@@ -78,6 +78,10 @@ no general lifetime or backing-source certificate; no reference code is promoted
 opcodes. A baseline without fill instrumentation and repeated sensor runs agree;
 effective fetch pages can differ from historical fill pages without word changes.
 Current tags/physical access therefore establish no byte-origin certificate.
+`spikes/014-ares-cache-operations/` opts into a generated interpreter TU to retain
+completed tag/data transitions. Three original guest CACHE operations match the
+prior independent goldens and repeated state, without extra bus/translation/
+timing calls. Default handlers stay original; production lifetimes stay unknown.
 
 ## gopher64/gopher64
 

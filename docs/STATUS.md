@@ -201,6 +201,11 @@ Implemented:
   historical fill page. Baseline/plain/traced/repeated CPU/timing/RAM/cache
   checkpoints agree. Effective fetch/tag addresses do not establish byte origin;
   explicit mutation and backing witnesses remain necessary.
+- A separate completed-CACHE-operation sensor now records exact PC/operand and
+  before/after tag/eight-word transitions for the three controlled guest
+  tag-store/index-invalidate operations. Plain/traced/repeated complete goldens
+  match. Additional operation outcomes, backing and a unified event history
+  remain open; no lifecycle/image identity is promoted.
 
 Verification: 76 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

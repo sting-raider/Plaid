@@ -81,3 +81,6 @@ general executable lifetimes remain open; W012 stays TODO.
 Guest CACHE retags now demonstrate differing effective and historical fill pages
 with unchanged reference checkpoints. Explicit mutations/backing witnesses stay
 open; W012 remains TODO.
+Completed CACHE tag-store/index-invalidate sensing now preserves exact operand/
+tag/data transitions and prior complete goldens. Additional outcomes, backing
+and unified history remain open; W012 stays TODO.
