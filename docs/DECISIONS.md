@@ -451,3 +451,20 @@ hashes agree at one million calls, with matching plain/traced/repeated execution
 These are declared reference inputs, not automatic ROM-profile discovery. Future
 production handling must check supplied firmware bytes and the complete source;
 metadata does not establish PIF backing, executable generations or full coverage.
+
+## ADR-0035: Require firmware bytes when importing declared boot inputs
+
+Status: Accepted, 2026-10-08.
+
+Import research v4 through an explicit firmware-input API/CLI path. Validate the
+complete fixed profile, hash and size of supplied firmware, power-entry PC/access/
+word/slot and complete raw source. Retain typed boot metadata in digest-qualified
+captures and recheck it with every fact and provenance record. Missing, null,
+partial, unsupported or changed inputs fail; the legacy path cannot silently
+accept boot captures or ignore a supplied firmware file. V3 remains unsupported
+because it lacks the full profile. Default/omit the additive map field to retain
+legacy serialization. Header inputs identify supplied bytes and declared setup;
+they do not authenticate firmware or prove PIF backing, hardware equivalence,
+retirement or executable lifetime. No regions, copies or generations are created.
+Keep the unknown-execution solver gate. Only project-owned data handling is
+promoted; firmware assets and reference CPU/device code remain outside Plaid.

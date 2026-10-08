@@ -14,6 +14,12 @@ is 154,485,706 bytes, SHA-256
 `38a0781c763a110ca419af65bf9f1a19ed96cd9282e01b2545486d9d865bd937`.
 The earlier v3 format remains distinct. Header metadata does not create a
 firmware backing witness or hardware-equivalence claim.
+Production v4 handling now requires actual supplied firmware bytes, validates
+their hash/size and the complete supported profile, checks the power-entry
+PC/access/word/slot and rechecks every fact, metadata and provenance record
+against the complete raw source. V3 stays unsupported. Synthetic tests use
+original zero-filled bytes; no firmware is shipped with tests. Supplied-input
+identity does not authenticate firmware.
 
 The harness declares NTSC/CIC-NUS-6102, deterministic entropy and 8 MiB RAM. These
 are experiment inputs, not automatic ROM profile discovery or hardware-wide boot
@@ -56,13 +62,12 @@ Message SHA-256:
 `a426f5ee6b100d52d934c9033067cf7d97dc5d073bd9a04ec206c221772cafac`.
 
 Research v3 declares firmware digest, natural power entry, PIF HLE and checksum
-policy. Production deliberately rejects this scope without output. A future
-format must explicitly carry the complete boot profile and recheck firmware
-input, not accept a hash claim alone. PIF source remains unknown: SI busy latches
+policy. Production deliberately rejects this scope without output. V4 carries
+the complete profile and requires supplied firmware input. PIF source remains unknown: SI busy latches
 and PIF ROM lockout can return words without reading firmware. RAM/SP copy/cache
 lineage, execution modes, lifetimes and whole-ROM coverage remain unresolved.
 
 Existing v0/v1/v2 streams and state/message goldens remain exact with the conditional
-boot path present. Rust's 72 tests and CLI/exporter/Mupen integrations pass, as do
+boot path present. Rust's 74 tests and CLI/exporter/Mupen integrations pass, as do
 the earlier static/homebrew/oracle/source-boundary experiments. No native artifact
 or complete guest-suite result is claimed.

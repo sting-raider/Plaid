@@ -154,23 +154,28 @@ Implemented:
   and ten million calls. Firmware sets Config 7006E463 and passes the checksum
   stage. The longer prefix leaves PI polling and runs StartupTest and subsequent
   cartridge-memory tests with no reported failures; full-suite completion remains
-  unverified. Reference PIF
-  HLE, fixed NTSC/6102 profile and finite budget remain explicit limitations.
+  unverified. Reference PIF HLE, fixed NTSC/6102 profile and finite budget remain
+  explicit limitations.
   Research v3 records firmware identity; production rejects this boot scope.
   Firmware bytes remain ignored; no PIF backing or executable lifetime is inferred.
 - Research v4 explicitly records firmware hash/size and the complete declared
   boot profile. Its one-million-call stream preserves the entire v3 projection,
   fixed CPU/device/memory checkpoint and plain/traced/repeat neutrality.
-  Production handling requires supplied-input and full-source verification.
+  Production handling now requires supplied-input and full-source verification.
+- Research v4 imports typed declared boot inputs through explicit firmware CLI
+  commands. Hash/size, complete supported profile and power-entry word/access/slot
+  are checked. Full-source rechecking protects facts, metadata and provenance;
+  missing/changed/unsupported inputs fail. Legacy maps omit the new field.
+  Inputs create no regions, copies or lifetimes; the solver stays OPEN.
 
-Verification: 72 Rust integration tests, formatting, strict Clippy, CLI integration,
+Verification: 74 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.
 Execution tests use x64 Linux under WSL Ubuntu with GCC and NASM; other CPU hosts
 are unverified. The ares spike additionally uses G++ C++20; the two earlier spikes
 and deterministic homebrew packaging/known negative outcomes also pass.
-Raw-fetch CLI tests cover all three versions, all ROM byte orders, wide
+Raw-fetch CLI tests cover v0/v1/v2/v4 and rejection of v3, all ROM byte orders, wide
 PC/word/access/source variants, forged canonical bytes, source
 tampering and missing footers. Full-corpus import/source verification/self-merge
 and OPEN gating pass. A single Windows debug import under concurrent verification
@@ -181,6 +186,8 @@ baseline, not an isolated throughput or scalability claim.
 canonical ROM and verifies captured DMA-backed code bytes. `solve [rom] map` emits
 whole-ROM diagnostics; supplying the ROM provides hash-checked source witnesses.
 Command success means a report was produced, not that the report is CLOSED.
+`import-boot-fetch <rom> <firmware> <raw> <map>` and `verify-boot-fetch` require
+the actual local firmware input for the declared research v4 scope.
 
 A declared immutable, nontrapping integer-image scope can close with explicit
 exclusions. Whole-ROM mode remains OPEN and `native_complete` is always false.

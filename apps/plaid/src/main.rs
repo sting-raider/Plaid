@@ -1,7 +1,7 @@
 use plaid_core::{
     GuestAddr,
     discovery::CodeImage,
-    fetch::{import_fetch, verify_fetch_capture},
+    fetch::{import_boot_fetch, import_fetch, verify_boot_fetch_capture, verify_fetch_capture},
     merge::{import_trace_with_rom, merge_maps},
     pipeline::discover_image,
     program::{GuestRange, ProgramMap, RomOffset},
@@ -14,6 +14,30 @@ use std::{env, fs, io::BufReader, process::ExitCode};
 fn run() -> Result<(), String> {
     let args: Vec<_> = env::args().skip(1).collect();
     match args.as_slice() {
+        [command, rom_path, firmware_path, fetch_path, output]
+            if command == "import-boot-fetch" =>
+        {
+            let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
+            let firmware = fs::read(firmware_path).map_err(|e| e.to_string())?;
+            let reader = BufReader::new(fs::File::open(fetch_path).map_err(|e| e.to_string())?);
+            let map = import_boot_fetch(reader, &rom, &firmware)?;
+            fs::write(output, map.to_json()?).map_err(|e| e.to_string())?;
+            println!(
+                "imported {} boot fetch summaries; executable identities remain unknown",
+                map.fetch_observations.len()
+            );
+        }
+        [command, rom_path, firmware_path, fetch_path, map_path]
+            if command == "verify-boot-fetch" =>
+        {
+            let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
+            let firmware = fs::read(firmware_path).map_err(|e| e.to_string())?;
+            let map =
+                ProgramMap::from_json(&fs::read_to_string(map_path).map_err(|e| e.to_string())?)?;
+            let reader = BufReader::new(fs::File::open(fetch_path).map_err(|e| e.to_string())?);
+            verify_boot_fetch_capture(&map, reader, &rom, &firmware)?;
+            println!("boot fetch summaries and firmware inputs match their complete sources");
+        }
         [command, rom_path, fetch_path, output] if command == "import-fetch" => {
             let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
             let reader = BufReader::new(fs::File::open(fetch_path).map_err(|e| e.to_string())?);
@@ -149,7 +173,7 @@ fn run() -> Result<(), String> {
         }
         _ => {
             return Err(
-                "usage: plaid rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | merge <left.json> <right.json> <output.json>"
+                "usage: plaid rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | merge <left.json> <right.json> <output.json>"
                     .into(),
             );
         }
