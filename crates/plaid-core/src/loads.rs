@@ -5,6 +5,23 @@ use crate::{
     program::*,
     rom::{CanonicalRom, sha256},
 };
+use std::collections::BTreeSet;
+
+fn physical_start(map: &ProgramMap, load: &LoadMapping) -> Option<PhysicalAddr> {
+    let locations: BTreeSet<_> = map
+        .regions
+        .iter()
+        .filter(|r| {
+            r.image == load.image
+                && r.generation == load.generation
+                && r.range == load.destination
+                && r.rom_offset == Some(load.rom_offset)
+        })
+        .filter_map(|r| r.physical_start)
+        .collect();
+    // Contradictory mapping evidence cannot establish a unique physical alias.
+    (locations.len() == 1).then(|| *locations.first().unwrap())
+}
 
 #[derive(Debug, Clone)]
 pub struct LoadObservation {
@@ -30,6 +47,12 @@ pub fn record_load(
         return Err("load evidence belongs to another ROM".into());
     }
     observation.destination.validate(true)?;
+    if observation
+        .physical_start
+        .is_some_and(|p| u64::from(p.0) + u64::from(observation.destination.size) > 0x1_0000_0000)
+    {
+        return Err("executable load exceeds physical address space".into());
+    }
     if observation.snapshot.len() != observation.destination.size as usize
         || observation.producer.is_empty()
         || observation.revision.is_empty()
@@ -89,8 +112,17 @@ pub fn record_load(
         .loads
         .iter()
         .filter(|old| {
-            u64::from(old.destination.start.0) < load.destination.end()
-                && u64::from(load.destination.start.0) < old.destination.end()
+            let guest_overlap = u64::from(old.destination.start.0) < load.destination.end()
+                && u64::from(load.destination.start.0) < old.destination.end();
+            let physical_overlap = match (physical_start(&out, old), observation.physical_start) {
+                (Some(previous), Some(current)) => {
+                    u64::from(previous.0) < u64::from(current.0) + u64::from(load.destination.size)
+                        && u64::from(current.0)
+                            < u64::from(previous.0) + u64::from(old.destination.size)
+                }
+                _ => false,
+            };
+            guest_overlap || physical_overlap
         })
         .cloned()
         .collect();
@@ -140,7 +172,7 @@ pub fn record_load(
             refs
         });
         out.unresolved.insert(Unresolved { kind:"overlay_candidate_lifecycle_unknown".into(), site:None,
-            detail:"different canonical executable sources overlap in guest RAM; unload/relocation/dispatch lifecycle is unproven".into(), evidence:refs });
+            detail:"different canonical executable sources overlap in guest or explicitly mapped physical RAM; unload/relocation/dispatch lifecycle is unproven".into(), evidence:refs });
     }
     out.regions.insert(Region {
         image: load.image.clone(),

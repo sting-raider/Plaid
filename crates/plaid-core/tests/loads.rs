@@ -85,3 +85,53 @@ fn malformed_snapshots_and_rom_mismatch_are_errors() {
     m.rom.sha256 = "b".repeat(64);
     assert!(record_load(&m, &r, &observation(&r, 64, 0)).is_err());
 }
+
+#[test]
+fn explicitly_mapped_aliases_preserve_virtual_identity_and_overlay_candidates() {
+    let r = rom();
+    let m = record_load(
+        &ProgramMap::new(r.identity.clone()),
+        &r,
+        &observation(&r, 64, 0),
+    )
+    .unwrap();
+    let mut alias = observation(&r, 80, 1);
+    alias.destination.start = GuestAddr(0xa0000000);
+    let shared = record_load(&m, &r, &alias).unwrap();
+    assert_eq!(shared.loads.len(), 2);
+    assert_eq!(shared.overlays.len(), 2);
+    assert!(shared.overlays.values().all(|o| o.candidate));
+    assert!(
+        shared
+            .loads
+            .iter()
+            .any(|l| l.destination.start == GuestAddr(0x80000000))
+    );
+    assert!(
+        shared
+            .loads
+            .iter()
+            .any(|l| l.destination.start == GuestAddr(0xa0000000))
+    );
+    // Virtual bit patterns alone are not a mapping proof.
+    alias.physical_start = None;
+    assert!(record_load(&m, &r, &alias).unwrap().overlays.is_empty());
+    alias.physical_start = Some(PhysicalAddr(32));
+    assert!(record_load(&m, &r, &alias).unwrap().overlays.is_empty());
+    // Partial physical overlap is enough for a conservative lifecycle obligation.
+    alias.physical_start = Some(PhysicalAddr(4));
+    assert_eq!(record_load(&m, &r, &alias).unwrap().overlays.len(), 2);
+    let mut ambiguous = m.clone();
+    let mut conflicting = ambiguous.regions.first().unwrap().clone();
+    conflicting.physical_start = Some(PhysicalAddr(32));
+    ambiguous.regions.insert(conflicting);
+    alias.physical_start = Some(PhysicalAddr(0));
+    assert!(
+        record_load(&ambiguous, &r, &alias)
+            .unwrap()
+            .overlays
+            .is_empty()
+    );
+    alias.physical_start = Some(PhysicalAddr(0xffff_fffc));
+    assert!(record_load(&m, &r, &alias).is_err());
+}

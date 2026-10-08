@@ -37,6 +37,9 @@ synthetic IPL3 fixture programs PI DMA, polls busy, executes the copied payload,
 checks RAM store/load, and reports completion through IS64 MMIO. The frontend
 attaches bundled dummy plugins and stops via the public API. All GPRs, HI/LO and
 PC agree across pure/traced/untraced engines; repeated 42-event traces match.
+Two further fixtures replace code at the same RAM address and execute through
+cached/uncached entries. Their CPU states and 81/80-event reruns match; the importer
+keeps generations separate and marks physically overlapping sources as candidates.
 The importer verifies ROM sources for executed DMA-backed units and keeps raw
 indirect evidence. The boot copy is still uncorrelated and the solver stays OPEN.
 Linux requires GCC/make/NASM and SDL2/zlib/libpng headers/runtime libraries;
