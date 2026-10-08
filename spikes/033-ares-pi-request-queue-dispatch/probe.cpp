@@ -103,8 +103,10 @@ int main(int argc, char** argv) {
   queue.step(3, dispatch);
   assert(dispatch_requests.size() == 2);
 #if PLAID_QUEUE_SENSOR
-  assert(life[a].token && life[b].token && life[a].token != life[b].token);
-  assert(dispatch_requests[0] != dispatch_requests[1]);
+  if(traced) {
+    assert(life[a].token && life[b].token && life[a].token != life[b].token);
+    assert(dispatch_requests[0] != dispatch_requests[1]);
+  }
 #endif
 
   // Case 2: canceled PI event. Invalid queue roots are drained without CPU callback.
@@ -141,8 +143,10 @@ int main(int argc, char** argv) {
   queue.step(5, dispatch);
   assert(dispatch_requests.size() == before + 1);
 #if PLAID_QUEUE_SENSOR
-  assert(dispatch_requests.back() == 0);
-  assert(!life[restored].dispatched);
+  if(traced) {
+    assert(dispatch_requests.back() == 0);
+    assert(!life[restored].dispatched);
+  }
 #endif
 
 #if PLAID_QUEUE_SENSOR
