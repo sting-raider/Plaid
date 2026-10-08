@@ -56,6 +56,7 @@ def main():
     if physical:
         sensor = json.loads((output / "results.json").read_text())
         assert capture["trace_sha256"] == sensor["trace_sha256"]
+        assert capture["trace_sha256"] == "c14917d5dd2037cb93c02039bff2f488cf3d60aa841152c43f31c5e3a4ba22d1"
         assert capture["mapped_cartridge_size"] == 2742280
         assert len(data["fetch_observations"]) == sensor["unique_virtual_physical_cache_tuples"]
         assert all("access" in f for f in data["fetch_observations"])

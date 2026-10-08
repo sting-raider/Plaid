@@ -86,6 +86,8 @@ def worker():
             projection.update((json.dumps(event,separators=(",",":"))+"\n").encode())
     assert ended and count == 4999998 and projection.hexdigest() == V0_DIGEST
     assert cached and uncached
+    assert digest.hexdigest() == "c14917d5dd2037cb93c02039bff2f488cf3d60aa841152c43f31c5e3a4ba22d1"
+    assert (len(samples),cached,uncached) == (53037,4806689,193309)
     results = {"fetches":count,"unique_virtual_physical_cache_tuples":len(samples),
         "cached_fetches":cached,"uncached_fetches":uncached,"mapped_cartridge_size":len(data)&~7,
         "trace_bytes":(OUTPUT / "traced.ndjson").stat().st_size,"trace_sha256":digest.hexdigest(),
