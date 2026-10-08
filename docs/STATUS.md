@@ -283,6 +283,9 @@ Implemented:
   877-byte report exactly. Five new tests cover ambiguous reads/unfetched lanes,
   malformed histories, all-source tampering and changes between replay passes.
   No ProgramMap identity or closure rule is promoted.
+  CLI inspection/rechecking now requires both raw sources and actual inputs;
+  all ROM byte orders produce identical reports. Report/input tampering and
+  truncated histories fail, and report output cannot overwrite an input file.
 
 Verification: 81 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

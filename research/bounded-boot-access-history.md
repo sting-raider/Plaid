@@ -73,3 +73,9 @@ malformed/duplicate/truncated/oversized records, supplied-input/report tampering
 and a paired source changing between validation and replay. The corpus passes
 complete report reconstruction. All 81 Rust tests, formatting and strict Clippy
 pass. No ProgramMap identity or source/lifetime certificate is changed.
+
+The public CLI uses `inspect-boot-history <rom> <firmware> <fetch.ndjson>
+<history.ndjson> <report.json>` and `verify-boot-history` with the same inputs.
+The corpus receipt above was generated and fully reconstructed through these
+commands. `python scripts/test_history.py` separately tests all canonical ROM
+orders, report/source/input tampering, truncation and input-overwrite protection.
