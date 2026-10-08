@@ -179,8 +179,10 @@ Implemented:
 - Research v5 now retains selected-cache context on the one-million-call boot
   prefix: 400,954 snapshots at 32 resident tuples, with complete prior stream/
   checkpoint agreement and unchanged repeated CPU/device/memory/cache state.
-  Uncached fetches have no snapshot. Production rejects this unsupported scope;
-  longer-prefix, backing and lifecycle work remain separate.
+  The ten-million prefix also matches: 9,399,022 cached fetches at 8,118 resident
+  tuples; exact prior streams/checkpoints, repeated bytes and no reported guest
+  failures in this finite prefix. Uncached fetches have no snapshot. Production,
+  backing and lifecycle work remain separate.
 
 Verification: 74 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
