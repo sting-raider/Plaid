@@ -129,6 +129,11 @@ Implemented:
   Physical context creates no backing source, image or code-generation proof.
   Full v1 corpus verification accounts for all fetches in a 24,203,476-byte map;
   raw v1 data is 628,211,919 bytes. Both self-merge byte-identically and stay OPEN.
+- A bounded ROM-device source experiment records actual delegated halfword reads.
+  Direct/TLB/reverse-endian fetches acquire three source witnesses; identical PI
+  latch words, unmapped file tail and prior data reads remain unknown. Original/
+  plain/traced/repeated GPR/HI/LO/PC/Count/exception/PI checkpoints agree. Broader
+  source capture and production source/lifecycle handling remain unimplemented.
 
 Verification: 70 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

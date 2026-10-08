@@ -375,3 +375,19 @@ under merge. Physical context creates no ROM/load source, image, generation or
 retirement claim; the independent unknown-identity solver gate remains unchanged.
 No reference CPU code is promoted. Backing-source and lifecycle witnesses need
 separate evidence before any executable-image construction.
+
+## ADR-0030: Test ROM fetch witnesses through actual delegated PI reads
+
+Status: Accepted for research, 2026-10-08.
+
+A project-owned PI wrapper forwards the pinned ROM device's address/read/write
+operations once and records only returned halfwords. Clear its ledger before each
+single interpreter call and pair reads at the existing pre-decoder prologue.
+Require uncached effective address, consecutive source offsets and exact returned
+word. Three synthetic reads acquire witnesses, while identical PI latch data,
+unmapped file tail and prior data reads remain unknown. Original/plain/traced/
+repeat CPU/Count/PI checkpoints match. This relies on the pinned interpreter call
+boundary with both recompilers disabled; no additional guest reads/translations
+or reference CPU changes occur. Keep this separately licensed research experiment
+isolated. Broader corpus capture, canonical source verification and production
+handling require further work; no generation/immutability/closure is promoted.
