@@ -132,7 +132,8 @@ int main(int argc, char** argv) {
   u32 returned = 0;
   if(!strcmp(mode, "natural")) {
     if(!cpu.instruction()) return 6;
-    if(plaidEvents.size()) returned = plaidEvents.back().returned;
+    returned = fw0;
+    if(!plaidEvents.empty() && plaidEvents.back().returned != returned) std::abort();
   } else if(!strcmp(mode, "mirror")) {
     returned = directFetch(0x1fc00800, false);
   } else if(!strcmp(mode, "high_mirror")) {
@@ -191,6 +192,7 @@ int main(int argc, char** argv) {
     std::printf("}");
   }
   std::printf("]}\n");
+  std::fflush(stdout);
   ares::Nintendo64::system.unload();
   return 0;
 }
