@@ -163,3 +163,17 @@ avoids inventing JR/JALR events for direct predecessors or reading a source regi
 after a slot overwrite. Keep this transient single-core reference state out of
 portable identities. Differential tests cover JR, custom-link JALR and direct
 pagespan paths; ProgramMap's predecessor-state model is still an open obligation.
+
+## ADR-0016: Exercise discovery through a separately built full reference core
+
+Status: Accepted, 2026-10-08.
+
+Build the pinned GPL core from a clean temporary Git export plus the research
+patch; keep its library, headers and synthetic ROM under ignored `target/`.
+Use public frontend/config/debugger APIs with bundled dummy plugins and an
+original bootstrap. Real PI register writes, busy polling, DMA, RAM store/load
+and IS64 output exercise device integration absent from the flat-memory harness.
+Compare interpreter and traced/untraced dynarec CPU state and repeated traces.
+Do not infer boot/CIC completeness, device accuracy or RSP/graphics coverage from
+this session. Uncorrelated PIF-HLE boot copies and executable policy gaps remain
+solver obligations; the reference core is never linked into Plaid/native mode.

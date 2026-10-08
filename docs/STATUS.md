@@ -23,6 +23,12 @@ Implemented:
   inline return-cache hits. Custom links, likely annulment and register stress pass.
   Unsupported runtime
   services trap; flat memory and a sentinel stop policy exclude boot/devices/timing.
+- A full pinned core session uses an original bootstrap, real PI DMA, RAM
+  store/load and IS64 MMIO completion, with bundled dummy plugins. All GPRs,
+  HI/LO/PC agree across interpreter/traced/untraced dynarec. Repeated 42-event
+  traces match, and executed DMA-backed units import with verified ROM sources.
+  PIF HLE/unknown-CIC fallback, dummy graphics/audio/RSP and a frontend stop
+  request bound this synthetic session's scope; whole-ROM closure remains OPEN.
 - Signature-based z64/v64/n64 normalization, canonical SHA-256 and header parsing.
 - Pinned Rabbitizer direct CFG with delay slots, branch-likely annulment, calls,
   return continuations, block repartitioning and explicit unresolved paths.
@@ -46,7 +52,7 @@ Implemented:
   close indirect sites.
 
 Verification: 53 Rust integration tests, formatting, strict Clippy, CLI integration,
-strict C99 exporter, actual pinned Mupen hook and CPU execution integration pass.
+strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.
 Execution tests use x64 Linux under WSL Ubuntu with GCC and NASM; other CPU hosts
@@ -61,7 +67,7 @@ A declared immutable, nontrapping integer-image scope can close with explicit
 exclusions. Whole-ROM mode remains OPEN and `native_complete` is always false.
 There is no native output, game compatibility claim or performance claim.
 
-Remaining gaps: full reference sessions with devices, ProgramMap predecessor
+Remaining gaps: broader reference sessions and device coverage, ProgramMap predecessor
 state for pagespan entries, non-x64 runtime hooks, general join/loop and
 immutable-table proofs, automatic boot/CIC
 roots, overlay/relocation lifecycle, non-PI copies, exceptions/TLB/execution modes,

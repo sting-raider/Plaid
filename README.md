@@ -73,6 +73,7 @@ python scripts/test_cli.py
 python scripts/test_exporter.py
 python scripts/test_mupen_hooks.py
 python scripts/test_mupen_execution.py
+python scripts/test_mupen_session.py
 ```
 
 The Mupen commands require the pinned checkout in `.refs/`; use
@@ -84,6 +85,15 @@ pinned x64 dynarec and pure interpreter, with tracing enabled and disabled.
 It requires Linux GCC/NASM; Windows uses WSL Ubuntu. Set `PLAID_NASM` in Linux
 when NASM is outside PATH. Flat memory and a sentinel stop policy exclude
 boot, devices and interrupt timing from this test's scope.
+
+The session script builds the full pinned core separately under ignored `target/`
+and runs an original synthetic bootstrap through real PI DMA, RAM and IS64 MMIO.
+It compares interpreter/traced/untraced CPU state and deterministic traces, then
+imports the DMA-backed code and checks OPEN solver output. Linux GCC/make/NASM,
+Python 3.12+, SDL2/zlib/libpng development headers and runtime libraries are needed.
+Windows uses WSL Ubuntu. `PLAID_REF_DEPS` can point to an extracted x64 Linux
+dependency prefix instead of system headers. Bundled dummy plugins exclude
+rendering, audio and RSP execution; this establishes no game compatibility.
 
 ## Discovery commands
 
