@@ -125,3 +125,16 @@ Persist raw indirect observations independently of image-resolved site edges.
 The target may be compiled after the observation, so defer that identity join to
 the end of the same invalidation epoch. Source identities are fixed at observation
 time; ambiguity remains a blocker. Later generations cannot explain earlier jumps.
+
+## ADR-0013: Reconstruct CFG for restricted cross-block proofs
+
+Status: Accepted, 2026-10-08.
+
+Propagate constants through unique direct predecessors in a scalar instruction
+subset, applying only the selected edge's delay-slot effects. Entries and all
+candidate/observed indirect incoming targets begin with unknown registers. Calls,
+joins, loop invariants and memory effects are not summarized. Reconstruct direct
+CFG from instruction bytes, then check supplied block/edge facts: deleting a
+predecessor cannot manufacture a proof. Serialize selected edges, block identities
+and word hash; independently recompute them when verifying. Bounded analysis may
+remain unresolved. This is declared-CFG evidence, not whole-ROM coverage.

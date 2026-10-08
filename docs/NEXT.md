@@ -1,7 +1,8 @@
 # Next
 
-1. Extend indirect certificates with sound cross-block propagation and bounded
-   jump/pointer tables; independently recheck their assumptions and target sets.
+1. Recognize bounded jump/pointer tables, preserve data-source assumptions and
+   distinguish candidate evidence from exhaustive immutable-table certificates.
+   Extend cross-block analysis to joins only with sound rechecked invariants.
 2. Extend the headless execution corpus, especially register allocation stress,
    branch-likely/link alias cases and pagespan JR/JALR. Then build a reference
    session with real devices. Keep speculative compilation distinct from execution.

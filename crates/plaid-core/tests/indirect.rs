@@ -145,3 +145,107 @@ fn jalr_target_precedes_link_write_and_link_metadata_is_rechecked() {
     bad.link_register = None;
     assert!(!verify_constant(&m, &i, &bad));
 }
+
+#[test]
+fn cross_block_jump_propagates_slot_value_and_rechecks_new_entries() {
+    let i = image(vec![
+        0x3c088000, 0x08000004, 0x35080040, 0, 0x01000008, 0x35080080,
+    ]);
+    let m = analyze_indirect(&map(&i), &i).unwrap();
+    let s = m.indirect_sites.first().unwrap();
+    assert_eq!(s.candidates.first_key_value().unwrap().0.pc.0, 0x80000040);
+    assert!(verify_constant(&m, &i, s));
+    assert_eq!(
+        m.evidence[s.closed_proof.as_ref().unwrap()].producer,
+        "plaid-cross-block-constant/v0"
+    );
+    let mut changed = i.clone();
+    changed.words[2] = 0x35080080;
+    assert!(!verify_constant(&m, &changed, s));
+    let mut bypass = m.clone();
+    bypass
+        .entries
+        .insert(i.address(GuestAddr(0x80000010)), s.evidence.clone());
+    assert!(!verify_constant(&bypass, &i, s));
+    let mut candidate = m.clone();
+    let mut extra = s.clone();
+    extra.site = i.address(GuestAddr(0x80000030));
+    extra.closed_proof = None;
+    extra.candidates = [(i.address(GuestAddr(0x80000010)), s.evidence.clone())].into();
+    candidate.indirect_sites.insert(extra);
+    assert!(!verify_constant(&candidate, &i, s));
+}
+
+#[test]
+fn cross_block_branch_likely_propagates_distinct_slot_paths() {
+    let i = image(vec![
+        0x3c088000, 0x35080040, 0x512a0005, 0x35080080, 0x01000008, 0, 0, 0, 0x01000008, 0,
+    ]);
+    let m = analyze_indirect(&map(&i), &i).unwrap();
+    assert_eq!(m.indirect_sites.len(), 2);
+    for s in &m.indirect_sites {
+        let target = if s.site.pc.0 == 0x80000010 {
+            0x80000040
+        } else {
+            0x800000c0
+        };
+        assert_eq!(s.candidates.first_key_value().unwrap().0.pc.0, target);
+        assert!(verify_constant(&m, &i, s));
+    }
+    let mut ordinary = i.clone();
+    ordinary.words[2] = 0x152a0005;
+    let m = analyze_indirect(&map(&ordinary), &ordinary).unwrap();
+    assert!(
+        m.indirect_sites
+            .iter()
+            .all(|s| s.candidates.first_key_value().unwrap().0.pc.0 == 0x800000c0)
+    );
+}
+
+#[test]
+fn cross_block_joins_calls_and_effects_remain_unknown_even_if_edges_are_deleted() {
+    let join = image(vec![
+        0x3c088000, 0x15200004, 0, 0x35080040, 0x0800000a, 0, 0x35080080, 0x0800000a, 0, 0,
+        0x01000008, 0,
+    ]);
+    let mut m = map(&join);
+    assert!(
+        analyze_indirect(&m, &join)
+            .unwrap()
+            .indirect_sites
+            .first()
+            .unwrap()
+            .closed_proof
+            .is_none()
+    );
+    m.direct_edges.retain(|e| e.site.pc.0 != 0x8000001c);
+    assert!(
+        analyze_indirect(&m, &join)
+            .unwrap()
+            .indirect_sites
+            .first()
+            .unwrap()
+            .closed_proof
+            .is_none()
+    );
+    let calls = image(vec![
+        0x3c088000, 0x0c000008, 0, 0x08000005, 0, 0x01000008, 0, 0, 0x03e00008, 0,
+    ]);
+    assert!(
+        analyze_indirect(&map(&calls), &calls)
+            .unwrap()
+            .indirect_sites
+            .iter()
+            .all(|s| s.closed_proof.is_none())
+    );
+    let store = image(vec![0x3c088000, 0xad000000, 0x08000004, 0, 0x01000008, 0]);
+    assert!(
+        analyze_indirect(&map(&store), &store)
+            .unwrap()
+            .indirect_sites
+            .first()
+            .unwrap()
+            .closed_proof
+            .is_none()
+    );
+}
