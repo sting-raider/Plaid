@@ -84,3 +84,6 @@ open; W012 remains TODO.
 Completed CACHE tag-store/index-invalidate sensing now preserves exact operand/
 tag/data transitions and prior complete goldens. Additional outcomes, backing
 and unified history remain open; W012 stays TODO.
+Controlled cache hit/miss invalidation/fill/writeback outcomes now pass with a
+separate baseline and actual uncached RAM result. General backing, failure/reset/
+restore and unified event/lifetime joins stay open; W012 remains TODO.

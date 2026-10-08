@@ -206,6 +206,12 @@ Implemented:
   tag-store/index-invalidate operations. Plain/traced/repeated complete goldens
   match. Additional operation outcomes, backing and a unified event history
   remain open; no lifecycle/image identity is promoted.
+- Extended guest CACHE outcomes now cover hit/miss invalidation, explicit fill
+  and hit/miss writeback: seventeen fetches, eight operations, four fills and one
+  writeback. A later uncached fetch checks restored RAM after deliberate backing
+  mutation. Separate baseline/plain/traced/repeated complete checkpoints match.
+  Identity-mapped controlled RAM is the verified scope; general bus backing,
+  failures/reset/restore and unified event/lifetime joins remain open.
 
 Verification: 76 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

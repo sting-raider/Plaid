@@ -563,3 +563,17 @@ translations have no completed event. Hit-invalidate/fill/writeback outcomes,
 backing reads/writes, reset/restore and a unified event history need separate
 verification. Completion is not a successful RAM-write or immutable-lifetime
 certificate. Do not promote a cache lifecycle or executable image from this scope.
+
+## ADR-0042: Verify cache hit/miss outcomes before lifecycle construction
+
+Status: Accepted for research, 2026-10-08.
+
+Extend controlled guest CACHE cases to hit/miss invalidation, explicit fill and
+hit/miss writeback. Eight completed operations across seventeen fetches preserve
+baseline/plain/traced/repeated CPU/timing/RAM/cache checkpoints, with four fills
+and one writeback. Deliberately change RAM while resident data stays stale, then
+require successful writeback and an uncached fetch of the restored word. Miss
+operations preserve state. This validates finite outcomes for identity-mapped
+RAM, not a general backing/write-success policy. Still require actual bus/copy/
+mutation witnesses, failure/reset/restore boundaries and unified event ordering
+before constructing executable lifetimes. No production epoch/image is promoted.
