@@ -21,8 +21,11 @@ integration to `main`; `codex/executable-discovery` is now a checkpoint.
 | `sp-dma-lifecycle-gpt56sol` | `ab98ece` | Actual SP pending mutation/row/handoff/wrap fixture; three-reference source comparison |
 | `pif-rom-backing-ares-gpt56sol` | `983b8f5` | Actual PIF backing fetch-stage sensor with nine adversaries |
 
-The live COP1 store branch is still being tested by its worker; it is reviewed as
-in-progress evidence and is not promoted before closeout/reproduction.
+The COP1 store branch subsequently reached `b95a51d` with its durable validated
+note and exact-reference receipt. Primary reproduction now passes the payload
+model and all 192 repeated handler cases, retaining cache/backing and endian/
+fault limits. Adopt the general concrete mutation-sensing obligation under
+ADR-0061; reference callback decomposition remains hardware-unresolved.
 
 Primary PI reproduction passes all four recovered contracts. The actual write
 fixture reproduces trace SHA-256

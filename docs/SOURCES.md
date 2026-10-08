@@ -222,6 +222,10 @@ callbacks for nine actual fetch-stage tests, including the supplied local firmwa
 path. Reported original/instrumented/repeated checkpoints agree; no reference
 implementation or firmware is copied into production. Full boot/immutability and
 firmware authenticity are outside this bounded source contract.
+`spikes/035-ares-cop1-stores/` executes actual pinned ares SWC1/SDC1 handlers and
+an original independent payload model. Mupen/Gopher transaction decomposition is
+source-only comparison; general mutation/lifetime and hardware atomicity remain
+unknown, with no additional reference dependency in production.
 
 Selected-cache v5 handling in Plaid is original Rust schema/import/verification
 code. It checks the pinned reference's finite snapshot constraints while keeping

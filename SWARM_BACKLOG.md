@@ -123,3 +123,8 @@ scopes also pass both PI directions; rejected insertions retain independent byte
 effects. Save preserves external queue identity; load remains unknown. Canonical
 integration is now `main` by user instruction. Broader boot joins and lifetime
 obligations keep W012 TODO.
+
+SP DMA lifecycle, nine-mode PIF backing (synthetic and supplied firmware), and
+192 repeated COP1 store cases now reproduce locally. Keep pending/full policy,
+physical/source identity and cache/backing mutation obligations explicit; broader
+lifetime and mutation completeness still keep W012 TODO.
