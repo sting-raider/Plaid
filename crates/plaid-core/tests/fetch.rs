@@ -1,5 +1,8 @@
 use plaid_core::{
-    fetch::{FORMAT, PHYSICAL_FORMAT, REVISION, import_fetch, verify_fetch_capture},
+    fetch::{
+        FORMAT, PHYSICAL_FORMAT, REVISION, SOURCE_FORMAT, SOURCE_POLICY, import_fetch,
+        verify_fetch_capture,
+    },
     merge::merge_maps,
     program::*,
     rom::{CanonicalRom, sha256},
@@ -50,6 +53,126 @@ fn physical_raw(events: &[(u32, bool)]) -> String {
             event.to_string() + "\n"
         })
         .collect()
+}
+
+fn source_raw(sources: &[FetchSource]) -> String {
+    physical_raw(&vec![(0x10000044, false); sources.len()])
+        .lines()
+        .enumerate()
+        .map(|(index, line)| {
+            let mut event: serde_json::Value = serde_json::from_str(line).unwrap();
+            if index == 0 {
+                event["format"] = SOURCE_FORMAT.into();
+                event["source_policy"] = SOURCE_POLICY.into();
+            } else if index <= sources.len() {
+                event["source"] = serde_json::to_value(sources[index - 1]).unwrap();
+            }
+            event.to_string() + "\n"
+        })
+        .collect()
+}
+
+#[test]
+fn source_witnesses_keep_unknowns_and_canonical_bytes_without_image_identity() {
+    let known = FetchSource::CartridgeRom {
+        offset: RomOffset(68),
+    };
+    let input = source_raw(&[known, FetchSource::Unknown {}, known]);
+    let map = import(&input).unwrap();
+    assert_eq!(map.fetch_observations.len(), 2);
+    let witness = map
+        .fetch_observations
+        .iter()
+        .find(|f| f.source == Some(known))
+        .unwrap();
+    assert_eq!(
+        (witness.first_seq, witness.last_seq, witness.occurrences),
+        (0, 2, 2)
+    );
+    assert_eq!(
+        map.fetch_captures
+            .values()
+            .next()
+            .unwrap()
+            .source_policy
+            .as_deref(),
+        Some(SOURCE_POLICY)
+    );
+    assert!(map.regions.is_empty() && map.loads.is_empty() && map.entries.is_empty());
+    verify_fetch_capture(&map, Cursor::new(input.as_bytes()), &rom()).unwrap();
+    assert_eq!(map, ProgramMap::from_json(&map.to_json().unwrap()).unwrap());
+    let old = import(&physical_raw(&[(0x10000044, false)])).unwrap();
+    assert!(!old.to_json().unwrap().contains("source_policy"));
+    assert!(!old.to_json().unwrap().contains("\"source\""));
+    let merged = merge_maps(&map, &old).unwrap();
+    assert_eq!(merged.fetch_observations.len(), 3);
+    assert_eq!(merged, merge_maps(&old, &map).unwrap());
+    assert_eq!(merged, merge_maps(&merged, &map).unwrap());
+    let all_known = import(&source_raw(&[known])).unwrap();
+    let report = solve(&all_known, &[], Scope::WholeRom).unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    assert!(!report.native_complete);
+    assert!(
+        report
+            .blockers
+            .iter()
+            .any(|b| b.kind == "fetch_execution_identity_unknown")
+    );
+    let mut changed = all_known;
+    let mut fact = changed.fetch_observations.pop_first().unwrap();
+    fact.source = Some(FetchSource::Unknown {});
+    changed.fetch_observations.insert(fact);
+    changed.validate().unwrap();
+    assert!(verify_fetch_capture(&changed, Cursor::new(source_raw(&[known])), &rom()).is_err());
+}
+
+#[test]
+fn source_claims_reject_forged_bytes_access_capacity_and_version_fields() {
+    let input = source_raw(&[FetchSource::CartridgeRom {
+        offset: RomOffset(68),
+    }]);
+    for bad in [
+        input.replace(SOURCE_FORMAT, PHYSICAL_FORMAT),
+        input.replace(SOURCE_POLICY, "physical_range_guess"),
+        input.replace(&format!(",\"source_policy\":\"{SOURCE_POLICY}\""), ""),
+        input.replace("\"source\":{\"kind\":\"cartridge_rom\",\"offset\":68},", ""),
+        input.replace("\"offset\":68", "\"offset\":69"),
+        input.replace("\"offset\":68", "\"offset\":4096"),
+        input.replace("\"offset\":68", "\"offset\":18446744073709551615"),
+        input.replace("\"physical\":268435524", "\"physical\":268435528"),
+        input.replace("\"cached\":false", "\"cached\":true"),
+        input.replace("\"word\":0", "\"word\":1"),
+        input.replace("cartridge_rom", "unrecognized"),
+        input.replace("{\"kind\":\"cartridge_rom\",\"offset\":68}", "null"),
+    ] {
+        assert_ne!(bad, input, "mutation did not change input");
+        assert!(import(&bad).is_err(), "accepted {bad}");
+    }
+    let unknown = source_raw(&[FetchSource::Unknown {}]);
+    assert!(
+        import(&unknown.replace(
+            "{\"kind\":\"unknown\"}",
+            "{\"kind\":\"unknown\",\"offset\":68}"
+        ))
+        .is_err()
+    );
+    let old = physical_raw(&[(0x10000044, false)]);
+    assert!(
+        import(&old.replace("\"seq\":0", "\"seq\":0,\"source\":{\"kind\":\"unknown\"}")).is_err()
+    );
+    let map = import(&input).unwrap();
+    for source in [
+        None,
+        Some(FetchSource::CartridgeRom {
+            offset: RomOffset(u64::MAX),
+        }),
+    ] {
+        let mut invalid = map.clone();
+        let mut fact = invalid.fetch_observations.pop_first().unwrap();
+        fact.source = source;
+        invalid.fetch_observations.insert(fact);
+        assert!(invalid.validate().is_err());
+    }
 }
 
 #[test]

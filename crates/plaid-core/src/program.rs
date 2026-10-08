@@ -291,9 +291,11 @@ pub struct FetchCapture {
     pub initial_state: String,
     pub instruction_call_budget: u64,
     pub fetch_count: u64,
-    /// Present only for the v1 physical-access observer; exact mapped capacity.
+    /// Present for physical-access observers; exact mapped capacity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mapped_cartridge_size: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_policy: Option<String>,
 }
 
 /// Effective word address after translation/endian selection and cache policy.
@@ -303,6 +305,15 @@ pub struct FetchCapture {
 pub struct FetchAccess {
     pub physical: PhysicalAddr,
     pub cached: bool,
+}
+
+/// Finite fetch-source evidence, independently checked against canonical bytes.
+/// This is neither an immutable image nor a generation/retirement certificate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum FetchSource {
+    Unknown {},
+    CartridgeRom { offset: RomOffset },
 }
 
 /// A finite summary of identical word/slot/access facts in one raw capture.
@@ -316,6 +327,8 @@ pub struct ObservedFetch {
     pub delay_slot: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub access: Option<FetchAccess>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<FetchSource>,
     pub capture: String,
     pub first_seq: u64,
     pub last_seq: u64,
@@ -559,7 +572,9 @@ impl ProgramMap {
         let mut fetch_keys = BTreeSet::new();
         let mut fetch_endpoints = BTreeMap::new();
         for (id, capture) in &self.fetch_captures {
-            let producer = if capture.mapped_cartridge_size.is_some() {
+            let producer = if capture.source_policy.is_some() {
+                crate::fetch::SOURCE_FORMAT
+            } else if capture.mapped_cartridge_size.is_some() {
                 crate::fetch::PHYSICAL_FORMAT
             } else {
                 crate::fetch::FORMAT
@@ -575,6 +590,9 @@ impl ProgramMap {
                 || capture.instruction_call_budget == 0
                 || capture.instruction_call_budget > crate::fetch::MAX_BUDGET
                 || capture.fetch_count > capture.instruction_call_budget
+                || capture.source_policy.as_ref().is_some_and(|policy| {
+                    policy != crate::fetch::SOURCE_POLICY || capture.mapped_cartridge_size.is_none()
+                })
                 || capture
                     .mapped_cartridge_size
                     .is_some_and(|size| u64::from(size) != (self.rom.size & !7) || size < 64)
@@ -594,21 +612,36 @@ impl ProgramMap {
                 .fetch_captures
                 .get(&f.capture)
                 .ok_or("unknown fetch capture")?;
+            if let Some(FetchSource::CartridgeRom { offset }) = f.source
+                && (!offset.0.is_multiple_of(4)
+                    || offset.0.checked_add(4).is_none_or(|end| {
+                        capture
+                            .mapped_cartridge_size
+                            .is_none_or(|size| end > u64::from(size))
+                    })
+                    || f.access.is_none_or(|a| {
+                        a.cached
+                            || offset.0.checked_add(0x10000000) != Some(u64::from(a.physical.0))
+                    }))
+            {
+                return Err("invalid cartridge fetch source bounds or access".into());
+            }
             if !f.pc.0.is_multiple_of(4)
                 || f.access.is_some() != capture.mapped_cartridge_size.is_some()
                 || f.access.is_some_and(|a| !a.physical.0.is_multiple_of(4))
+                || f.source.is_some() != capture.source_policy.is_some()
                 || f.first_seq > f.last_seq
                 || f.last_seq >= capture.fetch_count
                 || f.occurrences == 0
                 || f.occurrences > f.last_seq - f.first_seq + 1
                 || (f.occurrences == 1 && f.first_seq != f.last_seq)
                 || !f.evidence.contains(&f.capture)
-                || !fetch_keys.insert((&f.capture, f.pc, f.word, f.delay_slot, f.access))
+                || !fetch_keys.insert((&f.capture, f.pc, f.word, f.delay_slot, f.access, f.source))
             {
                 return Err("invalid or duplicate raw fetch summary".into());
             }
             for seq in [f.first_seq, f.last_seq] {
-                let value = (f.pc, f.word, f.delay_slot, f.access);
+                let value = (f.pc, f.word, f.delay_slot, f.access, f.source);
                 if fetch_endpoints
                     .insert((&f.capture, seq), value)
                     .is_some_and(|old| old != value)

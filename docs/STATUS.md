@@ -140,14 +140,20 @@ Implemented:
   768,248,958 bytes. Production source handling and executable lifetimes remain
   separate work.
 
-Verification: 70 Rust integration tests, formatting, strict Clippy, CLI integration,
+- Research v2 source facts now import with strict policy/access/capacity checks and
+  canonical word verification. Known and unknown variants remain distinct; the
+  full raw-source rechecker protects their provenance. V0/v1 maps remain byte-
+  identical. No regions, entries, copies, images or lifetimes are fabricated.
+
+Verification: 72 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.
 Execution tests use x64 Linux under WSL Ubuntu with GCC and NASM; other CPU hosts
 are unverified. The ares spike additionally uses G++ C++20; the two earlier spikes
 and deterministic homebrew packaging/known negative outcomes also pass.
-Raw-fetch CLI tests cover both versions, all ROM byte orders, wide PCs/word/access variants, source
+Raw-fetch CLI tests cover all three versions, all ROM byte orders, wide
+PC/word/access/source variants, forged canonical bytes, source
 tampering and missing footers. Full-corpus import/source verification/self-merge
 and OPEN gating pass. A single Windows debug import under concurrent verification
 took 75.7 seconds and peaked at 74,719,232 bytes of working memory; this is a cost

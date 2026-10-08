@@ -11,6 +11,8 @@ use std::{
 
 pub const FORMAT: &str = "plaid-ares-fetch-research-v0";
 pub const PHYSICAL_FORMAT: &str = "plaid-ares-fetch-research-v1";
+pub const SOURCE_FORMAT: &str = "plaid-ares-fetch-research-v2";
+pub const SOURCE_POLICY: &str = "delegated_rom_halves_before_prologue";
 pub const REVISION: &str = "9408cb43d4948fc3ea6e152a307a34348df3fe04";
 pub const INITIAL_STATE: &str = "declared_post_ipl2_sp_entry";
 pub const MAX_BUDGET: u64 = 10_000_000;
@@ -33,6 +35,8 @@ enum Record {
         initial_state: String,
         #[serde(default, deserialize_with = "present")]
         mapped_cartridge_size: Option<u32>,
+        #[serde(default, deserialize_with = "present")]
+        source_policy: Option<String>,
     },
     Fetch {
         seq: u64,
@@ -43,6 +47,8 @@ enum Record {
         physical: Option<PhysicalAddr>,
         #[serde(default, deserialize_with = "present")]
         cached: Option<bool>,
+        #[serde(default, deserialize_with = "present")]
+        source: Option<FetchSource>,
     },
     End {
         fetch_count: u64,
@@ -76,11 +82,12 @@ pub fn import_fetch<R: BufRead>(mut reader: R, rom: &CanonicalRom) -> Result<Pro
         budget,
         initial_state,
         mapped_cartridge_size,
+        source_policy,
     } = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?
     else {
         return Err("fetch stream must begin with header".into());
     };
-    if (format != FORMAT && format != PHYSICAL_FORMAT)
+    if (format != FORMAT && format != PHYSICAL_FORMAT && format != SOURCE_FORMAT)
         || revision != REVISION
         || initial_state != INITIAL_STATE
         || budget == 0
@@ -91,15 +98,27 @@ pub fn import_fetch<R: BufRead>(mut reader: R, rom: &CanonicalRom) -> Result<Pro
     if rom_sha256 != rom.identity.sha256 {
         return Err("fetch stream does not match canonical ROM".into());
     }
-    let physical_format = format == PHYSICAL_FORMAT;
+    let source_format = format == SOURCE_FORMAT;
+    let physical_format = format != FORMAT;
+    if source_policy.as_deref() != source_format.then_some(SOURCE_POLICY) {
+        return Err("invalid fetch source policy for format".into());
+    }
     if physical_format != mapped_cartridge_size.is_some()
         || mapped_cartridge_size
             .is_some_and(|size| u64::from(size) != (rom.identity.size & !7) || size < 64)
     {
         return Err("invalid mapped cartridge capacity for fetch format".into());
     }
-    let mut samples =
-        BTreeMap::<(GuestVirtualAddr, u32, bool, Option<FetchAccess>), (u64, u64, u64)>::new();
+    let mut samples = BTreeMap::<
+        (
+            GuestVirtualAddr,
+            u32,
+            bool,
+            Option<FetchAccess>,
+            Option<FetchSource>,
+        ),
+        (u64, u64, u64),
+    >::new();
     let mut count = 0;
     loop {
         if !line(&mut reader, &mut bytes)? {
@@ -114,6 +133,7 @@ pub fn import_fetch<R: BufRead>(mut reader: R, rom: &CanonicalRom) -> Result<Pro
                 delay_slot,
                 physical,
                 cached,
+                source,
             } => {
                 let access = match (physical_format, physical, cached) {
                     (true, Some(physical), Some(cached)) if physical.0.is_multiple_of(4) => {
@@ -122,11 +142,22 @@ pub fn import_fetch<R: BufRead>(mut reader: R, rom: &CanonicalRom) -> Result<Pro
                     (false, None, None) => None,
                     _ => return Err("invalid physical fetch metadata for format".into()),
                 };
+                if source.is_some() != source_format {
+                    return Err("invalid fetch source metadata for format".into());
+                }
+                if let Some(FetchSource::CartridgeRom { offset }) = source {
+                    let start =
+                        usize::try_from(offset.0).map_err(|_| "ROM source offset overflow")?;
+                    let end = start.checked_add(4).ok_or("ROM source offset overflow")?;
+                    if rom.bytes().get(start..end) != Some(word.to_be_bytes().as_slice()) {
+                        return Err("cartridge fetch source word differs from canonical ROM".into());
+                    }
+                }
                 if seq != count || count >= budget || !pc.0.is_multiple_of(4) {
                     return Err("invalid fetch sequence, address or budget".into());
                 }
                 let sample = samples
-                    .entry((pc, word, delay_slot, access))
+                    .entry((pc, word, delay_slot, access, source))
                     .or_insert((seq, seq, 0));
                 sample.1 = seq;
                 sample.2 += 1;
@@ -163,21 +194,25 @@ pub fn import_fetch<R: BufRead>(mut reader: R, rom: &CanonicalRom) -> Result<Pro
             instruction_call_budget: budget,
             fetch_count: count,
             mapped_cartridge_size,
+            source_policy,
         },
     );
     map.fetch_observations = samples
         .into_iter()
         .map(
-            |((pc, word, delay_slot, access), (first_seq, last_seq, occurrences))| ObservedFetch {
-                pc,
-                word,
-                delay_slot,
-                access,
-                capture: id.clone(),
-                first_seq,
-                last_seq,
-                occurrences,
-                evidence: [id.clone()].into(),
+            |((pc, word, delay_slot, access, source), (first_seq, last_seq, occurrences))| {
+                ObservedFetch {
+                    pc,
+                    word,
+                    delay_slot,
+                    access,
+                    source,
+                    capture: id.clone(),
+                    first_seq,
+                    last_seq,
+                    occurrences,
+                    evidence: [id.clone()].into(),
+                }
             },
         )
         .collect();

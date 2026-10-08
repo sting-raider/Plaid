@@ -74,11 +74,33 @@ def main():
         physical_map["fetch_observations"][0]["access"]["cached"] = True
         map_path.write_text(json.dumps(physical_map))
         assert subprocess.run([str(exe),"verify-fetch",str(rom),str(trace),str(map_path)],capture_output=True).returncode != 0
+        source_records = json.loads(json.dumps(physical_records))
+        source_records[0].update(format="plaid-ares-fetch-research-v2",source_policy="delegated_rom_halves_before_prologue")
+        for event in source_records[1:-1]: event["source"] = {"kind":"unknown"}
+        source_records[1].update(physical=0x10000044,cached=False,source={"kind":"cartridge_rom","offset":68})
+        source_records[3].update(physical=0x10000044,cached=False)
+        trace.write_bytes(b"".join((json.dumps(r)+"\n").encode() for r in source_records))
+        source_outputs = []
+        for order in ("z64","v64","n64"):
+            output = directory / f"source-{order}.json"
+            source = directory / f"original.{order}"
+            subprocess.run([str(exe),"import-fetch",str(source),str(trace),str(output)],check=True)
+            subprocess.run([str(exe),"verify-fetch",str(source),str(trace),str(output)],check=True)
+            source_outputs.append(output.read_bytes())
+        assert source_outputs[0] == source_outputs[1] == source_outputs[2]
+        source_map = json.loads(source_outputs[0])
+        assert len(source_map["fetch_observations"]) == 3
+        assert sum(f["source"]["kind"] == "cartridge_rom" for f in source_map["fetch_observations"]) == 1
+        source_records[1]["word"] = 1
+        trace.write_bytes(b"".join((json.dumps(r)+"\n").encode() for r in source_records))
+        rejected_source = directory / "rejected-source.json"
+        assert subprocess.run([str(exe),"import-fetch",str(rom),str(trace),str(rejected_source)],capture_output=True).returncode != 0
+        assert not rejected_source.exists()
         trace.write_bytes(b"".join((json.dumps(r)+"\n").encode() for r in records[:-1]))
         rejected = directory / "rejected.json"
         assert subprocess.run([str(exe),"import-fetch",str(rom),str(trace),str(rejected)],capture_output=True).returncode != 0
         assert not rejected.exists()
-    print("Raw fetch CLI: v0/v1, all byte orders, wide PC/word/access variants, source rechecking and OPEN gate passed")
+    print("Raw fetch CLI: v0/v1/v2, all byte orders, wide PC/word/access/source variants, source rechecking and OPEN gate passed")
 
 
 if __name__ == "__main__": main()
