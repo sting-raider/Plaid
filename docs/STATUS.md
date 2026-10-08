@@ -344,7 +344,7 @@ Implemented:
   retain raw nonmutation. Reference write decomposition differs; callback counts
   supply no hardware atomicity proof. General mutation/lifetime coverage remains open.
 
-Verification: 86 Rust integration tests, formatting, strict Clippy, CLI integration,
+Verification: 92 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.
@@ -396,4 +396,4 @@ The second SB/SH fixture now independently reproduces 100 actual cases and both 
 
 Recovered RSP self-store code now passes 28 decoded probes: ordinary scalar/vector stores remain in DMEM and preserve IMEM, including the aligned SRV no-op. CPU/SP DMA/external IMEM mutation obligations remain open (ADR-0068).
 
-Original bounded boot history v2 now records accepted PI requests, actual queue identities and CPU dispatch/status scopes. The 8,823,189-record prefix preserves exact complete v1/v0/v5 sources and all 1,638,808 ROM byte origins; three status links are identified and request 4 remains without status. Twelve synthetic/four actual forgeries fail. Rust v1 rechecking keeps its exact prior report hash and rejects v2; original Rust v2 inspection is next (ADR-0069).
+Original bounded boot history v2 now records accepted PI requests, actual queue identities and CPU dispatch/status scopes. The 8,823,189-record prefix preserves exact complete v1/v0/v5 sources and all 1,638,808 ROM byte origins; three status links are identified and request 4 remains without status. Twelve synthetic/four actual forgeries fail. Rust v1 rechecking keeps its exact prior report hash and rejects v2. Original strict Rust v2 inspection/report rechecking now consumes the complete raw source and reproduces every scheduling count/link plus the entire unchanged nested v1 report. Six adversarial integration tests keep unknown/unbound/read/direct/canceled/rejected/save/load boundaries explicit. No guest/native completion or executable lifetime is promoted (ADR-0069/0070).

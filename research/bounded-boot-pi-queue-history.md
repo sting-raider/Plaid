@@ -72,13 +72,24 @@ lineage for PI reads, arbitrary cancellation/reentrancy/restore behavior, genera
 cache/copy/mutation completeness, executable lifetimes or whole-ROM closure.
 The component fixtures supply separate canceled/rejected/unbound/read/load cases.
 
-The original strict Rust v1 consumer remains the compatibility boundary. A future
-original Rust v2 inspector/rechecker must consume the complete new raw source,
-retain exact nested v1/v0/v5 verification and reject forged scheduling identities
-before exposing a CLI or promoting evidence into production identities. Keep all
-native/transfer completion flags false. Generated upstream code/licenses, ROM,
-firmware and trace data stay isolated and ignored; no emulator code enters the
-production runtime.
+The original strict Rust v2 API now streams typed scheduling records into the
+unchanged strict v1 consumer, preserving exact canonical v1/v0 serialization and
+complete paired-v5/input checks. Its report binds the raw v2 digest and all
+request/outcome/status facts; the rechecker reconstructs the entire nested report.
+Observed slot identity is not a full heap emulator or hardware timing model.
+Six original Rust integration tests cover equal deadlines, cancellation, save,
+load rejection, failed insertion with copy effects, unknown pre-capture and unbound
+entries, read/direct status, malformed wire fields, raw interval laundering and
+source/report tampering. Legacy consumers still reject v2.
+
+The complete 8,823,189-record capture passes both API inspection and source
+rechecking. Every count/status link agrees with the independent Python result;
+the entire nested Rust v1 report is equal to its retained prior report. The new
+3,156-byte pretty JSON report SHA-256 is
+`34a2f880cb2164b2e8d1fef47ed757dd8fa31a9a8c40163ddf5d968987c4e96f`.
+Request 4 remains without an observed status; this does not claim queue liveness.
+All native/guest/transfer completion flags remain false. Generated reference
+sources, ROM, firmware and trace data remain isolated and ignored.
 
 The existing strict Rust v1 API independently rechecks the entire projected
 source and reproduces report SHA-256

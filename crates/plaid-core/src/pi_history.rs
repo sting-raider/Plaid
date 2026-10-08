@@ -37,16 +37,16 @@ pub struct PiHistoryReport {
     pub pi_origin_effects_sha256: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
-enum Wire {
+pub(crate) enum Wire {
     Pi(PiRecord),
     Scalar(PiScalar),
     Base(history::Record),
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
-enum PiRecord {
+pub(crate) enum PiRecord {
     PiDma {
         ordinal: u64,
         context: u64,
@@ -70,9 +70,9 @@ enum PiRecord {
         value: u16,
     },
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct PiScalar {
+pub(crate) struct PiScalar {
     record: String,
     ordinal: u64,
     context: u64,
@@ -85,12 +85,70 @@ struct PiScalar {
     value: u64,
     pi: PiContext,
 }
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct PiContext {
     transfer: u64,
     block: u32,
     lane: u32,
+}
+
+impl Wire {
+    pub(crate) fn identity(&self) -> Option<(u64, u64, GuestVirtualAddr, &'static str)> {
+        let (ordinal, context, pc, kind) = match self {
+            Self::Base(record) => return record.identity(),
+            Self::Scalar(s) => (s.ordinal, s.context, s.pc, "scalar"),
+            Self::Pi(PiRecord::PiDma {
+                ordinal,
+                context,
+                pc,
+                ..
+            }) => (*ordinal, *context, *pc, "pi_dma"),
+            Self::Pi(PiRecord::PiRomHalf {
+                ordinal,
+                context,
+                pc,
+                ..
+            }) => (*ordinal, *context, *pc, "pi_rom_half"),
+        };
+        Some((ordinal, context, pc, kind))
+    }
+
+    pub(crate) fn renumber(&mut self, next: u64, scope: u64) {
+        let (ordinal, context) = match self {
+            Self::Pi(PiRecord::PiDma {
+                ordinal, context, ..
+            })
+            | Self::Pi(PiRecord::PiRomHalf {
+                ordinal, context, ..
+            }) => (ordinal, context),
+            Self::Scalar(s) => (&mut s.ordinal, &mut s.context),
+            Self::Base(history::Record::Scalar {
+                ordinal, context, ..
+            })
+            | Self::Base(history::Record::Burst {
+                ordinal, context, ..
+            })
+            | Self::Base(history::Record::Fill {
+                ordinal, context, ..
+            })
+            | Self::Base(history::Record::CacheOperation {
+                ordinal, context, ..
+            })
+            | Self::Base(history::Record::FetchBegin {
+                ordinal, context, ..
+            })
+            | Self::Base(history::Record::FetchEnd {
+                ordinal, context, ..
+            })
+            | Self::Base(history::Record::Fetch {
+                ordinal, context, ..
+            }) => (ordinal, context),
+            Self::Base(_) => return,
+        };
+        *ordinal = next;
+        *context = scope;
+    }
 }
 
 #[derive(Clone, Copy)]
