@@ -13,7 +13,10 @@
    scalar-fetch, CPU-copy, RSP, exception, restore and 64-bit mutation fixtures now
    reproduce locally. Shared explicit fetch boundaries and scalar reads/writes
    pass a 95-record ledger, its prior projection and independent primitive
-   fixtures. Extend this chronology to the bounded boot prefix next.
+   fixtures. The bounded boot prefix now preserves v5 bytes/checkpoints while
+   retaining 5,051,089 ordered records and 32 actual RAM-backed fills. Implement
+   strict complete-source Rust inspection/rechecking next; keep general cache,
+   copy/transfer completion, byte lifetime and mutation completeness separate.
    Current tags/effective addresses can differ from resident-byte history; keep
    those identities separate. A recovered synchronized-restore/cache-power
    fixture now confirms restored residency without a fill and rejects a latest-
