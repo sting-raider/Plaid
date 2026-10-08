@@ -110,6 +110,8 @@ plaid import-fetch <rom> <fetch.ndjson> <out.json>
 plaid verify-fetch <rom> <fetch.ndjson> <map.json>
 plaid import-boot-fetch <rom> <firmware> <fetch.ndjson> <out.json>
 plaid verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json>
+plaid inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json>
+plaid verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json>
 plaid merge <left.json> <right.json> <out.json>
 plaid solve [rom] <map.json>
 ```
@@ -142,6 +144,15 @@ fetches and verifies the effective fetched lane; other lanes have no execution
 claim. Resident context does not establish fill origins or executable lifetimes.
 After spikes 009/011, use corpus `--boot`/`--cache`, optionally
 `--budget 10000000`, for the corresponding complete sources. V3 remains unsupported.
+
+`inspect-boot-history` checks a bounded spike-027 access sidecar against every
+corresponding v5 fetch and the supplied ROM/firmware. Its independent report
+retains both complete source hashes, event counts and unambiguous scalar/fill
+witness counts. `verify-boot-history` reconstructs the complete report, including
+unused payloads, and rejects source/input/report changes. Ambiguous reads and
+unsupported backing stay unknown; no ProgramMap images, generations, lifetimes
+or closure rules are created. `python scripts/test_history.py` exercises CLI
+input/rechecking/overwrite gates with original synthetic inputs.
 
 Additional disposable reference experiments are documented under `spikes/`.
 `python spikes/003-ares-oracle/run.py` builds the pinned ares core separately and
