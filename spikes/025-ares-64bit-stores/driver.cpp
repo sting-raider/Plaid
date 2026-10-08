@@ -3,6 +3,7 @@
  */
 #include <n64/n64.hpp>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <vector>
@@ -87,7 +88,8 @@ int main(int argc, char** argv) {
   cpu.context.endian = !std::strcmp(endian,"little") ? CPU::Context::Little : CPU::Context::Big;
 
   u64 base = !std::strcmp(mode,"cached") ? CACHED : !std::strcmp(mode,"tlbmiss") ? 0x2000ull : UNCACHED;
-  std::printf("{\"mode\":\"%s\",\"op\":\"%s\",\"endian\":\"%s\",\"offset\":%d,",mode,op,endian,offset);
+  std::printf("{\"mode\":\"%s\",\"op\":\"%s\",\"endian\":\"%s\",\"context_little\":%u,\"offset\":%d,",
+    mode,op,endian,(u32)cpu.context.littleEndian(),offset);
   if(std::strcmp(mode,"tlbmiss")) { printBytes("before_guest",base); std::printf(","); }
   printRaw("before_raw"); std::printf(",");
 
