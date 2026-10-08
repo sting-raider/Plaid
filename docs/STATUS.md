@@ -1,6 +1,6 @@
 # Status
 
-2026-10-09. Milestone scope: M1â€“M3 synthetic executable discovery foundation.
+2026-10-09. Milestone scope: M1Ã¢â‚¬â€œM3 synthetic executable discovery foundation.
 
 Implemented:
 
@@ -381,3 +381,5 @@ EBus HiddenRAM research now reproduces an exhaustive 65,536-pair header probe an
 Reproduced TLBWI/alias/remap/ASID/global/reverse-endian fetch cases now retain actual per-fetch identity-RDRAM origins. Cached and failed translations fail closed; mapping lifetime and other page/mode cases remain open (ADR-0063).
 
 Translated/degraded scalar Word reads reproduce exact backing/result receipts and stochastic sequence. Request address, translated raw origin and CCI-delivered value stay separate; full fetch and other-path evidence remains open (ADR-0064).
+
+Actual D-cache eviction now reproduces the full outgoing 16-byte write, including a clean lane changed externally in backing, before slot reuse. Dirty masks/current RAM cannot reconstruct those origins (ADR-0065).

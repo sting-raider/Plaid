@@ -244,3 +244,5 @@ Before introducing code copied or linked from an upstream project:
 `spikes/036-ares-tlb-uncached-fetch/` reuses the original scalar/fetch sensor and executes actual pinned TLBWI/interpreter cases. n64-systemtest/Mupen comparisons remain source evidence, without hardware execution or extra production dependencies.
 
 `spikes/033-ares-rdram-translated-backing/` generates optional reference shadows in ignored output, executes the original read/degrade once, and reproduces actual Word evidence. Gopher comparison stays source-only; no upstream source enters production.
+
+`spikes/036-ares-dcache-eviction-lineage/` is an original project-owned model and actual guest transaction fixture with isolated optional reference shadows and preserved upstream licenses; no new production dependency.

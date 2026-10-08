@@ -926,3 +926,16 @@ Other widths, bursts/writes, actual fetch composition and degraded executable-im
 identity remain open. Original project-owned sensor code generates isolated
 ignored reference shadows with preserved upstream licensing; no production
 emulator dependency or ProgramMap/closure change is introduced.
+
+## ADR-0065: Writeback exports the entire outgoing resident line
+
+Status: Accepted for research, 2026-10-09.
+
+The reproduced guest eviction fixture overwrites an externally changed clean
+lane with its older resident bytes before filling the replacement. Dirty mask
+is not writeback span; current RAM and post-replacement slot state cannot recover
+the outgoing source. Preserve per-byte resident origin/generation and capture
+actual full backing transactions in writeback scope before retag/reuse. Exact
+model/evidence hashes and reported baseline/repeat checkpoints agree locally.
+This finite original fixture keeps generated upstream builds/licensing isolated;
+full lineage verification, arbitrary stores/epochs and closure remain open.
