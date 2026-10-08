@@ -1,0 +1,25 @@
+name: Research VR4300 64-bit stores
+
+on:
+  push:
+    branches: [research/64bit-store-mutation-gpt56]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - name: Syntax-check deterministic model and harness driver
+        run: |
+          python3 -m py_compile spikes/025-ares-64bit-stores/model.py spikes/025-ares-64bit-stores/run.py
+          python3 spikes/025-ares-64bit-stores/model.py > /tmp/model.out
+          head -n 2 /tmp/model.out
+      - name: Build exact pinned ares and run exhaustive store matrix
+        run: python3 spikes/025-ares-64bit-stores/run.py
