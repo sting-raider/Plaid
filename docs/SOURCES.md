@@ -66,6 +66,10 @@ source, executable-lifetime and hardware-equivalence claims are not promoted.
 existing prologue, without coherence/translation/bus calls. Twelve original
 fixtures preserve repeated CPU/timing and full RAM/cache checkpoints. Slot/data
 observations remain finite context, with fill/copy/mutation lineage unresolved.
+`spikes/011-ares-cache-fetch/` extends selected-line sensing to the bounded boot
+prefix, with prior-stream projections and unchanged repeated CPU/device/memory/
+cache checkpoints. Research v5 remains unsupported by production; snapshot
+payloads establish neither fill provenance, epochs nor executable coverage.
 
 ## gopher64/gopher64
 

@@ -482,3 +482,17 @@ identical contents; retain slot/event identity and refuse lifetime inference.
 Snapshot words establish finite resident context, not RAM/ROM lineage or execution
 of every resident word. Broader capture, import and complete-source verification
 need separate decisions. No reference CPU or native code is promoted.
+
+## ADR-0037: Retain finite selected-cache context on the boot prefix
+
+Status: Accepted for research, 2026-10-08.
+
+Research v5 adds an explicit selected-line policy and resident snapshot to each
+cached fetch; uncached fetches omit it. Retain all v4 boot inputs and existing
+ROM-source policy. The one-million-call prefix has 400,954 cached observations
+at 32 resident tuples, exact prior stream/checkpoint projections and matching
+plain/traced/repeated CPU/device/memory/cache checkpoints. Validate slot, tag,
+page index and effective word lane without extra guest accesses. Keep counts
+distinct from fill/epoch identities; other resident words have no execution
+claim. Production currently rejects this scope. Complete-source verification and
+production import require separate handling; backing/lifetimes remain unknown.

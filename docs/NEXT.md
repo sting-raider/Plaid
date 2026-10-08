@@ -38,8 +38,10 @@
    mutation lineage and contextual executable identities next. Keep PIF HLE and
    fixed NTSC/6102 scope visible; PIF backing and RAM/SP lineage remain unknown.
    A selected instruction-cache snapshot sensor now passes twelve controlled
-   cases, with unchanged CPU/timing and full RAM/cache hashes. Apply it to the
-   broader boot prefix and recheck complete sources before production import;
+   cases, with unchanged CPU/timing and full RAM/cache hashes. The one-million
+   boot prefix now preserves 400,954 snapshots and exact prior-stream/checkpoint
+   agreement. Verify the longer prefix and recheck complete sources before
+   production import;
    retain slot/event identities without inferring fill lineage or lifetimes.
    Continue RSP/exception/TLB/FPU verification
    before extending semantic claims.

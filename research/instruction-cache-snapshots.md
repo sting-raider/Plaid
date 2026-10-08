@@ -30,3 +30,19 @@ or generation. Resident words do not establish their RAM/ROM origin or that ever
 word executed. Broader boot capture, source verification, fill/mutation/copy
 lineage and contextual image construction remain separate work. No production
 data handling, native output or whole-ROM closure is promoted.
+
+Spike 011 extends the sensor to the unchanged homebrew's CPU power-entry prefix.
+Research v5 retains the explicit v4 boot inputs and declares
+selected_icache_line_at_prologue. One million fetches include 400,954 cached
+snapshots at 32 distinct slot/tag/index/data tuples; uncached fetches have none.
+Virtual slot and page index, effective physical page/index/lane and exact word
+are checked. Complete v3/v4 projections and previous checkpoint goldens match,
+as do plain/traced/repeated CPU/device/timing/RAM/SP and complete cache hashes.
+The additional cache hash serializes explicit fields without padding/pointers.
+Raw size: 210,032,160 bytes; SHA-256
+`c0dcae4870aaec1b30097d7fd95f2b6214f043e2ac1dea6366b1814655ce4ce9`.
+Full cache hash:
+`eb0abce6ce91d78b5c335be4cb364a7d10744af865a758b9026f9c653c474892`.
+Production rejects this unsupported cache policy without output. Longer-prefix
+and legacy checks are pending. Counts describe finite observations/payloads, not
+fills, epochs or immutable images; backing and lifecycle joins remain unresolved.

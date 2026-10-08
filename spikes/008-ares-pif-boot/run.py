@@ -21,7 +21,7 @@ def equal_files(left, right):
         assert not second.read(1)
 
 
-def worker(budget, *, driver=None, output_root=OUTPUT, boot_inputs=None):
+def worker(budget, *, driver=None, output_root=OUTPUT, boot_inputs=None, cache_policy=None):
     data, firmware = ROM.read_bytes(), FIRMWARE.read_bytes()
     assert hashlib.sha256(data).hexdigest() == "629f908c200bbf21013dcd1d331d4ddedd08a6c9d7ae1f528421564238056e8a"
     assert len(firmware) == 1984 and hashlib.sha256(firmware).hexdigest() == FIRMWARE_SHA
@@ -44,9 +44,9 @@ def worker(budget, *, driver=None, output_root=OUTPUT, boot_inputs=None):
     equal_files(output / "traced.ndjson",output / "repeat.ndjson")
     equal_files(output / "plain.messages",output / "traced.messages")
     equal_files(output / "traced.messages",output / "repeat.messages")
-    digest = hashlib.sha256(); projection = hashlib.sha256(); count = witnesses = 0
+    digest = hashlib.sha256(); projection = hashlib.sha256(); profile_projection = hashlib.sha256(); count = witnesses = 0
     physical_domains = {"pif":set(),"sp":set(),"ram":set(),"cartridge":set(),"other":set()}
-    first = None; ended = False
+    first = None; ended = False; cached_count = 0; snapshots = set()
     legacy_header = {"record":"header","format":"plaid-ares-fetch-research-v3",
         "revision":builder.REV,"rom_sha256":hashlib.sha256(data).hexdigest(),
         "budget":budget,"initial_state":"cpu_power_pif_entry",
@@ -56,6 +56,10 @@ def worker(budget, *, driver=None, output_root=OUTPUT, boot_inputs=None):
     if boot_inputs is not None:
         for key in ("firmware_sha256","pif_processor","pif_checksum_enforced"): del expected_header[key]
         expected_header.update(format="plaid-ares-fetch-research-v4",boot_inputs=boot_inputs)
+    profile_header = dict(expected_header)
+    if cache_policy is not None:
+        assert boot_inputs is not None and cache_policy == "selected_icache_line_at_prologue"
+        expected_header.update(format="plaid-ares-fetch-research-v5",cache_policy=cache_policy)
     header_seen = False
     with (output / "traced.ndjson").open("rb") as trace:
         for raw in trace:
@@ -63,10 +67,29 @@ def worker(budget, *, driver=None, output_root=OUTPUT, boot_inputs=None):
             if event["record"] == "header":
                 assert event == expected_header and not header_seen and count == 0
                 projection.update((json.dumps(legacy_header,separators=(",",":"))+"\n").encode())
+                profile_projection.update((json.dumps(profile_header,separators=(",",":"))+"\n").encode())
                 header_seen = True
             elif event["record"] == "fetch":
                 assert header_seen
-                projection.update(raw)
+                if cache_policy is not None:
+                    if event["cached"]:
+                        snapshot = event.pop("cache_line")
+                        assert set(snapshot) == {"slot","tag_key","index","words"}
+                        assert snapshot["slot"] == (event["pc"]>>5)&0x1ff
+                        assert snapshot["index"] == (snapshot["slot"]<<5)&0xfe0
+                        assert snapshot["index"] == event["physical"]&0xfe0
+                        assert snapshot["tag_key"] == (event["physical"]&~0xfff)|1
+                        assert len(snapshot["words"]) == 8
+                        assert snapshot["words"][(event["physical"]>>2)&7] == event["word"]
+                        snapshots.add((snapshot["slot"],snapshot["tag_key"],snapshot["index"],tuple(snapshot["words"])))
+                        cached_count += 1
+                    else: assert "cache_line" not in event
+                    projected = (json.dumps(event,separators=(",",":"))+"\n").encode()
+                    projection.update(projected); profile_projection.update(projected)
+                else:
+                    assert "cache_line" not in event
+                    projection.update(raw)
+                    profile_projection.update(raw)
                 assert event["seq"] == count
                 if first is None: first = event
                 pa = event["physical"]
@@ -84,13 +107,17 @@ def worker(budget, *, driver=None, output_root=OUTPUT, boot_inputs=None):
             elif event["record"] == "end":
                 assert header_seen
                 projection.update(raw)
+                profile_projection.update(raw)
                 assert event == {"record":"end","fetch_count":count,"reason":"instruction_call_budget"}
                 assert not trace.read(1); ended = True
             else: raise AssertionError(event)
     assert ended and count <= budget and first is not None
     assert (first["pc"],first["physical"],first["word"]) == (0xffffffffbfc00000,0x1fc00000,int.from_bytes(firmware[:4],"big"))
     assert states["traced"]["pif_checksum_enforced"] is True
-    checkpoint_hash = hashlib.sha256(json.dumps(states["traced"],sort_keys=True,separators=(",",":")).encode()).hexdigest()
+    checkpoint = dict(states["traced"])
+    if cache_policy is not None:
+        assert len(checkpoint.pop("icache_sha256")) == 64
+    checkpoint_hash = hashlib.sha256(json.dumps(checkpoint,sort_keys=True,separators=(",",":")).encode()).hexdigest()
     if budget == 1000000:
         assert count == budget and witnesses == 0
         assert projection.hexdigest() == "fbdf4da4fbae6bec9712404b7f14df790fe1fb3aca1a9b1239e207248bffe021"
@@ -115,6 +142,9 @@ def worker(budget, *, driver=None, output_root=OUTPUT, boot_inputs=None):
         "messages_sha256":hashlib.sha256((output / "traced.messages").read_bytes()).hexdigest(),
         "guest_failure_lines":[line for line in messages.splitlines() if "failed:" in line],
         "observer_state_unchanged":True,"guest_completion_claimed":False}
+    if cache_policy is not None:
+        results.update(cached_fetches=cached_count,unique_resident_snapshots=len(snapshots),
+            cache_policy=cache_policy,v4_projection_sha256=profile_projection.hexdigest())
     (output / "results.json").write_text(json.dumps(results,indent=2)+"\n")
     print(json.dumps(results,indent=2))
     return results

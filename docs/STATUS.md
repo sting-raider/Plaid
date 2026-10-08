@@ -176,6 +176,11 @@ Implemented:
   TLB/endian and virtual-bank cases. Plain/traced/repeated CPU/Count/COP0 and full
   RAM/cache checkpoints agree. Equal snapshots after eviction or in distinct
   slots prove no lifetime; broader capture and production handling remain open.
+- Research v5 now retains selected-cache context on the one-million-call boot
+  prefix: 400,954 snapshots at 32 resident tuples, with complete prior stream/
+  checkpoint agreement and unchanged repeated CPU/device/memory/cache state.
+  Uncached fetches have no snapshot. Production rejects this unsupported scope;
+  longer-prefix, backing and lifecycle work remain separate.
 
 Verification: 74 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
