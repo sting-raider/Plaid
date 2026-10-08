@@ -2,6 +2,11 @@
 
 Pin: ares `9408cb43d4948fc3ea6e152a307a34348df3fe04`.
 
+Result: **VALIDATED** for the bounded store/cache semantics below. The initial
+late-subwrite partial-commit sub-hypothesis is **REJECTED** for stable translation.
+
+Full analysis: `research/ares-64bit-store-mutation.md`.
+
 ## Hypothesis
 
 `SD`, `SDL` and `SDR` are executable-byte mutation classes absent from Plaid's
@@ -14,8 +19,8 @@ The initial claim also proposed that a later subwrite might fault after an earli
 subwrite committed. Exact pinned source inspection produced a counter-hypothesis:
 every `SDL`/`SDR` subwrite is aligned and remains within one aligned 8-byte window.
 With stable address translation, segment and minimum TLB-page boundaries therefore
-cannot split those subwrites. The executable harness checks invalid default-TLB
-cases for fail-before-mutate behavior rather than assuming partial commit.
+cannot split those subwrites. The executable harness confirms invalid default-TLB
+cases fail before RDRAM/D-cache mutation.
 
 ## Experiment
 
@@ -36,27 +41,51 @@ actual guest-visible bytes and raw RDRAM bytes for:
 byte-identically, compares actual bytes against the independent model, checks
 aligned `SD` versus address-error cases, and hashes the complete results.
 
-Local model check:
+## Reproduce
 
 ```text
 python3 spikes/025-ares-64bit-stores/model.py
-PASS: decomposition widths/lane uniqueness and unaligned SDL+SDR pairs
-model-result SHA-256: 768ff87e0f0690e427a5efad86af02dba7a0a4d56dabceff1adec66bdbfba03e
-model.py SHA-256: b56cec125a2f2c2bc1dad389207700d41359b1aceecf0d7debaa5a9a2d916fad
-```
-
-The full pinned-reference command is:
-
-```text
 python3 spikes/025-ares-64bit-stores/run.py
 ```
 
+Model result:
+
+```text
+PASS: decomposition widths/lane uniqueness and unaligned SDL+SDR pairs
+sha256 768ff87e0f0690e427a5efad86af02dba7a0a4d56dabceff1adec66bdbfba03e
+```
+
+Exact pinned-reference result from GitHub Actions run `37801439305`, job
+`113394390287`, branch commit
+`c41dc462f55bf12a0fbdc15a68b0f138d34c899b`:
+
+```text
+PASS: 158 repeated pinned-ares SD/SDL/SDR cases
+results_sha256=cf8f82bde400e23c0f2225ee55baaf727b7f09b87c2ca2489c2e295aed6c5f1e
+```
+
 The branch-only workflow `.github/workflows/research-64bit-stores.yml` checks out
-the exact ares revision and runs the same command on Linux.
+the exact ares revision and runs the same commands on Linux.
+
+## Key observations
+
+- successful uncached stores update raw RDRAM synchronously;
+- successful cached stores update resident D-cache bytes and dirty state while raw
+  RDRAM and the uncached alias still expose old backing bytes at the immediate
+  post-store checkpoint;
+- one `SDL`/`SDR` instruction may produce 1-3 concrete writes;
+- paired `SDL`/`SDR` stores materialize an arbitrary unaligned 64-bit value across
+  adjacent aligned 8-byte windows;
+- invalid-TLB `SDL`/`SDR` cases fail before raw/D-cache mutation in the tested path;
+- `readDebug<Byte>` is not an architectural guest-endian byte observer in this pin;
+  the final harness uses normal CPU byte reads for guest view and debugger-backed
+  RDRAM reads only for raw backing state.
 
 ## Scope
 
 This is an interpreter/reference experiment, not a production Plaid sensor. It
-does not prove complete store coverage, arbitrary TLB histories, bus-device error
-semantics, LL/SC, FPU stores, DMA/copy provenance, reset/restore, or executable
-lifetime closure. The result must not be promoted to a whole-ROM mutation proof.
+does not prove complete store coverage, arbitrary TLB histories, legal
+reverse-endian user/TLB mode, bus-device error semantics, LL/SC, COP1 stores,
+DMA/copy provenance, reset/restore, I-cache visibility, source-byte provenance, or
+executable lifetime closure. The result must not be promoted to a whole-ROM
+mutation proof.
