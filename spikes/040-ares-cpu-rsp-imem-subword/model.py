@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Independent source-derived model for pinned-ares CPU SB/SH -> RSP IMEM.
+"""Independent source-derived model for VR4300 SB/SH -> RSP IMEM.
 
-The key distinction is between the nominal CPU store width and the concrete
-RSP::writeWord sink effect reached through Memory::RCP::write<Byte/Half>.
+SP memory has a hardware-visible bus quirk: the RCP subword adapter shifts the
+unmasked low 32 bits of the GPR into a 32-bit write.  Depending on the lane, a
+nominal SB/SH therefore exposes more source-register bytes than its nominal width
+and replaces the complete destination word.
 """
 from __future__ import annotations
 import hashlib
@@ -28,13 +30,17 @@ def sink_word(op: str, endian: str, guest_offset: int, value: int = DATA):
         return None
     p = transformed_offset(op, endian, guest_offset)
     lane = p & 3
-    low = value & ((1 << (8 * size)) - 1)
+    # This intentionally does NOT first mask to Byte/Half.  Exact pinned ares
+    # passes rt.u32 through CPU::write/Bus::write, then Memory::RCP shifts that
+    # full value and RSP::writeWord truncates only at the final 32-bit sink.
+    low32 = value & 0xFFFFFFFF
     if size == 1:
         shift = (3 - lane) * 8
     else:
         assert lane in (0, 2)
         shift = 16 if lane == 0 else 0
-    return p & ~3, (low << shift).to_bytes(4, "big")
+    word = (low32 << shift) & 0xFFFFFFFF
+    return p & ~3, word.to_bytes(4, "big")
 
 
 def apply(before: bytes, op: str, endian: str, guest_offset: int, value: int = DATA) -> bytes:
@@ -62,13 +68,21 @@ def main() -> None:
                     word_base, payload = sink_word(op, endian, off)
                     assert after[word_base:word_base + 4] == payload
                     changed = [i for i, (a, b) in enumerate(zip(initial, after)) if a != b]
-                    # Distinct nonzero sentinels and zero-filled unused lanes make
-                    # all four overwritten bytes observably different.
                     assert changed == list(range(word_base, word_base + 4))
                 report.append({
                     "endian": endian, "op": op, "offset": off, "fault": fault,
                     "after": list(after), "changed": changed,
                 })
+
+    # Reproduce the exact pinned n64-systemtest hardware-oracle examples.
+    v = 0x12345678
+    zero = bytes(16)
+    assert apply(zero, "SB", "big", 0, v)[0:4] == bytes.fromhex("78000000")
+    assert apply(zero, "SB", "big", 5, v)[4:8] == bytes.fromhex("56780000")
+    assert apply(zero, "SB", "big", 10, v)[8:12] == bytes.fromhex("34567800")
+    assert apply(zero, "SB", "big", 15, v)[12:16] == bytes.fromhex("12345678")
+    assert apply(bytes.fromhex("deadbeefbaddecafabababab00000000"), "SH", "big", 0, v)[0:4] == bytes.fromhex("56780000")
+    assert apply(bytes.fromhex("deadbeefbaddecafabababab00000000"), "SH", "big", 6, v)[4:8] == bytes.fromhex("12345678")
 
     rng = random.Random(0x5348494D454D)
     for _ in range(100_000):
@@ -85,7 +99,7 @@ def main() -> None:
         assert after[word_base + 4:] == before[word_base + 4:]
 
     encoded = (json.dumps(report, sort_keys=True, separators=(",", ":")) + "\n").encode()
-    print("PASS: 32 exhaustive lane/fault cases + 100000 randomized sink cases")
+    print("PASS: 32 exhaustive lane/fault cases + hardware-oracle examples + 100000 randomized sink cases")
     print("model_sha256=" + hashlib.sha256(encoded).hexdigest())
 
 
