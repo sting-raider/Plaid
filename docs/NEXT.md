@@ -7,8 +7,10 @@
    importer now retains these facts, requires explicit mapped capacity and
    preserves byte-identical v0 serialization. Keep source/lifetime unknown.
    A bounded delegating-ROM-device experiment now distinguishes actual returned
-   halfwords from PI latch/open-bus/prior-data reads. Extend to the broad capture,
-   verify canonical backing and raw provenance, then decide production handling.
+   halfwords from PI latch/open-bus/prior-data reads. Its broader prefix verifies
+   1,852 actual reads at 65 canonical ROM offsets with exact v1 projection/state
+   agreement. Promote project-owned source handling with raw-source verification;
+   keep executable lifetime and other memory sources unknown.
    The streaming importer now preserves 64-bit PCs,
    fetched-word/slot variants and digest-qualified first/last indices/counts,
    rechecks the complete source and refuses closure of unknown identities. The pinned

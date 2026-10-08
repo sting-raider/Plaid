@@ -391,3 +391,17 @@ boundary with both recompilers disabled; no additional guest reads/translations
 or reference CPU changes occur. Keep this separately licensed research experiment
 isolated. Broader corpus capture, canonical source verification and production
 handling require further work; no generation/immutability/closure is promoted.
+
+## ADR-0031: Extend actual ROM-read sensing to the bounded homebrew prefix
+
+Status: Accepted for research, 2026-10-08.
+
+Research v2 declares the delegated-halfword fetch-window policy and preserves
+known or unknown source on every event. Actual ROM reads account for 1,852 fetches
+at 65 offsets, with canonical bytes and mapped bounds checked. Other sources stay
+unknown. Complete v1 projection, full checkpoints/messages and repeated v2 bytes
+agree. Fixed golden hashes avoid racing other experiments' mutable outputs.
+Existing observer modes and source-boundary fixtures pass. Keep the interpreter
+window/recompilation constraints explicit and retain all boot/coverage/lifecycle
+limits. Production data handling and executable-image identities remain separate
+decisions; no reference CPU code or native execution is promoted.

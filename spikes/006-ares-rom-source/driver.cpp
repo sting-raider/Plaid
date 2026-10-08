@@ -45,7 +45,7 @@ struct SourceFrontend : Headless {
   }
 };
 
-int main(int argc, char** argv) {
+int rom_source_fixture_main(int argc, char** argv) {
   if(argc != 4) return 2;
   bool wrapped = strcmp(argv[1], "original");
   bool traced = !strcmp(argv[1], "traced");
@@ -116,3 +116,7 @@ int main(int argc, char** argv) {
   ares::Nintendo64::system.unload();
   return 0;
 }
+
+#if !defined(PLAID_ROM_FETCH_SOURCE)
+int main(int argc, char** argv) { return rom_source_fixture_main(argc, argv); }
+#endif
