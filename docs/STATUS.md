@@ -123,8 +123,12 @@ Implemented:
   even an otherwise closed declared-image CFG. The broad stream yields 53,037
   summaries in a 20,053,874-byte map, accounts for all 4,999,998 fetches, verifies
   against its complete raw source and self-merges byte-identically.
+- Research v1 imports typed effective physical/cache facts with explicit mapped
+  capacity. Remapping/cache variants remain distinct and source verification
+  rechecks them. V0 bytes stay identical; mixed captures merge conservatively.
+  Physical context creates no backing source, image or code-generation proof.
 
-Verification: 68 Rust integration tests, formatting, strict Clippy, CLI integration,
+Verification: 70 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.

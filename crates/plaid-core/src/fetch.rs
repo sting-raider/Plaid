@@ -10,9 +10,17 @@ use std::{
 };
 
 pub const FORMAT: &str = "plaid-ares-fetch-research-v0";
+pub const PHYSICAL_FORMAT: &str = "plaid-ares-fetch-research-v1";
 pub const REVISION: &str = "9408cb43d4948fc3ea6e152a307a34348df3fe04";
 pub const INITIAL_STATE: &str = "declared_post_ipl2_sp_entry";
 pub const MAX_BUDGET: u64 = 10_000_000;
+
+// Missing optional version fields default to None; explicit null is invalid.
+fn present<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
+    deserializer: D,
+) -> Result<Option<T>, D::Error> {
+    T::deserialize(deserializer).map(Some)
+}
 
 #[derive(Deserialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
@@ -23,12 +31,18 @@ enum Record {
         rom_sha256: String,
         budget: u64,
         initial_state: String,
+        #[serde(default, deserialize_with = "present")]
+        mapped_cartridge_size: Option<u32>,
     },
     Fetch {
         seq: u64,
         pc: GuestVirtualAddr,
         word: u32,
         delay_slot: bool,
+        #[serde(default, deserialize_with = "present")]
+        physical: Option<PhysicalAddr>,
+        #[serde(default, deserialize_with = "present")]
+        cached: Option<bool>,
     },
     End {
         fetch_count: u64,
@@ -61,11 +75,12 @@ pub fn import_fetch<R: BufRead>(mut reader: R, rom: &CanonicalRom) -> Result<Pro
         rom_sha256,
         budget,
         initial_state,
+        mapped_cartridge_size,
     } = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?
     else {
         return Err("fetch stream must begin with header".into());
     };
-    if format != FORMAT
+    if (format != FORMAT && format != PHYSICAL_FORMAT)
         || revision != REVISION
         || initial_state != INITIAL_STATE
         || budget == 0
@@ -76,7 +91,15 @@ pub fn import_fetch<R: BufRead>(mut reader: R, rom: &CanonicalRom) -> Result<Pro
     if rom_sha256 != rom.identity.sha256 {
         return Err("fetch stream does not match canonical ROM".into());
     }
-    let mut samples = BTreeMap::<(GuestVirtualAddr, u32, bool), (u64, u64, u64)>::new();
+    let physical_format = format == PHYSICAL_FORMAT;
+    if physical_format != mapped_cartridge_size.is_some()
+        || mapped_cartridge_size
+            .is_some_and(|size| u64::from(size) != (rom.identity.size & !7) || size < 64)
+    {
+        return Err("invalid mapped cartridge capacity for fetch format".into());
+    }
+    let mut samples =
+        BTreeMap::<(GuestVirtualAddr, u32, bool, Option<FetchAccess>), (u64, u64, u64)>::new();
     let mut count = 0;
     loop {
         if !line(&mut reader, &mut bytes)? {
@@ -89,12 +112,21 @@ pub fn import_fetch<R: BufRead>(mut reader: R, rom: &CanonicalRom) -> Result<Pro
                 pc,
                 word,
                 delay_slot,
+                physical,
+                cached,
             } => {
+                let access = match (physical_format, physical, cached) {
+                    (true, Some(physical), Some(cached)) if physical.0.is_multiple_of(4) => {
+                        Some(FetchAccess { physical, cached })
+                    }
+                    (false, None, None) => None,
+                    _ => return Err("invalid physical fetch metadata for format".into()),
+                };
                 if seq != count || count >= budget || !pc.0.is_multiple_of(4) {
                     return Err("invalid fetch sequence, address or budget".into());
                 }
                 let sample = samples
-                    .entry((pc, word, delay_slot))
+                    .entry((pc, word, delay_slot, access))
                     .or_insert((seq, seq, 0));
                 sample.1 = seq;
                 sample.2 += 1;
@@ -130,15 +162,17 @@ pub fn import_fetch<R: BufRead>(mut reader: R, rom: &CanonicalRom) -> Result<Pro
             initial_state,
             instruction_call_budget: budget,
             fetch_count: count,
+            mapped_cartridge_size,
         },
     );
     map.fetch_observations = samples
         .into_iter()
         .map(
-            |((pc, word, delay_slot), (first_seq, last_seq, occurrences))| ObservedFetch {
+            |((pc, word, delay_slot, access), (first_seq, last_seq, occurrences))| ObservedFetch {
                 pc,
                 word,
                 delay_slot,
+                access,
                 capture: id.clone(),
                 first_seq,
                 last_seq,

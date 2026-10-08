@@ -358,3 +358,20 @@ pin's eight-byte rounding. This is effective access context, not proof of backin
 bytes, retirement or executable lifetime. Preserve notices and build the ISC/BSD
 reference separately; no reference instruction code enters Plaid or native mode.
 Production handling and image/source/lifecycle joins require separate decisions.
+
+## ADR-0029: Preserve versioned physical access in raw fetch summaries
+
+Status: Accepted, 2026-10-08.
+
+Import the pinned research v1 stream as project-owned data. Each observation may
+carry typed effective physical address/cache policy; include both in semantic
+uniqueness and endpoint witnesses so remappings or cache variants never collapse.
+The capture's explicit mapped capacity identifies v1 and must match the pinned
+loader's canonical-ROM capacity rounding. Require both access fields in every v1
+event and reject them in v0; null, partial pairs and misalignment fail. Extend the
+full-source rechecker to these facts and metadata. Default/omit additive fields to
+preserve byte-identical v0 serialization. Keep v0 and v1 capture identities separate
+under merge. Physical context creates no ROM/load source, image, generation or
+retirement claim; the independent unknown-identity solver gate remains unchanged.
+No reference CPU code is promoted. Backing-source and lifecycle witnesses need
+separate evidence before any executable-image construction.

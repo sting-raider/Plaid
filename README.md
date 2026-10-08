@@ -121,6 +121,8 @@ No commercial ROM assets are needed by the tests.
 
 `import-fetch` streams the pinned ares observer's separate format into raw 64-bit
 PC/word/slot summaries. `verify-fetch` regenerates them from the complete source.
+Research v1 additionally retains effective physical address and cache policy;
+remapped/cache variants stay distinct. V0 remains compatible and byte-identical.
 They have no established image generation, code lifetime or retirement identity;
 the solver keeps them OPEN. After spike 004 creates the ignored broad capture,
 `python scripts/test_fetch_corpus.py` checks full-source provenance, self-merge and

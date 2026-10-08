@@ -3,8 +3,9 @@
 1. Establish explicit physical/cartridge backing and contextual executable image
    identities for raw fetches. A separate physical/cache observer now preserves
    existing translated/endian-selected fetch inputs without additional accesses;
-   broad checkpoints/v0 projection and cache/TLB/endian fixtures pass. Promote
-   project-owned data handling separately, preserving legacy format compatibility.
+   broad checkpoints/v0 projection and cache/TLB/endian fixtures pass. The v1
+   importer now retains these facts, requires explicit mapped capacity and
+   preserves byte-identical v0 serialization. Keep source/lifetime unknown.
    The streaming importer now preserves 64-bit PCs,
    fetched-word/slot variants and digest-qualified first/last indices/counts,
    rechecks the complete source and refuses closure of unknown identities. The pinned
