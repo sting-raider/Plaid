@@ -10,7 +10,11 @@
 #include <cstdlib>
 #include <nall/hash/sha256.hpp>
 #if defined(PLAID_ACCESS_BOOT)
+#if defined(PLAID_PI_ACCESS_BOOT)
+#include "../030-ares-boot-pi-history/observer.hpp"
+#else
 #include "../027-ares-boot-history/observer.hpp"
+#endif
 #endif
 
 static void cache_fetch_fields(FILE* trace,u64 pc,u32 physical,bool cached,u32 word) {

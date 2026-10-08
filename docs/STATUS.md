@@ -306,6 +306,12 @@ Implemented:
   clock-wrap case. Source routes read/write completion through the same method;
   last-write context cannot certify transfer completion. CPU/PI scheduling and
   hardware execution remain unverified by this container/source-only experiment.
+- Research boot history v1 retains 8,823,134 records at 610,000 calls, with exact
+  canonical ROM origins for all 1,638,808 successful PI byte writes. Complete
+  prior v0 history/v5 fetch bytes and original-PI/disabled/repeated reported
+  checkpoints agree. Four copy calls return and three status transitions occur;
+  final busy is 1 and transfer completion remains uncertified. Production v0
+  rejects v1, keeping broader Rust inspection and executable lifetimes separate.
 
 Verification: 81 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

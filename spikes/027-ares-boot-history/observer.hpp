@@ -6,6 +6,12 @@ static u64 accessBootOrdinal = 0, accessBootActive = 0, accessBootPending = 0;
 static u64 accessBootPc = 0, accessBootVaddr = 0;
 static u32 accessBootTranslated = 0, accessBootBus = 0, accessBootWord = 0;
 static bool accessBootCached = false;
+#ifndef PLAID_ACCESS_BOOT_FORMAT
+#define PLAID_ACCESS_BOOT_FORMAT "plaid-ares-access-history-v0"
+#endif
+#ifndef PLAID_ACCESS_BOOT_POLICY
+#define PLAID_ACCESS_BOOT_POLICY "identity_ram_successful_access_and_fetch_boundaries"
+#endif
 
 static void access_boot_record(const char* kind) {
   if(!accessBootTrace || ++accessBootOrdinal == 0) std::abort();
@@ -78,8 +84,8 @@ static void access_boot_start(const char* tracePath,const char* romHash,u32 budg
   std::string filename = std::string(tracePath) + ".history.ndjson";
   accessBootTrace = std::fopen(filename.c_str(),"wb");
   if(!accessBootTrace) std::abort();
-  std::fprintf(accessBootTrace,"{\"record\":\"header\",\"format\":\"plaid-ares-access-history-v0\",\"revision\":\"9408cb43d4948fc3ea6e152a307a34348df3fe04\",\"rom_sha256\":\"%s\",\"budget\":%u,\"mapped_cartridge_size\":%u,\"firmware_sha256\":\"%s\",\"policy\":\"identity_ram_successful_access_and_fetch_boundaries\",\"lifecycle_policy\":\"single_run_no_host_restore\",\"paired_fetch_format\":\"plaid-ares-fetch-research-v5\"}\n",
-    romHash,budget,mappedSize,firmwareHash);
+  std::fprintf(accessBootTrace,"{\"record\":\"header\",\"format\":\"%s\",\"revision\":\"9408cb43d4948fc3ea6e152a307a34348df3fe04\",\"rom_sha256\":\"%s\",\"budget\":%u,\"mapped_cartridge_size\":%u,\"firmware_sha256\":\"%s\",\"policy\":\"%s\",\"lifecycle_policy\":\"single_run_no_host_restore\",\"paired_fetch_format\":\"plaid-ares-fetch-research-v5\"}\n",
+    PLAID_ACCESS_BOOT_FORMAT,romHash,budget,mappedSize,firmwareHash,PLAID_ACCESS_BOOT_POLICY);
   plaidRdramScalarObserver = access_boot_scalar;
   plaidRdramBurstObserver = access_boot_burst;
   plaidCacheFillObserver = access_boot_fill;

@@ -5,6 +5,11 @@
 #include "../003-ares-oracle/driver.cpp"
 #undef main
 
+#if defined(PLAID_ROM_HALF_ACCESS)
+// Project-owned optional result callback; no guest access or device layout change.
+static void (*plaidRomHalfObserver)(u32,u16) = nullptr;
+#endif
+
 struct RomObserver : PIDevice {
   struct HalfRead { u32 offset; u16 word; };
   std::vector<HalfRead> reads;
@@ -14,7 +19,12 @@ struct RomObserver : PIDevice {
   auto piReadHalf(PIDeviceTiming timing) -> maybe<u16> override {
     auto offset = cartridge.romDevice.piViewOffset;
     auto data = cartridge.romDevice.piReadHalf(timing);
-    if(data) reads.push_back({offset, *data});
+    if(data) {
+      reads.push_back({offset, *data});
+      #if defined(PLAID_ROM_HALF_ACCESS)
+      if(plaidRomHalfObserver) plaidRomHalfObserver(offset,*data);
+      #endif
+    }
     return data;
   }
   auto piWriteHalf(u16 data, PIDeviceTiming timing) -> void override {

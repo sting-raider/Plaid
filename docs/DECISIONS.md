@@ -757,3 +757,21 @@ only capture metadata; do not certify transfer completion from it. Future
 completion evidence needs distinct successful insertion/dispatch identity,
 direction, cancellation/removal and capture lifecycle. Keep completed byte
 effects separate from queue success or completion and retain unknown obligations.
+
+## ADR-0054: Capture finite boot PI origins under a distinct research version
+
+Status: Accepted for research, 2026-10-08.
+
+Research history v1 retains returned PI buffer halves, actual delegated ROM
+results, attempts/returns and successful identity-RAM transfer/block/lane effects
+alongside the existing chronology. The 610,000-call prefix joins 1,638,808 writes
+to exact canonical ROM sources, preserving all complete original-PI v0/v5 bytes
+and reported baseline/disabled/repeated checkpoints. The 8,823,134-record stream
+repeats exactly; its v0 projection preserves ordinal/context relationships.
+Four copy calls return and three status transitions occur; the final reference
+busy bit remains set. Status observer contexts do not certify queue-to-transfer
+completion under ADR-0053. Seventeen forged/truncated metadata/protocol cases
+fail. Production v0 rejects research v1; only the original projected v0 can use
+the existing inspector. Implement strict original Rust v1 source rechecking
+under a separate decision before promotion; finite copy facts supply no complete
+mutation census, executable identity/lifetime or whole-ROM certificate.
