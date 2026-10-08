@@ -24,7 +24,7 @@ CONTRACTS = {
         "template<u32 Size>\nauto CPU::DataCache::write(u64 vaddr, u32 paddr, u64 data) -> void {",
     ],
     "ares/n64/rdram/rdram.hpp": [
-        "Memory::Writable::write<Size>(address, value);",
+        "template<u32 Size>\n    auto write(u32 address, u64 value, RBusDevice device) -> void {",
         "self.hidden.update<Size>(address, value);",
     ],
     "ares/n64/memory/lsb/writable.hpp": [
