@@ -9,7 +9,7 @@ The matrix covers:
 - `SDL` offsets 0..7 in both endian contexts;
 - `SDR` offsets 0..7 in both endian contexts;
 - `SD` offsets 0..7, proving aligned success and misalignment failure;
-- standard `SDL addr` + `SDR addr+7` pairs at all eight starting offsets;
+- endian-correct unaligned pairs at all eight starting offsets: big-endian uses `SDL addr` + `SDR addr+7`, while little-endian uses `SDL addr+7` + `SDR addr`;
 - unmapped-TLB failure for every `SDL`/`SDR` offset and aligned `SD` in both endian contexts;
 - two byte-identical repetitions of every case.
 
@@ -26,4 +26,4 @@ The run writes `target/ares-sd-sdl-sdr/results.json` and prints its SHA-256. Gen
 
 ## Reference cross-check
 
-Pinned Mupen64Plus Core `ba95bab92a76744753bfe61470823a4937850ab0` is used as an independent source oracle. Its `mips_instructions.def` expresses `SDL`/`SDR` as masks passed to `r4300_write_aligned_dword`, while `r4300_core.c` emits two masked 32-bit memory writes. This differs structurally from ares' subwrite decomposition but agrees on the architectural byte masks.
+Pinned Mupen64Plus Core `ba95bab92a76744753bfe61470823a4937850ab0` is used as an independent source oracle for the normal big-endian N64 path. Its `mips_instructions.def` expresses `SDL`/`SDR` as masks passed to `r4300_write_aligned_dword`, while `r4300_core.c` emits two masked 32-bit memory writes. This differs structurally from ares' subwrite decomposition but agrees on the big-endian architectural byte masks. Reverse-endian lane behavior is validated against pinned ares source plus execution, not claimed as a Mupen cross-check.
