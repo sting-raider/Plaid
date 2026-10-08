@@ -151,8 +151,10 @@ Implemented:
 - A bounded CPU power-entry experiment loads the existing ignored NTSC PIF
   firmware through the system pak, without host SP copying or register/PC seeds.
   Plain/traced/repeated CPU/COP0/PIF/PI/Count/RAM/SP checkpoints agree at one
-  million calls. Firmware sets Config 7006E463 and passes the checksum stage;
-  the loader is still waiting for PI DMA before guest tests begin. Reference PIF
+  and ten million calls. Firmware sets Config 7006E463 and passes the checksum
+  stage. The longer prefix leaves PI polling and runs StartupTest and subsequent
+  cartridge-memory tests with no reported failures; full-suite completion remains
+  unverified. Reference PIF
   HLE, fixed NTSC/6102 profile and finite budget remain explicit limitations.
   Research v3 records firmware identity; production rejects this boot scope.
   Firmware bytes remain ignored; no PIF backing or executable lifetime is inferred.

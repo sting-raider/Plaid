@@ -29,7 +29,8 @@
    The bounded CPU power-entry experiment now records the existing PIF firmware
    input and matching repeated CPU/device/memory checkpoints. Its checksum stage
    passes with Config 7006E463; the one-million-call loader prefix is PI-busy.
-   Verify the longer guest prefix, explicitly version the complete boot profile
+   The longer ten-million-call prefix now repeats exactly and reaches guest tests
+   with no reported failures. Explicitly version the complete boot profile
    and recheck supplied firmware bytes before production import. Keep PIF HLE and
    fixed NTSC/6102 scope visible; PIF backing and RAM/SP lineage remain unknown.
    Continue RSP/exception/TLB/FPU verification

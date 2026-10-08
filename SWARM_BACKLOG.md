@@ -51,5 +51,6 @@ copy/cache/mutation lineage and executable lifetime remain open; W012 stays TODO
 
 CPU boot-input research: natural power entry with ignored firmware input now has
 matching repeated CPU/device/memory checkpoints and explicit PIF-HLE/checksum
-scope. The bounded loader prefix remains PI-busy before guest tests. Complete
+scope. The longer prefix leaves PI polling and reaches guest tests with matching
+repeated checkpoints and no reported failures; full-suite completion is unverified. Complete
 profile/input verification and production handling remain open; W012 stays TODO.
