@@ -254,3 +254,5 @@ Before introducing code copied or linked from an upstream project:
 `spikes/034-ares-dcache-writeback-lineage/` generates optional layout-neutral CPU/cache and RDRAM shadows under ignored output, preserves upstream licensing, and now has actual baseline/repeated evidence plus an original adversarial reducer.
 
 `spikes/036-ares-sb-sh-stores/` retains an original model and unmodified-reference handler fixture, with no extra upstream source copied into production. Worker note filenames remain separate for the two independent SB/SH lanes.
+
+`spikes/033-ares-sb-sh-stores-gpt56/` retains the independent original 100-case fixture and construction model. Generated ares builds stay ignored and separately licensed; no ROM data enters Git.

@@ -156,3 +156,5 @@ Retained/reproduced `pi-read-lifecycle-gpt56sol` (`1f7eac1`): six actual read/qu
 Retained `dcache-writeback-lineage-gpt56sol` (`674109b`), corrected stale closeout model numbers and completed actual-reference reproduction. Primary measured reducer adds mutation revisions/exact sink chronology and passes six forgeries (ADR-0067).
 
 Retained/reproduced `sb-sh-mutation-gpt56sol` (`6b6adcf`): independent 100,000-case model and actual 96-case result hash. The note is renamed with `-independent` to preserve both workers original closeouts.
+
+Retained/reproduced `sb-sh-mutation-gpt56` (`6fd2107`): exact model and 100-case actual result hashes, including byte/halfword word construction. Distinct output roots prevent the workers shared-path collision.
