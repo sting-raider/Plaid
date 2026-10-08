@@ -66,6 +66,9 @@ def source_audit():
     for name in sorted(VECTOR_STORES):
         body = function_body(vpu, f"auto RSP::{name}(")
         assert "dmem.write<Byte>" in body and "imem" not in body, (name, body)
+    srv = function_body(vpu, "auto RSP::SRV(")
+    assert "auto end = start + (address & 15);" in srv
+    assert "address &= ~15;" in srv
 
     assert "} dmem{*this};\n  Memory::Writable imem;" in rsp_hpp
     assert "dmem.allocate(4_KiB);\n  imem.allocate(4_KiB);" in rsp_cpp
@@ -122,6 +125,7 @@ def source_audit():
         "ares_vector_stores": sorted(VECTOR_STORES),
         "ares_dmem_bytes": 4096,
         "ares_imem_bytes": 4096,
+        "ares_srv_aligned_zero_length": True,
         "gopher_rsp_mem_bytes": 8192,
         "gopher_store_mask": "0x0fff",
         "gopher_imem_selector": "0x1000",
@@ -140,13 +144,16 @@ def main():
     raw2 = subprocess.check_output([str(exe)], text=True, timeout=30)
     assert raw1 == raw2
     observed = json.loads(raw1)
-    assert observed["probe_count"] == 28
-    expected = {"SB", "SH", "SW-wrap", "SW-bit12"}
+    assert observed["probe_count"] == 29
+    expected = {"SB", "SH", "SW-wrap", "SW-bit12", "SRV@0x100f"}
     for name in VECTOR_STORES:
         expected.add(name + "@0x1000")
         expected.add(name + "@0x0fff")
     assert {p["name"] for p in observed["probes"]} == expected
-    assert all(p["changed_dmem"] > 0 for p in observed["probes"])
+    by_name = {p["name"]: p for p in observed["probes"]}
+    assert by_name["SRV@0x1000"]["changed_dmem"] == 0
+    assert by_name["SRV@0x100f"]["changed_dmem"] > 0
+    assert all(p["changed_dmem"] > 0 for p in observed["probes"] if p["name"] != "SRV@0x1000")
 
     result = {
         "ares_revision": ARES_REV,
@@ -160,7 +167,7 @@ def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     (OUTPUT / "results.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, sort_keys=True))
-    print("PASS: decoded pinned-ares RSP scalar/vector stores mutate DMEM only; 0x1000 and 0xfff adversaries leave IMEM byte-identical; Gopher64 and n64-systemtest independently corroborate the DMEM-only address domain")
+    print("PASS: decoded pinned-ares RSP scalar/vector stores never mutate IMEM; all nonzero-length adversaries mutate DMEM only, aligned SRV is correctly zero-length, and Gopher64/n64-systemtest independently corroborate the DMEM-only address domain")
 
 
 if __name__ == "__main__":
