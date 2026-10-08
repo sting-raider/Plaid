@@ -1,11 +1,11 @@
 # Next
 
-1. Recognize bounded jump/pointer tables, preserve data-source assumptions and
-   distinguish candidate evidence from exhaustive immutable-table certificates.
-   Extend cross-block analysis to joins only with sound rechecked invariants.
-2. Extend the headless execution corpus, especially register allocation stress,
+1. Extend the headless execution corpus, especially register allocation stress,
    branch-likely/link alias cases and pagespan JR/JALR. Then build a reference
    session with real devices. Keep speculative compilation distinct from execution.
+2. Prove pointer-table data immutability and guard coverage before issuing exhaustive
+   table certificates. Extend cross-block joins only with rechecked invariants;
+   the current table recognizer and single-predecessor chains are restricted passes.
 3. Track decompression, CPU copies, address aliases and overlay unload/reload,
    relocation and instruction-patch snapshots. PI copy sensing alone is insufficient.
 4. Implement whole-ROM certificate verifiers for roots/boot, exceptions, execution

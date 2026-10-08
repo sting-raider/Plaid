@@ -138,3 +138,16 @@ CFG from instruction bytes, then check supplied block/edge facts: deleting a
 predecessor cannot manufacture a proof. Serialize selected edges, block identities
 and word hash; independently recompute them when verifying. Bounded analysis may
 remain unresolved. This is declared-CFG evidence, not whole-ROM coverage.
+
+## ADR-0014: Pointer-table snapshots yield candidates, not closed targets
+
+Status: Accepted, 2026-10-08.
+
+A restricted SLTIU/branch guard followed by scalar address construction, SLL,
+ADDU, LW and JR/JALR can suggest a bounded table. Enumerate at most 256 entries
+from a supplied memory image, retaining guard/prefix/table hashes and assumptions.
+Reject known bypasses, changed index registers, unsupported bounds, incomplete
+sources and malformed pointers conservatively. These facts are candidate evidence:
+neither table immutability nor all runtime entry paths are certified. The solver
+must keep the indirect site and immutability obligation open. Pattern matches may
+guide traversal but may never manufacture native readiness.
