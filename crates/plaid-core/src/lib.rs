@@ -4,6 +4,7 @@
 
 pub mod discovery;
 pub mod indirect;
+mod indirect_chain;
 pub mod loads;
 pub mod merge;
 pub mod pipeline;

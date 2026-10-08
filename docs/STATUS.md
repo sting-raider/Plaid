@@ -30,6 +30,9 @@ Implemented:
 - Bounded local constant-target certificates, independent rechecking and recursive
   traversal of inferred in-image targets. Repartitioning can revoke a certificate
   while retaining its candidate evidence.
+  Restricted cross-block certificates propagate through single-predecessor scalar
+  chains and selected branch delay slots. They reconstruct CFG from bytes and
+  reject joins, calls, loops, incoming unknown entries and unsupported effects.
 - Canonical-byte-verified executable loads joined to DMA observations. Reloads
   preserve generations; overlapping sources are overlay candidates, and changed
   bytes remain unclassified executable-write blockers.
@@ -37,7 +40,7 @@ Implemented:
   including omitted and contradictory extra facts. Finite trace samples do not
   close indirect sites.
 
-Verification: 46 Rust integration tests, formatting, strict Clippy, CLI integration,
+Verification: 50 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook and CPU execution integration pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.
@@ -54,7 +57,7 @@ exclusions. Whole-ROM mode remains OPEN and `native_complete` is always false.
 There is no native output, game compatibility claim or performance claim.
 
 Remaining gaps: full reference sessions with devices, pagespan indirect execution
-correlation, non-x64 runtime hooks, cross-block/table proofs, automatic boot/CIC
+correlation, non-x64 runtime hooks, general join/loop and table proofs, automatic boot/CIC
 roots, overlay/relocation lifecycle, non-PI copies, exceptions/TLB/execution modes,
 executable mutation and RSP policies. Header CRC fields are parsed, not verified.
 Analysis scalability has not been benchmarked. See NEXT for the execution order.

@@ -16,11 +16,11 @@ pub struct ConstantCertificate {
     pub prefix_sha256: String,
 }
 
-fn signed_word(value: u32) -> u64 {
+pub(crate) fn signed_word(value: u32) -> u64 {
     i64::from(value as i32) as u64
 }
 
-fn transfer(word: u32, pc: GuestAddr, state: &mut [Option<u64>; 32]) {
+pub(crate) fn transfer(word: u32, pc: GuestAddr, state: &mut [Option<u64>; 32]) {
     let i = decode(word, pc);
     // Upstream getters assert that the instruction semantically has that
     // operand (LUI has no rs). Raw fields are safe for this bounded transfer.
@@ -148,24 +148,39 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
     out.indirect_sites.clear();
     for old in &map.indirect_sites {
         let mut site = old.clone();
-        if let Some(proof) = certificate(map, image, &old.site) {
-            let detail = serde_json::to_string(&proof).map_err(|e| e.to_string())?;
+        let proof = if let Some(proof) = certificate(map, image, &old.site) {
+            Some((
+                "plaid-local-constant/v0",
+                proof.target.clone(),
+                serde_json::to_string(&proof),
+            ))
+        } else {
+            crate::indirect_chain::certificate(map, image, &old.site).map(|proof| {
+                (
+                    "plaid-cross-block-constant/v0",
+                    proof.target.clone(),
+                    serde_json::to_string(&proof),
+                )
+            })
+        };
+        if let Some((producer, target, detail)) = proof {
+            let detail = detail.map_err(|e| e.to_string())?;
             let id = format!("constant:{}", sha256(detail.as_bytes()));
             out.evidence.insert(
                 id.clone(),
                 Evidence {
                     kind: EvidenceKind::Static,
-                    producer: "plaid-local-constant/v0".into(),
+                    producer: producer.into(),
                     revision: "0".into(),
                     detail,
                 },
             );
             site.candidates
-                .entry(proof.target.clone())
+                .entry(target.clone())
                 .or_default()
                 .insert(id.clone());
             // A disagreement is retained as a candidate conflict; never close it.
-            if site.candidates.len() == 1 && site.observed.keys().all(|a| *a == proof.target) {
+            if site.candidates.len() == 1 && site.observed.keys().all(|a| *a == target) {
                 site.closed_proof = Some(id);
             } else {
                 site.closed_proof = None;
@@ -212,14 +227,33 @@ pub fn verify_constant(map: &ProgramMap, image: &CodeImage, site: &IndirectSite)
     let Some(e) = map.evidence.get(id) else {
         return false;
     };
-    if e.kind != EvidenceKind::Static || e.producer != "plaid-local-constant/v0" {
+    if e.kind != EvidenceKind::Static {
         return false;
     }
-    let Ok(proof) = serde_json::from_str::<ConstantCertificate>(&e.detail) else {
-        return false;
+    let target = match e.producer.as_str() {
+        "plaid-local-constant/v0" => {
+            let Ok(proof) = serde_json::from_str::<ConstantCertificate>(&e.detail) else {
+                return false;
+            };
+            if certificate(map, image, &site.site).as_ref() != Some(&proof) {
+                return false;
+            }
+            proof.target
+        }
+        "plaid-cross-block-constant/v0" => {
+            let Ok(proof) =
+                serde_json::from_str::<crate::indirect_chain::ChainCertificate>(&e.detail)
+            else {
+                return false;
+            };
+            if crate::indirect_chain::certificate(map, image, &site.site).as_ref() != Some(&proof) {
+                return false;
+            }
+            proof.target
+        }
+        _ => return false,
     };
-    certificate(map, image, &site.site).as_ref() == Some(&proof)
-        && site.candidates.len() == 1
-        && site.candidates.contains_key(&proof.target)
-        && site.observed.keys().all(|a| *a == proof.target)
+    site.candidates.len() == 1
+        && site.candidates.contains_key(&target)
+        && site.observed.keys().all(|a| *a == target)
 }
