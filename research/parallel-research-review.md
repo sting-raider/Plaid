@@ -160,3 +160,10 @@ Retained/reproduced `sb-sh-mutation-gpt56sol` (`6b6adcf`): independent 100,000-c
 Retained/reproduced `sb-sh-mutation-gpt56` (`6fd2107`): exact model and 100-case actual result hashes, including byte/halfword word construction. Distinct output roots prevent the workers shared-path collision.
 
 Recovered `rsp-self-store-imem-gpt56sol` (`41fc9b6`) in-progress code, fixed its false aligned-SRV mutation assumption, and completed 28 repeated actual probes. Primary receipt and source-only comparisons are recorded under ADR-0068.
+
+The retained research-contract runner now passes 20 models/guards, including both
+SB/SH models, CPU-to-IMEM sink, D-cache eviction/revision and COP1 payload cases.
+An old burst-only source guard incorrectly rejected the shared builder's newer
+scalar opt-in code. It now checks the specific spike-016 build call and the false
+scalar default through Python AST, retaining the intended boundary without
+forbidding other callers. This batch still executes no reference CPU.
