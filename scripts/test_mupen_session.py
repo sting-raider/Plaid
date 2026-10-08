@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "target/reference-core"
 SESSION = ROOT / "target/mupen-session"
 MODES = ("pure", "untraced", "traced", "repeat")
-SCENARIOS = ("pi", "reload", "reload_alias", "mutation", "cpu_copy")
+SCENARIOS = ("pi", "reload", "reload_alias", "mutation", "cpu_copy", "store_stress")
 
 
 def fixture(scenario="pi"):
@@ -40,7 +40,16 @@ def fixture(scenario="pi"):
             0x38:0x3c090a00, 0x3c:0xad090028, 0x40:0x34090009,
             0x44:0xad090014, 0x48:0x08000112, 0x4c:0,
             0xc0:0x26110007, 0xc4:0x03e00008, 0xc8:0x24120009}
-    if scenario == "cpu_copy":
+    if scenario == "store_stress":
+        boot[6] = 0x340901ff  # 512-byte payload, including the register prefix.
+        body = {offset+0x80:word for offset,word in body.items()}
+        body[0x84] = 0x35080540
+        body[0xc8] = 0x08000132
+        prefix = [0x34000000 | (r<<16) | (0x400+r) for r in range(1,32) if r not in (8,9,13,19,31)] + [0x3c0d8000]
+        prefix += [0xada00610, 0x14a00003, 0xada6060c, 0x341bdead, 0]
+        assert len(prefix)==32
+        body.update({n*4:word for n,word in enumerate(prefix)})
+    elif scenario == "cpu_copy":
         # CPU reads from cartridge mapping and stores into RAM. PI sensors must
         # not invent a DMA source for this non-PI executable copy.
         boot = [0x3c08b000, 0x35081000, 0x3c098000, 0x35290400, 0x340a0040,
@@ -90,6 +99,7 @@ def worker(directory, mode):
         PLAID_ROM_SHA256=hashlib.sha256(rom.read_bytes()).hexdigest(),
         PLAID_ROM_SIZE=str(rom.stat().st_size), PLAID_TRACE_PATH=str(trace),
         PLAID_TRACE_EXECUTION="1" if mode in ("traced", "repeat") else "0")
+    os.environ["PLAID_TRACE_WRITES"] = "1" if mode in ("traced", "repeat") else "0"
     core = c.CDLL(str(OUTPUT / "libmupen64plus.so"))
     debug_type = c.CFUNCTYPE(None, c.c_void_p, c.c_int, c.c_char_p)
     state_type = c.CFUNCTYPE(None, c.c_void_p, c.c_int, c.c_int)
@@ -166,19 +176,31 @@ def verify(directory, scenario, cargo):
     for mode, state in states.items():
         assert state["regs"][14] == (18 if replaced else 12), (mode, state)
         assert state["regs"][16:20] == ([11,18,13,1] if replaced else [5,12,9,0]), (mode, state)
-        assert state["pc"] == base + (0x50 if scenario == "mutation" else 0x48), (mode, state)
+        assert state["pc"] == base + (0x50 if scenario == "mutation" else 0xc8 if scenario == "store_stress" else 0x48), (mode, state)
         assert state == states["pure"], states
+        if scenario == "store_stress":
+            assert state["regs"][27] == 0x41b and sum(bool(r) for r in state["regs"]) >= 29, state
     first = (directory / "traced.ndjson").read_bytes()
     assert first == (directory / "repeat.ndjson").read_bytes(), "Trace differs on repeated device session"
     events = [json.loads(line)["data"] for line in first.splitlines()[1:-1]]
     dma = [e for e in events if e["event"] == "rom_dma_observed"]
     expected_dma = [] if scenario == "cpu_copy" else [0x1000,0x1100] if scenario in ("reload", "reload_alias") else [0x1000]
     assert [e["rom_offset"] for e in dma] == expected_dma, dma
-    assert all(e["physical_destination"] == 0x400 and e["size"] == 256 for e in dma), dma
+    assert all(e["physical_destination"] == 0x400 and e["size"] == (512 if scenario == "store_stress" else 256) for e in dma), dma
     indirect = [e for e in events if e["event"] == "indirect_target_observed"]
-    assert any(e["site"] == base+8 and e["target"] == base+0xc0 for e in indirect), indirect
-    assert any(e["site"] == base+0xc4 and e["target"] == base+0x10 for e in indirect), indirect
+    stores = [e for e in events if e["event"] == "cpu_word_store_observed"]
+    assert any(e["destination"] == 0x80000600 and e["value"] == (18 if replaced else 12) for e in stores), stores
+    if scenario == "mutation":
+        assert any(e["site"] == 0xa400008c and e["destination"] == 0x8000040c and e["value"] == 0x2410000b for e in stores), stores
+        assert any(e["site"] == 0xa4000098 and e["destination"] == 0x800004c8 and e["value"] == 0x2412000d for e in stores), stores
+    shift = 0x80 if scenario == "store_stress" else 0
+    assert any(e["site"] == base+shift+8 and e["target"] == base+shift+0xc0 for e in indirect), indirect
+    assert any(e["site"] == base+shift+0xc4 and e["target"] == base+shift+0x10 for e in indirect), indirect
+    if scenario == "store_stress":
+        assert any(e["site"] == 0x8000046c and e["destination"] == 0x80000610 and e["value"] == 0 for e in stores), stores
+        assert any(e["site"] == 0x80000474 and e["destination"] == 0x8000060c and e["value"] == 0x406 for e in stores), stores
     assert "indirect_target_observed" not in (directory / "untraced.ndjson").read_text()
+    assert "cpu_word_store_observed" not in (directory / "untraced.ndjson").read_text()
     for args in [("check-trace", str(directory / "traced.ndjson")),
                  ("import-trace", str(directory / "synthetic.z64"), str(directory / "traced.ndjson"), str(directory / "map.json"))]:
         subprocess.run([cargo, "run", "--quiet", "-p", "plaid", "--", *args], cwd=ROOT, check=True)
@@ -189,15 +211,20 @@ def verify(directory, scenario, cargo):
     assert solved["status"] == "open" and not solved["native_complete"]
     assert not any(b["kind"] == "indirect_evidence_disagreement" for b in solved["blockers"])
     imported = json.loads((directory / "map.json").read_text())
+    assert sum(len(s["evidence"]) for s in imported["word_store_observations"]) == len(stores)
     offset = 0x1100 if scenario in ("reload", "reload_alias") else 0x1000
     if scenario == "cpu_copy":
         assert not imported["loads"] and not imported["dma_observations"]
         assert any(u["kind"] == "unknown_executable_source" for u in imported["unresolved"])
     else:
         assert any(load["rom_offset"] == offset and load["destination"]["start"] == base for load in imported["loads"])
-        assert any(load["rom_offset"] == offset+0xc0 and load["destination"]["start"] == base+0xc0 for load in imported["loads"])
+        assert any(load["rom_offset"] == offset+shift+0xc0 and load["destination"]["start"] == base+shift+0xc0 for load in imported["loads"])
     assert sum(len(o["evidence"]) for o in imported["indirect_observations"]) == len(indirect)
-    assert any(site["observed"] for site in imported["indirect_sites"])
+    if scenario == "store_stress":
+        assert all(not site["observed"] for site in imported["indirect_sites"])
+        assert any(u["kind"] == "uncorrelated_indirect_observation" for u in imported["unresolved"])
+    else:
+        assert any(site["observed"] for site in imported["indirect_sites"])
     assert all(site["closed_proof"] is None for site in imported["indirect_sites"])
     assert all(target[0]["generation"] == site["site"]["generation"]
         for site in imported["indirect_sites"] for target in site["observed"])

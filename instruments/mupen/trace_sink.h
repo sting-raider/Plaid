@@ -14,6 +14,7 @@ static FILE *plaid_trace_file;
 static uint64_t plaid_trace_seq, plaid_trace_unit, plaid_current_unit;
 static int plaid_trace_failed;
 static int plaid_trace_execution_enabled;
+static int plaid_trace_writes_enabled;
 static uint32_t plaid_pagespan_branch;
 
 static void plaid_trace_check(void) {
@@ -40,6 +41,7 @@ static void plaid_trace_open(void) {
     plaid_trace_seq = plaid_trace_unit = plaid_current_unit = 0;
     plaid_trace_failed = 0;
     plaid_trace_execution_enabled = 0;
+    plaid_trace_writes_enabled = 0;
     plaid_pagespan_branch = 0;
     if (!path || !*path) return;
     if (!hash || strlen(hash) != 64 || !size_text || !*size_text) goto invalid;
@@ -54,13 +56,16 @@ static void plaid_trace_open(void) {
     {
         const char *execution = getenv("PLAID_TRACE_EXECUTION");
         plaid_trace_execution_enabled = execution && !strcmp(execution, "1");
+        execution = getenv("PLAID_TRACE_WRITES");
+        plaid_trace_writes_enabled = execution && !strcmp(execution, "1");
     }
 #endif
     fprintf(plaid_trace_file,
         "{\"record\":\"header\",\"header\":{\"schema_version\":0,\"rom\":{\"sha256\":\"%s\",\"size\":%llu},"
         "\"engine\":\"mupen64plus-new_dynarec\",\"revision\":\"ba95bab92a76744753bfe61470823a4937850ab0\","
-        "\"capabilities\":[\"compilation_units\",\"entry_installation\"%s,\"invalidation\",\"rom_dma\",\"target_lookup\"]}}\n", hash, size,
-        plaid_trace_execution_enabled ? ",\"indirect_targets_x64\"" : "");
+        "\"capabilities\":[\"compilation_units\",\"entry_installation\"%s%s,\"invalidation\",\"rom_dma\",\"target_lookup\"]}}\n", hash, size,
+        plaid_trace_execution_enabled ? ",\"indirect_targets_x64\"" : "",
+        plaid_trace_writes_enabled ? ",\"cpu_sw_constant_rdram_x64\"" : "");
     plaid_trace_check();
     return;
 invalid:
@@ -127,6 +132,11 @@ static void plaid_trace_invalidate(uint32_t address, size_t size) {
 void plaid_trace_rom_dma(uint32_t offset, uint32_t destination, uint32_t size) {
     if (!size || !plaid_trace_prefix("rom_dma_observed")) return;
     fprintf(plaid_trace_file, ",\"rom_offset\":%" PRIu32 ",\"physical_destination\":%" PRIu32 ",\"size\":%" PRIu32, offset,destination,size);
+    plaid_trace_finish();
+}
+void plaid_trace_word_store(uint32_t site, uint32_t destination, uint32_t value) {
+    if (!plaid_trace_writes_enabled || !plaid_trace_prefix("cpu_word_store_observed")) return;
+    fprintf(plaid_trace_file, ",\"site\":%" PRIu32 ",\"destination\":%" PRIu32 ",\"value\":%" PRIu32, site,destination,value);
     plaid_trace_finish();
 }
 #endif

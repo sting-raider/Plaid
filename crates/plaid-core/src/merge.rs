@@ -16,6 +16,7 @@ macro_rules! facts { ($($t:ty),*) => { $(impl Fact for $t { fn refs(&mut self) -
 facts!(
     ObservedDma,
     ObservedIndirect,
+    ObservedWordStore,
     Region,
     BasicBlock,
     DirectEdge,
@@ -60,6 +61,10 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
     out.loads = union(&left.loads, &right.loads);
     out.dma_observations = union(&left.dma_observations, &right.dma_observations);
     out.indirect_observations = union(&left.indirect_observations, &right.indirect_observations);
+    out.word_store_observations = union(
+        &left.word_store_observations,
+        &right.word_store_observations,
+    );
     out.relocations = union(&left.relocations, &right.relocations);
     out.executable_writes = union(&left.executable_writes, &right.executable_writes);
     out.rsp_microcodes = union(&left.rsp_microcodes, &right.rsp_microcodes);
@@ -232,6 +237,35 @@ fn import(
             },
         );
         match &event.data {
+            TraceEvent::CpuWordStoreObserved {
+                site,
+                destination,
+                value,
+            } => {
+                out.word_store_observations.insert(ObservedWordStore {
+                    site: *site,
+                    destination: *destination,
+                    value: *value,
+                    generation: epoch,
+                    evidence: evidence.clone(),
+                });
+                let physical = destination.0 & 0x1fffffff;
+                if out.regions.iter().any(|r| {
+                    r.physical_start.is_some_and(|p| {
+                        u64::from(p.0) < u64::from(physical) + 4
+                            && u64::from(physical) < u64::from(p.0) + u64::from(r.range.size)
+                    })
+                }) {
+                    out.executable_writes.insert(ExecutableWrite {
+                        range: Some(GuestRange {
+                            start: *destination,
+                            size: 4,
+                        }),
+                        kind: WriteKind::Unknown,
+                        evidence,
+                    });
+                }
+            }
             TraceEvent::RomDmaObserved {
                 rom_offset,
                 physical_destination,

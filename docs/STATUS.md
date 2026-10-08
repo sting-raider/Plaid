@@ -34,6 +34,12 @@ Implemented:
   A CPU-store mutation session executes changed instructions and retains unknown
   write/source blockers (78 events); a CPU-copy session executes cartridge reads
   and RAM stores without inventing PI DMA or verified load sources (33 events).
+  With the new limited SW sensor enabled, the six full-core sessions produce
+  43/83/82/82/34/48 deterministic events. Constant aligned cached-RDRAM stores
+  retain source PC, destination and value; overlap with previously compiled
+  physical regions adds Unknown executable-write evidence. A register/zero/
+  delay-slot store stress fixture preserves full CPU state. Its invalidations
+  expose restored-entry identity gaps, retained as uncorrelated raw indirect facts.
   PIF HLE/unknown-CIC fallback, dummy graphics/audio/RSP and a frontend stop
   request bound this synthetic session's scope; whole-ROM closure remains OPEN.
 - Signature-based z64/v64/n64 normalization, canonical SHA-256 and header parsing.
@@ -68,7 +74,7 @@ Implemented:
   need blockers. Manual section/mapping inputs and the shared decoder limit the
   result. No production adapter or runtime dependency is introduced.
 
-Verification: 56 Rust integration tests, formatting, strict Clippy, CLI integration,
+Verification: 58 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.
@@ -88,5 +94,5 @@ Remaining gaps: broader reference sessions and device coverage, ProgramMap prede
 state for pagespan entries, non-x64 runtime hooks, general join/loop and
 immutable-table proofs, automatic boot/CIC
 roots, overlay/relocation lifecycle, non-PI copies, exceptions/TLB/execution modes,
-executable mutation and RSP policies. Header CRC fields are parsed, not verified.
+complete store/mutation and RSP policies. Header CRC fields are parsed, not verified.
 Analysis scalability has not been benchmarked. See NEXT for the execution order.

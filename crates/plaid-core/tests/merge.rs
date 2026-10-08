@@ -150,6 +150,31 @@ fn repeated_compilation_is_not_a_new_dma_reload() {
 }
 
 #[test]
+fn actual_word_store_evidence_survives_and_only_known_code_overlap_is_executable() {
+    let known = image();
+    let mut t = trace(known.words.clone());
+    for destination in [GuestAddr(0x80000000), GuestAddr(0x80000100)] {
+        t.events.push(EventRecord {
+            seq: t.events.len() as u64,
+            data: TraceEvent::CpuWordStoreObserved {
+                site: GuestAddr(0x80000000),
+                destination,
+                value: 0x12345678,
+            },
+        });
+    }
+    let map = import_trace(&t, &[known], 100).unwrap();
+    assert_eq!(map.word_store_observations.len(), 2);
+    assert_eq!(map.executable_writes.len(), 1);
+    let write = map.executable_writes.first().unwrap();
+    assert_eq!(write.kind, WriteKind::Unknown);
+    assert_eq!(write.range.as_ref().unwrap().start, GuestAddr(0x80000000));
+    assert_eq!(write.range.as_ref().unwrap().size, 4);
+    assert_eq!(map, merge_maps(&map, &map).unwrap());
+    assert_eq!(map, ProgramMap::from_json(&map.to_json().unwrap()).unwrap());
+}
+
+#[test]
 fn unproved_evidence_merges_into_a_static_certificate_without_duplicate_sites() {
     let mut i = image();
     i.words = vec![0x3c088000, 0x35080000, 0x01000008, 0];

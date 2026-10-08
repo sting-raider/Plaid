@@ -43,6 +43,17 @@ keeps generations separate and marks physically overlapping sources as candidate
 CPU-store mutation and CPU-copy fixtures also agree across engines (78/33 events).
 Changed PI-backed snapshots remain Unknown; CPU copies produce no invented DMA
 or canonical load source. Load mappings distinguish copy events from recompilation.
+An additional store/register stress fixture checks zero and branch-delay-slot
+stores. With `PLAID_TRACE_WRITES=1`, the six sessions emit 43/83/82/82/34/48 events.
+
+`PLAID_TRACE_WRITES=1` enables a restricted x64 sensor after successful aligned
+SW to a constant cached-RDRAM address, including return from an invalidation stub.
+It preserves caller-save registers and reports source PC, destination and value.
+Raw stores survive import; overlap with a previously compiled physical region
+adds Unknown executable-write evidence. Dynamic addresses, other store sizes,
+TLB/uncached paths and non-x64 hosts are outside this capability. The stress case
+keeps indirect observations uncorrelated when invalidations separate execution
+from available compiled-entry identities; raw evidence is never discarded.
 The importer verifies ROM sources for executed DMA-backed units and keeps raw
 indirect evidence. The boot copy is still uncorrelated and the solver stays OPEN.
 Linux requires GCC/make/NASM and SDL2/zlib/libpng headers/runtime libraries;

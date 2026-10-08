@@ -24,6 +24,12 @@ pub struct TraceHeader {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TraceEvent {
+    /// Successful aligned SW, limited sensor; never complete write coverage.
+    CpuWordStoreObserved {
+        site: GuestAddr,
+        destination: GuestAddr,
+        value: u32,
+    },
     RomDmaObserved {
         rom_offset: RomOffset,
         physical_destination: PhysicalAddr,
@@ -105,6 +111,17 @@ impl DiscoveryTrace {
                 return Err("non-contiguous trace sequence".into());
             }
             match &event.data {
+                TraceEvent::CpuWordStoreObserved {
+                    site, destination, ..
+                } => {
+                    aligned(*site)?;
+                    aligned(*destination)?;
+                    if !(0x80000000..0x80800000).contains(&destination.0) {
+                        return Err(
+                            "word-store sensor destination outside declared cached RDRAM".into(),
+                        );
+                    }
+                }
                 TraceEvent::RomDmaObserved {
                     rom_offset,
                     physical_destination,
