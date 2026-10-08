@@ -216,3 +216,17 @@ future adapter needs a separate design decision, canonical hashes, provenance,
 image/generation/mapping identity and candidate-only semantics. A hint cannot
 replace independently rechecked CFG or executable-universe/table certificates.
 Both tools share Rabbitizer, so this comparison is not an independent CPU oracle.
+
+## ADR-0020: Preserve partial successful CPU-store observations explicitly
+
+Status: Accepted, 2026-10-08.
+
+An opt-in x64 research callback runs after successful aligned SW to a constant
+cached-RDRAM address, including any invalidation-stub return. Preserve caller-save
+registers and copy the value before overwriting ABI arguments. Trace/ProgramMap
+retain raw source/destination/value and conservative import epoch. Only overlap
+with previously compiled explicit physical mappings adds Unknown executable-write
+evidence; ordinary data stores remain raw facts. Do not infer complete write,
+copy, relocation or lifetime coverage from this limited sensor. Differential
+sessions cover patch writes, zero values, register pressure and branch delay slots.
+Invalidation/restored-entry joins remain unresolved rather than crossing epochs.

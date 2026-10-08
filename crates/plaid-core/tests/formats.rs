@@ -57,6 +57,56 @@ fn map_roundtrip_and_order_are_canonical() {
 }
 
 #[test]
+fn limited_word_store_records_reject_unaligned_or_out_of_scope_addresses() {
+    let mut p = map();
+    let store = ObservedWordStore {
+        site: GuestAddr(0x80000000),
+        destination: GuestAddr(0x80000004),
+        value: 0xffffffff,
+        generation: 3,
+        evidence: ["e1".into()].into(),
+    };
+    p.word_store_observations.insert(store.clone());
+    assert_eq!(p, ProgramMap::from_json(&p.to_json().unwrap()).unwrap());
+    let trace = DiscoveryTrace {
+        header: TraceHeader {
+            schema_version: 0,
+            rom: rom(),
+            engine: "synthetic".into(),
+            revision: "0".into(),
+            capabilities: Default::default(),
+        },
+        events: vec![EventRecord {
+            seq: 0,
+            data: TraceEvent::CpuWordStoreObserved {
+                site: store.site,
+                destination: store.destination,
+                value: store.value,
+            },
+        }],
+    };
+    assert_eq!(
+        trace,
+        DiscoveryTrace::from_ndjson(&trace.to_ndjson().unwrap()).unwrap()
+    );
+    for destination in [0x80000001, 0xa0000000, 0x80800000] {
+        let mut bad = store.clone();
+        bad.destination = GuestAddr(destination);
+        let mut changed = p.clone();
+        changed.word_store_observations.clear();
+        changed.word_store_observations.insert(bad);
+        assert!(changed.validate().is_err());
+        let mut bad_trace = trace.clone();
+        bad_trace.events[0].data = TraceEvent::CpuWordStoreObserved {
+            site: store.site,
+            destination: GuestAddr(destination),
+            value: store.value,
+        };
+        assert!(bad_trace.validate().is_err());
+    }
+}
+
+#[test]
 fn map_rejects_bad_version_provenance_ranges_and_unknown_fields() {
     let mut p = map();
     p.schema_version = 1;

@@ -208,6 +208,16 @@ pub struct ObservedIndirect {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct ObservedWordStore {
+    pub site: GuestAddr,
+    pub destination: GuestAddr,
+    pub value: u32,
+    pub generation: u64,
+    pub evidence: EvidenceRefs,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Relocation {
     pub site: CodeAddress,
     pub kind: String,
@@ -271,6 +281,8 @@ pub struct ProgramMap {
     pub dma_observations: BTreeSet<ObservedDma>,
     #[serde(default)]
     pub indirect_observations: BTreeSet<ObservedIndirect>,
+    #[serde(default)]
+    pub word_store_observations: BTreeSet<ObservedWordStore>,
     pub relocations: BTreeSet<Relocation>,
     pub executable_writes: BTreeSet<ExecutableWrite>,
     pub rsp_microcodes: BTreeSet<Microcode>,
@@ -292,6 +304,7 @@ impl ProgramMap {
             loads: BTreeSet::new(),
             dma_observations: BTreeSet::new(),
             indirect_observations: BTreeSet::new(),
+            word_store_observations: BTreeSet::new(),
             relocations: BTreeSet::new(),
             executable_writes: BTreeSet::new(),
             rsp_microcodes: BTreeSet::new(),
@@ -442,6 +455,15 @@ impl ProgramMap {
                 return Err("incorrect observed delay slot PC".into());
             }
             refs(&o.evidence)?;
+        }
+        for store in &self.word_store_observations {
+            if !store.site.0.is_multiple_of(4)
+                || !store.destination.0.is_multiple_of(4)
+                || !(0x80000000..0x80800000).contains(&store.destination.0)
+            {
+                return Err("invalid observed cached RDRAM word store".into());
+            }
+            refs(&store.evidence)?;
         }
         for r in &self.relocations {
             address(&r.site)?;
