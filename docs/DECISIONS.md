@@ -885,3 +885,15 @@ where ares uses one Dual write; preserve observed ordering without inferring
 hardware transaction count or atomicity. This is pinned handler evidence, with
 forced endian-context and combined-fault limits, not a complete mutation census,
 second-reference execution, executable lifetime or whole-ROM certificate.
+
+## ADR-0062: EBus HiddenRAM words are derived bits, not copied instruction bytes
+
+Status: Accepted for research, 2026-10-09.
+
+The recovered exact-header probe reproduces all 65,536 hidden-byte pairs: a Word
+is derived from two two-bit fields, with only 16 possible values. Ordinary RAM
+byte origins cannot describe that transform. Require an actual source-specific
+read within fetch scope, retain mapped hidden offsets and transformation inputs,
+or keep the source unknown. The compiled header/source/model evidence is PARTIAL
+for full fetch provenance and does not establish hidden-storage epochs, restore
+lineage, hardware correctness or an executable-image identity policy.
