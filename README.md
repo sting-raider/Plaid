@@ -74,6 +74,8 @@ python scripts/test_exporter.py
 python scripts/test_fetch.py
 python scripts/test_boot_fetch.py
 python scripts/test_cache_fetch.py
+python scripts/test_history.py
+python scripts/test_pi_history.py
 python scripts/test_mupen_hooks.py
 python scripts/test_mupen_execution.py
 python scripts/test_mupen_session.py
@@ -112,6 +114,8 @@ plaid import-boot-fetch <rom> <firmware> <fetch.ndjson> <out.json>
 plaid verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json>
 plaid inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json>
 plaid verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json>
+plaid inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json>
+plaid verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json>
 plaid merge <left.json> <right.json> <out.json>
 plaid solve [rom] <map.json>
 ```
@@ -153,6 +157,15 @@ unused payloads, and rejects source/input/report changes. Ambiguous reads and
 unsupported backing stay unknown; no ProgramMap images, generations, lifetimes
 or closure rules are created. `python scripts/test_history.py` exercises CLI
 input/rechecking/overwrite gates with original synthetic inputs.
+
+`inspect-pi-boot-history` separately checks the spike-030 v1 protocol, buffered
+canonical ROM byte origins and successful identity-RAM effects. Its report binds
+both complete sources, the exact v0 projection and finite writer effects.
+`verify-pi-boot-history` reconstructs the entire report from supplied inputs.
+Observed busy/interrupt contexts do not certify transfer completion; executable
+identities and lifetimes remain open. The original history commands reject v1.
+`python scripts/test_pi_history.py` checks byte orders, source/report tampering,
+version separation and input-overwrite protection with original synthetic data.
 
 Additional disposable reference experiments are documented under `spikes/`.
 `python spikes/003-ares-oracle/run.py` builds the pinned ares core separately and
