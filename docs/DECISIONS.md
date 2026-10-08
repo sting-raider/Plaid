@@ -592,3 +592,17 @@ use the original RAM header, including when reusing a prior sensor directory.
 These are RAM transaction witnesses, not ROM origins, complete mutation coverage
 or executable lifetimes. Require broader mapping/failure/reset/restore and
 unified history/copy witnesses before production source/lifecycle handling.
+
+## ADR-0044: Keep nonidentity and failed RAM paths outside identity witnesses
+
+Status: Accepted, 2026-10-08.
+
+Direct-component tests remap bus address zero to another backing chip, store
+through translation, exercise zero/partial degradation, missing mappings,
+inactive RI and out-of-bounds access. None may produce a valid identity witness,
+even when returned bytes match backing bytes. Actual 16/32-byte identity paths
+retain witnesses. Baseline/plain/traced/repeated returned words, CPU/RI state
+and full RAM/hidden-memory hashes agree, including deterministic degraded-word
+goldens. This validates policy boundaries in declared synthetic component state,
+not guest execution, hardware initialization or complete backing coverage. Keep
+unsupported policies unknown; unified history and copy/lifetime work remain open.

@@ -6,6 +6,9 @@
    fill and hit/miss writeback now preserve independent reference checkpoints.
    Successful identity-mapped RAM bursts now supply actual transaction witnesses;
    translated/degraded paths, ordinary stores and copy histories remain unclaimed.
+   Remapping/degradation/failure boundary tests now preserve baseline and full
+   hidden-memory hashes while retaining unsupported paths as unknown. Unify
+   transaction/fill/cache-operation/fetch order next, then copy/mutation lineage.
    Current tags/effective addresses can differ from resident-byte history; keep
    those identities separate. Test mapping/degradation/failure and reset/restore
    boundaries, then extend the sensor to the bounded homebrew boot prefix.
