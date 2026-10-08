@@ -1,0 +1,34 @@
+name: Research PIF ROM backing
+
+on:
+  push:
+    branches:
+      - research/pif-rom-backing-ares-gpt56sol
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout exact pinned ares
+        run: |
+          mkdir -p .refs
+          git clone --no-tags https://github.com/ares-emulator/ares.git .refs/ares
+          git -C .refs/ares checkout 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          test "$(git -C .refs/ares rev-parse HEAD)" = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
+          git -C .refs/ares diff --quiet HEAD
+      - name: Recheck independent PIF backing model
+        run: |
+          python3 -m py_compile experiments/pif-rom-backing/witness_model.py experiments/pif-rom-backing/run_ares.py
+          python3 experiments/pif-rom-backing/witness_model.py --fuzz 1000000 > /tmp/pif-model.json
+          sha256sum experiments/pif-rom-backing/witness_model.py /tmp/pif-model.json
+          grep -q '"positives": 92583' /tmp/pif-model.json
+          grep -q '"negatives": 907417' /tmp/pif-model.json
+          grep -q '"mirrored_positives": 92426' /tmp/pif-model.json
+      - name: Build and run real pinned ares sensor
+        run: python3 experiments/pif-rom-backing/run_ares.py
