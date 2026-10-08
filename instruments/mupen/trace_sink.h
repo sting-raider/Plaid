@@ -66,7 +66,7 @@ static void plaid_trace_open(void) {
         "{\"record\":\"header\",\"header\":{\"schema_version\":0,\"rom\":{\"sha256\":\"%s\",\"size\":%llu},"
         "\"engine\":\"mupen64plus-new_dynarec\",\"revision\":\"ba95bab92a76744753bfe61470823a4937850ab0\","
         "\"capabilities\":[\"compilation_units\",\"entry_installation\"%s%s,\"invalidation\",\"rom_dma\",\"target_lookup\"]}}\n", hash, size,
-        plaid_trace_execution_enabled ? ",\"indirect_targets_x64\"" : "",
+        plaid_trace_execution_enabled ? ",\"indirect_targets_x64\",\"verified_dirty_entries_x64\"" : "",
         plaid_trace_writes_enabled ? ",\"cpu_sw_constant_rdram_x64\"" : "");
     plaid_trace_check();
     return;
@@ -100,6 +100,15 @@ static void plaid_trace_entry(uint64_t unit, uint32_t pc, uint32_t mask) {
     if (!plaid_trace_prefix("entry_installed")) return;
     fprintf(plaid_trace_file, ",\"unit\":%" PRIu64 ",\"pc\":%" PRIu32 ",\"register_mask\":%" PRIu32, unit, pc & ~3u, mask);
     plaid_trace_finish();
+}
+/* Called only after the reference compared this complete saved unit to memory.
+ * A successful dirty lookup is a snapshot check, not proof of execution. */
+static void plaid_trace_verified_entry(uint64_t unit, uint32_t pc, uint32_t mask, const uint32_t *words, uint32_t count) {
+    uint32_t i;
+    if (!plaid_trace_execution_enabled || !plaid_trace_prefix("entry_bytes_verified")) return;
+    fprintf(plaid_trace_file, ",\"unit\":%" PRIu64 ",\"pc\":%" PRIu32 ",\"register_mask\":%" PRIu32 ",\"words\":[", unit, pc, mask);
+    for (i = 0; i < count; ++i) fprintf(plaid_trace_file, "%s%" PRIu32, i ? "," : "", words[i]);
+    fputc(']', plaid_trace_file); plaid_trace_finish();
 }
 static void plaid_trace_lookup(uint32_t target, int delay_slot) {
     if (!plaid_trace_prefix("target_lookup")) return;

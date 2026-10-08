@@ -220,6 +220,18 @@ pub struct ObservedWordStore {
     pub evidence: EvidenceRefs,
 }
 
+/// A reference sensor's byte-equality check for an existing installed entry.
+/// Generation is the verification epoch, not the unit's compilation generation.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ObservedEntryVerification {
+    pub entry: CodeAddress,
+    pub register_mask: u32,
+    pub source_unit: String,
+    pub generation: u64,
+    pub evidence: EvidenceRefs,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Relocation {
@@ -286,6 +298,8 @@ pub struct ProgramMap {
     #[serde(default)]
     pub indirect_observations: BTreeSet<ObservedIndirect>,
     #[serde(default)]
+    pub entry_verifications: BTreeSet<ObservedEntryVerification>,
+    #[serde(default)]
     pub word_store_observations: BTreeSet<ObservedWordStore>,
     pub relocations: BTreeSet<Relocation>,
     pub executable_writes: BTreeSet<ExecutableWrite>,
@@ -308,6 +322,7 @@ impl ProgramMap {
             loads: BTreeSet::new(),
             dma_observations: BTreeSet::new(),
             indirect_observations: BTreeSet::new(),
+            entry_verifications: BTreeSet::new(),
             word_store_observations: BTreeSet::new(),
             relocations: BTreeSet::new(),
             executable_writes: BTreeSet::new(),
@@ -476,6 +491,18 @@ impl ProgramMap {
                 return Err("invalid observed cached RDRAM word store".into());
             }
             refs(&store.evidence)?;
+        }
+        for verification in &self.entry_verifications {
+            address(&verification.entry)?;
+            refs(&verification.evidence)?;
+            if !self.entries.contains_key(&verification.entry)
+                || !self
+                    .evidence
+                    .get(&verification.source_unit)
+                    .is_some_and(|e| e.kind == EvidenceKind::Trace)
+            {
+                return Err("verified entry missing installed identity or unit provenance".into());
+            }
         }
         for r in &self.relocations {
             address(&r.site)?;

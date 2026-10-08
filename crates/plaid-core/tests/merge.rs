@@ -534,3 +534,151 @@ fn indirect_unit_context_must_already_be_completed_and_contain_site() {
     t.events[2].seq = 2;
     assert!(t.validate().unwrap_err().contains("not completed"));
 }
+
+#[test]
+fn verified_old_entry_explains_only_pending_targets_before_invalidation() {
+    let words = vec![0x01000008, 0];
+    let mut t = trace(words.clone());
+    let transfer = TraceEvent::IndirectTargetObserved {
+        site: GuestAddr(0x80000000),
+        target: GuestAddr(0x80000000),
+        delay_slot_pc: Some(GuestAddr(0x80000004)),
+        source_unit: Some(0),
+    };
+    let verification = TraceEvent::EntryBytesVerified {
+        unit: 0,
+        pc: GuestAddr(0x80000000),
+        register_mask: 0,
+        words: words.clone(),
+    };
+    for data in [
+        TraceEvent::Invalidate { range: None },
+        transfer.clone(),
+        verification.clone(),
+    ] {
+        t.events.push(EventRecord {
+            seq: t.events.len() as u64,
+            data,
+        });
+    }
+    let m = import_trace(&t, &[], 100).unwrap();
+    let site = m.indirect_sites.first().unwrap();
+    assert_eq!(site.observed.len(), 1);
+    assert_eq!(site.observed.first_key_value().unwrap().0, &site.site);
+    assert!(site.closed_proof.is_none());
+    let checked = m.entry_verifications.first().unwrap();
+    assert_eq!(checked.generation, 1);
+    assert_eq!(checked.entry.generation, 0);
+    assert!(
+        checked
+            .evidence
+            .is_subset(site.observed.first_key_value().unwrap().1)
+    );
+    assert_eq!(m, ProgramMap::from_json(&m.to_json().unwrap()).unwrap());
+    assert_eq!(m, merge_maps(&m, &m).unwrap());
+    let mut bad_map = m.clone();
+    bad_map.entries.clear();
+    assert!(bad_map.validate().is_err());
+
+    let mut missing = t.clone();
+    missing.events.pop();
+    assert!(
+        import_trace(&missing, &[], 100)
+            .unwrap()
+            .indirect_sites
+            .first()
+            .unwrap()
+            .observed
+            .is_empty()
+    );
+    // Verification is not an execution event and cannot explain a later transfer.
+    let mut before = t.clone();
+    before.events[4].data = verification.clone();
+    before.events[5].data = transfer.clone();
+    let m = import_trace(&before, &[], 100).unwrap();
+    assert_eq!(m.entry_verifications.len(), 1);
+    assert!(m.indirect_sites.first().unwrap().observed.is_empty());
+    let mut interrupted = t.clone();
+    interrupted.events.insert(
+        5,
+        EventRecord {
+            seq: 0,
+            data: TraceEvent::Invalidate { range: None },
+        },
+    );
+    for (seq, event) in interrupted.events.iter_mut().enumerate() {
+        event.seq = seq as u64;
+    }
+    assert!(
+        import_trace(&interrupted, &[], 100)
+            .unwrap()
+            .indirect_sites
+            .first()
+            .unwrap()
+            .observed
+            .is_empty()
+    );
+
+    // A competing current-epoch compilation at the same PC remains ambiguous.
+    let mut ambiguous = t.clone();
+    for data in [
+        TraceEvent::CompileBegin {
+            unit: 1,
+            start: GuestAddr(0x80000000),
+            physical_start: Some(PhysicalAddr(0)),
+            delay_slot_entry: false,
+        },
+        TraceEvent::UnitCompiled {
+            unit: 1,
+            start: GuestAddr(0x80000000),
+            words,
+        },
+    ] {
+        ambiguous.events.push(EventRecord {
+            seq: ambiguous.events.len() as u64,
+            data,
+        });
+    }
+    assert!(
+        import_trace(&ambiguous, &[], 100)
+            .unwrap()
+            .indirect_sites
+            .iter()
+            .all(|s| s.observed.is_empty())
+    );
+}
+
+#[test]
+fn verified_entry_requires_exact_completed_words_and_installed_mask() {
+    let mut t = trace(vec![0x01000008, 0]);
+    let verified = |unit, pc, register_mask, words| TraceEvent::EntryBytesVerified {
+        unit,
+        pc: GuestAddr(pc),
+        register_mask,
+        words,
+    };
+    t.events.push(EventRecord {
+        seq: 3,
+        data: verified(0, 0x80000000, 0, vec![0x01000008, 0]),
+    });
+    assert_eq!(
+        t,
+        DiscoveryTrace::from_ndjson(&t.to_ndjson().unwrap()).unwrap()
+    );
+    for data in [
+        verified(0, 0x80000000, 0, vec![0x01000008]),
+        verified(0, 0x80000000, 0, vec![0x03e00008, 0]),
+        verified(0, 0x80000004, 0, vec![0x01000008, 0]),
+        verified(0, 0x80000000, 1, vec![0x01000008, 0]),
+        verified(1, 0x80000000, 0, vec![0x01000008, 0]),
+    ] {
+        t.events[3].data = data;
+        assert!(t.validate().is_err());
+    }
+    t.events.remove(2);
+    t.events[2] = EventRecord {
+        seq: 2,
+        data: verified(0, 0x80000000, 0, vec![0x01000008, 0]),
+    };
+    assert!(t.validate().is_err());
+}

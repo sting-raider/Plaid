@@ -196,6 +196,11 @@ def verify(directory, scenario, cargo):
         word = unit["words"][index]
         assert word >> 26 == 0 and word & 63 in (8,9), (event, unit)
     stores = [e for e in events if e["event"] == "cpu_word_store_observed"]
+    verifications = [e for e in events if e["event"] == "entry_bytes_verified"]
+    installed = {(e["unit"],e["pc"],e["register_mask"]) for e in events if e["event"] == "entry_installed"}
+    for verified in verifications:
+        assert verified["words"] == units[verified["unit"]]["words"]
+        assert (verified["unit"],verified["pc"],verified["register_mask"]) in installed
     assert any(e["destination"] == 0x80000600 and e["value"] == (18 if replaced else 12) for e in stores), stores
     if scenario == "mutation":
         assert any(e["site"] == 0xa400008c and e["destination"] == 0x8000040c and e["value"] == 0x2410000b for e in stores), stores
@@ -227,10 +232,14 @@ def verify(directory, scenario, cargo):
         assert any(load["rom_offset"] == offset and load["destination"]["start"] == base for load in imported["loads"])
         assert any(load["rom_offset"] == offset+shift+0xc0 and load["destination"]["start"] == base+shift+0xc0 for load in imported["loads"])
     assert sum(len(o["evidence"]) for o in imported["indirect_observations"]) == len(indirect)
+    assert sum(len(o["evidence"]) for o in imported["entry_verifications"]) == len(verifications)
     if scenario == "store_stress":
         call = next(site for site in imported["indirect_sites"] if site["site"]["pc"] == 0x80000488)
         assert len(call["observed"]) == 1 and call["observed"][0][0]["generation"] > call["site"]["generation"]
-        assert any(u["kind"] == "uncorrelated_indirect_observation" for u in imported["unresolved"])
+        returning = next(site for site in imported["indirect_sites"] if site["site"]["pc"] == 0x80000544)
+        assert len(returning["observed"]) == 1 and returning["observed"][0][0]["generation"] < returning["site"]["generation"]
+        checked = next(v for v in imported["entry_verifications"] if v["entry"]["pc"] == 0x80000490)
+        assert set(checked["evidence"]).issubset(returning["observed"][0][1])
     else:
         assert any(site["observed"] for site in imported["indirect_sites"])
     assert all(site["closed_proof"] is None for site in imported["indirect_sites"])

@@ -46,6 +46,14 @@ pub enum TraceEvent {
         start: GuestAddr,
         words: Vec<u32>,
     },
+    /// A dirty-entry lookup compared current memory to this completed unit.
+    /// This records a snapshot check, not execution or a new compilation.
+    EntryBytesVerified {
+        unit: u64,
+        pc: GuestAddr,
+        register_mask: u32,
+        words: Vec<u32>,
+    },
     EntryInstalled {
         unit: u64,
         pc: GuestAddr,
@@ -92,6 +100,12 @@ enum WireRecord {
     Header { header: TraceHeader },
     Event { seq: u64, data: TraceEvent },
     End { event_count: u64 },
+}
+
+struct UnitState {
+    start: GuestAddr,
+    words: Option<Vec<u32>>,
+    entries: BTreeSet<(GuestAddr, u32)>,
 }
 
 impl DiscoveryTrace {
@@ -143,7 +157,17 @@ impl DiscoveryTrace {
                 }
                 TraceEvent::CompileBegin { unit, start, .. } => {
                     aligned(*start)?;
-                    if units.insert(*unit, (*start, None, Vec::new())).is_some() {
+                    if units
+                        .insert(
+                            *unit,
+                            UnitState {
+                                start: *start,
+                                words: None,
+                                entries: BTreeSet::new(),
+                            },
+                        )
+                        .is_some()
+                    {
                         return Err("duplicate compilation unit".into());
                     }
                 }
@@ -158,17 +182,35 @@ impl DiscoveryTrace {
                     }
                     .validate(true)?;
                     let state = units.get_mut(unit).ok_or("unit completion without begin")?;
-                    if state.0 != *start || state.1.replace(size).is_some() {
+                    if state.start != *start || state.words.replace(words.clone()).is_some() {
                         return Err("mismatched unit completion".into());
                     }
                 }
-                TraceEvent::EntryInstalled { unit, pc, .. } => {
+                TraceEvent::EntryInstalled {
+                    unit,
+                    pc,
+                    register_mask,
+                } => {
                     aligned(*pc)?;
                     units
                         .get_mut(unit)
                         .ok_or("entry without compilation unit")?
-                        .2
-                        .push(*pc);
+                        .entries
+                        .insert((*pc, *register_mask));
+                }
+                TraceEvent::EntryBytesVerified {
+                    unit,
+                    pc,
+                    register_mask,
+                    words,
+                } => {
+                    let state = units.get(unit).ok_or("verified entry without unit")?;
+                    if state.words.as_ref() != Some(words) {
+                        return Err("verified entry bytes differ from completed unit".into());
+                    }
+                    if !state.entries.contains(&(*pc, *register_mask)) {
+                        return Err("verified entry/mask was not installed".into());
+                    }
                 }
                 TraceEvent::TargetLookup { target, .. } | TraceEvent::RuntimeLink { target } => {
                     aligned(*target)?;
@@ -189,8 +231,13 @@ impl DiscoveryTrace {
                     if let Some(unit) = source_unit {
                         let state = units.get(unit).ok_or("unknown indirect source unit")?;
                         let range = GuestRange {
-                            start: state.0,
-                            size: state.1.ok_or("indirect source unit not completed")?,
+                            start: state.start,
+                            size: state
+                                .words
+                                .as_ref()
+                                .ok_or("indirect source unit not completed")?
+                                .len() as u32
+                                * 4,
                         };
                         if !range.contains(*site) {
                             return Err("indirect site outside source unit".into());
@@ -204,12 +251,17 @@ impl DiscoveryTrace {
                 }
             }
         }
-        for (start, size, entries) in units.values() {
+        for state in units.values() {
             let range = GuestRange {
-                start: *start,
-                size: size.ok_or("unfinished compilation unit")?,
+                start: state.start,
+                size: state
+                    .words
+                    .as_ref()
+                    .ok_or("unfinished compilation unit")?
+                    .len() as u32
+                    * 4,
             };
-            if entries.iter().any(|pc| !range.contains(*pc)) {
+            if state.entries.iter().any(|(pc, _)| !range.contains(*pc)) {
                 return Err("entry outside compilation unit".into());
             }
         }
