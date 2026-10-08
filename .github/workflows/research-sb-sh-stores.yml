@@ -1,0 +1,24 @@
+name: Research VR4300 SB SH stores
+
+on:
+  push:
+    branches: [research/sb-sh-mutation-gpt56]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - name: Check independent byte-effect model
+        run: |
+          python3 -m py_compile spikes/033-ares-sb-sh-stores-gpt56/model.py spikes/033-ares-sb-sh-stores-gpt56/run.py
+          python3 spikes/033-ares-sb-sh-stores-gpt56/model.py
+      - name: Build exact pinned ares and run SB SH matrix
+        run: python3 spikes/033-ares-sb-sh-stores-gpt56/run.py
