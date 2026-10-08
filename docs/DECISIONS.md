@@ -742,3 +742,18 @@ This validates finite byte provenance only under the controlled identity-RAM,
 single-capture policy. Broader cache/restore/mutation and executable lifetime
 obligations remain open. Extend versioned boot capture with PI source/transfer
 contexts while preserving complete prior projections before production promotion.
+
+## ADR-0053: Shared PI status transitions cannot certify transfer completion
+
+Status: Accepted for research, 2026-10-08.
+
+Pinned source routes both queued DMA directions to the same busy/interrupt
+completion method and permits guest cancellation and silent insertion failure.
+The actual queue-container probe retains duplicate identifiers, invalidated
+entries consuming all 512 slots, cancellation without callbacks and one wrap
+case. This is container execution plus CPU/PI source evidence, not full device
+or hardware testing. A last-write observer context at a status transition is
+only capture metadata; do not certify transfer completion from it. Future
+completion evidence needs distinct successful insertion/dispatch identity,
+direction, cancellation/removal and capture lifecycle. Keep completed byte
+effects separate from queue success or completion and retain unknown obligations.

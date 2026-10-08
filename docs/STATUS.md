@@ -301,6 +301,12 @@ Implemented:
   malformed-history rejections pass. This supplies finite resident provenance,
   leaving general cache transitions, scheduling and executable lifetimes open.
 
+- Actual pinned queue-container tests preserve duplicate PI event IDs,
+  cancellation without callbacks, 512 invalid entries occupying capacity and one
+  clock-wrap case. Source routes read/write completion through the same method;
+  last-write context cannot certify transfer completion. CPU/PI scheduling and
+  hardware execution remain unverified by this container/source-only experiment.
+
 Verification: 81 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
