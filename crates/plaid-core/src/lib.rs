@@ -2,6 +2,7 @@
 //!
 //! Keep this crate free of ROM assets and game-specific assumptions.
 
+pub mod discovery;
 pub mod program;
 pub mod rom;
 pub mod trace;
