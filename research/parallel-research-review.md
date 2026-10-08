@@ -6,6 +6,48 @@ Useful notes and original fixtures are transplanted individually; stale branch
 state, production changes and branch-only CI workflows are not merged wholesale.
 The source pins and licensing boundaries remain unchanged.
 
+2026-10-09 follow-up: the primary fetched and reviewed the new PI, SP lifecycle
+and PIF backing branches plus issue #4 closeouts. Useful original notes/fixtures
+are retained individually. Branch-only workflows remain outside integration;
+historical receipts retain their original policy/scope. The user moved canonical
+integration to `main`; `codex/executable-discovery` is now a checkpoint.
+
+| Additional research branch | Inspected tip | Supplied evidence |
+| --- | --- | --- |
+| `pi-queue-dispatch-gpt56sol` | `ef26a90` | Source guard, fuzz model and actual pinned PI write/CPU dispatch fixture |
+| `pi-request-queue-dispatch-gpt56sol` | `2e2bd82` | Actual queue with source-guarded synthetic PI lifecycle |
+| `pi-causal-token-gpt56sol` | `26e8360` | Source-guarded C++ extraction with optimized/sanitized differential fuzz |
+| `pi-dispatch-sidecar-20261008` | `06c5243` | 200,000-operation identity model and save-only evidence-loss counterexample |
+| `sp-dma-lifecycle-gpt56sol` | `ab98ece` | Actual SP pending mutation/row/handoff/wrap fixture; three-reference source comparison |
+| `pif-rom-backing-ares-gpt56sol` | `983b8f5` | Actual PIF backing fetch-stage sensor with nine adversaries |
+
+The live COP1 store branch is still being tested by its worker; it is reviewed as
+in-progress evidence and is not promoted before closeout/reproduction.
+
+Primary PI reproduction passes all four recovered contracts. The actual write
+fixture reproduces trace SHA-256
+`a52ac2df67c03f4bbc68fe26c9a8ac09113212a9c6971af556d02d892d5d300c`
+and result SHA-256
+`3b5b3850b35dd26ad728b5bac49eb1e8791f4b749d2aba11c09ee73ae4af9b6d`
+exactly. The actual-queue lifecycle receipt remains
+`ca8d5b75da19f00f2a4b4963de65cca9c82a10d757c190baa6f01797cecc69d0`.
+The causal extraction reproduces all 1,280,000 differential operations under
+optimized and ASan/UBSan builds, stdout SHA-256
+`8f49c659443569004ccc17e377988cdac70d17cb33df669f37ac69667c0f0424`.
+The 200,000-operation sidecar model repeats its visible-state digest exactly;
+the other fuzz model repeats canonical report digest
+`ebab07300e683fa8d555f0fc4228fe3627b04bd261778373594be76cb3be0b27`.
+Its Windows receipt encoding differs from the worker's Linux file while the
+canonical model report agrees. Local adapters fix CRLF pin checking/WSL paths
+and preserve the generated fixture include graph. Shared opt-in generation now
+owns queue headers, so the recovered actual runner requests that option explicitly.
+
+Adopt request identity before insertion, explicit scheduling failure, exact valid
+removal/CPU dispatch and distinct data effects. Preserve unknowns for unbound,
+canceled and restored identities. The primary save-only fix and explicit read/
+write dispatch-scope fixture have separate receipts in their topic notes. None
+of these results promotes boot history v1 completion or whole-ROM closure.
+
 | Research branch under `origin/research/` | Inspected tip | Evidence supplied by worker |
 | --- | --- | --- |
 | `ares-fill-rdram-join-gpt56` | `e8823d1` | Standalone chronology model; reference execution pending |

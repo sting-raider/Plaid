@@ -116,3 +116,10 @@ inspection/rechecking now preserves every complete source/count/hash. Real queue
 insertion/removal identities now pass the actual container with unchanged
 reported checkpoints. Compose real PI request and CPU dispatch/status next; general
 mutation/lifetime obligations leave W012 TODO.
+
+2026-10-09: four additional PI research contracts now reproduce locally, including
+the exact actual-reference write fixture. Accepted request/actual CPU dispatch
+scopes also pass both PI directions; rejected insertions retain independent byte
+effects. Save preserves external queue identity; load remains unknown. Canonical
+integration is now `main` by user instruction. Broader boot joins and lifetime
+obligations keep W012 TODO.
