@@ -9,6 +9,7 @@ pub mod indirect;
 mod indirect_chain;
 pub mod loads;
 pub mod merge;
+pub mod pi_history;
 pub mod pipeline;
 pub mod program;
 pub mod rom;

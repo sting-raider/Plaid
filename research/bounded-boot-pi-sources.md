@@ -58,6 +58,20 @@ both raw hashes agree with Python. The 872-byte report SHA-256 is
 
 This supplies finite PI source effects, not resident executable origins throughout
 boot, a complete mutation census, executable lifetimes, hardware agreement or
-whole-ROM closure. Original Rust v1 inspection needs a separate implementation
-decision and strict tests; queue insertion/removal/dispatch identity is separate
-work. Preserve all raw hashes and keep production version/lifetime gates closed.
+whole-ROM closure. Original Rust v1 inspection now passes under ADR-0055; queue
+insertion/removal/dispatch identity is separate work. Preserve all raw hashes and
+keep production identity/lifetime gates closed.
+
+Primary Rust receipt, 2026-10-09: complete typed v1 inspection and independent
+report source rechecking both pass the retained 8,823,134-record corpus. Every
+count and raw/source/effect hash matches the independent Python checker; the
+nested projected report equals the existing complete Rust v0 report exactly.
+The 1,936-byte PI report SHA-256 is
+`93ec36ff03f592a3e5c82b6c7b942502dbcd9e002bd27c1a6d7da1262e26620b`.
+The effect digest binds destination, canonical offset or unknown, byte value and
+successful scalar writer ordinal:
+`12512b865aab077dc980c10b930adfb05cb9337f1a496189e1ecb0c4b943b1ae`.
+Five adversarial Rust tests reject protocol/type/context/source/report forgeries,
+including PI records inside fetch intervals that a projection could otherwise
+conceal. All 86 Rust integration tests, formatting and strict Clippy pass.
+Finite status observer contexts remain uncertified; no production map promotion.

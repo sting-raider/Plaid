@@ -34,9 +34,9 @@ pub struct AccessHistoryReport {
     pub unknown_context_fills: u64,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
-enum Record {
+pub(crate) enum Record {
     Header {
         format: String,
         revision: String,
@@ -128,7 +128,7 @@ enum Record {
 }
 
 impl Record {
-    fn identity(&self) -> Option<(u64, u64, GuestVirtualAddr, &'static str)> {
+    pub(crate) fn identity(&self) -> Option<(u64, u64, GuestVirtualAddr, &'static str)> {
         let (a, b, c, k) = match self {
             Self::Scalar {
                 ordinal,

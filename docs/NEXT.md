@@ -22,8 +22,9 @@
    fill origins through equal/changed reloads, guest SW/invalidation and partial
    words. Versioned boot chronology now retains 8,823,134 records and exact ROM
    origins for 1,638,808 successful PI writes, preserving complete v0/v5 sources
-   and independent checkpoints. Implement original strict Rust v1 inspection
-   under a separate decision before any production identity promotion;
+   and independent checkpoints. Original strict Rust v1 inspection and complete
+   report source rechecking now agree with every retained count/hash and the exact
+   v0 projection. Keep finite PI effects separate from production identities;
    do not certify completion from last-write context: actual queue-container and
    source checks expose duplicate IDs, cancellation and silent insertion failure.
    Retain successful insertion/dispatch identity and removal before queue joins;

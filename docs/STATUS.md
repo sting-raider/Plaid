@@ -1,6 +1,6 @@
 # Status
 
-2026-10-08. Milestone scope: M1–M3 synthetic executable discovery foundation.
+2026-10-09. Milestone scope: M1–M3 synthetic executable discovery foundation.
 
 Implemented:
 
@@ -311,9 +311,15 @@ Implemented:
   prior v0 history/v5 fetch bytes and original-PI/disabled/repeated reported
   checkpoints agree. Four copy calls return and three status transitions occur;
   final busy is 1 and transfer completion remains uncertified. Production v0
-  rejects v1, keeping broader Rust inspection and executable lifetimes separate.
+  rejects v1, keeping executable lifetimes separate.
+- Original Rust PI inspection validates the complete v1 stream and paired v5
+  source, preserving the exact v0 projection and canonical buffered byte effects.
+  Separate report rechecking reconstructs every hash/count. Strict typed metadata,
+  duplicate keys, missing footers and PI events inside fetch intervals fail closed.
+  The complete retained boot corpus agrees with independent Python evidence;
+  status contexts still certify no transfer completion or executable identity.
 
-Verification: 81 Rust integration tests, formatting, strict Clippy, CLI integration,
+Verification: 86 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.

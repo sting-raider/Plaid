@@ -775,3 +775,24 @@ fail. Production v0 rejects research v1; only the original projected v0 can use
 the existing inspector. Implement strict original Rust v1 source rechecking
 under a separate decision before promotion; finite copy facts supply no complete
 mutation census, executable identity/lifetime or whole-ROM certificate.
+
+## ADR-0055: Inspect buffered PI effects through a typed streaming projection
+
+Status: Accepted, 2026-10-09.
+
+Add original Rust v1 inspection under a separate API and report schema. Validate
+actual canonical ROM halves, consumed buffer lanes, attempts, successful identity-
+RAM writes and matching returns while streaming an exact typed v0 projection into
+the existing complete-source validator. Preserve both raw source hashes and a
+digest of each finite byte effect including its successful writer ordinal.
+Reconstruct the entire report for source rechecking. Reject duplicate/unknown
+fields, unsupported versions, missing footers, inconsistent contexts and PI
+events inside fetch intervals: dropping such records could conceal ordering
+violations from the projected validator. The supported capture places synchronous
+PI effects outside fetch intervals; broader contexts require separate evidence.
+Five adversarial Rust tests and the complete 8,823,134-record corpus preserve
+every independent Python count/hash and the exact prior v0 report. Last-write
+contexts at status transitions remain metadata under ADR-0053; completion is
+always uncertified. No ProgramMap, solver, image generation, executable lifetime
+or native path changes. Reference implementation/firmware stays isolated and
+ignored; only original typed data validation enters the Rust dependency graph.

@@ -112,5 +112,6 @@ remain unknown. A composed 481-record fixture now preserves writer/fetch/fill
 origins through reloads, CPU patches, invalidation and partial words. Versioned
 boot transfer capture now passes 8,823,134 records and 1,638,808 exact PI byte
 origins with complete prior projections/checkpoints. Strict original Rust v1
-inspection and real queue insertion/removal/dispatch identity are next; general
+inspection/rechecking now preserves every complete source/count/hash. Real queue
+insertion/removal/dispatch identity is next; general
 mutation/lifetime obligations leave W012 TODO.
