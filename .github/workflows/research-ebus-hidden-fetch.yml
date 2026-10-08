@@ -34,3 +34,9 @@ jobs:
 
       - name: Hash result payload
         run: sha256sum target/ares-ebus-hidden-fetch-spike/results.json
+
+      - name: Upload result payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ebus-hidden-fetch-results
+          path: target/ares-ebus-hidden-fetch-spike/results.json
