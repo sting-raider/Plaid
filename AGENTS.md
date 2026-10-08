@@ -17,6 +17,12 @@ Build an automatic N64 ROM-to-native recompilation system. The final native game
 
 ## Agent workflow
 
+Use one continuing primary implementation session. `SWARM_BACKLOG.md` is a legacy
+task ledger, not an instruction to delegate. Read and maintain `docs/STATUS.md`,
+`docs/NEXT.md`, `docs/DECISIONS.md` and relevant research notes. Commit coherent,
+tested milestones and continue through routine steps without waiting for approval.
+Executable discovery precedes serious native lowering.
+
 For each task:
 
 1. Read `README.md`, `docs/PLAN.md`, `docs/ARCHITECTURE.md`, `docs/SOURCES.md`, and this file.

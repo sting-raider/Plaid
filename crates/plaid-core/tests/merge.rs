@@ -1,10 +1,73 @@
-use plaid_core::{EvidenceKind, GuestAddr, discovery::*, merge::*, program::*, trace::*};
+use plaid_core::{
+    EvidenceKind, GuestAddr, discovery::*, merge::*, program::*, rom::CanonicalRom, trace::*,
+};
 
 fn rom() -> RomIdentity {
     RomIdentity {
         sha256: "a".repeat(64),
         size: 4096,
     }
+}
+
+#[test]
+fn observed_dma_and_captured_words_establish_verified_executable_source() {
+    let mut bytes = vec![0; 4096];
+    bytes[..4].copy_from_slice(&[0x80, 0x37, 0x12, 0x40]);
+    bytes[64..72].copy_from_slice(&[8, 0, 0, 0, 0, 0, 0, 0]);
+    let rom = CanonicalRom::from_bytes(&bytes).unwrap();
+    let mut t = trace(vec![0x08000000, 0]);
+    t.header.rom = rom.identity.clone();
+    for e in &mut t.events {
+        e.seq += 1;
+    }
+    t.events.insert(
+        0,
+        EventRecord {
+            seq: 0,
+            data: TraceEvent::RomDmaObserved {
+                rom_offset: RomOffset(64),
+                physical_destination: PhysicalAddr(0),
+                size: 8,
+            },
+        },
+    );
+    let m = import_trace_with_rom(&t, &[], &rom, 100).unwrap();
+    assert_eq!(m.loads.len(), 1);
+    assert_eq!(m.dma_observations.len(), 1);
+    assert_eq!(m.loads.first().unwrap().rom_offset, RomOffset(64));
+    assert!(
+        !m.unresolved
+            .iter()
+            .any(|u| u.kind == "unknown_executable_source")
+    );
+    t.events[3].data = TraceEvent::UnitCompiled {
+        unit: 0,
+        start: GuestAddr(0x80000000),
+        words: vec![0x03e00008, 0],
+    };
+    let m = import_trace_with_rom(&t, &[], &rom, 100).unwrap();
+    assert!(m.loads.is_empty());
+    assert!(
+        m.unresolved
+            .iter()
+            .any(|u| u.kind == "executable_load_bytes_mismatch")
+    );
+}
+
+#[test]
+fn unproved_evidence_merges_into_a_static_certificate_without_duplicate_sites() {
+    let mut i = image();
+    i.words = vec![0x3c088000, 0x35080000, 0x01000008, 0];
+    let a = direct_cfg(rom(), &i, &[i.base.pc], 100).unwrap().map;
+    let b = plaid_core::indirect::analyze_indirect(&a, &i).unwrap();
+    let m = merge_maps(&a, &b).unwrap();
+    assert_eq!(m.indirect_sites.len(), 1);
+    assert!(plaid_core::indirect::verify_constant(
+        &m,
+        &i,
+        m.indirect_sites.first().unwrap()
+    ));
+    assert_eq!(m, merge_maps(&b, &a).unwrap());
 }
 fn image() -> CodeImage {
     CodeImage {

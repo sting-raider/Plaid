@@ -1,0 +1,52 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * The recompiler emits addresses of runtime helpers. This compile-only test
+ * supplies fail-fast linker symbols rather than a reference CPU/runtime.
+ * Calling ANY helper aborts the test; generated host code is never executed.
+ * Data symbols such as ROM_HEADER are real typed data in compile_driver.c.
+ */
+#include <stdlib.h>
+#include <stdio.h>
+#define TRAP(name) void name(void) { fputs("unexpected runtime helper: " #name "\n", stderr); abort(); }
+TRAP(TLB_refill_exception)
+TRAP(cached_interp_DDIV)
+TRAP(cached_interp_DDIVU)
+TRAP(cached_interp_DMULT)
+TRAP(cached_interp_DMULTU)
+TRAP(cached_interp_MFC0)
+TRAP(cached_interp_MTC0)
+TRAP(cached_interp_SYSCALL)
+TRAP(cached_interp_TLBP)
+TRAP(cached_interp_TLBR)
+TRAP(cached_interp_TLBWI)
+TRAP(cached_interp_TLBWR)
+TRAP(cc_interrupt)
+TRAP(cp0_update_count)
+TRAP(do_interrupt)
+TRAP(dyna_linker)
+TRAP(dyna_linker_ds)
+TRAP(exception_general)
+TRAP(fp_exception)
+TRAP(gen_interrupt)
+TRAP(invalidate_block_eax)
+TRAP(invalidate_block_ebp)
+TRAP(invalidate_block_ebx)
+TRAP(invalidate_block_ecx)
+TRAP(invalidate_block_edi)
+TRAP(invalidate_block_edx)
+TRAP(invalidate_block_esi)
+TRAP(jump_eret)
+TRAP(jump_syscall)
+TRAP(jump_vaddr_eax)
+TRAP(jump_vaddr_ebp)
+TRAP(jump_vaddr_ebx)
+TRAP(jump_vaddr_ecx)
+TRAP(jump_vaddr_edi)
+TRAP(jump_vaddr_edx)
+TRAP(r4300_check_interrupt)
+TRAP(r4300_read_aligned_dword)
+TRAP(r4300_read_aligned_word)
+TRAP(r4300_write_aligned_dword)
+TRAP(r4300_write_aligned_word)
+TRAP(verify_code)
+TRAP(validate_pi_request)
+TRAP(add_interrupt_event)

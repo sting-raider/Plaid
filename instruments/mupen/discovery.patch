@@ -1,3 +1,36 @@
+diff --git a/src/device/cart/cart_rom.c b/src/device/cart/cart_rom.c
+index 395b494..8c21364 100644
+--- a/src/device/cart/cart_rom.c
++++ b/src/device/cart/cart_rom.c
+@@ -21,6 +21,10 @@
+ 
+ #include "cart_rom.h"
+ 
++#ifdef NEW_DYNAREC
++void plaid_trace_rom_dma(uint32_t offset, uint32_t destination, uint32_t size);
++#endif
++
+ #define M64P_CORE_PROTOTYPES 1
+ #include "api/callbacks.h"
+ #include "api/m64p_types.h"
+@@ -124,6 +128,17 @@ unsigned int cart_rom_dma_write(void* opaque, uint8_t* dram, uint32_t dram_addr,
+         }
+     }
+ 
++#ifdef NEW_DYNAREC
++    /* Persist only ROM bytes actually copied; exclude truncation/zero fill. */
++    uint32_t plaid_copied = length;
++    if (cart_addr >= cart_rom->rom_size || dram_addr >= cart_rom->r4300->rdram->dram_size) plaid_copied = 0;
++    else {
++        if (plaid_copied > cart_rom->rom_size - cart_addr) plaid_copied = cart_rom->rom_size - cart_addr;
++        if (plaid_copied > cart_rom->r4300->rdram->dram_size - dram_addr) plaid_copied = cart_rom->r4300->rdram->dram_size - dram_addr;
++    }
++    plaid_trace_rom_dma(cart_addr, dram_addr, plaid_copied);
++#endif
++
+     /* invalidate cached code */
+     invalidate_r4300_cached_code(cart_rom->r4300, 0x80000000 + dram_addr, length);
+     invalidate_r4300_cached_code(cart_rom->r4300, 0xa0000000 + dram_addr, length);
 diff --git a/src/device/r4300/new_dynarec/new_dynarec.c b/src/device/r4300/new_dynarec/new_dynarec.c
 index 5f70f7c..4cc8ce3 100644
 --- a/src/device/r4300/new_dynarec/new_dynarec.c

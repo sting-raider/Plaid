@@ -247,22 +247,28 @@ pub fn direct_cfg(
             }
             if (i.is_branch() && !i.is_unconditional_branch()) || links {
                 let next = GuestAddr(pc.0.wrapping_add(8));
-                let kind = if links {
-                    EdgeKind::ReturnContinuation
-                } else {
-                    EdgeKind::Fallthrough
-                };
-                map.direct_edges.insert(DirectEdge {
-                    site,
-                    target: image.address(next),
-                    kind,
-                    delay_slot: if i.is_branch_likely() {
-                        DelaySlot::None
-                    } else {
-                        DelaySlot::Always
-                    },
-                    evidence: evidence.clone(),
-                });
+                if links {
+                    map.direct_edges.insert(DirectEdge {
+                        site: site.clone(),
+                        target: image.address(next),
+                        kind: EdgeKind::ReturnContinuation,
+                        delay_slot: DelaySlot::None,
+                        evidence: evidence.clone(),
+                    });
+                }
+                if i.is_branch() && !i.is_unconditional_branch() {
+                    map.direct_edges.insert(DirectEdge {
+                        site,
+                        target: image.address(next),
+                        kind: EdgeKind::Fallthrough,
+                        delay_slot: if i.is_branch_likely() {
+                            DelaySlot::None
+                        } else {
+                            DelaySlot::Always
+                        },
+                        evidence: evidence.clone(),
+                    });
+                }
                 leaders.insert(next);
                 pending.insert(next);
             }

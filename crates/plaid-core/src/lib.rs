@@ -6,6 +6,7 @@ pub mod discovery;
 pub mod indirect;
 pub mod loads;
 pub mod merge;
+pub mod pipeline;
 pub mod program;
 pub mod rom;
 pub mod solver;

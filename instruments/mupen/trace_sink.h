@@ -49,7 +49,7 @@ static void plaid_trace_open(void) {
     fprintf(plaid_trace_file,
         "{\"record\":\"header\",\"header\":{\"schema_version\":0,\"rom\":{\"sha256\":\"%s\",\"size\":%llu},"
         "\"engine\":\"mupen64plus-new_dynarec\",\"revision\":\"ba95bab92a76744753bfe61470823a4937850ab0\","
-        "\"capabilities\":[\"compilation_units\",\"entry_installation\",\"invalidation\",\"target_lookup\"]}}\n", hash, size);
+        "\"capabilities\":[\"compilation_units\",\"entry_installation\",\"invalidation\",\"rom_dma\",\"target_lookup\"]}}\n", hash, size);
     plaid_trace_check();
     return;
 invalid:
@@ -97,6 +97,12 @@ static void plaid_trace_invalidate(uint32_t address, size_t size) {
     if (!size || size > UINT32_MAX || (uint64_t)address + size > UINT64_C(0x100000000))
         fputs(",\"range\":null", plaid_trace_file);
     else fprintf(plaid_trace_file, ",\"range\":{\"start\":%" PRIu32 ",\"size\":%" PRIu32 "}", address, (uint32_t)size);
+    plaid_trace_finish();
+}
+/* Exported only by the research reference's new_dynarec translation unit. */
+void plaid_trace_rom_dma(uint32_t offset, uint32_t destination, uint32_t size) {
+    if (!size || !plaid_trace_prefix("rom_dma_observed")) return;
+    fprintf(plaid_trace_file, ",\"rom_offset\":%" PRIu32 ",\"physical_destination\":%" PRIu32 ",\"size\":%" PRIu32, offset,destination,size);
     plaid_trace_finish();
 }
 #endif

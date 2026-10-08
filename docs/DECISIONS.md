@@ -82,3 +82,29 @@ mode stays OPEN until root/exception/DMA/overlay/write/RSP/execution-mode certif
 verifiers exist. No user-toggle booleans waive these obligations. `native_complete`
 remains false: discovery closure is necessary but CPU lowering, runtime and behavioral
 verification are also required. CLI `solve` defaults to whole-ROM scope.
+
+## ADR-0010: Verify actual DMA copies before assigning executable sources
+
+Status: Accepted, 2026-10-08.
+
+The pinned cartridge hook records the actual copy extent after clipping at ROM
+and RDRAM boundaries. Requested length and zero-filled bytes cannot establish
+ROM provenance. Import joins prior covering DMA events with captured instruction
+words and compares all bytes against canonical ROM content. Raw DMA observations
+remain available independently. This proves a byte mapping, not overlay lifecycle,
+relocation semantics or complete executable-copy coverage.
+
+The synthetic harness invokes actual pinned compilation/copy routines without
+executing generated host code. Runtime helpers trap if called. Its fixed interrupt
+helper is test scaffolding, not a timing oracle; CPU differential testing is pending.
+
+## ADR-0011: Retain inferred target evidence through bounded rediscovery
+
+Status: Accepted, 2026-10-08.
+
+Indirect targets inside a source image become traversal roots in a bounded CFG/
+constant-analysis fixed point. Repartitioning may expose a bypass and revoke an
+earlier local proof. Preserve its candidate and provenance rather than silently
+dropping history. Iteration budgets produce blockers. Conditional link branches
+separate taken calls, untaken fallthrough and possible return continuation; returning
+does not execute the original call's delay slot again.

@@ -52,4 +52,50 @@ A simple title comes first. Overlay-heavy and custom-microcode titles come later
 
 ## Repository state
 
-Bootstrap/research scaffold only. No compatibility claim is implied.
+Executable discovery v0 is implemented and verified on synthetic inputs through
+the M1–M3 foundation: ProgramMap, pinned Mupen trace instrumentation, ROM
+normalization, direct CFG, evidence merging, local indirect certificates,
+DMA-backed loads and fail-closed solver reports. Whole-ROM closure and native
+execution remain unimplemented. See [`docs/STATUS.md`](docs/STATUS.md) and
+[`docs/NEXT.md`](docs/NEXT.md) for the precise scope.
+
+## Build and verification
+
+Rust and a C compiler are required by the pinned Rabbitizer dependency. Python
+3.11+ and an x64 GCC toolchain are required by the integration scripts. The current
+verification host is Windows/MinGW; portability is not yet verified.
+
+```text
+cargo test --workspace
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+python scripts/test_cli.py
+python scripts/test_exporter.py
+python scripts/test_mupen_hooks.py
+```
+
+The final command requires the pinned Mupen checkout in `.refs/`; use
+`python scripts/fetch_refs.py` to fetch the reference lab. The hook script prepares
+the research patch, compiles actual Mupen routines and tests synthetic inputs. It
+does not execute generated host code or validate N64 CPU behavior.
+
+## Discovery commands
+
+```text
+plaid rom-info <rom>
+plaid check-trace <trace.ndjson>
+plaid check-map <map.json>
+plaid discover <rom> <rom_offset> <guest_start> <size> <entry> <out.json>
+plaid import-trace <rom> <trace.ndjson> <out.json>
+plaid merge <left.json> <right.json> <out.json>
+plaid solve [rom] <map.json>
+```
+
+Numbers accept decimal or `0x` notation. `discover` requires an explicit load
+mapping. Trace import compares captured DMA-backed code with the canonical ROM.
+Supplying a ROM to `solve` reconstructs hash-checked source witnesses. The CLI
+solver always uses whole-ROM scope and currently reports OPEN; a successful exit
+means the report was produced. `native_complete` remains false.
+
+Keep local ROMs in ignored `roms/` and derived traces/maps in ignored `artifacts/`.
+No commercial ROM assets are needed by the tests.
