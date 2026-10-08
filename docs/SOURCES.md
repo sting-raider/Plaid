@@ -209,6 +209,10 @@ queue completion or executable image/lifetime certificate is introduced.
 nall header; external original metadata preserves actual insertion/heap identities
 without changing object layout. Original/disabled/repeated container checkpoints
 agree; serialization loses identity. No CPU/device dispatch claim is made.
+`spikes/035-ares-pi-queue-dispatch-context/` uses optional generated PI accepted-I/O
+and CPU dispatch scopes to compose queue identities with actual component status
+callbacks in both directions. Six forged joins fail and reported baseline state
+agrees. No upstream implementation enters Rust or the native dependency graph.
 
 Selected-cache v5 handling in Plaid is original Rust schema/import/verification
 code. It checks the pinned reference's finite snapshot constraints while keeping

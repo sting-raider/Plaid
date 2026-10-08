@@ -7,6 +7,7 @@ import subprocess
 import sys
 import shutil
 import re
+import importlib.util
 
 ROOT = Path(__file__).resolve().parents[2]
 REF = ROOT / ".refs/ares"
@@ -14,13 +15,14 @@ REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 OUTPUT = ROOT / "target/ares-oracle-spike"
 
 
-def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False, rdram_scalar_access=False, fetch_boundary_access=False, pi_dma_access=False):
+def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False, rdram_scalar_access=False, fetch_boundary_access=False, pi_dma_access=False, queue_access=False):
     if cache_fill_access: assert raw_fetch_access and physical_fetch_access
     if cache_operation_access: assert raw_fetch_access and physical_fetch_access
     if rdram_burst_access: assert raw_fetch_access and physical_fetch_access
     if rdram_scalar_access: assert raw_fetch_access and physical_fetch_access
     if fetch_boundary_access: assert raw_fetch_access and physical_fetch_access
     if pi_dma_access: assert raw_fetch_access and physical_fetch_access
+    if queue_access: assert raw_fetch_access and physical_fetch_access and pi_dma_access
     output = Path(directory)
     assert subprocess.check_output(["git","rev-parse","HEAD"],cwd=REF,text=True).strip() == REV
     subprocess.run(["git","-c","core.autocrlf=true","diff","--quiet","HEAD"],cwd=REF,check=True)
@@ -37,6 +39,8 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
         "rdram_scalar_access":rdram_scalar_access,
         "fetch_boundary_access":fetch_boundary_access,
         "pi_dma_access":pi_dma_access,
+        "queue_access":queue_access,
+        "queue_recipe":hashlib.sha256((ROOT/"spikes/032-ares-queue-identity/prepare.py").read_bytes()).hexdigest() if queue_access else None,
         "extra_sources":{str(Path(p).relative_to(ROOT)):hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in extra_sources},
         "fixture_driver":hashlib.sha256(Path(__file__).with_name("driver.cpp").read_bytes()).hexdigest(),
         "recipe":hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
@@ -45,6 +49,13 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
     if not manifest.exists() or json.loads(manifest.read_text()) != inputs or not exe.exists():
         flags = ["-O1","-std=c++20","-msse4.1","-DSLJIT_HAVE_CONFIG_PRE=1","-DSLJIT_HAVE_CONFIG_POST=1"]
         includes = [REF / p for p in ("ares","nall",".","thirdparty","thirdparty/xxhash","ares/n64/system")]
+        queue_header = output/"include/nall/priority-queue.hpp"
+        if queue_access:
+            spec = importlib.util.spec_from_file_location("plaid_queue_generation", ROOT/"spikes/032-ares-queue-identity/prepare.py")
+            module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+            module.generate(REF, queue_header)
+        else:
+            queue_header.unlink(missing_ok=True)
         if raw_fetch_access:
             # Expose existing debugger input through an accessor in a generated
             # header. No CPU fields, instruction code or object layout changes.
@@ -66,6 +77,22 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
                 header = "// Project-owned callbacks bracketing a successful CPU fetch access.\nusing PlaidCpuFetchObserver = void (*)(bool, u64, u32, u32, bool, u32);\ninline PlaidCpuFetchObserver plaidCpuFetchObserver = nullptr;\n" + header
             if pi_dma_access:
                 header = "// Project-owned PI DMA buffered-read/write boundaries.\nusing PlaidPiDmaObserver = void (*)(u32, u32, u32, u32, u32, u32);\ninline PlaidPiDmaObserver plaidPiDmaObserver = nullptr;\n" + header
+            if queue_access:
+                header = """// Original optional request/CPU-dispatch scopes, no CPU object fields.
+using PlaidPiIoDmaObserver = void (*)(bool, u32, u32, u32, u32);
+inline PlaidPiIoDmaObserver plaidPiIoDmaObserver = nullptr;
+using PlaidCpuQueueDispatchObserver = void (*)(bool, u32);
+inline PlaidCpuQueueDispatchObserver plaidCpuQueueDispatchObserver = nullptr;
+struct PlaidQueueDispatchScope {
+  u32 event;
+  explicit PlaidQueueDispatchScope(u32 event) : event(event) {
+    if(plaidCpuQueueDispatchObserver) plaidCpuQueueDispatchObserver(true, event);
+  }
+  ~PlaidQueueDispatchScope() {
+    if(plaidCpuQueueDispatchObserver) plaidCpuQueueDispatchObserver(false, event);
+  }
+};
+""" + header
             destination = output / "include/n64/cpu/cpu.hpp"
             destination.parent.mkdir(parents=True,exist_ok=True)
             destination.write_text(header)
@@ -151,7 +178,19 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
             (output/"pi_dma.cpp").write_text(dma)
             pi_source = (REF/"ares/n64/pi/pi.cpp").read_text()
             assert pi_source.count('#include "dma.cpp"') == 1
-            pi_source = re.sub(r'#include "([^"]+)"',lambda m:f'#include "{output / "pi_dma.cpp" if m[1] == "dma.cpp" else REF / "ares/n64/pi" / m[1]}"',pi_source)
+            pi_replacements = {"dma.cpp":output/"pi_dma.cpp"}
+            if queue_access:
+                pi_io = (REF/"ares/n64/pi/io.cpp").read_text()
+                for direction in ("Read", "Write"):
+                    name=direction.lower()
+                    marker=f"    cpu.queueInsert(Queue::PI_DMA_{direction}, dmaDuration({str(direction == 'Read').lower()}));\n    dma{direction}();"
+                    assert pi_io.count(marker)==1
+                    before=f"    if(plaidPiIoDmaObserver) plaidPiIoDmaObserver(true, Queue::PI_DMA_{direction}, io.dramAddress, io.pbusAddress, io.{name}Length+1);\n"
+                    after=f"\n    if(plaidPiIoDmaObserver) plaidPiIoDmaObserver(false, Queue::PI_DMA_{direction}, io.dramAddress, io.pbusAddress, io.{name}Length);"
+                    pi_io=pi_io.replace(marker,before+marker+after)
+                (output/"pi_io.cpp").write_text(pi_io)
+                pi_replacements["io.cpp"]=output/"pi_io.cpp"
+            pi_source = re.sub(r'#include "([^"]+)"',lambda m:f'#include "{pi_replacements.get(m[1], REF / "ares/n64/pi" / m[1])}"',pi_source)
             (output/"pi.cpp").write_text(pi_source)
             assert unity.count("#include <n64/pi/pi.cpp>") == 1
             unity = unity.replace("#include <n64/pi/pi.cpp>",f'#include "{output/"pi.cpp"}"')
@@ -199,6 +238,10 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
                 (output / "cpu_interpreter_ipu.cpp").write_text(ipu[:start] + block + ipu[stop:])
                 replacements["interpreter-ipu.cpp"] = output / "cpu_interpreter_ipu.cpp"
             cpu = (REF / "ares/n64/cpu/cpu.cpp").read_text()
+            if queue_access:
+                marker="  queue.step(clocks, [](u32 event) {"
+                assert cpu.count(marker)==1
+                cpu=cpu.replace(marker,marker+"\n    PlaidQueueDispatchScope plaidDispatchScope(event);")
             assert cpu.count('#include "memory.cpp"') == 1
             # Relocating this TU changes quoted-include lookup. Resolve every
             # CPU include explicitly; system/serialization.cpp shares a name.

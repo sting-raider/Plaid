@@ -823,3 +823,20 @@ and object size remain equal; save-only token 521 survives while the restored
 entry remains unknown. This is a finite continuous-execution improvement, not
 sidecar persistence or cross-load identity. Historical worker receipts retain
 their earlier policy and scope. Five identity/validity/movement forgeries fail.
+
+## ADR-0058: Join accepted PI requests through exact CPU dispatch scope
+
+Status: Accepted for research, 2026-10-09.
+
+New worker research separates immediate PI data effects from later queued status
+callbacks. Original opt-in request boundaries snapshot the accepted I/O context
+before insertion/copy; successful external queue tokens join through valid removal
+and an explicit scope around the actual CPU callback. Five component cases cover
+both request directions, cancellation, failed insertion with successful writes,
+unbound queue entries and direct status invocation. Original/disabled/repeated
+reported checkpoints agree, and six forged joins fail. Copy effects need no
+successful queue insertion; status association requires exact dispatch identity.
+This is finite reference component evidence without guest instruction/MMIO
+execution or hardware timing. Keep canonical byte origins, restore identity,
+boot schema promotion and executable lifetimes separate; v1 inspection still
+certifies no transfer completion. Generated reference code/notices stay isolated.

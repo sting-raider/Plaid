@@ -323,6 +323,12 @@ Implemented:
   capacity. Reported dispatches, occupied serialized state and object size match
   original/disabled/repeated builds; save preserves identity and load discards it. Actual
   CPU/device dispatch and transfer-completion joins remain separate work.
+- Explicit accepted PI I/O and actual CPU dispatch scopes now pass a 2,222-record
+  component fixture with both request directions. Exact insertion/removal tokens
+  identify two request/status links; canceled, rejected, unbound and direct calls
+  fail closed. All 32 successful byte effects remain separate from scheduling.
+  Original/disabled/repeated reported state agrees; no boot completion or image
+  promotion follows from these finite component results.
 
 Verification: 86 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

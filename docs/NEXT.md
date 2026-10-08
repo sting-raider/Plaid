@@ -29,7 +29,10 @@
    source checks expose duplicate IDs, cancellation and silent insertion failure.
    Actual-container insertion identities now survive heap movement/cancellation,
    including equal deadlines and save; load remains unknown. Compose this sensor
-   with actual PI request and CPU dispatch/status boundaries before queue joins;
+   with actual PI request and CPU dispatch/status boundaries now passes both
+   directions in a finite component fixture. Version a bounded boot extension
+   with explicit accepted requests, queue outcomes, cancellation and dispatch
+   scopes before upgrading any boot completion claim;
    keep general cache, byte lifetime and mutation completeness separate.
    Current tags/effective addresses can differ from resident-byte history; keep
    those identities separate. A recovered synchronized-restore/cache-power
