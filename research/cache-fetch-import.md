@@ -31,6 +31,16 @@ merges byte-identically. Map size: 644,693 bytes; SHA-256
 `07f650865d122d13059c6f862e68303aa82527173d87f08b37e2d0e90108156f`.
 A single Windows debug import took 14.01 seconds and peaked at 11,907,072 bytes
 of working memory under concurrent checks. This is one-host cost evidence, not
-an optimization or scalability claim. Complete longer and legacy corpus checks
-remain separate verification milestones. Fill/copy/mutation lineage and
-contextual executable identities are still required.
+an optimization or scalability claim.
+
+The ten-million-call corpus also passes complete supplied-input/raw-source
+verification, occurrence accounting, byte-identical self-merge and OPEN gating.
+Its 9,999,998 fetches yield 54,279 facts, including 65 known ROM-source facts.
+Map size: 43,509,988 bytes; SHA-256
+`7c6740e204721cd7a4b3a02c494453525eca6fa3e8043b2c1d19a270e8867c11`.
+A Windows debug import under concurrent checks took 187.24 seconds and peaked
+at 113,090,560 bytes. The raw source is 2,831,854,844 bytes. The bounded corpus
+timeout is 300 seconds for v5 because its extra fields increase parsing cost;
+legacy budgets remain unchanged. These are single-run cost measurements.
+Full v0/v1/v2 and one-million v4 regressions retain exact prior map hashes.
+Fill/copy/mutation lineage and contextual executable identities are still required.

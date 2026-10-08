@@ -22,7 +22,9 @@ none. Each slot/tag/index/effective-word selection is checked. The raw stream is
 `c0dcae4870aaec1b30097d7fd95f2b6214f043e2ac1dea6366b1814655ce4ce9`.
 The full cache checkpoint is
 `eb0abce6ce91d78b5c335be4cb364a7d10744af865a758b9026f9c653c474892`.
-Production rejects the unsupported cache policy without writing a map.
+Before promotion, production rejected the unsupported cache policy without
+writing a map. Original Rust handling is now independently validated; see
+`research/cache-fetch-import.md` for the distinct import decision and corpora.
 
 At ten million calls, 9,999,998 fetches include 9,399,022 cached observations at
 8,118 distinct resident snapshots. The 2,831,854,844-byte repeated stream has

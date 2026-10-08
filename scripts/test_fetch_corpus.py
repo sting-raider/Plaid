@@ -89,6 +89,9 @@ def main():
             if args.budget == 1000000:
                 assert len(data["fetch_observations"]) == 1155
                 assert hashlib.sha256(map_path.read_bytes()).hexdigest() == "07f650865d122d13059c6f862e68303aa82527173d87f08b37e2d0e90108156f"
+            else:
+                assert len(data["fetch_observations"]) == 54279 and len(known) == 65
+                assert hashlib.sha256(map_path.read_bytes()).hexdigest() == "7c6740e204721cd7a4b3a02c494453525eca6fa3e8043b2c1d19a270e8867c11"
         elif args.budget == 1000000:
             assert capture["trace_sha256"] == "38a0781c763a110ca419af65bf9f1a19ed96cd9282e01b2545486d9d865bd937"
             assert len(data["fetch_observations"]) == 1155 and not known

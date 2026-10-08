@@ -41,8 +41,8 @@
    cases, with unchanged CPU/timing and full RAM/cache hashes. The one-million
    boot prefix now preserves 400,954 snapshots and exact prior-stream/checkpoint
    agreement. The ten-million prefix matches too, at 8,118 resident tuples.
-   V5 import now rechecks complete sources and resident context. Finish broader
-   corpus/legacy verification, then actual fill/copy/mutation lineage;
+   V5 import now rechecks both complete sources and resident context. Continue
+   actual fill/copy/mutation lineage;
    retain slot/event identities without inferring fill lineage or lifetimes.
    Continue RSP/exception/TLB/FPU verification
    before extending semantic claims.
