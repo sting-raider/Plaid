@@ -32,11 +32,13 @@ def main():
         for offset in range(8):
           for mode in ("uncached","cached"):
             state=invoke(exe,mode,op,endian,offset); results.append(state)
+            assert bool(state["context_little"]) == (endian == "little"), state
             before=state["before_guest"]
             expected=apply_expected(before,op,endian,offset)
             if op=="SD" and offset:
+                # The address exception enters kernel/big-endian exception mode;
+                # compare raw backing, not post-exception byte presentation.
                 assert state["exception"] == 5
-                assert state["after_guest"] == before
                 assert state["after_raw"] == state["before_raw"]
                 assert state["dirty"] == 0
                 continue
@@ -54,6 +56,7 @@ def main():
       for op in ("SD","SDL","SDR"):
         for offset in range(8):
           state=invoke(exe,"tlbmiss",op,endian,offset); results.append(state)
+          assert bool(state["context_little"]) == (endian == "little"), state
           assert state["after_raw"] == state["before_raw"] and state["dirty"] == 0
           if op=="SD" and offset:
               assert state["exception"] == 5
@@ -62,6 +65,7 @@ def main():
 
       for target in range(1,8):
         state=invoke(exe,"pair","SDL",endian,target); results.append(state)
+        assert bool(state["context_little"]) == (endian == "little"), state
         assert state["exception"] == 0
         expected=model.DATA.to_bytes(8,endian)
         assert bytes(state["after_guest"][target:target+8]) == expected, state
