@@ -134,3 +134,5 @@ lifetime and mutation completeness still keep W012 TODO.
 2026-10-09 primary: TLB mapped uncached fetch fixture locally reproduced; complete mapping history/closure remains open.
 
 2026-10-09 primary: translated/degraded scalar Word fixture locally reproduced; full fetch/other widths and executable-identity policy stay open.
+
+2026-10-09 primary: actual dirty eviction/clean-lane overwrite counterexample reproduced; general resident-byte lineage remains open.

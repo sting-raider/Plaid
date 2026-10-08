@@ -90,3 +90,5 @@ EBus hidden fetches require a separate derived-bits source witness or Unknown; r
 Successful TLB-mapped uncached fetches now have finite source evidence; retain current translated/post-endian addresses in each access context and add mapping-generation/lifecycle evidence before proving alias history (ADR-0063).
 
 Compose the reproduced translated scalar raw-read and delivered-transform witness with actual access contexts; decide degraded executable-image identity explicitly and retain unsupported paths as unknown (ADR-0064).
+
+Retain full per-byte outgoing D-cache lineage before actual writeback and slot replacement. The reproduced clean-lane overwrite counterexample rules out dirty-mask-only provenance (ADR-0065).
