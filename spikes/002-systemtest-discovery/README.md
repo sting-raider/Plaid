@@ -34,6 +34,11 @@ isolate old Cargo from Plaid's resolver 3; guest files and Cargo.lock are unchan
 The packager writes beside its ELF; the script copies that output and checks two
 identical packaging runs. No ELF/symbol metadata is supplied to Plaid.
 
+The probe uses a 30-second wall bound and the existing 16-MiB trace bound. The
+former five-second limit stopped during integer tests under concurrent reference
+build load, before the expected LLD boundary. A timeout still fails that boundary
+assertion; extending the bound does not count as guest completion or CPU agreement.
+
 ## Verdict: PARTIAL
 
 ### Evidence
