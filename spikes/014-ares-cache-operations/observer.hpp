@@ -12,6 +12,9 @@ static void cache_operation_observer(u64 pc,u32 operation,u64 virtualAddress,u32
   CacheOperation event{pc,virtualAddress,cacheFills.size(),operation,physical,beforeTag,afterTag,{},{}};
   for(u32 i=0;i<8;i++) { event.beforeWords[i] = beforeWords[i]; event.afterWords[i] = afterWords[i]; }
   cacheOperations.push_back(event);
+  #if defined(PLAID_ORDERED_HISTORY_CONTEXT)
+  history_event("cache_operation",cacheOperations.size());
+  #endif
 }
 
 static void print_cache_operations() {

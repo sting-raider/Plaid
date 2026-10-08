@@ -606,3 +606,17 @@ and full RAM/hidden-memory hashes agree, including deterministic degraded-word
 goldens. This validates policy boundaries in declared synthetic component state,
 not guest execution, hardware initialization or complete backing coverage. Keep
 unsupported policies unknown; unified history and copy/lifetime work remain open.
+
+## ADR-0045: Measure one controlled callback chronology before joining lifetimes
+
+Status: Accepted for research, 2026-10-08.
+
+Retain one original ordered ledger across existing successful RAM burst, fill,
+CACHE completion and pre-decoder fetch callbacks. Include declared fixture writes
+with explicit host attribution. Every payload is referenced exactly once; measured
+read/fill/fetch and writeback/completion order, complete prior projection and
+independent baseline/plain/repeated checkpoints agree. Reordered/missing/forged
+records fail. This validates the controlled chronology, not a general causal
+context, mutation census or executable lifetime. Ordinary scalar backing events
+and reset/restore/copy/byte-write findings require separate integration. Historical
+fill data is distinct from current effective tags. No production epoch is created.

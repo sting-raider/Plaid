@@ -93,3 +93,6 @@ unknown. General backing/copy/mutation/lifetime handling remains open; W012 stay
 RAM remapping/degradation/failure boundary tests now retain unsupported paths as
 unknown while verifying 16/32-byte identity witnesses and full hidden-memory
 checks. Unified transaction/cache/fetch/copy/lifetime history remains open; W012 stays TODO.
+Controlled shared chronology now measures 43 transaction/cache/fetch/fixture-write
+records with independent checkpoints and forged-history rejection. General
+contexts, scalar backing, copy/mutation/reset/restore and lifetimes remain open.

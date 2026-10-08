@@ -13,6 +13,9 @@ static void cache_fill_observer(u32 slot,u32 physical,u32 index,const u32* words
   for(u32 i=0;i<8;i++) fill.words[i] = words[i];
   cacheFills.push_back(fill);
   lastCacheFill[slot] = cacheFills.size();
+  #if defined(PLAID_ORDERED_HISTORY_CONTEXT)
+  history_event("fill",cacheFills.size());
+  #endif
 }
 
 static u64 cache_fill_for_fetch(u32 slot,u32 physical,u32 index,const u32* words) {
