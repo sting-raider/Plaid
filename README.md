@@ -123,6 +123,8 @@ No commercial ROM assets are needed by the tests.
 PC/word/slot summaries. `verify-fetch` regenerates them from the complete source.
 Research v1 additionally retains effective physical address and cache policy;
 remapped/cache variants stay distinct. V0 remains compatible and byte-identical.
+V2 retains actual cartridge-read or unknown source, requiring canonical word,
+mapped-capacity and access checks. A source witness supplies no image lifetime.
 They have no established image generation, code lifetime or retirement identity;
 the solver keeps them OPEN. After spike 004 creates the ignored broad capture,
 `python scripts/test_fetch_corpus.py` checks full-source provenance, self-merge and

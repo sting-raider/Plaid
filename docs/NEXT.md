@@ -9,8 +9,9 @@
    A bounded delegating-ROM-device experiment now distinguishes actual returned
    halfwords from PI latch/open-bus/prior-data reads. Its broader prefix verifies
    1,852 actual reads at 65 canonical ROM offsets with exact v1 projection/state
-   agreement. Promote project-owned source handling with raw-source verification;
-   keep executable lifetime and other memory sources unknown.
+   agreement. The v2 importer rechecks policy, access, capacity and canonical words
+   against the complete raw source, preserving known/unknown variants. Establish
+   contextual image/lifetime witnesses next; other memory sources stay unknown.
    The streaming importer now preserves 64-bit PCs,
    fetched-word/slot variants and digest-qualified first/last indices/counts,
    rechecks the complete source and refuses closure of unknown identities. The pinned

@@ -405,3 +405,20 @@ Existing observer modes and source-boundary fixtures pass. Keep the interpreter
 window/recompilation constraints explicit and retain all boot/coverage/lifecycle
 limits. Production data handling and executable-image identities remain separate
 decisions; no reference CPU code or native execution is promoted.
+
+## ADR-0032: Recheck finite ROM fetch sources without inventing code images
+
+Status: Accepted, 2026-10-08.
+
+Import research v2 with its explicit source policy and a known/unknown source on
+every fetch. Cartridge facts require aligned mapped bounds, matching uncached
+effective physical address and the exact canonical ROM word. Full-source
+verification regenerates these facts and their capture metadata/provenance.
+Source variants participate in semantic and endpoint identity; unknown latch
+data remains separate even when words and addresses match. Use a strict empty
+struct for the unknown variant so extra fields cannot be silently accepted.
+Default/omit additive fields to retain byte-identical v0/v1 maps. Mixed captures
+merge conservatively. The finite source witness does not establish immutable
+images, generations, retirement or executable lifetime. Keep the independent
+solver identity gate and create no regions/entries/copies from these facts.
+Only project-owned data handling is promoted; no reference CPU/runtime is linked.
