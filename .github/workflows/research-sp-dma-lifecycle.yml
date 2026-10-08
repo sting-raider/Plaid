@@ -37,6 +37,7 @@ jobs:
       - name: Execute exact-pin lifecycle experiment
         run: |
           set -o pipefail
+          mkdir -p target
           python3 spikes/034-ares-sp-dma-lifecycle/run.py | tee target/sp-dma-lifecycle-run.log
           sha256sum target/ares-sp-dma-lifecycle/results.json
       - name: Upload evidence
