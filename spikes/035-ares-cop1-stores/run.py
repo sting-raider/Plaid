@@ -29,6 +29,13 @@ def expected_after(before,op,fr,ft,endian,offset):
     return list(out)
 
 
+def assert_fault_nonmutation(s, code, coprocessor_error=0):
+    assert (s['exception'],s['coprocessor_error'])==(code,coprocessor_error),s
+    # Exception entry can change CPU endian/address context before after_alias is
+    # sampled. Raw backing plus a clean D-cache is the stable mutation witness.
+    assert s['after_raw']==s['before_raw'] and s['dirty']==0,s
+
+
 def main():
     exe=mod.build(HERE/'driver.cpp',OUTPUT)
     results=[]
@@ -56,19 +63,15 @@ def main():
                 assert s['dirty']!=0,s
 
           s=invoke(exe,op,'tlbmiss',fr,ft,endian,0); results.append(s)
-          assert (s['exception'],s['coprocessor_error'])==(3,0),s
-          assert s['after_raw']==s['before_raw'] and s['after_alias']==s['before_alias'] and s['dirty']==0,s
+          assert_fault_nonmutation(s,3)
 
           s=invoke(exe,op,'misalign',fr,ft,endian,1); results.append(s)
-          assert (s['exception'],s['coprocessor_error'])==(5,0),s
-          assert s['after_raw']==s['before_raw'] and s['after_alias']==s['before_alias'] and s['dirty']==0,s
+          assert_fault_nonmutation(s,5)
 
           s=invoke(exe,op,'cu1off',fr,ft,endian,0); results.append(s)
-          assert (s['exception'],s['coprocessor_error'])==(11,1),s
-          assert s['after_raw']==s['before_raw'] and s['after_alias']==s['before_alias'] and s['dirty']==0,s
+          assert_fault_nonmutation(s,11,1)
           s=invoke(exe,op,'cu1off_misalign',fr,ft,endian,1); results.append(s)
-          assert (s['exception'],s['coprocessor_error'])==(11,1),s
-          assert s['after_raw']==s['before_raw'] and s['after_alias']==s['before_alias'] and s['dirty']==0,s
+          assert_fault_nonmutation(s,11,1)
 
     assert model.select_u32(0,1)==0x11223344
     assert model.select_u64(0,1)==0x1122334455667788
