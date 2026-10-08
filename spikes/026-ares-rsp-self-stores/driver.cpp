@@ -101,18 +101,26 @@ int main() {
 
   // SWC2 encoding from the pinned n64-systemtest assembler:
   // op=58, base=r1, vt=v2, e=0, imm7=0, with WC2 subtype in bits 15..11.
-  struct VectorStore { const char* name; u32 subtype; };
+  struct VectorStore {
+    const char* bit12Name;
+    const char* wrapName;
+    u32 subtype;
+  };
   const VectorStore stores[] = {
-    {"SBV",0},{"SSV",1},{"SLV",2},{"SDV",3},{"SQV",4},{"SRV",5},
-    {"SPV",6},{"SUV",7},{"SHV",8},{"SFV",9},{"SWV",10},{"STV",11},
+    {"SBV@0x1000","SBV@0x0fff",0}, {"SSV@0x1000","SSV@0x0fff",1},
+    {"SLV@0x1000","SLV@0x0fff",2}, {"SDV@0x1000","SDV@0x0fff",3},
+    {"SQV@0x1000","SQV@0x0fff",4}, {"SRV@0x1000","SRV@0x0fff",5},
+    {"SPV@0x1000","SPV@0x0fff",6}, {"SUV@0x1000","SUV@0x0fff",7},
+    {"SHV@0x1000","SHV@0x0fff",8}, {"SFV@0x1000","SFV@0x0fff",9},
+    {"SWV@0x1000","SWV@0x0fff",10}, {"STV@0x1000","STV@0x0fff",11},
   };
   for(const auto& store : stores) {
     u32 instruction = (58u << 26) | (1u << 21) | (2u << 16) | (store.subtype << 11);
     // 0x1000 is the adversarial would-be IMEM selector if the RSP data path
     // shared the CPU-visible 8 KiB SP memory addressing model.
-    runDecoded(string{store.name} + "@0x1000", instruction, 0x1000, false, [&] {});
+    runDecoded(store.bit12Name, instruction, 0x1000, false, [&] {});
     // 0x0fff forces multi-byte/vector forms to confront the 4 KiB wrap edge.
-    runDecoded(string{store.name} + "@0x0fff", instruction, 0x0fff, false, [&] {});
+    runDecoded(store.wrapName, instruction, 0x0fff, false, [&] {});
   }
 
   string finalImem = digest(rsp.imem.data, 4096);
