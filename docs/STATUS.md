@@ -144,6 +144,9 @@ Implemented:
   canonical word verification. Known and unknown variants remain distinct; the
   full raw-source rechecker protects their provenance. V0/v1 maps remain byte-
   identical. No regions, entries, copies, images or lifetimes are fabricated.
+  Complete v2 import accounts for all fetches in 53,037 facts (65 known-source,
+  52,972 unknown-source), verifies raw provenance and self-merges byte-identically.
+  Its map is 27,016,450 bytes; the solver remains OPEN/native_complete=false.
 
 Verification: 72 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
