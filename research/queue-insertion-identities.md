@@ -34,3 +34,16 @@ callback, not transfer completion or hardware timing certificates. Compose the
 sensor with actual CPU dispatch and PI request/status boundaries before joining
 queue identities to copy effects. Capture gaps, arbitrary restore/reset policies
 and broader lifecycle identity remain separate obligations.
+
+Primary follow-up, 2026-10-09: new worker research at
+`origin/research/pi-dispatch-sidecar-20261008` (`06c5243`) identified the save-only
+loss of evidence. The sensor now uses the existing serializer `reading()` flag:
+saving preserves live external tokens; loading still clears them. The actual
+six-case container fixture preserves original/disabled/repeated reported state
+and object size. Token 521 survives save-only removal; the restored valid entry
+remains unknown. All 514 canceled removals retain identity, with no dispatch.
+Nine valid removals are identified and one post-load removal remains unknown.
+Five forged records still fail. Updated result SHA-256:
+`4ad164fe93410ca7c73aa48697c9dd408fbebd9e9ba4d79842092a13d257ceda`.
+The earlier receipt above describes the deliberately more conservative policy;
+neither policy certifies identity across load or reconstructs a saved sidecar.

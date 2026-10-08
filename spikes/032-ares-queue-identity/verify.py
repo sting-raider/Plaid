@@ -20,7 +20,7 @@ def verify(events):
         assert 1 <= kind <= 9 and e["event"] < 2 and e["clock"] < 2**32
         if kind in (1, 9):
             assert e["token"] == 0 and slot == other == e["event"] == 0
-            slots = [None] * 512
+            if kind == 1 or e["valid"]: slots = [None] * 512
             counts["serialization_boundaries"] += kind == 9
         elif kind == 2:
             assert slot == 512 and other == 0 and e["token"] == 0 and not e["valid"]

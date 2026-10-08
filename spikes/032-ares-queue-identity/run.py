@@ -44,9 +44,9 @@ def worker():
     assert state["boundaries"] == [3,4,4,5,6,8,10]
     result = verify(enabled["events"])
     assert result["successful_insertions"] == 523 and result["rejected_insertions"] == 1
-    assert [e["token"] for e in result["identified_dispatch_candidates"]] == [2,3,1,6,519,520,522,523]
-    assert result["unknown_valid_removals"] == 2
-    assert result["identified_canceled_removals"] == 2 and result["unknown_invalid_removals"] == 512
+    assert [e["token"] for e in result["identified_dispatch_candidates"]] == [2,3,1,6,519,520,521,522,523]
+    assert result["unknown_valid_removals"] == 1
+    assert result["identified_canceled_removals"] == 514 and result["unknown_invalid_removals"] == 0
     # Mutations preserve syntax and attack identity, validity, deadlines and moves.
     for kind, field, value in ((4,"token",1),(5,"event",1),(8,"valid",True),(3,"other",511),(7,"token",9999)):
         forged = copy.deepcopy(enabled["events"])
@@ -64,7 +64,7 @@ def worker():
     (OUTPUT / "traced.json").write_text(raw)
     print("RESULT_SHA256=" + hashlib.sha256(path.read_bytes()).hexdigest())
     print(json.dumps(result, indent=2))
-    print("PASS: actual queue identities survive heap movement/cancellation; serialization loses unsupported identities")
+    print("PASS: actual queue identities survive heap movement/cancellation/save; restore loses unsupported identities")
 
 
 if __name__ == "__main__":

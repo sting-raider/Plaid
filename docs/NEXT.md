@@ -28,7 +28,7 @@
    do not certify completion from last-write context: actual queue-container and
    source checks expose duplicate IDs, cancellation and silent insertion failure.
    Actual-container insertion identities now survive heap movement/cancellation,
-   including equal deadlines; serialization remains unknown. Compose this sensor
+   including equal deadlines and save; load remains unknown. Compose this sensor
    with actual PI request and CPU dispatch/status boundaries before queue joins;
    keep general cache, byte lifetime and mutation completeness separate.
    Current tags/effective addresses can differ from resident-byte history; keep

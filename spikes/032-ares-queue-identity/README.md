@@ -11,6 +11,6 @@ cancellation, full capacity occupied by invalid entries, clock wrap, serializati
 restore and identical event/deadline insertions. Reported dispatches, occupied
 serialized checkpoints and object size match original/disabled/repeated builds.
 The independent ledger checker rejects five token/event/validity/movement attacks.
-It conservatively loses identities at serialization boundaries. This is actual
+Saving preserves live identities; loading conservatively loses them. This is actual
 container execution; CPU/device dispatch, transfer completion, hardware timing
 and arbitrary checkpoint lifecycles remain unclaimed. See the research receipt.

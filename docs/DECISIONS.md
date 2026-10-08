@@ -811,3 +811,15 @@ unknown. Five forged records fail independent replay. This validates finite
 container identities only, not CPU/device dispatch, PI transfer completion or
 hardware timing. Compose actual request/dispatch/status contexts before stronger
 joins. Keep generated reference code/notices isolated and out of the Rust graph.
+
+## ADR-0057: Preserve queue identity on save and cut it on load
+
+Status: Accepted for research, 2026-10-09.
+
+Worker research exposes unnecessary save-only evidence loss under ADR-0056.
+Use the existing serializer reading flag: saving leaves live sidecar identities
+unchanged; loading clears them. Actual-container baseline/disabled/repeated state
+and object size remain equal; save-only token 521 survives while the restored
+entry remains unknown. This is a finite continuous-execution improvement, not
+sidecar persistence or cross-load identity. Historical worker receipts retain
+their earlier policy and scope. Five identity/validity/movement forgeries fail.

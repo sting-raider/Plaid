@@ -49,7 +49,7 @@ int main(int argc,char** argv) {
   phase(3);
   for(u32 i=0;i<512;i++) assert(queue.insert(1,1));
   assert(queue.remove(1)==1 && !queue.insert(0,2));
-  // Serialize while occupied: observer conservatively forgets identities.
+  // Saving while occupied must preserve live identities; loading cuts them.
   checkpoint(); queue.step(1,dispatch);
   assert(queue.insert(0,1)); queue.step(1,dispatch); checkpoint();
   phase(4);
