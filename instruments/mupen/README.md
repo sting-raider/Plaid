@@ -31,11 +31,15 @@ required; Windows dispatches the worker through WSL Ubuntu. Unsupported runtime
 services trap. Flat memory and a sentinel stop policy exclude full boot, devices,
 interrupt timing and broader CPU semantics.
 
-Set `PLAID_TRACE_EXECUTION=1` to emit source-correlated in-unit x64 JR/JALR events.
+Set `PLAID_TRACE_EXECUTION=1` to emit source-correlated x64 JR/JALR events.
 The generated sensor preserves allocated caller-save registers and the saved
 pre-delay-slot target. It runs after the delay slot and before either general
-lookup or inline mini_ht dispatch; repeated return-cache hits are tested. Other
-hosts and pagespan indirect correlation are not claimed by this capability.
+lookup or inline mini_ht dispatch; repeated return-cache hits are tested.
+Page-spanning predecessors record an indirect source tag. The separate delay-slot
+unit emits only when its predecessor tag matches, using the saved branch target;
+direct predecessors clear the tag. Eight scenarios agree across traced/untraced
+dynarec and pure interpreter, including pagespan JR/JALR, custom links, likely
+annulment and register stress. Other hosts remain outside this capability.
 
 Instrumented hooks: validated compile begin, compilation finish before Pass 10,
 normal/restricted/pagespan entry installs, dynamic linker and lookup helpers,
@@ -44,7 +48,7 @@ instruction words, not host code or host identities. Global invalidation is null
 The cartridge hook records actual copied ROM bytes, clipped at ROM and RDRAM
 ends; zero-fill and zero-length operations do not become ROM-copy evidence.
 
-Limitations: restored entries, pagespan indirect correlation, non-x64 execution
+Limitations: restored entries, ProgramMap pagespan predecessor state, non-x64 execution
 sensors, non-PI copies and RSP sensors remain unimplemented.
 Runtime links may also be created at compile time. Cache expiry is not emitted.
 Invalidation is not proof of a memory write. Trace v0 cannot prove complete

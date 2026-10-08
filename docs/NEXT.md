@@ -1,8 +1,8 @@
 # Next
 
-1. Extend the headless execution corpus, especially register allocation stress,
-   branch-likely/link alias cases and pagespan JR/JALR. Then build a reference
-   session with real devices. Keep speculative compilation distinct from execution.
+1. Build a synthetic reference session with real devices and boot/load setup.
+   Keep speculative compilation distinct from execution; the headless CPU corpus
+   now covers register stress, custom links, likely branches and pagespan JR/JALR.
 2. Prove pointer-table data immutability and guard coverage before issuing exhaustive
    table certificates. Extend cross-block joins only with rechecked invariants;
    the current table recognizer and single-predecessor chains are restricted passes.

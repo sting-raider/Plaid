@@ -44,17 +44,22 @@ int main(int argc, char **argv) {
     struct interrupt_handler handlers[CP0_INTERRUPT_HANDLERS_COUNT] = {{0}};
     struct cart_rom cart;
     FILE *file;
-    uint32_t cartridge[1024];
+    uint32_t *cartridge;
+    long cartridge_size;
     unsigned int i;
     int pure;
     if (argc != 3) return 1;
     pure = !strcmp(argv[1], "pure");
     if (!pure && strcmp(argv[1], "dynarec")) return 2;
     file = fopen(argv[2], "rb");
-    if (!file || fread(cartridge, 1, sizeof(cartridge), file) != sizeof(cartridge)) return 3;
+    if (!file || fseek(file, 0, SEEK_END)) return 3;
+    cartridge_size = ftell(file);
+    if (cartridge_size < 64 || cartridge_size > 65536 || cartridge_size % 4 || fseek(file, 0, SEEK_SET)) return 3;
+    cartridge = malloc((size_t)cartridge_size);
+    if (!cartridge || fread(cartridge, 1, (size_t)cartridge_size, file) != (size_t)cartridge_size) return 3;
     fclose(file);
     /* Convert canonical BE bytes to the reference's host-word ROM layout. */
-    for (i = 0; i < 1024; ++i) {
+    for (i = 0; i < (unsigned long)cartridge_size / 4; ++i) {
         uint8_t *p = (uint8_t *)&cartridge[i];
         uint32_t word = ((uint32_t)p[0]<<24) | ((uint32_t)p[1]<<16) | ((uint32_t)p[2]<<8) | p[3];
         cartridge[i] = word;
@@ -72,8 +77,8 @@ int main(int argc, char **argv) {
     g_dev.sp.mem[0x44 / 4] = 0x03200008; /* JR t9 */
     g_dev.sp.mem[0x48 / 4] = 0;
     if (!pure) new_dynarec_init();
-    init_cart_rom(&cart, (uint8_t *)cartridge, sizeof(cartridge), core, &g_dev.pi);
-    cart_rom_dma_write(&cart, (uint8_t *)g_dev.rdram.dram, 0, 0x10000040, 0x108);
+    init_cart_rom(&cart, (uint8_t *)cartridge, (size_t)cartridge_size, core, &g_dev.pi);
+    cart_rom_dma_write(&cart, (uint8_t *)g_dev.rdram.dram, 0, 0x10000040, (size_t)cartridge_size - 64);
     if (pure) run_pure_interpreter(core);
     else new_dyna_start();
     printf("{\"pc\":%" PRIu32 ",\"hi\":%" PRId64 ",\"lo\":%" PRId64 ",\"regs\":[",
@@ -82,5 +87,6 @@ int main(int argc, char **argv) {
     printf("]}\n");
     if (!pure) new_dynarec_cleanup();
     free(g_dev.rdram.dram);
+    free(cartridge);
     return 0;
 }
