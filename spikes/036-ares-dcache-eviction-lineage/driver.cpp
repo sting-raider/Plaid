@@ -18,7 +18,8 @@ static constexpr u32 Destination = 0x2000;
 static constexpr u32 Conflict = 0x4000;  // same D-cache index as Destination
 static constexpr u32 Code = 0x6000;
 static constexpr u32 Original = 0x11223344;
-static constexpr u32 Decoy = 0xdeadbeef;
+static constexpr u32 DecoyDirty = 0xdeadbeef;
+static constexpr u32 DecoyClean = 0xfeedface;
 static constexpr u32 D1 = 0x01020304;
 static constexpr u32 D2 = 0x11223344;
 static constexpr u32 D3 = 0x55667788;
@@ -84,13 +85,14 @@ int main(int argc, char** argv) {
     rdram.ram.write<Word>(address, word, RBusDevice::ARES_DEBUGGER);
   };
 
-  // Cached source load, cached destination store, uncached backing decoy, then
-  // a conflicting cached load. Destination and Conflict differ by 0x2000, so
-  // (vaddr >> 4) & 0x1ff selects the same D-cache slot.
+  // Cached source load, cached destination store, two uncached backing decoys,
+  // then a conflicting cached load. Destination and Conflict differ by 0x2000,
+  // so (vaddr >> 4) & 0x1ff selects the same D-cache slot.
   put(Code + 0x00, 0x8e080000);  // LW t0,0(s0)
   put(Code + 0x04, 0xae280000);  // SW t0,0(s1)
-  put(Code + 0x08, 0xae4a0000);  // SW t2,0(s2) -- uncached alias of destination
-  put(Code + 0x0c, 0x8e6b0000);  // LW t3,0(s3) -- conflicting cached line
+  put(Code + 0x08, 0xae4a0000);  // SW t2,0(s2) -- decoy in dirty word
+  put(Code + 0x0c, 0xae4c0004);  // SW t4,4(s2) -- decoy in clean word
+  put(Code + 0x10, 0x8e6b0000);  // LW t3,0(s3) -- conflicting cached line
 
   put(Source, Original);
   put(Destination + 0x0, 0xaabbccdd);
@@ -102,7 +104,8 @@ int main(int argc, char** argv) {
   put(Conflict + 0x8, C2);
   put(Conflict + 0xc, C3);
 
-  cpu.ipu.r[10].u64 = Decoy;
+  cpu.ipu.r[10].u64 = DecoyDirty;
+  cpu.ipu.r[12].u64 = DecoyClean;
   cpu.ipu.r[16].u64 = 0xffffffff80001000ull;
   cpu.ipu.r[17].u64 = 0xffffffff80002000ull;
   cpu.ipu.r[18].u64 = 0xffffffffa0002000ull;
@@ -113,9 +116,9 @@ int main(int argc, char** argv) {
   set_eviction_observers(traced);
   cpu.pipeline.setPc(0xffffffff80006000ull);
 
-  // Stop immediately before the conflicting access, while the outgoing victim
-  // still exists in the slot and backing contains the uncached decoy.
-  for(u32 i = 0; i < 3; i++) if(cpu.instruction()) cpu.synchronize();
+  // Stop immediately before the conflicting access. The outgoing victim still
+  // owns the slot while backing disagrees in one dirty and one clean word.
+  for(u32 i = 0; i < 4; i++) if(cpu.instruction()) cpu.synchronize();
   if(cpu.scc.cause.exceptionCode != 0 || cpu.ipu.r[8].u32 != Original) return 5;
 
   const auto& outgoing = cpu.dcache.line(cpu.ipu.r[17].u64);
@@ -129,10 +132,10 @@ int main(int argc, char** argv) {
     backing_word(Destination + 0x8), backing_word(Destination + 0xc)
   };
   if(outgoingWords[0] != Original || outgoingWords[1] != D1 || outgoingWords[2] != D2 || outgoingWords[3] != D3) return 7;
-  if(backingBefore[0] != Decoy || backingBefore[1] != D1 || backingBefore[2] != D2 || backingBefore[3] != D3) return 8;
+  if(backingBefore[0] != DecoyDirty || backingBefore[1] != DecoyClean || backingBefore[2] != D2 || backingBefore[3] != D3) return 8;
 
-  // The conflict miss synchronously writes back the outgoing dirty victim and
-  // then fills/reuses this same cache slot for physical 0x4000.
+  // The conflict miss synchronously writes back all four outgoing words, even
+  // though only bytes 0..3 are dirty, then fills/reuses the same cache slot.
   if(cpu.instruction()) cpu.synchronize();
   if(cpu.scc.cause.exceptionCode != 0 || cpu.ipu.r[11].u32 != C0) return 9;
 
