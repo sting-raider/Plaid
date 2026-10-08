@@ -159,7 +159,7 @@ Implemented:
   Research v3 records firmware identity; production rejects this boot scope.
   Firmware bytes remain ignored; no PIF backing or executable lifetime is inferred.
 - Research v4 explicitly records firmware hash/size and the complete declared
-  boot profile. Its one-million-call stream preserves the entire v3 projection,
+  boot profile. Its one- and ten-million-call streams preserve the entire v3 projection,
   fixed CPU/device/memory checkpoint and plain/traced/repeat neutrality.
   Production handling now requires supplied-input and full-source verification.
 - Research v4 imports typed declared boot inputs through explicit firmware CLI
