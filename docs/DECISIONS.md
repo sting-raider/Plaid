@@ -151,3 +151,15 @@ sources and malformed pointers conservatively. These facts are candidate evidenc
 neither table immutability nor all runtime entry paths are certified. The solver
 must keep the indirect site and immutability obligation open. Pattern matches may
 guide traversal but may never manufacture native readiness.
+
+## ADR-0015: Carry pagespan source context to the separate delay-slot unit
+
+Status: Accepted, 2026-10-08.
+
+The research x64 predecessor records an indirect site tag; direct page-spanning
+branches clear it. The separately compiled delay-slot unit checks the tag against
+its predecessor PC and reports the saved target after executing the slot. This
+avoids inventing JR/JALR events for direct predecessors or reading a source register
+after a slot overwrite. Keep this transient single-core reference state out of
+portable identities. Differential tests cover JR, custom-link JALR and direct
+pagespan paths; ProgramMap's predecessor-state model is still an open obligation.

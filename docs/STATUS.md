@@ -18,8 +18,10 @@ Implemented:
   This compile-only harness never executes generated host code.
 - A separate headless execution harness runs synthetic integer/control programs
   on the actual pinned x64 dynarec and pure interpreter. Full GPR/HI/LO/PC results
-  agree, with tracing enabled and disabled. Source-correlated in-unit JR/JALR
-  events cover general lookup and inline return-cache hits. Unsupported runtime
+  agree on eight scenarios, with tracing enabled and disabled. Source-correlated
+  x64 JR/JALR events cover in-unit and pagespan transfers, general lookup and
+  inline return-cache hits. Custom links, likely annulment and register stress pass.
+  Unsupported runtime
   services trap; flat memory and a sentinel stop policy exclude boot/devices/timing.
 - Signature-based z64/v64/n64 normalization, canonical SHA-256 and header parsing.
 - Pinned Rabbitizer direct CFG with delay slots, branch-likely annulment, calls,
@@ -59,8 +61,9 @@ A declared immutable, nontrapping integer-image scope can close with explicit
 exclusions. Whole-ROM mode remains OPEN and `native_complete` is always false.
 There is no native output, game compatibility claim or performance claim.
 
-Remaining gaps: full reference sessions with devices, pagespan indirect execution
-correlation, non-x64 runtime hooks, general join/loop and immutable-table proofs, automatic boot/CIC
+Remaining gaps: full reference sessions with devices, ProgramMap predecessor
+state for pagespan entries, non-x64 runtime hooks, general join/loop and
+immutable-table proofs, automatic boot/CIC
 roots, overlay/relocation lifecycle, non-PI copies, exceptions/TLB/execution modes,
 executable mutation and RSP policies. Header CRC fields are parsed, not verified.
 Analysis scalability has not been benchmarked. See NEXT for the execution order.

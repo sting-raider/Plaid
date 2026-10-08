@@ -37,3 +37,12 @@ Reproduce: `python scripts/test_mupen_execution.py` on Windows with WSL Ubuntu,
 or Linux with GCC/NASM and Rust. NASM can be supplied by `PLAID_NASM`; this run
 used an apt package extracted under ignored `target/reference-tools/`, with no
 system package installation.
+
+Follow-up: the corpus now covers eight scenarios, including page-spanning JR,
+custom-link JALR and direct J. Predecessor tags are written before boundary
+dispatch, then checked after the separate delay-slot unit. Direct predecessors
+emit no indirect event. The saved target survives a slot overwrite. Additional
+custom links, likely-branch annulment and all-GPR register stress agree across
+the same three CPU modes; repeated traces remain identical. This completes the
+x64 pagespan sensor experiment, not the ProgramMap predecessor-state proof or
+device/timing coverage.
