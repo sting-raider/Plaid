@@ -391,3 +391,5 @@ The recovered actual PI read lifecycle fixture now matches both worker hashes ac
 D-cache lineage research progressed from worker PARTIAL to a locally executed four-phase fixture. Two full-line writebacks certify bounded resident origins; dirty invalidate/drop does not. Six measured-history forgeries now fail, including a same-value intervening mutation (ADR-0067).
 
 Independent SB/SH identity-RDRAM model and 96 actual cases now reproduce exact worker hashes. Successful subword backing/cache effects retain endian lanes, while faulting attempts mutate neither; these effects differ from SP IMEM widening.
+
+The second SB/SH fixture now independently reproduces 100 actual cases and both executable-word construction families. Its runner has a distinct output root; source/result hashes match the worker.
