@@ -54,6 +54,13 @@ digests and inspected-file guards preserve unrelated reference instrumentation.
 Mupen/Gopher remain source-only evidence, and FULL-policy hardware disagreement
 remains unresolved. Adopt lifecycle obligations under ADR-0059.
 
+Primary PIF backing reproduction passes all nine actual fetch-stage adversaries,
+matching the synthetic worker result hash exactly. All nine also pass with the
+known supplied NTSC firmware and independent baseline/repeated checkpoints.
+The topic note records both ignored-result digests. Adopt actual in-context
+backing reads and separate physical/source identity under ADR-0060, retaining
+complete boot, firmware authenticity, lifetime and production schema gaps.
+
 | Research branch under `origin/research/` | Inspected tip | Evidence supplied by worker |
 | --- | --- | --- |
 | `ares-fill-rdram-join-gpt56` | `e8823d1` | Standalone chronology model; reference execution pending |

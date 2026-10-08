@@ -855,3 +855,18 @@ source instead snapshots pending descriptors and rejects a third FULL push.
 Preserve that hardware-unresolved disagreement; do not make ares overwrite policy
 a native invariant. Only ares component execution is validated here, without
 general CPU/RSP scheduling, save/restore identity or whole-ROM closure.
+
+## ADR-0060: PIF firmware origins require actual backing reads inside fetch scope
+
+Status: Accepted for research, 2026-10-09.
+
+Recovered optional PIF sensor evidence reproduces locally with an original image
+and the known supplied NTSC firmware. Bracket the existing actual CPU fetch stage
+and sense only the successful unlocked PIF-ROM backing branch. Nine adversaries
+preserve reported baseline/repeated state while distinguishing mirrored physical
+addresses from masked source offsets; equal-valued latch/RAM, lockout, cached
+rejection and stale/non-fetch reads supply no firmware witness. Reference source,
+firmware and generated builds stay isolated/ignored. This establishes a bounded
+reference source contract, without full instruction/boot execution, firmware
+authenticity, immutable lifetime or ProgramMap promotion. A future schema must
+retain the declared input digest/device namespace separately from fetch address.
