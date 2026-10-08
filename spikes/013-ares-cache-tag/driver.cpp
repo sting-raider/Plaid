@@ -75,6 +75,11 @@ int main(int argc,char** argv) {
   put(0x2000,0xbd080000); // CACHE index store tag, 0(t0)
   put(0x2004,0xbd000000); // CACHE index invalidate, 0(t0)
   put(0x2008,0xbd080000); // CACHE index store tag, 0(t0)
+  #if defined(PLAID_CACHE_EXTRA_CASES)
+  put(0x200c,0xbd100000); // CACHE hit invalidate, 0(t0)
+  put(0x2010,0xbd140000); // CACHE fill, 0(t0)
+  put(0x2014,0xbd180000); // CACHE hit writeback, 0(t0)
+  #endif
   std::vector<u32> postTags;
   std::vector<u64> postFillCounts;
   auto step = [&](u64 pc,u64 expected) {
@@ -98,6 +103,21 @@ int main(int argc,char** argv) {
   cpu.scc.tagLo.setPhysicalAddress(0); cpu.scc.tagLo.setPrimaryCacheState(2);
   if(!step(0xffffffffa0002008ull,9)) return 10;
   if(!step(0xffffffff80000000ull,9)) return 11;
+  #if defined(PLAID_CACHE_EXTRA_CASES)
+  if(!step(0xffffffffa000200cull,9)) return 12; // invalidate hit
+  if(!step(0xffffffff80000000ull,1)) return 13; // refill actual RAM
+  cpu.ipu.r[8].u64 = 0xffffffff80004000ull;
+  if(!step(0xffffffffa000200cull,1)) return 14; // invalidate miss
+  if(!step(0xffffffff80000000ull,1)) return 15; // existing line still hits
+  if(!step(0xffffffffa0002010ull,1)) return 16; // explicit fill of page 0x4000
+  if(!step(0xffffffff80004000ull,9)) return 17;
+  put(0x4000,0x24100008); // RAM changes while the resident word remains 9
+  if(!step(0xffffffffa0002014ull,9)) return 18; // writeback hit restores RAM to 9
+  if(!step(0xffffffff80004000ull,9)) return 19;
+  cpu.ipu.r[8].u64 = 0xffffffff80000000ull;
+  if(!step(0xffffffffa0002014ull,9)) return 20; // writeback miss has no bus write
+  if(!step(0xffffffffa0004000ull,9)) return 21; // actual uncached RAM result
+  #endif
 
   std::printf("{\"events\":[");
   for(size_t i=0;i<frontend.samples.size();i++) {
@@ -133,11 +153,15 @@ int main(int argc,char** argv) {
     for(u32 word : line.words) append(word,4);
   }
   auto cacheHash = nall::Hash::SHA256(std::span<const u8>{cacheBytes.data(),cacheBytes.size()}).digest();
-  std::printf("],\"hi\":%lld,\"lo\":%lld,\"count\":%llu,\"exception\":%u,\"epc\":%llu,\"status\":%u,\"configuration\":%u,\"cache_hits\":%lld,\"cache_misses\":%lld,\"ram_sha256\":\"%s\",\"icache_sha256\":\"%s\"}}\n",
+  std::printf("],\"hi\":%lld,\"lo\":%lld,\"count\":%llu,\"exception\":%u,\"epc\":%llu,\"status\":%u,\"configuration\":%u,\"cache_hits\":%lld,\"cache_misses\":%lld,\"ram_sha256\":\"%s\",\"icache_sha256\":\"%s\"",
     (long long)(int64_t)cpu.ipu.hi.u64,(long long)(int64_t)cpu.ipu.lo.u64,
     (unsigned long long)cpu.effectiveCount(),(u32)cpu.scc.cause.exceptionCode,
     (unsigned long long)cpu.scc.epc,(u32)cpu.getControlRegister(12),(u32)cpu.getControlRegister(16),
     (long long)cpu.profile.icacheHits,(long long)cpu.profile.icacheMisses,ramHash.data(),cacheHash.data());
+  #if defined(PLAID_CACHE_EXTRA_CASES)
+  std::printf(",\"cache_writebacks\":%lld",(long long)cpu.profile.icacheWritebacks);
+  #endif
+  std::printf("}}\n");
   ares::Nintendo64::system.unload();
   return 0;
 }

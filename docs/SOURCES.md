@@ -82,6 +82,11 @@ Current tags/physical access therefore establish no byte-origin certificate.
 completed tag/data transitions. Three original guest CACHE operations match the
 prior independent goldens and repeated state, without extra bus/translation/
 timing calls. Default handlers stay original; production lifetimes stay unknown.
+`spikes/015-ares-cache-outcomes/` extends original guest CACHE cases to hit/miss
+invalidation, explicit fill and hit/miss writeback. Independent baseline and
+sensor checkpoints match; uncached execution observes restored RAM after a stale
+resident writeback. This is a finite identity-mapped RAM scope, not a general
+bus/backing or write-success certificate.
 
 ## gopher64/gopher64
 
