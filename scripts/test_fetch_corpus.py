@@ -33,9 +33,12 @@ def peak_working_set(process):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--physical",action="store_true",help="Recheck the v1 physical observer capture")
-    physical = parser.parse_args().physical
-    output = ROOT / "target/ares-physical-fetch-spike" if physical else OUTPUT
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--physical",action="store_true",help="Recheck the v1 physical observer capture")
+    modes.add_argument("--source",action="store_true",help="Recheck the v2 ROM-source observer capture")
+    args = parser.parse_args()
+    physical, source = args.physical, args.source
+    output = ROOT / "target/ares-rom-fetch-spike" if source else ROOT / "target/ares-physical-fetch-spike" if physical else OUTPUT
     raw = output / "traced.ndjson"
     map_path = output / "map.json"
     cargo = os.environ.get("CARGO") or shutil.which("cargo") or str(Path.home() / ".cargo/bin/cargo.exe")
@@ -53,11 +56,24 @@ def main():
     assert len(data["fetch_captures"]) == 1
     assert sum(f["occurrences"] for f in data["fetch_observations"]) == 4999998
     capture = next(iter(data["fetch_captures"].values()))
-    if physical:
+    if source:
+        sensor = json.loads((output / "results.json").read_text())
+        assert capture["trace_sha256"] == sensor["trace_sha256"]
+        assert capture["trace_sha256"] == "40d8d029cd66fb5ecfcdc3d77bdbc570dd13ce62684d47e7704cbe375008d204"
+        assert capture["source_policy"] == "delegated_rom_halves_before_prologue"
+        assert capture["mapped_cartridge_size"] == 2742280
+        assert len(data["fetch_observations"]) == 53037
+        known = [f for f in data["fetch_observations"] if f["source"]["kind"] == "cartridge_rom"]
+        assert len(known) == sensor["unique_rom_source_offsets"] == 65
+        assert sum(f["occurrences"] for f in known) == sensor["rom_source_fetches"] == 1852
+        assert all(not f["access"]["cached"] and f["access"]["physical"] == 0x10000000 + f["source"]["offset"] for f in known)
+        assert sum(f["occurrences"] for f in data["fetch_observations"] if f["source"]["kind"] == "unknown") == sensor["unknown_source_fetches"]
+    elif physical:
         sensor = json.loads((output / "results.json").read_text())
         assert capture["trace_sha256"] == sensor["trace_sha256"]
         assert capture["trace_sha256"] == "c14917d5dd2037cb93c02039bff2f488cf3d60aa841152c43f31c5e3a4ba22d1"
         assert capture["mapped_cartridge_size"] == 2742280
+        assert hashlib.sha256(map_path.read_bytes()).hexdigest() == "04057ba54310f4e4adc7d879f32aa976a9679c1f1d9d7aa629155978f3f92dc7"
         assert len(data["fetch_observations"]) == sensor["unique_virtual_physical_cache_tuples"]
         assert all("access" in f for f in data["fetch_observations"])
         for cached, name in ((True,"cached_fetches"),(False,"uncached_fetches")):

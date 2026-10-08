@@ -43,3 +43,8 @@ Effective fetch context: the separate observer and v1 importer preserve physical
 cache variants with full-source rechecking and byte-identical v0 compatibility.
 Cache/TLB/endian fixtures and both complete corpus checks pass. Actual byte-source
 witnesses and lifecycle joins remain open; W012 stays TODO.
+
+Finite ROM sources: delegated actual reads and v2 canonical-source import/recheck
+now account for 1,852 fetches at 65 offsets while retaining all unknowns. Raw
+provenance, source variants, legacy map hashes and OPEN gating pass. Boot/mode,
+copy/cache/mutation lineage and executable lifetime remain open; W012 stays TODO.
