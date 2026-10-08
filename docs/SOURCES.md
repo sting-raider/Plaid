@@ -208,7 +208,7 @@ queue completion or executable image/lifetime certificate is introduced.
 `spikes/032-ares-queue-identity/` generates optional callbacks in an ignored pinned
 nall header; external original metadata preserves actual insertion/heap identities
 without changing object layout. Original/disabled/repeated container checkpoints
-agree; serialization loses identity. No CPU/device dispatch claim is made.
+agree; save preserves identity and load cuts it. No CPU/device dispatch claim is made.
 `spikes/035-ares-pi-queue-dispatch-context/` uses optional generated PI accepted-I/O
 and CPU dispatch scopes to compose queue identities with actual component status
 callbacks in both directions. Six forged joins fail and reported baseline state
