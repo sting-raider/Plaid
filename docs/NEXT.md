@@ -45,6 +45,9 @@
    actual fill/copy/mutation lineage;
    the controlled completed-fill callback now passes. Extend tag-store/
    invalidation and backing witnesses before constructing execution lifetimes;
+   guest CACHE retagging is now measured: current tags can name a different page
+   from the resident words' historical fill. Observe actual completed cache
+   operations and preserve data history separately from effective access;
    retain slot/event identities without inferring fill lineage or lifetimes.
    Continue RSP/exception/TLB/FPU verification
    before extending semantic claims.
