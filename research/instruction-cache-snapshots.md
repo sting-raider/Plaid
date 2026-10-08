@@ -43,6 +43,12 @@ Raw size: 210,032,160 bytes; SHA-256
 `c0dcae4870aaec1b30097d7fd95f2b6214f043e2ac1dea6366b1814655ce4ce9`.
 Full cache hash:
 `eb0abce6ce91d78b5c335be4cb364a7d10744af865a758b9026f9c653c474892`.
-Production rejects this unsupported cache policy without output. Longer-prefix
-and legacy checks are pending. Counts describe finite observations/payloads, not
+At ten million calls, 9,999,998 fetches include 9,399,022 cached observations at
+8,118 resident tuples. The repeated stream is 2,831,854,844 bytes, SHA-256
+`f94383a777bd32269d9056c8a2b6edd34e45ea103fa8b58ee6a4e9e143bdd581`.
+Its full cache checkpoint is
+`48f1c732f0313a5002678b7e1d006f215aad7215ccace0b77f70bf9030a286f8`.
+Full v3/v4 projections and prior checkpoint/message hashes agree, with no
+reported guest failure in the bounded prefix. Fresh v4/v2 observers retain their
+goldens. Production handling is a separate decision. Counts describe finite observations/payloads, not
 fills, epochs or immutable images; backing and lifecycle joins remain unresolved.

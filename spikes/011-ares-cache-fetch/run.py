@@ -29,8 +29,12 @@ def main():
             assert results["v4_projection_sha256"] == "38a0781c763a110ca419af65bf9f1a19ed96cd9282e01b2545486d9d865bd937"
             assert results["trace_sha256"] == "c0dcae4870aaec1b30097d7fd95f2b6214f043e2ac1dea6366b1814655ce4ce9"
             assert results["cached_fetches"] == 400954 and results["unique_resident_snapshots"] == 32
+            assert results["final_state"]["icache_sha256"] == "eb0abce6ce91d78b5c335be4cb364a7d10744af865a758b9026f9c653c474892"
         if budget == 10000000:
             assert results["v4_projection_sha256"] == "d46c9c99245c65cb2b671b182da0a247006b077026000ac2b29d5df786644027"
+            assert results["trace_sha256"] == "f94383a777bd32269d9056c8a2b6edd34e45ea103fa8b58ee6a4e9e143bdd581"
+            assert results["cached_fetches"] == 9399022 and results["unique_resident_snapshots"] == 8118
+            assert results["final_state"]["icache_sha256"] == "48f1c732f0313a5002678b7e1d006f215aad7215ccace0b77f70bf9030a286f8"
 
 
 if __name__ == "__main__": main()

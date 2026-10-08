@@ -40,8 +40,8 @@
    A selected instruction-cache snapshot sensor now passes twelve controlled
    cases, with unchanged CPU/timing and full RAM/cache hashes. The one-million
    boot prefix now preserves 400,954 snapshots and exact prior-stream/checkpoint
-   agreement. Verify the longer prefix and recheck complete sources before
-   production import;
+   agreement. The ten-million prefix matches too, at 8,118 resident tuples.
+   Recheck complete sources before production import;
    retain slot/event identities without inferring fill lineage or lifetimes.
    Continue RSP/exception/TLB/FPU verification
    before extending semantic claims.

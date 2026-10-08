@@ -496,3 +496,8 @@ page index and effective word lane without extra guest accesses. Keep counts
 distinct from fill/epoch identities; other resident words have no execution
 claim. Production currently rejects this scope. Complete-source verification and
 production import require separate handling; backing/lifetimes remain unknown.
+
+The ten-million-call prefix also preserves the prior goldens and complete cache
+checkpoint neutrality: 9,399,022 cached observations at 8,118 resident tuples.
+Fresh v4/v2 reference builds retain earlier stream/checkpoint hashes. This extends
+the measured finite scope without a fill/lifetime or complete-suite claim.
