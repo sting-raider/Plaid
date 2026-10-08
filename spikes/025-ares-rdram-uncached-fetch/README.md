@@ -14,6 +14,8 @@ The spike recovers the scalar RDRAM observer already executed by `spikes/020-are
 4. Successful non-identity RDRAM translation: executes a known `ORI`, but the identity-only scalar observer must remain silent.
 5. Identity-mapped out-of-range RDRAM fetch: returns zero/NOP with no backing witness.
 6. Non-identity missing mapping: returns zero/NOP with no backing witness.
+7. Successful non-identity translated read with CCI at `ccLow`: the backing instruction is degraded to zero/NOP and remains outside the identity witness policy.
+8. MI EBUS test mode: uncached CPU traffic bypasses `RDRAM::Writable::read`; a deterministic hidden-RAM zero/NOP must therefore produce no ordinary-RDRAM witness.
 
 The baseline, instrumented-observer-disabled and instrumented-observer-enabled runs must end with identical emulated facts/state; traced execution is repeated byte-for-byte.
 
