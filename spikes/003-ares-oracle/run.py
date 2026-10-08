@@ -14,7 +14,8 @@ REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 OUTPUT = ROOT / "target/ares-oracle-spike"
 
 
-def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=()):
+def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False):
+    if cache_fill_access: assert raw_fetch_access and physical_fetch_access
     output = Path(directory)
     assert subprocess.check_output(["git","rev-parse","HEAD"],cwd=REF,text=True).strip() == REV
     subprocess.run(["git","-c","core.autocrlf=true","diff","--quiet","HEAD"],cwd=REF,check=True)
@@ -25,6 +26,7 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
     inputs = {"revision":REV,"compiler":compiler,"driver":hashlib.sha256(driver.read_bytes()).hexdigest(),
         "raw_fetch_access":raw_fetch_access,
         "physical_fetch_access":physical_fetch_access,
+        "cache_fill_access":cache_fill_access,
         "extra_sources":{str(Path(p).relative_to(ROOT)):hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in extra_sources},
         "fixture_driver":hashlib.sha256(Path(__file__).with_name("driver.cpp").read_bytes()).hexdigest(),
         "recipe":hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
@@ -42,6 +44,12 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
             header = header.replace(signature, signature + "\n    auto fetchedWord() const -> u32 { return instruction; }")
             if physical_fetch_access:
                 header = "// Project-owned observer metadata; no CPU object-layout change.\nstruct PlaidFetchAccess { u32 physical; bool cached; };\ninline PlaidFetchAccess plaidFetchAccess;\n" + header
+            if cache_fill_access:
+                assert physical_fetch_access
+                marker = "        cpu.busReadBurst<ICache>(tag | index, words);"
+                assert header.count(marker) == 1
+                header = header.replace(marker,marker + "\n        if(plaidCacheFillObserver) plaidCacheFillObserver(static_cast<u32>(this - cpu.icache.lines), paddr, index, words);")
+                header = "// Project-owned callback after the existing completed cache fill.\nusing PlaidCacheFillObserver = void (*)(u32, u32, u32, const u32*);\ninline PlaidCacheFillObserver plaidCacheFillObserver = nullptr;\n" + header
             destination = output / "include/n64/cpu/cpu.hpp"
             destination.parent.mkdir(parents=True,exist_ok=True)
             destination.write_text(header)

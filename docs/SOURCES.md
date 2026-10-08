@@ -68,8 +68,12 @@ fixtures preserve repeated CPU/timing and full RAM/cache checkpoints. Slot/data
 observations remain finite context, with fill/copy/mutation lineage unresolved.
 `spikes/011-ares-cache-fetch/` extends selected-line sensing to the bounded boot
 prefix, with prior-stream projections and unchanged repeated CPU/device/memory/
-cache checkpoints. Research v5 remains unsupported by production; snapshot
+cache checkpoints. Original Rust v5 data handling has a separate verified decision; snapshot
 payloads establish neither fill provenance, epochs nor executable coverage.
+`spikes/012-ares-cache-fill/` opts into a callback after the existing bus burst in
+an ignored generated header, preserving upstream notices. Nine fills retain
+unchanged controlled CPU/timing/RAM/cache goldens. Fill-event ordinals supply
+no general lifetime or backing-source certificate; no reference code is promoted.
 
 ## gopher64/gopher64
 

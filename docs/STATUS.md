@@ -190,7 +190,12 @@ Implemented:
   lane changes. The one-million corpus verifies all fetches in 1,155 facts,
   self-merges exactly and stays OPEN; its map is 644,693 bytes. The ten-million
   corpus also passes, yielding 54,279 facts in 43,509,988 bytes. V0/v1/v2 and the
-  shorter v4 corpus retain exact map hashes. No fill/lifetime/source identity is inferred.
+  both v4 corpora retain exact map hashes. No fill/lifetime/source identity is inferred.
+- An opt-in completed-cache-fill sensor now distinguishes nine actual fills
+  across twelve controlled fetches, including equal-payload refills and bank
+  aliases. Plain/traced/repeated CPU/timing/RAM/cache goldens match. This observes
+  fill event boundaries; tag/invalidation history, backing and general executable
+  lifetimes remain unresolved. No production epoch is created.
 
 Verification: 76 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

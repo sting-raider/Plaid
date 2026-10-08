@@ -43,6 +43,8 @@
    agreement. The ten-million prefix matches too, at 8,118 resident tuples.
    V5 import now rechecks both complete sources and resident context. Continue
    actual fill/copy/mutation lineage;
+   the controlled completed-fill callback now passes. Extend tag-store/
+   invalidation and backing witnesses before constructing execution lifetimes;
    retain slot/event identities without inferring fill lineage or lifetimes.
    Continue RSP/exception/TLB/FPU verification
    before extending semantic claims.
