@@ -322,3 +322,22 @@ Config failure and unknown PIF/IPL2 state visible. Production schema, import,
 changing-byte identity, copy/overlay lifecycle and scalable provenance require a
 separate implementation decision. Neither fetched words nor broad finite samples
 prove retirement, immutability, complete execution coverage or whole-ROM closure.
+
+## ADR-0027: Import raw fetch summaries without inventing execution identities
+
+Status: Accepted, 2026-10-08.
+
+Add a streaming reader for the exact pinned observer format and conservative
+ProgramMap raw facts. Preserve typed 64-bit virtual PCs, distinct words and slot
+states, and one capture's exact first/last event indices and occurrence count.
+The complete raw-byte SHA-256 qualifies capture identity and provenance; first/
+last do not denote a contiguous interval or executable lifetime. Strict bounded
+records, header/revision/initial-state checks, sequential events, budget and footer
+checks precede import. A verifier regenerates summaries from their complete raw
+source and rejects changed facts or provenance. Validate count conservation and
+endpoint witnesses, preserve capture identities under union and default fields
+when reading legacy maps. An independent solver blocker prevents unresolved raw
+identities from closing an otherwise verified declared-image CFG. No regions,
+blocks, entries, copies, generations, retirement or immutability are inferred.
+This promotes project-owned data handling, not reference CPU code. Physical
+backing, full chronology and executable-generation joins require separate work.

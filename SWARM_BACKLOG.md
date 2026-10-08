@@ -34,3 +34,7 @@ Broader fetch sensing: `spikes/004-ares-fetch/` validates repeatable observation
 of 52,424 RAM/548 SP/65 cartridge addresses on the pinned homebrew. Its synthetic
 SP-entry/budget scope, startup failure and missing production adapter leave
 W012 and whole-ROM closure open. No native backend work is promoted by this spike.
+
+Raw capture import: typed 64-bit observations and full-source summary verification
+now pass on the broader corpus (53,037 summaries; 4,999,998 accounted fetches).
+Physical backing and execution generations remain unknown; W012 stays TODO.

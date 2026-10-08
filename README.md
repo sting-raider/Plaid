@@ -71,6 +71,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 python scripts/test_cli.py
 python scripts/test_exporter.py
+python scripts/test_fetch.py
 python scripts/test_mupen_hooks.py
 python scripts/test_mupen_execution.py
 python scripts/test_mupen_session.py
@@ -103,6 +104,8 @@ plaid check-trace <trace.ndjson>
 plaid check-map <map.json>
 plaid discover <rom> <rom_offset> <guest_start> <size> <entry> <out.json>
 plaid import-trace <rom> <trace.ndjson> <out.json>
+plaid import-fetch <rom> <fetch.ndjson> <out.json>
+plaid verify-fetch <rom> <fetch.ndjson> <map.json>
 plaid merge <left.json> <right.json> <out.json>
 plaid solve [rom] <map.json>
 ```
@@ -115,6 +118,13 @@ means the report was produced. `native_complete` remains false.
 
 Keep local ROMs in ignored `roms/` and derived traces/maps in ignored `artifacts/`.
 No commercial ROM assets are needed by the tests.
+
+`import-fetch` streams the pinned ares observer's separate format into raw 64-bit
+PC/word/slot summaries. `verify-fetch` regenerates them from the complete source.
+They have no established image generation, code lifetime or retirement identity;
+the solver keeps them OPEN. After spike 004 creates the ignored broad capture,
+`python scripts/test_fetch_corpus.py` checks full-source provenance, self-merge and
+OPEN output and records one-host import cost. The raw stream remains required.
 
 Additional disposable reference experiments are documented under `spikes/`.
 `python spikes/003-ares-oracle/run.py` builds the pinned ares core separately and

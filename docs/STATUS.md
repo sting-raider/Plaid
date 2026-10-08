@@ -106,15 +106,30 @@ Implemented:
   agree. A generated const accessor exposes the existing debugger word; CPU
   instruction code is unchanged. Startup Config mismatch and missing PIF/IPL2
   provenance remain explicit. The budget stop is not guest completion. This raw
-  research format has no production ProgramMap adapter or copy/lifetime inference.
+  research format now imports as conservative raw summaries; it has no copy/lifetime
+  or executable-generation inference.
+- Streaming raw-fetch import preserves typed 64-bit PCs, word/slot variants and
+  capture-qualified exact first/last indices/counts. Complete raw-file SHA-256,
+  strict sequence/footer/budget checks and a source rechecker protect provenance.
+  Legacy maps default the new fields; merge retains capture identities and remains
+  idempotent. Raw facts create no regions, blocks, entries, DMA or generations.
+  An independent solver blocker prevents unresolved raw identities from closing
+  even an otherwise closed declared-image CFG. The broad stream yields 53,037
+  summaries in a 20,053,874-byte map, accounts for all 4,999,998 fetches, verifies
+  against its complete raw source and self-merges byte-identically.
 
-Verification: 63 Rust integration tests, formatting, strict Clippy, CLI integration,
+Verification: 68 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.
 Execution tests use x64 Linux under WSL Ubuntu with GCC and NASM; other CPU hosts
 are unverified. The ares spike additionally uses G++ C++20; the two earlier spikes
 and deterministic homebrew packaging/known negative outcomes also pass.
+Raw-fetch CLI tests cover all ROM byte orders, wide PCs/word variants, source
+tampering and missing footers. Full-corpus import/source verification/self-merge
+and OPEN gating pass. A single Windows debug import under concurrent verification
+took 75.7 seconds and peaked at 74,719,232 bytes of working memory; this is a cost
+baseline, not an isolated throughput or scalability claim.
 
 `discover` still requires an explicit ROM/load mapping. `import-trace` checks the
 canonical ROM and verifies captured DMA-backed code bytes. `solve [rom] map` emits
