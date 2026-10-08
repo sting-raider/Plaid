@@ -14,12 +14,13 @@ REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 OUTPUT = ROOT / "target/ares-oracle-spike"
 
 
-def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False, rdram_scalar_access=False, fetch_boundary_access=False):
+def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False, rdram_scalar_access=False, fetch_boundary_access=False, pi_dma_access=False):
     if cache_fill_access: assert raw_fetch_access and physical_fetch_access
     if cache_operation_access: assert raw_fetch_access and physical_fetch_access
     if rdram_burst_access: assert raw_fetch_access and physical_fetch_access
     if rdram_scalar_access: assert raw_fetch_access and physical_fetch_access
     if fetch_boundary_access: assert raw_fetch_access and physical_fetch_access
+    if pi_dma_access: assert raw_fetch_access and physical_fetch_access
     output = Path(directory)
     assert subprocess.check_output(["git","rev-parse","HEAD"],cwd=REF,text=True).strip() == REV
     subprocess.run(["git","-c","core.autocrlf=true","diff","--quiet","HEAD"],cwd=REF,check=True)
@@ -35,6 +36,7 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
         "rdram_burst_access":rdram_burst_access,
         "rdram_scalar_access":rdram_scalar_access,
         "fetch_boundary_access":fetch_boundary_access,
+        "pi_dma_access":pi_dma_access,
         "extra_sources":{str(Path(p).relative_to(ROOT)):hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in extra_sources},
         "fixture_driver":hashlib.sha256(Path(__file__).with_name("driver.cpp").read_bytes()).hexdigest(),
         "recipe":hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
@@ -62,6 +64,8 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
                 header = "// Project-owned callback around completed guest instruction-cache operations.\nusing PlaidCacheOperationObserver = void (*)(u64, u32, u64, u32, u32, u32, const u32*, const u32*);\ninline PlaidCacheOperationObserver plaidCacheOperationObserver = nullptr;\n" + header
             if fetch_boundary_access:
                 header = "// Project-owned callbacks bracketing a successful CPU fetch access.\nusing PlaidCpuFetchObserver = void (*)(bool, u64, u32, u32, bool, u32);\ninline PlaidCpuFetchObserver plaidCpuFetchObserver = nullptr;\n" + header
+            if pi_dma_access:
+                header = "// Project-owned PI DMA buffered-read/write boundaries.\nusing PlaidPiDmaObserver = void (*)(u32, u32, u32, u32, u32, u32);\ninline PlaidPiDmaObserver plaidPiDmaObserver = nullptr;\n" + header
             destination = output / "include/n64/cpu/cpu.hpp"
             destination.parent.mkdir(parents=True,exist_ok=True)
             destination.write_text(header)
@@ -115,6 +119,42 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
         unity = (REF / "ares/n64/n64.cpp").read_text()
         assert unity.count("#include <n64/system/system.cpp>") == 1
         unity = unity.replace("#include <n64/system/system.cpp>", f'#include "{output / "system.cpp"}"')
+        if pi_dma_access:
+            dma = (REF / "ares/n64/pi/dma.cpp").read_text()
+            begin = "auto PI::dmaWrite() -> void {"
+            end = "\nauto PI::dmaFinished() -> void {"
+            assert dma.count(begin) == dma.count(end) == 1
+            start,stop = dma.index(begin),dma.index(end)
+            block = dma[start:stop]
+            block = block.replace(begin,begin + "\n  if(plaidPiDmaObserver) plaidPiDmaObserver(1, io.dramAddress, io.pbusAddress, io.writeLength + 1, 0, 0);")
+            marker = "    i32 curLen = min(length, blockLen);"
+            assert block.count(marker) == 1
+            block = block.replace(marker,marker + "\n    if(plaidPiDmaObserver) plaidPiDmaObserver(2, io.dramAddress, io.pbusAddress, curLen, misalign, firstBlock);")
+            marker = "      u16 data = busReadHalf();"
+            assert block.count(marker) == 1
+            block = block.replace(marker,marker + "\n      if(plaidPiDmaObserver) plaidPiDmaObserver(3, io.dramAddress, io.pbusAddress, curLen, i, data);")
+            for lane in ("i","i+0","i+1"):
+                marker = f"        rdram.ram.write<Byte>(io.dramAddress++, mem[{lane}], RBusDevice::PI_DMA);"
+                assert block.count(marker) == 1
+                before = f"        if(plaidPiDmaObserver) plaidPiDmaObserver(4, io.dramAddress, io.pbusAddress, curLen, {lane}, mem[{lane}]);\n"
+                after = f"\n        if(plaidPiDmaObserver) plaidPiDmaObserver(5, io.dramAddress-1, io.pbusAddress, curLen, {lane}, mem[{lane}]);"
+                block = block.replace(marker,before + marker + after)
+            marker = "    io.dramAddress = (io.dramAddress + 7) & ~7;"
+            assert block.count(marker) == 1
+            block = block.replace(marker,"    if(plaidPiDmaObserver) plaidPiDmaObserver(6, io.dramAddress, io.pbusAddress, curLen, misalign, firstBlock);\n"+marker)
+            assert block.endswith("}\n")
+            block = block[:-2]+"  if(plaidPiDmaObserver) plaidPiDmaObserver(7, io.dramAddress, io.pbusAddress, io.writeLength, 0, 0);\n}\n"
+            dma = dma[:start]+block+dma[stop:]
+            marker = "  mi.raise(MI::IRQ::PI);"
+            assert dma.count(marker) == 1
+            dma = dma.replace(marker,marker+"\n  if(plaidPiDmaObserver) plaidPiDmaObserver(8, io.dramAddress, io.pbusAddress, io.writeLength, io.dmaBusy, io.interrupt);")
+            (output/"pi_dma.cpp").write_text(dma)
+            pi_source = (REF/"ares/n64/pi/pi.cpp").read_text()
+            assert pi_source.count('#include "dma.cpp"') == 1
+            pi_source = re.sub(r'#include "([^"]+)"',lambda m:f'#include "{output / "pi_dma.cpp" if m[1] == "dma.cpp" else REF / "ares/n64/pi" / m[1]}"',pi_source)
+            (output/"pi.cpp").write_text(pi_source)
+            assert unity.count("#include <n64/pi/pi.cpp>") == 1
+            unity = unity.replace("#include <n64/pi/pi.cpp>",f'#include "{output/"pi.cpp"}"')
         if physical_fetch_access:
             assert raw_fetch_access
             memory = (REF / "ares/n64/cpu/memory.cpp").read_text()

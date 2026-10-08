@@ -16,7 +16,9 @@
    fixtures. The bounded boot prefix now preserves v5 bytes/checkpoints while
    retaining 5,051,089 ordered records and 32 actual RAM-backed fills. Strict Rust
    complete-source inspection/report rechecking now agrees with independent
-   Python evidence. Extend source/copy transaction contexts and completion next;
+   Python evidence. Buffered PI component cases now join 95 ROM byte origins to
+   successful RAM effects, retaining discarded lanes, failed destinations and
+   separate completion. Compose these writers with actual fetch/fill contexts next;
    keep general cache, byte lifetime and mutation completeness separate.
    Current tags/effective addresses can differ from resident-byte history; keep
    those identities separate. A recovered synchronized-restore/cache-power

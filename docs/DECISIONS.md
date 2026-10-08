@@ -709,3 +709,19 @@ tests stay OPEN and no ProgramMap field, image, generation or lifetime changes.
 Reference code remains separately licensed/compiled; only original data handling
 enters Plaid core. This is finite access inspection, not a mutation census,
 hardware certificate, whole-ROM proof or native execution path.
+
+## ADR-0051: Join buffered PI sources only through consumed lanes and successful effects
+
+Status: Accepted for research, 2026-10-08.
+
+Observe actual returned ROM halves, DMA block/buffer lanes, write attempts and
+successful identity-RAM effects under distinct transfer ordinals. Whole buffers
+are read before writes; adjacent-read matching is insufficient. Alignment can
+discard source bytes or a whole first block. The eight-case reference fixture
+retains 95 exact ROM byte origins, eight unknown open-bus writes and eight failed
+destinations, preserving independent original-source/disabled/repeated reported
+checkpoints. Equal reloads remain distinct; data effects and later busy/interrupt
+completion remain separate. Direct component invocation proves no guest MMIO,
+scheduler duration, complete mutation census or executable lifetime. Compose
+these finite writers with actual fetch/fill chronology before a separately
+reviewed boot-schema or production identity decision.
