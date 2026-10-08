@@ -100,3 +100,5 @@ PI read-side save/load/rejection now has independent actual-reference reproducti
 Carry both resident generation and mutation revision into exact writeback scopes. The primary four-phase fixture and six forgeries pass; compose broader store/epoch sensing before production lineage promotion (ADR-0067).
 
 Compose RDRAM SB/SH successful byte effects with the general mutation sensor and later cache writeback; nominal width remains sink-specific and failed attempts supply no effect.
+
+Distinguish ordinary RSP DMEM stores from CPU/SP-DMA IMEM sinks. Preserve observed lineage if those DMEM bytes are copied into executable IMEM later (ADR-0068).

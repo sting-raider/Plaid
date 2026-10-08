@@ -158,3 +158,5 @@ Retained `dcache-writeback-lineage-gpt56sol` (`674109b`), corrected stale closeo
 Retained/reproduced `sb-sh-mutation-gpt56sol` (`6b6adcf`): independent 100,000-case model and actual 96-case result hash. The note is renamed with `-independent` to preserve both workers original closeouts.
 
 Retained/reproduced `sb-sh-mutation-gpt56` (`6fd2107`): exact model and 100-case actual result hashes, including byte/halfword word construction. Distinct output roots prevent the workers shared-path collision.
+
+Recovered `rsp-self-store-imem-gpt56sol` (`41fc9b6`) in-progress code, fixed its false aligned-SRV mutation assumption, and completed 28 repeated actual probes. Primary receipt and source-only comparisons are recorded under ADR-0068.

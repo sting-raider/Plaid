@@ -256,3 +256,5 @@ Before introducing code copied or linked from an upstream project:
 `spikes/036-ares-sb-sh-stores/` retains an original model and unmodified-reference handler fixture, with no extra upstream source copied into production. Worker note filenames remain separate for the two independent SB/SH lanes.
 
 `spikes/033-ares-sb-sh-stores-gpt56/` retains the independent original 100-case fixture and construction model. Generated ares builds stay ignored and separately licensed; no ROM data enters Git.
+
+`spikes/026-ares-rsp-self-stores/` retains original research code, executes actual unmodified ares decoding, and inspects pinned Gopher/systemtest contracts without importing their implementation or assets.

@@ -969,3 +969,16 @@ dirty alone cannot establish transfer. Original generated shadow sources remain
 ignored/licensed separately. The finite aligned-store fixture does not establish
 all store families, restore epochs, full provenance completeness or ProgramMap
 closure, and is not transplanted into the production solver.
+
+## ADR-0068: RSP data-store addresses do not use the CPU SP bank selector
+
+Status: Accepted for research, 2026-10-09.
+
+Recovered original in-progress code now passes 28 actual decoded scalar/vector
+probes, with 27 DMEM mutations and one required aligned-SRV no-op; every IMEM
+byte remains unchanged. Exact source and independent Gopher/systemtest guards
+support the separate DMEM address domain. Do not transfer CPU bit-12 IMEM routing
+to ordinary RSP store handlers. DMEM-to-IMEM CPU/DMA copies and external mutations
+still need separate provenance. This original fixture compiles ignored licensed
+ares without patching it; bounded/source evidence is not general hardware/lifetime
+or closed-world proof.
