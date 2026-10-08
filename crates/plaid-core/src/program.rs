@@ -150,6 +150,7 @@ pub struct Overlay {
     pub rom_offset: RomOffset,
     pub size: u32,
     pub load_address: GuestAddr,
+    pub candidate: bool,
     pub evidence: EvidenceRefs,
 }
 

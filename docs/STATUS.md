@@ -41,3 +41,8 @@ Local indirect analysis emits and independently rechecks finite constant-target
 certificates. Observation, an unknown register, a bypass into the prefix or changed
 bytes cannot establish closure. `discover` includes this bounded pass. 26 Rust
 tests pass. Table recognition and inter-block propagation remain unimplemented.
+
+Executable-load evidence verifies post-copy snapshots against canonical ROM bytes,
+records exact mappings and reload generations, and identifies overlapping-source
+overlay candidates. Changed bytes remain unclassified blockers. 30 Rust tests
+pass. Live PI DMA sensing and full overlay/relocation lifecycle are still pending.
