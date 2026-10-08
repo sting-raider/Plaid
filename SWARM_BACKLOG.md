@@ -5,9 +5,9 @@ Statuses: `TODO`, `CLAIMED`, `BLOCKED`, `DONE`.
 | ID | Status | Work item | Acceptance criterion |
 |---|---|---|---|
 | W001 | TODO | ROM format normalizer | Synthetic tests cover z64/v64/n64 byte order and canonical hashing input. |
-| W002 | TODO | Define `ProgramMap` schema v0 | Schema represents regions, blocks, edges, indirect targets, overlays, evidence, unresolved items. |
+| W002 | DONE | Define `ProgramMap` schema v0 | Schema represents regions, blocks, edges, indirect targets, overlays, evidence, unresolved items. |
 | W003 | DONE | Mupen `new_dynarec` instrumentation design | Document exact hook points for block creation, links, invalidation, indirect target discovery. |
-| W004 | TODO | Build dynamic trace format | Versioned machine-readable trace plus parser tests. |
+| W004 | DONE | Build dynamic trace format | Versioned machine-readable trace plus parser tests. |
 | W005 | TODO | Direct CFG discovery | Starting from an entry PC, recursively recover direct branch/call targets with delay-slot semantics. |
 | W006 | TODO | spimdisasm integration spike | Compare its recovered functions/pointers against our map on legal/synthetic inputs. |
 | W007 | TODO | Rabbitizer integration decision | Benchmark/assess using Rabbitizer vs project-owned decode layer; document ADR. |
