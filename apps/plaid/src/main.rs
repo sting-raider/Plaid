@@ -1,6 +1,7 @@
 use plaid_core::{
     GuestAddr,
     discovery::{CodeImage, direct_cfg},
+    indirect::analyze_indirect,
     merge::{import_trace, merge_maps},
     program::{GuestRange, ProgramMap, RomOffset},
     rom::CanonicalRom,
@@ -48,7 +49,8 @@ fn run() -> Result<(), String> {
                 &[GuestAddr(number32(entry)?)],
                 1_000_000,
             )?;
-            fs::write(output, d.map.to_json()?).map_err(|e| e.to_string())?;
+            let map = analyze_indirect(&d.map, &image)?;
+            fs::write(output, map.to_json()?).map_err(|e| e.to_string())?;
             println!(
                 "discovered {} blocks, {} indirect sites, {} unresolved items",
                 d.map.blocks.len(),

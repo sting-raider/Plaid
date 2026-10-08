@@ -60,3 +60,13 @@ treats PC zero as an unspecified address and substitutes KSEG0.
 Explicit ROM/load mappings precede CFG analysis. No generic boot/CIC load mapping
 is inferred from the header alone. Conditional, likely, call and delay-slot paths
 are represented conservatively; exceptional/invalid/nested slots remain open.
+
+## ADR-0008: Recheck local indirect certificates against bytes and current CFG
+
+Status: Accepted, 2026-10-08.
+
+Finite observations are stored independently from static candidate sets. A local
+constant proof requires a single straight-line block prefix with no entry/candidate
+bypass. Serialize the prefix hash, site and target; re-evaluate instead of trusting
+producer labels. Later merges may invalidate a proof. These certificates do not
+cover overlays, executable mutation, exceptions or the whole executable universe.

@@ -3,6 +3,7 @@
 //! Keep this crate free of ROM assets and game-specific assumptions.
 
 pub mod discovery;
+pub mod indirect;
 pub mod merge;
 pub mod program;
 pub mod rom;
