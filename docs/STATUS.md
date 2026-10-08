@@ -393,3 +393,5 @@ D-cache lineage research progressed from worker PARTIAL to a locally executed fo
 Independent SB/SH identity-RDRAM model and 96 actual cases now reproduce exact worker hashes. Successful subword backing/cache effects retain endian lanes, while faulting attempts mutate neither; these effects differ from SP IMEM widening.
 
 The second SB/SH fixture now independently reproduces 100 actual cases and both executable-word construction families. Its runner has a distinct output root; source/result hashes match the worker.
+
+Recovered RSP self-store code now passes 28 decoded probes: ordinary scalar/vector stores remain in DMEM and preserve IMEM, including the aligned SRV no-op. CPU/SP DMA/external IMEM mutation obligations remain open (ADR-0068).
