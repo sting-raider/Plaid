@@ -152,3 +152,5 @@ Retained/reproduced `dcache-eviction-lineage-gpt56sol` (`2f70161`): exact model 
 Retained/reproduced `cpu-rsp-imem-subword-gpt56sol` (`6f0791f`): model, source comparison and actual 32-case result hashes match. Adopt concrete device-sink span/payload under ADR-0066.
 
 Retained/reproduced `pi-read-lifecycle-gpt56sol` (`1f7eac1`): six actual read/queue phases and exact trace/result hashes; no whole-ROM or v1 completion promotion.
+
+Retained `dcache-writeback-lineage-gpt56sol` (`674109b`), corrected stale closeout model numbers and completed actual-reference reproduction. Primary measured reducer adds mutation revisions/exact sink chronology and passes six forgeries (ADR-0067).

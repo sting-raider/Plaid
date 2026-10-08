@@ -953,3 +953,19 @@ source disagrees, so preserve the oracle conflict. Forced endian/component tests
 and source expectations do not replace physical hardware evidence or prove other
 sinks/lifetimes. Original fixture builds ignored licensed ares separately; no
 reference code or assets enter production.
+
+## ADR-0067: D-cache lineage needs resident mutation revisions and exact scope
+
+Status: Accepted for research, 2026-10-09.
+
+The recovered previously PARTIAL fixture now executes locally: actual explicit
+writeback/dirty eviction export two full-line resident certificates; clean
+replacement and dirty invalidate/drop export none. Track generation plus every
+successful resident mutation revision. A same-value store after writeback begin
+changes origin even when payload equality survives. The primary measured reducer
+now rejects that stale snapshot and five additional chronology/sink forgeries.
+Require one exact nested backing write and pre-replacement resident origin;
+dirty alone cannot establish transfer. Original generated shadow sources remain
+ignored/licensed separately. The finite aligned-store fixture does not establish
+all store families, restore epochs, full provenance completeness or ProgramMap
+closure, and is not transplanted into the production solver.
