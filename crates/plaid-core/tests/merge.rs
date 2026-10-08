@@ -358,6 +358,7 @@ fn indirect_observation_precedes_target_compilation_and_survives_raw() {
             site: GuestAddr(0x80000000),
             target: GuestAddr(0x80000020),
             delay_slot_pc: Some(GuestAddr(0x80000004)),
+            source_unit: None,
         },
         TraceEvent::CompileBegin {
             unit: 1,
@@ -417,4 +418,119 @@ fn indirect_observation_precedes_target_compilation_and_survives_raw() {
             .iter()
             .any(|u| u.kind == "uncorrelated_indirect_observation")
     );
+}
+
+#[test]
+fn explicit_executing_unit_identifies_stale_source_but_not_stale_target() {
+    let mut t = trace(vec![0x01000008, 0]);
+    for data in [
+        TraceEvent::Invalidate { range: None },
+        TraceEvent::IndirectTargetObserved {
+            site: GuestAddr(0x80000000),
+            target: GuestAddr(0x80000020),
+            delay_slot_pc: Some(GuestAddr(0x80000004)),
+            source_unit: Some(0),
+        },
+        TraceEvent::CompileBegin {
+            unit: 1,
+            start: GuestAddr(0x80000020),
+            physical_start: Some(PhysicalAddr(32)),
+            delay_slot_entry: false,
+        },
+        TraceEvent::UnitCompiled {
+            unit: 1,
+            start: GuestAddr(0x80000020),
+            words: vec![0x03e00008, 0],
+        },
+        TraceEvent::IndirectTargetObserved {
+            site: GuestAddr(0x80000020),
+            target: GuestAddr(0x80000000),
+            delay_slot_pc: Some(GuestAddr(0x80000024)),
+            source_unit: Some(1),
+        },
+    ] {
+        t.events.push(EventRecord {
+            seq: t.events.len() as u64,
+            data,
+        });
+    }
+    let m = import_trace(&t, &[], 100).unwrap();
+    let source = m
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc == GuestAddr(0x80000000))
+        .unwrap();
+    assert_eq!(source.site.generation, 0);
+    assert_eq!(source.observed.len(), 1);
+    assert_eq!(source.observed.first_key_value().unwrap().0.generation, 1);
+    let returning = m
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc == GuestAddr(0x80000020))
+        .unwrap();
+    assert!(returning.observed.is_empty());
+    assert!(
+        m.unresolved
+            .iter()
+            .any(|u| u.kind == "uncorrelated_indirect_observation"
+                && u.site.as_ref() == Some(&returning.site))
+    );
+    assert!(m.indirect_sites.iter().all(|s| s.closed_proof.is_none()));
+    assert!(
+        m.indirect_observations
+            .iter()
+            .all(|o| o.generation == 1 && o.source_unit.is_some())
+    );
+    assert_eq!(m, ProgramMap::from_json(&m.to_json().unwrap()).unwrap());
+    assert_eq!(m, merge_maps(&m, &m).unwrap());
+    let mut missing_provenance = m.clone();
+    let unit = m
+        .indirect_observations
+        .first()
+        .unwrap()
+        .source_unit
+        .as_ref()
+        .unwrap();
+    missing_provenance.evidence.remove(unit);
+    assert!(missing_provenance.validate().is_err());
+
+    // Without actual executing-unit context, the same PC cannot pick a stale source.
+    if let TraceEvent::IndirectTargetObserved { source_unit, .. } = &mut t.events[4].data {
+        *source_unit = None;
+    }
+    let legacy = import_trace(&t, &[], 100).unwrap();
+    assert!(legacy.indirect_sites.iter().all(|s| s.observed.is_empty()));
+    let old_json = legacy
+        .to_json()
+        .unwrap()
+        .replace("\"source_unit\": null,", "");
+    assert_eq!(legacy, ProgramMap::from_json(&old_json).unwrap());
+}
+
+#[test]
+fn indirect_unit_context_must_already_be_completed_and_contain_site() {
+    let mut t = trace(vec![0x01000008, 0]);
+    let observed = |source_unit, site| EventRecord {
+        seq: 3,
+        data: TraceEvent::IndirectTargetObserved {
+            site: GuestAddr(site),
+            target: GuestAddr(0x80000020),
+            delay_slot_pc: Some(GuestAddr(site + 4)),
+            source_unit,
+        },
+    };
+    t.events.push(observed(Some(0), 0x80000000));
+    assert!(t.validate().is_ok());
+    t.events[3] = observed(Some(1), 0x80000000);
+    assert!(
+        t.validate()
+            .unwrap_err()
+            .contains("unknown indirect source unit")
+    );
+    t.events[3] = observed(Some(0), 0x80000008);
+    assert!(t.validate().unwrap_err().contains("outside source unit"));
+    t.events.remove(2); // Unit exists but has not completed when the sensor runs.
+    t.events[2] = observed(Some(0), 0x80000000);
+    t.events[2].seq = 2;
+    assert!(t.validate().unwrap_err().contains("not completed"));
 }

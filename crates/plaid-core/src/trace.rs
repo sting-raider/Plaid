@@ -60,6 +60,10 @@ pub enum TraceEvent {
         site: GuestAddr,
         target: GuestAddr,
         delay_slot_pc: Option<GuestAddr>,
+        /// Trace-local compilation identity embedded in the executing host unit.
+        /// Older producers lack this context and retain conservative epoch joins.
+        #[serde(default)]
+        source_unit: Option<u64>,
     },
     RuntimeLink {
         target: GuestAddr,
@@ -173,6 +177,7 @@ impl DiscoveryTrace {
                     site,
                     target,
                     delay_slot_pc,
+                    source_unit,
                 } => {
                     aligned(*site)?;
                     aligned(*target)?;
@@ -180,6 +185,16 @@ impl DiscoveryTrace {
                         && site.0.checked_add(4) != Some(ds.0)
                     {
                         return Err("incorrect delay slot PC".into());
+                    }
+                    if let Some(unit) = source_unit {
+                        let state = units.get(unit).ok_or("unknown indirect source unit")?;
+                        let range = GuestRange {
+                            start: state.0,
+                            size: state.1.ok_or("indirect source unit not completed")?,
+                        };
+                        if !range.contains(*site) {
+                            return Err("indirect site outside source unit".into());
+                        }
                     }
                 }
                 TraceEvent::Invalidate { range } => {

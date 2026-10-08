@@ -188,6 +188,13 @@ def verify(directory, scenario, cargo):
     assert [e["rom_offset"] for e in dma] == expected_dma, dma
     assert all(e["physical_destination"] == 0x400 and e["size"] == (512 if scenario == "store_stress" else 256) for e in dma), dma
     indirect = [e for e in events if e["event"] == "indirect_target_observed"]
+    units = {e["unit"]:e for e in events if e["event"] == "unit_compiled"}
+    for event in indirect:
+        unit = units[event["source_unit"]]
+        index = (event["site"]-unit["start"])//4
+        assert 0 <= index < len(unit["words"]), (event, unit)
+        word = unit["words"][index]
+        assert word >> 26 == 0 and word & 63 in (8,9), (event, unit)
     stores = [e for e in events if e["event"] == "cpu_word_store_observed"]
     assert any(e["destination"] == 0x80000600 and e["value"] == (18 if replaced else 12) for e in stores), stores
     if scenario == "mutation":
@@ -221,13 +228,13 @@ def verify(directory, scenario, cargo):
         assert any(load["rom_offset"] == offset+shift+0xc0 and load["destination"]["start"] == base+shift+0xc0 for load in imported["loads"])
     assert sum(len(o["evidence"]) for o in imported["indirect_observations"]) == len(indirect)
     if scenario == "store_stress":
-        assert all(not site["observed"] for site in imported["indirect_sites"])
+        call = next(site for site in imported["indirect_sites"] if site["site"]["pc"] == 0x80000488)
+        assert len(call["observed"]) == 1 and call["observed"][0][0]["generation"] > call["site"]["generation"]
         assert any(u["kind"] == "uncorrelated_indirect_observation" for u in imported["unresolved"])
     else:
         assert any(site["observed"] for site in imported["indirect_sites"])
     assert all(site["closed_proof"] is None for site in imported["indirect_sites"])
-    assert all(target[0]["generation"] == site["site"]["generation"]
-        for site in imported["indirect_sites"] for target in site["observed"])
+    assert all(o["source_unit"] in imported["evidence"] for o in imported["indirect_observations"])
     if scenario in ("reload", "reload_alias"):
         earlier = [load for load in imported["loads"] if load["rom_offset"] == 0x1000]
         later = [load for load in imported["loads"] if load["rom_offset"] == 0x1100]

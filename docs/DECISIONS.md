@@ -230,3 +230,19 @@ evidence; ordinary data stores remain raw facts. Do not infer complete write,
 copy, relocation or lifetime coverage from this limited sensor. Differential
 sessions cover patch writes, zero values, register pressure and branch delay slots.
 Invalidation/restored-entry joins remain unresolved rather than crossing epochs.
+
+## ADR-0021: Identify an executing indirect source by its compiled unit
+
+Status: Accepted, 2026-10-08.
+
+Invalidation can advance the import epoch while an older generated unit keeps
+executing. Embed its trace-local compilation ID in each x64 JR/JALR callback,
+including the predecessor unit for pagespan transfers. Validate completion and
+source-PC containment before import; attach only to that exact decoded indirect
+site. Preserve session-qualified CompileBegin provenance in raw observations.
+This supports older sources without a PC-only cross-generation guess. Events
+without unit context retain the conservative epoch rule. Target snapshots still
+must be unique in the current epoch; a source tag does not establish a restored
+target's active bytes or lifecycle. Differential CPU and full-core fixtures pass,
+including generation 8 -> 9 in the store-stress call. Older return targets stay
+unresolved and all whole-ROM reports stay OPEN.
