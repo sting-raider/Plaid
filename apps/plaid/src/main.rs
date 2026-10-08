@@ -5,6 +5,7 @@ use plaid_core::{
     merge::{import_trace, merge_maps},
     program::{GuestRange, ProgramMap, RomOffset},
     rom::CanonicalRom,
+    solver::{Scope, solve},
     trace::DiscoveryTrace,
 };
 use std::{env, fs, process::ExitCode};
@@ -12,6 +13,14 @@ use std::{env, fs, process::ExitCode};
 fn run() -> Result<(), String> {
     let args: Vec<_> = env::args().skip(1).collect();
     match args.as_slice() {
+        [command, path] if command == "solve" => {
+            let map = ProgramMap::from_json(&fs::read_to_string(path).map_err(|e| e.to_string())?)?;
+            let report = solve(&map, &[], Scope::WholeRom)?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
+            );
+        }
         [command, rom_path, trace_path, output] if command == "import-trace" => {
             let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
             let trace = DiscoveryTrace::from_ndjson(
@@ -92,7 +101,7 @@ fn run() -> Result<(), String> {
         }
         _ => {
             return Err(
-                "usage: plaid rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> | import-trace <rom> <trace.ndjson> <output.json> | merge <left.json> <right.json> <output.json>"
+                "usage: plaid rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> | import-trace <rom> <trace.ndjson> <output.json> | merge <left.json> <right.json> <output.json>"
                     .into(),
             );
         }

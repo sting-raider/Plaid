@@ -16,6 +16,6 @@ Statuses: `TODO`, `CLAIMED`, `BLOCKED`, `DONE`.
 | W010 | TODO | Native backend spike | Emit one synthetic MIPS basic block as a relocatable host object and verify final machine state. |
 | W011 | TODO | Differential verifier | Run equivalent synthetic block through reference and native paths and compare state. |
 | W012 | TODO | Executable DMA/overlay tracing | Detect ROM->RAM code loads and represent relocation/load evidence. |
-| W013 | TODO | Closed-world solver v0 | Report unresolved direct/indirect targets and refuse native-complete status while any remain. |
+| W013 | DONE | Closed-world solver v0 | Report unresolved direct/indirect targets and refuse native-complete status while any remain. |
 | W014 | TODO | Runtime boundary study | Map N64ModernRuntime/Mupen/ares/Gopher64 services to our planned runtime API. |
 | W015 | TODO | First commercial-ROM validation protocol | Define legal local-ROM workflow and metadata-only expected-results fixtures. |

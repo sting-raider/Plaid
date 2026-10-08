@@ -70,3 +70,15 @@ constant proof requires a single straight-line block prefix with no entry/candid
 bypass. Serialize the prefix hash, site and target; re-evaluate instead of trusting
 producer labels. Later merges may invalidate a proof. These certificates do not
 cover overlays, executable mutation, exceptions or the whole executable universe.
+
+## ADR-0009: Scope closure is not native readiness
+
+Status: Accepted, 2026-10-08.
+
+Solver v0 re-derives instruction edges/sites from supplied bytes and rechecks local
+certificates. Removing a blocker/edge from JSON cannot manufacture closure. A finite
+immutable integer-image scope can report CLOSED with explicit exclusions; whole-ROM
+mode stays OPEN until root/exception/DMA/overlay/write/RSP/execution-mode certificate
+verifiers exist. No user-toggle booleans waive these obligations. `native_complete`
+remains false: discovery closure is necessary but CPU lowering, runtime and behavioral
+verification are also required. CLI `solve` defaults to whole-ROM scope.
