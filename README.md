@@ -72,12 +72,18 @@ cargo clippy --workspace --all-targets -- -D warnings
 python scripts/test_cli.py
 python scripts/test_exporter.py
 python scripts/test_mupen_hooks.py
+python scripts/test_mupen_execution.py
 ```
 
-The final command requires the pinned Mupen checkout in `.refs/`; use
+The Mupen commands require the pinned checkout in `.refs/`; use
 `python scripts/fetch_refs.py` to fetch the reference lab. The hook script prepares
 the research patch, compiles actual Mupen routines and tests synthetic inputs. It
 does not execute generated host code or validate N64 CPU behavior.
+The execution script separately compares synthetic integer/control code on the
+pinned x64 dynarec and pure interpreter, with tracing enabled and disabled.
+It requires Linux GCC/NASM; Windows uses WSL Ubuntu. Set `PLAID_NASM` in Linux
+when NASM is outside PATH. Flat memory and a sentinel stop policy exclude
+boot, devices and interrupt timing from this test's scope.
 
 ## Discovery commands
 

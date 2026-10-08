@@ -108,3 +108,20 @@ earlier local proof. Preserve its candidate and provenance rather than silently
 dropping history. Iteration budgets produce blockers. Conditional link branches
 separate taken calls, untaken fallthrough and possible return continuation; returning
 does not execute the original call's delay slot again.
+
+## ADR-0012: Trace completed indirect transfers before cache dispatch
+
+Status: Accepted, 2026-10-08.
+
+The optional x64 in-unit JR/JALR sensor is generated after delay-slot execution
+and before the cycle check and mini_ht/general lookup split. It receives the saved
+target operand, preserves allocated caller-save registers, and does not reuse
+host addresses as portable identities. Trace capability names describe this
+restricted coverage, not a whole-ROM execution guarantee. When disabled, no
+execution sensor calls are generated. Validate state preservation against the
+pinned pure interpreter and untraced dynarec; devices/timing remain excluded.
+
+Persist raw indirect observations independently of image-resolved site edges.
+The target may be compiled after the observation, so defer that identity join to
+the end of the same invalidation epoch. Source identities are fixed at observation
+time; ambiguity remains a blocker. Later generations cannot explain earlier jumps.
