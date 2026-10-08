@@ -119,8 +119,10 @@ int main(int argc, char** argv) {
   int steps = 1;
   if(pair) {
     base = DATA_VADDR + (u64)offset;
-    put_instruction(CODE_VADDR + 0, encode_store(0x2c, RS, RT, 0), little);
-    put_instruction(CODE_VADDR + 4, encode_store(0x2d, RS, RT, 7), little);
+    s16 leftImm = little ? 7 : 0;
+    s16 rightImm = little ? 0 : 7;
+    put_instruction(CODE_VADDR + 0, encode_store(0x2c, RS, RT, leftImm), little);
+    put_instruction(CODE_VADDR + 4, encode_store(0x2d, RS, RT, rightImm), little);
     steps = 2;
   } else {
     put_instruction(CODE_VADDR, encode_store(opcode, RS, RT, imm), little);
