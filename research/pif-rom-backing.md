@@ -85,3 +85,9 @@ promotion.
 
 Recommendation: **PRIMARY-INTEGRATOR-REVIEW**, then a small follow-up actual-ares
 instrumentation run if this evidence contract is accepted.
+
+Primary follow-up, 2026-10-09: the actual pinned fetch-stage sensor now passes
+nine baseline/instrumented/repeated adversaries with both the synthetic image
+and known local NTSC firmware. See `pif-rom-backing-ares.md` for complete receipts
+and the preserved distinction between a fetch-stage witness and a full boot/
+lifetime certificate.

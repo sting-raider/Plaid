@@ -333,6 +333,11 @@ Implemented:
   result hashes. Ares pending descriptors mutate while FULL, handoff can keep
   BUSY asserted, count/skip rows share one current request and IMEM spans wrap.
   Mupen/Gopher source disagrees on FULL policy; hardware semantics remain open.
+- Actual PIF backing sensing passes nine fetch-stage adversaries with original
+  synthetic and known local NTSC firmware. Baseline/instrumented/repeated reported
+  checkpoints agree; mirrored fetch addresses retain distinct identity while
+  sharing the actual masked source offset. Latch/RAM/lockout/cache/stale decoys
+  supply no firmware witness. Full boot/lifetime and production promotion remain open.
 
 Verification: 86 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

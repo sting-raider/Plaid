@@ -217,6 +217,11 @@ agrees. No upstream implementation enters Rust or the native dependency graph.
 ares without instrumentation and compares exact Mupen/Gopher source contracts.
 Pending mutation/FULL disagreement remains reference-specific; source comparison
 does not execute the GPL Mupen implementation or add any production dependency.
+`experiments/pif-rom-backing/run_ares.py` generates isolated PIF-ROM backing/fetch
+callbacks for nine actual fetch-stage tests, including the supplied local firmware
+path. Reported original/instrumented/repeated checkpoints agree; no reference
+implementation or firmware is copied into production. Full boot/immutability and
+firmware authenticity are outside this bounded source contract.
 
 Selected-cache v5 handling in Plaid is original Rust schema/import/verification
 code. It checks the pinned reference's finite snapshot constraints while keeping
