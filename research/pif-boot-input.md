@@ -12,6 +12,9 @@ boot_inputs object. Its one-million-call capture preserves the complete v3
 projection, fixed checkpoint hash and plain/traced/repeat neutrality. The stream
 is 154,485,706 bytes, SHA-256
 `38a0781c763a110ca419af65bf9f1a19ed96cd9282e01b2545486d9d865bd937`.
+The ten-million-call v4 prefix also preserves the entire v3 stream projection,
+fixed checkpoint and message hashes. It is 1,538,325,906 bytes, SHA-256
+`d46c9c99245c65cb2b671b182da0a247006b077026000ac2b29d5df786644027`.
 The earlier v3 format remains distinct. Header metadata does not create a
 firmware backing witness or hardware-equivalence claim.
 Production v4 handling now requires actual supplied firmware bytes, validates

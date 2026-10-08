@@ -27,6 +27,8 @@ def main():
             output_root=OUTPUT,boot_inputs=profile)
         if budget == 1000000:
             assert results["trace_sha256"] == "38a0781c763a110ca419af65bf9f1a19ed96cd9282e01b2545486d9d865bd937"
+        if budget == 10000000:
+            assert results["trace_sha256"] == "d46c9c99245c65cb2b671b182da0a247006b077026000ac2b29d5df786644027"
 
 
 if __name__ == "__main__": main()
