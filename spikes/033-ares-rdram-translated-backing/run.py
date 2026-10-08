@@ -88,17 +88,18 @@ def worker():
     assert plain["translated_reads"] == []
 
     results = traced["results"]
-    assert len(results) == 9
+    assert len(results) == 10
     assert results[0] == 0xF0F0AA55
     assert results[1] == 0x11223344
     assert results[2] == 0xDEADBEEF
     assert results[3] == 0
     assert 0 < results[4] < 0xFFFFFFFF
-    assert results[5] == 0 and results[6] == 0
-    assert results[7] == 0x11223344
+    assert 0 < results[5] < 0xFFFFFFFF
+    assert results[6] == 0 and results[7] == 0
+    assert results[8] == 0x11223344
 
     events = traced["translated_reads"]
-    assert len(events) == 5
+    assert len(events) == 6
     expected = [
         (0x000000, 0x200000, 1, 0xF0F0AA55, 0xF0F0AA55, 63),
         (0x200000, 0x000000, 0, 0x11223344, 0x11223344, 63),
@@ -115,6 +116,15 @@ def worker():
     )
     assert partial["delivered"] == results[4]
     assert 0 < partial["delivered"] < partial["raw"]
+    partial2 = events[5]
+    assert (partial2["request"], partial2["mapped"], partial2["chip"], partial2["raw"], partial2["cci"], partial2["cc_low"], partial2["cc_high"]) == (
+        0x000010, 0x200010, 1, 0xFFFFFFFF, 12, 8, 16
+    )
+    assert partial2["delivered"] == results[5]
+    assert 0 < partial2["delivered"] < partial2["raw"]
+
+    # A second stochastic degradation makes observer-induced RNG consumption externally visible.
+    # Baseline/plain/traced state+results equality above therefore checks RNG neutrality too.
 
     # Equal payload cannot identify the source: both request-address backing and mapped backing hold DEADBEEF.
     backing_request_decoy = 0xDEADBEEF
@@ -133,6 +143,7 @@ def worker():
         "results_sha256": hashlib.sha256(raws[1].encode()).hexdigest(),
         "event_count": len(events),
         "partial_delivered": partial["delivered"],
+        "second_partial_delivered": partial2["delivered"],
     }
     OUTPUT.mkdir(parents=True, exist_ok=True)
     (OUTPUT / "results.json").write_text(json.dumps(traced, indent=2, sort_keys=True) + "\n")
