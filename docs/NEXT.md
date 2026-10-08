@@ -27,7 +27,9 @@
    v0 projection. Keep finite PI effects separate from production identities;
    do not certify completion from last-write context: actual queue-container and
    source checks expose duplicate IDs, cancellation and silent insertion failure.
-   Retain successful insertion/dispatch identity and removal before queue joins;
+   Actual-container insertion identities now survive heap movement/cancellation,
+   including equal deadlines; serialization remains unknown. Compose this sensor
+   with actual PI request and CPU dispatch/status boundaries before queue joins;
    keep general cache, byte lifetime and mutation completeness separate.
    Current tags/effective addresses can differ from resident-byte history; keep
    those identities separate. A recovered synchronized-restore/cache-power

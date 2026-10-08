@@ -113,5 +113,6 @@ origins through reloads, CPU patches, invalidation and partial words. Versioned
 boot transfer capture now passes 8,823,134 records and 1,638,808 exact PI byte
 origins with complete prior projections/checkpoints. Strict original Rust v1
 inspection/rechecking now preserves every complete source/count/hash. Real queue
-insertion/removal/dispatch identity is next; general
+insertion/removal identities now pass the actual container with unchanged
+reported checkpoints. Compose real PI request and CPU dispatch/status next; general
 mutation/lifetime obligations leave W012 TODO.
