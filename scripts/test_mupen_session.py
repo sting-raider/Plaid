@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "target/reference-core"
 SESSION = ROOT / "target/mupen-session"
 MODES = ("pure", "untraced", "traced", "repeat")
-SCENARIOS = ("pi", "reload", "reload_alias")
+SCENARIOS = ("pi", "reload", "reload_alias", "mutation", "cpu_copy")
 
 
 def fixture(scenario="pi"):
@@ -40,7 +40,25 @@ def fixture(scenario="pi"):
             0x38:0x3c090a00, 0x3c:0xad090028, 0x40:0x34090009,
             0x44:0xad090014, 0x48:0x08000112, 0x4c:0,
             0xc0:0x26110007, 0xc4:0x03e00008, 0xc8:0x24120009}
-    if scenario != "pi":
+    if scenario == "cpu_copy":
+        # CPU reads from cartridge mapping and stores into RAM. PI sensors must
+        # not invent a DMA source for this non-PI executable copy.
+        boot = [0x3c08b000, 0x35081000, 0x3c098000, 0x35290400, 0x340a0040,
+                0x8d0b0000, 0xad2b0000, 0x25080004, 0x25290004, 0x254affff,
+                0x1540fffa, 0, 0x3c088000, 0x35080400, 0x01000008, 0]
+    elif scenario == "mutation":
+        original = dict(body)
+        body = {offset:word for offset,word in original.items() if offset < 0x1c or offset >= 0xc0}
+        body.update({offset+8:word for offset,word in original.items() if 0x1c <= offset <= 0x4c})
+        body.update({0x1c:0x1260002c, 0x20:0, 0x50:0x08000114, 0x54:0,
+                     0xd0:0x26730001, 0xd4:0x02e00008, 0xd8:0})
+        # Return to SP after first execution, patch two instructions with CPU
+        # stores, then re-enter. No second PI event explains the changed bytes.
+        boot = boot[:14] + [0x0100b809, 0, 0x3c088000,
+            0x3c092410, 0x3529000b, 0xad09040c,
+            0x3c092412, 0x3529000d, 0xad0904c8,
+            0x35080400, 0x01000008, 0]
+    elif scenario != "pi":
         assert scenario in ("reload", "reload_alias")
         first = dict(body)
         first[0x1c] = 0x26730001  # First payload increments s3, then returns to SP.
@@ -57,7 +75,7 @@ def fixture(scenario="pi"):
         body[0xc8] = 0x2412000d
         body[0x48] = 0x08000112  # J preserves the current cached/uncached region.
     for n, word in enumerate(boot): data[64+n*4:68+n*4] = word.to_bytes(4, "big")
-    payload_offset = 0x1000 if scenario == "pi" else 0x1100
+    payload_offset = 0x1100 if scenario in ("reload", "reload_alias") else 0x1000
     for offset, word in body.items(): data[payload_offset+offset:payload_offset+offset+4] = word.to_bytes(4, "big")
     return data
 
@@ -143,17 +161,19 @@ def worker(directory, mode):
 
 def verify(directory, scenario, cargo):
     base = 0xa0000400 if scenario == "reload_alias" else 0x80000400
+    replaced = scenario in ("reload", "reload_alias", "mutation")
     states = {mode:json.loads((directory / f"{mode}-state.json").read_text()) for mode in MODES}
     for mode, state in states.items():
-        assert state["regs"][14] == (12 if scenario == "pi" else 18), (mode, state)
-        assert state["regs"][16:20] == ([5,12,9,0] if scenario == "pi" else [11,18,13,1]), (mode, state)
-        assert state["pc"] == base + 0x48, (mode, state)
+        assert state["regs"][14] == (18 if replaced else 12), (mode, state)
+        assert state["regs"][16:20] == ([11,18,13,1] if replaced else [5,12,9,0]), (mode, state)
+        assert state["pc"] == base + (0x50 if scenario == "mutation" else 0x48), (mode, state)
         assert state == states["pure"], states
     first = (directory / "traced.ndjson").read_bytes()
     assert first == (directory / "repeat.ndjson").read_bytes(), "Trace differs on repeated device session"
     events = [json.loads(line)["data"] for line in first.splitlines()[1:-1]]
     dma = [e for e in events if e["event"] == "rom_dma_observed"]
-    assert [e["rom_offset"] for e in dma] == ([0x1000] if scenario == "pi" else [0x1000,0x1100]), dma
+    expected_dma = [] if scenario == "cpu_copy" else [0x1000,0x1100] if scenario in ("reload", "reload_alias") else [0x1000]
+    assert [e["rom_offset"] for e in dma] == expected_dma, dma
     assert all(e["physical_destination"] == 0x400 and e["size"] == 256 for e in dma), dma
     indirect = [e for e in events if e["event"] == "indirect_target_observed"]
     assert any(e["site"] == base+8 and e["target"] == base+0xc0 for e in indirect), indirect
@@ -169,20 +189,30 @@ def verify(directory, scenario, cargo):
     assert solved["status"] == "open" and not solved["native_complete"]
     assert not any(b["kind"] == "indirect_evidence_disagreement" for b in solved["blockers"])
     imported = json.loads((directory / "map.json").read_text())
-    offset = 0x1000 if scenario == "pi" else 0x1100
-    assert any(load["rom_offset"] == offset and load["destination"]["start"] == base for load in imported["loads"])
-    assert any(load["rom_offset"] == offset+0xc0 and load["destination"]["start"] == base+0xc0 for load in imported["loads"])
+    offset = 0x1100 if scenario in ("reload", "reload_alias") else 0x1000
+    if scenario == "cpu_copy":
+        assert not imported["loads"] and not imported["dma_observations"]
+        assert any(u["kind"] == "unknown_executable_source" for u in imported["unresolved"])
+    else:
+        assert any(load["rom_offset"] == offset and load["destination"]["start"] == base for load in imported["loads"])
+        assert any(load["rom_offset"] == offset+0xc0 and load["destination"]["start"] == base+0xc0 for load in imported["loads"])
     assert sum(len(o["evidence"]) for o in imported["indirect_observations"]) == len(indirect)
     assert any(site["observed"] for site in imported["indirect_sites"])
     assert all(site["closed_proof"] is None for site in imported["indirect_sites"])
     assert all(target[0]["generation"] == site["site"]["generation"]
         for site in imported["indirect_sites"] for target in site["observed"])
-    if scenario != "pi":
+    if scenario in ("reload", "reload_alias"):
         earlier = [load for load in imported["loads"] if load["rom_offset"] == 0x1000]
         later = [load for load in imported["loads"] if load["rom_offset"] == 0x1100]
         assert min(load["generation"] for load in later) > max(load["generation"] for load in earlier)
         assert imported["overlays"] and all(o["candidate"] for o in imported["overlays"].values())
-    print(f"Pinned full-core {scenario} passes: PI DMA, RAM store/load, JR/JALR and IS64 stop; deterministic {len(events)}-event trace")
+    if scenario == "mutation":
+        assert any(u["kind"] == "executable_load_bytes_mismatch" for u in imported["unresolved"])
+        assert any(u["kind"] == "unknown_executable_source" for u in imported["unresolved"])
+        assert any(w["kind"] == "unknown" and w["range"] is not None for w in imported["executable_writes"])
+        first_generation = min(load["generation"] for load in imported["loads"])
+        assert any(region["generation"] > first_generation and region["rom_offset"] is None for region in imported["regions"])
+    print(f"Pinned full-core {scenario} passes: executable copy/mutation, RAM store/load, JR/JALR and IS64 stop; deterministic {len(events)}-event trace")
 
 
 def main():

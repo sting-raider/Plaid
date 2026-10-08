@@ -31,6 +31,9 @@ Implemented:
   using cached or uncached entry. Their 81/80-event traces and CPU states match;
   generations remain separate and explicit physical overlaps yield overlay
   candidates even when guest addresses differ. No alias identities are collapsed.
+  A CPU-store mutation session executes changed instructions and retains unknown
+  write/source blockers (78 events); a CPU-copy session executes cartridge reads
+  and RAM stores without inventing PI DMA or verified load sources (33 events).
   PIF HLE/unknown-CIC fallback, dummy graphics/audio/RSP and a frontend stop
   request bound this synthetic session's scope; whole-ROM closure remains OPEN.
 - Signature-based z64/v64/n64 normalization, canonical SHA-256 and header parsing.
@@ -51,13 +54,16 @@ Implemented:
 - Canonical-byte-verified executable loads joined to DMA observations. Reloads
   preserve generations; overlapping sources are overlay candidates, and changed
   bytes remain unclassified executable-write blockers.
+  Load mappings retain a separate copy-event reference with typed DMA/source/
+  physical coverage checks. Recompilation under one event cannot establish reload;
+  legacy maps lacking the reference retain uncertainty.
 - Fail-closed solver reports and rechecks CFG/certificates against source bytes,
   including omitted and contradictory extra facts. Finite trace samples do not
   close indirect sites.
   Observations may extend incomplete candidate hypotheses without a contradiction;
   disagreement diagnostics require a claimed exhaustive target certificate.
 
-Verification: 55 Rust integration tests, formatting, strict Clippy, CLI integration,
+Verification: 56 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.
