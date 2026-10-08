@@ -98,6 +98,15 @@ Implemented:
   Explicit initial state, renderer-owned hidden-RAM backing supplied by the
   harness, and a generated non-Vulkan renderer guard bound the scope. No boot,
   FPU/TLB, RSP or full homebrew-suite correctness is claimed.
+- A separate ares debugger-based raw fetch probe executes the untouched pinned
+  homebrew with a declared synthetic SP/IPL3 entry. At five million instruction
+  calls it records 4,999,998 actual fetches and 52,424 RAM/548 SP/65 cartridge
+  addresses. All cartridge words match the canonical ROM. Repeated 465,553,451-byte
+  streams and plain/traced GPR/HI/LO/PC/Count, RAM/SP hashes and guest messages
+  agree. A generated const accessor exposes the existing debugger word; CPU
+  instruction code is unchanged. Startup Config mismatch and missing PIF/IPL2
+  provenance remain explicit. The budget stop is not guest completion. This raw
+  research format has no production ProgramMap adapter or copy/lifetime inference.
 
 Verification: 63 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

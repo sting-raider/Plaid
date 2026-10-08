@@ -1,11 +1,18 @@
 # Next
 
-1. Model cartridge-resident executable sources and a capable capture path. The
+1. Add a provenance-bearing raw fetch schema/import path, preserving 64-bit guest
+   PCs, fetched words, delay-slot context and changing words at one PC. The pinned
+   ares probe reaches 52,424 RAM/548 SP/65 cartridge addresses on the untouched
+   homebrew; repeated streams and CPU/memory checkpoints match. Measure artifact
+   cost before promoting its large stream. Keep RAM copies/lifetime unknown;
+   establish cartridge backing only through explicit mapping and byte verification.
+   Model cartridge-resident executable sources and a capable capture path. The
    pinned homebrew spike exposes unsupported B0001040 execution in new_dynarec;
    the interpreter also lacks LLD and fails upstream exception/LLAddr checks.
    A pinned ares interpreter now independently agrees on the eight integer/control
-   fixtures and checks cartridge fetch, LLD/SCD and address errors. Extend its raw
-   fetch observation to a broader corpus, and add RSP/exception/TLB/FPU verification
+   fixtures and checks cartridge fetch, LLD/SCD and address errors. Its broader raw
+   observer is now validated within a synthetic SP-entry/budget scope. Add
+   PIF/IPL2 boot provenance and RSP/exception/TLB/FPU verification
    before extending semantic claims.
 2. Model/sense non-PI copies and executable writes beyond PI-backed snapshots.
    The constant aligned cached-RDRAM SW sensor is partial; general addresses,

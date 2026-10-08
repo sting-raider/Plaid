@@ -39,6 +39,10 @@ Pinned core license: ISC with BSD SLJIT and additional upstream notices.
 target/. The bounded interpreter oracle agrees with Mupen on eight original
 integer/control fixtures and verifies four cartridge/linked-memory/address-error
 cases. No reference code is linked into Plaid core or a native artifact.
+`spikes/004-ares-fetch/` additionally observes exact CPU fetches on the untouched
+homebrew with a generated const debugger accessor. Its synthetic SP-entry/budget
+scope excludes authentic PIF/IPL2 boot and complete-suite claims; streams remain
+ignored and no RAM-copy or executable-lifetime inference is introduced.
 
 ## gopher64/gopher64
 

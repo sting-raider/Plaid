@@ -29,3 +29,8 @@ Independent oracle foundation: `spikes/003-ares-oracle/` is VALIDATED for four
 original cartridge/linked-memory/address-error cases and eight cross-reference
 integer/control comparisons. W011 still requires a native path and broader
 declared semantic coverage; this research does not complete W011 or W012.
+
+Broader fetch sensing: `spikes/004-ares-fetch/` validates repeatable observations
+of 52,424 RAM/548 SP/65 cartridge addresses on the pinned homebrew. Its synthetic
+SP-entry/budget scope, startup failure and missing production adapter leave
+W012 and whole-ROM closure open. No native backend work is promoted by this spike.
