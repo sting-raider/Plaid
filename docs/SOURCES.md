@@ -64,6 +64,11 @@ Purpose:
 - function/pointer/symbol discovery;
 - candidate frontend or validation source for our `ProgramMap`.
 
+Pinned source license: MIT. A separately built comparison in
+`spikes/001-spimdisasm/` uses the backend with original fixtures and explicit
+section/mapping inputs. Its PARTIAL verdict treats functions/tables as hints;
+there is no production dependency or exhaustive coverage inference.
+
 ## Decompollaborate/rabbitizer
 
 Purpose:

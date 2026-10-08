@@ -11,8 +11,9 @@
    relocation and instruction-patch snapshots. PI copy sensing alone is insufficient.
 4. Implement whole-ROM certificate verifiers for roots/boot, exceptions, execution
    modes, RSP identity and executable mutation. No flags may waive these obligations.
-5. Assess pinned spimdisasm/signature evidence on synthetic inputs, and measure
-   analysis size/cost before making scalability claims.
+5. Design a provenance-bearing candidate adapter if promoting the partial
+   spimdisasm spike; assess known-symbol signatures separately. Measure analysis
+   size/cost before making scalability claims.
 6. Begin tiny native integer lowering only after discovery beyond the current
    synthetic scope is demonstrably useful, with reference differential tests.
 

@@ -62,6 +62,11 @@ Implemented:
   close indirect sites.
   Observations may extend incomplete candidate hypotheses without a contradiction;
   disagreement diagnostics require a claimed exhaustive target certificate.
+- A disposable pinned spimdisasm/Rabbitizer comparison covers four original
+  mapped fixtures. Direct-call/function and guarded-table hints are useful, but
+  function extents include unreachable/padding words and truncated returns still
+  need blockers. Manual section/mapping inputs and the shared decoder limit the
+  result. No production adapter or runtime dependency is introduced.
 
 Verification: 56 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
