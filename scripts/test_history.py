@@ -96,12 +96,23 @@ def main():
         assert run("inspect-boot-history",*inputs,rejected).returncode != 0
         assert not rejected.exists()
         write(history,rows)
+        # Research PI contexts have a distinct version/policy and cannot silently
+        # enter production v0 inspection, even with otherwise supported sources.
+        original_header = dict(rows[0])
+        rows[0].update(format="plaid-ares-access-history-v1",policy="identity_ram_fetch_and_buffered_pi_contexts")
+        write(history,rows)
+        result = run("inspect-boot-history",*inputs,rejected)
+        assert result.returncode != 0 and "history header" in result.stderr
+        assert not rejected.exists()
+        assert run("verify-boot-history",*inputs,output).returncode != 0
+        rows[0] = original_header
+        write(history,rows)
         changed_firmware = bytearray(firmware.read_bytes())
         changed_firmware[15] = 1
         firmware.write_bytes(changed_firmware)
         assert run("inspect-boot-history",*inputs,rejected).returncode != 0
         assert not rejected.exists()
-    print("History CLI: canonical orders, causal/source rechecking, tamper/truncation/input gates and overwrite protection passed")
+    print("History CLI: canonical orders, causal/source rechecking, tamper/truncation/input/version gates and overwrite protection passed")
 
 
 if __name__ == "__main__": main()
