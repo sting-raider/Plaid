@@ -92,3 +92,5 @@ Successful TLB-mapped uncached fetches now have finite source evidence; retain c
 Compose the reproduced translated scalar raw-read and delivered-transform witness with actual access contexts; decide degraded executable-image identity explicitly and retain unsupported paths as unknown (ADR-0064).
 
 Retain full per-byte outgoing D-cache lineage before actual writeback and slot replacement. The reproduced clean-lane overwrite counterexample rules out dirty-mask-only provenance (ADR-0065).
+
+General mutation sensing must normalize at the actual storage sink: CPU SB/SH reaching SP IMEM replaces a full Word and can carry upper source-register bytes (ADR-0066).

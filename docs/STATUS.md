@@ -1,6 +1,6 @@
 # Status
 
-2026-10-09. Milestone scope: M1Ã¢â‚¬â€œM3 synthetic executable discovery foundation.
+2026-10-09. Milestone scope: M1–M3 synthetic executable discovery foundation.
 
 Implemented:
 
@@ -383,3 +383,5 @@ Reproduced TLBWI/alias/remap/ASID/global/reverse-endian fetch cases now retain a
 Translated/degraded scalar Word reads reproduce exact backing/result receipts and stochastic sequence. Request address, translated raw origin and CCI-delivered value stay separate; full fetch and other-path evidence remains open (ADR-0064).
 
 Actual D-cache eviction now reproduces the full outgoing 16-byte write, including a clean lane changed externally in backing, before slot reuse. Dirty masks/current RAM cannot reconstruct those origins (ADR-0065).
+
+CPU SB/SH to SP IMEM now reproduces 32 actual cases: 24 widened full-word sinks and eight nonmutating faults. Sink width/payload follows device semantics, with a preserved Mupen source disagreement (ADR-0066).
