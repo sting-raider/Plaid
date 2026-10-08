@@ -21,7 +21,7 @@ CONTRACTS = {
     ],
     "ares/n64/cpu/dcache.cpp": [
         "dirty |= ((1 << Size) - 1) << (paddr & 0xF);",
-        "line.write<Size>(paddr, data);",
+        "template<u32 Size>\nauto CPU::DataCache::write(u64 vaddr, u32 paddr, u64 data) -> void {",
     ],
     "ares/n64/rdram/rdram.hpp": [
         "Memory::Writable::write<Size>(address, value);",
