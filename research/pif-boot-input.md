@@ -7,6 +7,14 @@ power, preserves enforced IPL2 checksum and the reference PIF processor HLE, and
 records its digest. Both recompilers are disabled. Firmware bytes and reference
 objects stay ignored; the separate build preserves upstream notices.
 
+Spike 009 introduces research v4 with the complete declared profile in a
+boot_inputs object. Its one-million-call capture preserves the complete v3
+projection, fixed checkpoint hash and plain/traced/repeat neutrality. The stream
+is 154,485,706 bytes, SHA-256
+`38a0781c763a110ca419af65bf9f1a19ed96cd9282e01b2545486d9d865bd937`.
+The earlier v3 format remains distinct. Header metadata does not create a
+firmware backing witness or hardware-equivalence claim.
+
 The harness declares NTSC/CIC-NUS-6102, deterministic entropy and 8 MiB RAM. These
 are experiment inputs, not automatic ROM profile discovery or hardware-wide boot
 equivalence. CPU::power supplies PC FFFFFFFFBFC00000. Existing prologue/access/

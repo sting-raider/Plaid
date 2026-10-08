@@ -59,6 +59,9 @@ local input and records its digest, with no firmware bytes in project sources.
 Natural CPU power entry and repeated checkpoints pass within a fixed NTSC/6102
 profile. The reference PIF processor remains HLE; boot/source/lifetime scope is
 not promoted into production or native mode. No firmware redistribution is added.
+`spikes/009-ares-boot-profile/` versions the complete declared setup and checks
+unchanged v3 projection/checkpoints. These metadata remain reference inputs;
+source, executable-lifetime and hardware-equivalence claims are not promoted.
 
 ## gopher64/gopher64
 

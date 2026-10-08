@@ -99,7 +99,9 @@ int fetch_observer_main(int argc, char** argv) {
     frontend.trace = std::fopen(argv[3], "wb");
     if(!frontend.trace) return 4;
     auto romHash = nall::Hash::SHA256(std::span<const u8>{bytes.data(), bytes.size()}).digest();
-    #if defined(PLAID_PIF_BOOT)
+    #if defined(PLAID_BOOT_PROFILE)
+    boot_profile_header(frontend.trace, romHash.data(), budget, cartridge.rom.size, firmwareHash.data());
+    #elif defined(PLAID_PIF_BOOT)
     std::fprintf(frontend.trace, "{\"record\":\"header\",\"format\":\"plaid-ares-fetch-research-v3\",\"revision\":\"9408cb43d4948fc3ea6e152a307a34348df3fe04\",\"rom_sha256\":\"%s\",\"budget\":%u,\"initial_state\":\"cpu_power_pif_entry\",\"mapped_cartridge_size\":%u,\"source_policy\":\"delegated_rom_halves_before_prologue\",\"firmware_sha256\":\"%s\",\"pif_processor\":\"reference_hle\",\"pif_checksum_enforced\":true}\n", romHash.data(), budget, cartridge.rom.size, firmwareHash.data());
     #elif defined(PLAID_ROM_FETCH_SOURCE)
     std::fprintf(frontend.trace, "{\"record\":\"header\",\"format\":\"plaid-ares-fetch-research-v2\",\"revision\":\"9408cb43d4948fc3ea6e152a307a34348df3fe04\",\"rom_sha256\":\"%s\",\"budget\":%u,\"initial_state\":\"declared_post_ipl2_sp_entry\",\"mapped_cartridge_size\":%u,\"source_policy\":\"delegated_rom_halves_before_prologue\"}\n", romHash.data(), budget, cartridge.rom.size);
