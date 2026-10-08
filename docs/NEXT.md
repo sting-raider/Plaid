@@ -86,3 +86,5 @@ Native lowering remains deferred until discovery is demonstrably useful.
 Keep user ROMs in ignored `roms/` and derived maps/traces in ignored `artifacts/`.
 
 EBus hidden fetches require a separate derived-bits source witness or Unknown; retain actual read context and hidden-storage lifecycle before any origin promotion (ADR-0062).
+
+Successful TLB-mapped uncached fetches now have finite source evidence; retain current translated/post-endian addresses in each access context and add mapping-generation/lifecycle evidence before proving alias history (ADR-0063).
