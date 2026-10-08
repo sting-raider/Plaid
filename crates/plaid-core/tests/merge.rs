@@ -286,6 +286,32 @@ fn contradictions_and_rom_or_provenance_identity_conflicts_are_visible() {
     let m = merge_maps(&a, &b).unwrap();
     assert_eq!(m.blocks.len(), 2);
     assert!(m.unresolved.iter().any(|u| u.kind == "conflicting_block"));
+    let mut later = a.clone();
+    later
+        .evidence
+        .insert("later".into(), a.evidence.values().next().unwrap().clone());
+    later.blocks = later
+        .blocks
+        .into_iter()
+        .map(|mut block| {
+            block.evidence.insert("later".into());
+            block
+        })
+        .collect();
+    let expanded = merge_maps(&m, &later).unwrap();
+    let conflicts: Vec<_> = expanded
+        .unresolved
+        .iter()
+        .filter(|u| u.kind == "conflicting_block")
+        .collect();
+    assert_eq!(conflicts.len(), 1);
+    assert!(conflicts[0].evidence.contains("later"));
+    assert_eq!(expanded, merge_maps(&expanded, &expanded).unwrap());
+    assert_eq!(
+        expanded,
+        merge_maps(&a, &merge_maps(&b, &later).unwrap()).unwrap()
+    );
+    assert_eq!(expanded, merge_maps(&later, &m).unwrap());
     b = a.clone();
     b.rom.sha256 = "b".repeat(64);
     assert!(merge_maps(&a, &b).is_err());
@@ -681,4 +707,63 @@ fn verified_entry_requires_exact_completed_words_and_installed_mask() {
         data: verified(0, 0x80000000, 0, vec![0x01000008, 0]),
     };
     assert!(t.validate().is_err());
+}
+
+#[test]
+fn repeated_sensor_facts_preserve_provenance_and_merge_idempotence() {
+    let words = vec![0x01000008, 0];
+    let mut t = trace(words.clone());
+    for _ in 0..3 {
+        for data in [
+            TraceEvent::IndirectTargetObserved {
+                site: GuestAddr(0x80000000),
+                target: GuestAddr(0x80000000),
+                delay_slot_pc: Some(GuestAddr(0x80000004)),
+                source_unit: Some(0),
+            },
+            TraceEvent::EntryBytesVerified {
+                unit: 0,
+                pc: GuestAddr(0x80000000),
+                register_mask: 0,
+                words: words.clone(),
+            },
+            TraceEvent::CpuWordStoreObserved {
+                site: GuestAddr(0x80000000),
+                destination: GuestAddr(0x80000600),
+                value: 7,
+            },
+            TraceEvent::RomDmaObserved {
+                rom_offset: RomOffset(64),
+                physical_destination: PhysicalAddr(0x1000),
+                size: 4,
+            },
+        ] {
+            t.events.push(EventRecord {
+                seq: t.events.len() as u64,
+                data,
+            });
+        }
+    }
+    let m = import_trace(&t, &[], 100).unwrap();
+    assert_eq!(m, merge_maps(&m, &m).unwrap());
+    assert_eq!(m.indirect_observations.len(), 1);
+    assert_eq!(m.entry_verifications.len(), 1);
+    assert_eq!(m.word_store_observations.len(), 1);
+    assert_eq!(m.dma_observations.len(), 1);
+    assert_eq!(m.indirect_observations.first().unwrap().evidence.len(), 3);
+    assert_eq!(m.entry_verifications.first().unwrap().evidence.len(), 3);
+    assert_eq!(m.word_store_observations.first().unwrap().evidence.len(), 3);
+    assert_eq!(m.dma_observations.first().unwrap().evidence.len(), 3);
+    assert_eq!(
+        m.indirect_sites
+            .first()
+            .unwrap()
+            .observed
+            .first_key_value()
+            .unwrap()
+            .1
+            .len(),
+        6
+    );
+    assert_eq!(m, ProgramMap::from_json(&m.to_json().unwrap()).unwrap());
 }

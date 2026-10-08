@@ -43,6 +43,10 @@ fn union<T: Fact>(left: &BTreeSet<T>, right: &BTreeSet<T>) -> BTreeSet<T> {
         .collect()
 }
 
+fn canonicalize<T: Fact>(facts: &mut BTreeSet<T>) {
+    *facts = union(facts, &BTreeSet::new());
+}
+
 pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, String> {
     left.validate()?;
     right.validate()?;
@@ -186,6 +190,9 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
             }
         }
     }
+    // Diagnostics added after the initial union can repeat a semantic fact
+    // with expanded provenance. Normalize those additions as well.
+    canonicalize(&mut out.unresolved);
     out.validate()?;
     Ok(out)
 }
@@ -561,6 +568,14 @@ fn import(
         }
     }
     correlate_indirect(&mut out, &recent, &mut observations, epoch);
+    // Imports append sensor facts in execution order. Normalize once after
+    // correlation, preserving every event ID without rescanning on each event.
+    canonicalize(&mut out.dma_observations);
+    canonicalize(&mut out.indirect_observations);
+    canonicalize(&mut out.entry_verifications);
+    canonicalize(&mut out.word_store_observations);
+    canonicalize(&mut out.executable_writes);
+    canonicalize(&mut out.unresolved);
     out.validate()?;
     Ok(out)
 }

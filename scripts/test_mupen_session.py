@@ -223,6 +223,9 @@ def verify(directory, scenario, cargo):
     assert solved["status"] == "open" and not solved["native_complete"]
     assert not any(b["kind"] == "indirect_evidence_disagreement" for b in solved["blockers"])
     imported = json.loads((directory / "map.json").read_text())
+    subprocess.run([cargo, "run", "--quiet", "-p", "plaid", "--", "merge",
+        str(directory / "map.json"), str(directory / "map.json"), str(directory / "merged.json")], cwd=ROOT, check=True)
+    assert (directory / "map.json").read_bytes() == (directory / "merged.json").read_bytes(), "Imported facts must already be canonical"
     assert sum(len(s["evidence"]) for s in imported["word_store_observations"]) == len(stores)
     offset = 0x1100 if scenario in ("reload", "reload_alias") else 0x1000
     if scenario == "cpu_copy":

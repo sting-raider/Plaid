@@ -262,3 +262,15 @@ missing sensor data or competing target identities prevent the join. A lookup
 does not establish execution, a new copy, complete cache/lifecycle coverage or
 an exhaustive indirect target set. The original store-stress return now resolves
 its observed generation-9 -> 8 identity; its whole-ROM report still stays OPEN.
+
+## ADR-0023: Imported facts share the merger's canonical provenance union
+
+Status: Accepted, 2026-10-08.
+
+Repeated semantic sensor facts differ only by event provenance. Normalize those
+sets once after trace correlation, preserving all references, so self-merging an
+import cannot change its bytes. Apply the same normalization to diagnostics
+added after a map union; expanded evidence should extend one conflict rather
+than duplicate it. Copy-event identities, generations, values and unit identities
+remain semantic fields and are not discarded. This fixes an import/merge mismatch
+without weakening blockers or treating repeated observations as coverage proof.
