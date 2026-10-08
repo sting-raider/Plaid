@@ -57,6 +57,9 @@ Implemented:
   A dirty-entry snapshot check may identify a pending older target before the next
   invalidation. Captured words and installed entry/mask must match its completed
   unit. These raw checks are neither new compilations/copies nor execution proof.
+  Imported sensor/write/diagnostic facts coalesce repeated semantics while
+  retaining every event reference. Imports and expanded conflict diagnostics
+  remain byte-identical when merged with themselves.
 - Bounded local constant-target certificates, independent rechecking and recursive
   traversal of inferred in-image targets. Repartitioning can revoke a certificate
   while retaining its candidate evidence.
@@ -83,7 +86,7 @@ Implemented:
   need blockers. Manual section/mapping inputs and the shared decoder limit the
   result. No production adapter or runtime dependency is introduced.
 
-Verification: 62 Rust integration tests, formatting, strict Clippy, CLI integration,
+Verification: 63 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.

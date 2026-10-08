@@ -144,6 +144,9 @@ def main():
             output = directory / f"{scenario}-map.json"
             subprocess.run([cargo, "run", "--quiet", "-p", "plaid", "--", "import-trace", str(directory / f"{scenario}.z64"), str(trace), str(output)], cwd=ROOT, check=True)
             imported = json.loads(output.read_text())
+            merged = directory / f"{scenario}-merged.json"
+            subprocess.run([cargo, "run", "--quiet", "-p", "plaid", "--", "merge", str(output), str(output), str(merged)], cwd=ROOT, check=True)
+            assert output.read_bytes() == merged.read_bytes(), "Repeated runtime facts must be canonical"
             assert sum(len(o["evidence"]) for o in imported["indirect_observations"]) == len(indirect)
             assert any(site["observed"] for site in imported["indirect_sites"]), "runtime target identities must be correlated"
             assert all(site["closed_proof"] is None for site in imported["indirect_sites"]), "execution samples cannot prove closure"

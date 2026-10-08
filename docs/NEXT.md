@@ -5,7 +5,8 @@
    other sizes, TLB/uncached paths and CPU-copy provenance remain unmodeled.
    Extend restored target-entry sensing beyond successful dirty lookups; verified
    snapshots now explain pending same-epoch returns, and explicit source-unit
-   tags identify older units still executing. Preserve boot-source/lifecycle obligations; keep
+   tags identify older units still executing. Preserve boot-source/lifecycle
+   obligations; keep
    speculative compilation distinct from execution.
 2. Prove pointer-table data immutability and guard coverage before issuing exhaustive
    table certificates. Extend cross-block joins only with rechecked invariants;
