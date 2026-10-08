@@ -13,8 +13,10 @@
    reproduce the parallel scalar-fetch, copy, reset/restore and byte-mutation
    findings next; then extend contextual lineage beyond this declared fixture.
    Current tags/effective addresses can differ from resident-byte history; keep
-   those identities separate. Test mapping/degradation/failure and reset/restore
-   boundaries, then extend the sensor to the bounded homebrew boot prefix.
+   those identities separate. A recovered synchronized-restore/cache-power
+   fixture now confirms restored residency without a fill and rejects a latest-
+   tuple causal shortcut; broader reset/NMI/restore capture policy remains open.
+   Extend source-specific contexts before the bounded homebrew boot prefix.
    V0/v1/v2/v4/v5 import and complete-source checks preserve all legacy map hashes.
    V5 retains resident context; actual ROM-read witnesses retain canonical sources.
    RAM/SP/PIF backing, copy/mutation lineage and executable lifetimes stay unknown.

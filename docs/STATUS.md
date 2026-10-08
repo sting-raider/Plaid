@@ -231,6 +231,12 @@ Implemented:
   fail. Ordinary scalar fetch backing and general copy/mutation/reset/restore
   coverage remain separate; no production lifecycle identity is promoted.
 
+- A recovered reset/restore reference fixture now passes on the primary host:
+  synchronized restore reinstalls a valid cache line without a new fill, so the
+  external latest-tuple matcher selects the wrong historical fill. Independent
+  baseline/disabled/repeated reported PC/s0/timing/RAM/cache fields agree; explicit
+  cache power forces a new fill. General restore/capture provenance remains open.
+
 Verification: 76 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.

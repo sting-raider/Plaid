@@ -101,6 +101,10 @@ checkpoints agree. Requestor arguments supply no independent execution claim.
 transaction/cache/fetch callbacks and explicitly declared fixture writes. All 43
 records, prior complete projection and independent/repeated checkpoints match.
 This finite ordering does not promote general provenance or executable lifetimes.
+The recovered `spikes/018-ares-cache-reset-restore/` also executes synchronized
+restore and explicit cache power against the pin. Reported baseline/disabled/
+traced fields agree; restore creates valid residency without a fill. Broader
+reset varieties and production checkpoint provenance remain separate.
 
 ## gopher64/gopher64
 
