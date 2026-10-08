@@ -140,22 +140,24 @@ def run():
     assert baseline["state"] == plain["state"] == traced["state"]
 
     original = 0x11223344
-    decoy = 0xDEADBEEF
+    decoy_dirty = 0xDEADBEEF
+    decoy_clean = 0xFEEDFACE
     dwords = [original, 0x01020304, 0x11223344, 0x55667788]
     cwords = [0xCAFEBABE, 0x0BADF00D, 0x89ABCDEF, 0x13579BDF]
     facts = traced["facts"]
     assert facts["dirty_before"] == 0x000F
     assert facts["outgoing_words"] == dwords
-    assert facts["backing_before"] == [decoy, *dwords[1:]]
+    assert facts["backing_before"] == [decoy_dirty, decoy_clean, *dwords[2:]]
     assert facts["backing_after"] == dwords
     assert facts["incoming_words"] == cwords
     assert facts["outgoing_tag"] != facts["incoming_tag"]
 
     scalar = [e for e in traced["scalar_events"] if e["phase"] == 1]
     assert [(e["write"], e["address"], e["bytes"], e["value"]) for e in scalar] == [
-        (True, 0x2000, 4, decoy),
+        (True, 0x2000, 4, decoy_dirty),
+        (True, 0x2004, 4, decoy_clean),
     ], scalar
-    assert scalar[0]["uncached_cpu"]
+    assert all(e["uncached_cpu"] for e in scalar)
 
     dcache = [e for e in traced["burst_events"] if e["phase"] == 1 and e["dcache"]]
     compact = [(e["write"], e["address"], e["bytes"], e["words"][:4]) for e in dcache]
@@ -166,7 +168,7 @@ def run():
         (False, 0x4000, 16, cwords),
     ], compact
     assert dcache[0]["words"][0] == original
-    assert dcache[0]["ordinal"] < dcache[1]["ordinal"] < scalar[0]["ordinal"] < dcache[2]["ordinal"] < dcache[3]["ordinal"]
+    assert dcache[0]["ordinal"] < dcache[1]["ordinal"] < scalar[0]["ordinal"] < scalar[1]["ordinal"] < dcache[2]["ordinal"] < dcache[3]["ordinal"]
     assert traced["state"]["exception"] == 0
     assert traced["state"]["dcache_misses"] == 3
     assert traced["state"]["dcache_writebacks"] == 1
@@ -180,7 +182,7 @@ def run():
     canonical = json.dumps(evidence, sort_keys=True, separators=(",", ":"))
     print("EVIDENCE_SHA256=" + hashlib.sha256(canonical.encode()).hexdigest())
     print("EVIDENCE_JSON=" + canonical)
-    print("PASS: dirty destination line writes back its pre-replacement mixed-origin payload before the same slot is reused for the conflicting line")
+    print("PASS: dirty victim writes its full pre-replacement mixed-origin line, overwriting an externally changed clean lane, before the slot is reused")
 
 
 def main():
