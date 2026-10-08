@@ -38,10 +38,16 @@ def expected_direct(kind: str, offset: int, little: int) -> tuple[bytes, int, in
     out = bytearray(INITIAL)
     payload = payload_bytes(little)
     if kind == "sdl":
-        out[offset:8] = payload[: 8 - offset]
+        if little:
+            out[: offset + 1] = payload[7 - offset :]
+        else:
+            out[offset:8] = payload[: 8 - offset]
         return bytes(out), 0, 0, CODE_VADDR + 4
     if kind == "sdr":
-        out[: offset + 1] = payload[7 - offset :]
+        if little:
+            out[offset:8] = payload[: 8 - offset]
+        else:
+            out[: offset + 1] = payload[7 - offset :]
         return bytes(out), 0, 0, CODE_VADDR + 4
     if kind == "pair":
         out[offset : offset + 8] = payload
@@ -65,13 +71,13 @@ def changed(before: bytes, after: bytes) -> list[int]:
     return [i for i, (a, b) in enumerate(zip(before, after)) if a != b]
 
 
-def expected_changed(kind: str, offset: int, address_kind: str) -> list[int]:
+def expected_changed(kind: str, offset: int, little: int, address_kind: str) -> list[int]:
     if address_kind == "tlb":
         return []
     if kind == "sdl":
-        return list(range(offset, 8))
+        return list(range(0, offset + 1)) if little else list(range(offset, 8))
     if kind == "sdr":
-        return list(range(0, offset + 1))
+        return list(range(offset, 8)) if little else list(range(0, offset + 1))
     if kind == "pair":
         return list(range(offset, offset + 8))
     if kind == "sd" and offset == 0:
@@ -103,7 +109,7 @@ def check(case, state):
     assert physical_after == physical_from_guest(after, little), (case, physical_after.hex(), after.hex())
     assert state["kind"] == kind and state["offset"] == offset and state["little"] == little
     assert state["address_kind"] == address_kind
-    assert changed(before, after) == expected_changed(kind, offset, address_kind), (case, changed(before, after), after.hex())
+    assert changed(before, after) == expected_changed(kind, offset, little, address_kind), (case, changed(before, after), after.hex())
 
     if address_kind == "tlb":
         assert after == INITIAL, (case, after.hex())
