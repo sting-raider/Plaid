@@ -15,6 +15,9 @@
 #if defined(PLAID_CACHE_OPERATION_CONTEXT)
 #include "../014-ares-cache-operations/observer.hpp"
 #endif
+#if defined(PLAID_RDRAM_BURST_CONTEXT)
+#include "../016-ares-rdram-bursts/observer.hpp"
+#endif
 
 struct Sample {
   u64 pc, lastFill;
@@ -62,8 +65,20 @@ int main(int argc,char** argv) {
   #if defined(PLAID_CACHE_OPERATION_CONTEXT)
   plaidCacheOperationObserver = traced ? cache_operation_observer : nullptr;
   #endif
+  #if defined(PLAID_RDRAM_BURST_CONTEXT)
+  plaidRdramBurstObserver = traced ? rdram_burst_observer : nullptr;
+  #endif
   std::vector<u8> hidden(rdram.ram.size/2); rdram.hidden.data = hidden.data();
   rdram.mapIdentity = 1;
+  #if defined(PLAID_RDRAM_BURST_CONTEXT)
+  if(traced) {
+    u32 outOfBounds[8]; for(auto& word : outOfBounds) word = 0xdeadbeef;
+    rdram.ram.readBurst<ICache>(rdram.ram.size,outOfBounds,RBusDevice::ARES_DEBUGGER);
+    for(u32 word : outOfBounds) if(word != 0) return 22;
+    rdram.ram.writeBurst<ICache>(rdram.ram.size,outOfBounds,RBusDevice::ARES_DEBUGGER);
+    if(!rdramBursts.empty()) return 23; // Neither attempt supplies a valid backing witness.
+  }
+  #endif
   for(auto& reg : cpu.ipu.r) reg.u64 = 0;
   cpu.scc.status.errorLevel = cpu.scc.status.exceptionLevel = 0;
   cpu.context.setMode();
@@ -136,6 +151,9 @@ int main(int argc,char** argv) {
   #endif
   #if defined(PLAID_CACHE_OPERATION_CONTEXT)
   print_cache_operations();
+  #endif
+  #if defined(PLAID_RDRAM_BURST_CONTEXT)
+  print_rdram_bursts();
   #endif
   std::printf(",\"post_tags\":[");
   for(size_t i=0;i<postTags.size();i++) std::printf("%s%u",i ? "," : "",postTags[i]);

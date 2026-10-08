@@ -87,6 +87,11 @@ invalidation, explicit fill and hit/miss writeback. Independent baseline and
 sensor checkpoints match; uncached execution observes restored RAM after a stale
 resident writeback. This is a finite identity-mapped RAM scope, not a general
 bus/backing or write-success certificate.
+`spikes/016-ares-rdram-bursts/` samples existing successful identity-mapped burst
+results/stores in an ignored generated RDRAM header. Four read and one write
+transaction preserve the prior complete projection/checkpoints; unsuccessful
+attempts supply no valid backing witness. Default headers and source notices
+are preserved; translated/degraded paths and executable lifetimes stay unknown.
 
 ## gopher64/gopher64
 

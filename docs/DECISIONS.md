@@ -577,3 +577,18 @@ operations preserve state. This validates finite outcomes for identity-mapped
 RAM, not a general backing/write-success policy. Still require actual bus/copy/
 mutation witnesses, failure/reset/restore boundaries and unified event ordering
 before constructing executable lifetimes. No production epoch/image is promoted.
+
+## ADR-0043: Observe actual identity-mapped RAM burst transactions
+
+Status: Accepted for research, 2026-10-08.
+
+An opt-in generated RDRAM header samples the existing returned words after
+successful identity-mapped burst reads and input words after actual stores/hidden
+updates. Four reads match the measured fills; one completed store explains the
+controlled writeback. Invalid zero reads/ignored writes supply no valid witness;
+translated/degraded paths stay unclaimed. Preserve complete prior JSON and
+CPU/timing/RAM/cache goldens without extra accesses or clocks. Default builds
+use the original RAM header, including when reusing a prior sensor directory.
+These are RAM transaction witnesses, not ROM origins, complete mutation coverage
+or executable lifetimes. Require broader mapping/failure/reset/restore and
+unified history/copy witnesses before production source/lifecycle handling.

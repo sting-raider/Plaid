@@ -87,3 +87,6 @@ and unified history remain open; W012 stays TODO.
 Controlled cache hit/miss invalidation/fill/writeback outcomes now pass with a
 separate baseline and actual uncached RAM result. General backing, failure/reset/
 restore and unified event/lifetime joins stay open; W012 remains TODO.
+Successful identity-mapped RAM burst witnesses now match four actual fills and
+one completed writeback, with unchanged prior goldens and invalid attempts kept
+unknown. General backing/copy/mutation/lifetime handling remains open; W012 stays TODO.
