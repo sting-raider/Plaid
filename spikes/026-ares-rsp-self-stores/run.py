@@ -10,8 +10,10 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[2]
 ARES = ROOT / ".refs/ares"
 GOPHER = ROOT / ".refs/gopher64"
+N64TEST = ROOT / ".refs/n64-systemtest"
 ARES_REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 GOPHER_REV = "e96debac941a26ba4961e5145056c0821d3a56f7"
+N64TEST_REV = "196f5421173220eb2f63a7a99c64795dc0ea0698"
 DRIVER = Path(__file__).with_name("driver.cpp")
 OUTPUT = ROOT / "target/ares-rsp-self-store-spike"
 VECTOR_STORES = {"SBV","SDV","SFV","SHV","SLV","SPV","SQV","SRV","SSV","STV","SUV","SWV"}
@@ -38,10 +40,10 @@ def function_body(source: str, marker: str) -> str:
 
 
 def source_audit():
-    assert subprocess.check_output(["git","rev-parse","HEAD"],cwd=ARES,text=True).strip() == ARES_REV
-    assert subprocess.check_output(["git","rev-parse","HEAD"],cwd=GOPHER,text=True).strip() == GOPHER_REV
-    subprocess.run(["git","-c","core.autocrlf=true","diff","--quiet","HEAD"],cwd=ARES,check=True)
-    subprocess.run(["git","-c","core.autocrlf=true","diff","--quiet","HEAD"],cwd=GOPHER,check=True)
+    pins = ((ARES, ARES_REV), (GOPHER, GOPHER_REV), (N64TEST, N64TEST_REV))
+    for checkout, revision in pins:
+        assert subprocess.check_output(["git","rev-parse","HEAD"],cwd=checkout,text=True).strip() == revision
+        subprocess.run(["git","-c","core.autocrlf=true","diff","--quiet","HEAD"],cwd=checkout,check=True)
 
     ipu = (ARES / "ares/n64/rsp/interpreter-ipu.cpp").read_text()
     vpu = (ARES / "ares/n64/rsp/interpreter-vpu.cpp").read_text()
@@ -71,8 +73,9 @@ def source_audit():
     assert "write<Byte>(address + 0" in rsp_hpp and "write<Byte>(address + 1" in rsp_hpp
     assert "u32 mask = bit::round(size) - 1;" in writable and "maskByte = mask & ~0;" in writable
 
-    # Independent pinned Gopher64 stores use only the lower 4 KiB of an 8 KiB
-    # RSP memory image. Its SP interface explicitly treats bit 0x1000 as IMEM.
+    # Independent pinned Gopher64: one 8 KiB SP image, but every RSP-originated
+    # store masks to the lower 4 KiB. The SP interface separately identifies
+    # bit 0x1000 as IMEM for CPU/DMA writes.
     su = (GOPHER / "src/device/rsp_su_instructions.rs").read_text()
     interface = (GOPHER / "src/device/rsp_interface.rs").read_text()
     assert "pub mem: [u8; 0x2000]" in interface
@@ -84,6 +87,31 @@ def source_audit():
         body = function_body(su, f"pub fn {name}(")
         assert "device.rsp.mem" in body and "0xFFF" in body, (name, body)
 
+    # Pinned n64-systemtest is a hardware-oriented corpus. Its scalar SW test
+    # explicitly expects 0xffe to wrap to 0x000 in DMEM. Its vector-store suite
+    # deliberately uses base 0x1000 and compares against DMEM addresses masked
+    # with &0xfff. We source-audit these expectations; this CI does not itself
+    # execute the ROM on physical hardware.
+    sw_test = (N64TEST / "src/tests/rsp/op_sw.rs").read_text()
+    vector_test = (N64TEST / "src/tests/rsp/op_vector_stores.rs").read_text()
+    assembler = (N64TEST / "src/rsp/rsp_assembler.rs").read_text()
+    assert "When writing to 0xFFF, 0xFFE or 0xFFD, there is wrap-around to 0x0" in sw_test
+    assert "assembler.write_sw(GPR::S2, GPR::R0, 0x7FFE);" in sw_test
+    assert "wrapped around to start of DMEM" in sw_test
+    assert "let address = (base_offset + i * 0x10 - 0x10) & 0xFFF;" in vector_test
+    for name in sorted(VECTOR_STORES):
+        marker = f"pub struct {name} {{}}"
+        assert marker in vector_test
+        start = vector_test.index(marker)
+        candidates = [p for p in (vector_test.find("pub struct ", start + len(marker)), len(vector_test)) if p >= 0]
+        block = vector_test[start:min(candidates)]
+        assert "0x1000" in block, (name, block[:500])
+    assert "SWC2 = 58" in assembler
+    assert "B = 0, S = 1, L = 2, D = 3, Q = 4, R = 5, P = 6, U = 7, H = 8, F = 9, W = 10, T = 11" in assembler
+    wc2 = function_body(assembler, "fn write_wc2(")
+    for field in ("((imm7 as u32) & 0b111_1111)", "((element as u32) << 7)", "((wc2op as u32) << 11)", "((vt as u32) << 16)", "((base as u32) << 21)", "((op as u32) << 26)"):
+        assert field in wc2, field
+
     return {
         "ares_scalar_stores": sorted(scalar),
         "ares_vector_stores": sorted(VECTOR_STORES),
@@ -92,6 +120,8 @@ def source_audit():
         "gopher_rsp_mem_bytes": 8192,
         "gopher_store_mask": "0x0fff",
         "gopher_imem_selector": "0x1000",
+        "n64_systemtest_scalar_wrap_expectation": "SW@0xffe -> DMEM 0xffe,0xfff,0x000,0x001",
+        "n64_systemtest_vector_adversary_base": "0x1000",
     }
 
 
@@ -104,18 +134,18 @@ def main():
     raw2 = subprocess.check_output([str(exe)], text=True, timeout=30)
     assert raw1 == raw2
     observed = json.loads(raw1)
-    assert observed["probe_count"] == 17
-    expected = {
-        "SB@0x1000","SH@0x0fff","SW@0x0ffe",
-        *VECTOR_STORES,
-        "decoded_SH@0x0fff","decoded_SW@0x1000",
-    }
+    assert observed["probe_count"] == 28
+    expected = {"SB", "SH", "SW-wrap", "SW-bit12"}
+    for name in VECTOR_STORES:
+        expected.add(name + "@0x1000")
+        expected.add(name + "@0x0fff")
     assert {p["name"] for p in observed["probes"]} == expected
     assert all(p["changed_dmem"] > 0 for p in observed["probes"])
 
     result = {
         "ares_revision": ARES_REV,
         "gopher64_revision": GOPHER_REV,
+        "n64_systemtest_revision": N64TEST_REV,
         "driver_sha256": hashlib.sha256(DRIVER.read_bytes()).hexdigest(),
         "source_audit": audit,
         "execution": observed,
@@ -124,7 +154,7 @@ def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
     (OUTPUT / "results.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result, sort_keys=True))
-    print("PASS: all pinned ares RSP scalar/vector store families changed DMEM only; boundary/wrap and decoded stores left IMEM byte-identical; pinned Gopher64 independently masks stores to DMEM")
+    print("PASS: decoded pinned-ares RSP scalar/vector stores mutate DMEM only; 0x1000 and 0xfff adversaries leave IMEM byte-identical; Gopher64 and n64-systemtest independently corroborate the DMEM-only address domain")
 
 
 if __name__ == "__main__":
