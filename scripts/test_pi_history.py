@@ -14,14 +14,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--no-build", action="store_true")
-    options = parser.parse_args()
-    cargo = os.environ.get("CARGO") or shutil.which("cargo") or str(Path.home()/".cargo/bin/cargo.exe")
-    if not options.no_build:
-        subprocess.run([cargo, "build", "-p", "plaid"], cwd=ROOT, check=True)
-    exe = ROOT/("target/debug/plaid.exe" if os.name == "nt" else "target/debug/plaid")
+def fixture():
     sys.path.insert(0, str(ROOT/"spikes/030-ares-boot-pi-history"))
     spec = importlib.util.spec_from_file_location("pi_fixture", ROOT/"spikes/030-ares-boot-pi-history/test_verifier.py")
     helper = importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
@@ -56,6 +49,18 @@ def main():
     fetch(1, 0xffffffffa0004000, 0x4000, 0x34081111)
     rows.append(dict(record="end", record_count=len(rows)-1, fetch_count=2, reason="instruction_call_budget"))
     fetches.append(dict(record="end", fetch_count=2, reason="instruction_call_budget"))
+    return source, firmware_bytes, rows, fetches
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--no-build", action="store_true")
+    options = parser.parse_args()
+    cargo = os.environ.get("CARGO") or shutil.which("cargo") or str(Path.home()/".cargo/bin/cargo.exe")
+    if not options.no_build:
+        subprocess.run([cargo, "build", "-p", "plaid"], cwd=ROOT, check=True)
+    exe = ROOT/("target/debug/plaid.exe" if os.name == "nt" else "target/debug/plaid")
+    source, firmware_bytes, rows, fetches = fixture()
     with tempfile.TemporaryDirectory(prefix="pi-history-cli-", dir=ROOT/"target") as temporary:
         directory = Path(temporary)
         firmware = directory/"firmware.bin"; firmware.write_bytes(firmware_bytes)
