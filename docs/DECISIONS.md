@@ -468,3 +468,17 @@ they do not authenticate firmware or prove PIF backing, hardware equivalence,
 retirement or executable lifetime. No regions, copies or generations are created.
 Keep the unknown-execution solver gate. Only project-owned data handling is
 promoted; firmware assets and reference CPU/device code remain outside Plaid.
+
+## ADR-0036: Sample selected cache-line fields without inventing a lifetime
+
+Status: Accepted for research, 2026-10-08.
+
+At the existing interpreter prologue, sample slot, tag/valid bits, index and eight
+words from the line selected by virtual PC. Verify the fetched word with the
+effective physical lane after endian selection. Add no coherence/bus/translation
+call. Twelve controlled fetches preserve repeated CPU/COP0/timing and complete
+RAM/cache checkpoints. Same bytes recur after eviction, and different slots hold
+identical contents; retain slot/event identity and refuse lifetime inference.
+Snapshot words establish finite resident context, not RAM/ROM lineage or execution
+of every resident word. Broader capture, import and complete-source verification
+need separate decisions. No reference CPU or native code is promoted.

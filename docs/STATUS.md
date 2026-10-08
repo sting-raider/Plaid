@@ -171,6 +171,11 @@ Implemented:
   self-merge byte-identically: one million fetches yield 1,155 facts in 589,862
   bytes; 9,999,998 fetches yield 54,279 facts in 27,649,768 bytes, including 65
   known-ROM-source facts. V0/v1/v2 map hashes remain unchanged.
+- A separate instruction-cache snapshot experiment preserves selected slot/tag/
+  index/eight-word context across twelve stale-word, invalidation, eviction,
+  TLB/endian and virtual-bank cases. Plain/traced/repeated CPU/Count/COP0 and full
+  RAM/cache checkpoints agree. Equal snapshots after eviction or in distinct
+  slots prove no lifetime; broader capture and production handling remain open.
 
 Verification: 74 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

@@ -37,6 +37,10 @@
    verify and self-merge with unchanged legacy map hashes. Establish cache/copy/
    mutation lineage and contextual executable identities next. Keep PIF HLE and
    fixed NTSC/6102 scope visible; PIF backing and RAM/SP lineage remain unknown.
+   A selected instruction-cache snapshot sensor now passes twelve controlled
+   cases, with unchanged CPU/timing and full RAM/cache hashes. Apply it to the
+   broader boot prefix and recheck complete sources before production import;
+   retain slot/event identities without inferring fill lineage or lifetimes.
    Continue RSP/exception/TLB/FPU verification
    before extending semantic claims.
 2. Model/sense non-PI copies and executable writes beyond PI-backed snapshots.

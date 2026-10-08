@@ -62,6 +62,10 @@ not promoted into production or native mode. No firmware redistribution is added
 `spikes/009-ares-boot-profile/` versions the complete declared setup and checks
 unchanged v3 projection/checkpoints. These metadata remain reference inputs;
 source, executable-lifetime and hardware-equivalence claims are not promoted.
+`spikes/010-ares-cache-snapshot/` reads selected instruction-cache fields at the
+existing prologue, without coherence/translation/bus calls. Twelve original
+fixtures preserve repeated CPU/timing and full RAM/cache checkpoints. Slot/data
+observations remain finite context, with fill/copy/mutation lineage unresolved.
 
 ## gopher64/gopher64
 
