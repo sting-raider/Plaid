@@ -190,6 +190,7 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
         }
         out.indirect_sites.insert(site);
     }
+    out = crate::tables::analyze(&out, image)?;
     // New candidate edges may themselves enter a prefix and break dominance.
     out.indirect_sites = out
         .indirect_sites

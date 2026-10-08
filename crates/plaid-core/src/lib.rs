@@ -11,6 +11,7 @@ pub mod pipeline;
 pub mod program;
 pub mod rom;
 pub mod solver;
+mod tables;
 pub mod trace;
 
 use serde::{Deserialize, Serialize};
