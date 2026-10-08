@@ -146,3 +146,5 @@ lifetime and mutation completeness still keep W012 TODO.
 2026-10-09 primary: independent RDRAM SB/SH 96-case fixture reproduced; generalized sink/lineage coverage stays open.
 
 2026-10-09 primary: RSP scalar/vector DMEM-only store fixture completed; copied/external IMEM provenance and lifetimes remain open.
+
+2026-10-09 primary: full bounded boot v2 request/queue/dispatch composition validated and old complete source/API receipts preserved. Next is original strict Rust v2 consumption; generalized source/lifetime completeness keeps W012 TODO.

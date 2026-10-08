@@ -395,3 +395,5 @@ Independent SB/SH identity-RDRAM model and 96 actual cases now reproduce exact w
 The second SB/SH fixture now independently reproduces 100 actual cases and both executable-word construction families. Its runner has a distinct output root; source/result hashes match the worker.
 
 Recovered RSP self-store code now passes 28 decoded probes: ordinary scalar/vector stores remain in DMEM and preserve IMEM, including the aligned SRV no-op. CPU/SP DMA/external IMEM mutation obligations remain open (ADR-0068).
+
+Original bounded boot history v2 now records accepted PI requests, actual queue identities and CPU dispatch/status scopes. The 8,823,189-record prefix preserves exact complete v1/v0/v5 sources and all 1,638,808 ROM byte origins; three status links are identified and request 4 remains without status. Twelve synthetic/four actual forgeries fail. Rust v1 rechecking keeps its exact prior report hash and rejects v2; original Rust v2 inspection is next (ADR-0069).

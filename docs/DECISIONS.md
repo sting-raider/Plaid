@@ -982,3 +982,23 @@ to ordinary RSP store handlers. DMEM-to-IMEM CPU/DMA copies and external mutatio
 still need separate provenance. This original fixture compiles ignored licensed
 ares without patching it; bounded/source evidence is not general hardware/lifetime
 or closed-world proof.
+
+## ADR-0069: Boot PI status identity comes from actual request/queue dispatch
+
+Status: Accepted for research, 2026-10-09.
+
+Original optional history v2 now composes accepted PI IO scopes, actual queue
+identity and CPU dispatch with complete buffered-source effects. The 610,000-call
+prefix adds only 55 records and preserves every prior v1/v0/v5 byte/checkpoint.
+Four requests receive tokens 6..9; three statuses are bound to actual valid-removal
+and CPU dispatch of tokens 6..8. Request 4 remains without an observed status.
+Do not infer identity from last copy, event/deadline equality or successful data
+effects. Keep legacy v1 status metadata unchanged and independently scoped.
+
+Twelve synthetic/four actual identity forgeries fail, complete final scheduling
+replay passes, and the original strict Rust v1 report hash is unchanged. V2 is
+research-only and rejected by that CLI. Implement an original strict complete-
+source Rust v2 consumer/rechecker before exposing production evidence; no native,
+transfer/lifetime or whole-ROM completion flag is promoted. Generated reference
+sources retain licenses in ignored builds; no reference implementation or asset
+enters production.

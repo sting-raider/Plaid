@@ -10,7 +10,9 @@
 #include <cstdlib>
 #include <nall/hash/sha256.hpp>
 #if defined(PLAID_ACCESS_BOOT)
-#if defined(PLAID_PI_ACCESS_BOOT)
+#if defined(PLAID_PI_QUEUE_ACCESS_BOOT)
+#include "../037-ares-boot-pi-queue-history/observer.hpp"
+#elif defined(PLAID_PI_ACCESS_BOOT)
 #include "../030-ares-boot-pi-history/observer.hpp"
 #else
 #include "../027-ares-boot-history/observer.hpp"
