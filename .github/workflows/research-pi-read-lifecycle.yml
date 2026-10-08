@@ -1,0 +1,33 @@
+name: research-pi-read-lifecycle
+
+on:
+  push:
+    branches:
+      - research/pi-read-lifecycle-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  exact-pin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact pinned ares revision
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs/ares
+          git -C .refs/ares init
+          git -C .refs/ares remote add origin https://github.com/ares-emulator/ares.git
+          git -C .refs/ares fetch --depth=1 origin 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git -C .refs/ares checkout --detach FETCH_HEAD
+      - name: Check exact source contracts
+        run: python3 spikes/036-ares-pi-read-lifecycle/source_guard.py
+      - name: Build and run actual pinned ares PI DMA read fixture
+        run: python3 spikes/036-ares-pi-read-lifecycle/actual.py
+      - name: Upload research receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pi-read-lifecycle-results
+          path: target/ares-pi-read-lifecycle/
