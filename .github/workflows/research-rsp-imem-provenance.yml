@@ -30,6 +30,33 @@ jobs:
           test "$(git -C .refs/ares rev-parse HEAD)" = 9408cb43d4948fc3ea6e152a307a34348df3fe04
       - name: Build and run RSP provenance experiment
         run: python3 spikes/018-ares-rsp-imem-provenance/run.py
+      - name: Hash generated observer sources
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os, subprocess
+          root = Path.cwd()
+          out = root / "target/ares-rsp-imem-provenance-spike/traced-build"
+          files = [
+              out / "include/n64/rdram/rdram.hpp",
+              out / "rsp_dma.cpp",
+              out / "rsp_io.cpp",
+              out / "rsp.cpp",
+              out / "n64.cpp",
+          ]
+          record = {
+              "plaid_head": os.environ["GITHUB_SHA"],
+              "ares_revision": "9408cb43d4948fc3ea6e152a307a34348df3fe04",
+              "compiler": subprocess.check_output(["g++", "--version"], text=True).splitlines()[0],
+              "python": subprocess.check_output(["python3", "--version"], text=True).strip(),
+              "driver_sha256": hashlib.sha256((root / "spikes/018-ares-rsp-imem-provenance/driver.cpp").read_bytes()).hexdigest(),
+              "runner_sha256": hashlib.sha256((root / "spikes/018-ares-rsp-imem-provenance/run.py").read_bytes()).hexdigest(),
+              "generated": {str(p.relative_to(out)): hashlib.sha256(p.read_bytes()).hexdigest() for p in files},
+          }
+          (out / "observer-build.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+          print(json.dumps(record, indent=2, sort_keys=True))
+          PY
       - name: Confirm pinned reference stayed untouched
         run: git -C .refs/ares diff --exit-code HEAD
       - name: Upload deterministic result and build logs
@@ -42,6 +69,7 @@ jobs:
             target/ares-rsp-imem-provenance-spike/baseline-build/build.json
             target/ares-rsp-imem-provenance-spike/baseline-build/build.log
             target/ares-rsp-imem-provenance-spike/traced-build/build.json
+            target/ares-rsp-imem-provenance-spike/traced-build/observer-build.json
             target/ares-rsp-imem-provenance-spike/traced-build/build.log
             target/ares-rsp-imem-provenance-spike/traced-build/traced-build.log
           if-no-files-found: warn
