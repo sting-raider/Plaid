@@ -1,0 +1,35 @@
+name: Research CPU subword stores into RSP IMEM
+
+on:
+  push:
+    branches: [research/cpu-rsp-imem-subword-gpt56sol]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - uses: actions/checkout@v4
+        with:
+          repository: gopher64/gopher64
+          ref: e96debac941a26ba4961e5145056c0821d3a56f7
+          path: .refs/gopher64
+      - uses: actions/checkout@v4
+        with:
+          repository: mupen64plus/mupen64plus-core
+          ref: ba95bab92a76744753bfe61470823a4937850ab0
+          path: .refs/mupen64plus-core
+      - name: Verify deterministic model and independent source comparison
+        run: |
+          python3 -m py_compile spikes/040-ares-cpu-rsp-imem-subword/*.py
+          python3 spikes/040-ares-cpu-rsp-imem-subword/model.py
+          python3 spikes/040-ares-cpu-rsp-imem-subword/compare_refs.py
+      - name: Build exact pinned ares and run exhaustive fixture
+        run: python3 spikes/040-ares-cpu-rsp-imem-subword/run.py
