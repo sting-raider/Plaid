@@ -1,0 +1,47 @@
+{
+  "adversarial": {
+    "cancel_tombstone": {
+      "canceled_token": 1,
+      "invalid_root_observed": true,
+      "valid_dispatch_token": 2
+    },
+    "capacity_failure": {
+      "capacity": 512,
+      "fabricated_token": null
+    },
+    "duplicate_tuple": {
+      "dispatch_tokens": [
+        1,
+        2
+      ],
+      "tokens": [
+        1,
+        2
+      ],
+      "tuple": [
+        10,
+        1
+      ]
+    },
+    "serialization_counterexample": {
+      "continuity_preserved": false,
+      "dispatch_token_after_save_with_spike032_kind9": 0,
+      "pending_request_token_before_save": 1
+    },
+    "slot_reuse": {
+      "first_token": 1,
+      "initial_slot": 0,
+      "new_root_token": 2,
+      "slot_after_earlier_insert": 1
+    }
+  },
+  "ares_revision": "9408cb43d4948fc3ea6e152a307a34348df3fe04",
+  "fuzz": {
+    "accepted_inserts": 96018,
+    "cancel_ops": 34277,
+    "operations": 200000,
+    "seed": 344876730692,
+    "valid_callbacks": 80950,
+    "visible_trace_sha256": "b10f8a5d4c4f3de8e64519b9d7665d0fa360ba937a0fab465506cb9265690d79"
+  }
+}
