@@ -96,3 +96,5 @@ Retain full per-byte outgoing D-cache lineage before actual writeback and slot r
 General mutation sensing must normalize at the actual storage sink: CPU SB/SH reaching SP IMEM replaces a full Word and can carry upper source-register bytes (ADR-0066).
 
 PI read-side save/load/rejection now has independent actual-reference reproduction. Compose request/queue outcomes with the bounded boot stream while retaining RDRAM-to-PBUS data effects separately from scheduled status.
+
+Carry both resident generation and mutation revision into exact writeback scopes. The primary four-phase fixture and six forgeries pass; compose broader store/epoch sensing before production lineage promotion (ADR-0067).

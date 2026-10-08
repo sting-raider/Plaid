@@ -387,3 +387,5 @@ Actual D-cache eviction now reproduces the full outgoing 16-byte write, includin
 CPU SB/SH to SP IMEM now reproduces 32 actual cases: 24 widened full-word sinks and eight nonmutating faults. Sink width/payload follows device semantics, with a preserved Mupen source disagreement (ADR-0066).
 
 The recovered actual PI read lifecycle fixture now matches both worker hashes across six phases, including full-queue copy without scheduling and save-preserved/load-cut identity. ADR-0057/0058 remain the governing finite contracts.
+
+D-cache lineage research progressed from worker PARTIAL to a locally executed four-phase fixture. Two full-line writebacks certify bounded resident origins; dirty invalidate/drop does not. Six measured-history forgeries now fail, including a same-value intervening mutation (ADR-0067).
