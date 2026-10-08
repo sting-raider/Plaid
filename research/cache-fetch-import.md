@@ -42,5 +42,5 @@ A Windows debug import under concurrent checks took 187.24 seconds and peaked
 at 113,090,560 bytes. The raw source is 2,831,854,844 bytes. The bounded corpus
 timeout is 300 seconds for v5 because its extra fields increase parsing cost;
 legacy budgets remain unchanged. These are single-run cost measurements.
-Full v0/v1/v2 and one-million v4 regressions retain exact prior map hashes.
+Full v0/v1/v2 and both v4 regressions retain exact prior map hashes.
 Fill/copy/mutation lineage and contextual executable identities are still required.

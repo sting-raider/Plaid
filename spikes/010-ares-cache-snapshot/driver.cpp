@@ -6,12 +6,18 @@
 #undef main
 #include <cstdlib>
 #include <nall/hash/sha256.hpp>
+#if defined(PLAID_CACHE_FILL_CONTEXT)
+#include "../012-ares-cache-fill/observer.hpp"
+#endif
 
 struct CacheSample {
   u64 pc;
   u32 word, physical;
   bool cached;
   u32 slot, tagKey, index, words[8];
+  #if defined(PLAID_CACHE_FILL_CONTEXT)
+  u64 fill;
+  #endif
 };
 
 struct CacheObserver : Headless {
@@ -31,6 +37,9 @@ struct CacheObserver : Headless {
       // Pure field checks; never call a memory/coherence/translation helper.
       if(!line.hit(sample.physical) || sample.words[sample.physical >> 2 & 7] != sample.word)
         std::abort();
+      #if defined(PLAID_CACHE_FILL_CONTEXT)
+      sample.fill = cache_fill_for_fetch(sample.slot, sample.physical, line.index, line.words);
+      #endif
     }
     samples.push_back(sample);
   }
@@ -57,6 +66,9 @@ int main(int argc, char** argv) {
   cartridgeSlot.port->allocate(); cartridgeSlot.port->connect();
   ares::Nintendo64::system.power(false);
   if(cpu.recompiler.enabled || rsp.recompiler.enabled) return 4;
+  #if defined(PLAID_CACHE_FILL_CONTEXT)
+  plaidCacheFillObserver = traced ? cache_fill_observer : nullptr;
+  #endif
   std::vector<u8> hidden(rdram.ram.size / 2); rdram.hidden.data = hidden.data();
   rdram.mapIdentity = 1;
   for(auto& reg : cpu.ipu.r) reg.u64 = 0;
@@ -112,10 +124,17 @@ int main(int argc, char** argv) {
     if(sample.cached) {
       std::printf(",\"cache_slot\":%u,\"cache_line\":",sample.slot);
       print_line(sample.tagKey,sample.index,sample.words);
+      #if defined(PLAID_CACHE_FILL_CONTEXT)
+      std::printf(",\"fill_id\":%llu",(unsigned long long)sample.fill);
+      #endif
     }
     std::printf("}");
   }
-  std::printf("],\"state\":{\"pc\":%llu,\"regs\":[",(unsigned long long)cpu.ipu.pc);
+  std::printf("]");
+  #if defined(PLAID_CACHE_FILL_CONTEXT)
+  print_cache_fills();
+  #endif
+  std::printf(",\"state\":{\"pc\":%llu,\"regs\":[",(unsigned long long)cpu.ipu.pc);
   for(u32 i=0;i<32;i++) std::printf("%s%lld",i ? "," : "",(long long)(int64_t)cpu.ipu.r[i].u64);
   auto ramHash = nall::Hash::SHA256(std::span<const u8>{rdram.ram.data,rdram.ram.size}).digest();
   // Hash explicit fields in big-endian order; no padding/host-pointer bytes.

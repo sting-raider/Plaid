@@ -518,3 +518,18 @@ fill/copy history, immutable lifetime or execution of other lanes. Keep the
 unknown-execution solver gate; create no executable regions, entries or copies.
 Only project-owned Rust data handling is promoted; reference code and firmware
 stay isolated and ignored.
+
+## ADR-0039: Observe completed cache fills without inferring cache epochs
+
+Status: Accepted for research, 2026-10-08.
+
+Add an opt-in callback after the pinned reference's existing instruction-cache
+fill bus burst in an ignored generated header. Record array slot, effective
+request/burst address and returned words, with monotonic event ordinals. Read no
+additional guest memory and serialize no host pointers. Nine fills across twelve
+controlled fetches distinguish equal-payload refills and cache-bank aliases;
+plain/traced/repeated CPU/timing/RAM/cache goldens remain unchanged. The default
+reference header stays unchanged. A last-fill link in these controlled cases
+does not prove validity across CACHE tag stores, invalidations, reset/restores
+or RAM/copy mutations. The burst address alone does not establish backing source.
+Broader capture and production lifetime handling remain separate decisions.

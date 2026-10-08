@@ -75,3 +75,6 @@ V5 selected-cache context now has strict Rust import/full-source verification an
 snapshot-variant tests, without executable identity promotion. W012 remains TODO.
 Both complete v5 corpora now verify full sources/firmware and self-merge exactly,
 with OPEN gating and preserved v0/v1/v2/shorter-v4 map hashes. W012 remains TODO.
+Controlled completed-cache-fill sensing now distinguishes nine fills without
+altering CPU/timing/RAM/cache goldens. Tag/invalidation/backing witnesses and
+general executable lifetimes remain open; W012 stays TODO.
