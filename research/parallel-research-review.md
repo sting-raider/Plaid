@@ -140,3 +140,5 @@ fetch/boot/cache checks pass at this integration milestone. No production schema
 or solver gate changes. Every whole-ROM report remains OPEN with
 `native_complete=false`. Next, integrate explicit fetch access boundaries with
 the measured shared chronology before extending the bounded boot capture.
+
+Retained `research/ebus-hidden-fetch-gpt56sol` at `fe15ab6`: exact hidden-header exhaustive probe and adversarial reducer reproduce locally; full CPU source sensing stays PARTIAL (ADR-0062).

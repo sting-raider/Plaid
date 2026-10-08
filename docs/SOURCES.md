@@ -238,3 +238,5 @@ Before introducing code copied or linked from an upstream project:
 3. preserve notices and obligations;
 4. avoid contaminating a permissive component with GPL code accidentally;
 5. when uncertain, use the project as a behavioral/reference oracle instead of copying implementation text.
+
+`spikes/034-ares-ebus-hidden-fetch/` retains original project-owned header-probe/reducer code and its finite reference contract. Exact upstream headers are compiled only from the ignored pinned checkout; no upstream implementation or ROM data is vendored.

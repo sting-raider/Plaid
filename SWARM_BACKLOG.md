@@ -128,3 +128,5 @@ SP DMA lifecycle, nine-mode PIF backing (synthetic and supplied firmware), and
 192 repeated COP1 store cases now reproduce locally. Keep pending/full policy,
 physical/source identity and cache/backing mutation obligations explicit; broader
 lifetime and mutation completeness still keep W012 TODO.
+
+2026-10-09 primary: retained/reproduced `ebus-hidden-fetch-gpt56sol` (`fe15ab6`), header/model evidence only; actual hidden-read capture remains open.

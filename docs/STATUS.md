@@ -375,3 +375,5 @@ immutable-table proofs, automatic boot/CIC
 roots, overlay/relocation lifecycle, non-PI copies, exceptions/TLB/execution modes,
 complete store/mutation and RSP policies. Header CRC fields are parsed, not verified.
 Analysis scalability has not been benchmarked. See NEXT for the execution order.
+
+EBus HiddenRAM research now reproduces an exhaustive 65,536-pair header probe and seven reducer negatives. Its Word is derived from four hidden bits rather than copied RAM bytes; actual full fetch/epoch evidence remains PARTIAL (ADR-0062).
