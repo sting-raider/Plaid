@@ -86,6 +86,7 @@ def patched_builder(output: Path):
     generated = output / "builder_pif.py"
     generated.parent.mkdir(parents=True, exist_ok=True)
     generated.write_text(text)
+    generated.with_name("driver.cpp").write_bytes(original.with_name("driver.cpp").read_bytes())
     module = import_module(generated, "plaid_pif_builder")
     module.ROOT = ROOT
     module.REF = ROOT / ".refs/ares"
