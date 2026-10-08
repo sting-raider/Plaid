@@ -1,0 +1,51 @@
+name: Research SP DMA lifecycle
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/sp-dma-lifecycle-gpt56sol
+    paths:
+      - 'spikes/034-ares-sp-dma-lifecycle/**'
+      - '.github/workflows/research-sp-dma-lifecycle.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact pinned references
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs
+          fetch_ref() {
+            path="$1"; url="$2"; sha="$3"
+            git init "$path"
+            git -C "$path" remote add origin "$url"
+            git -C "$path" fetch --depth=1 origin "$sha"
+            git -C "$path" checkout --detach "$sha"
+          }
+          fetch_ref .refs/ares https://github.com/ares-emulator/ares.git 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          fetch_ref .refs/mupen64plus-core https://github.com/mupen64plus/mupen64plus-core.git ba95bab92a76744753bfe61470823a4937850ab0
+          fetch_ref .refs/gopher64 https://github.com/gopher64/gopher64.git e96debac941a26ba4961e5145056c0821d3a56f7
+      - name: Syntax check
+        run: python3 -m py_compile spikes/034-ares-sp-dma-lifecycle/run.py spikes/034-ares-sp-dma-lifecycle/source_guard.py
+      - name: Execute exact-pin lifecycle experiment
+        run: |
+          set -o pipefail
+          python3 spikes/034-ares-sp-dma-lifecycle/run.py | tee target/sp-dma-lifecycle-run.log
+          sha256sum target/ares-sp-dma-lifecycle/results.json
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sp-dma-lifecycle-evidence
+          if-no-files-found: warn
+          path: |
+            target/ares-sp-dma-lifecycle/results.json
+            target/sp-dma-lifecycle-run.log
+            target/ares-sp-dma-lifecycle/build/build.log
