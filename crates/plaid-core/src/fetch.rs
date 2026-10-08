@@ -13,6 +13,8 @@ pub const FORMAT: &str = "plaid-ares-fetch-research-v0";
 pub const PHYSICAL_FORMAT: &str = "plaid-ares-fetch-research-v1";
 pub const SOURCE_FORMAT: &str = "plaid-ares-fetch-research-v2";
 pub const BOOT_FORMAT: &str = "plaid-ares-fetch-research-v4";
+pub const CACHE_FORMAT: &str = "plaid-ares-fetch-research-v5";
+pub const CACHE_POLICY: &str = "selected_icache_line_at_prologue";
 pub const BOOT_INITIAL_STATE: &str = "cpu_power_pif_entry";
 pub const SOURCE_POLICY: &str = "delegated_rom_halves_before_prologue";
 pub const REVISION: &str = "9408cb43d4948fc3ea6e152a307a34348df3fe04";
@@ -41,6 +43,8 @@ enum Record {
         source_policy: Option<String>,
         #[serde(default, deserialize_with = "present")]
         boot_inputs: Option<Box<FetchBootInputs>>,
+        #[serde(default, deserialize_with = "present")]
+        cache_policy: Option<String>,
     },
     Fetch {
         seq: u64,
@@ -53,6 +57,8 @@ enum Record {
         cached: Option<bool>,
         #[serde(default, deserialize_with = "present")]
         source: Option<FetchSource>,
+        #[serde(default, deserialize_with = "present")]
+        cache_line: Option<FetchCacheLine>,
     },
     End {
         fetch_count: u64,
@@ -105,12 +111,14 @@ fn import_with_inputs<R: BufRead>(
         mapped_cartridge_size,
         source_policy,
         boot_inputs,
+        cache_policy,
     } = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?
     else {
         return Err("fetch stream must begin with header".into());
     };
     let boot_inputs = boot_inputs.map(|inputs| *inputs);
-    let boot_format = format == BOOT_FORMAT;
+    let cache_format = format == CACHE_FORMAT;
+    let boot_format = format == BOOT_FORMAT || cache_format;
     if (format != FORMAT && format != PHYSICAL_FORMAT && format != SOURCE_FORMAT && !boot_format)
         || revision != REVISION
         || initial_state
@@ -144,6 +152,9 @@ fn import_with_inputs<R: BufRead>(
     if source_policy.as_deref() != source_format.then_some(SOURCE_POLICY) {
         return Err("invalid fetch source policy for format".into());
     }
+    if cache_policy.as_deref() != cache_format.then_some(CACHE_POLICY) {
+        return Err("invalid fetch cache policy for format".into());
+    }
     if physical_format != mapped_cartridge_size.is_some()
         || mapped_cartridge_size
             .is_some_and(|size| u64::from(size) != (rom.identity.size & !7) || size < 64)
@@ -157,6 +168,7 @@ fn import_with_inputs<R: BufRead>(
             bool,
             Option<FetchAccess>,
             Option<FetchSource>,
+            Option<FetchCacheLine>,
         ),
         (u64, u64, u64),
     >::new();
@@ -175,6 +187,7 @@ fn import_with_inputs<R: BufRead>(
                 physical,
                 cached,
                 source,
+                cache_line,
             } => {
                 let access = match (physical_format, physical, cached) {
                     (true, Some(physical), Some(cached)) if physical.0.is_multiple_of(4) => {
@@ -199,6 +212,12 @@ fn import_with_inputs<R: BufRead>(
                 if source.is_some() != source_format {
                     return Err("invalid fetch source metadata for format".into());
                 }
+                if cache_line.is_some() != (cache_format && cached == Some(true)) {
+                    return Err("invalid cache snapshot presence for format/access".into());
+                }
+                if let Some(line) = cache_line {
+                    line.validate(pc, access.ok_or("cache snapshot lacks access")?, word)?;
+                }
                 if let Some(FetchSource::CartridgeRom { offset }) = source {
                     let start =
                         usize::try_from(offset.0).map_err(|_| "ROM source offset overflow")?;
@@ -211,7 +230,7 @@ fn import_with_inputs<R: BufRead>(
                     return Err("invalid fetch sequence, address or budget".into());
                 }
                 let sample = samples
-                    .entry((pc, word, delay_slot, access, source))
+                    .entry((pc, word, delay_slot, access, source, cache_line))
                     .or_insert((seq, seq, 0));
                 sample.1 = seq;
                 sample.2 += 1;
@@ -250,18 +269,23 @@ fn import_with_inputs<R: BufRead>(
             mapped_cartridge_size,
             source_policy,
             boot_inputs,
+            cache_policy,
         },
     );
     map.fetch_observations = samples
         .into_iter()
         .map(
-            |((pc, word, delay_slot, access, source), (first_seq, last_seq, occurrences))| {
+            |(
+                (pc, word, delay_slot, access, source, cache_line),
+                (first_seq, last_seq, occurrences),
+            )| {
                 ObservedFetch {
                     pc,
                     word,
                     delay_slot,
                     access,
                     source,
+                    cache_line,
                     capture: id.clone(),
                     first_seq,
                     last_seq,

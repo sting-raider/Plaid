@@ -37,14 +37,17 @@ def main():
     modes.add_argument("--physical",action="store_true",help="Recheck the v1 physical observer capture")
     modes.add_argument("--source",action="store_true",help="Recheck the v2 ROM-source observer capture")
     modes.add_argument("--boot",action="store_true",help="Recheck the v4 explicit boot-profile capture")
+    modes.add_argument("--cache",action="store_true",help="Recheck the v5 selected-cache boot capture")
     parser.add_argument("--budget",type=int,choices=(1000000,10000000),default=1000000,help="Boot capture prefix")
     args = parser.parse_args()
+    timeout = 300 if args.cache else 180
     physical, source = args.physical, args.source
+    boot = args.boot or args.cache
     output = ROOT / "target/ares-rom-fetch-spike" if source else ROOT / "target/ares-physical-fetch-spike" if physical else OUTPUT
-    if args.boot: output = ROOT / "target/ares-boot-profile-spike" / str(args.budget)
-    elif args.budget != 1000000: parser.error("--budget requires --boot")
-    sensor = json.loads((output / "results.json").read_text()) if args.boot else None
-    expected_count = sensor["fetches"] if args.boot else 4999998
+    if boot: output = ROOT / ("target/ares-cache-fetch-spike" if args.cache else "target/ares-boot-profile-spike") / str(args.budget)
+    elif args.budget != 1000000: parser.error("--budget requires --boot or --cache")
+    sensor = json.loads((output / "results.json").read_text()) if boot else None
+    expected_count = sensor["fetches"] if boot else 4999998
     raw = output / "traced.ndjson"
     map_path = output / "map.json"
     cargo = os.environ.get("CARGO") or shutil.which("cargo") or str(Path.home() / ".cargo/bin/cargo.exe")
@@ -52,19 +55,19 @@ def main():
     exe = ROOT / ("target/debug/plaid.exe" if os.name == "nt" else "target/debug/plaid")
     started = time.perf_counter()
     inputs = [str(ROM),str(raw)]
-    if args.boot: inputs.insert(1,str(ROOT / ".refs/ares/ares/System/Nintendo 64/pif.ntsc.rom"))
-    process = subprocess.Popen([str(exe),"import-boot-fetch" if args.boot else "import-fetch",*inputs,str(map_path)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
-    stdout, stderr = process.communicate(timeout=180)
+    if boot: inputs.insert(1,str(ROOT / ".refs/ares/ares/System/Nintendo 64/pif.ntsc.rom"))
+    process = subprocess.Popen([str(exe),"import-boot-fetch" if boot else "import-fetch",*inputs,str(map_path)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    stdout, stderr = process.communicate(timeout=timeout)
     elapsed = time.perf_counter() - started
     assert process.returncode == 0, stderr
     peak = peak_working_set(process)
     print(stdout.strip())
-    subprocess.run([str(exe),"verify-boot-fetch" if args.boot else "verify-fetch",*inputs,str(map_path)],check=True,timeout=180)
+    subprocess.run([str(exe),"verify-boot-fetch" if boot else "verify-fetch",*inputs,str(map_path)],check=True,timeout=timeout)
     data = json.loads(map_path.read_text())
     assert len(data["fetch_captures"]) == 1
     assert sum(f["occurrences"] for f in data["fetch_observations"]) == expected_count
     capture = next(iter(data["fetch_captures"].values()))
-    if args.boot:
+    if boot:
         assert sensor["budget"] == args.budget
         assert expected_count == (1000000 if args.budget == 1000000 else 9999998)
         assert capture["trace_sha256"] == sensor["trace_sha256"]
@@ -75,7 +78,18 @@ def main():
         known = [f for f in data["fetch_observations"] if f["source"]["kind"] == "cartridge_rom"]
         assert sum(f["occurrences"] for f in known) == sensor["rom_source_fetches"]
         assert all(f["source"]["kind"] in ("cartridge_rom","unknown") for f in data["fetch_observations"])
-        if args.budget == 1000000:
+        if args.cache:
+            assert capture["cache_policy"] == sensor["cache_policy"] == "selected_icache_line_at_prologue"
+            cached = [f for f in data["fetch_observations"] if "cache_line" in f]
+            assert all(f["access"]["cached"] == ("cache_line" in f) for f in data["fetch_observations"])
+            assert sum(f["occurrences"] for f in cached) == sensor["cached_fetches"]
+            snapshots = {(f["cache_line"]["slot"],f["cache_line"]["tag_key"],f["cache_line"]["index"],
+                tuple(f["cache_line"]["words"])) for f in cached}
+            assert len(snapshots) == sensor["unique_resident_snapshots"]
+            if args.budget == 1000000:
+                assert len(data["fetch_observations"]) == 1155
+                assert hashlib.sha256(map_path.read_bytes()).hexdigest() == "07f650865d122d13059c6f862e68303aa82527173d87f08b37e2d0e90108156f"
+        elif args.budget == 1000000:
             assert capture["trace_sha256"] == "38a0781c763a110ca419af65bf9f1a19ed96cd9282e01b2545486d9d865bd937"
             assert len(data["fetch_observations"]) == 1155 and not known
             assert hashlib.sha256(map_path.read_bytes()).hexdigest() == "f88a70b8c444b44326e5e9fd79a2b64b8aa983bbc3669495f7a9c0458ea7fcad"

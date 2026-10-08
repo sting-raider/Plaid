@@ -136,6 +136,10 @@ in the interpreter. This pin cannot serve as a universal CPU oracle by itself.
 
 ## Source-use policy
 
+Selected-cache v5 handling in Plaid is original Rust schema/import/verification
+code. It checks the pinned reference's finite snapshot constraints while keeping
+reference CPU code and firmware outside the production dependency graph.
+
 Before introducing code copied or linked from an upstream project:
 
 1. inspect its current license at the pinned commit;
