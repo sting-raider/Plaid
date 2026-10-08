@@ -120,3 +120,24 @@ fn exceptions_writes_and_empty_maps_are_blockers() {
         "missing_entry_universe"
     ));
 }
+
+#[test]
+fn conflicting_or_fabricated_extra_facts_cannot_close() {
+    let i = image(vec![0x08000000, 0]);
+    let mut m = map(&i);
+    let mut b = m.blocks.first().unwrap().clone();
+    b.size = 4;
+    m.blocks.insert(b);
+    assert!(has(
+        &solve(&m, std::slice::from_ref(&i), Scope::DeclaredStaticImages).unwrap(),
+        "unexpected_block_extent"
+    ));
+    let mut m = map(&i);
+    let mut e = m.direct_edges.first().unwrap().clone();
+    e.kind = EdgeKind::Call;
+    m.direct_edges.insert(e);
+    assert!(has(
+        &solve(&m, &[i], Scope::DeclaredStaticImages).unwrap(),
+        "unexpected_decoded_edge"
+    ));
+}

@@ -166,6 +166,15 @@ pub struct LoadMapping {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct ObservedDma {
+    pub rom_offset: RomOffset,
+    pub physical_destination: PhysicalAddr,
+    pub size: u32,
+    pub evidence: EvidenceRefs,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Relocation {
     pub site: CodeAddress,
     pub kind: String,
@@ -215,6 +224,7 @@ pub struct Unresolved {
 pub struct ProgramMap {
     pub schema_version: u32,
     pub rom: RomIdentity,
+    #[serde(with = "unique_map")]
     pub evidence: BTreeMap<String, Evidence>,
     pub regions: BTreeSet<Region>,
     pub blocks: BTreeSet<BasicBlock>,
@@ -222,8 +232,10 @@ pub struct ProgramMap {
     pub entries: BTreeMap<CodeAddress, EvidenceRefs>,
     pub direct_edges: BTreeSet<DirectEdge>,
     pub indirect_sites: BTreeSet<IndirectSite>,
+    #[serde(with = "unique_map")]
     pub overlays: BTreeMap<String, Overlay>,
     pub loads: BTreeSet<LoadMapping>,
+    pub dma_observations: BTreeSet<ObservedDma>,
     pub relocations: BTreeSet<Relocation>,
     pub executable_writes: BTreeSet<ExecutableWrite>,
     pub rsp_microcodes: BTreeSet<Microcode>,
@@ -243,6 +255,7 @@ impl ProgramMap {
             indirect_sites: BTreeSet::new(),
             overlays: BTreeMap::new(),
             loads: BTreeSet::new(),
+            dma_observations: BTreeSet::new(),
             relocations: BTreeSet::new(),
             executable_writes: BTreeSet::new(),
             rsp_microcodes: BTreeSet::new(),
@@ -354,6 +367,13 @@ impl ProgramMap {
                 return Err("load has no image identity".into());
             }
         }
+        for d in &self.dma_observations {
+            rom_range(d.rom_offset, d.size)?;
+            refs(&d.evidence)?;
+            if u64::from(d.physical_destination.0) + u64::from(d.size) > 1u64 << 32 {
+                return Err("DMA destination overflow".into());
+            }
+        }
         for r in &self.relocations {
             address(&r.site)?;
             refs(&r.evidence)?;
@@ -428,5 +448,45 @@ pub mod pairs {
             }
         }
         Ok(out)
+    }
+}
+
+mod unique_map {
+    use serde::{
+        Deserialize, Deserializer, Serialize, Serializer,
+        de::{Error, MapAccess, Visitor},
+    };
+    use std::{collections::BTreeMap, marker::PhantomData};
+    pub fn serialize<K: Serialize + Ord, V: Serialize, S: Serializer>(
+        map: &BTreeMap<K, V>,
+        s: S,
+    ) -> Result<S::Ok, S::Error> {
+        map.serialize(s)
+    }
+    pub fn deserialize<
+        'de,
+        K: Deserialize<'de> + Ord,
+        V: Deserialize<'de>,
+        D: Deserializer<'de>,
+    >(
+        d: D,
+    ) -> Result<BTreeMap<K, V>, D::Error> {
+        struct Unique<K, V>(PhantomData<(K, V)>);
+        impl<'de, K: Deserialize<'de> + Ord, V: Deserialize<'de>> Visitor<'de> for Unique<K, V> {
+            type Value = BTreeMap<K, V>;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("map with unique identities")
+            }
+            fn visit_map<A: MapAccess<'de>>(self, mut a: A) -> Result<Self::Value, A::Error> {
+                let mut out = BTreeMap::new();
+                while let Some((k, v)) = a.next_entry()? {
+                    if out.insert(k, v).is_some() {
+                        return Err(A::Error::custom("duplicate evidence/overlay identity"));
+                    }
+                }
+                Ok(out)
+            }
+        }
+        d.deserialize_map(Unique(PhantomData))
     }
 }

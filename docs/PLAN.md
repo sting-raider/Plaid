@@ -1,5 +1,14 @@
 # Research and Implementation Plan
 
+## Current execution order
+
+The immediate implementation order is ProgramMap, discovery trace, pinned Mupen
+exporter and synthetic tests, ROM normalization, direct CFG, evidence merger,
+indirect analysis, DMA/overlay analysis and fail-closed solver. This refines the
+historical phase order below without restarting the architecture. STATUS and NEXT
+record the verified scope and remaining work; native lowering follows useful
+executable discovery.
+
 ## Thesis
 
 Existing emulators already know how to execute arbitrary N64 programs dynamically, while N64Recomp proves that known N64 programs can be transformed into native host code. Plaid will bridge the two by converting runtime discovery into a complete, persistent program representation suitable for static/native linking.

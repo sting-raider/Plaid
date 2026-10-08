@@ -2,8 +2,9 @@
 use crate::{
     EvidenceKind, GuestAddr,
     discovery::{CodeImage, direct_cfg},
+    loads::{LoadObservation, record_load},
     program::*,
-    rom::sha256,
+    rom::{CanonicalRom, sha256},
     trace::*,
 };
 use std::collections::{BTreeMap, BTreeSet};
@@ -13,6 +14,7 @@ trait Fact: Clone + Ord {
 }
 macro_rules! facts { ($($t:ty),*) => { $(impl Fact for $t { fn refs(&mut self) -> &mut EvidenceRefs { &mut self.evidence } })* }; }
 facts!(
+    ObservedDma,
     Region,
     BasicBlock,
     DirectEdge,
@@ -55,6 +57,7 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
     out.blocks = union(&left.blocks, &right.blocks);
     out.direct_edges = union(&left.direct_edges, &right.direct_edges);
     out.loads = union(&left.loads, &right.loads);
+    out.dma_observations = union(&left.dma_observations, &right.dma_observations);
     out.relocations = union(&left.relocations, &right.relocations);
     out.executable_writes = union(&left.executable_writes, &right.executable_writes);
     out.rsp_microcodes = union(&left.rsp_microcodes, &right.rsp_microcodes);
@@ -85,6 +88,7 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
         key.evidence.clear();
         key.candidates.clear();
         key.observed.clear();
+        key.closed_proof = None;
         let slot = indirect.entry(key).or_insert_with(|| {
             let mut s = s.clone();
             s.candidates.clear();
@@ -107,6 +111,39 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
         }
     }
     out.indirect_sites = indirect.into_values().collect();
+    // An unproved observation does not contradict a static proof. Distinct
+    // proof identities are retained as an explicit conflict for verification.
+    out.indirect_sites = out
+        .indirect_sites
+        .into_iter()
+        .map(|mut merged| {
+            let proofs: BTreeSet<_> = left
+                .indirect_sites
+                .iter()
+                .chain(&right.indirect_sites)
+                .filter(|s| {
+                    s.site == merged.site
+                        && s.link_register == merged.link_register
+                        && s.delay_slot == merged.delay_slot
+                })
+                .filter_map(|s| s.closed_proof.clone())
+                .collect();
+            merged.closed_proof = if proofs.len() == 1 {
+                proofs.first().cloned()
+            } else {
+                None
+            };
+            if proofs.len() > 1 {
+                out.unresolved.insert(Unresolved {
+                    kind: "conflicting_indirect_proofs".into(),
+                    site: Some(merged.site.clone()),
+                    detail: "distinct closure certificates require reconciliation".into(),
+                    evidence: proofs,
+                });
+            }
+            merged
+        })
+        .collect();
     // Multiple byte extents or direct destinations for an identical identity
     // remain visible. Different generations/images are intentionally distinct.
     for a in &out.blocks {
@@ -151,12 +188,34 @@ pub fn import_trace(
     known: &[CodeImage],
     budget: usize,
 ) -> Result<ProgramMap, String> {
+    import(trace, known, None, budget)
+}
+
+pub fn import_trace_with_rom(
+    trace: &DiscoveryTrace,
+    known: &[CodeImage],
+    rom: &CanonicalRom,
+    budget: usize,
+) -> Result<ProgramMap, String> {
+    if trace.header.rom != rom.identity {
+        return Err("trace does not match canonical ROM".into());
+    }
+    import(trace, known, Some(rom), budget)
+}
+
+fn import(
+    trace: &DiscoveryTrace,
+    known: &[CodeImage],
+    rom: Option<&CanonicalRom>,
+    budget: usize,
+) -> Result<ProgramMap, String> {
     trace.validate()?;
     let mut out = ProgramMap::new(trace.header.rom.clone());
     let session = sha256(trace.to_ndjson()?.as_bytes());
     let mut epoch = 0u64;
     let mut units = BTreeMap::new();
     let mut recent = Vec::<CodeImage>::new();
+    let mut transfers = Vec::<(u64, RomOffset, PhysicalAddr, u32)>::new();
     for event in &trace.events {
         let id = format!("trace:{session}:{}", event.seq);
         let evidence: EvidenceRefs = [id.clone()].into();
@@ -170,6 +229,19 @@ pub fn import_trace(
             },
         );
         match &event.data {
+            TraceEvent::RomDmaObserved {
+                rom_offset,
+                physical_destination,
+                size,
+            } => {
+                transfers.push((event.seq, *rom_offset, *physical_destination, *size));
+                out.dma_observations.insert(ObservedDma {
+                    rom_offset: *rom_offset,
+                    physical_destination: *physical_destination,
+                    size: *size,
+                    evidence,
+                });
+            }
             TraceEvent::CompileBegin {
                 unit,
                 start,
@@ -214,7 +286,58 @@ pub fn import_trace(
                 for w in words {
                     bytes.extend(w.to_be_bytes());
                 }
-                let base = if state.3 == 0 && matching.len() == 1 {
+                let transfer = state.1.and_then(|physical| {
+                    transfers
+                        .iter()
+                        .rev()
+                        .find(|(_, _, dest, size)| {
+                            dest.0 <= physical.0
+                                && u64::from(dest.0) + u64::from(*size)
+                                    >= u64::from(physical.0) + words.len() as u64 * 4
+                        })
+                        .map(|(seq, offset, dest, _)| {
+                            (*seq, RomOffset(offset.0 + u64::from(physical.0 - dest.0)))
+                        })
+                });
+                let dma_image = match (rom, transfer) {
+                    (Some(rom), Some((dma_seq, offset))) => {
+                        let mut mapped = CodeImage::from_rom(
+                            rom,
+                            offset,
+                            GuestRange {
+                                start: *start,
+                                size: words.len() as u32 * 4,
+                            },
+                        )?;
+                        out = record_load(
+                            &out,
+                            rom,
+                            &LoadObservation {
+                                rom_offset: offset,
+                                destination: GuestRange {
+                                    start: *start,
+                                    size: words.len() as u32 * 4,
+                                },
+                                physical_start: state.1,
+                                generation: state.3,
+                                snapshot: bytes.clone(),
+                                producer: trace.header.engine.clone(),
+                                revision: trace.header.revision.clone(),
+                                event: dma_seq,
+                            },
+                        )?;
+                        if mapped.words == *words {
+                            mapped.base.generation = state.3;
+                            Some(mapped)
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                };
+                let base = if let Some(mapped) = &dma_image {
+                    mapped.base.clone()
+                } else if state.3 == 0 && matching.len() == 1 {
                     matching[0].address(*start)
                 } else {
                     CodeAddress {
@@ -226,7 +349,9 @@ pub fn import_trace(
                 let image = CodeImage {
                     base: base.clone(),
                     words: words.clone(),
-                    rom_offset: if matching.len() == 1 {
+                    rom_offset: if let Some(mapped) = &dma_image {
+                        mapped.rom_offset
+                    } else if matching.len() == 1 {
                         matching[0]
                             .rom_offset
                             .map(|o| RomOffset(o.0 + u64::from(start.0 - matching[0].base.pc.0)))
@@ -290,7 +415,7 @@ pub fn import_trace(
                     cfg = add_provenance(cfg, &refs);
                     imported = merge_maps(&imported, &cfg)?;
                 }
-                if image.rom_offset.is_none() || matching.len() != 1 {
+                if image.rom_offset.is_none() || (matching.len() != 1 && dma_image.is_none()) {
                     imported.unresolved.insert(Unresolved {
                         kind: "unknown_executable_source".into(),
                         site: Some(image.base.clone()),

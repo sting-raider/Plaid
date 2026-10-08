@@ -186,3 +186,54 @@ fn trace_rejects_truncation_extra_unknown_and_reordered_records() {
             .is_err()
     );
 }
+
+#[test]
+fn duplicate_provenance_keys_and_structured_keys_are_rejected() {
+    let p = map();
+    let mut json = serde_json::to_value(&p).unwrap();
+    let e = serde_json::to_string(&evidence()).unwrap();
+    json["evidence"] = serde_json::json!({});
+    let text = serde_json::to_string(&json).unwrap().replace(
+        "\"evidence\":{}",
+        &format!("\"evidence\":{{\"e1\":{e},\"e1\":{e}}}"),
+    );
+    assert!(
+        ProgramMap::from_json(&text)
+            .unwrap_err()
+            .contains("duplicate")
+    );
+    let mut json = serde_json::to_value(&p).unwrap();
+    let duplicate = json["entries"][0].clone();
+    json["entries"].as_array_mut().unwrap().push(duplicate);
+    assert!(
+        ProgramMap::from_json(&json.to_string())
+            .unwrap_err()
+            .contains("duplicate")
+    );
+}
+
+#[test]
+fn raw_dma_range_must_fit_rom_and_physical_space() {
+    let mut t = trace();
+    t.events.push(EventRecord {
+        seq: 4,
+        data: TraceEvent::RomDmaObserved {
+            rom_offset: RomOffset(4092),
+            physical_destination: PhysicalAddr(0),
+            size: 8,
+        },
+    });
+    assert!(t.validate().is_err());
+    t.events[4].data = TraceEvent::RomDmaObserved {
+        rom_offset: RomOffset(64),
+        physical_destination: PhysicalAddr(0xffffffff),
+        size: 8,
+    };
+    assert!(t.validate().is_err());
+    t.events[4].data = TraceEvent::RomDmaObserved {
+        rom_offset: RomOffset(64),
+        physical_destination: PhysicalAddr(0),
+        size: 0,
+    };
+    assert!(t.validate().is_err());
+}

@@ -59,8 +59,11 @@ fn allowed_static_effect(word: u32, pc: crate::GuestAddr) -> bool {
     if !i.is_valid() || i.is_trap() || i.is_float() {
         return false;
     }
-    if i.is_branch() || i.is_jump() {
-        return true;
+    if i.is_branch() {
+        return matches!(word >> 26, 1 | 4..=7 | 20..=23);
+    }
+    if i.is_jump() {
+        return matches!(word >> 26, 2 | 3) || (word >> 26 == 0 && matches!(word & 63, 8 | 9));
     }
     match word >> 26 {
         9 | 12 | 13 | 14 | 15 | 25 => true,
@@ -169,6 +172,22 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         }
     }
     for edge in &map.direct_edges {
+        if !map.blocks.iter().any(|b| {
+            b.start.image == edge.site.image
+                && b.start.generation == edge.site.generation
+                && GuestRange {
+                    start: b.start.pc,
+                    size: b.size,
+                }
+                .contains(edge.site.pc)
+        }) {
+            add(
+                "unmapped_direct_site",
+                Some(edge.site.clone()),
+                "edge source is outside all decoded blocks",
+                edge.evidence.clone(),
+            );
+        }
         if !starts.contains(&edge.target) {
             add(
                 "unresolved_direct_target",
@@ -235,6 +254,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             image.words.len(),
         )?
         .map;
+        let provenance: EvidenceRefs = map
+            .regions
+            .iter()
+            .filter(|r| r.image == image.base.image && r.generation == image.base.generation)
+            .flat_map(|r| r.evidence.iter().cloned())
+            .collect();
         for edge in &expected.direct_edges {
             if !map.direct_edges.iter().any(|e| {
                 e.site == edge.site
@@ -246,7 +271,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                     "missing_decoded_edge",
                     Some(edge.site.clone()),
                     "instruction bytes require a direct edge absent from the map",
-                    edge.evidence.clone(),
+                    provenance.clone(),
                 );
             }
         }
@@ -260,7 +285,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                     "missing_decoded_indirect_site",
                     Some(site.site.clone()),
                     "instruction bytes require an indirect site absent from the map",
-                    site.evidence.clone(),
+                    provenance.clone(),
                 );
             }
         }
@@ -274,14 +299,51 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                     "missing_decoded_block",
                     Some(b.start.clone()),
                     "reachable instruction bytes require a block/extent absent from the map",
+                    provenance.clone(),
+                );
+            }
+        }
+        for b in &map.blocks {
+            if b.start.image == image.base.image
+                && b.start.generation == image.base.generation
+                && image.word(b.start.pc).is_some()
+                && !expected.blocks.iter().any(|e| {
+                    e.start == b.start
+                        && e.size == b.size
+                        && e.delay_slot_entry == b.delay_slot_entry
+                })
+            {
+                add(
+                    "unexpected_block_extent",
+                    Some(b.start.clone()),
+                    "declared block disagrees with re-derived block boundaries",
                     b.evidence.clone(),
+                );
+            }
+        }
+        for edge in &map.direct_edges {
+            if edge.site.image == image.base.image
+                && edge.site.generation == image.base.generation
+                && image.word(edge.site.pc).is_some()
+                && !expected.direct_edges.iter().any(|e| {
+                    e.site == edge.site
+                        && e.target == edge.target
+                        && e.kind == edge.kind
+                        && e.delay_slot == edge.delay_slot
+                })
+            {
+                add(
+                    "unexpected_decoded_edge",
+                    Some(edge.site.clone()),
+                    "declared direct edge contradicts instruction-derived control flow",
+                    edge.evidence.clone(),
                 );
             }
         }
         for u in &expected.unresolved {
             if !(u.kind == "unmapped_target" && u.site.as_ref().is_some_and(|a| starts.contains(a)))
             {
-                add(&u.kind, u.site.clone(), &u.detail, u.evidence.clone());
+                add(&u.kind, u.site.clone(), &u.detail, provenance.clone());
             }
         }
     }
@@ -324,7 +386,9 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         );
     }
     if scope == Scope::DeclaredStaticImages
-        && (!map.loads.is_empty() || !map.rsp_microcodes.is_empty())
+        && (!map.loads.is_empty()
+            || !map.dma_observations.is_empty()
+            || !map.rsp_microcodes.is_empty())
     {
         add(
             "dynamic_effect_outside_scope",

@@ -1,0 +1,4 @@
+* text=auto
+*.patch text eol=lf whitespace=-blank-at-eol
+# Preserve the pinned upstream license verbatim, including its whitespace.
+instruments/mupen/COPYING -text -whitespace

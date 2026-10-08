@@ -2,7 +2,7 @@
 //! Compilation units are not automatically guest basic blocks or functions.
 use crate::{
     GuestAddr,
-    program::{GuestRange, PhysicalAddr, RomIdentity},
+    program::{GuestRange, PhysicalAddr, RomIdentity, RomOffset},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -24,6 +24,11 @@ pub struct TraceHeader {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TraceEvent {
+    RomDmaObserved {
+        rom_offset: RomOffset,
+        physical_destination: PhysicalAddr,
+        size: u32,
+    },
     CompileBegin {
         unit: u64,
         start: GuestAddr,
@@ -100,6 +105,21 @@ impl DiscoveryTrace {
                 return Err("non-contiguous trace sequence".into());
             }
             match &event.data {
+                TraceEvent::RomDmaObserved {
+                    rom_offset,
+                    physical_destination,
+                    size,
+                } => {
+                    if *size == 0
+                        || rom_offset
+                            .0
+                            .checked_add(u64::from(*size))
+                            .is_none_or(|end| end > self.header.rom.size)
+                        || u64::from(physical_destination.0) + u64::from(*size) > 1u64 << 32
+                    {
+                        return Err("invalid observed ROM DMA range".into());
+                    }
+                }
                 TraceEvent::CompileBegin { unit, start, .. } => {
                     aligned(*start)?;
                     if units.insert(*unit, (*start, None, Vec::new())).is_some() {

@@ -194,6 +194,18 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
 /// Recompute the certificate using current CFG and bytes; producer labels alone
 /// are insufficient. A later merge/bypass or altered prefix invalidates it.
 pub fn verify_constant(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> bool {
+    let Some(word) = image.word(site.site.pc) else {
+        return false;
+    };
+    let i = decode(word, site.site.pc);
+    let link = if i.opcode_name() == "jalr" && ((word >> 11) & 31) != 0 {
+        Some(((word >> 11) & 31) as u8)
+    } else {
+        None
+    };
+    if site.link_register != link || site.delay_slot != DelaySlot::Always {
+        return false;
+    }
     let Some(id) = &site.closed_proof else {
         return false;
     };

@@ -132,3 +132,16 @@ fn candidate_reentry_into_its_own_prefix_prevents_closure() {
     assert_eq!(s.candidates.len(), 1);
     assert!(s.closed_proof.is_none());
 }
+
+#[test]
+fn jalr_target_precedes_link_write_and_link_metadata_is_rechecked() {
+    let i = image(vec![0x3c088000, 0x35080000, 0x01004009, 0]);
+    let m = analyze_indirect(&map(&i), &i).unwrap();
+    let s = m.indirect_sites.first().unwrap();
+    assert_eq!(s.link_register, Some(8));
+    assert_eq!(s.candidates.keys().next().unwrap().pc.0, 0x80000000);
+    assert!(verify_constant(&m, &i, s));
+    let mut bad = s.clone();
+    bad.link_register = None;
+    assert!(!verify_constant(&m, &i, &bad));
+}

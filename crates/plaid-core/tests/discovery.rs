@@ -178,3 +178,27 @@ fn jalr_zero_link_register_has_no_return_continuation() {
             .is_none()
     );
 }
+
+#[test]
+fn likely_conditional_link_has_call_return_and_annulled_fallthrough() {
+    let i = image(0x80000000, vec![0x0513ffff, 0, j(0x80000008), 0]); // BGEZALL t0,self
+    let d = discover(&i);
+    assert!(
+        d.map
+            .direct_edges
+            .iter()
+            .any(|e| e.kind == EdgeKind::Call && e.delay_slot == DelaySlot::TakenOnly)
+    );
+    assert!(
+        d.map
+            .direct_edges
+            .iter()
+            .any(|e| e.kind == EdgeKind::Fallthrough && e.delay_slot == DelaySlot::None)
+    );
+    assert!(
+        d.map
+            .direct_edges
+            .iter()
+            .any(|e| e.kind == EdgeKind::ReturnContinuation && e.delay_slot == DelaySlot::None)
+    );
+}

@@ -1,8 +1,8 @@
 use plaid_core::{
     GuestAddr,
-    discovery::{CodeImage, direct_cfg},
-    indirect::analyze_indirect,
-    merge::{import_trace, merge_maps},
+    discovery::CodeImage,
+    merge::{import_trace_with_rom, merge_maps},
+    pipeline::discover_image,
     program::{GuestRange, ProgramMap, RomOffset},
     rom::CanonicalRom,
     solver::{Scope, solve},
@@ -13,6 +13,36 @@ use std::{env, fs, process::ExitCode};
 fn run() -> Result<(), String> {
     let args: Vec<_> = env::args().skip(1).collect();
     match args.as_slice() {
+        [command, rom_path, map_path] if command == "solve" => {
+            let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
+            let map =
+                ProgramMap::from_json(&fs::read_to_string(map_path).map_err(|e| e.to_string())?)?;
+            if map.rom != rom.identity {
+                return Err("map does not match canonical ROM".into());
+            }
+            let mut images: Vec<CodeImage> = Vec::new();
+            for region in &map.regions {
+                if let Some(offset) = region.rom_offset {
+                    let mut image = CodeImage::from_rom(&rom, offset, region.range.clone())?;
+                    // Partial regions may reference a larger image's identity.
+                    // Only complete hash-matching source witnesses enter here.
+                    if image.base.image == region.image {
+                        image.base.generation = region.generation;
+                        if !images
+                            .iter()
+                            .any(|old| old.base == image.base && old.words == image.words)
+                        {
+                            images.push(image);
+                        }
+                    }
+                }
+            }
+            let report = solve(&map, &images, Scope::WholeRom)?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
+            );
+        }
         [command, path] if command == "solve" => {
             let map = ProgramMap::from_json(&fs::read_to_string(path).map_err(|e| e.to_string())?)?;
             let report = solve(&map, &[], Scope::WholeRom)?;
@@ -29,7 +59,7 @@ fn run() -> Result<(), String> {
             if trace.header.rom != rom.identity {
                 return Err("trace does not match normalized ROM identity".into());
             }
-            let map = import_trace(&trace, &[], 1_000_000)?;
+            let map = import_trace_with_rom(&trace, &[], &rom, 1_000_000)?;
             fs::write(output, map.to_json()?).map_err(|e| e.to_string())?;
             println!(
                 "imported {} blocks; {} unresolved facts",
@@ -52,14 +82,13 @@ fn run() -> Result<(), String> {
                     size: number32(size)?,
                 },
             )?;
-            let d = direct_cfg(
+            let d = discover_image(
                 rom.identity,
                 &image,
                 &[GuestAddr(number32(entry)?)],
                 1_000_000,
             )?;
-            let map = analyze_indirect(&d.map, &image)?;
-            fs::write(output, map.to_json()?).map_err(|e| e.to_string())?;
+            fs::write(output, d.map.to_json()?).map_err(|e| e.to_string())?;
             println!(
                 "discovered {} blocks, {} indirect sites, {} unresolved items",
                 d.map.blocks.len(),
@@ -101,7 +130,7 @@ fn run() -> Result<(), String> {
         }
         _ => {
             return Err(
-                "usage: plaid rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> | import-trace <rom> <trace.ndjson> <output.json> | merge <left.json> <right.json> <output.json>"
+                "usage: plaid rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> | import-trace <rom> <trace.ndjson> <output.json> | merge <left.json> <right.json> <output.json>"
                     .into(),
             );
         }
