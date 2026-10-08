@@ -258,3 +258,5 @@ Before introducing code copied or linked from an upstream project:
 `spikes/033-ares-sb-sh-stores-gpt56/` retains the independent original 100-case fixture and construction model. Generated ares builds stay ignored and separately licensed; no ROM data enters Git.
 
 `spikes/026-ares-rsp-self-stores/` retains original research code, executes actual unmodified ares decoding, and inspects pinned Gopher/systemtest contracts without importing their implementation or assets.
+
+`spikes/037-ares-boot-pi-queue-history/` is original streaming sensor/replay code composed from the validated original queue sidecar and optional request/dispatch callbacks. Only generated ignored reference shadows include upstream implementations with preserved licenses. No new production dependency, firmware/ROM asset or upstream source is vendored.

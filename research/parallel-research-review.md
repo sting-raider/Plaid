@@ -167,3 +167,5 @@ An old burst-only source guard incorrectly rejected the shared builder's newer
 scalar opt-in code. It now checks the specific spike-016 build call and the false
 scalar default through Python AST, retaining the intended boundary without
 forbidding other callers. This batch still executes no reference CPU.
+
+Primary history v2 composition now validates all 8,823,189 bounded boot records, preserving complete source projections and old Rust report hash. Three actual request/dispatch status links and four accepted requests are separate from prior buffered byte-origin facts. See ADR-0069 and the new bounded boot queue note; production typed v2 consumption remains open.

@@ -102,3 +102,5 @@ Carry both resident generation and mutation revision into exact writeback scopes
 Compose RDRAM SB/SH successful byte effects with the general mutation sensor and later cache writeback; nominal width remains sink-specific and failed attempts supply no effect.
 
 Distinguish ordinary RSP DMEM stores from CPU/SP-DMA IMEM sinks. Preserve observed lineage if those DMEM bytes are copied into executable IMEM later (ADR-0068).
+
+Bounded boot request/queue/dispatch composition now passes the full prefix under ADR-0069. Implement original strict Rust v2 inspection and complete-source report rechecking, preserving exact nested v1/v0/v5 validation and unknown/unbound/canceled boundaries. Keep finite scheduling facts separate from byte-transfer timing, lifetimes and whole-ROM closure.
