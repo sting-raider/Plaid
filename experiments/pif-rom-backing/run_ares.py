@@ -98,8 +98,13 @@ def run_one(exe: Path, mode: str, firmware: Path | None):
     cmd = [str(exe), mode]
     if firmware is not None:
         cmd.append(str(firmware))
-    raw = subprocess.check_output(cmd, text=True, timeout=30)
-    return json.loads(raw)
+    for attempt in range(2):
+        raw = subprocess.check_output(cmd, text=True, timeout=30)
+        json_lines = [line for line in raw.splitlines() if line.startswith("{")]
+        if json_lines:
+            return json.loads(json_lines[-1])
+        assert attempt == 0, (mode, "successful process produced no JSON twice")
+    raise AssertionError((mode, "unreachable"))
 
 
 def witness(event):
