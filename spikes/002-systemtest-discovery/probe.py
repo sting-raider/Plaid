@@ -11,6 +11,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "target/systemtest-spike"
+WALL_BUDGET_SECONDS = 30
 
 
 def worker(mode):
@@ -60,7 +61,7 @@ def worker(mode):
         if code: raise RuntimeError(f"Core API {code}; {logs[-4:]}")
 
     def bound():
-        end = time.monotonic() + 5
+        end = time.monotonic() + WALL_BUDGET_SECONDS
         while not stopped.wait(0.1):
             if trace.exists() and trace.stat().st_size > 16*1024*1024: stop("trace_byte_budget")
             elif time.monotonic() >= end: stop("wall_time_budget")
@@ -84,7 +85,7 @@ def worker(mode):
         timer.join(timeout=1)
         pc = c.cast(core.DebugGetCPUDataPtr(1),c.POINTER(c.c_uint32)).contents.value
         (directory / "result.json").write_text(json.dumps({"stop_reason":reason,"stop_errors":errors,"pc":pc,
-            "guest_completion_claimed":reason == ["guest_done_line"],"plugins":"bundled dummy","wall_budget_seconds":5},indent=2)+"\n")
+            "guest_completion_claimed":reason == ["guest_done_line"],"plugins":"bundled dummy","wall_budget_seconds":WALL_BUDGET_SECONDS},indent=2)+"\n")
         check(core.CoreDoCommand(2,0,None))
         check(core.CoreShutdown())
     finally:
@@ -103,7 +104,7 @@ def main():
         if os.name == "nt":
             script = subprocess.check_output(["wsl","-d","Ubuntu","--exec","wslpath","-a",Path(__file__).resolve().as_posix()],text=True).strip()
             command = ["wsl","-d","Ubuntu","--exec","python3",script,"--worker",mode]
-        process = subprocess.run(command,capture_output=True,text=True,timeout=20)
+        process = subprocess.run(command,capture_output=True,text=True,timeout=WALL_BUDGET_SECONDS+15)
         directory = OUTPUT / mode
         (directory / "process-output.txt").write_text(process.stdout + process.stderr)
         live = (directory / "live.log").read_text()
