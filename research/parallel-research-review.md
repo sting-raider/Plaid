@@ -150,3 +150,5 @@ Retained/reproduced `rdram-translated-backing-gpt56sol` (`c88977d`): six actual 
 Retained/reproduced `dcache-eviction-lineage-gpt56sol` (`2f70161`): exact model and actual evidence hashes. Adopt outgoing full-line transaction semantics under ADR-0065.
 
 Retained/reproduced `cpu-rsp-imem-subword-gpt56sol` (`6f0791f`): model, source comparison and actual 32-case result hashes match. Adopt concrete device-sink span/payload under ADR-0066.
+
+Retained/reproduced `pi-read-lifecycle-gpt56sol` (`1f7eac1`): six actual read/queue phases and exact trace/result hashes; no whole-ROM or v1 completion promotion.

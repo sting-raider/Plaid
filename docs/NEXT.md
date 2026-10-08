@@ -94,3 +94,5 @@ Compose the reproduced translated scalar raw-read and delivered-transform witnes
 Retain full per-byte outgoing D-cache lineage before actual writeback and slot replacement. The reproduced clean-lane overwrite counterexample rules out dirty-mask-only provenance (ADR-0065).
 
 General mutation sensing must normalize at the actual storage sink: CPU SB/SH reaching SP IMEM replaces a full Word and can carry upper source-register bytes (ADR-0066).
+
+PI read-side save/load/rejection now has independent actual-reference reproduction. Compose request/queue outcomes with the bounded boot stream while retaining RDRAM-to-PBUS data effects separately from scheduled status.
