@@ -1,6 +1,6 @@
 # Spike 034: ares D-cache writeback lineage
 
-Result status while running: **PARTIAL / experimental**.
+Result: **VALIDATED for this bounded controlled scope**.
 
 This spike tests one bounded question at exact pinned ares revision
 `9408cb43d4948fc3ea6e152a307a34348df3fe04`: can a cached VR4300 word-store
@@ -36,7 +36,9 @@ exact nested RDRAM burst write with matching address/payload, and
 `writeback_end`. Invalidation or replacement retires resident lineage.
 
 `model.py` independently stresses that contract with fixed counterexamples and
-seeded histories, including same-payload wrong-generation writes.
+seeded histories. It also versions resident mutations so a same-value store after
+a pending writeback snapshot invalidates that stale snapshot instead of being
+mistaken for unchanged provenance.
 
 ## Reproduce
 
@@ -50,6 +52,11 @@ python3 spikes/034-ares-dcache-writeback-lineage/run.py
 The runner writes ignored build/results under
 `target/ares-dcache-writeback-lineage-spike/` and prints exact source, trace, and
 result SHA-256 hashes. No ROM or firmware asset is committed.
+
+The final exact-pin CI run was GitHub Actions run `37851339805`. Its trace SHA-256
+is `e0cf9f8332b72377c20f665d89f640b80406ea358de7ecbf68de4b6936329192`, and
+the strengthened model report SHA-256 is
+`02bbfbfd58817fcdd10d21523018be2b69dba1cf8b2e2b9c9c6afcc4dd98a9eb`.
 
 ## Scope limits
 
