@@ -108,5 +108,6 @@ primitive fixtures. The bounded boot sidecar preserves v5/checkpoints across
 5,051,089 records and 32 RAM-backed fills. Strict Rust inspection/rechecking now
 passes complete sources. Buffered PI component cases join actual ROM halves and
 consumed lanes to 95 successful byte origins; open-bus and failed destinations
-remain unknown. Compose these writers with fetch/fill contexts next; general
-transfer/mutation/lifetime obligations still leave W012 TODO.
+remain unknown. A composed 481-record fixture now preserves writer/fetch/fill
+origins through reloads, CPU patches, invalidation and partial words. Versioned
+boot transfer capture is next; general mutation/lifetime obligations leave W012 TODO.
