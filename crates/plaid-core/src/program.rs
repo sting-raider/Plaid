@@ -856,7 +856,7 @@ pub mod pairs {
     }
 }
 
-mod unique_map {
+pub(crate) mod unique_map {
     use serde::{
         Deserialize, Deserializer, Serialize, Serializer,
         de::{Error, MapAccess, Visitor},

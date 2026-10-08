@@ -688,3 +688,24 @@ lifetimes. Truncated timeout output fails; complete retained inputs/streams can
 be rechecked without rerunning the CPU. The sidecar is reference research data,
 not a production certificate. Implement original strict Rust inspection and
 source rechecking under a separate decision before any identity promotion.
+
+## ADR-0050: Inspect access history through both complete sources without image promotion
+
+Status: Accepted, 2026-10-08.
+
+Add original Rust typed streaming validation and an independent inspection report.
+First validate the complete v5 source, ROM and supplied firmware/profile with the
+existing importer; then compare every sidecar access/prologue against its paired
+fetch and rehash the replay to reject source changes between passes. Require
+bounded supported policy, unique contiguous ordinals, matching contexts/words,
+typed transaction widths/addresses and complete footers. A scalar word witness
+requires one eligible read; immediate cached backing additionally requires one
+fill, an adjacent actual RAM burst and agreement with every paired resident word.
+Ambiguous and unsupported paths stay unknown. Reports bind both complete hashes
+and all finite counts; rechecking reconstructs the entire report, including
+otherwise-unused source payloads. Five adversarial Rust tests and the complete
+5,051,089-record boot corpus agree with the independent Python checker; legacy
+tests stay OPEN and no ProgramMap field, image, generation or lifetime changes.
+Reference code remains separately licensed/compiled; only original data handling
+enters Plaid core. This is finite access inspection, not a mutation census,
+hardware certificate, whole-ROM proof or native execution path.

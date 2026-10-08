@@ -117,6 +117,9 @@ controlled ledger; `spikes/027-ares-boot-history/` streams the bounded boot side
 while preserving the complete v5 bytes and reported reference checkpoint.
 These original observers supply finite callback chronology, not copied runtime
 implementations, complete mutation coverage or production lifetimes.
+Original Rust access-history inspection validates both complete raw sources and
+supplied inputs, records finite counts/hashes and reconstructs reports for
+rechecking. It promotes no reference code, ProgramMap images or lifetime rules.
 
 ## gopher64/gopher64
 
