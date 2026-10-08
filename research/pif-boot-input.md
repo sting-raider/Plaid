@@ -24,6 +24,20 @@ against the complete raw source. V3 stays unsupported. Synthetic tests use
 original zero-filled bytes; no firmware is shipped with tests. Supplied-input
 identity does not authenticate firmware.
 
+After spike 009, run `python scripts/test_fetch_corpus.py --boot`, or add
+`--budget 10000000` for the longer prefix. Both maps recheck actual firmware and
+complete raw sources, self-merge byte-identically and remain OPEN with no
+regions/entries/copies. The smaller map has 1,155 unknown-source facts in 589,862
+bytes, SHA-256 `f88a70b8c444b44326e5e9fd79a2b64b8aa983bbc3669495f7a9c0458ea7fcad`.
+The longer map has 54,279 facts (65 known-ROM-source, 54,214 unknown-source) in
+27,649,768 bytes, SHA-256
+`78199fd10ebadd1affb9d96060c1e2da960cd56bfc415f8ef7c29f924f26161c`.
+All 9,999,998 fetches are accounted for; 1,852 have actual ROM sources.
+V0/v1/v2 maps retain their exact hashes with the additive boot metadata omitted.
+One Windows/Rust debug import per prefix under concurrent verification took
+11.1/103.4 seconds and peaked at 11,669,504/76,673,024 bytes process working set.
+These are cost records for one host, not optimization or scalability claims.
+
 The harness declares NTSC/CIC-NUS-6102, deterministic entropy and 8 MiB RAM. These
 are experiment inputs, not automatic ROM profile discovery or hardware-wide boot
 equivalence. CPU::power supplies PC FFFFFFFFBFC00000. Existing prologue/access/

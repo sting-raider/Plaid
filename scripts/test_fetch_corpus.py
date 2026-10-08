@@ -36,30 +36,58 @@ def main():
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--physical",action="store_true",help="Recheck the v1 physical observer capture")
     modes.add_argument("--source",action="store_true",help="Recheck the v2 ROM-source observer capture")
+    modes.add_argument("--boot",action="store_true",help="Recheck the v4 explicit boot-profile capture")
+    parser.add_argument("--budget",type=int,choices=(1000000,10000000),default=1000000,help="Boot capture prefix")
     args = parser.parse_args()
     physical, source = args.physical, args.source
     output = ROOT / "target/ares-rom-fetch-spike" if source else ROOT / "target/ares-physical-fetch-spike" if physical else OUTPUT
+    if args.boot: output = ROOT / "target/ares-boot-profile-spike" / str(args.budget)
+    elif args.budget != 1000000: parser.error("--budget requires --boot")
+    sensor = json.loads((output / "results.json").read_text()) if args.boot else None
+    expected_count = sensor["fetches"] if args.boot else 4999998
     raw = output / "traced.ndjson"
     map_path = output / "map.json"
     cargo = os.environ.get("CARGO") or shutil.which("cargo") or str(Path.home() / ".cargo/bin/cargo.exe")
     subprocess.run([cargo,"build","-p","plaid"],cwd=ROOT,check=True)
     exe = ROOT / ("target/debug/plaid.exe" if os.name == "nt" else "target/debug/plaid")
     started = time.perf_counter()
-    process = subprocess.Popen([str(exe),"import-fetch",str(ROM),str(raw),str(map_path)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    inputs = [str(ROM),str(raw)]
+    if args.boot: inputs.insert(1,str(ROOT / ".refs/ares/ares/System/Nintendo 64/pif.ntsc.rom"))
+    process = subprocess.Popen([str(exe),"import-boot-fetch" if args.boot else "import-fetch",*inputs,str(map_path)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     stdout, stderr = process.communicate(timeout=180)
     elapsed = time.perf_counter() - started
     assert process.returncode == 0, stderr
     peak = peak_working_set(process)
     print(stdout.strip())
-    subprocess.run([str(exe),"verify-fetch",str(ROM),str(raw),str(map_path)],check=True,timeout=180)
+    subprocess.run([str(exe),"verify-boot-fetch" if args.boot else "verify-fetch",*inputs,str(map_path)],check=True,timeout=180)
     data = json.loads(map_path.read_text())
     assert len(data["fetch_captures"]) == 1
-    assert sum(f["occurrences"] for f in data["fetch_observations"]) == 4999998
+    assert sum(f["occurrences"] for f in data["fetch_observations"]) == expected_count
     capture = next(iter(data["fetch_captures"].values()))
-    if source:
+    if args.boot:
+        assert sensor["budget"] == args.budget
+        assert expected_count == (1000000 if args.budget == 1000000 else 9999998)
+        assert capture["trace_sha256"] == sensor["trace_sha256"]
+        assert capture["initial_state"] == "cpu_power_pif_entry"
+        assert capture["boot_inputs"] == {"firmware_sha256":sensor["firmware_sha256"],
+            "firmware_size":1984,"region":"ntsc","cic":"CIC-NUS-6102","rdram_size":8388608,
+            "deterministic_entropy":True,"pif_processor":"reference_hle","pif_checksum_enforced":True}
+        known = [f for f in data["fetch_observations"] if f["source"]["kind"] == "cartridge_rom"]
+        assert sum(f["occurrences"] for f in known) == sensor["rom_source_fetches"]
+        assert all(f["source"]["kind"] in ("cartridge_rom","unknown") for f in data["fetch_observations"])
+        if args.budget == 1000000:
+            assert capture["trace_sha256"] == "38a0781c763a110ca419af65bf9f1a19ed96cd9282e01b2545486d9d865bd937"
+            assert len(data["fetch_observations"]) == 1155 and not known
+            assert hashlib.sha256(map_path.read_bytes()).hexdigest() == "f88a70b8c444b44326e5e9fd79a2b64b8aa983bbc3669495f7a9c0458ea7fcad"
+        else:
+            assert capture["trace_sha256"] == "d46c9c99245c65cb2b671b182da0a247006b077026000ac2b29d5df786644027"
+            assert len(data["fetch_observations"]) == 54279 and len(known) == 65
+            assert hashlib.sha256(map_path.read_bytes()).hexdigest() == "78199fd10ebadd1affb9d96060c1e2da960cd56bfc415f8ef7c29f924f26161c"
+    elif source:
         sensor = json.loads((output / "results.json").read_text())
         assert capture["trace_sha256"] == sensor["trace_sha256"]
         assert capture["trace_sha256"] == "40d8d029cd66fb5ecfcdc3d77bdbc570dd13ce62684d47e7704cbe375008d204"
+        assert hashlib.sha256(map_path.read_bytes()).hexdigest() == "a3a2e4f0249974f6119a3a496ab518744259c38dbce32a182adee3bae3248786"
         assert capture["source_policy"] == "delegated_rom_halves_before_prologue"
         assert capture["mapped_cartridge_size"] == 2742280
         assert len(data["fetch_observations"]) == 53037
@@ -92,7 +120,7 @@ def main():
     (output / "solve.json").write_text(json.dumps(report,indent=2)+"\n")
     metrics = {"profile":"Rust debug, single host/run; no throughput/scalability claim",
         "host_os":os.name,"raw_bytes":raw.stat().st_size,"map_bytes":map_path.stat().st_size,
-        "raw_fetches":4999998,"summary_facts":len(data["fetch_observations"]),"import_seconds":elapsed,
+        "raw_fetches":expected_count,"summary_facts":len(data["fetch_observations"]),"import_seconds":elapsed,
         "peak_working_set_bytes":peak}
     (output / "import-metrics.json").write_text(json.dumps(metrics,indent=2)+"\n")
     print(json.dumps(metrics,indent=2))

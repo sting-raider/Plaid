@@ -167,6 +167,10 @@ Implemented:
   are checked. Full-source rechecking protects facts, metadata and provenance;
   missing/changed/unsupported inputs fail. Legacy maps omit the new field.
   Inputs create no regions, copies or lifetimes; the solver stays OPEN.
+  Both complete boot corpora verify supplied firmware and raw provenance and
+  self-merge byte-identically: one million fetches yield 1,155 facts in 589,862
+  bytes; 9,999,998 fetches yield 54,279 facts in 27,649,768 bytes, including 65
+  known-ROM-source facts. V0/v1/v2 map hashes remain unchanged.
 
 Verification: 74 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

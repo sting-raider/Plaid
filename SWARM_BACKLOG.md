@@ -61,3 +61,5 @@ W012 stays TODO.
 Declared boot-input import: v4 now requires supplied firmware bytes, supported
 profile, checked power entry and complete-source verification. No code images or
 lifetimes are created; the solver stays OPEN and W012 remains TODO.
+Both boot corpora now recheck complete sources/firmware and self-merge exactly,
+with all legacy map hashes unchanged. Cache/copy/mutation lineage remains open.
