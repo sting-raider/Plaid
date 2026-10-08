@@ -14,6 +14,7 @@ class Line:
     payload: list[int] = field(default_factory=lambda: [0] * LINE_BYTES)
     origins: list[str] = field(default_factory=lambda: ["unknown"] * LINE_BYTES)
     dirty: set[int] = field(default_factory=set)
+    revision: int = 0
 
 @dataclass
 class Pending:
@@ -22,6 +23,7 @@ class Pending:
     address: int
     payload: tuple[int, ...]
     origins: tuple[str, ...]
+    revision: int
 
 class Verifier:
     def __init__(self):
@@ -46,6 +48,7 @@ class Verifier:
         line.payload[:] = payload
         line.origins[:] = [f"fill:{event}:{address+i:#x}" for i in range(LINE_BYTES)]
         line.dirty.clear()
+        line.revision = 0
 
     def store(self, slot: int, paddr: int, data: bytes, event: str):
         line = self.line(slot)
@@ -57,6 +60,7 @@ class Verifier:
             line.payload[off+i] = b
             line.origins[off+i] = f"store:{event}:{i}"
             line.dirty.add(off+i)
+        line.revision += 1
 
     def wb_begin(self, slot: int, address: int):
         line = self.line(slot)
@@ -67,7 +71,7 @@ class Verifier:
         if expected != address:
             return
         self.pending = Pending(slot, line.generation, address,
-                               tuple(line.payload), tuple(line.origins))
+                               tuple(line.payload), tuple(line.origins), line.revision)
 
     def backing_write(self, address: int, payload: bytes):
         if (self.pending is None or self.pending.address != address or
@@ -76,7 +80,8 @@ class Verifier:
             return False
         p = self.pending
         line = self.line(p.slot)
-        if not line.resident or line.generation != p.generation:
+        if (not line.resident or line.generation != p.generation or
+            line.revision != p.revision):
             self.pending = None
             self.unknown_writes += 1
             return False
@@ -137,6 +142,14 @@ def fixed_cases():
     v.wb_begin(SLOT,A); forged = v.backing_write(A,mutated); v.wb_end(SLOT)
     assert not forged
     report["same_payload_wrong_generation"] = {"certified":forged,"unknown":v.unknown_writes}
+
+    # Even a same-value store after writeback_begin changes resident provenance.
+    # Payload equality alone must not allow the stale pending snapshot to certify.
+    v = Verifier(); v.fill(SLOT,A,original,"r-fill"); v.store(SLOT,A,mutated[:4],"r-store1")
+    v.wb_begin(SLOT,A); v.store(SLOT,A,mutated[:4],"r-store2-same-value")
+    forged = v.backing_write(A,mutated); v.wb_end(SLOT)
+    assert not forged
+    report["same_payload_wrong_revision"] = {"certified":forged,"unknown":v.unknown_writes}
     return report
 
 
