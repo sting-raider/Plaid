@@ -52,8 +52,9 @@ It preserves caller-save registers and reports source PC, destination and value.
 Raw stores survive import; overlap with a previously compiled physical region
 adds Unknown executable-write evidence. Dynamic addresses, other store sizes,
 TLB/uncached paths and non-x64 hosts are outside this capability. The stress case
-identifies the older still-running source unit through explicit unit tags, while
-returns to older target entries remain uncorrelated; raw evidence is retained.
+identifies the older still-running source unit through explicit unit tags. Its
+return also gains a verified dirty-entry snapshot, adding one event (49 total).
+Raw evidence is retained; other unsensed restore paths remain unresolved.
 The importer verifies ROM sources for executed DMA-backed units and keeps raw
 indirect evidence. The boot source remains unverified and the solver stays OPEN.
 Linux requires GCC/make/NASM and SDL2/zlib/libpng headers/runtime libraries;
@@ -71,6 +72,11 @@ its exact decoded identity even if invalidation has advanced the epoch. The raw
 map records a session-qualified CompileBegin evidence reference. Targets still
 require a unique snapshot in the current epoch; legacy events lacking unit
 context retain conservative source joins. No execution sample closes a site.
+Successful dirty lookups additionally emit `entry_bytes_verified` after the
+reference compares saved unit bytes against memory. Entry/mask and complete words
+must match the earlier completed unit. ProgramMap preserves this separate raw
+snapshot fact; it may explain a pending older target before the next invalidation.
+It cannot explain a future observation or establish execution/copy/closure.
 Page-spanning predecessors record an indirect source tag and source unit. The separate delay-slot
 unit emits only when its predecessor tag matches, using the saved branch target;
 direct predecessors clear the tag. Eight scenarios agree across traced/untraced
@@ -84,7 +90,7 @@ instruction words, not host code or host identities. Global invalidation is null
 The cartridge hook records actual copied ROM bytes, clipped at ROM and RDRAM
 ends; zero-fill and zero-length operations do not become ROM-copy evidence.
 
-Limitations: restored entries, ProgramMap pagespan predecessor state, non-x64 execution
+Limitations: broader restored-entry/cache-hit coverage, ProgramMap pagespan predecessor state, non-x64 execution
 sensors, non-PI copies and RSP sensors remain unimplemented.
 Runtime links may also be created at compile time. Cache expiry is not emitted.
 Invalidation is not proof of a memory write. Trace v0 cannot prove complete

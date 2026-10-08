@@ -7,6 +7,8 @@ int main(void) {
     unit = plaid_trace_begin(0x80000000u, 0);
     plaid_trace_entry(unit, 0x80000000u, 0);
     plaid_trace_compiled(unit, 0x80000000u, words, 4);
+    /* Execution-only snapshot sensing stays disabled in the portable driver. */
+    plaid_trace_verified_entry(unit, 0x80000000u, 0, words, 4);
     plaid_trace_lookup(0x80000020u, 0);
     plaid_trace_link(0x80000020u);
     plaid_trace_invalidate(0x80000000u, 16);

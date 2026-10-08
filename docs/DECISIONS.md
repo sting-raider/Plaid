@@ -246,3 +246,19 @@ must be unique in the current epoch; a source tag does not establish a restored
 target's active bytes or lifecycle. Differential CPU and full-core fixtures pass,
 including generation 8 -> 9 in the store-stress call. Older return targets stay
 unresolved and all whole-ROM reports stay OPEN.
+
+## ADR-0022: A dirty-entry byte check can identify a pending older target
+
+Status: Accepted, 2026-10-08.
+
+Carry compilation-unit IDs on reference linked-list metadata and preserve them
+when clean entries are copied. After a successful `get_dirty` byte comparison,
+emit the installed PC/mask and complete saved words. Trace validation requires
+exact equality with that completed unit and an installed entry/mask. ProgramMap
+retains a typed entry-verification observation with verification epoch separate
+from compilation generation. Use this snapshot only for a pending target in the
+same epoch, preserving its verification provenance. Intervening invalidation,
+missing sensor data or competing target identities prevent the join. A lookup
+does not establish execution, a new copy, complete cache/lifecycle coverage or
+an exhaustive indirect target set. The original store-stress return now resolves
+its observed generation-9 -> 8 identity; its whole-ROM report still stays OPEN.

@@ -32,6 +32,7 @@ def main():
         assert records[11]["event_count"] == 10
         assert records[10]["data"]["range"] is None
         assert b"host" not in first and b"pointer" not in first
+        assert b"entry_bytes_verified" not in first
         subprocess.run([cargo, "run", "--quiet", "-p", "plaid", "--", "check-trace", str(trace)], cwd=ROOT, check=True)
         trace.unlink()
         subprocess.run([str(exe)], env=dict(env, PLAID_ROM_SHA256="invalid"), check=True, capture_output=True)

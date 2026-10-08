@@ -17,6 +17,7 @@ facts!(
     ObservedDma,
     ObservedIndirect,
     ObservedWordStore,
+    ObservedEntryVerification,
     Region,
     BasicBlock,
     DirectEdge,
@@ -61,6 +62,7 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
     out.loads = union(&left.loads, &right.loads);
     out.dma_observations = union(&left.dma_observations, &right.dma_observations);
     out.indirect_observations = union(&left.indirect_observations, &right.indirect_observations);
+    out.entry_verifications = union(&left.entry_verifications, &right.entry_verifications);
     out.word_store_observations = union(
         &left.word_store_observations,
         &right.word_store_observations,
@@ -475,6 +477,36 @@ fn import(
                     evidence,
                 });
             }
+            TraceEvent::EntryBytesVerified {
+                unit,
+                pc,
+                register_mask,
+                ..
+            } => {
+                let entry = unit_images[unit].address(*pc);
+                out.entry_verifications.insert(ObservedEntryVerification {
+                    entry: entry.clone(),
+                    register_mask: *register_mask,
+                    source_unit: units[unit]
+                        .5
+                        .first()
+                        .expect("compile-begin evidence")
+                        .clone(),
+                    generation: epoch,
+                    evidence: evidence.clone(),
+                });
+                // Explain only pending targets in this epoch. A lookup is not
+                // execution and cannot attach itself to a future observation.
+                for observation in &mut observations {
+                    if observation.target == *pc {
+                        observation
+                            .verified_targets
+                            .entry(entry.clone())
+                            .or_default()
+                            .extend(evidence.clone());
+                    }
+                }
+            }
             TraceEvent::IndirectTargetObserved {
                 site,
                 target,
@@ -513,6 +545,7 @@ fn import(
                 observations.push(PendingIndirect {
                     sources,
                     target: *target,
+                    verified_targets: BTreeMap::new(),
                     evidence,
                 });
             }
@@ -535,6 +568,7 @@ fn import(
 struct PendingIndirect {
     sources: BTreeSet<CodeAddress>,
     target: GuestAddr,
+    verified_targets: BTreeMap<CodeAddress, EvidenceRefs>,
     evidence: EvidenceRefs,
 }
 
@@ -545,13 +579,14 @@ fn correlate_indirect(
     epoch: u64,
 ) {
     for observation in pending.drain(..) {
-        let targets: BTreeSet<_> = images
+        let mut targets: BTreeSet<_> = images
             .iter()
             .filter(|image| {
                 image.base.generation == epoch && image.word(observation.target).is_some()
             })
             .map(|image| image.address(observation.target))
             .collect();
+        targets.extend(observation.verified_targets.keys().cloned());
         if observation.sources.len() == 1 && targets.len() == 1 {
             let source = observation.sources.first().expect("one source");
             let sites: Vec<_> = out
@@ -563,10 +598,12 @@ fn correlate_indirect(
             if sites.len() == 1 {
                 let mut site = sites[0].clone();
                 out.indirect_sites.remove(&site);
-                site.observed
-                    .entry(targets.first().expect("one target").clone())
-                    .or_default()
-                    .extend(observation.evidence);
+                let target = targets.first().expect("one target");
+                let refs = site.observed.entry(target.clone()).or_default();
+                refs.extend(observation.evidence);
+                if let Some(verification) = observation.verified_targets.get(target) {
+                    refs.extend(verification.clone());
+                }
                 out.indirect_sites.insert(site);
                 continue;
             }
