@@ -78,3 +78,6 @@ with OPEN gating and preserved v0/v1/v2/shorter-v4 map hashes. W012 remains TODO
 Controlled completed-cache-fill sensing now distinguishes nine fills without
 altering CPU/timing/RAM/cache goldens. Tag/invalidation/backing witnesses and
 general executable lifetimes remain open; W012 stays TODO.
+Guest CACHE retags now demonstrate differing effective and historical fill pages
+with unchanged reference checkpoints. Explicit mutations/backing witnesses stay
+open; W012 remains TODO.

@@ -196,6 +196,11 @@ Implemented:
   aliases. Plain/traced/repeated CPU/timing/RAM/cache goldens match. This observes
   fill event boundaries; tag/invalidation history, backing and general executable
   lifetimes remain unresolved. No production epoch is created.
+- Guest CACHE tag stores now have a controlled counterexample: seven guest
+  instructions, two fills and two retagged fetches using words from another
+  historical fill page. Baseline/plain/traced/repeated CPU/timing/RAM/cache
+  checkpoints agree. Effective fetch/tag addresses do not establish byte origin;
+  explicit mutation and backing witnesses remain necessary.
 
 Verification: 76 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

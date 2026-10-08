@@ -74,6 +74,10 @@ payloads establish neither fill provenance, epochs nor executable coverage.
 an ignored generated header, preserving upstream notices. Nine fills retain
 unchanged controlled CPU/timing/RAM/cache goldens. Fill-event ordinals supply
 no general lifetime or backing-source certificate; no reference code is promoted.
+`spikes/013-ares-cache-tag/` executes original guest CACHE tag-store/invalidation
+opcodes. A baseline without fill instrumentation and repeated sensor runs agree;
+effective fetch pages can differ from historical fill pages without word changes.
+Current tags/physical access therefore establish no byte-origin certificate.
 
 ## gopher64/gopher64
 

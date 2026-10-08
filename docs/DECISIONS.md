@@ -533,3 +533,18 @@ reference header stays unchanged. A last-fill link in these controlled cases
 does not prove validity across CACHE tag stores, invalidations, reset/restores
 or RAM/copy mutations. The burst address alone does not establish backing source.
 Broader capture and production lifetime handling remain separate decisions.
+
+## ADR-0040: Separate current cache tags from resident-byte origins
+
+Status: Accepted, 2026-10-08.
+
+Guest CACHE index-store-tag can change the effective hit page without refilling
+or altering resident words. A seven-instruction controlled fixture retags page
+0 to 0x4000 and back around an explicit invalidation/refill. Two effective fetch
+pages differ from their last fill's burst page. Baseline without the fill hook,
+plain/traced/repeated CPU/timing/RAM/cache checkpoints agree. Never infer byte
+origin from the current tag or effective fetch physical address. Retain the
+historical fill as finite data-history evidence, while requiring actual bus
+backing witnesses and explicit tag/invalidation/reset/restore boundaries for
+general lifecycle joins. The existing unknown-source/execution gates remain;
+no production source or immutable lifetime certificate is fabricated.
