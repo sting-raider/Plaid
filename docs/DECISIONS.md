@@ -274,3 +274,16 @@ added after a map union; expanded evidence should extend one conflict rather
 than duplicate it. Copy-event identities, generations, values and unit identities
 remain semantic fields and are not discarded. This fixes an import/merge mismatch
 without weakening blockers or treating repeated observations as coverage proof.
+
+## ADR-0024: Treat broader reference failures as discovery/oracle limitations
+
+Status: Accepted for research, 2026-10-08.
+
+The pinned n64-systemtest source builds reproducibly, but the pinned dynarec
+cannot fetch its IPL3 cartridge code at B0001040 and exits without a valid trace
+footer. The interpreter boots farther, reports upstream failures and stops on
+unimplemented LLD. Keep this PARTIAL evidence as a reference capability boundary,
+preserve the guest, and reject the crashed trace. Extend general cartridge source
+modeling/capture and independent oracles through separate decisions; these
+failures do not authorize per-guest workarounds, fabricated completion, universal
+CPU claims or early native lowering. No GPL reference code enters Plaid core.

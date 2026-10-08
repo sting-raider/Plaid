@@ -85,6 +85,12 @@ Implemented:
   function extents include unreachable/padding words and truncated returns still
   need blockers. Manual section/mapping inputs and the shared decoder limit the
   result. No production adapter or runtime dependency is introduced.
+- A larger pinned MIT n64-systemtest source build produces a deterministic
+  2,742,284-byte research ROM with exact nightly and pinned nust64 packaging.
+  The headless probe is PARTIAL: the dynarec exits on cartridge execution at
+  B0001040; its incomplete trace is rejected. The pure interpreter reports nine
+  upstream failures and stops on unimplemented LLD. This identifies broader
+  source/oracle gaps; neither test-suite completion nor native execution is claimed.
 
 Verification: 63 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
