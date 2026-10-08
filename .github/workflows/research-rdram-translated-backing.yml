@@ -9,6 +9,10 @@ on:
       - '.github/workflows/research-rdram-translated-backing.yml'
   workflow_dispatch:
 
+concurrency:
+  group: research-rdram-translated-backing-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   translated-backing-provenance:
     runs-on: ubuntu-24.04
