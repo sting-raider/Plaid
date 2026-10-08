@@ -237,6 +237,33 @@ Implemented:
   baseline/disabled/repeated reported PC/s0/timing/RAM/cache fields agree; explicit
   cache power forces a new fill. General restore/capture provenance remains open.
 
+- Reviewed all 17 fetched research tips and retained their notes/original fixtures
+  individually. Fourteen standalone contracts/guards, including one million PIF
+  cases, pass locally. Source-derived NMI/reset, pointer aliases, PIF/SP selection
+  and LL/SC disagreements remain explicitly distinct from executed evidence.
+- Explicit fetch boundaries now join direct uncached identity-RAM instruction
+  words to the successful scalar backing read. Data-read decoys, cached fetches,
+  translated/degraded/missing/OOB RAM and EBUS supply no fabricated witness.
+  Independent baseline/disabled/repeated reported fields agree; six forged
+  context/read histories exercise conservative rejection. General contexts and
+  production backing/lifetime identity remain open.
+- CPU-copy experiments reproduce an exact uncached LW/SW backing sequence and a
+  stale-source cached copy surviving a later uncached alias write. Destination
+  backing changes only on D-cache writeback. Baseline/disabled/repeated reported
+  fields agree. Register dataflow, general copies and executable lifetimes remain
+  uncertified.
+- RSP interpreter/DMA tests reproduce eight fetched IMEM words with latest-writer
+  fragment history: equal-byte reloads retain different origins, count/skip selects
+  actual source words, direct writes supersede history, DMEM stays separate and
+  OOB DMA has unknown source. Baseline/repeated reported state and RAM/SP hashes
+  agree. Transfer-completion identities, wrap/interleavings and RSP closure remain
+  open.
+- All 28 guest-triggered exception-vector cases repeat with mode/BEV/EXL/BD/EPC
+  truth-table agreement. Independent 158-case cached/uncached and 98-case uncached
+  SD/SDL/SDR matrices repeat with exact byte/fault effects. Forced endian contexts
+  do not establish legal guest setup; handler provenance, general mutation sensing
+  and mode coverage remain open. These fixtures change no production certificates.
+
 Verification: 76 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.

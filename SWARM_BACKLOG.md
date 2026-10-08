@@ -99,3 +99,7 @@ contexts, scalar backing, copy/mutation/reset/restore and lifetimes remain open.
 Recovered synchronized-restore/cache-power execution now demonstrates restored
 residency without a fill, with baseline/disabled/repeated reported fields equal.
 General checkpoint/capture and byte lifetimes still leave W012 TODO.
+Seventeen research tips are reconciled individually. Scalar-fetch/copy, RSP IMEM,
+exception-vector and two 64-bit store matrices now reproduce on the primary host;
+fourteen source/model contracts also pass. Combine explicit access boundaries
+with the shared ledger next. General mutation/lifetime coverage leaves W012 TODO.

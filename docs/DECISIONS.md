@@ -636,3 +636,21 @@ does not clear either, system reset clears cache while preserving RAM, and full
 power initializes both. These varieties are not equivalent transitions, and the
 controlled restore result is not a hardware-wide reset certificate. No production
 image/generation/closure rule is issued by the research fixture.
+
+## ADR-0047: Preserve source context and successful byte effects before promotion
+
+Status: Accepted for research, 2026-10-08.
+
+Seventeen reviewed research tips supply distinct evidence levels. Independently
+reproduced scalar-fetch and CPU-copy fixtures require explicit access boundaries,
+successful backing transactions, separate resident/backing histories and later
+register-dataflow proof. A fetch interval needs exactly one eligible scalar read
+before an identity-RAM word witness is possible; equality and CPU requester alone
+are insufficient. RSP DMA/fetch tests require latest-writer fragment history;
+equal bytes cannot identify an installation lifetime. Independent SD/SDL/SDR
+matrices require ordered successful byte effects, retaining untouched-lane history
+without invented reads. Mode-sensitive exception vectors require separate handler
+bytes and reachability proof. PIF/SP/NMI/LLSC/table contracts remain source/model
+evidence where no reference fixture was executed. Retain the reviewed original
+harnesses and explicit limitations, integrate narrow sensors into shared research
+chronology next, and issue no production image/lifetime or whole-ROM certificate.

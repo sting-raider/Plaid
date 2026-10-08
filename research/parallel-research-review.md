@@ -1,0 +1,84 @@
+# Parallel research reconciliation
+
+2026-10-08. The primary checkout fetched the integration instructions through
+`3cf45dc`, read issue #4 and inspected all 17 available research branch tips.
+Useful notes and original fixtures are transplanted individually; stale branch
+state, production changes and branch-only CI workflows are not merged wholesale.
+The source pins and licensing boundaries remain unchanged.
+
+| Research branch under `origin/research/` | Inspected tip | Evidence supplied by worker |
+| --- | --- | --- |
+| `ares-fill-rdram-join-gpt56` | `e8823d1` | Standalone chronology model; reference execution pending |
+| `unified-cache-order-gpt56` | `58fa683` | Interleaving model and pinned-source guard |
+| `icache-reset-restore-gpt56` | `61170d0` | Restore counterexample model and prepared reference fixture |
+| `reset-cache-lifetime-20261008` | `bd5c9d6` | Source-derived NMI/reset/restore model |
+| `pointer-table-alias-gpt56` | `ef31dc6` | Physical-alias and stale-D-cache counterexamples |
+| `cpu-copy-provenance-g56` | `294b6e1` | Exact-unit adjacent-load/store contract model |
+| `cpu-copy-rdram-gpt56sol` | `9760f94` | Executed uncached/cached copy transaction fixture |
+| `ares-rdram-uncached-fetch-gpt56sol` | `77a2682` | Executed scalar-read/fetch-context fixture; includes recovered copy work |
+| `uncached-rdram-fetch-gpt56` | `14276f7` | Earlier context contract and source guard |
+| `exception-vector-roots-gpt56sol` | `e58a31c` | Executed 28-case mode-sensitive exception matrix |
+| `rsp-imem-provenance-20261008` | `3b66722` | Executed IMEM DMA/reload/direct-write/fetch chronology |
+| `pif-rom-backing-gpt56sol` | `3a9c557` | Source-selection model and one-million-case deterministic fuzzing |
+| `sp-fetch-backing-gpt56` | `b211271` | Source-derived DMEM/IMEM/mutation contract |
+| `swl-swr-byte-mutations-gpt56` | `f1a0b51` | Partial-store model, expected systemtest vectors and C++ dirty-mask probe |
+| `64bit-store-mutation-gpt56` | `8b1e9d4` | Executed 158-case cached/uncached SD/SDL/SDR matrix |
+| `sd-sdl-sdr-mutation-gpt56` | `34ee849` | Executed independent 98-case SD/SDL/SDR byte-effect matrix |
+| `llsc-provenance-gpt56sol` | `8abead9` | Source-derived reference disagreement and mutation contract |
+
+The worker notes retain their original verdicts and run receipts. "Executed" in
+this table describes the supplied remote evidence, not independent local
+reproduction. Local results below distinguish those levels explicitly.
+
+## Findings adopted for the next implementation
+
+1. Retain one raw chronology plus explicit causal access context. An uncached
+   data load shares the CPU requestor and can return the same value as a fetch.
+   A requestor/address/value match alone cannot select the instruction's source.
+2. Separate backing bytes, D-cache resident bytes and I-cache resident words.
+   Cached stores/copies may change only D-cache until later writeback. Current
+   source RAM can differ from the bytes loaded earlier. I-cache retags can change
+   the effective hit page while retaining historical fill data.
+3. Preserve exact successful byte mutations and ordered subwrites. Partial stores
+   do not generate read provenance for untouched lanes. The pinned ares dirty
+   mask is not an exact byte-lane witness for every SWR case.
+4. Distinguish NMI, cache power, backing reset and analysis savestate restore.
+   Restore installs serialized resident state without a contemporaneous fill;
+   exploration needs explicit checkpoint/restore provenance or a new capture.
+5. Pointer-table proof must cover actual load sources, cache state, mappings and
+   physical aliases. Excluding writes to one virtual range or backing alone is
+   insufficient. Current table candidates remain uncertified.
+6. Model exception roots by exception class and proven execution mode. Preserve
+   independent handler-byte/reachability obligations. RSP content hashes likewise
+   cannot replace latest-writer/transfer/generation provenance.
+7. Keep source classes and reference disagreements visible. PIF latch/lockout/RAM,
+   SP bank selection, degraded/failed RDRAM and conditional-store reservation
+   disagreements need their own evidence; no emulator consensus is fabricated.
+
+## Primary-checkout reproduction
+
+`python scripts/test_research_contracts.py` runs the retained models and source
+guards. These tests exercise counterexamples, not reference CPU execution.
+The PIF fuzzing reproduces 92,583 positive/907,417 negative cases and 92,426
+mirrored positives. The compiled dirty-mask probe reproduces the four reported
+mask pairs. Two portability defects were fixed: scope the ordinary-RDRAM guard
+to its read method, and include `initializer_list` in the C++ probe.
+
+The newly executed `spikes/018-ares-ordered-history/` separately measures all
+43 controlled callback records with independent baseline and prior projection
+agreement. It closes the workers' shared-order execution gap for that fixture.
+It does not prove general completeness, lifetime or all scalar backing paths.
+
+Local reference reproduction now passes for synchronized cache restore/power,
+scalar-fetch contexts, scalar/cached CPU copies, RSP IMEM chronology, all 28
+exception cases, and both independent 158/98-case 64-bit store matrices. Each
+topic note records the primary-host receipt and its bounded scope. Forced endian
+handler contexts do not establish legal guest mode transitions; reported-field
+neutrality does not compare unreported machine state. The PIF/SP backing, NMI/
+system-reset, pointer-table and LL/SC findings remain source/model evidence.
+
+All 76 Rust integration tests, formatting, strict Clippy and the existing CLI
+fetch/boot/cache checks pass at this integration milestone. No production schema
+or solver gate changes. Every whole-ROM report remains OPEN with
+`native_complete=false`. Next, integrate explicit fetch access boundaries with
+the measured shared chronology before extending the bounded boot capture.

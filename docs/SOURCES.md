@@ -105,6 +105,13 @@ The recovered `spikes/018-ares-cache-reset-restore/` also executes synchronized
 restore and explicit cache power against the pin. Reported baseline/disabled/
 traced fields agree; restore creates valid residency without a fill. Broader
 reset varieties and production checkpoint provenance remain separate.
+Recovered original scalar-fetch/CPU-copy, RSP IMEM, exception-vector and two
+64-bit-store harnesses now reproduce against this pin. Their reported state,
+source guards and narrow byte/access truth tables are recorded in
+`research/parallel-research-review.md`. All generated upstream shadows remain
+ignored, separately compiled with the same notices; no reference implementation
+enters Plaid's Rust dependency graph. Source/model-only PIF/SP/NMI/LLSC/table
+findings retain their evidence level and independent reference disagreements.
 
 ## gopher64/gopher64
 
