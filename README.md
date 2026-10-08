@@ -76,6 +76,7 @@ python scripts/test_boot_fetch.py
 python scripts/test_cache_fetch.py
 python scripts/test_history.py
 python scripts/test_pi_history.py
+python scripts/test_pi_queue_history.py
 python scripts/test_mupen_hooks.py
 python scripts/test_mupen_execution.py
 python scripts/test_mupen_session.py
@@ -116,6 +117,8 @@ plaid inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <rep
 plaid verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json>
 plaid inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json>
 plaid verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json>
+plaid inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json>
+plaid verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json>
 plaid merge <left.json> <right.json> <out.json>
 plaid solve [rom] <map.json>
 ```
@@ -166,6 +169,16 @@ Observed busy/interrupt contexts do not certify transfer completion; executable
 identities and lifetimes remain open. The original history commands reject v1.
 `python scripts/test_pi_history.py` checks byte orders, source/report tampering,
 version separation and input-overwrite protection with original synthetic data.
+
+`inspect-pi-queue-boot-history` checks the separate spike-037 v2 request, queue
+outcome and actual dispatch/status scopes before complete nested v1/v0/v5
+verification. Its report distinguishes rejected insertions, unknown/unbound
+statuses and requests without observed status. These are finite observations;
+requests without status are not a live-queue census or transfer timing proof.
+`verify-pi-queue-boot-history` rebuilds the entire report from complete sources.
+The older consumers reject v2, and guest/native completion remains false.
+`python scripts/test_pi_queue_history.py` tests canonical byte orders, forged
+identities, complete-source/report changes and input-overwrite protection.
 
 Additional disposable reference experiments are documented under `spikes/`.
 `python spikes/003-ares-oracle/run.py` builds the pinned ares core separately and

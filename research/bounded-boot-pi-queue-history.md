@@ -96,3 +96,10 @@ source and reproduces report SHA-256
 `93ec36ff03f592a3e5c82b6c7b942502dbcd9e002bd27c1a6d7da1262e26620b`.
 Its CLI rejects the new v2 raw input and creates no report, retaining version
 separation until the original typed v2 consumer is implemented.
+
+The separate `inspect-pi-queue-boot-history` and `verify-pi-queue-boot-history`
+commands expose this finite report without altering old-version consumers or the
+solver. Synthetic CLI tests reproduce canonical ROM byte-order equivalence,
+complete source/report binding, malformed identity/truncation rejection and
+protection of all four supplied inputs. Use these commands with the retained
+v2 sidecar and paired fetch source to reproduce the complete API result.
