@@ -29,6 +29,11 @@ at 80000400 and 800004c0. Solver output remains OPEN/native_complete=false.
 The original boot snapshot lacks a sensed PIF-HLE copy source. Ordinary cache
 invalidation is not proof of a write; unknown-write diagnostics remain conservative.
 
+The session also exposed a diagnostic error: empty/incomplete indirect candidate
+sets were treated as exhaustive when comparing observations. The solver now
+reports disagreement only against a claimed closed set. New tests preserve OPEN
+status for incomplete hypotheses and still reject conflicting certificates.
+
 Reproduce: `python scripts/test_mupen_session.py`. Python 3.12+, Linux x64
 GCC/make/NASM, SDL2/zlib/libpng headers and libraries are required. Windows uses
 WSL Ubuntu. This run extracted apt NASM 3.01 and SDL2 2.32.10/zlib 1.3.1/libpng

@@ -160,6 +160,7 @@ def main():
     (SESSION / "solver.json").write_text(report)
     solved = json.loads(report)
     assert solved["status"] == "open" and not solved["native_complete"]
+    assert not any(b["kind"] == "indirect_evidence_disagreement" for b in solved["blockers"])
     imported = json.loads((SESSION / "map.json").read_text())
     assert any(load["rom_offset"] == 0x1000 and load["destination"]["start"] == 0x80000400 for load in imported["loads"])
     assert any(load["rom_offset"] == 0x10c0 and load["destination"]["start"] == 0x800004c0 for load in imported["loads"])

@@ -2,8 +2,7 @@
 
 1. Extend the full-core synthetic PI session to executable reloads, aliases and
    CPU copies, preserving unknown boot-source and mutation obligations. Keep
-   speculative compilation distinct from execution. Review indirect diagnostic
-   wording where observations extend an uncertified candidate set.
+   speculative compilation distinct from execution.
 2. Prove pointer-table data immutability and guard coverage before issuing exhaustive
    table certificates. Extend cross-block joins only with rechecked invariants;
    the current table recognizer and single-predecessor chains are restricted passes.

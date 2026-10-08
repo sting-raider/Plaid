@@ -218,15 +218,19 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 );
             }
         }
-        if site
-            .observed
-            .keys()
-            .any(|a| !site.candidates.contains_key(a))
+        // Candidate hypotheses may be incomplete, including an empty set.
+        // Only a claimed exhaustive set can contradict execution evidence.
+        // Rechecking still rejects a certificate with an out-of-set sample.
+        if site.closed_proof.is_some()
+            && site
+                .observed
+                .keys()
+                .any(|a| !site.candidates.contains_key(a))
         {
             add(
                 "indirect_evidence_disagreement",
                 Some(site.site.clone()),
-                "observed target is outside the candidate set",
+                "observed target is outside the claimed closed target set",
                 site.evidence.clone(),
             );
         }
