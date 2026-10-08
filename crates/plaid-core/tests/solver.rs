@@ -52,11 +52,32 @@ fn finite_indirect_observations_and_missing_bytes_fail_closed() {
     m.indirect_sites.insert(s);
     let r = solve(&m, &[i], Scope::DeclaredStaticImages).unwrap();
     assert!(has(&r, "unresolved_indirect_site"));
-    assert!(has(&r, "indirect_evidence_disagreement"));
+    assert!(!has(&r, "indirect_evidence_disagreement"));
     assert!(has(
         &solve(&m, &[], Scope::WholeRom).unwrap(),
         "missing_instruction_source"
     ));
+}
+
+#[test]
+fn only_claimed_exhaustive_targets_can_disagree_with_observations() {
+    let i = image(vec![0x3c088000, 0x35080010, 0x01000008, 0, 0x08000004, 0]);
+    let mut m = analyze_indirect(&map(&i), &i).unwrap();
+    let mut site = m.indirect_sites.pop_first().unwrap();
+    assert!(site.closed_proof.is_some());
+    site.observed.insert(i.base.clone(), site.evidence.clone());
+    m.indirect_sites.insert(site.clone());
+    let r = solve(&m, std::slice::from_ref(&i), Scope::DeclaredStaticImages).unwrap();
+    assert_eq!(r.status, ClosureStatus::Open);
+    assert!(has(&r, "indirect_evidence_disagreement"));
+    assert!(has(&r, "unresolved_indirect_site"));
+    m.indirect_sites.clear();
+    site.closed_proof = None;
+    m.indirect_sites.insert(site);
+    let r = solve(&m, &[i], Scope::DeclaredStaticImages).unwrap();
+    assert_eq!(r.status, ClosureStatus::Open);
+    assert!(!has(&r, "indirect_evidence_disagreement"));
+    assert!(has(&r, "unresolved_indirect_site"));
 }
 
 #[test]

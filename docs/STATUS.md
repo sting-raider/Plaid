@@ -50,8 +50,10 @@ Implemented:
 - Fail-closed solver reports and rechecks CFG/certificates against source bytes,
   including omitted and contradictory extra facts. Finite trace samples do not
   close indirect sites.
+  Observations may extend incomplete candidate hypotheses without a contradiction;
+  disagreement diagnostics require a claimed exhaustive target certificate.
 
-Verification: 53 Rust integration tests, formatting, strict Clippy, CLI integration,
+Verification: 54 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.
