@@ -26,6 +26,11 @@ jobs:
           repository: mupen64plus/mupen64plus-core
           ref: ba95bab92a76744753bfe61470823a4937850ab0
           path: .refs/mupen64plus-core
+      - uses: actions/checkout@v4
+        with:
+          repository: lemmy-64/n64-systemtest
+          ref: 196f5421173220eb2f63a7a99c64795dc0ea0698
+          path: .refs/n64-systemtest
       - name: Verify deterministic model and independent source comparison
         run: |
           python3 -m py_compile spikes/040-ares-cpu-rsp-imem-subword/*.py
