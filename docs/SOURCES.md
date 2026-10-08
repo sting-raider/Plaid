@@ -205,6 +205,10 @@ Separate original Rust PI inspection validates the complete typed v1 protocol,
 canonical buffer origins and exact v0 projection without copying reference code.
 Complete-source report rechecking preserves the finite inspection scope; no
 queue completion or executable image/lifetime certificate is introduced.
+`spikes/032-ares-queue-identity/` generates optional callbacks in an ignored pinned
+nall header; external original metadata preserves actual insertion/heap identities
+without changing object layout. Original/disabled/repeated container checkpoints
+agree; serialization loses identity. No CPU/device dispatch claim is made.
 
 Selected-cache v5 handling in Plaid is original Rust schema/import/verification
 code. It checks the pinned reference's finite snapshot constraints while keeping

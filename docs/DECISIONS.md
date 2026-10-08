@@ -796,3 +796,18 @@ contexts at status transitions remain metadata under ADR-0053; completion is
 always uncertified. No ProgramMap, solver, image generation, executable lifetime
 or native path changes. Reference implementation/firmware stays isolated and
 ignored; only original typed data validation enters the Rust dependency graph.
+
+## ADR-0056: Retain queue identity outside reference object state
+
+Status: Accepted for research, 2026-10-09.
+
+Generate opt-in callbacks at actual queue heap copies, insertion, cancellation,
+removal and lifecycle boundaries. Original external metadata assigns a token
+only after successful insertion and follows actual slot moves. Six actual-container
+cases preserve original/disabled/repeated reported dispatches, occupied serialized
+state and object size, including identical event/deadline pairs and full capacity
+after cancellation. Serialization entry discards metadata; restored entries stay
+unknown. Five forged records fail independent replay. This validates finite
+container identities only, not CPU/device dispatch, PI transfer completion or
+hardware timing. Compose actual request/dispatch/status contexts before stronger
+joins. Keep generated reference code/notices isolated and out of the Rust graph.

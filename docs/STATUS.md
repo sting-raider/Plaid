@@ -318,6 +318,11 @@ Implemented:
   duplicate keys, missing footers and PI events inside fetch intervals fail closed.
   The complete retained boot corpus agrees with independent Python evidence;
   status contexts still certify no transfer completion or executable identity.
+- An opt-in external queue identity sensor now passes six actual-container cases
+  and 2,104 records, including equal event/deadline pairs, cancellation and full
+  capacity. Reported dispatches, occupied serialized state and object size match
+  original/disabled/repeated builds; serialization discards identities. Actual
+  CPU/device dispatch and transfer-completion joins remain separate work.
 
 Verification: 86 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
