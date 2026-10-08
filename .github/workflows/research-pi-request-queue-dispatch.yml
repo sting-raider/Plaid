@@ -1,0 +1,20 @@
+name: research-pi-request-queue-dispatch
+
+on:
+  push:
+    branches:
+      - research/pi-request-queue-dispatch-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout pinned ares reference
+        run: |
+          mkdir -p .refs
+          git clone --filter=blob:none https://github.com/ares-emulator/ares.git .refs/ares
+          git -C .refs/ares checkout 9408cb43d4948fc3ea6e152a307a34348df3fe04
+      - name: Run bounded composition experiment
+        run: python3 spikes/033-ares-pi-request-queue-dispatch/run.py
