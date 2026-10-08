@@ -1,6 +1,6 @@
 # Status
 
-2026-10-09. Milestone scope: M1–M3 synthetic executable discovery foundation.
+2026-10-09. Milestone scope: M1â€“M3 synthetic executable discovery foundation.
 
 Implemented:
 
@@ -379,3 +379,5 @@ Analysis scalability has not been benchmarked. See NEXT for the execution order.
 EBus HiddenRAM research now reproduces an exhaustive 65,536-pair header probe and seven reducer negatives. Its Word is derived from four hidden bits rather than copied RAM bytes; actual full fetch/epoch evidence remains PARTIAL (ADR-0062).
 
 Reproduced TLBWI/alias/remap/ASID/global/reverse-endian fetch cases now retain actual per-fetch identity-RDRAM origins. Cached and failed translations fail closed; mapping lifetime and other page/mode cases remain open (ADR-0063).
+
+Translated/degraded scalar Word reads reproduce exact backing/result receipts and stochastic sequence. Request address, translated raw origin and CCI-delivered value stay separate; full fetch and other-path evidence remains open (ADR-0064).

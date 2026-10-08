@@ -144,3 +144,5 @@ the measured shared chronology before extending the bounded boot capture.
 Retained `research/ebus-hidden-fetch-gpt56sol` at `fe15ab6`: exact hidden-header exhaustive probe and adversarial reducer reproduce locally; full CPU source sensing stays PARTIAL (ADR-0062).
 
 Retained/reproduced `tlb-uncached-fetch-gpt56sol` (`7ca4338`): actual TLB fetch matrix and exact worker hash; adopted bounded per-fetch semantics under ADR-0063.
+
+Retained/reproduced `rdram-translated-backing-gpt56sol` (`c88977d`): six actual reads and exact source/result hashes. Adopt the two-stage witness contract under ADR-0064.

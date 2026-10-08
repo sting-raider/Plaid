@@ -242,3 +242,5 @@ Before introducing code copied or linked from an upstream project:
 `spikes/034-ares-ebus-hidden-fetch/` retains original project-owned header-probe/reducer code and its finite reference contract. Exact upstream headers are compiled only from the ignored pinned checkout; no upstream implementation or ROM data is vendored.
 
 `spikes/036-ares-tlb-uncached-fetch/` reuses the original scalar/fetch sensor and executes actual pinned TLBWI/interpreter cases. n64-systemtest/Mupen comparisons remain source evidence, without hardware execution or extra production dependencies.
+
+`spikes/033-ares-rdram-translated-backing/` generates optional reference shadows in ignored output, executes the original read/degrade once, and reproduces actual Word evidence. Gopher comparison stays source-only; no upstream source enters production.
