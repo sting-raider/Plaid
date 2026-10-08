@@ -27,6 +27,10 @@ Implemented:
   store/load and IS64 MMIO completion, with bundled dummy plugins. All GPRs,
   HI/LO/PC agree across interpreter/traced/untraced dynarec. Repeated 42-event
   traces match, and executed DMA-backed units import with verified ROM sources.
+  Two further sessions replace the executable payload at the same physical RAM,
+  using cached or uncached entry. Their 81/80-event traces and CPU states match;
+  generations remain separate and explicit physical overlaps yield overlay
+  candidates even when guest addresses differ. No alias identities are collapsed.
   PIF HLE/unknown-CIC fallback, dummy graphics/audio/RSP and a frontend stop
   request bound this synthetic session's scope; whole-ROM closure remains OPEN.
 - Signature-based z64/v64/n64 normalization, canonical SHA-256 and header parsing.
@@ -53,7 +57,7 @@ Implemented:
   Observations may extend incomplete candidate hypotheses without a contradiction;
   disagreement diagnostics require a claimed exhaustive target certificate.
 
-Verification: 54 Rust integration tests, formatting, strict Clippy, CLI integration,
+Verification: 55 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.

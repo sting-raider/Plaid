@@ -177,3 +177,16 @@ Compare interpreter and traced/untraced dynarec CPU state and repeated traces.
 Do not infer boot/CIC completeness, device accuracy or RSP/graphics coverage from
 this session. Uncorrelated PIF-HLE boot copies and executable policy gaps remain
 solver obligations; the reference core is never linked into Plaid/native mode.
+
+## ADR-0017: Physical overlap is candidate evidence, not execution identity
+
+Status: Accepted, 2026-10-08.
+
+Different virtual executable ranges may share RAM. Compare load spans using
+explicit, unique physical mappings retained by matching regions in addition to
+guest overlap. This can expose overlay candidates across cached/uncached aliases.
+Do not infer mappings from virtual bit patterns or collapse CodeAddress identities;
+cache behavior, relocation, lifetime and dispatch still need independent policies.
+Missing or contradictory physical mappings cannot establish a unique alias.
+The full-core replacement fixtures validate separate generations and conservative
+candidate overlays, not a complete overlay lifecycle certificate.

@@ -18,9 +18,10 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "target/reference-core"
 SESSION = ROOT / "target/mupen-session"
 MODES = ("pure", "untraced", "traced", "repeat")
+SCENARIOS = ("pi", "reload", "reload_alias")
 
 
-def fixture():
+def fixture(scenario="pi"):
     data = bytearray(8192)
     data[:4] = bytes.fromhex("80371240")
     data[8:12] = (0x80000400).to_bytes(4, "big")
@@ -39,8 +40,25 @@ def fixture():
             0x38:0x3c090a00, 0x3c:0xad090028, 0x40:0x34090009,
             0x44:0xad090014, 0x48:0x08000112, 0x4c:0,
             0xc0:0x26110007, 0xc4:0x03e00008, 0xc8:0x24120009}
+    if scenario != "pi":
+        assert scenario in ("reload", "reload_alias")
+        first = dict(body)
+        first[0x1c] = 0x26730001  # First payload increments s3, then returns to SP.
+        first[0x20] = 0x02e00008  # JR s7 (bootstrap's custom link).
+        first[0x24] = 0
+        first = {offset:word for offset,word in first.items() if offset <= 0x24 or offset >= 0xc0}
+        for offset, word in first.items(): data[0x1000+offset:0x1004+offset] = word.to_bytes(4, "big")
+        second_dma = list(boot[:12])
+        second_dma[4] = 0x35291100
+        alias = scenario == "reload_alias"
+        boot = boot[:14] + [0x0100b809, 0] + second_dma + [0x3c08a000 if alias else 0x3c088000, 0x35080400, 0x01000008, 0]
+        body[0] = 0x3c08a000 if alias else 0x3c088000
+        body[0xc] = 0x2410000b
+        body[0xc8] = 0x2412000d
+        body[0x48] = 0x08000112  # J preserves the current cached/uncached region.
     for n, word in enumerate(boot): data[64+n*4:68+n*4] = word.to_bytes(4, "big")
-    for offset, word in body.items(): data[0x1000+offset:0x1004+offset] = word.to_bytes(4, "big")
+    payload_offset = 0x1000 if scenario == "pi" else 0x1100
+    for offset, word in body.items(): data[payload_offset+offset:payload_offset+offset+4] = word.to_bytes(4, "big")
     return data
 
 
@@ -123,51 +141,68 @@ def worker(directory, mode):
         (directory / f"{mode}-log.json").write_text(json.dumps(logs, indent=2) + "\n")
 
 
+def verify(directory, scenario, cargo):
+    base = 0xa0000400 if scenario == "reload_alias" else 0x80000400
+    states = {mode:json.loads((directory / f"{mode}-state.json").read_text()) for mode in MODES}
+    for mode, state in states.items():
+        assert state["regs"][14] == (12 if scenario == "pi" else 18), (mode, state)
+        assert state["regs"][16:20] == ([5,12,9,0] if scenario == "pi" else [11,18,13,1]), (mode, state)
+        assert state["pc"] == base + 0x48, (mode, state)
+        assert state == states["pure"], states
+    first = (directory / "traced.ndjson").read_bytes()
+    assert first == (directory / "repeat.ndjson").read_bytes(), "Trace differs on repeated device session"
+    events = [json.loads(line)["data"] for line in first.splitlines()[1:-1]]
+    dma = [e for e in events if e["event"] == "rom_dma_observed"]
+    assert [e["rom_offset"] for e in dma] == ([0x1000] if scenario == "pi" else [0x1000,0x1100]), dma
+    assert all(e["physical_destination"] == 0x400 and e["size"] == 256 for e in dma), dma
+    indirect = [e for e in events if e["event"] == "indirect_target_observed"]
+    assert any(e["site"] == base+8 and e["target"] == base+0xc0 for e in indirect), indirect
+    assert any(e["site"] == base+0xc4 and e["target"] == base+0x10 for e in indirect), indirect
+    assert "indirect_target_observed" not in (directory / "untraced.ndjson").read_text()
+    for args in [("check-trace", str(directory / "traced.ndjson")),
+                 ("import-trace", str(directory / "synthetic.z64"), str(directory / "traced.ndjson"), str(directory / "map.json"))]:
+        subprocess.run([cargo, "run", "--quiet", "-p", "plaid", "--", *args], cwd=ROOT, check=True)
+    report = subprocess.check_output([cargo, "run", "--quiet", "-p", "plaid", "--", "solve",
+        str(directory / "synthetic.z64"), str(directory / "map.json")], cwd=ROOT, text=True)
+    (directory / "solver.json").write_text(report)
+    solved = json.loads(report)
+    assert solved["status"] == "open" and not solved["native_complete"]
+    assert not any(b["kind"] == "indirect_evidence_disagreement" for b in solved["blockers"])
+    imported = json.loads((directory / "map.json").read_text())
+    offset = 0x1000 if scenario == "pi" else 0x1100
+    assert any(load["rom_offset"] == offset and load["destination"]["start"] == base for load in imported["loads"])
+    assert any(load["rom_offset"] == offset+0xc0 and load["destination"]["start"] == base+0xc0 for load in imported["loads"])
+    assert sum(len(o["evidence"]) for o in imported["indirect_observations"]) == len(indirect)
+    assert any(site["observed"] for site in imported["indirect_sites"])
+    assert all(site["closed_proof"] is None for site in imported["indirect_sites"])
+    assert all(target[0]["generation"] == site["site"]["generation"]
+        for site in imported["indirect_sites"] for target in site["observed"])
+    if scenario != "pi":
+        earlier = [load for load in imported["loads"] if load["rom_offset"] == 0x1000]
+        later = [load for load in imported["loads"] if load["rom_offset"] == 0x1100]
+        assert min(load["generation"] for load in later) > max(load["generation"] for load in earlier)
+        assert imported["overlays"] and all(o["candidate"] for o in imported["overlays"].values())
+    print(f"Pinned full-core {scenario} passes: PI DMA, RAM store/load, JR/JALR and IS64 stop; deterministic {len(events)}-event trace")
+
+
 def main():
     if len(sys.argv) == 4 and sys.argv[1] == "--worker":
         worker(sys.argv[2], sys.argv[3]); return
     subprocess.run([sys.executable, str(ROOT / "scripts/prepare_mupen.py")], check=True)
     subprocess.run([sys.executable, str(ROOT / "scripts/build_mupen_core.py")], check=True)
-    SESSION.mkdir(parents=True, exist_ok=True)
-    (SESSION / "synthetic.z64").write_bytes(fixture())
-    for mode in MODES:
-        command = [sys.executable, str(Path(__file__).resolve()), "--worker", str(SESSION), mode]
-        if os.name == "nt":
-            def linux_path(path):
-                return subprocess.check_output(["wsl", "-d", "Ubuntu", "--exec", "wslpath", "-a", path.as_posix()], text=True).strip()
-            command = ["wsl", "-d", "Ubuntu", "--exec", "python3", linux_path(Path(__file__).resolve()), "--worker", linux_path(SESSION), mode]
-        subprocess.run(command, check=True, timeout=30)
-    states = {mode:json.loads((SESSION / f"{mode}-state.json").read_text()) for mode in MODES}
-    for mode, state in states.items():
-        assert state["regs"][14] == 12 and state["regs"][16:19] == [5,12,9], (mode, state)
-        assert state["pc"] == 0x80000448, (mode, state)
-        assert state == states["pure"], states
-    first = (SESSION / "traced.ndjson").read_bytes()
-    assert first == (SESSION / "repeat.ndjson").read_bytes(), "Trace differs on repeated device session"
-    events = [json.loads(line)["data"] for line in first.splitlines()[1:-1]]
-    dma = [e for e in events if e["event"] == "rom_dma_observed"]
-    assert len(dma) == 1 and dma[0]["rom_offset"] == 0x1000 and dma[0]["physical_destination"] == 0x400 and dma[0]["size"] == 256, dma
-    indirect = [e for e in events if e["event"] == "indirect_target_observed"]
-    assert any(e["site"] == 0x80000408 and e["target"] == 0x800004c0 for e in indirect), indirect
-    assert any(e["site"] == 0x800004c4 and e["target"] == 0x80000410 for e in indirect), indirect
-    assert "indirect_target_observed" not in (SESSION / "untraced.ndjson").read_text()
     cargo = shutil.which("cargo") or str(Path.home() / ".cargo/bin/cargo.exe")
-    for args in [("check-trace", str(SESSION / "traced.ndjson")),
-                 ("import-trace", str(SESSION / "synthetic.z64"), str(SESSION / "traced.ndjson"), str(SESSION / "map.json"))]:
-        subprocess.run([cargo, "run", "--quiet", "-p", "plaid", "--", *args], cwd=ROOT, check=True)
-    report = subprocess.check_output([cargo, "run", "--quiet", "-p", "plaid", "--", "solve",
-        str(SESSION / "synthetic.z64"), str(SESSION / "map.json")], cwd=ROOT, text=True)
-    (SESSION / "solver.json").write_text(report)
-    solved = json.loads(report)
-    assert solved["status"] == "open" and not solved["native_complete"]
-    assert not any(b["kind"] == "indirect_evidence_disagreement" for b in solved["blockers"])
-    imported = json.loads((SESSION / "map.json").read_text())
-    assert any(load["rom_offset"] == 0x1000 and load["destination"]["start"] == 0x80000400 for load in imported["loads"])
-    assert any(load["rom_offset"] == 0x10c0 and load["destination"]["start"] == 0x800004c0 for load in imported["loads"])
-    assert sum(len(o["evidence"]) for o in imported["indirect_observations"]) == len(indirect)
-    assert any(site["observed"] for site in imported["indirect_sites"])
-    assert all(site["closed_proof"] is None for site in imported["indirect_sites"])
-    print("Pinned full-core session passes: original bootstrap, PI DMA, RAM store/load, JR/JALR and IS64 stop; deterministic trace")
+    for scenario in SCENARIOS:
+        directory = SESSION / scenario
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "synthetic.z64").write_bytes(fixture(scenario))
+        for mode in MODES:
+            command = [sys.executable, str(Path(__file__).resolve()), "--worker", str(directory), mode]
+            if os.name == "nt":
+                def linux_path(path):
+                    return subprocess.check_output(["wsl", "-d", "Ubuntu", "--exec", "wslpath", "-a", path.as_posix()], text=True).strip()
+                command = ["wsl", "-d", "Ubuntu", "--exec", "python3", linux_path(Path(__file__).resolve()), "--worker", linux_path(directory), mode]
+            subprocess.run(command, check=True, timeout=30)
+        verify(directory, scenario, cargo)
 
 
 if __name__ == "__main__": main()

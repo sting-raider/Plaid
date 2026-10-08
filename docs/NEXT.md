@@ -1,7 +1,8 @@
 # Next
 
-1. Extend the full-core synthetic PI session to executable reloads, aliases and
-   CPU copies, preserving unknown boot-source and mutation obligations. Keep
+1. Extend the full-core PI/reload/alias sessions to CPU copies and executable
+   mutation snapshots. Distinguish repeated compilation under one DMA event from
+   a new load, preserving unknown boot-source and mutation obligations. Keep
    speculative compilation distinct from execution.
 2. Prove pointer-table data immutability and guard coverage before issuing exhaustive
    table certificates. Extend cross-block joins only with rechecked invariants;

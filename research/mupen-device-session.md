@@ -34,6 +34,18 @@ sets were treated as exhaustive when comparing observations. The solver now
 reports disagreement only against a claimed closed set. New tests preserve OPEN
 status for incomplete hypotheses and still reject conflicting certificates.
 
+Follow-up: two more original fixtures return to SP code, transfer a different
+payload to the same RAM, and enter it through 80000400 or A0000400. The first
+payload leaves a stage marker; the second produces s0/s1/s2/s3=11/18/13/1 and
+RAM value 18. All engines agree on full GPR/HI/LO/PC; repeated 81/80-event traces
+match. Imports retain distinct generations and all seven raw source observations.
+The uncached fixture exposed guest-only overlap checks that missed shared RAM.
+Load analysis now uses unique explicit region physical mappings as additional
+overlap evidence, preserving virtual identities and unresolved overlay candidates.
+Missing, disjoint or contradictory physical mappings do not imply aliasing;
+partial physical overlap conservatively adds lifecycle obligations. A Rust test
+covers these cases and rejects physical spans exceeding the address space.
+
 Reproduce: `python scripts/test_mupen_session.py`. Python 3.12+, Linux x64
 GCC/make/NASM, SDL2/zlib/libpng headers and libraries are required. Windows uses
 WSL Ubuntu. This run extracted apt NASM 3.01 and SDL2 2.32.10/zlib 1.3.1/libpng
