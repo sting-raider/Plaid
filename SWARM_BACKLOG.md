@@ -96,3 +96,6 @@ checks. Unified transaction/cache/fetch/copy/lifetime history remains open; W012
 Controlled shared chronology now measures 43 transaction/cache/fetch/fixture-write
 records with independent checkpoints and forged-history rejection. General
 contexts, scalar backing, copy/mutation/reset/restore and lifetimes remain open.
+Recovered synchronized-restore/cache-power execution now demonstrates restored
+residency without a fill, with baseline/disabled/repeated reported fields equal.
+General checkpoint/capture and byte lifetimes still leave W012 TODO.

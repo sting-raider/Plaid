@@ -620,3 +620,19 @@ records fail. This validates the controlled chronology, not a general causal
 context, mutation census or executable lifetime. Ordinary scalar backing events
 and reset/restore/copy/byte-write findings require separate integration. Historical
 fill data is distinct from current effective tags. No production epoch is created.
+
+## ADR-0046: Restore provenance cannot be inherited from the latest matching fill
+
+Status: Accepted, 2026-10-08.
+
+The recovered reference fixture saves a synchronized state, creates an equal-
+payload refill, then restores the saved valid line without a new fill. An external
+latest-tuple matcher incorrectly selects the later pre-restore fill. Baseline,
+callbacks-disabled and repeated traced reported fields agree; explicit cache power
+clears residency and forces a new fill. Analysis restore must identify a checkpoint
+and capture branch, or leave restored origin unknown until separately witnessed.
+Preserve distinct backing and cache lifetimes: source inspection/model shows NMI
+does not clear either, system reset clears cache while preserving RAM, and full
+power initializes both. These varieties are not equivalent transitions, and the
+controlled restore result is not a hardware-wide reset certificate. No production
+image/generation/closure rule is issued by the research fixture.
