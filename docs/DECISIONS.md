@@ -840,3 +840,18 @@ This is finite reference component evidence without guest instruction/MMIO
 execution or hardware timing. Keep canonical byte origins, restore identity,
 boot schema promotion and executable lifetimes separate; v1 inspection still
 certifies no transfer completion. Generated reference code/notices stay isolated.
+
+## ADR-0059: SP transfer identity must follow actual descriptor lifecycle
+
+Status: Accepted for research, 2026-10-09.
+
+Recovered worker component/source evidence reproduces locally at the exact pins.
+Pinned ares permits pending SP DMA address/length mutation while FULL; a length
+commit therefore does not freeze an immutable request. Current-to-pending handoff
+occurs within the finishing step with BUSY still asserted afterward. Bind an
+ares request at actual promotion or retain all pending mutations; group count/
+skip rows and represent modulo-bank destination spans explicitly. Mupen/Gopher
+source instead snapshots pending descriptors and rejects a third FULL push.
+Preserve that hardware-unresolved disagreement; do not make ares overwrite policy
+a native invariant. Only ares component execution is validated here, without
+general CPU/RSP scheduling, save/restore identity or whole-ROM closure.

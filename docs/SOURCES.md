@@ -213,6 +213,10 @@ agree; save preserves identity and load cuts it. No CPU/device dispatch claim is
 and CPU dispatch scopes to compose queue identities with actual component status
 callbacks in both directions. Six forged joins fail and reported baseline state
 agrees. No upstream implementation enters Rust or the native dependency graph.
+`spikes/034-ares-sp-dma-lifecycle/` executes original component cases against pinned
+ares without instrumentation and compares exact Mupen/Gopher source contracts.
+Pending mutation/FULL disagreement remains reference-specific; source comparison
+does not execute the GPL Mupen implementation or add any production dependency.
 
 Selected-cache v5 handling in Plaid is original Rust schema/import/verification
 code. It checks the pinned reference's finite snapshot constraints while keeping

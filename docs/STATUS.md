@@ -329,6 +329,10 @@ Implemented:
   fail closed. All 32 successful byte effects remain separate from scheduling.
   Original/disabled/repeated reported state agrees; no boot completion or image
   promotion follows from these finite component results.
+- Recovered actual SP DMA lifecycle tests reproduce the worker's exact stdout/
+  result hashes. Ares pending descriptors mutate while FULL, handoff can keep
+  BUSY asserted, count/skip rows share one current request and IMEM spans wrap.
+  Mupen/Gopher source disagrees on FULL policy; hardware semantics remain open.
 
 Verification: 86 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
