@@ -46,3 +46,9 @@ Executable-load evidence verifies post-copy snapshots against canonical ROM byte
 records exact mappings and reload generations, and identifies overlapping-source
 overlay candidates. Changed bytes remain unclassified blockers. 30 Rust tests
 pass. Live PI DMA sensing and full overlay/relocation lifecycle are still pending.
+
+Solver v0 reports precise direct/indirect/source/write/overlay/exception blockers
+and rechecks CFG from bytes. 35 Rust tests pass. A synthetic immutable integer
+image can close under explicit exclusions; the same map stays OPEN in whole-ROM
+mode. Native-complete is always false in this discovery-only implementation.
+`plaid solve <map.json>` emits whole-ROM JSON diagnostics.

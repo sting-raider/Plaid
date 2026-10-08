@@ -8,6 +8,7 @@ pub mod loads;
 pub mod merge;
 pub mod program;
 pub mod rom;
+pub mod solver;
 pub mod trace;
 
 use serde::{Deserialize, Serialize};
