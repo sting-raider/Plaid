@@ -60,6 +60,9 @@
 2. Model/sense non-PI copies and executable writes beyond PI-backed snapshots.
    The constant aligned cached-RDRAM SW sensor is partial; general addresses,
    other sizes, TLB/uncached paths and CPU-copy provenance remain unmodeled.
+   Reproduced COP1 stores require successful mutation sensing below integer-only
+   opcode handlers, FR-sensitive payload normalization and distinct cache/backing
+   events. Reference callback count is not a hardware transaction/atomicity proof.
    Extend restored target-entry sensing beyond successful dirty lookups; verified
    snapshots now explain pending same-epoch returns, and explicit source-unit
    tags identify older units still executing. Preserve boot-source/lifecycle

@@ -870,3 +870,18 @@ firmware and generated builds stay isolated/ignored. This establishes a bounded
 reference source contract, without full instruction/boot execution, firmware
 authenticity, immutable lifetime or ProgramMap promotion. A future schema must
 retain the declared input digest/device namespace separately from fetch address.
+
+## ADR-0061: Concrete CPU mutation sensing must include COP1 stores
+
+Status: Accepted for research, 2026-10-09.
+
+Recovered SWC1/SDC1 evidence reproduces locally: 100,000 payload-model cases and
+192 repeated actual ares handler cases preserve FR-sensitive raw source bits,
+cached/backing distinction and fault nonmutation. Sense general successful CPU
+cache/backing mutations below opcode-specific handlers; integer-only coverage
+cannot prove executable immutability. FPR indices require FR/lane context or
+normalization to actual payload bytes. Mupen/Gopher source exposes two Word writes
+where ares uses one Dual write; preserve observed ordering without inferring
+hardware transaction count or atomicity. This is pinned handler evidence, with
+forced endian-context and combined-fault limits, not a complete mutation census,
+second-reference execution, executable lifetime or whole-ROM certificate.

@@ -338,6 +338,11 @@ Implemented:
   checkpoints agree; mirrored fetch addresses retain distinct identity while
   sharing the actual masked source offset. Latch/RAM/lockout/cache/stale decoys
   supply no firmware witness. Full boot/lifetime and production promotion remain open.
+- COP1 store research reproduces its 100,000-case payload model and 192 repeated
+  actual SWC1/SDC1 cases. FR mode changes source lanes/pairs; cached stores retain
+  resident changes and uncached stores mutate backing. CU1/alignment/TLB failures
+  retain raw nonmutation. Reference write decomposition differs; callback counts
+  supply no hardware atomicity proof. General mutation/lifetime coverage remains open.
 
 Verification: 86 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
