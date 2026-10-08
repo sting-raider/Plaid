@@ -54,11 +54,31 @@ def main():
         altered["fetch_observations"][0]["word"] ^= 2
         map_path.write_text(json.dumps(altered))
         assert subprocess.run([str(exe),"verify-fetch",str(rom),str(trace),str(map_path)],capture_output=True).returncode != 0
+        physical_records = json.loads(json.dumps(records))
+        physical_records[0].update(format="plaid-ares-fetch-research-v1",mapped_cartridge_size=4096)
+        for event, (physical, cached) in zip(physical_records[1:-1], ((0x2000,False),(0x2000,True),(0x3000,False))):
+            event.update(physical=physical,cached=cached)
+        trace.write_bytes(b"".join((json.dumps(r)+"\n").encode() for r in physical_records))
+        physical_outputs = []
+        for order in ("z64","v64","n64"):
+            output = directory / f"physical-{order}.json"
+            source = directory / f"original.{order}"
+            subprocess.run([str(exe),"import-fetch",str(source),str(trace),str(output)],check=True)
+            subprocess.run([str(exe),"verify-fetch",str(source),str(trace),str(output)],check=True)
+            physical_outputs.append(output.read_bytes())
+        assert physical_outputs[0] == physical_outputs[1] == physical_outputs[2]
+        physical_map = json.loads(physical_outputs[0])
+        assert len(physical_map["fetch_observations"]) == 3
+        assert all("access" in f for f in physical_map["fetch_observations"])
+        assert not physical_map["regions"] and not physical_map["loads"]
+        physical_map["fetch_observations"][0]["access"]["cached"] = True
+        map_path.write_text(json.dumps(physical_map))
+        assert subprocess.run([str(exe),"verify-fetch",str(rom),str(trace),str(map_path)],capture_output=True).returncode != 0
         trace.write_bytes(b"".join((json.dumps(r)+"\n").encode() for r in records[:-1]))
         rejected = directory / "rejected.json"
         assert subprocess.run([str(exe),"import-fetch",str(rom),str(trace),str(rejected)],capture_output=True).returncode != 0
         assert not rejected.exists()
-    print("Raw fetch CLI: all byte orders, wide PC/word variants, source rechecking and OPEN gate passed")
+    print("Raw fetch CLI: v0/v1, all byte orders, wide PC/word/access variants, source rechecking and OPEN gate passed")
 
 
 if __name__ == "__main__": main()

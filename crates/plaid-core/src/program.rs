@@ -291,9 +291,21 @@ pub struct FetchCapture {
     pub initial_state: String,
     pub instruction_call_budget: u64,
     pub fetch_count: u64,
+    /// Present only for the v1 physical-access observer; exact mapped capacity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mapped_cartridge_size: Option<u32>,
 }
 
-/// A finite summary of identical fetched-word/slot facts in one raw capture.
+/// Effective word address after translation/endian selection and cache policy.
+/// This records mapping context, not a memory source or executable lifetime.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FetchAccess {
+    pub physical: PhysicalAddr,
+    pub cached: bool,
+}
+
+/// A finite summary of identical word/slot/access facts in one raw capture.
 /// First/last are exact event indices, not a contiguous interval or lifetime.
 /// There is deliberately no image, generation, copy or retirement identity.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -302,6 +314,8 @@ pub struct ObservedFetch {
     pub pc: GuestVirtualAddr,
     pub word: u32,
     pub delay_slot: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub access: Option<FetchAccess>,
     pub capture: String,
     pub first_seq: u64,
     pub last_seq: u64,
@@ -545,6 +559,11 @@ impl ProgramMap {
         let mut fetch_keys = BTreeSet::new();
         let mut fetch_endpoints = BTreeMap::new();
         for (id, capture) in &self.fetch_captures {
+            let producer = if capture.mapped_cartridge_size.is_some() {
+                crate::fetch::PHYSICAL_FORMAT
+            } else {
+                crate::fetch::FORMAT
+            };
             RomIdentity {
                 sha256: capture.trace_sha256.clone(),
                 size: 64,
@@ -556,9 +575,12 @@ impl ProgramMap {
                 || capture.instruction_call_budget == 0
                 || capture.instruction_call_budget > crate::fetch::MAX_BUDGET
                 || capture.fetch_count > capture.instruction_call_budget
+                || capture
+                    .mapped_cartridge_size
+                    .is_some_and(|size| u64::from(size) != (self.rom.size & !7) || size < 64)
                 || self.evidence.get(id).is_none_or(|e| {
                     e.kind != EvidenceKind::Trace
-                        || e.producer != crate::fetch::FORMAT
+                        || e.producer != producer
                         || e.revision != capture.revision
                 })
             {
@@ -573,18 +595,20 @@ impl ProgramMap {
                 .get(&f.capture)
                 .ok_or("unknown fetch capture")?;
             if !f.pc.0.is_multiple_of(4)
+                || f.access.is_some() != capture.mapped_cartridge_size.is_some()
+                || f.access.is_some_and(|a| !a.physical.0.is_multiple_of(4))
                 || f.first_seq > f.last_seq
                 || f.last_seq >= capture.fetch_count
                 || f.occurrences == 0
                 || f.occurrences > f.last_seq - f.first_seq + 1
                 || (f.occurrences == 1 && f.first_seq != f.last_seq)
                 || !f.evidence.contains(&f.capture)
-                || !fetch_keys.insert((&f.capture, f.pc, f.word, f.delay_slot))
+                || !fetch_keys.insert((&f.capture, f.pc, f.word, f.delay_slot, f.access))
             {
                 return Err("invalid or duplicate raw fetch summary".into());
             }
             for seq in [f.first_seq, f.last_seq] {
-                let value = (f.pc, f.word, f.delay_slot);
+                let value = (f.pc, f.word, f.delay_slot, f.access);
                 if fetch_endpoints
                     .insert((&f.capture, seq), value)
                     .is_some_and(|old| old != value)

@@ -20,7 +20,7 @@ fn run() -> Result<(), String> {
             let map = import_fetch(reader, &rom)?;
             fs::write(output, map.to_json()?).map_err(|e| e.to_string())?;
             println!(
-                "imported {} raw fetched-word/slot summaries; executable identities remain unknown",
+                "imported {} raw fetch summaries; executable identities remain unknown",
                 map.fetch_observations.len()
             );
         }

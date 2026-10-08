@@ -1,5 +1,5 @@
 use plaid_core::{
-    fetch::{FORMAT, REVISION, import_fetch, verify_fetch_capture},
+    fetch::{FORMAT, PHYSICAL_FORMAT, REVISION, import_fetch, verify_fetch_capture},
     merge::merge_maps,
     program::*,
     rom::{CanonicalRom, sha256},
@@ -31,6 +31,141 @@ fn raw(events: &[(u64, u32, bool)]) -> String {
 }
 fn import(input: &str) -> Result<ProgramMap, String> {
     import_fetch(Cursor::new(input.as_bytes()), &rom())
+}
+
+fn physical_raw(events: &[(u32, bool)]) -> String {
+    let input = raw(&vec![(0x4000, 0, false); events.len()]);
+    input
+        .lines()
+        .enumerate()
+        .map(|(index, line)| {
+            let mut event: serde_json::Value = serde_json::from_str(line).unwrap();
+            if index == 0 {
+                event["format"] = PHYSICAL_FORMAT.into();
+                event["mapped_cartridge_size"] = 4096.into();
+            } else if index <= events.len() {
+                event["physical"] = events[index - 1].0.into();
+                event["cached"] = events[index - 1].1.into();
+            }
+            event.to_string() + "\n"
+        })
+        .collect()
+}
+
+#[test]
+fn physical_fetches_preserve_remappings_and_cache_variants_without_source_claims() {
+    let input = physical_raw(&[
+        (0x2000, false),
+        (0x3000, false),
+        (0x2000, true),
+        (0x2000, false),
+    ]);
+    let map = import(&input).unwrap();
+    assert_eq!(map.fetch_observations.len(), 3);
+    assert_eq!(
+        map.fetch_captures
+            .values()
+            .next()
+            .unwrap()
+            .mapped_cartridge_size,
+        Some(4096)
+    );
+    let repeated = map
+        .fetch_observations
+        .iter()
+        .find(|f| {
+            f.access
+                == Some(FetchAccess {
+                    physical: PhysicalAddr(0x2000),
+                    cached: false,
+                })
+        })
+        .unwrap();
+    assert_eq!(
+        (repeated.first_seq, repeated.last_seq, repeated.occurrences),
+        (0, 3, 2)
+    );
+    assert!(map.regions.is_empty() && map.loads.is_empty() && map.entries.is_empty());
+    verify_fetch_capture(&map, Cursor::new(input.as_bytes()), &rom()).unwrap();
+    assert_eq!(map, ProgramMap::from_json(&map.to_json().unwrap()).unwrap());
+    let legacy = import(&raw(&[(0x4000, 0, false)])).unwrap();
+    let old_json = legacy.to_json().unwrap();
+    assert!(!old_json.contains("mapped_cartridge_size") && !old_json.contains("\"access\""));
+    let merged = merge_maps(&map, &legacy).unwrap();
+    assert_eq!(merged.fetch_observations.len(), 4);
+    assert_eq!(merged, merge_maps(&legacy, &map).unwrap());
+    assert_eq!(merged, merge_maps(&merged, &map).unwrap());
+    verify_fetch_capture(&merged, Cursor::new(input.as_bytes()), &rom()).unwrap();
+    let mut altered = map.clone();
+    let mut fact = altered.fetch_observations.pop_first().unwrap();
+    fact.access.as_mut().unwrap().physical = PhysicalAddr(0x4000);
+    altered.fetch_observations.insert(fact);
+    altered.validate().unwrap();
+    assert!(verify_fetch_capture(&altered, Cursor::new(input.as_bytes()), &rom()).is_err());
+    let report = solve(&map, &[], Scope::WholeRom).unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    assert!(!report.native_complete);
+    assert!(
+        report
+            .blockers
+            .iter()
+            .any(|b| b.kind == "fetch_execution_identity_unknown")
+    );
+}
+
+#[test]
+fn physical_wire_and_map_metadata_are_versioned_and_fail_closed() {
+    let input = physical_raw(&[(0x2000, false)]);
+    for bad in [
+        input.replace(PHYSICAL_FORMAT, FORMAT),
+        input.replace("\"physical\":8192,", ""),
+        input.replace("\"cached\":false,", ""),
+        input.replace("\"physical\":8192", "\"physical\":8193"),
+        input.replace("\"physical\":8192", "\"physical\":4294967296"),
+        input.replace("\"cached\":false", "\"cached\":0"),
+        input.replace("\"physical\":8192", "\"physical\":null"),
+        input.replace("\"mapped_cartridge_size\":4096,", ""),
+        input.replace(
+            "\"mapped_cartridge_size\":4096",
+            "\"mapped_cartridge_size\":4088",
+        ),
+        input.replace(
+            "\"mapped_cartridge_size\":4096",
+            "\"mapped_cartridge_size\":null",
+        ),
+    ] {
+        assert!(import(&bad).is_err(), "accepted {bad}");
+    }
+    let legacy = raw(&[(0x4000, 0, false)]);
+    for field in [
+        "\"physical\":null,",
+        "\"physical\":8192,",
+        "\"cached\":false,",
+    ] {
+        assert!(import(&legacy.replace("\"seq\":0,", &format!("\"seq\":0,{field}"))).is_err());
+    }
+    let map = import(&input).unwrap();
+    for access in [
+        None,
+        Some(FetchAccess {
+            physical: PhysicalAddr(1),
+            cached: false,
+        }),
+    ] {
+        let mut invalid = map.clone();
+        let mut fact = invalid.fetch_observations.pop_first().unwrap();
+        fact.access = access;
+        invalid.fetch_observations.insert(fact);
+        assert!(invalid.validate().is_err());
+    }
+    let mut invalid = map;
+    invalid
+        .fetch_captures
+        .values_mut()
+        .next()
+        .unwrap()
+        .mapped_cartridge_size = Some(4088);
+    assert!(invalid.validate().is_err());
 }
 
 #[test]
