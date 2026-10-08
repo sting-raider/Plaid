@@ -227,3 +227,74 @@ fn invalidation_and_same_pc_recompilation_keep_distinct_generations() {
     assert!(m.regions.iter().any(|r| r.generation == 1));
     assert_eq!(m.executable_writes.len(), 1);
 }
+
+#[test]
+fn indirect_observation_precedes_target_compilation_and_survives_raw() {
+    let mut known = image();
+    known.words = vec![0x01000008, 0, 0, 0, 0, 0, 0, 0, 0x08000008, 0];
+    let mut t = trace(known.words[..2].to_vec());
+    for data in [
+        TraceEvent::IndirectTargetObserved {
+            site: GuestAddr(0x80000000),
+            target: GuestAddr(0x80000020),
+            delay_slot_pc: Some(GuestAddr(0x80000004)),
+        },
+        TraceEvent::CompileBegin {
+            unit: 1,
+            start: GuestAddr(0x80000020),
+            physical_start: Some(PhysicalAddr(32)),
+            delay_slot_entry: false,
+        },
+        TraceEvent::EntryInstalled {
+            unit: 1,
+            pc: GuestAddr(0x80000020),
+            register_mask: 0,
+        },
+        TraceEvent::UnitCompiled {
+            unit: 1,
+            start: GuestAddr(0x80000020),
+            words: known.words[8..].to_vec(),
+        },
+    ] {
+        t.events.push(EventRecord {
+            seq: t.events.len() as u64,
+            data,
+        });
+    }
+    let m = import_trace(&t, std::slice::from_ref(&known), 100).unwrap();
+    assert_eq!(m.indirect_observations.len(), 1);
+    let site = m.indirect_sites.first().unwrap();
+    assert_eq!(site.observed.len(), 1);
+    assert_eq!(
+        site.observed.first_key_value().unwrap().0,
+        &known.address(GuestAddr(0x80000020))
+    );
+    assert!(site.closed_proof.is_none());
+    assert!(
+        !m.unresolved
+            .iter()
+            .any(|u| u.kind == "uncorrelated_indirect_observation")
+    );
+    assert_eq!(m, ProgramMap::from_json(&m.to_json().unwrap()).unwrap());
+    assert_eq!(m, merge_maps(&m, &m).unwrap());
+
+    // A future generation cannot explain an earlier runtime transfer.
+    t.events.insert(
+        4,
+        EventRecord {
+            seq: 0,
+            data: TraceEvent::Invalidate { range: None },
+        },
+    );
+    for (seq, event) in t.events.iter_mut().enumerate() {
+        event.seq = seq as u64;
+    }
+    let m = import_trace(&t, &[known], 100).unwrap();
+    assert_eq!(m.indirect_observations.len(), 1);
+    assert!(m.indirect_sites.iter().all(|s| s.observed.is_empty()));
+    assert!(
+        m.unresolved
+            .iter()
+            .any(|u| u.kind == "uncorrelated_indirect_observation")
+    );
+}

@@ -13,6 +13,7 @@
 static FILE *plaid_trace_file;
 static uint64_t plaid_trace_seq, plaid_trace_unit, plaid_current_unit;
 static int plaid_trace_failed;
+static int plaid_trace_execution_enabled;
 
 static void plaid_trace_check(void) {
     if (plaid_trace_file && (ferror(plaid_trace_file) || fflush(plaid_trace_file))) {
@@ -37,6 +38,7 @@ static void plaid_trace_open(void) {
     plaid_trace_close();
     plaid_trace_seq = plaid_trace_unit = plaid_current_unit = 0;
     plaid_trace_failed = 0;
+    plaid_trace_execution_enabled = 0;
     if (!path || !*path) return;
     if (!hash || strlen(hash) != 64 || !size_text || !*size_text) goto invalid;
     for (i = 0; i < 64; ++i)
@@ -46,10 +48,17 @@ static void plaid_trace_open(void) {
     if (*end || size < 64 || size > UINT32_MAX) goto invalid;
     plaid_trace_file = fopen(path, "wb");
     if (!plaid_trace_file) { fprintf(stderr, "Plaid: cannot open trace destination\n"); return; }
+#if defined(NEW_DYNAREC) && NEW_DYNAREC == NEW_DYNAREC_X64
+    {
+        const char *execution = getenv("PLAID_TRACE_EXECUTION");
+        plaid_trace_execution_enabled = execution && !strcmp(execution, "1");
+    }
+#endif
     fprintf(plaid_trace_file,
         "{\"record\":\"header\",\"header\":{\"schema_version\":0,\"rom\":{\"sha256\":\"%s\",\"size\":%llu},"
         "\"engine\":\"mupen64plus-new_dynarec\",\"revision\":\"ba95bab92a76744753bfe61470823a4937850ab0\","
-        "\"capabilities\":[\"compilation_units\",\"entry_installation\",\"invalidation\",\"rom_dma\",\"target_lookup\"]}}\n", hash, size);
+        "\"capabilities\":[\"compilation_units\",\"entry_installation\"%s,\"invalidation\",\"rom_dma\",\"target_lookup\"]}}\n", hash, size,
+        plaid_trace_execution_enabled ? ",\"indirect_targets_x64_in_unit\"" : "");
     plaid_trace_check();
     return;
 invalid:
@@ -91,6 +100,14 @@ static void plaid_trace_lookup(uint32_t target, int delay_slot) {
 static void plaid_trace_link(uint32_t target) {
     if (!plaid_trace_prefix("runtime_link")) return;
     fprintf(plaid_trace_file, ",\"target\":%" PRIu32, target & ~3u); plaid_trace_finish();
+}
+/* Called by generated reference code after the delay slot, before lookup/cache
+ * dispatch. The target argument is the saved pre-delay-slot branch operand. */
+void plaid_trace_indirect(uint32_t site, uint32_t target) {
+    if (!plaid_trace_prefix("indirect_target_observed")) return;
+    fprintf(plaid_trace_file, ",\"site\":%" PRIu32 ",\"target\":%" PRIu32 ",\"delay_slot_pc\":%" PRIu32,
+        site, target, site + 4u);
+    plaid_trace_finish();
 }
 static void plaid_trace_invalidate(uint32_t address, size_t size) {
     if (!plaid_trace_prefix("invalidate")) return;

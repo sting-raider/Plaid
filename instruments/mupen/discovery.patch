@@ -32,7 +32,7 @@ index 395b494..8c21364 100644
      invalidate_r4300_cached_code(cart_rom->r4300, 0x80000000 + dram_addr, length);
      invalidate_r4300_cached_code(cart_rom->r4300, 0xa0000000 + dram_addr, length);
 diff --git a/src/device/r4300/new_dynarec/new_dynarec.c b/src/device/r4300/new_dynarec/new_dynarec.c
-index 5f70f7c..4cc8ce3 100644
+index 5f70f7c..14db8da 100644
 --- a/src/device/r4300/new_dynarec/new_dynarec.c
 +++ b/src/device/r4300/new_dynarec/new_dynarec.c
 @@ -40,6 +40,7 @@
@@ -107,7 +107,26 @@ index 5f70f7c..4cc8ce3 100644
      size_t i;
      size_t begin;
      size_t end;
-@@ -8651,6 +8660,7 @@ static void pagespan_ds(void)
+@@ -7356,6 +7365,18 @@ static void rjump_assemble(int i,struct regstat *i_regs)
+     do_miniht_load(ht,rh);
+   }
+   #endif
++#if NEW_DYNAREC == NEW_DYNAREC_X64
++  if(plaid_trace_execution_enabled) {
++    /* Preserve allocated caller-save registers. Copy the saved branch operand
++       before overwriting ABI argument registers. Flags are recomputed below.
++       This runs before both mini_ht hits and the general lookup path. */
++    save_regs(0xff);
++    if(rs!=ARG2_REG) emit_mov(rs,ARG2_REG);
++    emit_movimm(start+i*4,ARG1_REG);
++    emit_call((intptr_t)plaid_trace_indirect);
++    restore_regs(0xff);
++  }
++#endif
+   //do_cc(i,branch_regs[i].regmap,&adj,-1,TAKEN);
+   //if(adj) emit_addimm(cc,2*(ccadj[i]+2-adj),cc); // ??? - Shouldn't happen
+   //assert(adj==0);
+@@ -8651,6 +8672,7 @@ static void pagespan_ds(void)
    do_dirty_stub_ds(head);
    head->clean_addr=(void *)out;
    (void)ll_add(jump_in+page,vaddr,(void *)out,(void *)out,start,copy,slen*4);
@@ -115,7 +134,7 @@ index 5f70f7c..4cc8ce3 100644
    assert(regs[0].regmap_entry[HOST_CCREG]==CCREG);
    emit_addimm(HOST_CCREG,CLOCK_DIVIDER,HOST_CCREG);
    if(regs[0].regmap[HOST_CCREG]!=CCREG)
-@@ -8747,6 +8757,7 @@ static void pagespan_ds(void)
+@@ -8747,6 +8769,7 @@ static void pagespan_ds(void)
  /**** Recompiler ****/
  void new_dynarec_init(void)
  {
@@ -123,7 +142,7 @@ index 5f70f7c..4cc8ce3 100644
    DebugMessage(M64MSG_INFO, "Init new dynarec");
    ensure_dynarec_cache_alignment();
  
-@@ -8866,6 +8877,7 @@ void new_dynarec_init(void)
+@@ -8866,6 +8889,7 @@ void new_dynarec_init(void)
  
  void new_dynarec_cleanup(void)
  {
@@ -131,7 +150,7 @@ index 5f70f7c..4cc8ce3 100644
  #if defined(RECOMPILER_DEBUG) && !defined(RECOMP_DBG)
    recomp_dbg_cleanup();
  #endif
-@@ -8943,6 +8955,8 @@ static int new_recompile_block_impl(int addr)
+@@ -8943,6 +8967,8 @@ static int new_recompile_block_impl(int addr)
      exit(1);
    }
  
@@ -140,7 +159,7 @@ index 5f70f7c..4cc8ce3 100644
    /* Pass 1: disassemble */
    /* Pass 2: register dependencies, branch targets */
    /* Pass 3: register allocation */
-@@ -11898,6 +11912,7 @@ static int new_recompile_block_impl(int addr)
+@@ -11898,6 +11924,7 @@ static int new_recompile_block_impl(int addr)
            intptr_t entry_point=do_dirty_stub(i,head);
            head->clean_addr=(void*)entry_point;
            head=ll_add(jump_in+page,vaddr,(void *)entry_point,(void *)entry_point,start,copy,slen*4);
@@ -148,7 +167,7 @@ index 5f70f7c..4cc8ce3 100644
            // If there was an existing entry in the hash table,
            // replace it with the new address.
            // Don't add new entries.  We'll insert the
-@@ -11928,6 +11943,7 @@ static int new_recompile_block_impl(int addr)
+@@ -11928,6 +11955,7 @@ static int new_recompile_block_impl(int addr)
            intptr_t entry_point=do_dirty_stub(i,head);
            head->clean_addr=(void*)entry_point;
            (void)ll_add_32(jump_in+page,vaddr,r,(void *)entry_point,(void *)entry_point,start,copy,slen*4);
@@ -156,7 +175,7 @@ index 5f70f7c..4cc8ce3 100644
          }
        }
      }
-@@ -11968,6 +11984,8 @@ static int new_recompile_block_impl(int addr)
+@@ -11968,6 +11996,8 @@ static int new_recompile_block_impl(int addr)
      }
    }
  

@@ -15,6 +15,7 @@ trait Fact: Clone + Ord {
 macro_rules! facts { ($($t:ty),*) => { $(impl Fact for $t { fn refs(&mut self) -> &mut EvidenceRefs { &mut self.evidence } })* }; }
 facts!(
     ObservedDma,
+    ObservedIndirect,
     Region,
     BasicBlock,
     DirectEdge,
@@ -58,6 +59,7 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
     out.direct_edges = union(&left.direct_edges, &right.direct_edges);
     out.loads = union(&left.loads, &right.loads);
     out.dma_observations = union(&left.dma_observations, &right.dma_observations);
+    out.indirect_observations = union(&left.indirect_observations, &right.indirect_observations);
     out.relocations = union(&left.relocations, &right.relocations);
     out.executable_writes = union(&left.executable_writes, &right.executable_writes);
     out.rsp_microcodes = union(&left.rsp_microcodes, &right.rsp_microcodes);
@@ -215,6 +217,7 @@ fn import(
     let mut epoch = 0u64;
     let mut units = BTreeMap::new();
     let mut recent = Vec::<CodeImage>::new();
+    let mut observations = Vec::<PendingIndirect>::new();
     let mut transfers = Vec::<(u64, RomOffset, PhysicalAddr, u32)>::new();
     for event in &trace.events {
         let id = format!("trace:{session}:{}", event.seq);
@@ -427,6 +430,7 @@ fn import(
                 recent.push(image);
             }
             TraceEvent::Invalidate { range } => {
+                correlate_indirect(&mut out, &recent, &mut observations, epoch);
                 epoch = epoch.checked_add(1).ok_or("trace generation overflow")?;
                 out.executable_writes.insert(ExecutableWrite {
                     range: range.clone(),
@@ -434,49 +438,32 @@ fn import(
                     evidence,
                 });
             }
-            TraceEvent::IndirectTargetObserved { site, target, .. } => {
-                let sources: Vec<_> = recent
+            TraceEvent::IndirectTargetObserved {
+                site,
+                target,
+                delay_slot_pc,
+            } => {
+                out.indirect_observations.insert(ObservedIndirect {
+                    site: *site,
+                    target: *target,
+                    delay_slot_pc: *delay_slot_pc,
+                    generation: epoch,
+                    evidence: evidence.clone(),
+                });
+                // Freeze possible source identities at execution time. The
+                // target's first compilation may follow this event; defer that
+                // join until the epoch ends, never across an invalidation.
+                let sources = out
+                    .indirect_sites
                     .iter()
-                    .filter(|i| i.base.generation == epoch && i.word(*site).is_some())
+                    .filter(|s| s.site.pc == *site && s.site.generation == epoch)
+                    .map(|s| s.site.clone())
                     .collect();
-                let targets: Vec<_> = recent
-                    .iter()
-                    .filter(|i| i.base.generation == epoch && i.word(*target).is_some())
-                    .collect();
-                if sources.len() == 1 && targets.len() == 1 {
-                    let source = sources[0].address(*site);
-                    let matches: Vec<_> = out
-                        .indirect_sites
-                        .iter()
-                        .filter(|s| s.site == source)
-                        .cloned()
-                        .collect();
-                    if matches.len() == 1 {
-                        let mut s = matches[0].clone();
-                        out.indirect_sites.remove(&s);
-                        s.observed
-                            .entry(targets[0].address(*target))
-                            .or_default()
-                            .extend(evidence.clone());
-                        out.indirect_sites.insert(s);
-                    } else {
-                        out.unresolved.insert(Unresolved {
-                            kind: "uncorrelated_indirect_observation".into(),
-                            site: Some(source),
-                            detail: "trace source has no unique decoded indirect site".into(),
-                            evidence,
-                        });
-                    }
-                } else {
-                    out.unresolved.insert(Unresolved {
-                        kind: "uncorrelated_indirect_observation".into(),
-                        site: None,
-                        detail: format!(
-                            "no unique current execution identities for {site:?} -> {target:?}"
-                        ),
-                        evidence,
-                    });
-                }
+                observations.push(PendingIndirect {
+                    sources,
+                    target: *target,
+                    evidence,
+                });
             }
             TraceEvent::TargetLookup { target, .. } | TraceEvent::RuntimeLink { target } => {
                 // Lookups never establish source-correlated indirect targets.
@@ -489,8 +476,57 @@ fn import(
             }
         }
     }
+    correlate_indirect(&mut out, &recent, &mut observations, epoch);
     out.validate()?;
     Ok(out)
+}
+
+struct PendingIndirect {
+    sources: BTreeSet<CodeAddress>,
+    target: GuestAddr,
+    evidence: EvidenceRefs,
+}
+
+fn correlate_indirect(
+    out: &mut ProgramMap,
+    images: &[CodeImage],
+    pending: &mut Vec<PendingIndirect>,
+    epoch: u64,
+) {
+    for observation in pending.drain(..) {
+        let targets: BTreeSet<_> = images
+            .iter()
+            .filter(|image| {
+                image.base.generation == epoch && image.word(observation.target).is_some()
+            })
+            .map(|image| image.address(observation.target))
+            .collect();
+        if observation.sources.len() == 1 && targets.len() == 1 {
+            let source = observation.sources.first().expect("one source");
+            let sites: Vec<_> = out
+                .indirect_sites
+                .iter()
+                .filter(|s| &s.site == source)
+                .cloned()
+                .collect();
+            if sites.len() == 1 {
+                let mut site = sites[0].clone();
+                out.indirect_sites.remove(&site);
+                site.observed
+                    .entry(targets.first().expect("one target").clone())
+                    .or_default()
+                    .extend(observation.evidence);
+                out.indirect_sites.insert(site);
+                continue;
+            }
+        }
+        out.unresolved.insert(Unresolved {
+            kind: "uncorrelated_indirect_observation".into(),
+            site: if observation.sources.len() == 1 { observation.sources.first().cloned() } else { None },
+            detail: format!("no unique decoded source/target identity for observed target {:?} in epoch {epoch}", observation.target),
+            evidence: observation.evidence,
+        });
+    }
 }
 
 fn add_provenance(mut p: ProgramMap, refs: &EvidenceRefs) -> ProgramMap {

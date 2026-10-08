@@ -1,10 +1,10 @@
 # Next
 
-1. Run a synthetic N64 program in an instrumented reference session. Add
-   source-correlated JR/JALR events and cover inline assembly lookup hits/misses.
-   Keep speculative compilation distinct from actual execution.
-2. Extend indirect certificates with sound cross-block propagation and bounded
+1. Extend indirect certificates with sound cross-block propagation and bounded
    jump/pointer tables; independently recheck their assumptions and target sets.
+2. Extend the headless execution corpus, especially register allocation stress,
+   branch-likely/link alias cases and pagespan JR/JALR. Then build a reference
+   session with real devices. Keep speculative compilation distinct from execution.
 3. Track decompression, CPU copies, address aliases and overlay unload/reload,
    relocation and instruction-patch snapshots. PI copy sensing alone is insufficient.
 4. Implement whole-ROM certificate verifiers for roots/boot, exceptions, execution

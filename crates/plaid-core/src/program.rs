@@ -173,6 +173,18 @@ pub struct ObservedDma {
     pub evidence: EvidenceRefs,
 }
 
+/// Raw source-correlated execution evidence survives missing/ambiguous image
+/// identities. Generation is the importing trace's conservative invalidation epoch.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ObservedIndirect {
+    pub site: GuestAddr,
+    pub target: GuestAddr,
+    pub delay_slot_pc: Option<GuestAddr>,
+    pub generation: u64,
+    pub evidence: EvidenceRefs,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Relocation {
@@ -236,6 +248,8 @@ pub struct ProgramMap {
     pub overlays: BTreeMap<String, Overlay>,
     pub loads: BTreeSet<LoadMapping>,
     pub dma_observations: BTreeSet<ObservedDma>,
+    #[serde(default)]
+    pub indirect_observations: BTreeSet<ObservedIndirect>,
     pub relocations: BTreeSet<Relocation>,
     pub executable_writes: BTreeSet<ExecutableWrite>,
     pub rsp_microcodes: BTreeSet<Microcode>,
@@ -256,6 +270,7 @@ impl ProgramMap {
             overlays: BTreeMap::new(),
             loads: BTreeSet::new(),
             dma_observations: BTreeSet::new(),
+            indirect_observations: BTreeSet::new(),
             relocations: BTreeSet::new(),
             executable_writes: BTreeSet::new(),
             rsp_microcodes: BTreeSet::new(),
@@ -373,6 +388,17 @@ impl ProgramMap {
             if u64::from(d.physical_destination.0) + u64::from(d.size) > 1u64 << 32 {
                 return Err("DMA destination overflow".into());
             }
+        }
+        for o in &self.indirect_observations {
+            if !o.site.0.is_multiple_of(4) || !o.target.0.is_multiple_of(4) {
+                return Err("unaligned indirect observation".into());
+            }
+            if o.delay_slot_pc
+                .is_some_and(|ds| o.site.0.checked_add(4) != Some(ds.0))
+            {
+                return Err("incorrect observed delay slot PC".into());
+            }
+            refs(&o.evidence)?;
         }
         for r in &self.relocations {
             address(&r.site)?;
