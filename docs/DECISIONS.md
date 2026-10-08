@@ -303,3 +303,22 @@ remain exact. Explicit synthetic initial state excludes boot and event-equivalen
 claims. No reference code or decoder enters Plaid core or native mode. Broader fetch
 sensing, FPU/TLB/RSP and native differential acceptance require separate work;
 finite fixture agreement cannot close a whole-ROM executable universe.
+
+## ADR-0026: Observe exact ares fetches through its debugger, with explicit bounds
+
+Status: Accepted for research, 2026-10-08.
+
+The existing interpreter instruction prologue passes its actual fetched word to
+the debugger before opcode execution. A generated const disassembler accessor
+exposes that word to a headless callback; no CPU fields/layout or instruction
+semantics change. Disable history/mask suppression and recompilation, retain
+64-bit PC and delay-slot context, and perform no additional guest reads or TLB
+translations. Five-million-call tests preserve full GPR/HI/LO/PC/Count, RAM/SP
+hashes and guest message bytes while repeated fetch streams match exactly.
+Cartridge fetch words are checked against canonical bytes through the direct
+segment mapping. This separate research format declares synthetic SP entry and
+budget-stop scope; it is not a fabricated compilation/copy trace. Keep the startup
+Config failure and unknown PIF/IPL2 state visible. Production schema, import,
+changing-byte identity, copy/overlay lifecycle and scalable provenance require a
+separate implementation decision. Neither fetched words nor broad finite samples
+prove retirement, immutability, complete execution coverage or whole-ROM closure.

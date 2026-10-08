@@ -13,50 +13,69 @@ REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 OUTPUT = ROOT / "target/ares-oracle-spike"
 
 
-def worker():
+def build(driver, directory, raw_fetch_access=False):
+    output = Path(directory)
     assert subprocess.check_output(["git","rev-parse","HEAD"],cwd=REF,text=True).strip() == REV
     subprocess.run(["git","-c","core.autocrlf=true","diff","--quiet","HEAD"],cwd=REF,check=True)
-    OUTPUT.mkdir(parents=True,exist_ok=True)
-    shutil.copyfile(REF / "LICENSE", OUTPUT / "LICENSE")
-    driver = Path(__file__).with_name("driver.cpp")
+    output.mkdir(parents=True,exist_ok=True)
+    shutil.copyfile(REF / "LICENSE", output / "LICENSE")
+    driver = Path(driver)
     compiler = subprocess.check_output(["g++","--version"],text=True).splitlines()[0]
     inputs = {"revision":REV,"compiler":compiler,"driver":hashlib.sha256(driver.read_bytes()).hexdigest(),
+        "raw_fetch_access":raw_fetch_access,
+        "fixture_driver":hashlib.sha256(Path(__file__).with_name("driver.cpp").read_bytes()).hexdigest(),
         "recipe":hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
-    exe = OUTPUT / "oracle"
-    manifest = OUTPUT / "build.json"
+    exe = output / "oracle"
+    manifest = output / "build.json"
     if not manifest.exists() or json.loads(manifest.read_text()) != inputs or not exe.exists():
         flags = ["-O1","-std=c++20","-msse4.1","-DSLJIT_HAVE_CONFIG_PRE=1","-DSLJIT_HAVE_CONFIG_POST=1"]
         includes = [REF / p for p in ("ares","nall",".","thirdparty","thirdparty/xxhash","ares/n64/system")]
+        if raw_fetch_access:
+            # Expose existing debugger input through an accessor in a generated
+            # header. No CPU fields, instruction code or object layout changes.
+            header = (REF / "ares/n64/cpu/cpu.hpp").read_text()
+            signature = "    auto disassemble(u32 address, u32 instruction) -> string;"
+            assert header.count(signature) == 1
+            header = header.replace(signature, signature + "\n    auto fetchedWord() const -> u32 { return instruction; }")
+            destination = output / "include/n64/cpu/cpu.hpp"
+            destination.parent.mkdir(parents=True,exist_ok=True)
+            destination.write_text(header)
+            includes.insert(0, output / "include")
         include_flags = [part for path in includes for part in ("-I",str(path))]
         core = (REF / "ares/ares/ares.cpp.in").read_text().replace("#include <ares/resource/resource.cpp>", "// UI-only resources omitted in headless build.")
         for key, value in {"ARES_NAME":"Plaid pinned ares oracle", "ARES_VERSION":REV,
                 "ARES_LEGAL_COPYRIGHT_SHORT":"See upstream LICENSE", "ARES_WEBSITE":"ares-emu.net"}.items():
             core = core.replace(f"@{key}@", value)
-        (OUTPUT / "core.cpp").write_text(core)
+        (output / "core.cpp").write_text(core)
         # The pin leaves one Vulkan load call unguarded in System::run. Guard
         # only that renderer call in a generated TU; CPU/RSP sources stay exact.
         system = (REF / "ares/n64/system/system.cpp").read_text()
         assert system.count("    vulkan.load(node);") == 1
         system = system.replace("    vulkan.load(node);", "#if defined(VULKAN)\n    vulkan.load(node);\n#endif")
-        (OUTPUT / "system.cpp").write_text(system)
+        (output / "system.cpp").write_text(system)
         unity = (REF / "ares/n64/n64.cpp").read_text()
         assert unity.count("#include <n64/system/system.cpp>") == 1
-        unity = unity.replace("#include <n64/system/system.cpp>", f'#include "{OUTPUT / "system.cpp"}"')
-        (OUTPUT / "n64.cpp").write_text(unity)
+        unity = unity.replace("#include <n64/system/system.cpp>", f'#include "{output / "system.cpp"}"')
+        (output / "n64.cpp").write_text(unity)
         objects = []
-        with (OUTPUT / "build.log").open("w") as log:
+        with (output / "build.log").open("w") as log:
             for name, source in [("sljit",REF / "thirdparty/sljit/sljit_src/sljitLir.c"),("libco",REF / "libco/libco.c")]:
-                obj = OUTPUT / f"{name}.o"
+                obj = output / f"{name}.o"
                 subprocess.run(["gcc","-O1",*include_flags,"-DSLJIT_HAVE_CONFIG_PRE=1","-DSLJIT_HAVE_CONFIG_POST=1","-c",str(source),"-o",str(obj)],check=True,stdout=log,stderr=subprocess.STDOUT)
                 objects.append(obj)
-            sources = [driver,OUTPUT / "core.cpp",OUTPUT / "n64.cpp",REF / "ares/component/processor/sm5k/sm5k.cpp",
+            sources = [driver,output / "core.cpp",output / "n64.cpp",REF / "ares/component/processor/sm5k/sm5k.cpp",
                 REF / "ares/ares/memory/fixed-allocator.cpp",REF / "nall/nall/nall.cpp",REF / "thirdparty/sljitAllocator.cpp"]
             try:
                 subprocess.run(["g++",*flags,*include_flags,*map(str,sources),*map(str,objects),"-pthread","-ldl","-o",str(exe)],check=True,stdout=log,stderr=subprocess.STDOUT)
             except subprocess.CalledProcessError:
-                print("\n".join((OUTPUT / "build.log").read_text().splitlines()[-30:]))
+                print("\n".join((output / "build.log").read_text().splitlines()[-30:]))
                 raise
         manifest.write_text(json.dumps(inputs,indent=2)+"\n")
+    return exe
+
+
+def worker():
+    exe = build(Path(__file__).with_name("driver.cpp"), OUTPUT)
     results = {}
     for case in ("cartridge","linked","unaligned","slot_exception"):
         first = subprocess.check_output([str(exe),case],text=True,timeout=10)
