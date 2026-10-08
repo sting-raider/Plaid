@@ -377,3 +377,5 @@ complete store/mutation and RSP policies. Header CRC fields are parsed, not veri
 Analysis scalability has not been benchmarked. See NEXT for the execution order.
 
 EBus HiddenRAM research now reproduces an exhaustive 65,536-pair header probe and seven reducer negatives. Its Word is derived from four hidden bits rather than copied RAM bytes; actual full fetch/epoch evidence remains PARTIAL (ADR-0062).
+
+Reproduced TLBWI/alias/remap/ASID/global/reverse-endian fetch cases now retain actual per-fetch identity-RDRAM origins. Cached and failed translations fail closed; mapping lifetime and other page/mode cases remain open (ADR-0063).

@@ -897,3 +897,18 @@ read within fetch scope, retain mapped hidden offsets and transformation inputs,
 or keep the source unknown. The compiled header/source/model evidence is PARTIAL
 for full fetch provenance and does not establish hidden-storage epochs, restore
 lineage, hardware correctness or an executable-image identity policy.
+
+## ADR-0063: Resolve uncached TLB fetch origins per actual fetch context
+
+Status: Accepted for research, 2026-10-09.
+
+The recovered full ares TLB fixture reproduces the exact worker receipt. Extend
+the finite identity-RDRAM scalar/fetch join only for an actually resolved uncached
+access. Retain virtual PC, current translated address and post-endian bus address;
+equal-valued virtual aliases and TLBWI remaps are different contexts. Failed
+translations and cached mappings provide no scalar-fetch witness. CCA 2/3 routing
+is pinned ares evidence, not an N64-wide hardware assertion. Mapping generations,
+TLBWR/restore, broader page/mode cases and exhaustive reachability remain open.
+Original fixtures generate ignored licensed reference builds; no emulator code
+or asset enters production. No ProgramMap or closure gate changes.
+

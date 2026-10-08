@@ -130,3 +130,5 @@ physical/source identity and cache/backing mutation obligations explicit; broade
 lifetime and mutation completeness still keep W012 TODO.
 
 2026-10-09 primary: retained/reproduced `ebus-hidden-fetch-gpt56sol` (`fe15ab6`), header/model evidence only; actual hidden-read capture remains open.
+
+2026-10-09 primary: TLB mapped uncached fetch fixture locally reproduced; complete mapping history/closure remains open.

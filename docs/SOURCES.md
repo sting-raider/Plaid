@@ -240,3 +240,5 @@ Before introducing code copied or linked from an upstream project:
 5. when uncertain, use the project as a behavioral/reference oracle instead of copying implementation text.
 
 `spikes/034-ares-ebus-hidden-fetch/` retains original project-owned header-probe/reducer code and its finite reference contract. Exact upstream headers are compiled only from the ignored pinned checkout; no upstream implementation or ROM data is vendored.
+
+`spikes/036-ares-tlb-uncached-fetch/` reuses the original scalar/fetch sensor and executes actual pinned TLBWI/interpreter cases. n64-systemtest/Mupen comparisons remain source evidence, without hardware execution or extra production dependencies.
