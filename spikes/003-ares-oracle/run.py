@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import shutil
+import re
 
 ROOT = Path(__file__).resolve().parents[2]
 REF = ROOT / ".refs/ares"
@@ -13,7 +14,7 @@ REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 OUTPUT = ROOT / "target/ares-oracle-spike"
 
 
-def build(driver, directory, raw_fetch_access=False):
+def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=()):
     output = Path(directory)
     assert subprocess.check_output(["git","rev-parse","HEAD"],cwd=REF,text=True).strip() == REV
     subprocess.run(["git","-c","core.autocrlf=true","diff","--quiet","HEAD"],cwd=REF,check=True)
@@ -23,6 +24,8 @@ def build(driver, directory, raw_fetch_access=False):
     compiler = subprocess.check_output(["g++","--version"],text=True).splitlines()[0]
     inputs = {"revision":REV,"compiler":compiler,"driver":hashlib.sha256(driver.read_bytes()).hexdigest(),
         "raw_fetch_access":raw_fetch_access,
+        "physical_fetch_access":physical_fetch_access,
+        "extra_sources":{str(Path(p).relative_to(ROOT)):hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in extra_sources},
         "fixture_driver":hashlib.sha256(Path(__file__).with_name("driver.cpp").read_bytes()).hexdigest(),
         "recipe":hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
     exe = output / "oracle"
@@ -37,6 +40,8 @@ def build(driver, directory, raw_fetch_access=False):
             signature = "    auto disassemble(u32 address, u32 instruction) -> string;"
             assert header.count(signature) == 1
             header = header.replace(signature, signature + "\n    auto fetchedWord() const -> u32 { return instruction; }")
+            if physical_fetch_access:
+                header = "// Project-owned observer metadata; no CPU object-layout change.\nstruct PlaidFetchAccess { u32 physical; bool cached; };\ninline PlaidFetchAccess plaidFetchAccess;\n" + header
             destination = output / "include/n64/cpu/cpu.hpp"
             destination.parent.mkdir(parents=True,exist_ok=True)
             destination.write_text(header)
@@ -56,6 +61,22 @@ def build(driver, directory, raw_fetch_access=False):
         unity = (REF / "ares/n64/n64.cpp").read_text()
         assert unity.count("#include <n64/system/system.cpp>") == 1
         unity = unity.replace("#include <n64/system/system.cpp>", f'#include "{output / "system.cpp"}"')
+        if physical_fetch_access:
+            assert raw_fetch_access
+            memory = (REF / "ares/n64/cpu/memory.cpp").read_text()
+            marker = "  if(context.littleEndian()) paddr = reverseEndianPaddr<Word>(paddr);\n  if(access.cache) return icache.fetch(access.vaddr, paddr, cpu);"
+            assert memory.count(marker) == 1
+            memory = memory.replace(marker, marker.split("\n")[0] + "\n  plaidFetchAccess = {paddr, access.cache};\n" + marker.split("\n")[1])
+            (output / "cpu_memory.cpp").write_text(memory)
+            cpu = (REF / "ares/n64/cpu/cpu.cpp").read_text()
+            assert cpu.count('#include "memory.cpp"') == 1
+            # Relocating this TU changes quoted-include lookup. Resolve every
+            # CPU include explicitly; system/serialization.cpp shares a name.
+            cpu = re.sub(r'#include "([^"]+)"', lambda match:
+                f'#include "{output / "cpu_memory.cpp" if match[1] == "memory.cpp" else REF / "ares/n64/cpu" / match[1]}"', cpu)
+            (output / "cpu.cpp").write_text(cpu)
+            assert unity.count("#include <n64/cpu/cpu.cpp>") == 1
+            unity = unity.replace("#include <n64/cpu/cpu.cpp>", f'#include "{output / "cpu.cpp"}"')
         (output / "n64.cpp").write_text(unity)
         objects = []
         with (output / "build.log").open("w") as log:

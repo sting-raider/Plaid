@@ -43,6 +43,10 @@ cases. No reference code is linked into Plaid core or a native artifact.
 homebrew with a generated const debugger accessor. Its synthetic SP-entry/budget
 scope excludes authentic PIF/IPL2 boot and complete-suite claims; streams remain
 ignored and no RAM-copy or executable-lifetime inference is introduced.
+`spikes/005-ares-physical-fetch/` records existing effective physical/cache inputs
+in a generated CPU fetch TU. Cache-staleness, TLB remapping and endian-selection
+fixtures pass; full broad checkpoint and v0-projection agreement remain exact.
+The metadata establishes access context, not source backing or code lifetime.
 
 ## gopher64/gopher64
 
