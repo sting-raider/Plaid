@@ -66,3 +66,6 @@ with all legacy map hashes unchanged. Cache/copy/mutation lineage remains open.
 Selected-cache research now preserves slot/tag/index/words with twelve controlled
 cases and matching CPU/timing/RAM/cache checkpoints. Broad source/lifecycle joins
 remain open; W012 stays TODO.
+Broader cache context now preserves selected-line snapshots on the one-million
+boot prefix with exact prior-stream and checkpoint agreement. Production,
+fill/copy/mutation and executable lifetimes remain open; W012 stays TODO.

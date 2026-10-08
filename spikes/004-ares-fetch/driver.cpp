@@ -30,6 +30,9 @@ struct Observer : Headless {
         plaidFetchAccess.cached ? "true" : "false");
       if(backed) std::fprintf(trace,"{\"kind\":\"cartridge_rom\",\"offset\":%u}",rom.reads[0].offset);
       else std::fprintf(trace,"{\"kind\":\"unknown\"}");
+      #if defined(PLAID_CACHE_FETCH)
+      cache_fetch_fields(trace, pc, plaidFetchAccess.physical, plaidFetchAccess.cached, word);
+      #endif
       std::fprintf(trace,"}\n");
       #elif defined(PLAID_PHYSICAL_FETCH)
       std::fprintf(trace, "{\"record\":\"fetch\",\"seq\":%llu,\"pc\":%llu,\"word\":%u,\"delay_slot\":%s,\"physical\":%u,\"cached\":%s}\n",
@@ -142,6 +145,9 @@ int fetch_observer_main(int argc, char** argv) {
     (u32)pi.io.dmaBusy, (u32)pi.io.ioBusy, (u32)pi.io.dramAddress,
     (u32)pi.io.pbusAddress, (u32)pi.io.writeLength, (u32)pi.bsd1.latency,
     (u32)pi.bsd1.pulseWidth, (u32)pi.bsd1.pageSize, (u32)pi.bsd1.releaseDuration);
+  #endif
+  #if defined(PLAID_CACHE_FETCH)
+  cache_checkpoint_fields(state);
   #endif
   std::fprintf(state, "}\n");
   if(std::ferror(state) || std::fclose(state)) return 7;
