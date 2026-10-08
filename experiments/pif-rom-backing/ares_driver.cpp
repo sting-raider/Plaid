@@ -78,7 +78,7 @@ static auto syntheticFirmware() -> std::vector<u8> {
   for(u32 offset = 0; offset < firmware.size(); offset += 4) {
     put(offset, (0xa5000000u ^ (offset * 0x1021u) ^ (offset << 16)));
   }
-  put(0, 0x3c1abfc0);  // valid LUI; natural power-entry fetch remains executable
+  put(0, 0x3c1abfc0);  // valid LUI; useful equal-value fixture word
   put(4, 0x00000000);  // deliberate collision with lockout zero
   put(8, 0x3c1abfc0);  // deliberate duplicate defeats value->offset inference
   return firmware;
@@ -131,9 +131,11 @@ int main(int argc, char** argv) {
 
   u32 returned = 0;
   if(!strcmp(mode, "natural")) {
-    if(!cpu.instruction()) return 6;
-    returned = fw0;
-    if(!plaidEvents.empty() && plaidEvents.back().returned != returned) std::abort();
+    auto access = cpu.devirtualize<Read, Word>(cpu.ipu.pc);
+    if(!access) return 6;
+    auto result = cpu.fetch(access);
+    if(!result) return 6;
+    returned = *result;
   } else if(!strcmp(mode, "mirror")) {
     returned = directFetch(0x1fc00800, false);
   } else if(!strcmp(mode, "high_mirror")) {
