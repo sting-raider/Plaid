@@ -63,3 +63,6 @@ profile, checked power entry and complete-source verification. No code images or
 lifetimes are created; the solver stays OPEN and W012 remains TODO.
 Both boot corpora now recheck complete sources/firmware and self-merge exactly,
 with all legacy map hashes unchanged. Cache/copy/mutation lineage remains open.
+Selected-cache research now preserves slot/tag/index/words with twelve controlled
+cases and matching CPU/timing/RAM/cache checkpoints. Broad source/lifecycle joins
+remain open; W012 stays TODO.
