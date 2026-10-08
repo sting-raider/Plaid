@@ -132,7 +132,6 @@ int main(int argc, char** argv) {
   u32 returned = 0;
   if(!strcmp(mode, "natural")) {
     if(!cpu.instruction()) return 6;
-    cpu.synchronize();
     if(plaidEvents.size()) returned = plaidEvents.back().returned;
   } else if(!strcmp(mode, "mirror")) {
     returned = directFetch(0x1fc00800, false);
