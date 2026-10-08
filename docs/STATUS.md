@@ -30,3 +30,9 @@ Sixteen Rust tests cover formats, normalization, branches, calls, indirect sites
 delay slots, block splitting and rejected/unmapped paths. `plaid discover` writes
 a ProgramMap for an explicitly supplied ROM/load range; it is not automatic boot
 or whole-ROM discovery.
+
+Static/dynamic evidence merging is implemented and tested (20 Rust tests).
+Equal facts combine provenance; contradictions remain diagnostics. Trace imports
+advance generations on invalidation and never close sites from finite samples.
+CLI adds `import-trace` (canonical-ROM identity check) and `merge`. CLI trace
+imports have no supplied mappings yet and intentionally report unknown sources.
