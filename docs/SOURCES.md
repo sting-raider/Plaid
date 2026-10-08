@@ -188,6 +188,9 @@ in the interpreter. This pin cannot serve as a universal CPU oracle by itself.
 and delegates each actual ROM half-read once. Original transfer/lane validation
 checks successful identity-RAM effects against canonical toy bytes and a separately
 compiled original-source baseline. No reference PI code enters the Rust graph.
+`spikes/029-ares-pi-fetch-history/` composes these source effects with actual CPU
+fetch, burst/fill, SW and guest invalidation observations. Its original byte/
+resident checker preserves separate histories, with the same isolation/notices.
 
 ## Source-use policy
 

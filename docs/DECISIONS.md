@@ -725,3 +725,20 @@ completion remain separate. Direct component invocation proves no guest MMIO,
 scheduler duration, complete mutation census or executable lifetime. Compose
 these finite writers with actual fetch/fill chronology before a separately
 reviewed boot-schema or production identity decision.
+
+## ADR-0052: Preserve backing writers separately from resident byte origins
+
+Status: Accepted for research, 2026-10-08.
+
+The composed PI/CPU fixture joins each successful buffered byte writer to an
+actual uncached fetch or adjacent burst/completed fill. A valid cached line
+retains its first transfer's origins through identical and changed reloads and
+a guest SW; actual guest invalidation removes residency before a new fill.
+Three-byte reloads preserve mixed origins and untouched bytes without inventing
+a contiguous ROM word. The 481-record, 16-fetch fixture preserves independent
+original-source/disabled/repeated reported checkpoints, including full backing/
+hidden/cache hashes. Seven forgeries fail and ambiguous reads lose attribution.
+This validates finite byte provenance only under the controlled identity-RAM,
+single-capture policy. Broader cache/restore/mutation and executable lifetime
+obligations remain open. Extend versioned boot capture with PI source/transfer
+contexts while preserving complete prior projections before production promotion.

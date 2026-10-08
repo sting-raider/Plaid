@@ -293,6 +293,13 @@ Implemented:
   for misalignment, odd lengths and a discarded row-boundary block. Independent
   original-source/disabled/repeated reported checkpoints agree. Guest scheduling,
   resident-cache provenance and executable lifetimes remain unclaimed.
+- A 481-record composed PI/fetch fixture now joins 99 successful byte writers to
+  actual fetch/fill contexts. Valid cached fetches retain the first transfer's
+  writers through equal/changed backing reloads and guest SW; guest invalidation
+  forces a new fill. A partial reload keeps mixed origins and untouched bytes.
+  Sixteen CPU fetches, baseline/disabled/repeated reported checkpoints and seven
+  malformed-history rejections pass. This supplies finite resident provenance,
+  leaving general cache transitions, scheduling and executable lifetimes open.
 
 Verification: 81 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
