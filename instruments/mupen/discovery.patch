@@ -1,0 +1,134 @@
+diff --git a/src/device/r4300/new_dynarec/new_dynarec.c b/src/device/r4300/new_dynarec/new_dynarec.c
+index 5f70f7c..4cc8ce3 100644
+--- a/src/device/r4300/new_dynarec/new_dynarec.c
++++ b/src/device/r4300/new_dynarec/new_dynarec.c
+@@ -40,6 +40,7 @@
+ #endif
+ 
+ #include "new_dynarec.h"
++#include "plaid_trace_sink.h"
+ #include "api/m64p_types.h"
+ #include "api/callbacks.h"
+ #include "main/main.h"
+@@ -2558,6 +2559,7 @@ static void ll_kill_pointers(struct ll_entry *head,intptr_t addr,int shift)
+ // Add an entry to jump_out after making a link
+ static void add_link(u_int vaddr,void *src)
+ {
++  plaid_trace_link(vaddr);
+   u_int page=(vaddr^0x80000000)>>12;
+   if(page>262143&&g_dev.r4300.cp0.tlb.LUT_r[vaddr>>12]) page=(g_dev.r4300.cp0.tlb.LUT_r[vaddr>>12]^0x80000000)>>12;
+   if(page>4095) page=2048+(page&2047);
+@@ -2619,6 +2621,7 @@ static struct ll_entry *get_dirty(struct r4300_core* r4300,u_int vaddr,u_int fla
+ 
+ static void *dynamic_linker_impl(void * src, u_int vaddr)
+ {
++  plaid_trace_lookup(vaddr, 0);
+   assert((vaddr&1)==0);
+   struct r4300_core* r4300 = &g_dev.r4300;
+   struct ll_entry *head;
+@@ -2686,6 +2689,7 @@ void *dynamic_linker(void * src, u_int vaddr)
+ 
+ static void *dynamic_linker_ds_impl(void * src, u_int vaddr)
+ {
++  plaid_trace_lookup(vaddr, 1);
+   struct r4300_core* r4300 = &g_dev.r4300;
+   struct ll_entry *head;
+ 
+@@ -2754,6 +2758,7 @@ void *dynamic_linker_ds(void * src, u_int vaddr)
+ // This is called from the recompiled JR/JALR instructions
+ void *get_addr(u_int vaddr)
+ {
++  plaid_trace_lookup(vaddr, vaddr & 1);
+   struct r4300_core* r4300 = &g_dev.r4300;
+   struct ll_entry *head;
+   struct ll_entry **ht_bin=hash_table[((vaddr>>16)^vaddr)&0xFFFF];
+@@ -2791,6 +2796,7 @@ void *get_addr(u_int vaddr)
+ // Look up address in hash table first
+ void *get_addr_ht(u_int vaddr)
+ {
++  plaid_trace_lookup(vaddr, vaddr & 1);
+   struct ll_entry **ht_bin=hash_table[((vaddr>>16)^vaddr)&0xFFFF];
+   if(ht_bin[0]&&ht_bin[0]->vaddr==vaddr) return (void *)(((intptr_t)ht_bin[0]->addr-(intptr_t)base_addr)+(intptr_t)base_addr_rx);
+   if(ht_bin[1]&&ht_bin[1]->vaddr==vaddr) return (void *)(((intptr_t)ht_bin[1]->addr-(intptr_t)base_addr)+(intptr_t)base_addr_rx);
+@@ -2799,6 +2805,7 @@ void *get_addr_ht(u_int vaddr)
+ 
+ void *get_addr_32(u_int vaddr,u_int flags)
+ {
++  plaid_trace_lookup(vaddr, vaddr & 1);
+   struct ll_entry **ht_bin=hash_table[((vaddr>>16)^vaddr)&0xFFFF];
+   if(ht_bin[0]&&ht_bin[0]->vaddr==vaddr) return (void *)(((intptr_t)ht_bin[0]->addr-(intptr_t)base_addr)+(intptr_t)base_addr_rx);
+   if(ht_bin[1]&&ht_bin[1]->vaddr==vaddr) return (void *)(((intptr_t)ht_bin[1]->addr-(intptr_t)base_addr)+(intptr_t)base_addr_rx);
+@@ -2915,6 +2922,7 @@ static void invalidate_page(u_int page)
+ 
+ static void invalidate_block_impl(u_int block)
+ {
++  plaid_trace_invalidate(block << 12, 4096);
+   u_int page;
+   page=block^0x80000;
+   if(block<0x100000&&page>262143&&g_dev.r4300.cp0.tlb.LUT_r[block]) page=(g_dev.r4300.cp0.tlb.LUT_r[block]^0x80000000)>>12;
+@@ -3034,6 +3042,7 @@ static void invalidate_all_pages(void)
+ 
+ void invalidate_cached_code_new_dynarec(struct r4300_core* r4300, uint32_t address, size_t size)
+ {
++    plaid_trace_invalidate(address, size);
+     size_t i;
+     size_t begin;
+     size_t end;
+@@ -8651,6 +8660,7 @@ static void pagespan_ds(void)
+   do_dirty_stub_ds(head);
+   head->clean_addr=(void *)out;
+   (void)ll_add(jump_in+page,vaddr,(void *)out,(void *)out,start,copy,slen*4);
++  plaid_trace_entry(plaid_current_unit, vaddr, 0);
+   assert(regs[0].regmap_entry[HOST_CCREG]==CCREG);
+   emit_addimm(HOST_CCREG,CLOCK_DIVIDER,HOST_CCREG);
+   if(regs[0].regmap[HOST_CCREG]!=CCREG)
+@@ -8747,6 +8757,7 @@ static void pagespan_ds(void)
+ /**** Recompiler ****/
+ void new_dynarec_init(void)
+ {
++  plaid_trace_open();
+   DebugMessage(M64MSG_INFO, "Init new dynarec");
+   ensure_dynarec_cache_alignment();
+ 
+@@ -8866,6 +8877,7 @@ void new_dynarec_init(void)
+ 
+ void new_dynarec_cleanup(void)
+ {
++  plaid_trace_close();
+ #if defined(RECOMPILER_DEBUG) && !defined(RECOMP_DBG)
+   recomp_dbg_cleanup();
+ #endif
+@@ -8943,6 +8955,8 @@ static int new_recompile_block_impl(int addr)
+     exit(1);
+   }
+ 
++  uint64_t plaid_unit = plaid_trace_begin(start, addr & 1);
++
+   /* Pass 1: disassemble */
+   /* Pass 2: register dependencies, branch targets */
+   /* Pass 3: register allocation */
+@@ -11898,6 +11912,7 @@ static int new_recompile_block_impl(int addr)
+           intptr_t entry_point=do_dirty_stub(i,head);
+           head->clean_addr=(void*)entry_point;
+           head=ll_add(jump_in+page,vaddr,(void *)entry_point,(void *)entry_point,start,copy,slen*4);
++          plaid_trace_entry(plaid_unit, vaddr, 0);
+           // If there was an existing entry in the hash table,
+           // replace it with the new address.
+           // Don't add new entries.  We'll insert the
+@@ -11928,6 +11943,7 @@ static int new_recompile_block_impl(int addr)
+           intptr_t entry_point=do_dirty_stub(i,head);
+           head->clean_addr=(void*)entry_point;
+           (void)ll_add_32(jump_in+page,vaddr,r,(void *)entry_point,(void *)entry_point,start,copy,slen*4);
++          plaid_trace_entry(plaid_unit, vaddr, r);
+         }
+       }
+     }
+@@ -11968,6 +11984,8 @@ static int new_recompile_block_impl(int addr)
+     }
+   }
+ 
++  plaid_trace_compiled(plaid_unit, start, source, slen);
++
+   /* Pass 10 - Free memory by expiring oldest blocks */
+ 
+   int end=((((intptr_t)out-(intptr_t)base_addr)>>(TARGET_SIZE_2-16))+16384)&65535;
