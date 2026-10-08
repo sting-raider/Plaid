@@ -32,6 +32,14 @@ No guest tests have begun at this prefix. The raw stream is 154,485,582 bytes,
 SHA-256 `fbdf4da4fbae6bec9712404b7f14df790fe1fb3aca1a9b1239e207248bffe021`.
 Earlier 100,000- and five-million-call prefixes also repeat exactly.
 
+At ten million calls, plain/traced/repeated checkpoints/messages and raw repeats
+also match. There are 9,999,998 fetches at 50 PIF, 935 SP, 53,229 RAM and 65
+cartridge addresses, including 1,852 actual ROM-source reads. PIF reaches Run;
+StartupTest and subsequent cartridge-memory tests run without a reported failure
+in this prefix. No complete-suite result is claimed. The raw stream is
+1,538,325,782 bytes, SHA-256
+`aa5818e290e0cc932fc67b0405d3cdf7f24431854385d66742c08516e9079f57`.
+
 Each process has an instruction budget of at most ten million and a wall budget
 of 180–600 seconds, scaled by requested calls. A ten-million-call traced run
 under concurrent capture load exceeded the original 180-second wall budget;

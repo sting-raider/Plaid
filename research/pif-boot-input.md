@@ -29,11 +29,23 @@ The earlier five-million-call prefix also repeats exactly and remains in this
 loop (Count 30,784,366). Primary PI::ioWrite schedules dmaDuration before dmaWrite;
 dmaWrite copies immediately, while the queued dmaFinished later clears busy.
 CPU::synchronize advances that queue. Boot programs BSD timing, so the old
-synthetic-entry prefix's faster progress cannot establish equivalence. A longer
-plain run reaches the guest tests, but broader traced neutrality is pending.
+synthetic-entry prefix's faster progress cannot establish equivalence.
 The first longer trace exceeded 180 seconds under concurrent output load and is
 rejected as incomplete. Keep the ten-million instruction ceiling and scale the
 finite wall timeout to at most 600 seconds; this changes no guest event timing.
+
+The completed ten-million-call run now agrees across plain/traced/repeated
+checkpoints, messages and repeated raw bytes. It yields 9,999,998 fetches at 50
+PIF, 935 SP, 53,229 RAM and 65 cartridge addresses; 1,852 actual ROM-source
+fetches remain witnessed. The loader leaves DMA polling, PIF reaches Run (5),
+and the unchanged guest proceeds through StartupTest into cartridge-memory
+tests without a reported failure in this prefix. This addresses the earlier
+synthetic-entry Config failure through firmware initialization. It does not
+claim complete-suite success. Count is 44,289,548; PI DMA/IO busy are both 0.
+Raw bytes: 1,538,325,782; SHA-256
+`aa5818e290e0cc932fc67b0405d3cdf7f24431854385d66742c08516e9079f57`.
+Message SHA-256:
+`a426f5ee6b100d52d934c9033067cf7d97dc5d073bd9a04ec206c221772cafac`.
 
 Research v3 declares firmware digest, natural power entry, PIF HLE and checksum
 policy. Production deliberately rejects this scope without output. A future
@@ -42,7 +54,7 @@ input, not accept a hash claim alone. PIF source remains unknown: SI busy latche
 and PIF ROM lockout can return words without reading firmware. RAM/SP copy/cache
 lineage, execution modes, lifetimes and whole-ROM coverage remain unresolved.
 
-Existing v0/v2 streams and state/message goldens remain exact with the conditional
+Existing v0/v1/v2 streams and state/message goldens remain exact with the conditional
 boot path present. Rust's 72 tests and CLI/exporter/Mupen integrations pass, as do
 the earlier static/homebrew/oracle/source-boundary experiments. No native artifact
 or complete guest-suite result is claimed.
