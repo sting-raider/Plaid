@@ -21,7 +21,7 @@ def equal_files(left, right):
         assert not second.read(1)
 
 
-def worker(budget, *, driver=None, output_root=OUTPUT, boot_inputs=None, cache_policy=None):
+def worker(budget, *, driver=None, output_root=OUTPUT, boot_inputs=None, cache_policy=None, build_options=None, observer_sources=(), run_timeout=None):
     data, firmware = ROM.read_bytes(), FIRMWARE.read_bytes()
     assert hashlib.sha256(data).hexdigest() == "629f908c200bbf21013dcd1d331d4ddedd08a6c9d7ae1f528421564238056e8a"
     assert len(firmware) == 1984 and hashlib.sha256(firmware).hexdigest() == FIRMWARE_SHA
@@ -29,7 +29,8 @@ def worker(budget, *, driver=None, output_root=OUTPUT, boot_inputs=None, cache_p
     builder = importlib.util.module_from_spec(spec); spec.loader.exec_module(builder)
     exe = builder.build(driver or Path(__file__).with_name("driver.cpp"),output_root / "build",
         raw_fetch_access=True,physical_fetch_access=True,
-        extra_sources=(ROOT / "spikes/006-ares-rom-source/driver.cpp",ROOT / "spikes/004-ares-fetch/driver.cpp"))
+        extra_sources=(ROOT / "spikes/006-ares-rom-source/driver.cpp",ROOT / "spikes/004-ares-fetch/driver.cpp",*observer_sources),
+        **(build_options or {}))
     output = output_root / str(budget); output.mkdir(exist_ok=True)
     (output / "results.json").unlink(missing_ok=True)
     states = {}
@@ -38,7 +39,7 @@ def worker(budget, *, driver=None, output_root=OUTPUT, boot_inputs=None, cache_p
         subprocess.run([str(exe),"plain" if mode == "plain" else "traced",str(ROM),
             str(output / f"{mode}.ndjson"),str(output / f"{mode}.json"),
             str(output / f"{mode}.messages"),str(budget),str(FIRMWARE)],check=True,
-            timeout=max(180,60*((budget+999999)//1000000)))
+            timeout=run_timeout or max(180,60*((budget+999999)//1000000)))
         states[mode] = json.loads((output / f"{mode}.json").read_text())
     assert states["plain"] == states["traced"] == states["repeat"]
     equal_files(output / "traced.ndjson",output / "repeat.ndjson")

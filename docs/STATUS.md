@@ -271,6 +271,15 @@ Implemented:
   scalar-fetch and CPU-copy fixtures retain complete earlier JSON through the
   shared recipe. Broader boot chronology and production identities remain open.
 
+- The one-million-call boot prefix now retains a byte-identical 859,502,085-byte
+  ordered sidecar with 5,051,089 records. All 32 fills join actual RAM bursts in
+  their fetch contexts and match the full paired resident snapshot; 19 uncached
+  CPU data reads stay outside fetch contexts. This prefix has no uncached RAM
+  instruction fetches. Complete v5 bytes, fresh default baseline and reported
+  plain/enabled/repeated checkpoints agree. Scalar DMA writes are observed backing
+  effects; transfer-origin/completion, general mutations and lifetimes remain open.
+  Original Rust source-linked inspection is the next separate implementation step.
+
 Verification: 76 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.

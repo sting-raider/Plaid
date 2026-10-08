@@ -671,3 +671,20 @@ traced JSON through this common recipe. Extend this narrow measured chronology
 to the fixed boot profile before deciding source-linked production representation.
 Failure/nonidentity paths and general mutations/copies/restore lifetimes remain
 unclaimed; default recipe handlers and whole-ROM gates stay unchanged.
+
+## ADR-0049: Retain bounded boot chronology alongside the unchanged v5 capture
+
+Status: Accepted for research, 2026-10-08.
+
+Stream existing scalar/burst/fill/CACHE/fetch-boundary/prologue results into a
+separate versioned sidecar, preserving the existing complete v5 stream. The
+one-million-call declared boot profile yields 5,051,089 records with unchanged
+prior bytes and reported baseline/disabled/repeated machine checkpoint. Thirty-
+two RAM-backed fills agree with adjacent actual bursts and complete resident
+snapshots; nineteen data reads lie outside fetch contexts. This prefix contains
+no uncached RAM instruction fetches, so its corresponding witness count is zero.
+DMA writes remain backing effects without source/transfer-completion or image
+lifetimes. Truncated timeout output fails; complete retained inputs/streams can
+be rechecked without rerunning the CPU. The sidecar is reference research data,
+not a production certificate. Implement original strict Rust inspection and
+source rechecking under a separate decision before any identity promotion.

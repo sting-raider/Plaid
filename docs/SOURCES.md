@@ -112,6 +112,11 @@ source guards and narrow byte/access truth tables are recorded in
 ignored, separately compiled with the same notices; no reference implementation
 enters Plaid's Rust dependency graph. Source/model-only PIF/SP/NMI/LLSC/table
 findings retain their evidence level and independent reference disagreements.
+`spikes/026-ares-access-history/` composes scalar/fetch boundaries with the
+controlled ledger; `spikes/027-ares-boot-history/` streams the bounded boot sidecar
+while preserving the complete v5 bytes and reported reference checkpoint.
+These original observers supply finite callback chronology, not copied runtime
+implementations, complete mutation coverage or production lifetimes.
 
 ## gopher64/gopher64
 

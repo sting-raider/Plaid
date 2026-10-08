@@ -103,3 +103,7 @@ Seventeen research tips are reconciled individually. Scalar-fetch/copy, RSP IMEM
 exception-vector and two 64-bit store matrices now reproduce on the primary host;
 fourteen source/model contracts also pass. Combine explicit access boundaries
 with the shared ledger next. General mutation/lifetime coverage leaves W012 TODO.
+Shared access boundaries now pass the 95-record controlled history and original
+primitive fixtures. The bounded boot sidecar preserves v5/checkpoints across
+5,051,089 records and 32 RAM-backed fills. Strict Rust inspection/rechecking is
+next; general transfer/mutation/lifetime obligations still leave W012 TODO.

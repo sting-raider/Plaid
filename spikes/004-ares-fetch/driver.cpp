@@ -24,6 +24,9 @@ struct Observer : Headless {
       #if defined(PLAID_ROM_FETCH_SOURCE)
       auto word = cpu.disassembler.fetchedWord();
       bool backed = rom.source(plaidFetchAccess.physical, plaidFetchAccess.cached, word);
+      #if defined(PLAID_ACCESS_BOOT)
+      access_boot_fetch(fetches, pc, word, plaidFetchAccess.physical, plaidFetchAccess.cached);
+      #endif
       std::fprintf(trace, "{\"record\":\"fetch\",\"seq\":%llu,\"pc\":%llu,\"word\":%u,\"delay_slot\":%s,\"physical\":%u,\"cached\":%s,\"source\":",
         (unsigned long long)fetches++, (unsigned long long)pc, word,
         cpu.pipeline.inDelaySlot() ? "true" : "false", plaidFetchAccess.physical,
@@ -113,6 +116,9 @@ int fetch_observer_main(int argc, char** argv) {
     #else
     std::fprintf(frontend.trace, "{\"record\":\"header\",\"format\":\"plaid-ares-fetch-research-v0\",\"revision\":\"9408cb43d4948fc3ea6e152a307a34348df3fe04\",\"rom_sha256\":\"%s\",\"budget\":%u,\"initial_state\":\"declared_post_ipl2_sp_entry\"}\n", romHash.data(), budget);
     #endif
+    #if defined(PLAID_ACCESS_BOOT)
+    access_boot_start(argv[3], romHash.data(), budget, cartridge.rom.size, firmwareHash.data());
+    #endif
     cpu.debugger.tracer.instruction->setDepth(0);
     cpu.debugger.tracer.instruction->setMask(false);
     cpu.debugger.tracer.instruction->setEnabled(true);
@@ -124,6 +130,9 @@ int fetch_observer_main(int argc, char** argv) {
     if(cpu.instruction()) cpu.synchronize();
   }
   if(traced) {
+    #if defined(PLAID_ACCESS_BOOT)
+    access_boot_finish(frontend.fetches);
+    #endif
     std::fprintf(frontend.trace, "{\"record\":\"end\",\"fetch_count\":%llu,\"reason\":\"instruction_call_budget\"}\n",
       (unsigned long long)frontend.fetches);
     if(std::ferror(frontend.trace) || std::fclose(frontend.trace)) return 7;

@@ -9,6 +9,9 @@
 #include "../006-ares-rom-source/driver.cpp"
 #include <cstdlib>
 #include <nall/hash/sha256.hpp>
+#if defined(PLAID_ACCESS_BOOT)
+#include "../027-ares-boot-history/observer.hpp"
+#endif
 
 static void cache_fetch_fields(FILE* trace,u64 pc,u32 physical,bool cached,u32 word) {
   if(!cached) return;
