@@ -100,6 +100,7 @@ int main(int argc, char** argv) {
 
   cpu.scc.status.errorLevel = 0;
   cpu.scc.status.exceptionLevel = 0;
+  cpu.scc.status.vectorLocation = 0;
   cpu.scc.status.privilegeMode = 0;
   cpu.scc.status.kernelExtendedAddressing = 1;
   cpu.scc.configuration.bigEndian = little ? 0 : 1;
