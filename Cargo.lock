@@ -79,6 +79,7 @@ name = "plaid"
 version = "0.0.1"
 dependencies = [
  "plaid-core",
+ "serde_json",
 ]
 
 [[package]]

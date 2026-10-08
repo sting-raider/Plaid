@@ -18,3 +18,9 @@ Mupen execution and source-correlated indirect hooks remain unverified: M1 is
 not yet claimed. `plaid check-map` and `plaid check-trace` validate artifacts.
 
 No CPU lowering, native execution, compatibility, or native-complete claim.
+
+ROM ingestion detects z64/v64/n64 signatures, normalizes bytes, parses the header,
+and hashes canonical content. Eight Rust tests pass, including a SHA-256 known
+vector and identical header/hash results across all byte orders. `plaid rom-info`
+prints canonical identity and parsed metadata. Header entry PC is not assumed to
+prove a ROM-to-RAM load mapping or a particular boot/CIC behavior.
