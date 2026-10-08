@@ -31,4 +31,27 @@ jobs:
           grep -q '"negatives": 907417' /tmp/pif-model.json
           grep -q '"mirrored_positives": 92426' /tmp/pif-model.json
       - name: Build and run real pinned ares sensor
+        id: sensor
+        continue-on-error: true
         run: python3 experiments/pif-rom-backing/run_ares.py
+      - name: Diagnose compiled scenarios after failure
+        if: steps.sensor.outcome == 'failure'
+        run: |
+          set +e
+          for kind in baseline instrumented; do
+            exe="target/pif-rom-backing-ares/${kind}/oracle"
+            echo "== ${kind} =="
+            test -x "$exe" || { echo "missing $exe"; continue; }
+            for mode in natural mirror high_mirror busy_latch lockout_zero pif_ram_same_value cached_pif stale_decoy nonfetch_rom; do
+              echo "-- ${kind}/${mode} --"
+              "$exe" "$mode" >"/tmp/${kind}-${mode}.out" 2>"/tmp/${kind}-${mode}.err"
+              rc=$?
+              echo "rc=$rc stdout_bytes=$(wc -c < "/tmp/${kind}-${mode}.out") stderr_bytes=$(wc -c < "/tmp/${kind}-${mode}.err")"
+              cat "/tmp/${kind}-${mode}.out"
+              cat "/tmp/${kind}-${mode}.err"
+            done
+          done
+          exit 1
+      - name: Require successful sensor run
+        if: steps.sensor.outcome == 'success'
+        run: echo "sensor run passed"
