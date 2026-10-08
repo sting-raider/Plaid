@@ -203,6 +203,10 @@ pub struct ObservedIndirect {
     pub target: GuestAddr,
     pub delay_slot_pc: Option<GuestAddr>,
     pub generation: u64,
+    /// Session-qualified evidence ID of the source unit's CompileBegin event.
+    /// This is compilation provenance, never a host pointer or a closure proof.
+    #[serde(default)]
+    pub source_unit: Option<String>,
     pub evidence: EvidenceRefs,
 }
 
@@ -453,6 +457,14 @@ impl ProgramMap {
                 .is_some_and(|ds| o.site.0.checked_add(4) != Some(ds.0))
             {
                 return Err("incorrect observed delay slot PC".into());
+            }
+            if let Some(unit) = &o.source_unit
+                && !self
+                    .evidence
+                    .get(unit)
+                    .is_some_and(|e| e.kind == EvidenceKind::Trace)
+            {
+                return Err("missing indirect source-unit trace provenance".into());
             }
             refs(&o.evidence)?;
         }

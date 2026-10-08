@@ -120,17 +120,23 @@ def main():
             records = [json.loads(line) for line in first.splitlines()]
             events = [record["data"] for record in records[1:-1]]
             indirect = [event for event in events if event["event"] == "indirect_target_observed"]
+            units = {e["unit"]:e for e in events if e["event"] == "unit_compiled"}
+            for event in indirect:
+                unit = units[event["source_unit"]]
+                word = unit["words"][(event["site"]-unit["start"])//4]
+                assert word >> 26 == 0 and word & 63 in (8,9), (event, unit)
+            without_unit = lambda event: {k:v for k,v in event.items() if k != "source_unit"}
             if scenario in ("jalr", "jal"):
                 assert sum(event["site"] == 0x80000044 and event["target"] == 0x80000010 for event in indirect) == 3
                 assert sum(event["site"] == 0x80000008 and event["target"] == 0x80000040 for event in indirect) == (3 if scenario == "jalr" else 0)
                 return_lookups = [event for event in events if event["event"] == "target_lookup" and event["target"] == 0x80000010]
                 if scenario == "jal": assert not return_lookups, "three returns must exercise the inline mini_ht hit path"
                 else: assert len(return_lookups) >= 3, "JALR returns exercise the general lookup path"
-                assert indirect[-1] == {"event":"indirect_target_observed", "site":0x80000024, "target":0x80000100, "delay_slot_pc":0x80000028}
+                assert without_unit(indirect[-1]) == {"event":"indirect_target_observed", "site":0x80000024, "target":0x80000100, "delay_slot_pc":0x80000028}
             if scenario.startswith("pagespan"):
                 page_events = [e for e in indirect if e["site"] == 0x80000ffc]
                 if scenario == "pagespan_direct": assert not page_events, "direct predecessors must not invent indirect transfers"
-                else: assert page_events == [{"event":"indirect_target_observed", "site":0x80000ffc, "target":0x80000100, "delay_slot_pc":0x80001000}]
+                else: assert [without_unit(e) for e in page_events] == [{"event":"indirect_target_observed", "site":0x80000ffc, "target":0x80000100, "delay_slot_pc":0x80001000}]
             untraced = (directory / f"{scenario}-untraced.ndjson").read_text()
             assert "indirect_target_observed" not in untraced
             trace = directory / f"{scenario}-traced.ndjson"

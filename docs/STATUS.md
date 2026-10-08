@@ -39,7 +39,9 @@ Implemented:
   retain source PC, destination and value; overlap with previously compiled
   physical regions adds Unknown executable-write evidence. A register/zero/
   delay-slot store stress fixture preserves full CPU state. Its invalidations
-  expose restored-entry identity gaps, retained as uncorrelated raw indirect facts.
+  expose executing-unit and restored-target identity gaps. Explicit source-unit
+  tags now identify the still-running older call unit; stale target entries remain
+  uncorrelated raw facts until their lifecycle is modeled.
   PIF HLE/unknown-CIC fallback, dummy graphics/audio/RSP and a frontend stop
   request bound this synthetic session's scope; whole-ROM closure remains OPEN.
 - Signature-based z64/v64/n64 normalization, canonical SHA-256 and header parsing.
@@ -47,7 +49,10 @@ Implemented:
   return continuations, block repartitioning and explicit unresolved paths.
 - Deterministic static/dynamic merger retaining provenance and contradictions.
   Raw indirect observations survive ambiguous image identities. Target compilation
-  may follow an execution event; joins stay within the same invalidation epoch.
+  may follow an execution event within its invalidation epoch. Explicit completed
+  source-unit context identifies older executing units without guessing by PC;
+  legacy events keep conservative same-epoch source joins. Targets retain the
+  epoch restriction. Source-unit provenance is qualified by trace session.
 - Bounded local constant-target certificates, independent rechecking and recursive
   traversal of inferred in-image targets. Repartitioning can revoke a certificate
   while retaining its candidate evidence.
@@ -74,7 +79,7 @@ Implemented:
   need blockers. Manual section/mapping inputs and the shared decoder limit the
   result. No production adapter or runtime dependency is introduced.
 
-Verification: 58 Rust integration tests, formatting, strict Clippy, CLI integration,
+Verification: 60 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.

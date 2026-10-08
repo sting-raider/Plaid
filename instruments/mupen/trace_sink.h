@@ -16,6 +16,7 @@ static int plaid_trace_failed;
 static int plaid_trace_execution_enabled;
 static int plaid_trace_writes_enabled;
 static uint32_t plaid_pagespan_branch;
+static uint64_t plaid_pagespan_unit;
 
 static void plaid_trace_check(void) {
     if (plaid_trace_file && (ferror(plaid_trace_file) || fflush(plaid_trace_file))) {
@@ -43,6 +44,7 @@ static void plaid_trace_open(void) {
     plaid_trace_execution_enabled = 0;
     plaid_trace_writes_enabled = 0;
     plaid_pagespan_branch = 0;
+    plaid_pagespan_unit = 0;
     if (!path || !*path) return;
     if (!hash || strlen(hash) != 64 || !size_text || !*size_text) goto invalid;
     for (i = 0; i < 64; ++i)
@@ -110,16 +112,20 @@ static void plaid_trace_link(uint32_t target) {
 }
 /* Called by generated reference code after the delay slot, before lookup/cache
  * dispatch. The target argument is the saved pre-delay-slot branch operand. */
-void plaid_trace_indirect(uint32_t site, uint32_t target) {
+void plaid_trace_indirect(uint32_t site, uint32_t target, uint64_t source_unit) {
     if (!plaid_trace_prefix("indirect_target_observed")) return;
-    fprintf(plaid_trace_file, ",\"site\":%" PRIu32 ",\"target\":%" PRIu32 ",\"delay_slot_pc\":%" PRIu32,
-        site, target, site + 4u);
+    fprintf(plaid_trace_file, ",\"site\":%" PRIu32 ",\"target\":%" PRIu32 ",\"delay_slot_pc\":%" PRIu32 ",\"source_unit\":%" PRIu64,
+        site, target, site + 4u, source_unit);
     plaid_trace_finish();
 }
 /* The predecessor records site|1 only for JR/JALR. Direct pagespan branches
  * clear it, preventing a shared delay-slot entry from inventing an observation. */
 void plaid_trace_pagespan(uint32_t site, uint32_t target) {
-    if (plaid_pagespan_branch == (site | 1u)) plaid_trace_indirect(site, target);
+    if (plaid_pagespan_branch == (site | 1u)) plaid_trace_indirect(site, target, plaid_pagespan_unit);
+}
+void plaid_trace_pagespan_context(uint32_t branch, uint64_t source_unit) {
+    plaid_pagespan_branch = branch;
+    plaid_pagespan_unit = source_unit;
 }
 static void plaid_trace_invalidate(uint32_t address, size_t size) {
     if (!plaid_trace_prefix("invalidate")) return;

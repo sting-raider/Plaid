@@ -52,10 +52,10 @@ It preserves caller-save registers and reports source PC, destination and value.
 Raw stores survive import; overlap with a previously compiled physical region
 adds Unknown executable-write evidence. Dynamic addresses, other store sizes,
 TLB/uncached paths and non-x64 hosts are outside this capability. The stress case
-keeps indirect observations uncorrelated when invalidations separate execution
-from available compiled-entry identities; raw evidence is never discarded.
+identifies the older still-running source unit through explicit unit tags, while
+returns to older target entries remain uncorrelated; raw evidence is retained.
 The importer verifies ROM sources for executed DMA-backed units and keeps raw
-indirect evidence. The boot copy is still uncorrelated and the solver stays OPEN.
+indirect evidence. The boot source remains unverified and the solver stays OPEN.
 Linux requires GCC/make/NASM and SDL2/zlib/libpng headers/runtime libraries;
 Windows uses WSL Ubuntu. See `scripts/build_mupen_core.py` for prefix overrides.
 Dummy plugins exclude rendering/audio/RSP. PIF HLE with unknown-CIC fallback is
@@ -65,7 +65,13 @@ Set `PLAID_TRACE_EXECUTION=1` to emit source-correlated x64 JR/JALR events.
 The generated sensor preserves allocated caller-save registers and the saved
 pre-delay-slot target. It runs after the delay slot and before either general
 lookup or inline mini_ht dispatch; repeated return-cache hits are tested.
-Page-spanning predecessors record an indirect source tag. The separate delay-slot
+Each event includes the trace-local unit ID embedded at compilation. Import
+validates that the unit already completed and contains the source PC, then uses
+its exact decoded identity even if invalidation has advanced the epoch. The raw
+map records a session-qualified CompileBegin evidence reference. Targets still
+require a unique snapshot in the current epoch; legacy events lacking unit
+context retain conservative source joins. No execution sample closes a site.
+Page-spanning predecessors record an indirect source tag and source unit. The separate delay-slot
 unit emits only when its predecessor tag matches, using the saved branch target;
 direct predecessors clear the tag. Eight scenarios agree across traced/untraced
 dynarec and pure interpreter, including pagespan JR/JALR, custom links, likely

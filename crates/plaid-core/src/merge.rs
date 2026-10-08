@@ -221,6 +221,7 @@ fn import(
     let session = sha256(trace.to_ndjson()?.as_bytes());
     let mut epoch = 0u64;
     let mut units = BTreeMap::new();
+    let mut unit_images = BTreeMap::new();
     let mut recent = Vec::<CodeImage>::new();
     let mut observations = Vec::<PendingIndirect>::new();
     let mut transfers = Vec::<(u64, RomOffset, PhysicalAddr, u32)>::new();
@@ -462,6 +463,7 @@ fn import(
                     });
                 }
                 out = merge_maps(&out, &imported)?;
+                unit_images.insert(*unit, image.clone());
                 recent.push(image);
             }
             TraceEvent::Invalidate { range } => {
@@ -477,21 +479,35 @@ fn import(
                 site,
                 target,
                 delay_slot_pc,
+                source_unit,
             } => {
                 out.indirect_observations.insert(ObservedIndirect {
                     site: *site,
                     target: *target,
                     delay_slot_pc: *delay_slot_pc,
                     generation: epoch,
+                    source_unit: source_unit.map(|unit| {
+                        units[&unit]
+                            .5
+                            .first()
+                            .expect("compile-begin evidence")
+                            .clone()
+                    }),
                     evidence: evidence.clone(),
                 });
                 // Freeze possible source identities at execution time. The
                 // target's first compilation may follow this event; defer that
                 // join until the epoch ends, never across an invalidation.
+                // Explicit unit context can identify an older unit which is
+                // still executing; it says nothing about the target's lifecycle.
+                let explicit_source = source_unit.map(|unit| unit_images[&unit].address(*site));
                 let sources = out
                     .indirect_sites
                     .iter()
-                    .filter(|s| s.site.pc == *site && s.site.generation == epoch)
+                    .filter(|s| match &explicit_source {
+                        Some(source) => s.site == *source,
+                        None => s.site.pc == *site && s.site.generation == epoch,
+                    })
                     .map(|s| s.site.clone())
                     .collect();
                 observations.push(PendingIndirect {

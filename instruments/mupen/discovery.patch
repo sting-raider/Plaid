@@ -32,7 +32,7 @@ index 395b494..8c21364 100644
      invalidate_r4300_cached_code(cart_rom->r4300, 0x80000000 + dram_addr, length);
      invalidate_r4300_cached_code(cart_rom->r4300, 0xa0000000 + dram_addr, length);
 diff --git a/src/device/r4300/new_dynarec/new_dynarec.c b/src/device/r4300/new_dynarec/new_dynarec.c
-index 5f70f7c..68bba3b 100644
+index 5f70f7c..241f7e5 100644
 --- a/src/device/r4300/new_dynarec/new_dynarec.c
 +++ b/src/device/r4300/new_dynarec/new_dynarec.c
 @@ -40,6 +40,7 @@
@@ -129,7 +129,7 @@ index 5f70f7c..68bba3b 100644
  }
  
  static void storelr_assemble(int i,struct regstat *i_regs)
-@@ -7356,6 +7380,18 @@ static void rjump_assemble(int i,struct regstat *i_regs)
+@@ -7356,6 +7380,19 @@ static void rjump_assemble(int i,struct regstat *i_regs)
      do_miniht_load(ht,rh);
    }
    #endif
@@ -140,6 +140,7 @@ index 5f70f7c..68bba3b 100644
 +       This runs before both mini_ht hits and the general lookup path. */
 +    save_regs(0xff);
 +    if(rs!=ARG2_REG) emit_mov(rs,ARG2_REG);
++    emit_movimm64(plaid_current_unit,ARG3_REG);
 +    emit_movimm(start+i*4,ARG1_REG);
 +    emit_call((intptr_t)plaid_trace_indirect);
 +    restore_regs(0xff);
@@ -148,7 +149,7 @@ index 5f70f7c..68bba3b 100644
    //do_cc(i,branch_regs[i].regmap,&adj,-1,TAKEN);
    //if(adj) emit_addimm(cc,2*(ccadj[i]+2-adj),cc); // ??? - Shouldn't happen
    //assert(adj==0);
-@@ -8299,6 +8335,14 @@ static void fjump_assemble(int i,struct regstat *i_regs)
+@@ -8299,6 +8336,15 @@ static void fjump_assemble(int i,struct regstat *i_regs)
  
  static void pagespan_assemble(int i,struct regstat *i_regs)
  {
@@ -156,14 +157,15 @@ index 5f70f7c..68bba3b 100644
 +  if(plaid_trace_execution_enabled) {
 +    save_regs(0xff);
 +    emit_movimm(opcode[i]==0 && (opcode2[i]&0x3e)==8 ? (start+i*4)|1 : 0,ARG1_REG);
-+    emit_writeword(ARG1_REG,(intptr_t)&plaid_pagespan_branch);
++    emit_movimm64(plaid_current_unit,ARG2_REG);
++    emit_call((intptr_t)plaid_trace_pagespan_context);
 +    restore_regs(0xff);
 +  }
 +#endif
    int s1l=get_reg(i_regs->regmap,rs1[i]);
    int s1h=get_reg(i_regs->regmap,rs1[i]|64);
    int s2l=get_reg(i_regs->regmap,rs2[i]);
-@@ -8651,6 +8695,7 @@ static void pagespan_ds(void)
+@@ -8651,6 +8697,7 @@ static void pagespan_ds(void)
    do_dirty_stub_ds(head);
    head->clean_addr=(void *)out;
    (void)ll_add(jump_in+page,vaddr,(void *)out,(void *)out,start,copy,slen*4);
@@ -171,7 +173,7 @@ index 5f70f7c..68bba3b 100644
    assert(regs[0].regmap_entry[HOST_CCREG]==CCREG);
    emit_addimm(HOST_CCREG,CLOCK_DIVIDER,HOST_CCREG);
    if(regs[0].regmap[HOST_CCREG]!=CCREG)
-@@ -8714,6 +8759,16 @@ static void pagespan_ds(void)
+@@ -8714,6 +8761,16 @@ static void pagespan_ds(void)
    }
    assert(btaddr!=HOST_CCREG);
    if(regs[0].regmap[HOST_CCREG]!=CCREG) emit_loadreg(CCREG,HOST_CCREG);
@@ -188,7 +190,7 @@ index 5f70f7c..68bba3b 100644
    emit_test(HOST_CCREG,HOST_CCREG);
    intptr_t jaddr=(intptr_t)out;
    emit_js(0);
-@@ -8747,6 +8802,7 @@ static void pagespan_ds(void)
+@@ -8747,6 +8804,7 @@ static void pagespan_ds(void)
  /**** Recompiler ****/
  void new_dynarec_init(void)
  {
@@ -196,7 +198,7 @@ index 5f70f7c..68bba3b 100644
    DebugMessage(M64MSG_INFO, "Init new dynarec");
    ensure_dynarec_cache_alignment();
  
-@@ -8866,6 +8922,7 @@ void new_dynarec_init(void)
+@@ -8866,6 +8924,7 @@ void new_dynarec_init(void)
  
  void new_dynarec_cleanup(void)
  {
@@ -204,7 +206,7 @@ index 5f70f7c..68bba3b 100644
  #if defined(RECOMPILER_DEBUG) && !defined(RECOMP_DBG)
    recomp_dbg_cleanup();
  #endif
-@@ -8943,6 +9000,8 @@ static int new_recompile_block_impl(int addr)
+@@ -8943,6 +9002,8 @@ static int new_recompile_block_impl(int addr)
      exit(1);
    }
  
@@ -213,7 +215,7 @@ index 5f70f7c..68bba3b 100644
    /* Pass 1: disassemble */
    /* Pass 2: register dependencies, branch targets */
    /* Pass 3: register allocation */
-@@ -11898,6 +11957,7 @@ static int new_recompile_block_impl(int addr)
+@@ -11898,6 +11959,7 @@ static int new_recompile_block_impl(int addr)
            intptr_t entry_point=do_dirty_stub(i,head);
            head->clean_addr=(void*)entry_point;
            head=ll_add(jump_in+page,vaddr,(void *)entry_point,(void *)entry_point,start,copy,slen*4);
@@ -221,7 +223,7 @@ index 5f70f7c..68bba3b 100644
            // If there was an existing entry in the hash table,
            // replace it with the new address.
            // Don't add new entries.  We'll insert the
-@@ -11928,6 +11988,7 @@ static int new_recompile_block_impl(int addr)
+@@ -11928,6 +11990,7 @@ static int new_recompile_block_impl(int addr)
            intptr_t entry_point=do_dirty_stub(i,head);
            head->clean_addr=(void*)entry_point;
            (void)ll_add_32(jump_in+page,vaddr,r,(void *)entry_point,(void *)entry_point,start,copy,slen*4);
@@ -229,7 +231,7 @@ index 5f70f7c..68bba3b 100644
          }
        }
      }
-@@ -11968,6 +12029,8 @@ static int new_recompile_block_impl(int addr)
+@@ -11968,6 +12031,8 @@ static int new_recompile_block_impl(int addr)
      }
    }
  
