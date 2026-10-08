@@ -17,15 +17,15 @@ Build an automatic N64 ROM-to-native recompilation system. The final native game
 
 ## Agent workflow
 
-Use one continuing primary implementation session. `SWARM_BACKLOG.md` is a legacy
-task ledger, not an instruction to delegate. Read and maintain `docs/STATUS.md`,
-`docs/NEXT.md`, `docs/DECISIONS.md` and relevant research notes. Commit coherent,
-tested milestones and continue through routine steps without waiting for approval.
-Executable discovery precedes serious native lowering.
+Use one continuing **primary implementation/integration session** for canonical Plaid changes. Parallel experimental research workers are explicitly allowed under `ORCHESTRATION.md`: they may patch, compile, instrument, fuzz, benchmark, and test in isolated branches/worktrees, but the primary integrator owns reconciliation into the active integration branch.
+
+`SWARM_BACKLOG.md` remains a legacy/high-level task ledger rather than an instruction to duplicate work. All workers must read `ORCHESTRATION.md`; parallel workers must inspect and use the shared claim ledger in GitHub issue #4 before starting overlapping work.
+
+Read and maintain `docs/STATUS.md`, `docs/NEXT.md`, `docs/DECISIONS.md` and relevant research notes. Commit coherent, tested milestones and continue through routine steps without waiting for approval. Executable discovery precedes serious native lowering.
 
 For each task:
 
-1. Read `README.md`, `docs/PLAN.md`, `docs/ARCHITECTURE.md`, `docs/SOURCES.md`, and this file.
+1. Read `README.md`, `docs/PLAN.md`, `docs/ARCHITECTURE.md`, `docs/SOURCES.md`, `ORCHESTRATION.md`, and this file.
 2. Read the relevant upstream/reference implementation at the pinned commit from `refs.lock.toml`.
 3. State the hypothesis in the issue/experiment note.
 4. Make the smallest change that can prove or disprove it.
