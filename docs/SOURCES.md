@@ -34,6 +34,12 @@ Purpose:
 - CPU/RSP/hardware semantics;
 - differential testing/reference implementation.
 
+Pinned core license: ISC with BSD SLJIT and additional upstream notices.
+`spikes/003-ares-oracle/` builds separately and preserves LICENSE under ignored
+target/. The bounded interpreter oracle agrees with Mupen on eight original
+integer/control fixtures and verifies four cartridge/linked-memory/address-error
+cases. No reference code is linked into Plaid core or a native artifact.
+
 ## gopher64/gopher64
 
 Purpose:

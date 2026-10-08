@@ -91,13 +91,21 @@ Implemented:
   B0001040; its incomplete trace is rejected. The pure interpreter reports nine
   upstream failures and stops on unimplemented LLD. This identifies broader
   source/oracle gaps; neither test-suite completion nor native execution is claimed.
+- A separately built pinned ares interpreter oracle passes four original cartridge,
+  LLD/SCD and address-error fixtures, including BD/EPC/BadVAddr and memory results.
+  Its full GPR/HI/LO/PC state matches all eight existing Mupen integer/control
+  fixtures across pure/traced/untraced modes; repeated states match exactly.
+  Explicit initial state, renderer-owned hidden-RAM backing supplied by the
+  harness, and a generated non-Vulkan renderer guard bound the scope. No boot,
+  FPU/TLB, RSP or full homebrew-suite correctness is claimed.
 
 Verification: 63 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.
 Execution tests use x64 Linux under WSL Ubuntu with GCC and NASM; other CPU hosts
-are unverified.
+are unverified. The ares spike additionally uses G++ C++20; the two earlier spikes
+and deterministic homebrew packaging/known negative outcomes also pass.
 
 `discover` still requires an explicit ROM/load mapping. `import-trace` checks the
 canonical ROM and verifies captured DMA-backed code bytes. `solve [rom] map` emits

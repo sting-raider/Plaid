@@ -24,3 +24,8 @@ Broader corpus investigation: the pinned MIT n64-systemtest build is reproducibl
 but the headless capture spike is PARTIAL (cartridge execution and CPU-oracle
 limits). W010/W011 remain deferred; W012 still needs general source/write/lifecycle
 coverage. See `spikes/002-systemtest-discovery/` and `docs/NEXT.md`.
+
+Independent oracle foundation: `spikes/003-ares-oracle/` is VALIDATED for four
+original cartridge/linked-memory/address-error cases and eight cross-reference
+integer/control comparisons. W011 still requires a native path and broader
+declared semantic coverage; this research does not complete W011 or W012.
