@@ -9,9 +9,10 @@
    Remapping/degradation/failure boundary tests now preserve baseline and full
    hidden-memory hashes while retaining unsupported paths as unknown. Unify
    transaction/fill/cache-operation/fetch order now passes on a 43-record controlled
-   ledger, with independent checkpoints and forged-history rejection. Integrate/
-   reproduce the parallel scalar-fetch, copy, reset/restore and byte-mutation
-   findings next; then extend contextual lineage beyond this declared fixture.
+   ledger, with independent checkpoints and forged-history rejection. The parallel
+   scalar-fetch, CPU-copy, RSP, exception, restore and 64-bit mutation fixtures now
+   reproduce locally. Combine explicit fetch boundaries and successful scalar
+   reads/writes with the measured ledger; then extend beyond the declared fixture.
    Current tags/effective addresses can differ from resident-byte history; keep
    those identities separate. A recovered synchronized-restore/cache-power
    fixture now confirms restored residency without a fill and rejects a latest-
@@ -19,7 +20,9 @@
    Extend source-specific contexts before the bounded homebrew boot prefix.
    V0/v1/v2/v4/v5 import and complete-source checks preserve all legacy map hashes.
    V5 retains resident context; actual ROM-read witnesses retain canonical sources.
-   RAM/SP/PIF backing, copy/mutation lineage and executable lifetimes stay unknown.
+   Production RAM/SP/PIF backing, copy/mutation lineage and executable lifetimes
+   stay unknown. Bounded identity-RAM scalar contexts and RSP IMEM fragment lineage
+   now have reference evidence; neither establishes a complete mutation census.
    Keep the supplied-firmware, fixed NTSC/6102/8-MiB/deterministic/PIF-HLE scope
    visible; the finite guest-test prefix proves neither suite completion nor whole-
    ROM coverage. Retain raw sources for chronology and rechecking, with OPEN
