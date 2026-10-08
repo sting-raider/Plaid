@@ -9,7 +9,7 @@ Statuses: `TODO`, `CLAIMED`, `BLOCKED`, `DONE`.
 | W003 | DONE | Mupen `new_dynarec` instrumentation design | Document exact hook points for block creation, links, invalidation, indirect target discovery. |
 | W004 | DONE | Build dynamic trace format | Versioned machine-readable trace plus parser tests. |
 | W005 | DONE | Direct CFG discovery | Starting from an entry PC, recursively recover direct branch/call targets with delay-slot semantics. |
-| W006 | TODO | spimdisasm integration spike | Compare its recovered functions/pointers against our map on legal/synthetic inputs. |
+| W006 | DONE | spimdisasm integration spike | Four synthetic function/table/truncation comparisons pass; PARTIAL verdict and production constraints recorded in spikes/001-spimdisasm. |
 | W007 | DONE | Rabbitizer integration decision | Benchmark/assess using Rabbitizer vs project-owned decode layer; document ADR. |
 | W008 | TODO | Known-symbol/signature discovery | Integrate or reproduce n64sym-style identification into evidence model. |
 | W009 | TODO | Guest-address/native-symbol model | Prototype safe mapping without conflating guest pointers with host pointers. |

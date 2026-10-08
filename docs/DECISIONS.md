@@ -203,3 +203,16 @@ Legacy maps retain no inferred copy identity. Session-scoped copy references als
 keep imported load evidence separate across traces. CPU copies without a sensor
 and CPU-mutated snapshots remain unknown-source/write obligations, as verified
 by original full-core fixtures; no pattern guess can waive executable policies.
+
+## ADR-0019: Keep disassembler function/table hints outside closure proofs
+
+Status: Accepted for research, 2026-10-08.
+
+The separate pinned MIT spimdisasm/Rabbitizer experiment finds useful direct-call
+and guarded-table hints on original inputs with explicit section/mapping spans.
+Function extents also include unreachable words/padding, and truncated returns
+still produce hints. Keep the disposable comparison outside production. Any
+future adapter needs a separate design decision, canonical hashes, provenance,
+image/generation/mapping identity and candidate-only semantics. A hint cannot
+replace independently rechecked CFG or executable-universe/table certificates.
+Both tools share Rabbitizer, so this comparison is not an independent CPU oracle.
