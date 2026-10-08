@@ -36,3 +36,8 @@ Equal facts combine provenance; contradictions remain diagnostics. Trace imports
 advance generations on invalidation and never close sites from finite samples.
 CLI adds `import-trace` (canonical-ROM identity check) and `merge`. CLI trace
 imports have no supplied mappings yet and intentionally report unknown sources.
+
+Local indirect analysis emits and independently rechecks finite constant-target
+certificates. Observation, an unknown register, a bypass into the prefix or changed
+bytes cannot establish closure. `discover` includes this bounded pass. 26 Rust
+tests pass. Table recognition and inter-block propagation remain unimplemented.
