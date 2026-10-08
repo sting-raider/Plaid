@@ -1002,3 +1002,22 @@ source Rust v2 consumer/rechecker before exposing production evidence; no native
 transfer/lifetime or whole-ROM completion flag is promoted. Generated reference
 sources retain licenses in ignored builds; no reference implementation or asset
 enters production.
+
+## ADR-0070: V2 inspection rechecks actual scheduling and every nested source
+
+Status: Accepted for finite inspection, 2026-10-09.
+
+An original streamed Rust adapter validates typed accepted requests, queue slot
+identity moves/outcomes, immediate valid-removal/dispatch and copy/status joins.
+It rejects new scheduling rows inside raw fetch/copy intervals before projection.
+The unchanged v1 inspector then verifies buffered ROM origins, identity-RAM
+effects and exact nested v0/v5 sources with supplied ROM/firmware. Complete report
+rechecking binds every field and the raw source, including unused payloads.
+
+Full retained-prefix inspection/rechecking reproduces all independent scheduling
+facts and the entire prior v1 report. Six original adversarial integration tests
+cover unknown, canceled, rejected, save/load, read and direct-handler boundaries.
+This replays observed identities, not full heap contents, hardware transfer timing,
+guest-suite completion or executable lifetime. Requests without observed status
+are not a live-queue census. Keep every native/guest/transfer completion flag false;
+no ProgramMap/solver behavior or reference runtime dependency is introduced.
