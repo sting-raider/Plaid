@@ -48,6 +48,12 @@ canceled and restored identities. The primary save-only fix and explicit read/
 write dispatch-scope fixture have separate receipts in their topic notes. None
 of these results promotes boot history v1 completion or whole-ROM closure.
 
+Primary SP reproduction passes the actual descriptor mutation/row/handoff/wrap
+fixture with exact stdout/result hashes from the worker. Canonical LF source
+digests and inspected-file guards preserve unrelated reference instrumentation.
+Mupen/Gopher remain source-only evidence, and FULL-policy hardware disagreement
+remains unresolved. Adopt lifecycle obligations under ADR-0059.
+
 | Research branch under `origin/research/` | Inspected tip | Evidence supplied by worker |
 | --- | --- | --- |
 | `ares-fill-rdram-join-gpt56` | `e8823d1` | Standalone chronology model; reference execution pending |

@@ -45,6 +45,10 @@
    Production RAM/SP/PIF backing, copy/mutation lineage and executable lifetimes
    stay unknown. Bounded identity-RAM scalar contexts and RSP IMEM fragment lineage
    now have reference evidence; neither establishes a complete mutation census.
+   Reproduced SP lifecycle evidence requires actual promotion/pending mutations,
+   grouped count/skip rows and modulo-bank spans; BUSY edges and pending length
+   commits are insufficient identities. Keep the ares/Mupen/Gopher FULL-policy
+   disagreement unresolved until hardware-oriented evidence settles it.
    Keep the supplied-firmware, fixed NTSC/6102/8-MiB/deterministic/PIF-HLE scope
    visible; the finite guest-test prefix proves neither suite completion nor whole-
    ROM coverage. Retain raw sources for chronology and rechecking, with OPEN
