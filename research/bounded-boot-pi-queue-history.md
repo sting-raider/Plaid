@@ -103,3 +103,10 @@ solver. Synthetic CLI tests reproduce canonical ROM byte-order equivalence,
 complete source/report binding, malformed identity/truncation rejection and
 protection of all four supplied inputs. Use these commands with the retained
 v2 sidecar and paired fetch source to reproduce the complete API result.
+
+The locked release CLI also inspects the complete retained 8,823,189-record raw
+capture successfully: three actual request/status links, native completion open.
+Its report bytes exactly equal the independently rechecked API report above.
+All 92 Rust integration tests, formatting, strict Clippy, old/new CLI gates and
+21 retained research models/source guards pass. Model/guard tests are not new
+reference execution or hardware validation.
