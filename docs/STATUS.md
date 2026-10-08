@@ -225,6 +225,12 @@ Implemented:
   full RAM/hidden hashes match. This is direct-component synthetic scope, not
   guest execution or general backing/lifetime coverage.
 
+- One ordered controlled ledger now measures all 43 fixture-write/RAM-burst/fill/
+  CACHE-completion/fetch records, with complete prior projection and independent
+  baseline/plain/repeated CPU/timing/RAM/cache agreement. Five forged histories
+  fail. Ordinary scalar fetch backing and general copy/mutation/reset/restore
+  coverage remain separate; no production lifecycle identity is promoted.
+
 Verification: 76 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.

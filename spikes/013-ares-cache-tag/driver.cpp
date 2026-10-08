@@ -9,6 +9,9 @@
 #undef main
 #include <cstdlib>
 #include <nall/hash/sha256.hpp>
+#if defined(PLAID_ORDERED_HISTORY_CONTEXT)
+#include "../018-ares-ordered-history/history.hpp"
+#endif
 #if PLAID_CACHE_FILL_SENSOR
 #include "../012-ares-cache-fill/observer.hpp"
 #endif
@@ -42,6 +45,9 @@ struct TagObserver : Headless {
       #endif
     }
     samples.push_back(sample);
+    #if defined(PLAID_ORDERED_HISTORY_CONTEXT)
+    history_event("fetch",samples.size());
+    #endif
   }
 };
 
@@ -59,6 +65,9 @@ int main(int argc,char** argv) {
   cartridgeSlot.port->allocate(); cartridgeSlot.port->connect();
   ares::Nintendo64::system.power(false);
   if(cpu.recompiler.enabled || rsp.recompiler.enabled) return 4;
+  #if defined(PLAID_ORDERED_HISTORY_CONTEXT)
+  historyEnabled = traced;
+  #endif
   #if PLAID_CACHE_FILL_SENSOR
   plaidCacheFillObserver = traced ? cache_fill_observer : nullptr;
   #endif
@@ -85,7 +94,12 @@ int main(int argc,char** argv) {
   cpu.debugger.tracer.instruction->setDepth(0);
   cpu.debugger.tracer.instruction->setMask(false);
   cpu.debugger.tracer.instruction->setEnabled(traced);
-  auto put = [](u32 pa,u32 word) { rdram.ram.write<Word>(pa,word,RBusDevice::ARES_DEBUGGER); };
+  auto put = [](u32 pa,u32 word) {
+    rdram.ram.write<Word>(pa,word,RBusDevice::ARES_DEBUGGER);
+    #if defined(PLAID_ORDERED_HISTORY_CONTEXT)
+    history_fixture_write(pa,word);
+    #endif
+  };
   put(0,0x24100001); put(0x4000,0x24100009);
   put(0x2000,0xbd080000); // CACHE index store tag, 0(t0)
   put(0x2004,0xbd000000); // CACHE index invalidate, 0(t0)
@@ -154,6 +168,9 @@ int main(int argc,char** argv) {
   #endif
   #if defined(PLAID_RDRAM_BURST_CONTEXT)
   print_rdram_bursts();
+  #endif
+  #if defined(PLAID_ORDERED_HISTORY_CONTEXT)
+  print_history();
   #endif
   std::printf(",\"post_tags\":[");
   for(size_t i=0;i<postTags.size();i++) std::printf("%s%u",i ? "," : "",postTags[i]);

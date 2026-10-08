@@ -12,6 +12,9 @@ static void rdram_burst_observer(bool write,u32 address,u32 bytes,u32 device,con
   RdramBurst event{write,address,bytes,device,{}};
   for(u32 i=0;i<bytes/4;i++) event.words[i] = words[i];
   rdramBursts.push_back(event);
+  #if defined(PLAID_ORDERED_HISTORY_CONTEXT)
+  history_event("rdram_burst",rdramBursts.size());
+  #endif
 }
 
 static void print_rdram_bursts() {

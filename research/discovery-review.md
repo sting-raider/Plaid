@@ -36,3 +36,8 @@ Current baseline validation: all 76 Rust integration tests, formatting and stric
 Clippy pass. Earlier source-specific acceptance checks and complete corpus hashes
 are documented in their research notes; this review does not claim to rerun them.
 Whole-ROM remains OPEN, `native_complete=false`, and native lowering stays deferred.
+
+The subsequent fresh fetch found orchestration updates through `3cf45dc` and 17
+isolated research branches. Their durable findings are being reconciled separately;
+the branch tips, evidence levels and reproduction results belong in the parallel
+research review. The local baseline above describes the starting checkout only.

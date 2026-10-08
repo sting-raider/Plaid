@@ -8,7 +8,10 @@
    translated/degraded paths, ordinary stores and copy histories remain unclaimed.
    Remapping/degradation/failure boundary tests now preserve baseline and full
    hidden-memory hashes while retaining unsupported paths as unknown. Unify
-   transaction/fill/cache-operation/fetch order next, then copy/mutation lineage.
+   transaction/fill/cache-operation/fetch order now passes on a 43-record controlled
+   ledger, with independent checkpoints and forged-history rejection. Integrate/
+   reproduce the parallel scalar-fetch, copy, reset/restore and byte-mutation
+   findings next; then extend contextual lineage beyond this declared fixture.
    Current tags/effective addresses can differ from resident-byte history; keep
    those identities separate. Test mapping/degradation/failure and reset/restore
    boundaries, then extend the sensor to the bounded homebrew boot prefix.

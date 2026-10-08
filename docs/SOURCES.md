@@ -97,6 +97,11 @@ to verify remapping/degradation/failure exclusion and actual 16/32-byte identity
 witnesses. Independent baseline and repeated returned words/CPU/RI/RAM/hidden
 checkpoints agree. Requestor arguments supply no independent execution claim.
 
+`spikes/018-ares-ordered-history/` measures one original ledger across existing
+transaction/cache/fetch callbacks and explicitly declared fixture writes. All 43
+records, prior complete projection and independent/repeated checkpoints match.
+This finite ordering does not promote general provenance or executable lifetimes.
+
 ## gopher64/gopher64
 
 Purpose:
