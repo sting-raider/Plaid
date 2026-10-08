@@ -192,7 +192,7 @@ int main(int argc, char** argv) {
   put(EbusCode, OriT1);
   hidden[(EbusCode >> 1) + 0] = 0;
   hidden[(EbusCode >> 1) + 1] = 0;
-  mi.io.ebusTestMode = 1;
+  mi.writeWord(0, 1u << 10, cpu);
 #if PLAID_RDRAM_FETCH_SENSOR
   plaidRdramFetchPhase = 8;
 #endif
@@ -200,7 +200,7 @@ int main(int argc, char** argv) {
   cpu.pipeline.setPc(0xffffffffa0008000ull);
   if(cpu.instruction()) cpu.synchronize();
   if(cpu.scc.cause.exceptionCode != 0) return 13;
-  mi.io.ebusTestMode = 0;
+  mi.writeWord(0, 1u << 9, cpu);
   set_fetch_observers(false);
 
   auto ramHash = nall::Hash::SHA256(std::span<const u8>{rdram.ram.data, rdram.ram.size}).digest();
