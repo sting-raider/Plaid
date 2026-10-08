@@ -40,6 +40,9 @@ PC agree across pure/traced/untraced engines; repeated 42-event traces match.
 Two further fixtures replace code at the same RAM address and execute through
 cached/uncached entries. Their CPU states and 81/80-event reruns match; the importer
 keeps generations separate and marks physically overlapping sources as candidates.
+CPU-store mutation and CPU-copy fixtures also agree across engines (78/33 events).
+Changed PI-backed snapshots remain Unknown; CPU copies produce no invented DMA
+or canonical load source. Load mappings distinguish copy events from recompilation.
 The importer verifies ROM sources for executed DMA-backed units and keeps raw
 indirect evidence. The boot copy is still uncorrelated and the solver stays OPEN.
 Linux requires GCC/make/NASM and SDL2/zlib/libpng headers/runtime libraries;

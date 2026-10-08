@@ -1,4 +1,4 @@
-use plaid_core::{GuestAddr, loads::*, program::*, rom::CanonicalRom};
+use plaid_core::{EvidenceKind, GuestAddr, loads::*, program::*, rom::CanonicalRom};
 
 fn rom() -> CanonicalRom {
     let mut bytes = vec![0; 128];
@@ -20,15 +20,40 @@ fn observation(rom: &CanonicalRom, offset: u64, generation: u64) -> LoadObservat
         producer: "synthetic-dma".into(),
         revision: "0".into(),
         event: generation,
+        copy_event: None,
     }
 }
 
 #[test]
 fn exact_copy_and_reload_keep_rom_provenance_and_generation() {
     let r = rom();
-    let m = ProgramMap::new(r.identity.clone());
-    let m = record_load(&m, &r, &observation(&r, 64, 0)).unwrap();
-    let m = record_load(&m, &r, &observation(&r, 64, 1)).unwrap();
+    let mut m = ProgramMap::new(r.identity.clone());
+    for event in ["copy0", "copy1"] {
+        m.evidence.insert(
+            event.into(),
+            Evidence {
+                kind: EvidenceKind::Trace,
+                producer: "synthetic-dma".into(),
+                revision: "0".into(),
+                detail: format!("synthetic actual copy {event}"),
+            },
+        );
+        m.dma_observations.insert(ObservedDma {
+            rom_offset: RomOffset(64),
+            physical_destination: PhysicalAddr(0),
+            size: 8,
+            evidence: [event.into()].into(),
+        });
+    }
+    let mut first = observation(&r, 64, 0);
+    first.copy_event = Some("copy0".into());
+    let m = record_load(&m, &r, &first).unwrap();
+    let mut second = observation(&r, 64, 1);
+    second.copy_event = Some("copy0".into());
+    let recompiled = record_load(&m, &r, &second).unwrap();
+    assert!(recompiled.executable_writes.is_empty());
+    second.copy_event = Some("copy1".into());
+    let m = record_load(&m, &r, &second).unwrap();
     assert_eq!(m.loads.len(), 2);
     assert_eq!(m.regions.len(), 2);
     assert!(
@@ -84,6 +109,9 @@ fn malformed_snapshots_and_rom_mismatch_are_errors() {
     let mut m = ProgramMap::new(r.identity.clone());
     m.rom.sha256 = "b".repeat(64);
     assert!(record_load(&m, &r, &observation(&r, 64, 0)).is_err());
+    let mut o = observation(&r, 64, 0);
+    o.copy_event = Some("missing-copy".into());
+    assert!(record_load(&ProgramMap::new(r.identity.clone()), &r, &o).is_err());
 }
 
 #[test]

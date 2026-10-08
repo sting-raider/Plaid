@@ -190,3 +190,16 @@ cache behavior, relocation, lifetime and dispatch still need independent policie
 Missing or contradictory physical mappings cannot establish a unique alias.
 The full-core replacement fixtures validate separate generations and conservative
 candidate overlays, not a complete overlay lifecycle certificate.
+
+## ADR-0018: Copy identity is distinct from a compiled executable snapshot
+
+Status: Accepted, 2026-10-08.
+
+Cache invalidation and subsequent matching compilation do not establish another
+copy. Add optional copy-event provenance to load mappings, validating Trace kind,
+evidence membership and covering typed DMA/physical-region facts. Classify an
+exact reload only when both snapshots refer to distinct observed copy events.
+Legacy maps retain no inferred copy identity. Session-scoped copy references also
+keep imported load evidence separate across traces. CPU copies without a sensor
+and CPU-mutated snapshots remain unknown-source/write obligations, as verified
+by original full-core fixtures; no pattern guess can waive executable policies.

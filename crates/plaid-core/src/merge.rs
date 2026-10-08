@@ -327,6 +327,7 @@ fn import(
                                 producer: trace.header.engine.clone(),
                                 revision: trace.header.revision.clone(),
                                 event: dma_seq,
+                                copy_event: Some(format!("trace:{session}:{dma_seq}")),
                             },
                         )?;
                         if mapped.words == *words {

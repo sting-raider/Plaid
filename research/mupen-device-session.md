@@ -46,6 +46,24 @@ Missing, disjoint or contradictory physical mappings do not imply aliasing;
 partial physical overlap conservatively adds lifecycle obligations. A Rust test
 covers these cases and rejects physical spans exceeding the address space.
 
+A mutation fixture returns to SP after first execution, then uses CPU stores to
+change two DRAM instructions before re-entry. Engines agree on changed values,
+with identical 78-event traced reruns. Import detects canonical-byte mismatch,
+unknown executable source/write, and a new generation. A CPU-copy fixture reads
+64 cartridge words and stores them to DRAM without PI; all engines agree and
+33-event reruns match. No DMA or verified load mapping is invented. These are
+negative coverage checks: CPU-copy provenance and write semantics remain open.
+
+A separate synthetic trace regression shows that recompilation after cache
+invalidation can occur under the same earlier DMA event. It must not be called
+an exact reload. LoadMapping now retains optional `copy_event`, referencing the
+actual trace transfer separately from compilation. Its evidence must be Trace,
+included in load provenance, and cover ROM/physical spans in typed DMA/region
+facts. Exact reload classification requires two distinct copy references. Trace
+load evidence IDs include the session-scoped copy ID. Older maps deserialize
+with no copy identity and cannot establish distinct reloads. Tests reject absent
+provenance and misplaced DMA destinations and preserve deterministic roundtrips.
+
 Reproduce: `python scripts/test_mupen_session.py`. Python 3.12+, Linux x64
 GCC/make/NASM, SDL2/zlib/libpng headers and libraries are required. Windows uses
 WSL Ubuntu. This run extracted apt NASM 3.01 and SDL2 2.32.10/zlib 1.3.1/libpng

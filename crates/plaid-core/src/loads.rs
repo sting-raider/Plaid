@@ -35,6 +35,8 @@ pub struct LoadObservation {
     pub producer: String,
     pub revision: String,
     pub event: u64,
+    /// Existing trace evidence identifying the copy itself, not compilation.
+    pub copy_event: Option<String>,
 }
 
 pub fn record_load(
@@ -61,14 +63,37 @@ pub fn record_load(
     }
     let image = CodeImage::from_rom(rom, observation.rom_offset, observation.destination.clone())?;
     let id = format!(
-        "load:{}:{}:{:08x}:{}:{}",
-        observation.producer,
-        observation.event,
+        "load:{}:{:08x}:{}:{}",
+        observation
+            .copy_event
+            .clone()
+            .unwrap_or_else(|| format!("{}:{}", observation.producer, observation.event)),
         observation.destination.start.0,
         observation.generation,
         sha256(&observation.snapshot)
     );
-    let evidence: EvidenceRefs = [id.clone()].into();
+    let mut evidence: EvidenceRefs = [id.clone()].into();
+    if let Some(copy) = &observation.copy_event {
+        if map
+            .evidence
+            .get(copy)
+            .is_none_or(|e| e.kind != EvidenceKind::Trace)
+        {
+            return Err("executable load copy event lacks trace evidence".into());
+        }
+        if !map.dma_observations.iter().any(|d| {
+            copy_covers(
+                d,
+                copy,
+                observation.rom_offset,
+                observation.destination.size,
+                observation.physical_start,
+            )
+        }) {
+            return Err("executable load copy event has no covering observed DMA".into());
+        }
+        evidence.insert(copy.clone());
+    }
     let mut out = map.clone();
     let e = Evidence {
         kind: EvidenceKind::Trace,
@@ -106,6 +131,7 @@ pub fn record_load(
         destination: observation.destination.clone(),
         image: image.base.image.clone(),
         generation: observation.generation,
+        copy_event: observation.copy_event.clone(),
         evidence: evidence.clone(),
     };
     let prior: Vec<_> = out
@@ -130,6 +156,9 @@ pub fn record_load(
         old.destination == load.destination
             && old.rom_offset == load.rom_offset
             && old.image == load.image
+            && old.copy_event.is_some()
+            && load.copy_event.is_some()
+            && old.copy_event != load.copy_event
     });
     if reused {
         // This event is an observed exact ROM reload. It does not classify

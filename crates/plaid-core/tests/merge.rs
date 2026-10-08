@@ -55,6 +55,101 @@ fn observed_dma_and_captured_words_establish_verified_executable_source() {
 }
 
 #[test]
+fn repeated_compilation_is_not_a_new_dma_reload() {
+    let mut bytes = vec![0; 4096];
+    bytes[..4].copy_from_slice(&[0x80, 0x37, 0x12, 0x40]);
+    bytes[64..72].copy_from_slice(&[8, 0, 0, 0, 0, 0, 0, 0]);
+    let rom = CanonicalRom::from_bytes(&bytes).unwrap();
+    let dma = TraceEvent::RomDmaObserved {
+        rom_offset: RomOffset(64),
+        physical_destination: PhysicalAddr(0),
+        size: 8,
+    };
+    let mut t = trace(vec![0x08000000, 0]);
+    t.header.rom = rom.identity.clone();
+    let mut second = t.events.clone();
+    for event in &mut second {
+        match &mut event.data {
+            TraceEvent::CompileBegin { unit, .. }
+            | TraceEvent::EntryInstalled { unit, .. }
+            | TraceEvent::UnitCompiled { unit, .. } => *unit = 1,
+            _ => unreachable!(),
+        }
+    }
+    t.events.insert(
+        0,
+        EventRecord {
+            seq: 0,
+            data: dma.clone(),
+        },
+    );
+    t.events.push(EventRecord {
+        seq: 0,
+        data: TraceEvent::Invalidate { range: None },
+    });
+    t.events.extend(second);
+    for (seq, event) in t.events.iter_mut().enumerate() {
+        event.seq = seq as u64;
+    }
+    let recompiled = import_trace_with_rom(&t, &[], &rom, 100).unwrap();
+    assert_eq!(recompiled.loads.len(), 2);
+    assert_eq!(
+        recompiled
+            .loads
+            .iter()
+            .map(|l| l.copy_event.clone())
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        1
+    );
+    assert!(
+        !recompiled
+            .executable_writes
+            .iter()
+            .any(|w| w.kind == WriteKind::OverlayReload)
+    );
+    // A distinct sensed copy followed by a matching snapshot can establish reload.
+    t.events.insert(5, EventRecord { seq: 0, data: dma });
+    for (seq, event) in t.events.iter_mut().enumerate() {
+        event.seq = seq as u64;
+    }
+    let reloaded = import_trace_with_rom(&t, &[], &rom, 100).unwrap();
+    assert!(
+        reloaded
+            .executable_writes
+            .iter()
+            .any(|w| w.kind == WriteKind::OverlayReload)
+    );
+    assert_eq!(
+        reloaded,
+        ProgramMap::from_json(&reloaded.to_json().unwrap()).unwrap()
+    );
+    let mut misplaced = reloaded.clone();
+    misplaced.dma_observations = misplaced
+        .dma_observations
+        .iter()
+        .cloned()
+        .map(|mut d| {
+            d.physical_destination = PhysicalAddr(32);
+            d
+        })
+        .collect();
+    assert!(misplaced.validate().is_err());
+    let mut legacy: serde_json::Value = serde_json::from_str(&reloaded.to_json().unwrap()).unwrap();
+    for load in legacy["loads"].as_array_mut().unwrap() {
+        load.as_object_mut().unwrap().remove("copy_event");
+    }
+    let legacy = ProgramMap::from_json(&legacy.to_string()).unwrap();
+    assert!(legacy.loads.iter().all(|l| l.copy_event.is_none()));
+    // Deleting or changing the explicit event's provenance is rejected.
+    let mut invalid = reloaded;
+    let mut load = invalid.loads.pop_first().unwrap();
+    load.evidence.remove(load.copy_event.as_ref().unwrap());
+    invalid.loads.insert(load);
+    assert!(invalid.validate().is_err());
+}
+
+#[test]
 fn unproved_evidence_merges_into_a_static_certificate_without_duplicate_sites() {
     let mut i = image();
     i.words = vec![0x3c088000, 0x35080000, 0x01000008, 0];

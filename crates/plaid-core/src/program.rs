@@ -161,6 +161,10 @@ pub struct LoadMapping {
     pub destination: GuestRange,
     pub image: String,
     pub generation: u64,
+    /// Reference to the observed transfer, separate from compilation/snapshot.
+    /// Older maps without this identity cannot establish distinct reload events.
+    #[serde(default)]
+    pub copy_event: Option<String>,
     pub evidence: EvidenceRefs,
 }
 
@@ -171,6 +175,23 @@ pub struct ObservedDma {
     pub physical_destination: PhysicalAddr,
     pub size: u32,
     pub evidence: EvidenceRefs,
+}
+
+pub(crate) fn copy_covers(
+    dma: &ObservedDma,
+    copy: &str,
+    offset: RomOffset,
+    size: u32,
+    physical: Option<PhysicalAddr>,
+) -> bool {
+    let Some(delta) = offset.0.checked_sub(dma.rom_offset.0) else {
+        return false;
+    };
+    dma.evidence.contains(copy)
+        && delta
+            .checked_add(u64::from(size))
+            .is_some_and(|end| end <= u64::from(dma.size))
+        && physical.is_some_and(|p| u64::from(p.0) == u64::from(dma.physical_destination.0) + delta)
 }
 
 /// Raw source-correlated execution evidence survives missing/ambiguous image
@@ -378,6 +399,28 @@ impl ProgramMap {
             l.destination.validate(true)?;
             rom_range(l.rom_offset, l.destination.size)?;
             refs(&l.evidence)?;
+            if let Some(copy) = &l.copy_event
+                && (!l.evidence.contains(copy)
+                    || self
+                        .evidence
+                        .get(copy)
+                        .is_none_or(|e| e.kind != EvidenceKind::Trace))
+            {
+                return Err("load copy event lacks trace provenance".into());
+            }
+            if let Some(copy) = &l.copy_event
+                && !self.regions.iter().any(|r| {
+                    r.image == l.image
+                        && r.generation == l.generation
+                        && r.range == l.destination
+                        && r.rom_offset == Some(l.rom_offset)
+                        && self.dma_observations.iter().any(|d| {
+                            copy_covers(d, copy, l.rom_offset, l.destination.size, r.physical_start)
+                        })
+                })
+            {
+                return Err("load copy event has no covering observed DMA/mapping".into());
+            }
             if l.image.is_empty() {
                 return Err("load has no image identity".into());
             }

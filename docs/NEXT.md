@@ -1,9 +1,9 @@
 # Next
 
-1. Extend the full-core PI/reload/alias sessions to CPU copies and executable
-   mutation snapshots. Distinguish repeated compilation under one DMA event from
-   a new load, preserving unknown boot-source and mutation obligations. Keep
-   speculative compilation distinct from execution.
+1. Model/sense non-PI copies and executable writes beyond PI-backed snapshots.
+   CPU-copy and mutation reference fixtures now retain their unknown-source/write
+   blockers. Preserve boot-source and lifecycle obligations; keep speculative
+   compilation distinct from execution.
 2. Prove pointer-table data immutability and guard coverage before issuing exhaustive
    table certificates. Extend cross-block joins only with rechecked invariants;
    the current table recognizer and single-predecessor chains are restricted passes.
