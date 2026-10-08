@@ -188,8 +188,9 @@ Implemented:
   uncached/older formats forbid it. Distinct slots and resident payload variants
   survive coalescing and merge. Complete-source rechecking catches even unfetched
   lane changes. The one-million corpus verifies all fetches in 1,155 facts,
-  self-merges exactly and stays OPEN; its map is 644,693 bytes. Broader import and
-  legacy corpus regressions are running. No fill/lifetime/source identity is inferred.
+  self-merges exactly and stays OPEN; its map is 644,693 bytes. The ten-million
+  corpus also passes, yielding 54,279 facts in 43,509,988 bytes. V0/v1/v2 and the
+  shorter v4 corpus retain exact map hashes. No fill/lifetime/source identity is inferred.
 
 Verification: 76 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

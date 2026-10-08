@@ -73,3 +73,5 @@ The ten-million cache prefix and fresh v4/v2 regressions now preserve prior
 goldens too. Cache fill origins and execution lifetimes remain open.
 V5 selected-cache context now has strict Rust import/full-source verification and
 snapshot-variant tests, without executable identity promotion. W012 remains TODO.
+Both complete v5 corpora now verify full sources/firmware and self-merge exactly,
+with OPEN gating and preserved v0/v1/v2/shorter-v4 map hashes. W012 remains TODO.
