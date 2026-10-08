@@ -51,7 +51,7 @@ int main() {
   };
 
   std::vector<ProbeResult> results;
-  auto runDecoded = [&](string name, u32 instruction, u32 base, bool scalar, auto checkDmem) {
+  auto runDecoded = [&](string name, u32 instruction, u32 base, bool scalar, bool expectWrite, auto checkDmem) {
     resetMem();
     rsp.ipu.r[1].u32 = base;
     if(scalar) rsp.ipu.r[2].u32 = 0xa1b2c3d4;
@@ -76,8 +76,12 @@ int main() {
     checkDmem();
     u32 changed = 0;
     for(u32 i = 0; i < 4096; i++) changed += dmemBefore[i] != rsp.dmem.data[i];
-    if(!changed) {
+    if(expectWrite && !changed) {
       std::fprintf(stderr, "DMEM unexpectedly unchanged by %s base=%08x\n", name.data(), base);
+      std::abort();
+    }
+    if(!expectWrite && changed) {
+      std::fprintf(stderr, "DMEM unexpectedly changed by zero-length %s base=%08x\n", name.data(), base);
       std::abort();
     }
     results.push_back({name, instruction, base, changed, digest(rsp.dmem.data, 4096)});
@@ -85,17 +89,17 @@ int main() {
 
   // Scalar store opcodes: base=r1, rt=r2, immediate=0. These are actual
   // decoded guest instructions, including unaligned SH/SW wrap through 0xfff.
-  runDecoded("SB", 0xa0220000, 0x1000, true, [&] {
+  runDecoded("SB", 0xa0220000, 0x1000, true, true, [&] {
     if(rsp.dmem.read<Byte>(0x000) != 0xd4) std::abort();
   });
-  runDecoded("SH", 0xa4220000, 0x0fff, true, [&] {
+  runDecoded("SH", 0xa4220000, 0x0fff, true, true, [&] {
     if(rsp.dmem.read<Byte>(0xfff) != 0xc3 || rsp.dmem.read<Byte>(0x000) != 0xd4) std::abort();
   });
-  runDecoded("SW-wrap", 0xac220000, 0x0ffe, true, [&] {
+  runDecoded("SW-wrap", 0xac220000, 0x0ffe, true, true, [&] {
     if(rsp.dmem.read<Byte>(0xffe) != 0xa1 || rsp.dmem.read<Byte>(0xfff) != 0xb2 ||
        rsp.dmem.read<Byte>(0x000) != 0xc3 || rsp.dmem.read<Byte>(0x001) != 0xd4) std::abort();
   });
-  runDecoded("SW-bit12", 0xac220000, 0x1000, true, [&] {
+  runDecoded("SW-bit12", 0xac220000, 0x1000, true, true, [&] {
     if(rsp.dmem.read<Word>(0x000) != 0xa1b2c3d4) std::abort();
   });
 
@@ -117,11 +121,17 @@ int main() {
   for(const auto& store : stores) {
     u32 instruction = (58u << 26) | (1u << 21) | (2u << 16) | (store.subtype << 11);
     // 0x1000 is the adversarial would-be IMEM selector if the RSP data path
-    // shared the CPU-visible 8 KiB SP memory addressing model.
-    runDecoded(store.bit12Name, instruction, 0x1000, false, [&] {});
+    // shared the CPU-visible 8 KiB SP memory addressing model. SRV is the one
+    // architectural zero-byte case here: its length is address & 15.
+    runDecoded(store.bit12Name, instruction, 0x1000, false, store.subtype != 5, [&] {});
     // 0x0fff forces multi-byte/vector forms to confront the 4 KiB wrap edge.
-    runDecoded(store.wrapName, instruction, 0x0fff, false, [&] {});
+    runDecoded(store.wrapName, instruction, 0x0fff, false, true, [&] {});
   }
+
+  // Exercise SRV's real write path while keeping bit 12 set. This prevents the
+  // aligned SRV no-op above from being mistaken for evidence that SRV was not decoded.
+  u32 srvInstruction = (58u << 26) | (1u << 21) | (2u << 16) | (5u << 11);
+  runDecoded("SRV@0x100f", srvInstruction, 0x100f, false, true, [&] {});
 
   string finalImem = digest(rsp.imem.data, 4096);
   string finalDmem = digest(rsp.dmem.data, 4096);
@@ -135,5 +145,5 @@ int main() {
     results.size(), finalImem.data(), finalDmem.data());
 
   ares::Nintendo64::system.unload();
-  return results.size() == 28 ? 0 : 70;
+  return results.size() == 29 ? 0 : 70;
 }
