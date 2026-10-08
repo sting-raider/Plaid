@@ -5,7 +5,7 @@
    Controlled completed fills, guest tag stores, hit/miss invalidation, explicit
    fill and hit/miss writeback now preserve independent reference checkpoints.
    Successful identity-mapped RAM bursts now supply actual transaction witnesses;
-   translated/degraded paths, ordinary stores and copy histories remain unclaimed.
+   translated/degraded paths and general store/copy coverage remain unclaimed.
    Remapping/degradation/failure boundary tests now preserve baseline and full
    hidden-memory hashes while retaining unsupported paths as unknown. Unify
    transaction/fill/cache-operation/fetch order now passes on a 43-record controlled
@@ -20,7 +20,10 @@
    successful RAM effects, retaining discarded lanes, failed destinations and
    separate completion. A 481-record composed fixture now preserves actual fetch/
    fill origins through equal/changed reloads, guest SW/invalidation and partial
-   words. Extend these source/transfer contexts to versioned boot chronology next;
+   words. Versioned boot chronology now retains 8,823,134 records and exact ROM
+   origins for 1,638,808 successful PI writes, preserving complete v0/v5 sources
+   and independent checkpoints. Implement original strict Rust v1 inspection
+   under a separate decision before any production identity promotion;
    do not certify completion from last-write context: actual queue-container and
    source checks expose duplicate IDs, cancellation and silent insertion failure.
    Retain successful insertion/dispatch identity and removal before queue joins;
@@ -29,7 +32,8 @@
    those identities separate. A recovered synchronized-restore/cache-power
    fixture now confirms restored residency without a fill and rejects a latest-
    tuple causal shortcut; broader reset/NMI/restore capture policy remains open.
-   Extend source-specific contexts before the bounded homebrew boot prefix.
+   Extend additional source-specific contexts and lifecycle sensing beyond the
+   current bounded homebrew boot prefix.
    V0/v1/v2/v4/v5 import and complete-source checks preserve all legacy map hashes.
    V5 retains resident context; actual ROM-read witnesses retain canonical sources.
    Production RAM/SP/PIF backing, copy/mutation lineage and executable lifetimes

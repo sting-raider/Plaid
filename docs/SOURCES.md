@@ -197,6 +197,10 @@ resident checker preserves separate histories, with the same isolation/notices.
 `spikes/031-ares-pi-queue-contract/` separately compiles the pinned nall queue
 header and checks PI/CPU routes. This is actual container execution plus source
 evidence; it does not execute the CPU/PI components or certify hardware timing.
+`spikes/030-ares-boot-pi-history/` composes actual PI source/buffer/write contexts
+with the bounded boot sidecar under research v1. Original ROM-result forwarding
+and source/effect checks preserve complete original-PI v0/v5 sources and reported
+checkpoints. Current production v0 deliberately rejects this research version.
 
 Selected-cache v5 handling in Plaid is original Rust schema/import/verification
 code. It checks the pinned reference's finite snapshot constraints while keeping
