@@ -3,6 +3,7 @@
 //! Keep this crate free of ROM assets and game-specific assumptions.
 
 pub mod discovery;
+pub mod fetch;
 pub mod indirect;
 mod indirect_chain;
 pub mod loads;

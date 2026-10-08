@@ -1,10 +1,13 @@
 # Next
 
-1. Add a provenance-bearing raw fetch schema/import path, preserving 64-bit guest
-   PCs, fetched words, delay-slot context and changing words at one PC. The pinned
+1. Establish explicit physical/cartridge backing and contextual executable image
+   identities for raw fetches. The streaming importer now preserves 64-bit PCs,
+   fetched-word/slot variants and digest-qualified first/last indices/counts,
+   rechecks the complete source and refuses closure of unknown identities. The pinned
    ares probe reaches 52,424 RAM/548 SP/65 cartridge addresses on the untouched
-   homebrew; repeated streams and CPU/memory checkpoints match. Measure artifact
-   cost before promoting its large stream. Keep RAM copies/lifetime unknown;
+   homebrew; repeated streams and CPU/memory checkpoints match. Its 53,037-summary
+   map is 20,053,874 bytes; raw data is still required for rechecking and chronology.
+   Keep RAM copies/lifetime unknown;
    establish cartridge backing only through explicit mapping and byte verification.
    Model cartridge-resident executable sources and a capable capture path. The
    pinned homebrew spike exposes unsupported B0001040 execution in new_dynarec;

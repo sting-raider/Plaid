@@ -14,6 +14,11 @@ pub struct RomOffset(pub u64);
 #[serde(transparent)]
 pub struct PhysicalAddr(pub u32);
 
+/// Raw CPU virtual address. Wider modes must never be truncated into GuestAddr.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct GuestVirtualAddr(pub u64);
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RomIdentity {
@@ -280,6 +285,32 @@ pub struct Unresolved {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct FetchCapture {
+    pub trace_sha256: String,
+    pub revision: String,
+    pub initial_state: String,
+    pub instruction_call_budget: u64,
+    pub fetch_count: u64,
+}
+
+/// A finite summary of identical fetched-word/slot facts in one raw capture.
+/// First/last are exact event indices, not a contiguous interval or lifetime.
+/// There is deliberately no image, generation, copy or retirement identity.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ObservedFetch {
+    pub pc: GuestVirtualAddr,
+    pub word: u32,
+    pub delay_slot: bool,
+    pub capture: String,
+    pub first_seq: u64,
+    pub last_seq: u64,
+    pub occurrences: u64,
+    pub evidence: EvidenceRefs,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProgramMap {
     pub schema_version: u32,
     pub rom: RomIdentity,
@@ -301,6 +332,10 @@ pub struct ProgramMap {
     pub entry_verifications: BTreeSet<ObservedEntryVerification>,
     #[serde(default)]
     pub word_store_observations: BTreeSet<ObservedWordStore>,
+    #[serde(default, with = "unique_map")]
+    pub fetch_captures: BTreeMap<String, FetchCapture>,
+    #[serde(default)]
+    pub fetch_observations: BTreeSet<ObservedFetch>,
     pub relocations: BTreeSet<Relocation>,
     pub executable_writes: BTreeSet<ExecutableWrite>,
     pub rsp_microcodes: BTreeSet<Microcode>,
@@ -324,6 +359,8 @@ impl ProgramMap {
             indirect_observations: BTreeSet::new(),
             entry_verifications: BTreeSet::new(),
             word_store_observations: BTreeSet::new(),
+            fetch_captures: BTreeMap::new(),
+            fetch_observations: BTreeSet::new(),
             relocations: BTreeSet::new(),
             executable_writes: BTreeSet::new(),
             rsp_microcodes: BTreeSet::new(),
@@ -502,6 +539,67 @@ impl ProgramMap {
                     .is_some_and(|e| e.kind == EvidenceKind::Trace)
             {
                 return Err("verified entry missing installed identity or unit provenance".into());
+            }
+        }
+        let mut fetch_totals = BTreeMap::<&str, u64>::new();
+        let mut fetch_keys = BTreeSet::new();
+        let mut fetch_endpoints = BTreeMap::new();
+        for (id, capture) in &self.fetch_captures {
+            RomIdentity {
+                sha256: capture.trace_sha256.clone(),
+                size: 64,
+            }
+            .validate()?;
+            if id != &format!("fetch:{}", capture.trace_sha256)
+                || capture.revision != crate::fetch::REVISION
+                || capture.initial_state != crate::fetch::INITIAL_STATE
+                || capture.instruction_call_budget == 0
+                || capture.instruction_call_budget > crate::fetch::MAX_BUDGET
+                || capture.fetch_count > capture.instruction_call_budget
+                || self.evidence.get(id).is_none_or(|e| {
+                    e.kind != EvidenceKind::Trace
+                        || e.producer != crate::fetch::FORMAT
+                        || e.revision != capture.revision
+                })
+            {
+                return Err("invalid fetch capture identity, bounds or provenance".into());
+            }
+            fetch_totals.insert(id, 0);
+        }
+        for f in &self.fetch_observations {
+            refs(&f.evidence)?;
+            let capture = self
+                .fetch_captures
+                .get(&f.capture)
+                .ok_or("unknown fetch capture")?;
+            if !f.pc.0.is_multiple_of(4)
+                || f.first_seq > f.last_seq
+                || f.last_seq >= capture.fetch_count
+                || f.occurrences == 0
+                || f.occurrences > f.last_seq - f.first_seq + 1
+                || (f.occurrences == 1 && f.first_seq != f.last_seq)
+                || !f.evidence.contains(&f.capture)
+                || !fetch_keys.insert((&f.capture, f.pc, f.word, f.delay_slot))
+            {
+                return Err("invalid or duplicate raw fetch summary".into());
+            }
+            for seq in [f.first_seq, f.last_seq] {
+                let value = (f.pc, f.word, f.delay_slot);
+                if fetch_endpoints
+                    .insert((&f.capture, seq), value)
+                    .is_some_and(|old| old != value)
+                {
+                    return Err("conflicting fetch endpoint witnesses".into());
+                }
+            }
+            let total = fetch_totals.get_mut(f.capture.as_str()).unwrap();
+            *total = total
+                .checked_add(f.occurrences)
+                .ok_or("fetch count overflow")?;
+        }
+        for (id, total) in fetch_totals {
+            if total != self.fetch_captures[id].fetch_count {
+                return Err("fetch summaries do not account for capture count".into());
             }
         }
         for r in &self.relocations {

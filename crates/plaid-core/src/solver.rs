@@ -97,6 +97,17 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         .filter(|b| !b.delay_slot_entry)
         .map(|b| b.start.clone())
         .collect();
+    if !map.fetch_observations.is_empty() {
+        add(
+            "fetch_execution_identity_unknown",
+            None,
+            "raw fetched words have no established image generation, lifetime or retirement identity",
+            map.fetch_observations
+                .iter()
+                .flat_map(|f| f.evidence.clone())
+                .collect(),
+        );
+    }
     if map.entries.is_empty() {
         add(
             "missing_entry_universe",

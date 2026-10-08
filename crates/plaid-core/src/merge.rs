@@ -18,6 +18,7 @@ facts!(
     ObservedIndirect,
     ObservedWordStore,
     ObservedEntryVerification,
+    ObservedFetch,
     Region,
     BasicBlock,
     DirectEdge,
@@ -67,6 +68,13 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
     out.dma_observations = union(&left.dma_observations, &right.dma_observations);
     out.indirect_observations = union(&left.indirect_observations, &right.indirect_observations);
     out.entry_verifications = union(&left.entry_verifications, &right.entry_verifications);
+    out.fetch_observations = union(&left.fetch_observations, &right.fetch_observations);
+    for (id, capture) in &right.fetch_captures {
+        if out.fetch_captures.get(id).is_some_and(|old| old != capture) {
+            return Err(format!("conflicting fetch capture identity: {id}"));
+        }
+        out.fetch_captures.insert(id.clone(), capture.clone());
+    }
     out.word_store_observations = union(
         &left.word_store_observations,
         &right.word_store_observations,

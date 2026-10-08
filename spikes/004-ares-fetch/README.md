@@ -76,3 +76,8 @@ Add a separately decided production fetch-observation schema/import path with
 PC and unknown RAM source/lifetime; establish typed cartridge backing only with
 explicit mapping and canonical-byte verification. Keep whole-ROM closure OPEN
 while boot, exceptions, executable copies/writes, overlays and RSP remain open.
+
+ADR-0027 now implements the conservative raw-summary import/rechecker through
+`plaid import-fetch` and `plaid verify-fetch`. It introduces no executable
+generation or reference CPU dependency. `scripts/test_fetch_corpus.py` checks
+all fetched facts against the complete raw file and records artifact/import cost.
