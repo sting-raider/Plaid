@@ -17,6 +17,7 @@ static constexpr u32 Data = 0x1000;
 static constexpr u32 DirectCode = 0x6000;
 static constexpr u32 CachedCode = 0x6040;
 static constexpr u32 LittleCode = 0x7000;
+static constexpr u32 EbusCode = 0x8000;
 static constexpr u32 TranslatedBacking = 0x200000;
 static constexpr u32 LwT0S0 = 0x8e080000;
 static constexpr u32 OriT3 = 0x340b1357;
@@ -69,7 +70,7 @@ int main(int argc, char** argv) {
     rdram.ram.write<Word>(address, word, RBusDevice::ARES_DEBUGGER);
   };
 
-  // Phase 1: KSEG1 instruction fetch + same-valued data read decoy. The LW
+  // Phase 1: KSEG1 instruction fetch + same-valued data read decoy.  The LW
   // reads zero, immediately followed by a zero-valued NOP instruction fetch.
   put(DirectCode + 0x00, LwT0S0);
   put(DirectCode + 0x04, 0x00000000);
@@ -114,7 +115,7 @@ int main(int argc, char** argv) {
   if(cpu.scc.cause.exceptionCode != 0 || cpu.ipu.r[10].u32 != 0x5678) return 7;
   cpu.context.endian = CPU::Context::Endian::Big;
 
-  // Phase 4: successful non-identity RDRAM translation. Backing chip one is
+  // Phase 4: successful non-identity RDRAM translation.  Backing chip one is
   // read and executes ORI, but the identity-only scalar observer must stay quiet.
   set_fetch_observers(false);
   auto& backing = static_cast<ares::Nintendo64::Memory::Writable&>(rdram.ram);
@@ -164,6 +165,42 @@ int main(int argc, char** argv) {
   cpu.pipeline.setPc(0xffffffffa0000000ull);
   if(cpu.instruction()) cpu.synchronize();
   if(cpu.scc.cause.exceptionCode != 0) return 11;
+
+  // Phase 7: successful translated read with CCI at/below ccLow degrades every
+  // set bit to zero. It executes as NOP but is intentionally outside the
+  // identity-backing witness policy.
+  set_fetch_observers(false);
+  chip.enable = 1;
+  chip.deviceID = 0;
+  chip.ccLow = 8;
+  chip.ccHigh = 16;
+  chip.cci = 8;
+  rdram.mapIdentity = 0;
+#if PLAID_RDRAM_FETCH_SENSOR
+  plaidRdramFetchPhase = 7;
+#endif
+  set_fetch_observers(traced);
+  cpu.pipeline.setPc(0xffffffffa0000000ull);
+  if(cpu.instruction()) cpu.synchronize();
+  if(cpu.scc.cause.exceptionCode != 0) return 12;
+
+  // Phase 8: MI EBUS test mode bypasses RDRAM::Writable::read entirely for
+  // uncached CPU traffic. Force the hidden nibble to zero so the fetched word
+  // is a deterministic NOP, and require no ordinary-RDRAM backing witness.
+  set_fetch_observers(false);
+  rdram.mapIdentity = 1;
+  put(EbusCode, OriT1);
+  hidden[(EbusCode >> 1) + 0] = 0;
+  hidden[(EbusCode >> 1) + 1] = 0;
+  mi.io.ebusTestMode = 1;
+#if PLAID_RDRAM_FETCH_SENSOR
+  plaidRdramFetchPhase = 8;
+#endif
+  set_fetch_observers(traced);
+  cpu.pipeline.setPc(0xffffffffa0008000ull);
+  if(cpu.instruction()) cpu.synchronize();
+  if(cpu.scc.cause.exceptionCode != 0) return 13;
+  mi.io.ebusTestMode = 0;
   set_fetch_observers(false);
 
   auto ramHash = nall::Hash::SHA256(std::span<const u8>{rdram.ram.data, rdram.ram.size}).digest();

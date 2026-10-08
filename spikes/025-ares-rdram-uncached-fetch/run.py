@@ -187,6 +187,9 @@ def run():
     assert traced["state"]["exception"] == 0
 
     pairs = pair_fetches(traced)
+    # Phase 1 has two direct instruction fetches. The intervening LW data read
+    # returns the same zero value as the second fetched NOP but lies outside
+    # that fetch boundary and therefore cannot steal the witness.
     p1 = [p for p in pairs if p["phase"] == 1]
     assert len(p1) == 2 and all(p["witness_ordinal"] is not None for p in p1), p1
     assert [(p["bus_paddr"], p["value"]) for p in p1] == [(0x6000, 0x8e080000), (0x6004, 0)], p1
@@ -204,7 +207,9 @@ def run():
     scalar3 = [e for e in traced["scalar_events"] if e["phase"] == 3]
     assert [(e["address"], e["value"]) for e in scalar3] == [(0x7004, 0x340a5678)], scalar3
 
-    for phase in (4, 5, 6):
+    # Successful translated/degraded-capable path, identity OOB, and missing
+    # mapping all produce no eligible scalar backing witness by construction.
+    for phase in (4, 5, 6, 7, 8):
         selected = [p for p in pairs if p["phase"] == phase]
         assert len(selected) == 1 and selected[0]["witness_ordinal"] is None, selected
         assert not [e for e in traced["scalar_events"] if e["phase"] == phase]
@@ -212,6 +217,8 @@ def run():
     assert p4["value"] == 0x34091234 and not p4["cache"]
     assert next(p for p in pairs if p["phase"] == 5)["value"] == 0
     assert next(p for p in pairs if p["phase"] == 6)["value"] == 0
+    assert next(p for p in pairs if p["phase"] == 7)["value"] == 0
+    assert next(p for p in pairs if p["phase"] == 8)["value"] == 0
 
     evidence = {
         "fetch_pairs": pairs,
