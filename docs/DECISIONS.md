@@ -44,3 +44,19 @@ Inspected pinned Mupen `LICENSES` and `new_dynarec.c` notices (GPL-2.0-or-later
 for the instrumented file). The patch and sink are a GPL research instrument.
 No Mupen implementation is copied into or linked with plaid-core. The wire
 format is the boundary. Plaid's overall project license remains undecided.
+
+## ADR-0007: Pin Rabbitizer as the discovery decoder
+
+Status: Accepted, 2026-10-08.
+
+Inspected `LICENSE` (MIT), the Rust API/build script, CPU examinations and target
+getters at `724a49a5b4dbfb99f1a9e6992e63964fd29c90c8`. Use its Rust/C library
+through a revision-pinned Cargo dependency. Upstream source retains its MIT
+notice; no decoder implementation is copied into Plaid. A C compiler is required
+at build time. This is a decoder dependency for analysis, not a guest executor.
+Discovery uses literal ISA target arithmetic because Rabbitizer's J target getter
+treats PC zero as an unspecified address and substitutes KSEG0.
+
+Explicit ROM/load mappings precede CFG analysis. No generic boot/CIC load mapping
+is inferred from the header alone. Conditional, likely, call and delay-slot paths
+are represented conservatively; exceptional/invalid/nested slots remain open.

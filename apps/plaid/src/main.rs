@@ -1,9 +1,39 @@
-use plaid_core::{program::ProgramMap, rom::CanonicalRom, trace::DiscoveryTrace};
+use plaid_core::{
+    GuestAddr,
+    discovery::{CodeImage, direct_cfg},
+    program::{GuestRange, ProgramMap, RomOffset},
+    rom::CanonicalRom,
+    trace::DiscoveryTrace,
+};
 use std::{env, fs, process::ExitCode};
 
 fn run() -> Result<(), String> {
     let args: Vec<_> = env::args().skip(1).collect();
     match args.as_slice() {
+        [command, rom_path, offset, start, size, entry, output] if command == "discover" => {
+            let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
+            let image = CodeImage::from_rom(
+                &rom,
+                RomOffset(number(offset)?),
+                GuestRange {
+                    start: GuestAddr(number32(start)?),
+                    size: number32(size)?,
+                },
+            )?;
+            let d = direct_cfg(
+                rom.identity,
+                &image,
+                &[GuestAddr(number32(entry)?)],
+                1_000_000,
+            )?;
+            fs::write(output, d.map.to_json()?).map_err(|e| e.to_string())?;
+            println!(
+                "discovered {} blocks, {} indirect sites, {} unresolved items",
+                d.map.blocks.len(),
+                d.map.indirect_sites.len(),
+                d.map.unresolved.len()
+            );
+        }
         [command, path] if command == "rom-info" => {
             let rom = CanonicalRom::from_bytes(&fs::read(path).map_err(|e| e.to_string())?)?;
             println!(
@@ -38,12 +68,24 @@ fn run() -> Result<(), String> {
         }
         _ => {
             return Err(
-                "usage: plaid rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json>"
+                "usage: plaid rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json>"
                     .into(),
             );
         }
     }
     Ok(())
+}
+
+fn number(value: &str) -> Result<u64, String> {
+    if let Some(hex) = value.strip_prefix("0x") {
+        u64::from_str_radix(hex, 16)
+    } else {
+        value.parse()
+    }
+    .map_err(|e| e.to_string())
+}
+fn number32(value: &str) -> Result<u32, String> {
+    u32::try_from(number(value)?).map_err(|e| e.to_string())
 }
 
 fn main() -> ExitCode {

@@ -24,3 +24,9 @@ and hashes canonical content. Eight Rust tests pass, including a SHA-256 known
 vector and identical header/hash results across all byte orders. `plaid rom-info`
 prints canonical identity and parsed metadata. Header entry PC is not assumed to
 prove a ROM-to-RAM load mapping or a particular boot/CIC behavior.
+
+Pinned Rabbitizer decoding and recursive direct CFG work on explicit code images.
+Sixteen Rust tests cover formats, normalization, branches, calls, indirect sites,
+delay slots, block splitting and rejected/unmapped paths. `plaid discover` writes
+a ProgramMap for an explicitly supplied ROM/load range; it is not automatic boot
+or whole-ROM discovery.
