@@ -1,0 +1,33 @@
+name: research-tlb-uncached-fetch
+
+on:
+  push:
+    branches:
+      - research/tlb-uncached-fetch-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  exact-pin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact pinned ares revision
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs/ares
+          git -C .refs/ares init
+          git -C .refs/ares remote add origin https://github.com/ares-emulator/ares.git
+          git -C .refs/ares fetch --depth=1 origin 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git -C .refs/ares checkout --detach FETCH_HEAD
+      - name: Syntax check fixture runner
+        run: python3 -m py_compile spikes/036-ares-tlb-uncached-fetch/run.py spikes/036-ares-tlb-uncached-fetch/source_guard.py
+      - name: Build and execute exact pinned TLB fetch matrix
+        run: python3 spikes/036-ares-tlb-uncached-fetch/run.py
+      - name: Upload research receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tlb-uncached-fetch-results
+          path: target/ares-tlb-uncached-fetch-spike/
