@@ -22,6 +22,13 @@ python3 spikes/033-ares-sb-sh-stores-gpt56/model.py
 python3 spikes/033-ares-sb-sh-stores-gpt56/run.py
 ```
 
+Local independent-model checkpoint:
+
+```text
+PASS: 32 SB/SH lane cases + two construction families
+model_sha256=f26ef0dbd888a8d45cbf32a4edb8499386537a01182da649c94737f0387b42e3
+```
+
 No upstream ares source is patched. The experiment therefore does not need an instrumented-vs-uninstrumented neutrality comparison; it executes the unmodified exact pin directly. Repeated JSON equality is still required for every case.
 
 The little-endian direct-handler half is a controlled semantic probe. The independent pinned `n64-systemtest` reverse-endian user-mode matrix is the stronger checked-in oracle for architecturally legal RE mode. This spike does not claim a fresh physical-N64 measurement.
