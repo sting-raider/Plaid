@@ -36,9 +36,12 @@ static void rawReset() {
   for(auto& r : cpu.ipu.r) r.u64 = 0;
 }
 
-static void printBytes(const char* key, u64 guest) {
+static void printGuestBytes(const char* key, u64 guest) {
   std::printf("\"%s\":[", key);
-  for(u32 i=0;i<24;i++) std::printf("%s%u", i ? "," : "", (u32)cpu.readDebug<Byte>(guest+i));
+  for(u32 i=0;i<24;i++) {
+    auto value = cpu.read<Byte>(guest+i);
+    std::printf("%s%u", i ? "," : "", value ? (u32)*value : 0u);
+  }
   std::printf("]");
 }
 
@@ -90,7 +93,7 @@ int main(int argc, char** argv) {
   u64 base = !std::strcmp(mode,"cached") ? CACHED : !std::strcmp(mode,"tlbmiss") ? 0x2000ull : UNCACHED;
   std::printf("{\"mode\":\"%s\",\"op\":\"%s\",\"endian\":\"%s\",\"context_little\":%u,\"offset\":%d,",
     mode,op,endian,(u32)cpu.context.littleEndian(),offset);
-  if(std::strcmp(mode,"tlbmiss")) { printBytes("before_guest",base); std::printf(","); }
+  if(std::strcmp(mode,"tlbmiss")) { printGuestBytes("before_guest",UNCACHED); std::printf(","); }
   printRaw("before_raw"); std::printf(",");
 
   if(!std::strcmp(mode,"pair")) {
@@ -111,10 +114,10 @@ int main(int argc, char** argv) {
     (u32)cpu.dcache.line(base).dirty);
   printRaw("after_raw"); std::printf(",");
   if(!std::strcmp(mode,"tlbmiss")) {
-    printBytes("alias_after",UNCACHED);
+    printGuestBytes("alias_after",UNCACHED);
   } else {
-    printBytes("after_guest",base); std::printf(",");
-    printBytes("alias_after",UNCACHED);
+    printGuestBytes("after_guest",base); std::printf(",");
+    printGuestBytes("alias_after",UNCACHED);
   }
   std::printf("}\n");
   ares::Nintendo64::system.unload();
