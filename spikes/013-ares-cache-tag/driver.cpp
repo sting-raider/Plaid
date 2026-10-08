@@ -10,7 +10,11 @@
 #include <cstdlib>
 #include <nall/hash/sha256.hpp>
 #if defined(PLAID_ORDERED_HISTORY_CONTEXT)
+#if defined(PLAID_ACCESS_HISTORY_CONTEXT)
+#include "../026-ares-access-history/history.hpp"
+#else
 #include "../018-ares-ordered-history/history.hpp"
+#endif
 #endif
 #if PLAID_CACHE_FILL_SENSOR
 #include "../012-ares-cache-fill/observer.hpp"
@@ -67,6 +71,10 @@ int main(int argc,char** argv) {
   if(cpu.recompiler.enabled || rsp.recompiler.enabled) return 4;
   #if defined(PLAID_ORDERED_HISTORY_CONTEXT)
   historyEnabled = traced;
+  #if defined(PLAID_ACCESS_HISTORY_CONTEXT)
+  plaidRdramScalarObserver = traced ? access_scalar_observer : nullptr;
+  plaidCpuFetchObserver = traced ? access_boundary_observer : nullptr;
+  #endif
   #endif
   #if PLAID_CACHE_FILL_SENSOR
   plaidCacheFillObserver = traced ? cache_fill_observer : nullptr;

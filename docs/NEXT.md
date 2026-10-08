@@ -11,8 +11,9 @@
    transaction/fill/cache-operation/fetch order now passes on a 43-record controlled
    ledger, with independent checkpoints and forged-history rejection. The parallel
    scalar-fetch, CPU-copy, RSP, exception, restore and 64-bit mutation fixtures now
-   reproduce locally. Combine explicit fetch boundaries and successful scalar
-   reads/writes with the measured ledger; then extend beyond the declared fixture.
+   reproduce locally. Shared explicit fetch boundaries and scalar reads/writes
+   pass a 95-record ledger, its prior projection and independent primitive
+   fixtures. Extend this chronology to the bounded boot prefix next.
    Current tags/effective addresses can differ from resident-byte history; keep
    those identities separate. A recovered synchronized-restore/cache-power
    fixture now confirms restored residency without a fill and rejects a latest-

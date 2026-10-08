@@ -14,10 +14,12 @@ REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 OUTPUT = ROOT / "target/ares-oracle-spike"
 
 
-def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False):
+def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False, rdram_scalar_access=False, fetch_boundary_access=False):
     if cache_fill_access: assert raw_fetch_access and physical_fetch_access
     if cache_operation_access: assert raw_fetch_access and physical_fetch_access
     if rdram_burst_access: assert raw_fetch_access and physical_fetch_access
+    if rdram_scalar_access: assert raw_fetch_access and physical_fetch_access
+    if fetch_boundary_access: assert raw_fetch_access and physical_fetch_access
     output = Path(directory)
     assert subprocess.check_output(["git","rev-parse","HEAD"],cwd=REF,text=True).strip() == REV
     subprocess.run(["git","-c","core.autocrlf=true","diff","--quiet","HEAD"],cwd=REF,check=True)
@@ -31,6 +33,8 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
         "cache_fill_access":cache_fill_access,
         "cache_operation_access":cache_operation_access,
         "rdram_burst_access":rdram_burst_access,
+        "rdram_scalar_access":rdram_scalar_access,
+        "fetch_boundary_access":fetch_boundary_access,
         "extra_sources":{str(Path(p).relative_to(ROOT)):hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in extra_sources},
         "fixture_driver":hashlib.sha256(Path(__file__).with_name("driver.cpp").read_bytes()).hexdigest(),
         "recipe":hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
@@ -56,6 +60,8 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
                 header = "// Project-owned callback after the existing completed cache fill.\nusing PlaidCacheFillObserver = void (*)(u32, u32, u32, const u32*);\ninline PlaidCacheFillObserver plaidCacheFillObserver = nullptr;\n" + header
             if cache_operation_access:
                 header = "// Project-owned callback around completed guest instruction-cache operations.\nusing PlaidCacheOperationObserver = void (*)(u64, u32, u64, u32, u32, u32, const u32*, const u32*);\ninline PlaidCacheOperationObserver plaidCacheOperationObserver = nullptr;\n" + header
+            if fetch_boundary_access:
+                header = "// Project-owned callbacks bracketing a successful CPU fetch access.\nusing PlaidCpuFetchObserver = void (*)(bool, u64, u32, u32, bool, u32);\ninline PlaidCpuFetchObserver plaidCpuFetchObserver = nullptr;\n" + header
             destination = output / "include/n64/cpu/cpu.hpp"
             destination.parent.mkdir(parents=True,exist_ok=True)
             destination.write_text(header)
@@ -77,9 +83,23 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
                 destination = output / "include/n64/rdram/rdram.hpp"
                 destination.parent.mkdir(parents=True,exist_ok=True)
                 destination.write_text(ram)
-            else:
+            elif not rdram_scalar_access:
                 # Do not shadow the original header when reusing a prior sensor build.
                 (output / "include/n64/rdram/rdram.hpp").unlink(missing_ok=True)
+            if rdram_scalar_access:
+                destination = output / "include/n64/rdram/rdram.hpp"
+                ram = destination.read_text() if rdram_burst_access else (REF / "ares/n64/rdram/rdram.hpp").read_text()
+                marker = "      return Memory::Writable::read<Size>(address);"
+                assert ram.count(marker) == 1
+                ram = ram.replace(marker,"""      u64 plaidValue = Memory::Writable::read<Size>(address);
+      if(plaidRdramScalarObserver) plaidRdramScalarObserver(false, address, Size, (u32)device, plaidValue);
+      return plaidValue;""")
+                marker = "      self.hidden.update<Size>(address, value);"
+                assert ram.count(marker) == 1
+                ram = ram.replace(marker,marker + "\n      if(self.mapIdentity && plaidRdramScalarObserver) plaidRdramScalarObserver(true, address, Size, (u32)device, value);")
+                ram = "// Project-owned successful identity-mapped ordinary RAM callbacks.\nusing PlaidRdramScalarObserver = void (*)(bool, u32, u32, u32, u64);\ninline PlaidRdramScalarObserver plaidRdramScalarObserver = nullptr;\n" + ram
+                destination.parent.mkdir(parents=True,exist_ok=True)
+                destination.write_text(ram)
         include_flags = [part for path in includes for part in ("-I",str(path))]
         core = (REF / "ares/ares/ares.cpp.in").read_text().replace("#include <ares/resource/resource.cpp>", "// UI-only resources omitted in headless build.")
         for key, value in {"ARES_NAME":"Plaid pinned ares oracle", "ARES_VERSION":REV,
@@ -101,6 +121,13 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
             marker = "  if(context.littleEndian()) paddr = reverseEndianPaddr<Word>(paddr);\n  if(access.cache) return icache.fetch(access.vaddr, paddr, cpu);"
             assert memory.count(marker) == 1
             memory = memory.replace(marker, marker.split("\n")[0] + "\n  plaidFetchAccess = {paddr, access.cache};\n" + marker.split("\n")[1])
+            if fetch_boundary_access:
+                marker = "  if(access.cache) return icache.fetch(access.vaddr, paddr, cpu);\n  return busRead<Word>(paddr);"
+                assert memory.count(marker) == 1
+                memory = memory.replace(marker,"""  if(plaidCpuFetchObserver) plaidCpuFetchObserver(true, access.vaddr, access.paddr, paddr, access.cache, 0);
+  u32 value = access.cache ? icache.fetch(access.vaddr, paddr, cpu) : busRead<Word>(paddr);
+  if(plaidCpuFetchObserver) plaidCpuFetchObserver(false, access.vaddr, access.paddr, paddr, access.cache, value);
+  return value;""")
             (output / "cpu_memory.cpp").write_text(memory)
             replacements = {"memory.cpp":output / "cpu_memory.cpp"}
             if cache_operation_access:
