@@ -12,6 +12,8 @@ use std::{
 pub const FORMAT: &str = "plaid-ares-fetch-research-v0";
 pub const PHYSICAL_FORMAT: &str = "plaid-ares-fetch-research-v1";
 pub const SOURCE_FORMAT: &str = "plaid-ares-fetch-research-v2";
+pub const BOOT_FORMAT: &str = "plaid-ares-fetch-research-v4";
+pub const BOOT_INITIAL_STATE: &str = "cpu_power_pif_entry";
 pub const SOURCE_POLICY: &str = "delegated_rom_halves_before_prologue";
 pub const REVISION: &str = "9408cb43d4948fc3ea6e152a307a34348df3fe04";
 pub const INITIAL_STATE: &str = "declared_post_ipl2_sp_entry";
@@ -37,6 +39,8 @@ enum Record {
         mapped_cartridge_size: Option<u32>,
         #[serde(default, deserialize_with = "present")]
         source_policy: Option<String>,
+        #[serde(default, deserialize_with = "present")]
+        boot_inputs: Option<Box<FetchBootInputs>>,
     },
     Fetch {
         seq: u64,
@@ -68,7 +72,24 @@ fn line<R: BufRead>(reader: &mut R, bytes: &mut Vec<u8>) -> Result<bool, String>
     Ok(size != 0)
 }
 
-pub fn import_fetch<R: BufRead>(mut reader: R, rom: &CanonicalRom) -> Result<ProgramMap, String> {
+pub fn import_fetch<R: BufRead>(reader: R, rom: &CanonicalRom) -> Result<ProgramMap, String> {
+    import_with_inputs(reader, rom, None)
+}
+
+/// Require and hash-check the firmware bytes for the explicit power-entry scope.
+pub fn import_boot_fetch<R: BufRead>(
+    reader: R,
+    rom: &CanonicalRom,
+    firmware: &[u8],
+) -> Result<ProgramMap, String> {
+    import_with_inputs(reader, rom, Some(firmware))
+}
+
+fn import_with_inputs<R: BufRead>(
+    mut reader: R,
+    rom: &CanonicalRom,
+    firmware: Option<&[u8]>,
+) -> Result<ProgramMap, String> {
     let mut bytes = Vec::new();
     if !line(&mut reader, &mut bytes)? {
         return Err("missing fetch header".into());
@@ -83,13 +104,21 @@ pub fn import_fetch<R: BufRead>(mut reader: R, rom: &CanonicalRom) -> Result<Pro
         initial_state,
         mapped_cartridge_size,
         source_policy,
+        boot_inputs,
     } = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?
     else {
         return Err("fetch stream must begin with header".into());
     };
-    if (format != FORMAT && format != PHYSICAL_FORMAT && format != SOURCE_FORMAT)
+    let boot_inputs = boot_inputs.map(|inputs| *inputs);
+    let boot_format = format == BOOT_FORMAT;
+    if (format != FORMAT && format != PHYSICAL_FORMAT && format != SOURCE_FORMAT && !boot_format)
         || revision != REVISION
-        || initial_state != INITIAL_STATE
+        || initial_state
+            != if boot_format {
+                BOOT_INITIAL_STATE
+            } else {
+                INITIAL_STATE
+            }
         || budget == 0
         || budget > MAX_BUDGET
     {
@@ -98,7 +127,19 @@ pub fn import_fetch<R: BufRead>(mut reader: R, rom: &CanonicalRom) -> Result<Pro
     if rom_sha256 != rom.identity.sha256 {
         return Err("fetch stream does not match canonical ROM".into());
     }
-    let source_format = format == SOURCE_FORMAT;
+    if boot_format != boot_inputs.is_some() || boot_format != firmware.is_some() {
+        return Err("fetch boot scope requires explicit matching firmware input".into());
+    }
+    if let Some(inputs) = &boot_inputs {
+        inputs.validate()?;
+        let firmware = firmware.unwrap();
+        if firmware.len() as u64 != inputs.firmware_size
+            || crate::rom::sha256(firmware) != inputs.firmware_sha256
+        {
+            return Err("fetch firmware input does not match boot metadata".into());
+        }
+    }
+    let source_format = format == SOURCE_FORMAT || boot_format;
     let physical_format = format != FORMAT;
     if source_policy.as_deref() != source_format.then_some(SOURCE_POLICY) {
         return Err("invalid fetch source policy for format".into());
@@ -142,6 +183,19 @@ pub fn import_fetch<R: BufRead>(mut reader: R, rom: &CanonicalRom) -> Result<Pro
                     (false, None, None) => None,
                     _ => return Err("invalid physical fetch metadata for format".into()),
                 };
+                if boot_format
+                    && count == 0
+                    && (pc.0 != 0xffff_ffff_bfc0_0000
+                        || delay_slot
+                        || access
+                            != Some(FetchAccess {
+                                physical: PhysicalAddr(0x1fc0_0000),
+                                cached: false,
+                            })
+                        || firmware.unwrap()[..4] != word.to_be_bytes())
+                {
+                    return Err("boot capture does not begin at firmware power entry".into());
+                }
                 if source.is_some() != source_format {
                     return Err("invalid fetch source metadata for format".into());
                 }
@@ -195,6 +249,7 @@ pub fn import_fetch<R: BufRead>(mut reader: R, rom: &CanonicalRom) -> Result<Pro
             fetch_count: count,
             mapped_cartridge_size,
             source_policy,
+            boot_inputs,
         },
     );
     map.fetch_observations = samples
@@ -227,11 +282,29 @@ pub fn verify_fetch_capture<R: BufRead>(
     reader: R,
     rom: &CanonicalRom,
 ) -> Result<(), String> {
+    verify_with_inputs(map, reader, rom, None)
+}
+
+pub fn verify_boot_fetch_capture<R: BufRead>(
+    map: &ProgramMap,
+    reader: R,
+    rom: &CanonicalRom,
+    firmware: &[u8],
+) -> Result<(), String> {
+    verify_with_inputs(map, reader, rom, Some(firmware))
+}
+
+fn verify_with_inputs<R: BufRead>(
+    map: &ProgramMap,
+    reader: R,
+    rom: &CanonicalRom,
+    firmware: Option<&[u8]>,
+) -> Result<(), String> {
     map.validate()?;
     if map.rom != rom.identity {
         return Err("map does not match canonical ROM".into());
     }
-    let expected = import_fetch(reader, rom)?;
+    let expected = import_with_inputs(reader, rom, firmware)?;
     let (id, capture) = expected.fetch_captures.first_key_value().unwrap();
     if map.fetch_captures.get(id) != Some(capture)
         || map.evidence.get(id) != expected.evidence.get(id)

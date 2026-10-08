@@ -72,6 +72,156 @@ fn source_raw(sources: &[FetchSource]) -> String {
         .collect()
 }
 
+fn boot_raw() -> (String, Vec<u8>) {
+    let firmware = vec![0; 1984];
+    let mut records: Vec<serde_json::Value> = source_raw(&[FetchSource::Unknown {}])
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    records[0]["format"] = plaid_core::fetch::BOOT_FORMAT.into();
+    records[0]["initial_state"] = plaid_core::fetch::BOOT_INITIAL_STATE.into();
+    records[0]["boot_inputs"] = serde_json::json!({
+        "firmware_sha256":sha256(&firmware),"firmware_size":1984,
+        "region":"ntsc","cic":"CIC-NUS-6102","rdram_size":8388608,
+        "deterministic_entropy":true,"pif_processor":"reference_hle","pif_checksum_enforced":true
+    });
+    records[1]["pc"] = 0xffff_ffff_bfc0_0000u64.into();
+    records[1]["physical"] = 0x1fc0_0000u32.into();
+    (
+        records
+            .into_iter()
+            .map(|event| event.to_string() + "\n")
+            .collect(),
+        firmware,
+    )
+}
+
+#[test]
+fn boot_fetches_require_supplied_inputs_and_remain_unknown_execution() {
+    use plaid_core::fetch::{import_boot_fetch, verify_boot_fetch_capture};
+    let (input, firmware) = boot_raw();
+    assert!(import(&input).is_err());
+    let map = import_boot_fetch(Cursor::new(input.as_bytes()), &rom(), &firmware).unwrap();
+    verify_boot_fetch_capture(&map, Cursor::new(input.as_bytes()), &rom(), &firmware).unwrap();
+    assert!(verify_fetch_capture(&map, Cursor::new(input.as_bytes()), &rom()).is_err());
+    assert_eq!(map, ProgramMap::from_json(&map.to_json().unwrap()).unwrap());
+    assert_eq!(map, merge_maps(&map, &map).unwrap());
+    assert!(map.regions.is_empty() && map.loads.is_empty() && map.entries.is_empty());
+    assert_eq!(
+        map.fetch_observations.first().unwrap().source,
+        Some(FetchSource::Unknown {})
+    );
+    let mixed = merge_maps(
+        &map,
+        &import(&source_raw(&[FetchSource::Unknown {}])).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(mixed.fetch_captures.len(), 2);
+    let report = solve(&mixed, &[], Scope::WholeRom).unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    assert!(!report.native_complete);
+    assert!(
+        report
+            .blockers
+            .iter()
+            .any(|b| b.kind == "fetch_execution_identity_unknown")
+    );
+    let mut bad = map.clone();
+    bad.fetch_captures
+        .values_mut()
+        .next()
+        .unwrap()
+        .boot_inputs
+        .as_mut()
+        .unwrap()
+        .firmware_sha256 = "a".repeat(64);
+    assert!(
+        verify_boot_fetch_capture(&bad, Cursor::new(input.as_bytes()), &rom(), &firmware).is_err()
+    );
+    assert!(merge_maps(&map, &bad).is_err());
+    let mut other_firmware = firmware.clone();
+    other_firmware[100] = 1;
+    let other_input = input.replace(&sha256(&firmware), &sha256(&other_firmware));
+    let other =
+        import_boot_fetch(Cursor::new(other_input.as_bytes()), &rom(), &other_firmware).unwrap();
+    let both = merge_maps(&map, &other).unwrap();
+    assert_eq!(both.fetch_captures.len(), 2);
+    assert_eq!(both.fetch_observations.len(), 2);
+    let mut bad = map.clone();
+    let mut f = bad.fetch_observations.pop_first().unwrap();
+    f.pc.0 += 4;
+    bad.fetch_observations.insert(f);
+    assert!(bad.validate().is_err());
+}
+
+#[test]
+fn boot_profile_hash_size_version_and_power_entry_are_rechecked() {
+    use plaid_core::fetch::import_boot_fetch;
+    let (input, firmware) = boot_raw();
+    let mut changed = firmware.clone();
+    changed[10] = 1;
+    for bytes in [&changed[..], &firmware[..1980]] {
+        assert!(import_boot_fetch(Cursor::new(input.as_bytes()), &rom(), bytes).is_err());
+    }
+    assert!(
+        import_boot_fetch(
+            Cursor::new(source_raw(&[FetchSource::Unknown {}]).as_bytes()),
+            &rom(),
+            &firmware
+        )
+        .is_err()
+    );
+    let records: Vec<serde_json::Value> = input
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    for (index, key, value) in [
+        (0, "region", serde_json::json!("pal")),
+        (0, "cic", serde_json::json!("CIC-NUS-6105")),
+        (0, "rdram_size", serde_json::json!(4194304)),
+        (0, "deterministic_entropy", serde_json::json!(false)),
+        (0, "pif_processor", serde_json::json!("hardware")),
+        (0, "pif_checksum_enforced", serde_json::json!(false)),
+        (0, "firmware_size", serde_json::json!(1980)),
+        (0, "firmware_sha256", serde_json::json!("a".repeat(64))),
+        (0, "unexpected", serde_json::json!(1)),
+        (1, "pc", serde_json::json!(0xffff_ffff_bfc0_0004u64)),
+        (1, "physical", serde_json::json!(0x1fc00004)),
+        (1, "cached", serde_json::json!(true)),
+        (1, "delay_slot", serde_json::json!(true)),
+        (1, "word", serde_json::json!(1)),
+    ] {
+        let mut bad = records.clone();
+        if index == 0 {
+            bad[0]["boot_inputs"][key] = value;
+        } else {
+            bad[index][key] = value;
+        }
+        let bad: String = bad.into_iter().map(|r| r.to_string() + "\n").collect();
+        assert!(
+            import_boot_fetch(Cursor::new(bad.as_bytes()), &rom(), &firmware).is_err(),
+            "{key}"
+        );
+    }
+    for key in ["firmware_size", "cic", "pif_checksum_enforced"] {
+        let mut bad = records.clone();
+        bad[0]["boot_inputs"].as_object_mut().unwrap().remove(key);
+        let bad: String = bad.into_iter().map(|r| r.to_string() + "\n").collect();
+        assert!(import_boot_fetch(Cursor::new(bad.as_bytes()), &rom(), &firmware).is_err());
+    }
+    for value in [serde_json::Value::Null, serde_json::json!({})] {
+        let mut bad = records.clone();
+        bad[0]["boot_inputs"] = value;
+        let bad: String = bad.into_iter().map(|r| r.to_string() + "\n").collect();
+        assert!(import_boot_fetch(Cursor::new(bad.as_bytes()), &rom(), &firmware).is_err());
+    }
+    let mut empty = records;
+    empty.remove(1);
+    empty[1]["fetch_count"] = 0.into();
+    let empty: String = empty.into_iter().map(|r| r.to_string() + "\n").collect();
+    assert!(import_boot_fetch(Cursor::new(empty.as_bytes()), &rom(), &firmware).is_err());
+}
+
 #[test]
 fn source_witnesses_keep_unknowns_and_canonical_bytes_without_image_identity() {
     let known = FetchSource::CartridgeRom {

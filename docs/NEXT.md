@@ -32,7 +32,9 @@
    The longer ten-million-call prefix now repeats exactly and reaches guest tests
    with no reported failures. Research v4 now explicitly versions the complete
    declared boot profile and preserves the earlier stream/checkpoint goldens.
-   Recheck supplied firmware bytes before production import. Keep PIF HLE and
+   Production v4 import now rechecks supplied firmware, complete profile and
+   power-entry observation against the complete raw source. Verify the longer
+   boot corpus and preserve legacy map hashes. Keep PIF HLE and
    fixed NTSC/6102 scope visible; PIF backing and RAM/SP lineage remain unknown.
    Continue RSP/exception/TLB/FPU verification
    before extending semantic claims.

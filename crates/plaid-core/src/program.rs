@@ -296,6 +296,43 @@ pub struct FetchCapture {
     pub mapped_cartridge_size: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_policy: Option<String>,
+    /// Declared reference setup, not a hardware boot or executable certificate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boot_inputs: Option<FetchBootInputs>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FetchBootInputs {
+    pub firmware_sha256: String,
+    pub firmware_size: u64,
+    pub region: String,
+    pub cic: String,
+    pub rdram_size: u32,
+    pub deterministic_entropy: bool,
+    pub pif_processor: String,
+    pub pif_checksum_enforced: bool,
+}
+
+impl FetchBootInputs {
+    pub fn validate(&self) -> Result<(), String> {
+        RomIdentity {
+            sha256: self.firmware_sha256.clone(),
+            size: self.firmware_size,
+        }
+        .validate()?;
+        if self.firmware_size != 1984
+            || self.region != "ntsc"
+            || self.cic != "CIC-NUS-6102"
+            || self.rdram_size != 8 * 1024 * 1024
+            || !self.deterministic_entropy
+            || self.pif_processor != "reference_hle"
+            || !self.pif_checksum_enforced
+        {
+            return Err("unsupported fetch boot-input profile".into());
+        }
+        Ok(())
+    }
 }
 
 /// Effective word address after translation/endian selection and cache policy.
@@ -572,7 +609,28 @@ impl ProgramMap {
         let mut fetch_keys = BTreeSet::new();
         let mut fetch_endpoints = BTreeMap::new();
         for (id, capture) in &self.fetch_captures {
-            let producer = if capture.source_policy.is_some() {
+            if let Some(inputs) = &capture.boot_inputs {
+                inputs.validate()?;
+                if capture.source_policy.is_none() || capture.fetch_count == 0 {
+                    return Err("boot capture requires source policy and first fetch".into());
+                }
+                if !self.fetch_observations.iter().any(|f| {
+                    &f.capture == id
+                        && f.first_seq == 0
+                        && f.pc.0 == 0xffff_ffff_bfc0_0000
+                        && !f.delay_slot
+                        && f.access
+                            == Some(FetchAccess {
+                                physical: PhysicalAddr(0x1fc0_0000),
+                                cached: false,
+                            })
+                }) {
+                    return Err("boot capture lacks its power-entry observation".into());
+                }
+            }
+            let producer = if capture.boot_inputs.is_some() {
+                crate::fetch::BOOT_FORMAT
+            } else if capture.source_policy.is_some() {
                 crate::fetch::SOURCE_FORMAT
             } else if capture.mapped_cartridge_size.is_some() {
                 crate::fetch::PHYSICAL_FORMAT
@@ -586,7 +644,12 @@ impl ProgramMap {
             .validate()?;
             if id != &format!("fetch:{}", capture.trace_sha256)
                 || capture.revision != crate::fetch::REVISION
-                || capture.initial_state != crate::fetch::INITIAL_STATE
+                || capture.initial_state
+                    != if capture.boot_inputs.is_some() {
+                        crate::fetch::BOOT_INITIAL_STATE
+                    } else {
+                        crate::fetch::INITIAL_STATE
+                    }
                 || capture.instruction_call_budget == 0
                 || capture.instruction_call_budget > crate::fetch::MAX_BUDGET
                 || capture.fetch_count > capture.instruction_call_budget
