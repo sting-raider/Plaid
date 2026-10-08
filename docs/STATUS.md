@@ -321,7 +321,7 @@ Implemented:
 - An opt-in external queue identity sensor now passes six actual-container cases
   and 2,104 records, including equal event/deadline pairs, cancellation and full
   capacity. Reported dispatches, occupied serialized state and object size match
-  original/disabled/repeated builds; serialization discards identities. Actual
+  original/disabled/repeated builds; save preserves identity and load discards it. Actual
   CPU/device dispatch and transfer-completion joins remain separate work.
 
 Verification: 86 Rust integration tests, formatting, strict Clippy, CLI integration,

@@ -19,7 +19,10 @@ inline void queue_identity(u32 kind, const void* owner, u32 slot, u32 other,
   // Exactly one declared queue is supported per capture. Other owners fail.
   assert(owner == queueIdentityOwner);
   u64 token = 0;
-  if(kind == 1 || kind == 9) queueIdentitySlots.fill(0);
+  // Serializing out preserves live reference state. Only a restore cuts identity.
+  // For kind 9, valid is the serializer's existing reading() result.
+  if(kind == 1 || (kind == 9 && valid)) queueIdentitySlots.fill(0);
+  else if(kind == 9) {}
   else if(kind == 3 || kind == 6 || kind == 7) {
     assert(slot < 512 && other < 512);
     queueIdentitySlots[slot] = token = queueIdentitySlots[other];
