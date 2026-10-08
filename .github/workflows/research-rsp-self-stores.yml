@@ -30,3 +30,9 @@ jobs:
         run: python3 -m py_compile spikes/026-ares-rsp-self-stores/run.py
       - name: Audit pinned references and execute exact pinned ares
         run: python3 spikes/026-ares-rsp-self-stores/run.py
+      - name: Retain deterministic result
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rsp-self-store-results
+          path: target/ares-rsp-self-store-spike/results.json
