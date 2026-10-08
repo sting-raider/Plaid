@@ -32,6 +32,10 @@ def guard_sources() -> dict:
     queue = (REF / "nall/nall/priority-queue.hpp").read_text()
 
     ordered(pi_io,
+        "if(address != 4 && (io.dmaBusy || io.ioBusy)) {",
+        "io.error = 1;",
+        "return;")
+    ordered(pi_io,
         "io.writeLength = n24(data);",
         "io.dmaBusy = 1;",
         "io.originPc = cpu.ipu.pc;",
@@ -115,7 +119,8 @@ def worker() -> None:
         "reported_semantics_baseline_disabled_repeat_equal": True,
         "actual_pinned_queue_executed": True,
         "full_pi_cpu_component_executed": False,
-        "equal_event_deadline_tokens_distinct": True,
+        "guest_busy_gate_blocks_second_live_pi_request": True,
+        "equal_event_deadline_tokens_distinct_container_stress_only": True,
         "canceled_event_no_cpu_callback": True,
         "rejected_request_copy_effect_observed_in_guarded_model": True,
         "post_serialization_dispatch_identity_unknown": True,
