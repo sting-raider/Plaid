@@ -341,3 +341,20 @@ identities from closing an otherwise verified declared-image CFG. No regions,
 blocks, entries, copies, generations, retirement or immutability are inferred.
 This promotes project-owned data handling, not reference CPU code. Physical
 backing, full chronology and executable-generation joins require separate work.
+
+## ADR-0028: Sample effective physical fetch context without extra CPU accesses
+
+Status: Accepted for research, 2026-10-08.
+
+The pinned interpreter already computes translation, endian-selected word address
+and cache policy before fetching. A generated source assignment records those
+inputs in observer metadata without extra reads/translations or CPU layout changes;
+the existing prologue pairs them with the exact word. Plain/repeat checkpoints and
+the complete v0 projection match. Focused cases verify stale cached words, uncached
+aliases, invalidation, TLB remapping and reverse-endian selection. Resolve generated
+CPU quoted includes explicitly to avoid selecting same-named system files.
+The research v1 header records actual mapped cartridge capacity, including the
+pin's eight-byte rounding. This is effective access context, not proof of backing
+bytes, retirement or executable lifetime. Preserve notices and build the ISC/BSD
+reference separately; no reference instruction code enters Plaid or native mode.
+Production handling and image/source/lifecycle joins require separate decisions.

@@ -16,16 +16,23 @@ struct Observer : Headless {
       // The disassembler was passed the exact fetched word by instructionPrologue.
       // No additional guest memory read or TLB translation is performed here.
       auto pc = cpu.ipu.pc;
+      #if defined(PLAID_PHYSICAL_FETCH)
+      std::fprintf(trace, "{\"record\":\"fetch\",\"seq\":%llu,\"pc\":%llu,\"word\":%u,\"delay_slot\":%s,\"physical\":%u,\"cached\":%s}\n",
+        (unsigned long long)fetches++, (unsigned long long)pc,
+        cpu.disassembler.fetchedWord(), cpu.pipeline.inDelaySlot() ? "true" : "false",
+        plaidFetchAccess.physical, plaidFetchAccess.cached ? "true" : "false");
+      #else
       std::fprintf(trace, "{\"record\":\"fetch\",\"seq\":%llu,\"pc\":%llu,\"word\":%u,\"delay_slot\":%s}\n",
         (unsigned long long)fetches++, (unsigned long long)pc,
         cpu.disassembler.fetchedWord(), cpu.pipeline.inDelaySlot() ? "true" : "false");
+      #endif
     } else if(messages) {
       std::fwrite(message.data(), 1, message.size(), messages);
     }
   }
 };
 
-int main(int argc, char** argv) {
+int fetch_observer_main(int argc, char** argv) {
   if(argc != 7) return 2;
   bool traced = !strcmp(argv[1], "traced");
   if(!traced && strcmp(argv[1], "plain")) return 2;
@@ -62,7 +69,11 @@ int main(int argc, char** argv) {
     frontend.trace = std::fopen(argv[3], "wb");
     if(!frontend.trace) return 4;
     auto romHash = nall::Hash::SHA256(std::span<const u8>{bytes.data(), bytes.size()}).digest();
+    #if defined(PLAID_PHYSICAL_FETCH)
+    std::fprintf(frontend.trace, "{\"record\":\"header\",\"format\":\"plaid-ares-fetch-research-v1\",\"revision\":\"9408cb43d4948fc3ea6e152a307a34348df3fe04\",\"rom_sha256\":\"%s\",\"budget\":%u,\"initial_state\":\"declared_post_ipl2_sp_entry\",\"mapped_cartridge_size\":%u}\n", romHash.data(), budget, cartridge.rom.size);
+    #else
     std::fprintf(frontend.trace, "{\"record\":\"header\",\"format\":\"plaid-ares-fetch-research-v0\",\"revision\":\"9408cb43d4948fc3ea6e152a307a34348df3fe04\",\"rom_sha256\":\"%s\",\"budget\":%u,\"initial_state\":\"declared_post_ipl2_sp_entry\"}\n", romHash.data(), budget);
+    #endif
     cpu.debugger.tracer.instruction->setDepth(0);
     cpu.debugger.tracer.instruction->setMask(false);
     cpu.debugger.tracer.instruction->setEnabled(true);
@@ -89,3 +100,7 @@ int main(int argc, char** argv) {
   ares::Nintendo64::system.unload();
   return 0;
 }
+
+#if !defined(PLAID_PHYSICAL_FETCH)
+int main(int argc, char** argv) { return fetch_observer_main(argc, argv); }
+#endif

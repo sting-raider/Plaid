@@ -108,6 +108,12 @@ Implemented:
   provenance remain explicit. The budget stop is not guest completion. This raw
   research format now imports as conservative raw summaries; it has no copy/lifetime
   or executable-generation inference.
+- A generated ares fetch observer also records the existing effective physical
+  word address and cache policy. Its five-million-call run has 4,806,689 cached
+  and 193,309 uncached fetches; full checkpoints and the entire v0 projection
+  match. Stale-cache/uncached-alias, invalidation, TLB-remapping and reverse-endian
+  fixtures pass. Mapped cartridge capacity is explicitly 2,742,280 bytes, four
+  fewer than file length. Access context supplies no backing or lifetime proof.
 - Streaming raw-fetch import preserves typed 64-bit PCs, word/slot variants and
   capture-qualified exact first/last indices/counts. Complete raw-file SHA-256,
   strict sequence/footer/budget checks and a source rechecker protect provenance.

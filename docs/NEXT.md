@@ -1,7 +1,11 @@
 # Next
 
 1. Establish explicit physical/cartridge backing and contextual executable image
-   identities for raw fetches. The streaming importer now preserves 64-bit PCs,
+   identities for raw fetches. A separate physical/cache observer now preserves
+   existing translated/endian-selected fetch inputs without additional accesses;
+   broad checkpoints/v0 projection and cache/TLB/endian fixtures pass. Promote
+   project-owned data handling separately, preserving legacy format compatibility.
+   The streaming importer now preserves 64-bit PCs,
    fetched-word/slot variants and digest-qualified first/last indices/counts,
    rechecks the complete source and refuses closure of unknown identities. The pinned
    ares probe reaches 52,424 RAM/548 SP/65 cartridge addresses on the untouched
