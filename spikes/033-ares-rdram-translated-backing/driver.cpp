@@ -45,6 +45,7 @@ int main(int argc, char** argv) {
   backing.write<Word>(0x200004, 0xdeadbeef);  // Actual source for request 0x000004.
   backing.write<Word>(0x200008, 0xffffffff);
   backing.write<Word>(0x20000c, 0xffffffff);
+  backing.write<Word>(0x200010, 0xffffffff);
 
   rdram.mapIdentity = 0;
   ri.io.currentLoaded = 1;
@@ -80,20 +81,21 @@ int main(int argc, char** argv) {
 
   chip1.cci = 12;
   read(0x00000c);  // raw 0xffffffff, deterministic partial degradation
+  read(0x000010);  // second partial read makes RNG neutrality observable
 
   size_t beforeFailure = 0;
 #if PLAID_TRANSLATED_SENSOR
   beforeFailure = plaidTranslatedReads.size();
 #endif
   chip1.enable = 0;
-  read(0x000010);  // missing mapping: zero, no successful backing read
+  read(0x000014);  // missing mapping: zero, no successful backing read
 #if PLAID_TRANSLATED_SENSOR
   if(plaidTranslatedReads.size() != beforeFailure) return 6;
 #endif
 
   chip1.enable = 1;
   ri.io.select = 0;
-  read(0x000014);  // inactive RI: zero, no successful backing read
+  read(0x000018);  // inactive RI: zero, no successful backing read
 #if PLAID_TRANSLATED_SENSOR
   if(plaidTranslatedReads.size() != beforeFailure) return 7;
 #endif
