@@ -9,6 +9,7 @@ on:
 jobs:
   contract:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Fetch exact pinned ares revision
@@ -20,5 +21,13 @@ jobs:
           git -C .refs/ares remote add origin https://github.com/ares-emulator/ares.git
           git -C .refs/ares fetch --depth=1 origin 9408cb43d4948fc3ea6e152a307a34348df3fe04
           git -C .refs/ares checkout --detach FETCH_HEAD
-      - name: Run deterministic contract
+      - name: Run source-guarded model and fuzz contract
         run: python3 spikes/033-ares-pi-queue-dispatch/run.py
+      - name: Build and run actual pinned ares PI queue fixture
+        run: python3 spikes/033-ares-pi-queue-dispatch/actual.py
+      - name: Upload research receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pi-queue-dispatch-results
+          path: target/ares-pi-queue-dispatch/
