@@ -31,6 +31,19 @@ required; Windows dispatches the worker through WSL Ubuntu. Unsupported runtime
 services trap. Flat memory and a sentinel stop policy exclude full boot, devices,
 interrupt timing and broader CPU semantics.
 
+`python scripts/test_mupen_session.py` builds a full pinned reference library in
+ignored `target/` from a clean Git export plus the research patch. An original
+synthetic IPL3 fixture programs PI DMA, polls busy, executes the copied payload,
+checks RAM store/load, and reports completion through IS64 MMIO. The frontend
+attaches bundled dummy plugins and stops via the public API. All GPRs, HI/LO and
+PC agree across pure/traced/untraced engines; repeated 42-event traces match.
+The importer verifies ROM sources for executed DMA-backed units and keeps raw
+indirect evidence. The boot copy is still uncorrelated and the solver stays OPEN.
+Linux requires GCC/make/NASM and SDL2/zlib/libpng headers/runtime libraries;
+Windows uses WSL Ubuntu. See `scripts/build_mupen_core.py` for prefix overrides.
+Dummy plugins exclude rendering/audio/RSP. PIF HLE with unknown-CIC fallback is
+reference setup for this synthetic test, not verified commercial boot behavior.
+
 Set `PLAID_TRACE_EXECUTION=1` to emit source-correlated x64 JR/JALR events.
 The generated sensor preserves allocated caller-save registers and the saved
 pre-delay-slot target. It runs after the delay slot and before either general
