@@ -16,5 +16,7 @@ jobs:
           mkdir -p .refs
           git clone --filter=blob:none https://github.com/ares-emulator/ares.git .refs/ares
           git -C .refs/ares checkout 9408cb43d4948fc3ea6e152a307a34348df3fe04
-      - name: Run bounded composition experiment
+      - name: Revalidate recovered actual-container identity sensor
+        run: python3 spikes/032-ares-queue-identity/run.py
+      - name: Run bounded PI request/dispatch composition experiment
         run: python3 spikes/033-ares-pi-request-queue-dispatch/run.py
