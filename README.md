@@ -115,3 +115,9 @@ means the report was produced. `native_complete` remains false.
 
 Keep local ROMs in ignored `roms/` and derived traces/maps in ignored `artifacts/`.
 No commercial ROM assets are needed by the tests.
+
+Additional disposable reference experiments are documented under `spikes/`.
+`python spikes/003-ares-oracle/run.py` builds the pinned ares core separately and
+checks original cartridge, linked-memory and exception cases plus eight independent
+Mupen CPU comparisons. It requires Linux G++ C++20 (Windows uses WSL Ubuntu).
+Its explicit synthetic initial state excludes boot and full hardware validation.

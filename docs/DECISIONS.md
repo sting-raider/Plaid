@@ -287,3 +287,19 @@ preserve the guest, and reject the crashed trace. Extend general cartridge sourc
 modeling/capture and independent oracles through separate decisions; these
 failures do not authorize per-guest workarounds, fabricated completion, universal
 CPU claims or early native lowering. No GPL reference code enters Plaid core.
+
+## ADR-0025: Use a separately built, bounded ares interpreter oracle
+
+Status: Accepted for research, 2026-10-08.
+
+The pinned ares core runs four original cartridge/LLD/SCD/address-error cases
+and independently matches every GPR, HI/LO and PC on the eight existing Mupen
+integer/control fixtures. Use it as an additional oracle for this declared scope.
+Build the ISC/BSD reference separately, preserve upstream notices, disable both
+CPU/RSP recompilers and assert those settings. The headless recipe omits UI assets,
+guards one renderer call in a generated System::run translation unit, and supplies
+the hidden-RAM backing otherwise owned by Vulkan. CPU/RSP instruction sources
+remain exact. Explicit synthetic initial state excludes boot and event-equivalence
+claims. No reference code or decoder enters Plaid core or native mode. Broader fetch
+sensing, FPU/TLB/RSP and native differential acceptance require separate work;
+finite fixture agreement cannot close a whole-ROM executable universe.

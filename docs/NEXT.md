@@ -3,7 +3,10 @@
 1. Model cartridge-resident executable sources and a capable capture path. The
    pinned homebrew spike exposes unsupported B0001040 execution in new_dynarec;
    the interpreter also lacks LLD and fails upstream exception/LLAddr checks.
-   Add stronger independent CPU/RSP verification before extending semantic claims.
+   A pinned ares interpreter now independently agrees on the eight integer/control
+   fixtures and checks cartridge fetch, LLD/SCD and address errors. Extend its raw
+   fetch observation to a broader corpus, and add RSP/exception/TLB/FPU verification
+   before extending semantic claims.
 2. Model/sense non-PI copies and executable writes beyond PI-backed snapshots.
    The constant aligned cached-RDRAM SW sensor is partial; general addresses,
    other sizes, TLB/uncached paths and CPU-copy provenance remain unmodeled.
