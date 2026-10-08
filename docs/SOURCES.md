@@ -184,6 +184,11 @@ stay ignored and are not runtime dependencies. The PARTIAL headless probe expose
 unsupported cartridge execution in the dynarec and LLD/exception/LLAddr limits
 in the interpreter. This pin cannot serve as a universal CPU oracle by itself.
 
+`spikes/028-ares-pi-buffered-copy/` adds opt-in ignored generated PI boundaries
+and delegates each actual ROM half-read once. Original transfer/lane validation
+checks successful identity-RAM effects against canonical toy bytes and a separately
+compiled original-source baseline. No reference PI code enters the Rust graph.
+
 ## Source-use policy
 
 Selected-cache v5 handling in Plaid is original Rust schema/import/verification

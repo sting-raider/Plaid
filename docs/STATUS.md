@@ -287,6 +287,13 @@ Implemented:
   all ROM byte orders produce identical reports. Report/input tampering and
   truncated histories fail, and report output cannot overwrite an input file.
 
+- Buffered PI component provenance passes eight original cases and a 479-record
+  ledger: 95 exact ROM byte origins, eight unknown open-bus writes and eight failed
+  RAM destinations. Equal-byte reloads remain distinct; consumed lanes account
+  for misalignment, odd lengths and a discarded row-boundary block. Independent
+  original-source/disabled/repeated reported checkpoints agree. Guest scheduling,
+  resident-cache provenance and executable lifetimes remain unclaimed.
+
 Verification: 81 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
