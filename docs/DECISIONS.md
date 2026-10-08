@@ -912,3 +912,17 @@ TLBWR/restore, broader page/mode cases and exhaustive reachability remain open.
 Original fixtures generate ignored licensed reference builds; no emulator code
 or asset enters production. No ProgramMap or closure gate changes.
 
+## ADR-0064: Translated RDRAM raw origin and delivered transform are distinct
+
+Status: Accepted for research, 2026-10-09.
+
+The recovered actual Word scalar fixture reproduces six witnesses and both
+stochastic values exactly, with original/disabled/enabled reported state agreement.
+A completed read at translated backing/chip supplies raw byte origin; request
+address identifies routing, and CCI supplies a separate delivered-value transform.
+Never substitute request-address RAM or equal payload for the actual source.
+Failed mapping, inactive RI, identity and EBus paths supply no translated witness.
+Other widths, bursts/writes, actual fetch composition and degraded executable-image
+identity remain open. Original project-owned sensor code generates isolated
+ignored reference shadows with preserved upstream licensing; no production
+emulator dependency or ProgramMap/closure change is introduced.
