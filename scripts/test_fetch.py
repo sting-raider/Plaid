@@ -96,6 +96,16 @@ def main():
         rejected_source = directory / "rejected-source.json"
         assert subprocess.run([str(exe),"import-fetch",str(rom),str(trace),str(rejected_source)],capture_output=True).returncode != 0
         assert not rejected_source.exists()
+        boot_records = json.loads(json.dumps(physical_records))
+        boot_records[0].update(format="plaid-ares-fetch-research-v3",
+            initial_state="cpu_power_pif_entry",source_policy="delegated_rom_halves_before_prologue",
+            firmware_sha256="fa7b09795ef1e54461e59f6f2d902368133e3f1cd980e34383e6a780d74beffd",
+            pif_processor="reference_hle",pif_checksum_enforced=True)
+        for event in boot_records[1:-1]: event["source"] = {"kind":"unknown"}
+        trace.write_bytes(b"".join((json.dumps(r)+"\n").encode() for r in boot_records))
+        rejected_boot = directory / "rejected-boot.json"
+        assert subprocess.run([str(exe),"import-fetch",str(rom),str(trace),str(rejected_boot)],capture_output=True).returncode != 0
+        assert not rejected_boot.exists()
         trace.write_bytes(b"".join((json.dumps(r)+"\n").encode() for r in records[:-1]))
         rejected = directory / "rejected.json"
         assert subprocess.run([str(exe),"import-fetch",str(rom),str(trace),str(rejected)],capture_output=True).returncode != 0

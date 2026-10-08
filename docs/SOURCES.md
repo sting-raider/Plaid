@@ -54,6 +54,11 @@ unchanged CPU/PI checkpoints. Source/image promotion remains separate work.
 `spikes/007-ares-rom-fetch/` extends that sensor to the bounded homebrew prefix:
 1,852 reads at 65 canonical offsets, exact physical-capture projection and unchanged
 checkpoints/messages. Other memory sources and executable lifetimes remain unknown.
+`spikes/008-ares-pif-boot/` reads the existing NTSC CPU PIF firmware as an ignored
+local input and records its digest, with no firmware bytes in project sources.
+Natural CPU power entry and repeated checkpoints pass within a fixed NTSC/6102
+profile. The reference PIF processor remains HLE; boot/source/lifetime scope is
+not promoted into production or native mode. No firmware redistribution is added.
 
 ## gopher64/gopher64
 

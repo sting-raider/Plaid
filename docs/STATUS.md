@@ -148,6 +148,15 @@ Implemented:
   52,972 unknown-source), verifies raw provenance and self-merges byte-identically.
   Its map is 27,016,450 bytes; the solver remains OPEN/native_complete=false.
 
+- A bounded CPU power-entry experiment loads the existing ignored NTSC PIF
+  firmware through the system pak, without host SP copying or register/PC seeds.
+  Plain/traced/repeated CPU/COP0/PIF/PI/Count/RAM/SP checkpoints agree at one
+  million calls. Firmware sets Config 7006E463 and passes the checksum stage;
+  the loader is still waiting for PI DMA before guest tests begin. Reference PIF
+  HLE, fixed NTSC/6102 profile and finite budget remain explicit limitations.
+  Research v3 records firmware identity; production rejects this boot scope.
+  Firmware bytes remain ignored; no PIF backing or executable lifetime is inferred.
+
 Verification: 72 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.

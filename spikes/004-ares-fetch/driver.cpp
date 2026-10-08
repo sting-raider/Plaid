@@ -48,7 +48,11 @@ struct Observer : Headless {
 };
 
 int fetch_observer_main(int argc, char** argv) {
+  #if defined(PLAID_PIF_BOOT)
+  if(argc != 8) return 2;
+  #else
   if(argc != 7) return 2;
+  #endif
   bool traced = !strcmp(argv[1], "traced");
   if(!traced && strcmp(argv[1], "plain")) return 2;
   auto bytes = nall::file::read(argv[2]);
@@ -57,6 +61,12 @@ int fetch_observer_main(int argc, char** argv) {
   if(!budget || budget > 10000000) return 3;
   Observer frontend;
   platform = &frontend;
+  #if defined(PLAID_PIF_BOOT)
+  auto firmware = nall::file::read(argv[7]);
+  if(firmware.size() != 0x7c0 || !Accuracy::PIF::IPL2Checksum) return 3;
+  auto firmwareHash = nall::Hash::SHA256(std::span<const u8>{firmware.data(), firmware.size()}).digest();
+  frontend.systemPak->append("pif.ntsc.rom", std::span<const u8>{firmware.data(), firmware.size()});
+  #endif
   frontend.messages = std::fopen(argv[5], "wb");
   if(!frontend.messages) return 4;
   frontend.cartPak->setAttribute("title", "Pinned n64-systemtest research");
@@ -77,17 +87,21 @@ int fetch_observer_main(int argc, char** argv) {
   if(cpu.recompiler.enabled || rsp.recompiler.enabled) return 6;
   std::vector<u8> hidden(rdram.ram.size / 2);
   rdram.hidden.data = hidden.data();
+  #if !defined(PLAID_PIF_BOOT)
   // Declared post-IPL2 entry, not a claim of an authentic complete boot.
   for(u32 offset=0; offset<4096; offset+=4)
     rsp.dmem.write<Word>(offset, (u32)bytes[offset]<<24 | (u32)bytes[offset+1]<<16 |
       (u32)bytes[offset+2]<<8 | bytes[offset+3]);
   cpu.ipu.r[22].u64 = 0x3f;
   cpu.pipeline.setPc(0xffffffffa4000040ull);
+  #endif
   if(traced) {
     frontend.trace = std::fopen(argv[3], "wb");
     if(!frontend.trace) return 4;
     auto romHash = nall::Hash::SHA256(std::span<const u8>{bytes.data(), bytes.size()}).digest();
-    #if defined(PLAID_ROM_FETCH_SOURCE)
+    #if defined(PLAID_PIF_BOOT)
+    std::fprintf(frontend.trace, "{\"record\":\"header\",\"format\":\"plaid-ares-fetch-research-v3\",\"revision\":\"9408cb43d4948fc3ea6e152a307a34348df3fe04\",\"rom_sha256\":\"%s\",\"budget\":%u,\"initial_state\":\"cpu_power_pif_entry\",\"mapped_cartridge_size\":%u,\"source_policy\":\"delegated_rom_halves_before_prologue\",\"firmware_sha256\":\"%s\",\"pif_processor\":\"reference_hle\",\"pif_checksum_enforced\":true}\n", romHash.data(), budget, cartridge.rom.size, firmwareHash.data());
+    #elif defined(PLAID_ROM_FETCH_SOURCE)
     std::fprintf(frontend.trace, "{\"record\":\"header\",\"format\":\"plaid-ares-fetch-research-v2\",\"revision\":\"9408cb43d4948fc3ea6e152a307a34348df3fe04\",\"rom_sha256\":\"%s\",\"budget\":%u,\"initial_state\":\"declared_post_ipl2_sp_entry\",\"mapped_cartridge_size\":%u,\"source_policy\":\"delegated_rom_halves_before_prologue\"}\n", romHash.data(), budget, cartridge.rom.size);
     #elif defined(PLAID_PHYSICAL_FETCH)
     std::fprintf(frontend.trace, "{\"record\":\"header\",\"format\":\"plaid-ares-fetch-research-v1\",\"revision\":\"9408cb43d4948fc3ea6e152a307a34348df3fe04\",\"rom_sha256\":\"%s\",\"budget\":%u,\"initial_state\":\"declared_post_ipl2_sp_entry\",\"mapped_cartridge_size\":%u}\n", romHash.data(), budget, cartridge.rom.size);
@@ -115,11 +129,19 @@ int fetch_observer_main(int argc, char** argv) {
   for(int n=0;n<32;n++) std::fprintf(state, "%s%lld", n ? "," : "", (long long)(int64_t)cpu.ipu.r[n].u64);
   auto ramHash = nall::Hash::SHA256(std::span<const u8>{rdram.ram.data, rdram.ram.size}).digest();
   auto spHash = nall::Hash::SHA256(std::span<const u8>{rsp.dmem.data, rsp.dmem.size}).digest();
-  std::fprintf(state, "],\"hi\":%lld,\"lo\":%lld,\"count\":%llu,\"exception\":%u,\"epc\":%llu,\"pif_state\":%u,\"rdram_identity\":%u,\"rdram_size\":%u,\"ram_sha256\":\"%s\",\"sp_sha256\":\"%s\"}\n",
+  std::fprintf(state, "],\"hi\":%lld,\"lo\":%lld,\"count\":%llu,\"exception\":%u,\"epc\":%llu,\"pif_state\":%u,\"rdram_identity\":%u,\"rdram_size\":%u,\"ram_sha256\":\"%s\",\"sp_sha256\":\"%s\"",
     (long long)(int64_t)cpu.ipu.hi.u64, (long long)(int64_t)cpu.ipu.lo.u64,
     (unsigned long long)cpu.effectiveCount(), (u32)cpu.scc.cause.exceptionCode,
     (unsigned long long)cpu.scc.epc, (u32)pif.state, (u32)rdram.mapIdentity, rdram.ram.size,
     ramHash.data(), spHash.data());
+  #if defined(PLAID_PIF_BOOT)
+  std::fprintf(state, ",\"configuration\":%u,\"status\":%u,\"pif_checksum_enforced\":true,\"pi\":{\"dma_busy\":%u,\"io_busy\":%u,\"dram_address\":%u,\"pbus_address\":%u,\"write_length\":%u,\"bsd1\":[%u,%u,%u,%u]}",
+    (u32)cpu.getControlRegister(16), (u32)cpu.getControlRegister(12),
+    (u32)pi.io.dmaBusy, (u32)pi.io.ioBusy, (u32)pi.io.dramAddress,
+    (u32)pi.io.pbusAddress, (u32)pi.io.writeLength, (u32)pi.bsd1.latency,
+    (u32)pi.bsd1.pulseWidth, (u32)pi.bsd1.pageSize, (u32)pi.bsd1.releaseDuration);
+  #endif
+  std::fprintf(state, "}\n");
   if(std::ferror(state) || std::fclose(state)) return 7;
   if(std::ferror(frontend.messages) || std::fclose(frontend.messages)) return 7;
   ares::Nintendo64::system.unload();

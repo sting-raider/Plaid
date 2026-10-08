@@ -48,3 +48,8 @@ Finite ROM sources: delegated actual reads and v2 canonical-source import/rechec
 now account for 1,852 fetches at 65 offsets while retaining all unknowns. Raw
 provenance, source variants, legacy map hashes and OPEN gating pass. Boot/mode,
 copy/cache/mutation lineage and executable lifetime remain open; W012 stays TODO.
+
+CPU boot-input research: natural power entry with ignored firmware input now has
+matching repeated CPU/device/memory checkpoints and explicit PIF-HLE/checksum
+scope. The bounded loader prefix remains PI-busy before guest tests. Complete
+profile/input verification and production handling remain open; W012 stays TODO.

@@ -422,3 +422,19 @@ merge conservatively. The finite source witness does not establish immutable
 images, generations, retirement or executable lifetime. Keep the independent
 solver identity gate and create no regions/entries/copies from these facts.
 Only project-owned data handling is promoted; no reference CPU/runtime is linked.
+
+## ADR-0033: Observe natural CPU power entry with an explicit firmware input
+
+Status: Accepted for research, 2026-10-08.
+
+Load the pinned checkout's ignored NTSC CPU PIF firmware through the system pak
+and start from CPU::power, without host SP copying or register/PC shortcuts.
+Record firmware hash, PIF HLE and enforced checksum policy; retain the fixed
+NTSC/6102/8-MiB/deterministic experiment profile. Plain/traced/repeated CPU/device/
+memory checkpoints agree. The bounded prefix passes the checksum stage and sets
+Config naturally, while remaining in PI DMA polling before guest tests begin.
+Keep source words unknown unless actual device-read witnesses exist; PIF address
+or firmware equality alone cannot exclude SI latches/ROM lockout. Research v3
+is unsupported by production. Complete profile metadata and supplied-input
+verification need a separate decision before promotion. Firmware/reference
+objects stay ignored, notices preserved and no reference/native code is promoted.
