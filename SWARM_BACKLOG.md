@@ -90,3 +90,6 @@ restore and unified event/lifetime joins stay open; W012 remains TODO.
 Successful identity-mapped RAM burst witnesses now match four actual fills and
 one completed writeback, with unchanged prior goldens and invalid attempts kept
 unknown. General backing/copy/mutation/lifetime handling remains open; W012 stays TODO.
+RAM remapping/degradation/failure boundary tests now retain unsupported paths as
+unknown while verifying 16/32-byte identity witnesses and full hidden-memory
+checks. Unified transaction/cache/fetch/copy/lifetime history remains open; W012 stays TODO.

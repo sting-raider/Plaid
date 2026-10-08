@@ -218,6 +218,12 @@ Implemented:
   repeated CPU/timing/RAM/cache state and fresh default-observer goldens match.
   Translated/degraded paths, ordinary stores/copies and general lifetimes remain
   unknown. A separate recipe regression prevents stale observer headers on reuse.
+- RAM boundary tests now cover remapping, translated stores, zero/partial
+  degradation, missing mappings, inactive RI and out-of-bounds access; all stay
+  outside the identity-only witness policy. Actual 16/32-byte identity paths
+  retain witnesses. Baseline/plain/traced/repeated words, CPU/RI snapshots and
+  full RAM/hidden hashes match. This is direct-component synthetic scope, not
+  guest execution or general backing/lifetime coverage.
 
 Verification: 76 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

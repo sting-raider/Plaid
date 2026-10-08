@@ -92,6 +92,10 @@ results/stores in an ignored generated RDRAM header. Four read and one write
 transaction preserve the prior complete projection/checkpoints; unsuccessful
 attempts supply no valid backing witness. Default headers and source notices
 are preserved; translated/degraded paths and executable lifetimes stay unknown.
+`spikes/017-ares-rdram-boundaries/` uses declared direct-component chip/RI state
+to verify remapping/degradation/failure exclusion and actual 16/32-byte identity
+witnesses. Independent baseline and repeated returned words/CPU/RI/RAM/hidden
+checkpoints agree. Requestor arguments supply no independent execution claim.
 
 ## gopher64/gopher64
 
