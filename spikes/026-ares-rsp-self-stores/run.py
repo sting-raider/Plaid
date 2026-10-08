@@ -17,6 +17,7 @@ N64TEST_REV = "196f5421173220eb2f63a7a99c64795dc0ea0698"
 DRIVER = Path(__file__).with_name("driver.cpp")
 OUTPUT = ROOT / "target/ares-rsp-self-store-spike"
 VECTOR_STORES = {"SBV","SDV","SFV","SHV","SLV","SPV","SQV","SRV","SSV","STV","SUV","SWV"}
+VECTOR_BASE_1000_STORES = VECTOR_STORES - {"STV"}
 
 
 def load_builder():
@@ -88,10 +89,10 @@ def source_audit():
         assert "device.rsp.mem" in body and "0xFFF" in body, (name, body)
 
     # Pinned n64-systemtest is a hardware-oriented corpus. Its scalar SW test
-    # explicitly expects 0xffe to wrap to 0x000 in DMEM. Its vector-store suite
-    # deliberately uses base 0x1000 and compares against DMEM addresses masked
-    # with &0xfff. We source-audit these expectations; this CI does not itself
-    # execute the ROM on physical hardware.
+    # explicitly expects 0xffe to wrap to 0x000 in DMEM. Its shared vector
+    # helper compares addresses after &0xfff; 11/12 store-family tests use a
+    # literal 0x1000 adversarial base. STV uses a separate exhaustive-ish
+    # offset/register matrix, so do not pretend its source has the same shape.
     sw_test = (N64TEST / "src/tests/rsp/op_sw.rs").read_text()
     vector_test = (N64TEST / "src/tests/rsp/op_vector_stores.rs").read_text()
     assembler = (N64TEST / "src/rsp/rsp_assembler.rs").read_text()
@@ -103,9 +104,13 @@ def source_audit():
         marker = f"pub struct {name} {{}}"
         assert marker in vector_test
         start = vector_test.index(marker)
-        candidates = [p for p in (vector_test.find("pub struct ", start + len(marker)), len(vector_test)) if p >= 0]
-        block = vector_test[start:min(candidates)]
-        assert "0x1000" in block, (name, block[:500])
+        next_struct = vector_test.find("pub struct ", start + len(marker))
+        stop = len(vector_test) if next_struct < 0 else next_struct
+        block = vector_test[start:stop]
+        if name in VECTOR_BASE_1000_STORES:
+            assert "0x1000" in block, (name, block[:500])
+        else:
+            assert "assembler.write_stv" in block and "TEST_OFFSETS" in block, block[:500]
     assert "SWC2 = 58" in assembler
     assert "B = 0, S = 1, L = 2, D = 3, Q = 4, R = 5, P = 6, U = 7, H = 8, F = 9, W = 10, T = 11" in assembler
     wc2 = function_body(assembler, "fn write_wc2(")
@@ -121,7 +126,8 @@ def source_audit():
         "gopher_store_mask": "0x0fff",
         "gopher_imem_selector": "0x1000",
         "n64_systemtest_scalar_wrap_expectation": "SW@0xffe -> DMEM 0xffe,0xfff,0x000,0x001",
-        "n64_systemtest_vector_adversary_base": "0x1000",
+        "n64_systemtest_vector_base_1000_families": sorted(VECTOR_BASE_1000_STORES),
+        "n64_systemtest_stv_shape": "separate TEST_OFFSETS/register/element matrix",
     }
 
 
