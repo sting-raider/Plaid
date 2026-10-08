@@ -23,7 +23,7 @@ identity. Everything broader stays unresolved.
 ```
 
 Tested with Python 3.13.5. Harness SHA-256:
-`36cbdd0b58acd866805fa5f7807f960d386a593039c812a31f6d43d05d8fed44`.
+`21947d6134f6b1a46028e572a1942ff6f2426181b61b8b795b1ac33960d18ac0`.
 
 Expected output:
 
@@ -36,6 +36,7 @@ PASS same_pc_generation_ambiguity_rejected
 PASS changed_source_register_rejected
 PASS intervening_clobber_rejected
 PASS delay_slot_boundary_rejected
+PASS cartridge_address_not_rom_origin
 PASS transformed_value_rejected
 ```
 
@@ -54,6 +55,10 @@ values every eight words so value uniqueness cannot help the proof.
   their byte origin.
 - A branch with SW in its delay slot is rejected rather than silently crossing a
   control-transfer boundary.
+- A cartridge-space address is not a ROM-origin witness. At the pinned Mupen
+  revision, `read_cart_rom` can return the PI `last_write` latch while IO is busy
+  or zero when the masked ROM offset is out of bounds. The replay preserves these
+  source outcomes and refuses to upgrade them to `rom_bytes`.
 - A transformed value is rejected even when equality with an earlier load happens
   to hold.
 
