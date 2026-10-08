@@ -36,8 +36,8 @@ def main() -> None:
         "PI_DMA_Read,\n      PI_DMA_Write,",
     ])
     require("nall/nall/priority-queue.hpp", [
-        "if(size >= capacity) return false;",
-        "if(entry.valid) callback(entry.event);",
+        "if(size >= Size) return false;",
+        "if(auto event = remove()) callback(*event);",
     ])
     print("PASS: exact pinned ares PI_DMA_Read ordering, backing-read, PBUS-latch, dispatch and queue contracts match")
 
