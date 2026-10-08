@@ -26,7 +26,13 @@
    A pinned ares interpreter now independently agrees on the eight integer/control
    fixtures and checks cartridge fetch, LLD/SCD and address errors. Its broader raw
    observer is now validated within a synthetic SP-entry/budget scope. Add
-   PIF/IPL2 boot provenance and RSP/exception/TLB/FPU verification
+   The bounded CPU power-entry experiment now records the existing PIF firmware
+   input and matching repeated CPU/device/memory checkpoints. Its checksum stage
+   passes with Config 7006E463; the one-million-call loader prefix is PI-busy.
+   Verify the longer guest prefix, explicitly version the complete boot profile
+   and recheck supplied firmware bytes before production import. Keep PIF HLE and
+   fixed NTSC/6102 scope visible; PIF backing and RAM/SP lineage remain unknown.
+   Continue RSP/exception/TLB/FPU verification
    before extending semantic claims.
 2. Model/sense non-PI copies and executable writes beyond PI-backed snapshots.
    The constant aligned cached-RDRAM SW sensor is partial; general addresses,
