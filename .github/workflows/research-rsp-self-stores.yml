@@ -21,7 +21,12 @@ jobs:
           repository: gopher64/gopher64
           ref: e96debac941a26ba4961e5145056c0821d3a56f7
           path: .refs/gopher64
+      - uses: actions/checkout@v4
+        with:
+          repository: lemmy-64/n64-systemtest
+          ref: 196f5421173220eb2f63a7a99c64795dc0ea0698
+          path: .refs/n64-systemtest
       - name: Syntax-check verifier
         run: python3 -m py_compile spikes/026-ares-rsp-self-stores/run.py
-      - name: Audit both pinned implementations and execute exact pinned ares
+      - name: Audit pinned references and execute exact pinned ares
         run: python3 spikes/026-ares-rsp-self-stores/run.py
