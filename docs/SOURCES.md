@@ -51,6 +51,9 @@ The metadata establishes access context, not source backing or code lifetime.
 returned halves in a bounded interpreter fetch window. Six original cases check
 real source reads and rejection of latch/open-bus/prior-data contamination, with
 unchanged CPU/PI checkpoints. Source/image promotion remains separate work.
+`spikes/007-ares-rom-fetch/` extends that sensor to the bounded homebrew prefix:
+1,852 reads at 65 canonical offsets, exact physical-capture projection and unchanged
+checkpoints/messages. Other memory sources and executable lifetimes remain unknown.
 
 ## gopher64/gopher64
 

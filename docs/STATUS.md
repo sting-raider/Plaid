@@ -134,6 +134,11 @@ Implemented:
   latch words, unmapped file tail and prior data reads remain unknown. Original/
   plain/traced/repeated GPR/HI/LO/PC/Count/exception/PI checkpoints agree. Broader
   source capture and production source/lifecycle handling remain unimplemented.
+- Broader source sensing now verifies 1,852 actual ROM reads at 65 canonical
+  offsets, while retaining 4,998,146 unknown sources. Complete v1 projection,
+  CPU/Count/RAM/SP/message checkpoints and repeated v2 streams match. V2 is
+  768,248,958 bytes. Production source handling and executable lifetimes remain
+  separate work.
 
 Verification: 70 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

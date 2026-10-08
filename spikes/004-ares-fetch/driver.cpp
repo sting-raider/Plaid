@@ -1,13 +1,18 @@
 /* SPDX-License-Identifier: ISC
  * Original bounded Plaid fetch-observer experiment. No CPU semantics patch.
  */
+#if !defined(PLAID_ROM_FETCH_SOURCE)
 #define main bounded_fixture_main
 #include "../003-ares-oracle/driver.cpp"
 #undef main
+#endif
 #include <cstdlib>
 #include <nall/hash/sha256.hpp>
 
 struct Observer : Headless {
+  #if defined(PLAID_ROM_FETCH_SOURCE)
+  RomObserver rom;
+  #endif
   FILE* trace = nullptr;
   FILE* messages = nullptr;
   u64 fetches = 0;
@@ -16,7 +21,17 @@ struct Observer : Headless {
       // The disassembler was passed the exact fetched word by instructionPrologue.
       // No additional guest memory read or TLB translation is performed here.
       auto pc = cpu.ipu.pc;
-      #if defined(PLAID_PHYSICAL_FETCH)
+      #if defined(PLAID_ROM_FETCH_SOURCE)
+      auto word = cpu.disassembler.fetchedWord();
+      bool backed = rom.source(plaidFetchAccess.physical, plaidFetchAccess.cached, word);
+      std::fprintf(trace, "{\"record\":\"fetch\",\"seq\":%llu,\"pc\":%llu,\"word\":%u,\"delay_slot\":%s,\"physical\":%u,\"cached\":%s,\"source\":",
+        (unsigned long long)fetches++, (unsigned long long)pc, word,
+        cpu.pipeline.inDelaySlot() ? "true" : "false", plaidFetchAccess.physical,
+        plaidFetchAccess.cached ? "true" : "false");
+      if(backed) std::fprintf(trace,"{\"kind\":\"cartridge_rom\",\"offset\":%u}",rom.reads[0].offset);
+      else std::fprintf(trace,"{\"kind\":\"unknown\"}");
+      std::fprintf(trace,"}\n");
+      #elif defined(PLAID_PHYSICAL_FETCH)
       std::fprintf(trace, "{\"record\":\"fetch\",\"seq\":%llu,\"pc\":%llu,\"word\":%u,\"delay_slot\":%s,\"physical\":%u,\"cached\":%s}\n",
         (unsigned long long)fetches++, (unsigned long long)pc,
         cpu.disassembler.fetchedWord(), cpu.pipeline.inDelaySlot() ? "true" : "false",
@@ -56,6 +71,9 @@ int fetch_observer_main(int argc, char** argv) {
   cartridgeSlot.port->allocate();
   cartridgeSlot.port->connect();
   ares::Nintendo64::system.power(false);
+  #if defined(PLAID_ROM_FETCH_SOURCE)
+  pi.detach(cartridge.romDevice); pi.attach(frontend.rom, 0);
+  #endif
   if(cpu.recompiler.enabled || rsp.recompiler.enabled) return 6;
   std::vector<u8> hidden(rdram.ram.size / 2);
   rdram.hidden.data = hidden.data();
@@ -69,7 +87,9 @@ int fetch_observer_main(int argc, char** argv) {
     frontend.trace = std::fopen(argv[3], "wb");
     if(!frontend.trace) return 4;
     auto romHash = nall::Hash::SHA256(std::span<const u8>{bytes.data(), bytes.size()}).digest();
-    #if defined(PLAID_PHYSICAL_FETCH)
+    #if defined(PLAID_ROM_FETCH_SOURCE)
+    std::fprintf(frontend.trace, "{\"record\":\"header\",\"format\":\"plaid-ares-fetch-research-v2\",\"revision\":\"9408cb43d4948fc3ea6e152a307a34348df3fe04\",\"rom_sha256\":\"%s\",\"budget\":%u,\"initial_state\":\"declared_post_ipl2_sp_entry\",\"mapped_cartridge_size\":%u,\"source_policy\":\"delegated_rom_halves_before_prologue\"}\n", romHash.data(), budget, cartridge.rom.size);
+    #elif defined(PLAID_PHYSICAL_FETCH)
     std::fprintf(frontend.trace, "{\"record\":\"header\",\"format\":\"plaid-ares-fetch-research-v1\",\"revision\":\"9408cb43d4948fc3ea6e152a307a34348df3fe04\",\"rom_sha256\":\"%s\",\"budget\":%u,\"initial_state\":\"declared_post_ipl2_sp_entry\",\"mapped_cartridge_size\":%u}\n", romHash.data(), budget, cartridge.rom.size);
     #else
     std::fprintf(frontend.trace, "{\"record\":\"header\",\"format\":\"plaid-ares-fetch-research-v0\",\"revision\":\"9408cb43d4948fc3ea6e152a307a34348df3fe04\",\"rom_sha256\":\"%s\",\"budget\":%u,\"initial_state\":\"declared_post_ipl2_sp_entry\"}\n", romHash.data(), budget);
@@ -78,7 +98,12 @@ int fetch_observer_main(int argc, char** argv) {
     cpu.debugger.tracer.instruction->setMask(false);
     cpu.debugger.tracer.instruction->setEnabled(true);
   }
-  for(u32 step=0; step<budget; step++) if(cpu.instruction()) cpu.synchronize();
+  for(u32 step=0; step<budget; step++) {
+    #if defined(PLAID_ROM_FETCH_SOURCE)
+    frontend.rom.reads.clear();
+    #endif
+    if(cpu.instruction()) cpu.synchronize();
+  }
   if(traced) {
     std::fprintf(frontend.trace, "{\"record\":\"end\",\"fetch_count\":%llu,\"reason\":\"instruction_call_budget\"}\n",
       (unsigned long long)frontend.fetches);
