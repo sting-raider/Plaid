@@ -18,23 +18,26 @@ def build():
     prepare=load('queue_prepare',ROOT/'spikes/032-ares-queue-identity/prepare.py')
     # The capability fixture inherits both `nall::queue` and the N64 global
     # `ares::Nintendo64::queue` via using-directives in the common driver.
-    # Generate a compile-only shadow after all includes so the experiment names
-    # the intended N64 queue explicitly without modifying the pinned reference.
+    # Generate a compile-only shadow *beside* the source fixture so its relative
+    # includes remain exact, then delete it after both binaries are built.
     source=(HERE/'driver.cpp').read_text()
     marker='#endif\n\nstruct Fact {'
     assert source.count(marker)==1
     source=source.replace(marker,'#endif\n\n#define queue ares::Nintendo64::queue\n\nstruct Fact {')
     OUT.mkdir(parents=True,exist_ok=True)
-    generated=OUT/'driver.generated.cpp'; generated.write_text(source)
+    generated=HERE/'_driver.generated.cpp'; generated.write_text(source)
     baseline_source=OUT/'baseline.generated.cpp'
-    baseline_source.write_text('#define PLAID_PI_QUEUE_SENSOR 0\n#include "driver.generated.cpp"\n')
-    baseline=builder.build(baseline_source,OUT/'baseline',extra_sources=(generated,))
-    observed_dir=OUT/'observed'
-    prepare.generate(REF,observed_dir/'include/nall/priority-queue.hpp')
-    observed=builder.build(generated,observed_dir,
-        raw_fetch_access=True,physical_fetch_access=True,pi_dma_access=True,
-        extra_sources=(HERE/'observer.hpp',ROOT/'spikes/032-ares-queue-identity/prepare.py'))
-    return baseline,observed
+    baseline_source.write_text(f'#define PLAID_PI_QUEUE_SENSOR 0\n#include "{generated}"\n')
+    try:
+        baseline=builder.build(baseline_source,OUT/'baseline',extra_sources=(generated,))
+        observed_dir=OUT/'observed'
+        prepare.generate(REF,observed_dir/'include/nall/priority-queue.hpp')
+        observed=builder.build(generated,observed_dir,
+            raw_fetch_access=True,physical_fetch_access=True,pi_dma_access=True,
+            extra_sources=(HERE/'observer.hpp',ROOT/'spikes/032-ares-queue-identity/prepare.py'))
+        return baseline,observed
+    finally:
+        generated.unlink(missing_ok=True)
 
 def phase(data,n): return next(x for x in data['facts'] if x['phase']==n)
 def queue_phase(data,n): return [x for x in data['queue_trace'] if x['phase']==n]
