@@ -38,3 +38,8 @@ W012 and whole-ROM closure open. No native backend work is promoted by this spik
 Raw capture import: typed 64-bit observations and full-source summary verification
 now pass on the broader corpus (53,037 summaries; 4,999,998 accounted fetches).
 Physical backing and execution generations remain unknown; W012 stays TODO.
+
+Effective fetch context: the separate observer and v1 importer preserve physical/
+cache variants with full-source rechecking and byte-identical v0 compatibility.
+Cache/TLB/endian fixtures and both complete corpus checks pass. Actual byte-source
+witnesses and lifecycle joins remain open; W012 stays TODO.

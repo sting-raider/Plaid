@@ -127,6 +127,7 @@ They have no established image generation, code lifetime or retirement identity;
 the solver keeps them OPEN. After spike 004 creates the ignored broad capture,
 `python scripts/test_fetch_corpus.py` checks full-source provenance, self-merge and
 OPEN output and records one-host import cost. The raw stream remains required.
+After spike 005, add `--physical` to recheck its complete v1 capture.
 
 Additional disposable reference experiments are documented under `spikes/`.
 `python spikes/003-ares-oracle/run.py` builds the pinned ares core separately and

@@ -127,6 +127,8 @@ Implemented:
   capacity. Remapping/cache variants remain distinct and source verification
   rechecks them. V0 bytes stay identical; mixed captures merge conservatively.
   Physical context creates no backing source, image or code-generation proof.
+  Full v1 corpus verification accounts for all fetches in a 24,203,476-byte map;
+  raw v1 data is 628,211,919 bytes. Both self-merge byte-identically and stay OPEN.
 
 Verification: 70 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
@@ -135,7 +137,7 @@ Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.
 Execution tests use x64 Linux under WSL Ubuntu with GCC and NASM; other CPU hosts
 are unverified. The ares spike additionally uses G++ C++20; the two earlier spikes
 and deterministic homebrew packaging/known negative outcomes also pass.
-Raw-fetch CLI tests cover all ROM byte orders, wide PCs/word variants, source
+Raw-fetch CLI tests cover both versions, all ROM byte orders, wide PCs/word/access variants, source
 tampering and missing footers. Full-corpus import/source verification/self-merge
 and OPEN gating pass. A single Windows debug import under concurrent verification
 took 75.7 seconds and peaked at 74,719,232 bytes of working memory; this is a cost
