@@ -264,6 +264,13 @@ Implemented:
   do not establish legal guest setup; handler provenance, general mutation sensing
   and mode coverage remain open. These fixtures change no production certificates.
 
+- Shared opt-in scalar and fetch-boundary sensors now coexist with burst/fill/
+  CACHE callbacks. Ninety-five controlled records restore the exact previous
+  43-record projection when new access records are removed; baseline/disabled/
+  repeated reported checkpoints agree and six forgeries fail. Independent
+  scalar-fetch and CPU-copy fixtures retain complete earlier JSON through the
+  shared recipe. Broader boot chronology and production identities remain open.
+
 Verification: 76 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.

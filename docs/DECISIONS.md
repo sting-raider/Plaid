@@ -654,3 +654,20 @@ bytes and reachability proof. PIF/SP/NMI/LLSC/table contracts remain source/mode
 evidence where no reference fixture was executed. Retain the reviewed original
 harnesses and explicit limitations, integrate narrow sensors into shared research
 chronology next, and issue no production image/lifetime or whole-ROM certificate.
+
+## ADR-0048: Combine successful fetch boundaries with the controlled chronology
+
+Status: Accepted for research, 2026-10-08.
+
+Two explicit shared-builder options retain ordinary successful identity-RAM
+reads/writes and begin/end of successful CPU fetch accesses after endian address
+selection. They compose with existing burst/fill/CACHE callbacks without extra
+guest accesses or clocks. The 95-record controlled ledger retains the complete
+previous 43-record projection and independent/disabled/repeated reported
+checkpoints. Nine uncached word reads lie inside their actual fetch contexts;
+nine debugger writes retain separate fixture attribution. Six forgeries fail.
+The recovered independent scalar-fetch and CPU-copy fixtures preserve their full
+traced JSON through this common recipe. Extend this narrow measured chronology
+to the fixed boot profile before deciding source-linked production representation.
+Failure/nonidentity paths and general mutations/copies/restore lifetimes remain
+unclaimed; default recipe handlers and whole-ROM gates stay unchanged.
