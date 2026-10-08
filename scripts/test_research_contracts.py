@@ -22,6 +22,12 @@ CASES = (
     ("partial_dual", "spikes/025-ares-64bit-stores/model.py"),
     ("uncached_fetch", "spikes/025-ares-rdram-uncached-fetch/source_contract.py"),
     ("uncached_source_guard", "spikes/025-ares-rdram-uncached-fetch/source_guard.py", ".refs/ares"),
+    ("sb_sh_lanes", "spikes/033-ares-sb-sh-stores-gpt56/model.py"),
+    ("sb_sh_independent", "spikes/036-ares-sb-sh-stores/model.py"),
+    ("cpu_sp_imem_sink", "spikes/040-ares-cpu-rsp-imem-subword/model.py"),
+    ("dcache_eviction", "spikes/036-ares-dcache-eviction-lineage/model.py"),
+    ("dcache_writeback", "spikes/034-ares-dcache-writeback-lineage/model.py"),
+    ("cop1_store_payload", "spikes/035-ares-cop1-stores/model.py"),
 )
 
 
