@@ -438,3 +438,16 @@ or firmware equality alone cannot exclude SI latches/ROM lockout. Research v3
 is unsupported by production. Complete profile metadata and supplied-input
 verification need a separate decision before promotion. Firmware/reference
 objects stay ignored, notices preserved and no reference/native code is promoted.
+
+## ADR-0034: Version the complete declared boot profile separately
+
+Status: Accepted for research, 2026-10-08.
+
+Research v4 carries firmware hash/size, NTSC region, CIC-NUS-6102, 8 MiB RAM,
+deterministic entropy, reference PIF HLE and enforced checksum in one explicit
+boot_inputs object. Preserve v3 as a distinct scope rather than retroactively
+changing its header. Complete v3 projection and fixed CPU/device/memory checkpoint
+hashes agree at one million calls, with matching plain/traced/repeated execution.
+These are declared reference inputs, not automatic ROM-profile discovery. Future
+production handling must check supplied firmware bytes and the complete source;
+metadata does not establish PIF backing, executable generations or full coverage.

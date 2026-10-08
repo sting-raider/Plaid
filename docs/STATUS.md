@@ -158,6 +158,10 @@ Implemented:
   HLE, fixed NTSC/6102 profile and finite budget remain explicit limitations.
   Research v3 records firmware identity; production rejects this boot scope.
   Firmware bytes remain ignored; no PIF backing or executable lifetime is inferred.
+- Research v4 explicitly records firmware hash/size and the complete declared
+  boot profile. Its one-million-call stream preserves the entire v3 projection,
+  fixed CPU/device/memory checkpoint and plain/traced/repeat neutrality.
+  Production handling requires supplied-input and full-source verification.
 
 Verification: 72 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

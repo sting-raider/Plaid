@@ -54,3 +54,6 @@ matching repeated CPU/device/memory checkpoints and explicit PIF-HLE/checksum
 scope. The longer prefix leaves PI polling and reaches guest tests with matching
 repeated checkpoints and no reported failures; full-suite completion is unverified. Complete
 profile/input verification and production handling remain open; W012 stays TODO.
+Research v4 now explicitly records the fixed boot profile and preserves the full
+v3 projection/checkpoint baseline. Supplied-input verification remains separate;
+W012 stays TODO.
