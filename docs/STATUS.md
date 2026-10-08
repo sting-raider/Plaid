@@ -212,6 +212,12 @@ Implemented:
   mutation. Separate baseline/plain/traced/repeated complete checkpoints match.
   Identity-mapped controlled RAM is the verified scope; general bus backing,
   failures/reset/restore and unified event/lifetime joins remain open.
+- Actual successful identity-mapped RAM burst sensing now records four reads
+  matching the fills and one completed write matching the controlled writeback.
+  Invalid attempts supply no valid backing witness. Complete prior projection,
+  repeated CPU/timing/RAM/cache state and fresh default-observer goldens match.
+  Translated/degraded paths, ordinary stores/copies and general lifetimes remain
+  unknown. A separate recipe regression prevents stale observer headers on reuse.
 
 Verification: 76 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.

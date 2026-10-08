@@ -14,9 +14,10 @@ REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 OUTPUT = ROOT / "target/ares-oracle-spike"
 
 
-def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False):
+def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False):
     if cache_fill_access: assert raw_fetch_access and physical_fetch_access
     if cache_operation_access: assert raw_fetch_access and physical_fetch_access
+    if rdram_burst_access: assert raw_fetch_access and physical_fetch_access
     output = Path(directory)
     assert subprocess.check_output(["git","rev-parse","HEAD"],cwd=REF,text=True).strip() == REV
     subprocess.run(["git","-c","core.autocrlf=true","diff","--quiet","HEAD"],cwd=REF,check=True)
@@ -29,6 +30,7 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
         "physical_fetch_access":physical_fetch_access,
         "cache_fill_access":cache_fill_access,
         "cache_operation_access":cache_operation_access,
+        "rdram_burst_access":rdram_burst_access,
         "extra_sources":{str(Path(p).relative_to(ROOT)):hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in extra_sources},
         "fixture_driver":hashlib.sha256(Path(__file__).with_name("driver.cpp").read_bytes()).hexdigest(),
         "recipe":hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
@@ -58,6 +60,26 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
             destination.parent.mkdir(parents=True,exist_ok=True)
             destination.write_text(header)
             includes.insert(0, output / "include")
+            if rdram_burst_access:
+                ram = (REF / "ares/n64/rdram/rdram.hpp").read_text()
+                marker = "      self.hidden.updateBurst<Size>(address, value);"
+                assert ram.count(marker) == 1
+                ram = ram.replace(marker,marker + "\n      if(self.mapIdentity && plaidRdramBurstObserver) plaidRdramBurstObserver(true, address, Size, (u32)device, value);")
+                begin = "    template<u32 Size>\n    auto readBurst(u32 address, u32 *value, RBusDevice device) -> void {"
+                end = "  } ram{*this};"
+                assert ram.count(begin) == ram.count(end) == 1
+                start, stop = ram.index(begin), ram.index(end)
+                block = ram[start:stop]
+                assert block.endswith("    }\n\n")
+                block = block[:-7] + "      if(plaidRdramBurstObserver) plaidRdramBurstObserver(false, address, Size, (u32)device, value);\n    }\n\n"
+                ram = ram[:start] + block + ram[stop:]
+                ram = "// Project-owned identity-mapped successful RAM-burst callback.\nusing PlaidRdramBurstObserver = void (*)(bool, u32, u32, u32, const u32*);\ninline PlaidRdramBurstObserver plaidRdramBurstObserver = nullptr;\n" + ram
+                destination = output / "include/n64/rdram/rdram.hpp"
+                destination.parent.mkdir(parents=True,exist_ok=True)
+                destination.write_text(ram)
+            else:
+                # Do not shadow the original header when reusing a prior sensor build.
+                (output / "include/n64/rdram/rdram.hpp").unlink(missing_ok=True)
         include_flags = [part for path in includes for part in ("-I",str(path))]
         core = (REF / "ares/ares/ares.cpp.in").read_text().replace("#include <ares/resource/resource.cpp>", "// UI-only resources omitted in headless build.")
         for key, value in {"ARES_NAME":"Plaid pinned ares oracle", "ARES_VERSION":REV,
