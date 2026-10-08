@@ -252,3 +252,5 @@ Before introducing code copied or linked from an upstream project:
 `spikes/036-ares-pi-read-lifecycle/` reuses original optional queue/scalar sensors and executes exact ares requests/dispatch, with generated reference code kept ignored and no PBUS-device origin or hardware timing claim.
 
 `spikes/034-ares-dcache-writeback-lineage/` generates optional layout-neutral CPU/cache and RDRAM shadows under ignored output, preserves upstream licensing, and now has actual baseline/repeated evidence plus an original adversarial reducer.
+
+`spikes/036-ares-sb-sh-stores/` retains an original model and unmodified-reference handler fixture, with no extra upstream source copied into production. Worker note filenames remain separate for the two independent SB/SH lanes.

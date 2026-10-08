@@ -142,3 +142,5 @@ lifetime and mutation completeness still keep W012 TODO.
 2026-10-09 primary: PI read lifecycle/save/load/rejection locally reproduced; bounded boot request/dispatch composition is the next integration task.
 
 2026-10-09 primary: completed D-cache writeback worker PARTIAL fixture, preserving updated model and actual four-phase receipts; generalized lineage stays open.
+
+2026-10-09 primary: independent RDRAM SB/SH 96-case fixture reproduced; generalized sink/lineage coverage stays open.
