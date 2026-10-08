@@ -939,3 +939,17 @@ actual full backing transactions in writeback scope before retag/reuse. Exact
 model/evidence hashes and reported baseline/repeat checkpoints agree locally.
 This finite original fixture keeps generated upstream builds/licensing isolated;
 full lineage verification, arbitrary stores/epochs and closure remain open.
+
+## ADR-0066: Executable mutation width follows the concrete device sink
+
+Status: Accepted for research, 2026-10-09.
+
+The reproduced CPU-to-SP-IMEM fixture proves that successful SB/SH can overwrite
+four bytes with shifted unmasked rt.u32; nominal opcode width/payload truncation
+would lose both mutation span and source bits. Record post-translation/endian
+concrete sink address, full aligned Word effect and exact payload. Faulting odd
+SH supplies no mutation. Pinned systemtest/Gopher source agrees; Mupen masked
+source disagrees, so preserve the oracle conflict. Forced endian/component tests
+and source expectations do not replace physical hardware evidence or prove other
+sinks/lifetimes. Original fixture builds ignored licensed ares separately; no
+reference code or assets enter production.

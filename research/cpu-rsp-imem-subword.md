@@ -161,3 +161,15 @@ The existing RSP IMEM provenance rule that direct writes supersede only the byte
 ## Recommendation
 
 **ADOPT** the sink-width result into Plaid's executable-mutation model: CPU `SB`/`SH` reaching SP IMEM must not be represented as one/two-byte mutations merely because of opcode width. Normalize from the actual SP-memory sink semantics, including unmasked `rt.u32` lane leakage. Treat pinned Mupen's masked behavior as a known conflicting oracle for this case, not as grounds to weaken the hardware-facing result.
+
+## Primary integration reproduction (2026-10-09)
+
+Retained original fixture from `6f0791f`. Local model/source comparison matches
+both worker hashes, and WSL actual-reference execution reproduces all 32 cases
+and result SHA-256
+`2ccf7423eb9d2359119c29dea519c62f089c76902fd31c59f31c02ee06a3825e`.
+All 24 successful stores replace four IMEM bytes; all eight odd SH faults preserve
+IMEM. Windows dispatch and canonical-LF comparison digests are portable, and
+inspected-file cleanliness checks preserve unrelated reference instrumentation.
+Hardware-facing expectations remain checked-in source evidence, not new physical
+hardware measurements. RSP-originated stores are a separate lane.

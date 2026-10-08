@@ -148,3 +148,5 @@ Retained/reproduced `tlb-uncached-fetch-gpt56sol` (`7ca4338`): actual TLB fetch 
 Retained/reproduced `rdram-translated-backing-gpt56sol` (`c88977d`): six actual reads and exact source/result hashes. Adopt the two-stage witness contract under ADR-0064.
 
 Retained/reproduced `dcache-eviction-lineage-gpt56sol` (`2f70161`): exact model and actual evidence hashes. Adopt outgoing full-line transaction semantics under ADR-0065.
+
+Retained/reproduced `cpu-rsp-imem-subword-gpt56sol` (`6f0791f`): model, source comparison and actual 32-case result hashes match. Adopt concrete device-sink span/payload under ADR-0066.

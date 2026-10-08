@@ -246,3 +246,5 @@ Before introducing code copied or linked from an upstream project:
 `spikes/033-ares-rdram-translated-backing/` generates optional reference shadows in ignored output, executes the original read/degrade once, and reproduces actual Word evidence. Gopher comparison stays source-only; no upstream source enters production.
 
 `spikes/036-ares-dcache-eviction-lineage/` is an original project-owned model and actual guest transaction fixture with isolated optional reference shadows and preserved upstream licenses; no new production dependency.
+
+`spikes/040-ares-cpu-rsp-imem-subword/` executes original pinned ares CPU handlers and compares exact Gopher/Mupen/systemtest source contracts. GPL source is inspected only, not copied or linked into Plaid.
