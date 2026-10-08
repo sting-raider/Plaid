@@ -385,3 +385,5 @@ Translated/degraded scalar Word reads reproduce exact backing/result receipts an
 Actual D-cache eviction now reproduces the full outgoing 16-byte write, including a clean lane changed externally in backing, before slot reuse. Dirty masks/current RAM cannot reconstruct those origins (ADR-0065).
 
 CPU SB/SH to SP IMEM now reproduces 32 actual cases: 24 widened full-word sinks and eight nonmutating faults. Sink width/payload follows device semantics, with a preserved Mupen source disagreement (ADR-0066).
+
+The recovered actual PI read lifecycle fixture now matches both worker hashes across six phases, including full-queue copy without scheduling and save-preserved/load-cut identity. ADR-0057/0058 remain the governing finite contracts.

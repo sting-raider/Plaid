@@ -248,3 +248,5 @@ Before introducing code copied or linked from an upstream project:
 `spikes/036-ares-dcache-eviction-lineage/` is an original project-owned model and actual guest transaction fixture with isolated optional reference shadows and preserved upstream licenses; no new production dependency.
 
 `spikes/040-ares-cpu-rsp-imem-subword/` executes original pinned ares CPU handlers and compares exact Gopher/Mupen/systemtest source contracts. GPL source is inspected only, not copied or linked into Plaid.
+
+`spikes/036-ares-pi-read-lifecycle/` reuses original optional queue/scalar sensors and executes exact ares requests/dispatch, with generated reference code kept ignored and no PBUS-device origin or hardware timing claim.
