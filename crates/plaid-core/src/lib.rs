@@ -4,6 +4,7 @@
 
 pub mod discovery;
 pub mod fetch;
+pub mod history;
 pub mod indirect;
 mod indirect_chain;
 pub mod loads;

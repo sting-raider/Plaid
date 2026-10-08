@@ -278,9 +278,13 @@ Implemented:
   instruction fetches. Complete v5 bytes, fresh default baseline and reported
   plain/enabled/repeated checkpoints agree. Scalar DMA writes are observed backing
   effects; transfer-origin/completion, general mutations and lifetimes remain open.
-  Original Rust source-linked inspection is the next separate implementation step.
+  Original Rust source-linked inspection now validates both complete sources and
+  supplied inputs, matches the independent Python counts/hashes and rechecks the
+  877-byte report exactly. Five new tests cover ambiguous reads/unfetched lanes,
+  malformed histories, all-source tampering and changes between replay passes.
+  No ProgramMap identity or closure rule is promoted.
 
-Verification: 76 Rust integration tests, formatting, strict Clippy, CLI integration,
+Verification: 81 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.

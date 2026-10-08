@@ -62,3 +62,14 @@ RSP installations, copy dataflow, exhaustive reachability or full guest-suite
 completion. The next separate decision is an original Rust complete-source
 inspection/rechecker that records these finite witnesses without creating
 ProgramMap images/generations or weakening OPEN whole-ROM gating.
+
+## Original Rust inspection receipt
+
+`inspect_boot_history` and `verify_boot_history_report` now reproduce every
+corpus count and both raw hashes above. The report is 877 bytes with SHA-256
+`8eb7007dd08de872c34969a69ca6ed77911f8f9b6745b160b4cbbdb778d478d8`.
+Five Rust tests cover data-read ambiguity, complete resident-lane agreement,
+malformed/duplicate/truncated/oversized records, supplied-input/report tampering
+and a paired source changing between validation and replay. The corpus passes
+complete report reconstruction. All 81 Rust tests, formatting and strict Clippy
+pass. No ProgramMap identity or source/lifetime certificate is changed.

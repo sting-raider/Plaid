@@ -14,9 +14,10 @@
    reproduce locally. Shared explicit fetch boundaries and scalar reads/writes
    pass a 95-record ledger, its prior projection and independent primitive
    fixtures. The bounded boot prefix now preserves v5 bytes/checkpoints while
-   retaining 5,051,089 ordered records and 32 actual RAM-backed fills. Implement
-   strict complete-source Rust inspection/rechecking next; keep general cache,
-   copy/transfer completion, byte lifetime and mutation completeness separate.
+   retaining 5,051,089 ordered records and 32 actual RAM-backed fills. Strict Rust
+   complete-source inspection/report rechecking now agrees with independent
+   Python evidence. Extend source/copy transaction contexts and completion next;
+   keep general cache, byte lifetime and mutation completeness separate.
    Current tags/effective addresses can differ from resident-byte history; keep
    those identities separate. A recovered synchronized-restore/cache-power
    fixture now confirms restored residency without a fill and rejects a latest-

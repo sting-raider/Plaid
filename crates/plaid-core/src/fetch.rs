@@ -30,7 +30,7 @@ fn present<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
 
 #[derive(Deserialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
-enum Record {
+pub(crate) enum Record {
     Header {
         format: String,
         revision: String,
@@ -66,7 +66,7 @@ enum Record {
     },
 }
 
-fn line<R: BufRead>(reader: &mut R, bytes: &mut Vec<u8>) -> Result<bool, String> {
+pub(crate) fn line<R: BufRead>(reader: &mut R, bytes: &mut Vec<u8>) -> Result<bool, String> {
     bytes.clear();
     let size = reader
         .take(MAX_RECORD_BYTES as u64 + 1)
