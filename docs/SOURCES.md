@@ -90,6 +90,13 @@ Purpose:
 - correctness tests for CPU, exceptions, TLB, memory, RSP, and other N64 behavior;
 - verification corpus for lowering/runtime work.
 
+Pinned source license: MIT. `spikes/002-systemtest-discovery/` builds guest source
+with exact nightly-2022-07-10 and locked dependencies; the separately installed
+MIT nust64 0.4.1 packager includes libdragon open-source IPL3. ROM/ELF/tool outputs
+stay ignored and are not runtime dependencies. The PARTIAL headless probe exposes
+unsupported cartridge execution in the dynarec and LLD/exception/LLAddr limits
+in the interpreter. This pin cannot serve as a universal CPU oracle by itself.
+
 ## Source-use policy
 
 Before introducing code copied or linked from an upstream project:

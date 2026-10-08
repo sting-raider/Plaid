@@ -19,3 +19,8 @@ Statuses: `TODO`, `CLAIMED`, `BLOCKED`, `DONE`.
 | W013 | DONE | Closed-world solver v0 | Report unresolved direct/indirect targets and refuse native-complete status while any remain. |
 | W014 | TODO | Runtime boundary study | Map N64ModernRuntime/Mupen/ares/Gopher64 services to our planned runtime API. |
 | W015 | TODO | First commercial-ROM validation protocol | Define legal local-ROM workflow and metadata-only expected-results fixtures. |
+
+Broader corpus investigation: the pinned MIT n64-systemtest build is reproducible,
+but the headless capture spike is PARTIAL (cartridge execution and CPU-oracle
+limits). W010/W011 remain deferred; W012 still needs general source/write/lifecycle
+coverage. See `spikes/002-systemtest-discovery/` and `docs/NEXT.md`.
