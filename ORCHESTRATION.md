@@ -28,9 +28,12 @@ Research workers do **not** own canonical integration unless explicitly promoted
 
 Repository: `sting-raider/Plaid`
 
-Current active integration branch: `codex/executable-discovery`
+Current active integration branch: `main`
 
-`main` is milestone-oriented and may lag active research. Never assume `main` is the newest technical state.
+The user authorized direct work on `main` on 2026-10-09. The tested
+`codex/executable-discovery` history was fast-forwarded into `main`; that older
+branch remains a historical checkpoint. New canonical work uses small tested
+commits on `main`. Research branches still require primary reconciliation.
 
 Before selecting work, read in this order:
 
@@ -41,7 +44,7 @@ Before selecting work, read in this order:
 5. `docs/DECISIONS.md`
 6. `SWARM_BACKLOG.md`
 7. relevant files under `research/`, `spikes/`, `experiments/`, and `instruments/`
-8. recent commits on `codex/executable-discovery`
+8. recent commits on `main`
 9. open PRs/issues and the shared coordination ledger: GitHub issue #4
 
 Then inspect the relevant pinned reference revision from `refs.lock.toml`.
@@ -88,7 +91,7 @@ Parallel research is intentionally aggressive; canonical integration is intentio
 
 - Never force-push or rewrite the active integration branch.
 - Prefer `research/<topic>-<shortid>` branches or isolated worktrees for experiments.
-- Do not directly merge into `codex/executable-discovery` unless the user or primary integrator explicitly assigns integration ownership.
+- Do not directly merge into `main` unless the user or primary integrator explicitly assigns integration ownership.
 - It is fine to make invasive temporary patches to upstream references in a disposable experimental checkout.
 - Keep reference modifications clearly separated from project-owned production code and preserve license boundaries.
 - No ROMs, firmware, copyrighted game assets, generated traces containing redistributed copyrighted content, secrets, or credentials in git.
