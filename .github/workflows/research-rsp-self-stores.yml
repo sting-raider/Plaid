@@ -29,7 +29,16 @@ jobs:
       - name: Syntax-check verifier
         run: python3 -m py_compile spikes/026-ares-rsp-self-stores/run.py
       - name: Audit pinned references and execute exact pinned ares
-        run: python3 spikes/026-ares-rsp-self-stores/run.py
+        shell: bash
+        run: |
+          set +e
+          python3 spikes/026-ares-rsp-self-stores/run.py
+          status=$?
+          if [ "$status" -ne 0 ] && [ -f target/ares-rsp-self-store-spike/build/build.log ]; then
+            echo '--- exact-pin build.log ---'
+            cat target/ares-rsp-self-store-spike/build/build.log
+          fi
+          exit "$status"
       - name: Retain deterministic result
         if: success()
         uses: actions/upload-artifact@v4
