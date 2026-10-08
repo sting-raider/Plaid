@@ -47,6 +47,10 @@ ignored and no RAM-copy or executable-lifetime inference is introduced.
 in a generated CPU fetch TU. Cache-staleness, TLB remapping and endian-selection
 fixtures pass; full broad checkpoint and v0-projection agreement remain exact.
 The metadata establishes access context, not source backing or code lifetime.
+`spikes/006-ares-rom-source/` forwards the actual ROM PI device once and records
+returned halves in a bounded interpreter fetch window. Six original cases check
+real source reads and rejection of latch/open-bus/prior-data contamination, with
+unchanged CPU/PI checkpoints. Source/image promotion remains separate work.
 
 ## gopher64/gopher64
 
