@@ -548,3 +548,18 @@ historical fill as finite data-history evidence, while requiring actual bus
 backing witnesses and explicit tag/invalidation/reset/restore boundaries for
 general lifecycle joins. The existing unknown-source/execution gates remain;
 no production source or immutable lifetime certificate is fabricated.
+
+## ADR-0041: Retain completed guest cache-operation transitions separately
+
+Status: Accepted for research, 2026-10-08.
+
+An opt-in generated interpreter TU samples existing selected-line fields before
+and after supported CACHE handlers. Preserve instruction PC, effective virtual/
+physical operand address and before/after tag/eight words, without additional
+guest accesses or clocks. Three controlled tag-store/index-invalidate operations
+match independently checked CPU/timing/RAM/cache goldens and repeated JSON. The
+default build keeps its original handler; hooks are research-only. Invalid
+translations have no completed event. Hit-invalidate/fill/writeback outcomes,
+backing reads/writes, reset/restore and a unified event history need separate
+verification. Completion is not a successful RAM-write or immutable-lifetime
+certificate. Do not promote a cache lifecycle or executable image from this scope.

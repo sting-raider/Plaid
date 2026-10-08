@@ -12,6 +12,9 @@
 #if PLAID_CACHE_FILL_SENSOR
 #include "../012-ares-cache-fill/observer.hpp"
 #endif
+#if defined(PLAID_CACHE_OPERATION_CONTEXT)
+#include "../014-ares-cache-operations/observer.hpp"
+#endif
 
 struct Sample {
   u64 pc, lastFill;
@@ -55,6 +58,9 @@ int main(int argc,char** argv) {
   if(cpu.recompiler.enabled || rsp.recompiler.enabled) return 4;
   #if PLAID_CACHE_FILL_SENSOR
   plaidCacheFillObserver = traced ? cache_fill_observer : nullptr;
+  #endif
+  #if defined(PLAID_CACHE_OPERATION_CONTEXT)
+  plaidCacheOperationObserver = traced ? cache_operation_observer : nullptr;
   #endif
   std::vector<u8> hidden(rdram.ram.size/2); rdram.hidden.data = hidden.data();
   rdram.mapIdentity = 1;
@@ -107,6 +113,9 @@ int main(int argc,char** argv) {
   print_cache_fills();
   #else
   std::printf(",\"fills\":[]");
+  #endif
+  #if defined(PLAID_CACHE_OPERATION_CONTEXT)
+  print_cache_operations();
   #endif
   std::printf(",\"post_tags\":[");
   for(size_t i=0;i<postTags.size();i++) std::printf("%s%u",i ? "," : "",postTags[i]);

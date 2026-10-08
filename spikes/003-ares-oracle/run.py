@@ -14,8 +14,9 @@ REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 OUTPUT = ROOT / "target/ares-oracle-spike"
 
 
-def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False):
+def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False):
     if cache_fill_access: assert raw_fetch_access and physical_fetch_access
+    if cache_operation_access: assert raw_fetch_access and physical_fetch_access
     output = Path(directory)
     assert subprocess.check_output(["git","rev-parse","HEAD"],cwd=REF,text=True).strip() == REV
     subprocess.run(["git","-c","core.autocrlf=true","diff","--quiet","HEAD"],cwd=REF,check=True)
@@ -27,6 +28,7 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
         "raw_fetch_access":raw_fetch_access,
         "physical_fetch_access":physical_fetch_access,
         "cache_fill_access":cache_fill_access,
+        "cache_operation_access":cache_operation_access,
         "extra_sources":{str(Path(p).relative_to(ROOT)):hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in extra_sources},
         "fixture_driver":hashlib.sha256(Path(__file__).with_name("driver.cpp").read_bytes()).hexdigest(),
         "recipe":hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
@@ -50,6 +52,8 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
                 assert header.count(marker) == 1
                 header = header.replace(marker,marker + "\n        if(plaidCacheFillObserver) plaidCacheFillObserver(static_cast<u32>(this - cpu.icache.lines), paddr, index, words);")
                 header = "// Project-owned callback after the existing completed cache fill.\nusing PlaidCacheFillObserver = void (*)(u32, u32, u32, const u32*);\ninline PlaidCacheFillObserver plaidCacheFillObserver = nullptr;\n" + header
+            if cache_operation_access:
+                header = "// Project-owned callback around completed guest instruction-cache operations.\nusing PlaidCacheOperationObserver = void (*)(u64, u32, u64, u32, u32, u32, const u32*, const u32*);\ninline PlaidCacheOperationObserver plaidCacheOperationObserver = nullptr;\n" + header
             destination = output / "include/n64/cpu/cpu.hpp"
             destination.parent.mkdir(parents=True,exist_ok=True)
             destination.write_text(header)
@@ -76,12 +80,41 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
             assert memory.count(marker) == 1
             memory = memory.replace(marker, marker.split("\n")[0] + "\n  plaidFetchAccess = {paddr, access.cache};\n" + marker.split("\n")[1])
             (output / "cpu_memory.cpp").write_text(memory)
+            replacements = {"memory.cpp":output / "cpu_memory.cpp"}
+            if cache_operation_access:
+                ipu = (REF / "ares/n64/cpu/interpreter-ipu.cpp").read_text()
+                begin = "auto CPU::CACHE(u8 operation, cr64& rs, s16 imm) -> void {"
+                end = "\nauto CPU::DADD(r64& rd, cr64& rs, cr64& rt) -> void {"
+                assert ipu.count(begin) == ipu.count(end) == 1
+                start, stop = ipu.index(begin), ipu.index(end)
+                block = ipu[start:stop]
+                marker = "  switch(operation) {"
+                assert block.count(marker) == 1 and block.endswith("  }\n}\n")
+                before = """  bool plaidObserveCache = plaidCacheOperationObserver &&
+    (operation == 0x00 || operation == 0x08 || operation == 0x10 || operation == 0x14 || operation == 0x18);
+  u32 plaidTagBefore = 0, plaidWordsBefore[8]{};
+  if(plaidObserveCache) {
+    const auto& line = icache.line(access.vaddr);
+    plaidTagBefore = line.tagKey;
+    for(u32 i=0;i<8;i++) plaidWordsBefore[i] = line.words[i];
+  }
+"""
+                block = block.replace(marker,before + marker)
+                after = """  if(plaidObserveCache) {
+    const auto& line = icache.line(access.vaddr);
+    plaidCacheOperationObserver(ipu.pc, operation, access.vaddr, access.paddr,
+      plaidTagBefore, line.tagKey, plaidWordsBefore, line.words);
+  }
+"""
+                block = block[:-2] + after + "}\n"
+                (output / "cpu_interpreter_ipu.cpp").write_text(ipu[:start] + block + ipu[stop:])
+                replacements["interpreter-ipu.cpp"] = output / "cpu_interpreter_ipu.cpp"
             cpu = (REF / "ares/n64/cpu/cpu.cpp").read_text()
             assert cpu.count('#include "memory.cpp"') == 1
             # Relocating this TU changes quoted-include lookup. Resolve every
             # CPU include explicitly; system/serialization.cpp shares a name.
             cpu = re.sub(r'#include "([^"]+)"', lambda match:
-                f'#include "{output / "cpu_memory.cpp" if match[1] == "memory.cpp" else REF / "ares/n64/cpu" / match[1]}"', cpu)
+                f'#include "{replacements.get(match[1], REF / "ares/n64/cpu" / match[1])}"', cpu)
             (output / "cpu.cpp").write_text(cpu)
             assert unity.count("#include <n64/cpu/cpu.cpp>") == 1
             unity = unity.replace("#include <n64/cpu/cpu.cpp>", f'#include "{output / "cpu.cpp"}"')

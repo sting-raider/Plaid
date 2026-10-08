@@ -48,6 +48,8 @@
    guest CACHE retagging is now measured: current tags can name a different page
    from the resident words' historical fill. Observe actual completed cache
    operations and preserve data history separately from effective access;
+   the controlled tag-store/index-invalidate observer now passes. Verify hit/
+   miss/fill/writeback outcomes, actual backing witnesses and unified ordering;
    retain slot/event identities without inferring fill lineage or lifetimes.
    Continue RSP/exception/TLB/FPU verification
    before extending semantic claims.
