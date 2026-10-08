@@ -183,15 +183,22 @@ Implemented:
   tuples; exact prior streams/checkpoints, repeated bytes and no reported guest
   failures in this finite prefix. Uncached fetches have no snapshot. Production,
   backing and lifecycle work remain separate.
+- V5 snapshots now import with strict cache-policy, slot/tag/index/effective-lane
+  checks through the supplied-firmware path. Every cached fetch requires a line;
+  uncached/older formats forbid it. Distinct slots and resident payload variants
+  survive coalescing and merge. Complete-source rechecking catches even unfetched
+  lane changes. The one-million corpus verifies all fetches in 1,155 facts,
+  self-merges exactly and stays OPEN; its map is 644,693 bytes. Broader import and
+  legacy corpus regressions are running. No fill/lifetime/source identity is inferred.
 
-Verification: 74 Rust integration tests, formatting, strict Clippy, CLI integration,
+Verification: 76 Rust integration tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.
 Execution tests use x64 Linux under WSL Ubuntu with GCC and NASM; other CPU hosts
 are unverified. The ares spike additionally uses G++ C++20; the two earlier spikes
 and deterministic homebrew packaging/known negative outcomes also pass.
-Raw-fetch CLI tests cover v0/v1/v2/v4 and rejection of v3, all ROM byte orders, wide
+Raw-fetch CLI tests cover v0/v1/v2/v4/v5 and rejection of v3, all ROM byte orders, wide
 PC/word/access/source variants, forged canonical bytes, source
 tampering and missing footers. Full-corpus import/source verification/self-merge
 and OPEN gating pass. A single Windows debug import under concurrent verification
@@ -203,7 +210,7 @@ canonical ROM and verifies captured DMA-backed code bytes. `solve [rom] map` emi
 whole-ROM diagnostics; supplying the ROM provides hash-checked source witnesses.
 Command success means a report was produced, not that the report is CLOSED.
 `import-boot-fetch <rom> <firmware> <raw> <map>` and `verify-boot-fetch` require
-the actual local firmware input for the declared research v4 scope.
+the actual local firmware input for the declared research v4/v5 scopes.
 
 A declared immutable, nontrapping integer-image scope can close with explicit
 exclusions. Whole-ROM mode remains OPEN and `native_complete` is always false.

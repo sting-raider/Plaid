@@ -71,3 +71,5 @@ boot prefix with exact prior-stream and checkpoint agreement. Production,
 fill/copy/mutation and executable lifetimes remain open; W012 stays TODO.
 The ten-million cache prefix and fresh v4/v2 regressions now preserve prior
 goldens too. Cache fill origins and execution lifetimes remain open.
+V5 selected-cache context now has strict Rust import/full-source verification and
+snapshot-variant tests, without executable identity promotion. W012 remains TODO.

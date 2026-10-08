@@ -96,6 +96,176 @@ fn boot_raw() -> (String, Vec<u8>) {
     )
 }
 
+fn cache_raw() -> (String, Vec<u8>) {
+    let (input, firmware) = boot_raw();
+    let mut records: Vec<serde_json::Value> = input
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let end = records.pop().unwrap();
+    records[0]["format"] = plaid_core::fetch::CACHE_FORMAT.into();
+    records[0]["cache_policy"] = plaid_core::fetch::CACHE_POLICY.into();
+    for (pc, other, cached) in [
+        (0xffff_ffff_8000_1024u64, 0, true),
+        (0xffff_ffff_8000_1024, 9, true),
+        (0xffff_ffff_8000_1024, 0, true),
+        (0x4024, 0, true),
+        (0xffff_ffff_a000_1024, 0, false),
+    ] {
+        let mut event = serde_json::json!({"record":"fetch","seq":records.len()-1,
+            "pc":pc,"word":7,"delay_slot":false,"physical":0x1024,"cached":cached,
+            "source":{"kind":"unknown"}});
+        if cached {
+            event["cache_line"] = serde_json::json!({"slot":(pc>>5)&0x1ff,
+                "tag_key":0x1001,"index":0x20,"words":[other,7,0,0,0,0,0,0]});
+        }
+        records.push(event);
+    }
+    let mut end = end;
+    end["fetch_count"] = (records.len() - 1).into();
+    records.push(end);
+    (
+        records.into_iter().map(|r| r.to_string() + "\n").collect(),
+        firmware,
+    )
+}
+
+#[test]
+fn cache_context_keeps_slots_and_payload_variants_without_lifetimes() {
+    use plaid_core::fetch::{import_boot_fetch, verify_boot_fetch_capture};
+    let (input, firmware) = cache_raw();
+    let map = import_boot_fetch(Cursor::new(&input), &rom(), &firmware).unwrap();
+    verify_boot_fetch_capture(&map, Cursor::new(&input), &rom(), &firmware).unwrap();
+    assert_eq!(map, ProgramMap::from_json(&map.to_json().unwrap()).unwrap());
+    assert_eq!(map, merge_maps(&map, &map).unwrap());
+    assert_eq!(map.fetch_observations.len(), 5);
+    assert_eq!(
+        map.fetch_observations
+            .iter()
+            .filter(|f| f.cache_line.is_some())
+            .count(),
+        3
+    );
+    let recurring = map
+        .fetch_observations
+        .iter()
+        .find(|f| f.occurrences == 2)
+        .unwrap();
+    assert_eq!((recurring.first_seq, recurring.last_seq), (1, 3));
+    assert_eq!(recurring.cache_line.unwrap().slot, 129);
+    assert!(
+        map.fetch_observations
+            .iter()
+            .any(|f| f.cache_line.is_some_and(|l| l.slot == 1))
+    );
+    assert!(
+        map.regions.is_empty()
+            && map.blocks.is_empty()
+            && map.entries.is_empty()
+            && map.loads.is_empty()
+    );
+    let report = solve(&map, &[], Scope::WholeRom).unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    assert!(!report.native_complete);
+    assert!(
+        report
+            .blockers
+            .iter()
+            .any(|b| b.kind == "fetch_execution_identity_unknown")
+    );
+    let (legacy, _) = boot_raw();
+    let legacy = import_boot_fetch(Cursor::new(legacy), &rom(), &firmware).unwrap();
+    let mixed = merge_maps(&map, &legacy).unwrap();
+    verify_boot_fetch_capture(&mixed, Cursor::new(&input), &rom(), &firmware).unwrap();
+    assert_eq!(mixed.fetch_captures.len(), 2);
+
+    // An unfetched lane may be structurally valid but must match the raw source.
+    let mut bad = map.clone();
+    let mut facts: Vec<_> = bad.fetch_observations.iter().cloned().collect();
+    facts
+        .iter_mut()
+        .find(|f| f.cache_line.is_some())
+        .unwrap()
+        .cache_line
+        .as_mut()
+        .unwrap()
+        .words[7] = 123;
+    bad.fetch_observations = facts.into_iter().collect();
+    bad.validate().unwrap();
+    assert!(verify_boot_fetch_capture(&bad, Cursor::new(&input), &rom(), &firmware).is_err());
+    assert!(merge_maps(&map, &bad).is_err());
+}
+
+#[test]
+fn cache_context_rejects_missing_malformed_or_cross_version_metadata() {
+    use plaid_core::fetch::import_boot_fetch;
+    let (input, firmware) = cache_raw();
+    let records: Vec<serde_json::Value> = input
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    let reject = |bad: Vec<serde_json::Value>| {
+        let raw: String = bad.into_iter().map(|r| r.to_string() + "\n").collect();
+        assert!(import_boot_fetch(Cursor::new(raw), &rom(), &firmware).is_err());
+    };
+    for (record, field, value) in [
+        (0, "cache_policy", serde_json::Value::Null),
+        (0, "cache_policy", "coherent_read".into()),
+        (0, "format", plaid_core::fetch::BOOT_FORMAT.into()),
+        (2, "cache_line", serde_json::Value::Null),
+        (2, "cached", false.into()),
+        (1, "cache_line", records[2]["cache_line"].clone()),
+        (6, "cache_line", records[2]["cache_line"].clone()),
+    ] {
+        let mut bad = records.clone();
+        bad[record][field] = value;
+        reject(bad);
+    }
+    for (record, field) in [
+        (0, "cache_policy"),
+        (0, "boot_inputs"),
+        (2, "cache_line"),
+        (2, "physical"),
+    ] {
+        let mut bad = records.clone();
+        bad[record].as_object_mut().unwrap().remove(field);
+        reject(bad);
+    }
+    for (field, value) in [
+        ("slot", 1.into()),
+        ("slot", 512.into()),
+        ("tag_key", 0x1000.into()),
+        ("tag_key", 0x5001.into()),
+        ("index", 0x40.into()),
+        ("extra", true.into()),
+        ("words", serde_json::json!([0, 8, 0, 0, 0, 0, 0, 0])),
+        ("words", serde_json::json!([0, 7, 0, 0, 0, 0, 0])),
+        ("words", serde_json::json!([0, 7, 0, 0, 0, 0, 0, 0, 0])),
+    ] {
+        let mut bad = records.clone();
+        bad[2]["cache_line"][field] = value;
+        reject(bad);
+    }
+    for format in [
+        FORMAT,
+        PHYSICAL_FORMAT,
+        SOURCE_FORMAT,
+        plaid_core::fetch::BOOT_FORMAT,
+    ] {
+        let mut bad = records.clone();
+        bad[0]["format"] = format.into();
+        reject(bad);
+    }
+    // Even otherwise valid v4 captures cannot carry a v5 resident snapshot.
+    let (legacy, _) = boot_raw();
+    let mut legacy: Vec<serde_json::Value> = legacy
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    legacy[1]["cache_line"] = records[2]["cache_line"].clone();
+    reject(legacy);
+}
+
 #[test]
 fn boot_fetches_require_supplied_inputs_and_remain_unknown_execution() {
     use plaid_core::fetch::{import_boot_fetch, verify_boot_fetch_capture};

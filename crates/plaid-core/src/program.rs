@@ -299,6 +299,8 @@ pub struct FetchCapture {
     /// Declared reference setup, not a hardware boot or executable certificate.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boot_inputs: Option<FetchBootInputs>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_policy: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -353,6 +355,38 @@ pub enum FetchSource {
     CartridgeRom { offset: RomOffset },
 }
 
+/// The selected resident line at one fetch, without a fill or lifetime identity.
+/// Only the selected lane is fetched; other words are cache context.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FetchCacheLine {
+    pub slot: u16,
+    pub tag_key: u32,
+    pub index: u16,
+    pub words: [u32; 8],
+}
+
+impl FetchCacheLine {
+    pub fn validate(
+        &self,
+        pc: GuestVirtualAddr,
+        access: FetchAccess,
+        word: u32,
+    ) -> Result<(), String> {
+        if !access.cached
+            || !access.physical.0.is_multiple_of(4)
+            || u64::from(self.slot) != ((pc.0 >> 5) & 0x1ff)
+            || self.index != ((self.slot << 5) & 0xfe0)
+            || u32::from(self.index) != (access.physical.0 & 0xfe0)
+            || self.tag_key != ((access.physical.0 & !0xfff) | 1)
+            || self.words[((access.physical.0 >> 2) & 7) as usize] != word
+        {
+            return Err("invalid selected instruction-cache snapshot".into());
+        }
+        Ok(())
+    }
+}
+
 /// A finite summary of identical word/slot/access facts in one raw capture.
 /// First/last are exact event indices, not a contiguous interval or lifetime.
 /// There is deliberately no image, generation, copy or retirement identity.
@@ -366,6 +400,8 @@ pub struct ObservedFetch {
     pub access: Option<FetchAccess>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<FetchSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_line: Option<FetchCacheLine>,
     pub capture: String,
     pub first_seq: u64,
     pub last_seq: u64,
@@ -628,7 +664,9 @@ impl ProgramMap {
                     return Err("boot capture lacks its power-entry observation".into());
                 }
             }
-            let producer = if capture.boot_inputs.is_some() {
+            let producer = if capture.cache_policy.is_some() {
+                crate::fetch::CACHE_FORMAT
+            } else if capture.boot_inputs.is_some() {
                 crate::fetch::BOOT_FORMAT
             } else if capture.source_policy.is_some() {
                 crate::fetch::SOURCE_FORMAT
@@ -653,6 +691,9 @@ impl ProgramMap {
                 || capture.instruction_call_budget == 0
                 || capture.instruction_call_budget > crate::fetch::MAX_BUDGET
                 || capture.fetch_count > capture.instruction_call_budget
+                || capture.cache_policy.as_ref().is_some_and(|policy| {
+                    policy != crate::fetch::CACHE_POLICY || capture.boot_inputs.is_none()
+                })
                 || capture.source_policy.as_ref().is_some_and(|policy| {
                     policy != crate::fetch::SOURCE_POLICY || capture.mapped_cartridge_size.is_none()
                 })
@@ -675,6 +716,14 @@ impl ProgramMap {
                 .fetch_captures
                 .get(&f.capture)
                 .ok_or("unknown fetch capture")?;
+            if f.cache_line.is_some()
+                != (capture.cache_policy.is_some() && f.access.is_some_and(|a| a.cached))
+            {
+                return Err("invalid cache snapshot presence for capture/access".into());
+            }
+            if let Some(line) = f.cache_line {
+                line.validate(f.pc, f.access.ok_or("cache snapshot lacks access")?, f.word)?;
+            }
             if let Some(FetchSource::CartridgeRom { offset }) = f.source
                 && (!offset.0.is_multiple_of(4)
                     || offset.0.checked_add(4).is_none_or(|end| {
@@ -699,12 +748,20 @@ impl ProgramMap {
                 || f.occurrences > f.last_seq - f.first_seq + 1
                 || (f.occurrences == 1 && f.first_seq != f.last_seq)
                 || !f.evidence.contains(&f.capture)
-                || !fetch_keys.insert((&f.capture, f.pc, f.word, f.delay_slot, f.access, f.source))
+                || !fetch_keys.insert((
+                    &f.capture,
+                    f.pc,
+                    f.word,
+                    f.delay_slot,
+                    f.access,
+                    f.source,
+                    f.cache_line,
+                ))
             {
                 return Err("invalid or duplicate raw fetch summary".into());
             }
             for seq in [f.first_seq, f.last_seq] {
-                let value = (f.pc, f.word, f.delay_slot, f.access, f.source);
+                let value = (f.pc, f.word, f.delay_slot, f.access, f.source, f.cache_line);
                 if fetch_endpoints
                     .insert((&f.capture, seq), value)
                     .is_some_and(|old| old != value)

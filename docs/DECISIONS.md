@@ -501,3 +501,20 @@ The ten-million-call prefix also preserves the prior goldens and complete cache
 checkpoint neutrality: 9,399,022 cached observations at 8,118 resident tuples.
 Fresh v4/v2 reference builds retain earlier stream/checkpoint hashes. This extends
 the measured finite scope without a fill/lifetime or complete-suite claim.
+
+## ADR-0038: Import selected-cache snapshots as finite context
+
+Status: Accepted, 2026-10-08.
+
+Import research v5 through the existing explicit firmware-input path. Require
+the supported boot/source/cache policies and a strict eight-word snapshot for
+every cached fetch; uncached and older formats cannot carry snapshots. Check
+virtual slot, physical tag/valid bit, page index and effective fetched lane.
+Keep slot and all resident words in the semantic summary key, preserving variants
+without manufacturing cache epochs. Rebuild all facts, metadata and provenance
+from the complete raw source, including unfetched lanes. Additive optional map
+fields preserve old serialization. The point snapshot proves no backing source,
+fill/copy history, immutable lifetime or execution of other lanes. Keep the
+unknown-execution solver gate; create no executable regions, entries or copies.
+Only project-owned Rust data handling is promoted; reference code and firmware
+stay isolated and ignored.

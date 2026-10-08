@@ -72,6 +72,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 python scripts/test_cli.py
 python scripts/test_exporter.py
 python scripts/test_fetch.py
+python scripts/test_boot_fetch.py
+python scripts/test_cache_fetch.py
 python scripts/test_mupen_hooks.py
 python scripts/test_mupen_execution.py
 python scripts/test_mupen_session.py
@@ -106,6 +108,8 @@ plaid discover <rom> <rom_offset> <guest_start> <size> <entry> <out.json>
 plaid import-trace <rom> <trace.ndjson> <out.json>
 plaid import-fetch <rom> <fetch.ndjson> <out.json>
 plaid verify-fetch <rom> <fetch.ndjson> <map.json>
+plaid import-boot-fetch <rom> <firmware> <fetch.ndjson> <out.json>
+plaid verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json>
 plaid merge <left.json> <right.json> <out.json>
 plaid solve [rom] <map.json>
 ```
@@ -131,6 +135,13 @@ the solver keeps them OPEN. After spike 004 creates the ignored broad capture,
 OPEN output and records one-host import cost. The raw stream remains required.
 After spike 005, add `--physical` to recheck its complete v1 capture.
 After spike 007, use `--source` to recheck canonical v2 source witnesses.
+V4/v5 require `import-boot-fetch`/`verify-boot-fetch` with the actual local firmware
+input. The complete fixed boot profile and firmware hash/size are checked.
+V5 additionally retains the selected cache slot/tag/index/eight words for cached
+fetches and verifies the effective fetched lane; other lanes have no execution
+claim. Resident context does not establish fill origins or executable lifetimes.
+After spikes 009/011, use corpus `--boot`/`--cache`, optionally
+`--budget 10000000`, for the corresponding complete sources. V3 remains unsupported.
 
 Additional disposable reference experiments are documented under `spikes/`.
 `python spikes/003-ares-oracle/run.py` builds the pinned ares core separately and
