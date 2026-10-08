@@ -21,6 +21,9 @@
    separate completion. A 481-record composed fixture now preserves actual fetch/
    fill origins through equal/changed reloads, guest SW/invalidation and partial
    words. Extend these source/transfer contexts to versioned boot chronology next;
+   do not certify completion from last-write context: actual queue-container and
+   source checks expose duplicate IDs, cancellation and silent insertion failure.
+   Retain successful insertion/dispatch identity and removal before queue joins;
    keep general cache, byte lifetime and mutation completeness separate.
    Current tags/effective addresses can differ from resident-byte history; keep
    those identities separate. A recovered synchronized-restore/cache-power

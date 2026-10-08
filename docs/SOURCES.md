@@ -194,6 +194,10 @@ resident checker preserves separate histories, with the same isolation/notices.
 
 ## Source-use policy
 
+`spikes/031-ares-pi-queue-contract/` separately compiles the pinned nall queue
+header and checks PI/CPU routes. This is actual container execution plus source
+evidence; it does not execute the CPU/PI components or certify hardware timing.
+
 Selected-cache v5 handling in Plaid is original Rust schema/import/verification
 code. It checks the pinned reference's finite snapshot constraints while keeping
 reference CPU code and firmware outside the production dependency graph.
