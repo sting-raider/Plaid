@@ -141,7 +141,7 @@ def run():
     seq = 0
     for i in range(64):
         value = 0x10000000 | (i % 8)
-        loads.append(LoadEvent(seq, u1.unit, load_pc, 11, 0xB0001000 + 4*i, "cart_rom", value)); seq += 1
+        loads.append(LoadEvent(seq, u1.unit, load_pc, 11, 0xB0001000 + 4*i, "rom_bytes", value)); seq += 1
         stores.append(StoreEvent(seq, store_pc, 0x80000400 + 4*i, value, u1.unit)); seq += 1
     witnesses = certify({u1.unit: u1}, loads, stores)
     assert len(witnesses) == 64
@@ -160,15 +160,15 @@ def run():
 
     # Adversary 1: equal-value decoy load from another site/source. Value-only
     # pairing selects the decoy. The strict verifier refuses the observed gap.
-    l = LoadEvent(0, u1.unit, load_pc, 11, 0xB0002000, "cart_rom", 0xDEADBEEF)
-    decoy = LoadEvent(1, u1.unit, 0xA4000100, 12, 0xB0003000, "cart_rom", 0xDEADBEEF)
+    l = LoadEvent(0, u1.unit, load_pc, 11, 0xB0002000, "rom_bytes", 0xDEADBEEF)
+    decoy = LoadEvent(1, u1.unit, 0xA4000100, 12, 0xB0003000, "rom_bytes", 0xDEADBEEF)
     s = StoreEvent(2, store_pc, 0x80004000, 0xDEADBEEF, u1.unit)
     assert naive_value_join([l, decoy], [s]) == [(2, 0xB0003000)]
     assert certify({u1.unit: u1}, [l, decoy], [s]) == []
 
     # Adversary 2: today's store event has no executing-unit identity. A perfect
     # load event still cannot justify decoding the SW against a guessed generation.
-    l2 = LoadEvent(0, u1.unit, load_pc, 11, 0xB0002100, "cart_rom", 0x12345678)
+    l2 = LoadEvent(0, u1.unit, load_pc, 11, 0xB0002100, "rom_bytes", 0x12345678)
     s_no_unit = StoreEvent(1, store_pc, 0x80004004, 0x12345678, None)
     assert certify({u1.unit: u1}, [l2], [s_no_unit]) == []
 
@@ -177,7 +177,7 @@ def run():
     u2_words = list(cpu_copy)
     u2_words[6] = enc_i(SW, 9, 12, 0)  # SW t4,0(t1), not t3
     u2 = Unit(202, u1.start, tuple(u2_words))
-    l3 = LoadEvent(0, u1.unit, load_pc, 11, 0xB0002200, "cart_rom", 0xCAFEBABE)
+    l3 = LoadEvent(0, u1.unit, load_pc, 11, 0xB0002200, "rom_bytes", 0xCAFEBABE)
     ambiguous = StoreEvent(1, store_pc, 0x80004008, 0xCAFEBABE, None)
     assert naive_value_join([l3], [ambiguous]) == [(1, 0xB0002200)]
     assert certify({u1.unit: u1, u2.unit: u2}, [l3], [ambiguous]) == []
@@ -210,7 +210,23 @@ def run():
     assert naive_value_join([ld], [sd]) == [(1, 0x80009000)]
     assert certify({delay.unit: delay}, [ld], [sd]) == []
 
-    # Adversary 6: transformed value. Even if a later arithmetic operation happens
+    # Adversary 6: a cartridge-space address is not itself ROM provenance. The
+    # pinned device can return its PI last-write latch while IO_BUSY, or zero for
+    # an out-of-range offset. The copy witness must preserve that backing outcome
+    # instead of upgrading it to canonical ROM merely because the address is B000.
+    latch_load = LoadEvent(0, u1.unit, load_pc, 11, 0xB0002400, "pi_latch", 0x77777777)
+    latch_store = StoreEvent(1, store_pc, 0x80004010, 0x77777777, u1.unit)
+    latch_witness = certify({u1.unit: u1}, [latch_load], [latch_store])
+    assert len(latch_witness) == 1 and latch_witness[0].source_kind == "pi_latch"
+    assert not any(w.source_kind == "rom_bytes" for w in latch_witness)
+
+    zero_load = LoadEvent(0, u1.unit, load_pc, 11, 0xB0FFF000, "cart_oob_zero", 0)
+    zero_store = StoreEvent(1, store_pc, 0x80004014, 0, u1.unit)
+    zero_witness = certify({u1.unit: u1}, [zero_load], [zero_store])
+    assert len(zero_witness) == 1 and zero_witness[0].source_kind == "cart_oob_zero"
+    assert not any(w.source_kind == "rom_bytes" for w in zero_witness)
+
+    # Adversary 7: transformed value. Even if a later arithmetic operation happens
     # to produce a store value equal to some earlier load, equality is not lineage.
     transform = Unit(505, 0x8000B000, (
         enc_i(LW, 8, 11, 0),
@@ -230,6 +246,7 @@ def run():
     print("PASS changed_source_register_rejected")
     print("PASS intervening_clobber_rejected")
     print("PASS delay_slot_boundary_rejected")
+    print("PASS cartridge_address_not_rom_origin")
     print("PASS transformed_value_rejected")
 
 if __name__ == "__main__":
