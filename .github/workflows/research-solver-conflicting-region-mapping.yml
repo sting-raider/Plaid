@@ -12,5 +12,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run clippy
+        run: cargo clippy -p plaid-core --all-targets -- -D warnings
       - name: Run conflicting-region solver regression
         run: cargo test -p plaid-core --test solver_conflicting_region_mapping -- --nocapture
+      - name: Run full plaid-core suite
+        run: cargo test -p plaid-core
