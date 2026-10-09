@@ -21,12 +21,15 @@ jobs:
           python3 -m py_compile experiments/bev1-exception-pif-root/model.py experiments/bev1-exception-pif-root/run.py
       - name: Run adversarial provenance replay twice
         run: |
+          set -o pipefail
           mkdir -p target/bev1-exception-pif-root
           python3 experiments/bev1-exception-pif-root/model.py | tee target/bev1-exception-pif-root/model-1.log
           python3 experiments/bev1-exception-pif-root/model.py | tee target/bev1-exception-pif-root/model-2.log
           cmp target/bev1-exception-pif-root/model-1.log target/bev1-exception-pif-root/model-2.log
       - name: Build exact pinned ares and execute real BEV1 exception root
-        run: python3 experiments/bev1-exception-pif-root/run.py | tee target/bev1-exception-pif-root/run.log
+        run: |
+          set -o pipefail
+          python3 experiments/bev1-exception-pif-root/run.py | tee target/bev1-exception-pif-root/run.log
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
