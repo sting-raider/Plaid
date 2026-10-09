@@ -3,6 +3,9 @@ name: Research history scalability
 on:
   push:
     branches: [research/history-scalability-gpt56sol]
+    paths:
+      - 'spikes/044-history-scalability/**'
+      - '.github/workflows/research-history-scalability.yml'
   workflow_dispatch:
 
 jobs:
@@ -19,6 +22,8 @@ jobs:
           python3 -m py_compile spikes/044-history-scalability/bench.py
       - name: Build strict consumer
         run: cargo build --release --locked -p plaid
+      - name: Run strict PI history regressions
+        run: cargo test --release --locked -p plaid-core --test pi_history
       - name: Benchmark record and identity scaling
         run: python3 spikes/044-history-scalability/bench.py
       - name: Show durable result
