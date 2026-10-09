@@ -1,0 +1,23 @@
+name: research-solver-targetlookup-monotonicity
+
+on:
+  push:
+    branches:
+      - research/solver-targetlookup-monotonicity-gpt56sol
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Focused regression
+        run: cargo test -p plaid-core --test solver_target_dispatch -- --nocapture
+      - name: Full plaid-core tests
+        run: cargo test -p plaid-core
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Strict clippy
+        run: cargo clippy -p plaid-core --all-targets -- -D warnings
