@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import json
 import subprocess
+import sys
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -23,7 +24,9 @@ EXPECTED_SOURCE_HASHES = {
 spec = importlib.util.spec_from_file_location("ares_oracle_build", ROOT / "spikes/003-ares-oracle/run.py")
 mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
 mspec = importlib.util.spec_from_file_location("partial_model", HERE / "model.py")
-model = importlib.util.module_from_spec(mspec); mspec.loader.exec_module(model)
+model = importlib.util.module_from_spec(mspec)
+sys.modules[mspec.name] = model
+mspec.loader.exec_module(model)
 
 
 def guard_sources() -> dict[str, str]:
@@ -96,9 +99,6 @@ def main() -> None:
             assert state["exception"] == 0, state
             expected, events = model.execute_pair(initial, endian, offset)
             assert bytes(state["after"]) == expected, (state, events)
-            # A conventional SWL/SWR pair to normal memory preserves bytes outside
-            # the intended four-byte guest span. The SP widening path demonstrably
-            # replaces complete word sinks; use changed-lane extent as the direct counterexample.
             changed = [i for i,(a,b) in enumerate(zip(state["before"], state["after"])) if a != b]
             if len(changed) > 4:
                 pair_bad_for_normal_partial_semantics += 1
@@ -106,8 +106,6 @@ def main() -> None:
             state["changed"] = changed
             results.append(state)
 
-    # At least one exact pair must expose collateral full-word replacement;
-    # the complete matrix is retained rather than baking in a stronger claim pre-run.
     assert pair_bad_for_normal_partial_semantics > 0, pair_bad_for_normal_partial_semantics
 
     encoded = (json.dumps(results, sort_keys=True, separators=(",", ":")) + "\n").encode()
