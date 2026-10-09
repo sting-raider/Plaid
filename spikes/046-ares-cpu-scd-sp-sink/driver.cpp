@@ -23,8 +23,8 @@ struct Headless : ares::Platform {
 
 static constexpr u32 CodePA = 0x6000;
 static constexpr u64 CodeVA = 0xffffffffa0006000ull;
-static constexpr u32 ReservationPA = 0x2000;
-static constexpr u64 ReservationVA = 0xffffffffa0002000ull;
+static constexpr u32 ReservationPA = 0x8000;
+static constexpr u64 ReservationVA = 0xffffffffa0008000ull;
 static constexpr u64 DmemVA = 0xffffffffa4000000ull;
 static constexpr u64 ImemVA = 0xffffffffa4001000ull;
 static constexpr u32 InitialHi = 0x11223344u;
@@ -52,6 +52,12 @@ struct CaseFact {
   u64 badva;
   bool llbitAfter;
   string digest;
+};
+struct FreezeFact {
+  u32 bank;
+  u64 loaded;
+  bool llbitAfter;
+  bool sysadFrozen;
 };
 
 static Active active;
@@ -112,7 +118,7 @@ static void setWords(u32 bank, u32 hi, u32 lo) {
 static u32 getWord(u32 bank, u32 offset) {
   return bank ? rsp.imem.read<Word>(offset) : rsp.dmem.read<Word>(offset);
 }
-static void setReservationWords() {
+static void setReservationRdram() {
   rdram.ram.write<Word>(ReservationPA + 0, InitialHi, RBusDevice::ARES_DEBUGGER);
   rdram.ram.write<Word>(ReservationPA + 4, InitialLo, RBusDevice::ARES_DEBUGGER);
 }
@@ -131,6 +137,22 @@ static string digestMachine() {
   return nall::Hash::SHA256(std::span<const u8>{bytes.data(), bytes.size()}).digest();
 }
 
+static FreezeFact runSpLldFreeze(u32 bank) {
+  tracing = false;
+#if PLAID_SCD_SP_SENSOR
+  plaidSpWordObserver = nullptr;
+#endif
+  clearException();
+  cpu.icache.power(false); cpu.dcache.power(false);
+  cpu.scc.llbit = 0; cpu.scc.ll = 0;
+  for(auto& r : cpu.ipu.r) r.u64 = 0;
+  setWords(bank, InitialHi, InitialLo);
+  cpu.ipu.r[1].u64 = bank ? ImemVA : DmemVA;
+  cpu.ipu.r[2].u64 = Initial64;
+  execute(100 + bank, encodeI(0x34, 1, 2, 0));  // LLD directly from SPMEM: ares freezes non-RDRAM Dual reads.
+  return {bank, cpu.ipu.r[2].u64, (bool)cpu.scc.llbit, (bool)cpu.scc.sysadFrozen};
+}
+
 static CaseFact runCase(u32 id, u32 bank, const char* kind) {
   tracing = false;
 #if PLAID_SCD_SP_SENSOR
@@ -141,7 +163,7 @@ static CaseFact runCase(u32 id, u32 bank, const char* kind) {
   cpu.scc.llbit = 0; cpu.scc.ll = 0;
   for(auto& r : cpu.ipu.r) r.u64 = 0;
   setWords(bank, InitialHi, InitialLo);
-  setReservationWords();
+  setReservationRdram();
   u64 target = bank ? ImemVA : DmemVA;
   cpu.ipu.r[1].u64 = target;
   cpu.ipu.r[2].u64 = Initial64;
@@ -155,14 +177,13 @@ static CaseFact runCase(u32 id, u32 bank, const char* kind) {
   bool fail = !std::strcmp(kind, "fail");
   bool fault = !std::strcmp(kind, "fault");
   bool changed = !std::strcmp(kind, "changed");
-  // Exact pinned ares freezes the CPU on a Dual read from any non-RDRAM area,
-  // so an SP-targeted LLD cannot be the reservation producer. Use a decoded,
-  // valid RDRAM LLD solely to establish llbit and the 64-bit source payload;
-  // the measured operation remains the decoded SCD to CPU-visible SPMEM.
-  if(!fail) execute(id, encodeI(0x34, 3, 2, 0));   // LLD r2,0(r3), valid RDRAM reservation.
-  if(changed) execute(id, encodeI(0x19, 2, 2, 1)); // DADDIU carry changes both halves of source.
+  // Pinned ares freezes any non-RDRAM Dual read before the RSP device adapter,
+  // so a matching SP LLD cannot be used to reach the SCD sink. Establish a
+  // real decoded reservation in uncached RDRAM, then test SCD's actual SP sink.
+  if(!fail) execute(id, encodeI(0x34, 3, 2, 0));   // LLD r2,0(r3): real RDRAM reservation + known Dual payload.
+  if(changed) execute(id, encodeI(0x19, 2, 2, 1)); // DADDIU carry changes the high Word and low Word.
   u64 source = cpu.ipu.r[2].u64;
-  execute(id, encodeI(0x3c, 1, 2, fault ? 1 : 0)); // SCD r2,offset(r1), target is SP DMEM/IMEM.
+  execute(id, encodeI(0x3c, 1, 2, fault ? 1 : 0)); // SCD r2,offset(r1) into SP.
 
   tracing = false;
 #if PLAID_SCD_SP_SENSOR
@@ -201,6 +222,10 @@ int main(int argc, char** argv) {
   if(!cpu.context.kernelMode() || cpu.context.bits != 32 || !cpu.context.bigEndian()) return 5;
   tracing = enabled;
 
+  std::vector<FreezeFact> freezeFacts;
+  freezeFacts.push_back(runSpLldFreeze(0));
+  freezeFacts.push_back(runSpLldFreeze(1));
+
   std::vector<CaseFact> facts;
   for(u32 bank = 0; bank < 2; bank++) {
     u32 base = bank ? 5 : 1;
@@ -211,6 +236,7 @@ int main(int argc, char** argv) {
   }
 
   // Equal-valued Dual write outside decoded SCD execution context.
+  clearException();
   tracing = enabled;
 #if PLAID_SCD_SP_SENSOR
   plaidSpWordObserver = enabled ? spWord : nullptr;
@@ -229,6 +255,13 @@ int main(int argc, char** argv) {
     std::printf("%s{\"ordinal\":%u,\"case\":%u,\"pc\":%llu,\"instruction\":%u,\"pre_rt\":%llu,\"llbit_before\":%s,\"address\":%u,\"bank\":%u,\"offset\":%u,\"value\":%u}",
       i ? "," : "", e.ordinal, e.caseId, (unsigned long long)e.pc, e.instruction,
       (unsigned long long)e.preRt, e.llbitBefore ? "true" : "false", e.address, e.bank, e.offset, e.value);
+  }
+  std::printf("],\"freeze_controls\":[");
+  for(size_t i = 0; i < freezeFacts.size(); i++) {
+    auto& f = freezeFacts[i];
+    std::printf("%s{\"bank\":%u,\"loaded\":%llu,\"llbit_after\":%s,\"sysad_frozen\":%s}",
+      i ? "," : "", f.bank, (unsigned long long)f.loaded,
+      f.llbitAfter ? "true" : "false", f.sysadFrozen ? "true" : "false");
   }
   std::printf("],\"facts\":[");
   for(size_t i = 0; i < facts.size(); i++) {

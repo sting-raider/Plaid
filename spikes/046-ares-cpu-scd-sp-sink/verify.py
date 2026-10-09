@@ -20,6 +20,13 @@ def upper_word(value: int) -> int:
 def verify(doc: dict) -> dict:
     facts = {f["id"]: f for f in doc["facts"]}
     assert set(facts) == set(range(1, 9))
+
+    freezes = sorted(doc["freeze_controls"], key=lambda f: f["bank"])
+    assert freezes == [
+        {"bank": 0, "loaded": 0, "llbit_after": True, "sysad_frozen": True},
+        {"bank": 1, "loaded": 0, "llbit_after": True, "sysad_frozen": True},
+    ], freezes
+
     events = doc["events"]
     assert [e["ordinal"] for e in events] == list(range(1, len(events) + 1))
     assert [e["case"] for e in events] == [3, 4, 7, 8, 0], events
@@ -31,7 +38,7 @@ def verify(doc: dict) -> dict:
     for cid in FAIL_IDS:
         f = facts[cid]
         assert f["kind"] == "fail" and f["result"] == 0 and f["exception"] == 0
-        assert f["source"] == INITIAL64
+        assert f["source"] == INITIAL64 and f["llbit_after"] is False
         assert f["final_hi"] == INITIAL_HI and f["final_lo"] == INITIAL_LO
 
     for cid in FAULT_IDS:
@@ -39,12 +46,12 @@ def verify(doc: dict) -> dict:
         assert f["kind"] == "fault" and f["result"] == 0 and f["exception"] == 5
         expected_bad = (0xFFFFFFFFA4001000 if f["bank"] else 0xFFFFFFFFA4000000) + 1
         assert f["badva"] == expected_bad, (f, expected_bad)
-        assert f["source"] == INITIAL64
+        assert f["source"] == INITIAL64 and f["llbit_after"] is True
         assert f["final_hi"] == INITIAL_HI and f["final_lo"] == INITIAL_LO
 
     for cid in SUCCESS_IDS:
         f, e = facts[cid], attributed[cid]
-        assert f["result"] == 1 and f["exception"] == 0
+        assert f["result"] == 1 and f["exception"] == 0 and f["llbit_after"] is True
         source = CHANGED64 if f["kind"] == "changed" else INITIAL64
         assert f["source"] == source
         # Exact pinned ares RCP Dual writes commit only the upper source Word.
@@ -86,6 +93,7 @@ def verify(doc: dict) -> dict:
         "successful_scd_second_word_sinks": 0,
         "same_value_successes_missed_by_diff": 2,
         "truncated_dual_payload_successes": 2,
+        "sp_lld_freeze_controls": 2,
         "out_of_context_equal_value_decoys": 1,
     }
 
@@ -109,6 +117,7 @@ def forged_rejections(doc: dict) -> list[str]:
     reject("erase_scd_opcode", lambda d: next(e for e in d["events"] if e["case"] == 3).__setitem__("instruction", 0xFC220000))
     reject("erase_reservation_context", lambda d: next(e for e in d["events"] if e["case"] == 7).__setitem__("llbit_before", False))
     reject("pretend_lower_word_reached_sink", lambda d: next(e for e in d["events"] if e["case"] == 3).__setitem__("value", CHANGED64 & 0xFFFFFFFF))
+    reject("hide_sp_lld_freeze", lambda d: d["freeze_controls"][0].__setitem__("sysad_frozen", False))
     return names
 
 

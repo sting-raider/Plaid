@@ -39,6 +39,8 @@ def source_guard() -> tuple[dict[str, str], dict[str, int | bool]]:
     paths = {
         "ares_ipu": ARES / "ares/n64/cpu/interpreter-ipu.cpp",
         "ares_memory": ARES / "ares/n64/cpu/memory.cpp",
+        "ares_context": ARES / "ares/n64/cpu/context.cpp",
+        "ares_bus": ARES / "ares/n64/memory/bus.hpp",
         "ares_rcp": ARES / "ares/n64/memory/io.hpp",
         "ares_rsp_io": ARES / "ares/n64/rsp/io.cpp",
     }
@@ -46,12 +48,19 @@ def source_guard() -> tuple[dict[str, str], dict[str, int | bool]]:
     assert "auto CPU::LLD(r64& rt, cr64& rs, s16 imm) -> void {" in texts["ares_ipu"]
     assert "scc.ll = access.paddr >> 4;\n      scc.llbit = 1;" in texts["ares_ipu"]
     assert "auto CPU::SCD(r64& rt, cr64& rs, s16 imm) -> void {\n  if(!context.kernelMode() && context.bits == 32) return exception.reservedInstruction();\n  if(scc.llbit) {\n    rt.u64 = write<Dual>(rs.u64 + imm, rt.u64);\n  } else {\n    rt.u64 = 0;\n  }\n}" in texts["ares_ipu"]
+    assert "mode = min(2, self.scc.status.privilegeMode);" in texts["ares_context"]
+    assert "bits = self.scc.status.kernelExtendedAddressing ? 64 : 32;" in texts["ares_context"]
     assert "if (raiseAlignedError && vaddrAlignedError<Size>(vaddr, Dir == Write))" in texts["ares_memory"]
+    assert "if(address <= 0x03ff'ffff) return mi.readRdram<Size>(address, device, thread);\n  if(Size == Dual)           return freezeDualRead(address), 0;\n  if(address <= 0x0407'ffff) return rsp.read<Size>(address, thread);" in texts["ares_bus"]
+    assert "inline auto Bus::freezeDualRead(u32 address) -> void" in texts["ares_bus"]
+    assert "cpu.scc.sysadFrozen = true;" in texts["ares_bus"]
+    assert "if(address <= 0x0407'ffff) return rsp.write<Size>(address, data, thread);" in texts["ares_bus"]
     assert "if constexpr(Size == Dual) {\n      ((T*)this)->writeWord(address, data >> 32, thread);\n    }" in texts["ares_rcp"]
     assert "if(address & 0x1000) return recompiler.invalidate(address & 0xfff), imem.write<Word>(address, data);\n    else                 return dmem.write<Word>(address, data);" in texts["ares_rsp_io"]
 
     hashes = {k: hashlib.sha256(p.read_bytes()).hexdigest() for k, p in paths.items()}
     comparison: dict[str, int | bool] = {
+        "ares_non_rdram_dual_read_freezes_before_rsp": True,
         "ares_rcp_dual_word_writes": 1,
         "gopher_scd_data_writes": 0,
         "gopher_scd_clears_llbit": False,
@@ -123,6 +132,7 @@ def main() -> None:
     assert baseline_doc["events"] == []
     assert enabled_raw == repeat_raw, "instrumented traces are not byte-identical"
     assert enabled_noise == repeat_noise
+    assert baseline_doc["freeze_controls"] == enabled_doc["freeze_controls"] == repeat_doc["freeze_controls"]
     assert baseline_doc["facts"] == enabled_doc["facts"] == repeat_doc["facts"]
     assert baseline_doc["decoy_ok"] == enabled_doc["decoy_ok"] == repeat_doc["decoy_ok"] is True
 
@@ -132,19 +142,21 @@ def main() -> None:
         "gopher_revision": GOPHER_REV if GOPHER.exists() else None,
         "systemtest_revision": SYSTEMTEST_REV if SYSTEMTEST.exists() else None,
         "baseline_facts": baseline_doc["facts"],
+        "freeze_controls": enabled_doc["freeze_controls"],
         "enabled": enabled_doc,
         "reference_comparison": comparison,
         "non_json_stdout": {"baseline": baseline_noise, "enabled": enabled_noise},
         "source_sha256": hashes,
     }
     pre_encoded = persist(pre_body)
+    print("OBSERVED_FREEZE_CONTROLS=" + json.dumps(enabled_doc["freeze_controls"], sort_keys=True, separators=(",", ":")))
     print("OBSERVED_FACTS=" + json.dumps(enabled_doc["facts"], sort_keys=True, separators=(",", ":")))
     print("OBSERVED_EVENTS=" + json.dumps(enabled_doc["events"], sort_keys=True, separators=(",", ":")))
     print("OBSERVED_SHA256=" + hashlib.sha256(pre_encoded).hexdigest())
 
     summary = verify_mod.verify(enabled_doc)
     forged = verify_mod.forged_rejections(enabled_doc)
-    assert len(forged) == 6
+    assert len(forged) == 7
 
     body = {
         "stage": "verified",
@@ -152,6 +164,7 @@ def main() -> None:
         "gopher_revision": GOPHER_REV if GOPHER.exists() else None,
         "systemtest_revision": SYSTEMTEST_REV if SYSTEMTEST.exists() else None,
         "baseline_facts": baseline_doc["facts"],
+        "freeze_controls": enabled_doc["freeze_controls"],
         "enabled": enabled_doc,
         "summary": summary,
         "forged_histories_rejected": forged,
@@ -164,7 +177,7 @@ def main() -> None:
     print("TRACE_SHA256=" + hashlib.sha256(enabled_raw.encode()).hexdigest())
     print("RESULT_SHA256=" + hashlib.sha256(encoded).hexdigest())
     for key in sorted(hashes): print(f"SOURCE_{key.upper()}_SHA256={hashes[key]}")
-    print("PASS: successful SCD reaches one measured SP Word sink in pinned ares; failed/faulting SCD does not, same-value success remains a writer generation, Gopher64 structurally disagrees, and n64-systemtest provides only adjacent SCD-RDRAM/SP-SD hardware evidence")
+    print("PASS: with a real decoded RDRAM reservation, successful SCD reaches one measured SP Word sink in pinned ares; failed/faulting SCD does not, same-value success remains a writer generation, direct SP LLD freezes before RSP read dispatch, Gopher64 structurally disagrees, and n64-systemtest provides only adjacent SCD-RDRAM/SP-SD hardware evidence")
 
 
 if __name__ == "__main__":
