@@ -23,11 +23,17 @@ jobs:
           test "$(git -C .refs/ares rev-parse HEAD)" = 9408cb43d4948fc3ea6e152a307a34348df3fe04
           git -C .refs/ares diff --quiet HEAD
       - name: Syntax and deterministic model
+        shell: bash
         run: |
+          set -o pipefail
           python3 -m py_compile spikes/045-rsp-producer-cpu-imem-compose/model.py spikes/045-rsp-producer-cpu-imem-compose/prepare.py spikes/045-rsp-producer-cpu-imem-compose/run.py
-          python3 spikes/045-rsp-producer-cpu-imem-compose/model.py | tee /tmp/model.txt
+          python3 spikes/045-rsp-producer-cpu-imem-compose/model.py 2>&1 | tee /tmp/model.txt
       - name: Exact reference execution
-        run: python3 spikes/045-rsp-producer-cpu-imem-compose/run.py | tee /tmp/exact.txt
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 spikes/045-rsp-producer-cpu-imem-compose/run.py 2>&1 | tee /tmp/exact.txt
+          test -s target/ares-rsp-producer-cpu-imem-compose/results.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
