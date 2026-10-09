@@ -120,3 +120,25 @@ cached SP accesses do not share that proof and must remain open.
 No production `ProgramMap`, solver or authoritative architecture document is
 changed on this worker branch. The primary integrator should reproduce the actual
 ares sensor run before promoting a new production provenance/lifetime rule.
+
+## Primary actual-reference follow-up, 2026-10-09
+
+The separate original `spikes/039-ares-cpu-sp-fetch/` now executes the proposed
+sensor against the exact clean ares pin. Its finite fixture is **VALIDATED**:
+18 CPU steps, 77 ordered records, twelve exact uncached fetch/read joins, four
+CPU stores and three DMA stores. Both physical mirror addresses remain in the
+record while bank/offset identify the actual backing. An unrelated data read
+cannot join a later fetch. Equal writes retain separate ordinals; the byte-store
+case records the actual four-byte device effect and upper register payload.
+
+An independently built unchanged reference, disabled sensor and two enabled
+runs agree on all checkpoints and full reported CPU/timing/memory state. Enabled
+output repeats exactly; seven bank/offset/context/value/cache/DMA/order forgeries
+fail. Status IO and the cached-SP freeze retain no backing witness. Result SHA:
+`ff24e204cfe1e152b9d58d796a99c4505476c28ab6d882f5a042b73d5c140a49`.
+
+This closes the controlled actual-sensor neutrality/ordering gap, not the whole
+producer/mutation census. Boot composition and original strict complete-source
+consumption are next. Ordinary RSP instructions can still mutate executable CPU
+DMEM; CPU/SP-DMA IMEM mutations, PIF initialization, reset/restore and ultimate
+ROM origin remain separate obligations. No lifetime/native flag is promoted.

@@ -107,3 +107,9 @@ Distinguish ordinary RSP DMEM stores from CPU/SP-DMA IMEM sinks. Preserve observ
 Bounded boot request/queue/dispatch composition now passes the full prefix under ADR-0069. Original strict Rust v2 inspection and complete-source report rechecking now preserve exact nested v1/v0/v5 validation and unknown/unbound/canceled boundaries. Explicit v2 CLI inspection/rechecking now preserves version separation and input protection. Compose broader mutation/source contexts before promoting scheduling evidence into production identities. Keep finite scheduling facts separate from byte-transfer timing, lifetimes and whole-ROM closure.
 
 Observed PI byte-chain replay now passes full independent corpus/source checks (10,954 fetches, 185 samples). The separate finite CLI inspection/rechecking now passes byte-order/source/report/input gates. Validate actual CPU SP DMEM/IMEM backing-read sensing for the remaining 596,991 SP fetches. Preserve raw writer/fill/read ordinals and mixed/unknown bytes; keep mutation coverage and executable lifetime uncertified. See `research/boot-pi-fetch-lineage.md`.
+
+The controlled actual CPU SP sensor now passes independent baseline/disabled/
+repeat state and seven forgeries (ADR-0072). Compose it into a separate boot
+history version with exact prior-source projection, then add a strict original
+Rust consumer. Keep CPU DMEM/IMEM backing separate from ultimate ROM origin and
+RSP-originated DMEM mutations; PIF reads/initialization are the next source gap.

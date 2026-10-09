@@ -411,3 +411,11 @@ The 599,046 remaining fetches are uncached CPU SP (596,991) and PIF (2055) paths
 actual SP backing-read capture is next, with ultimate producer history separate.
 
 The separate `inspect-pi-fetch-lineage`/`verify-pi-fetch-lineage` commands now expose the observed-chain report. Synthetic CLI tests pass all ROM byte orders, raw writer attribution, source/report tampering, version/truncation rejection and protection of every supplied input.
+
+Actual CPU SP backing sensing now passes an independent unchanged-reference,
+disabled and repeated-enabled fixture: 18 CPU steps, 77 records, twelve exact
+fetch/read joins, four normalized CPU stores and three DMA stores. Physical
+mirrors and banks remain explicit; unrelated data reads, status IO and cached-SP
+freeze cannot supply fetch backing. Seven measured-history forgeries fail.
+Boot composition is in progress; producer census and lifetime remain open
+(ADR-0072).
