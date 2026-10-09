@@ -126,6 +126,24 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             );
         }
     }
+    // EntryBytesVerified is accepted by trace validation only for an installed
+    // (pc, register_mask) pair. Preserve that raw restriction even if a derived
+    // `restricted_entry` unresolved diagnostic was deleted from a hand-edited map.
+    for verification in &map.entry_verifications {
+        if verification.register_mask != 0 {
+            let mut evidence = verification.evidence.clone();
+            evidence.insert(verification.source_unit.clone());
+            add(
+                "restricted_entry",
+                Some(verification.entry.clone()),
+                &format!(
+                    "retained entry verification records unsupported register-state mask {:08x}",
+                    verification.register_mask
+                ),
+                evidence,
+            );
+        }
+    }
     for b in &map.blocks {
         if b.delay_slot_entry {
             add(
