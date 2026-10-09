@@ -23,6 +23,14 @@ The final gameplay path is **not** intended to contain a MIPS interpreter or a r
 4. The resulting native package is cached.
 5. Future launches run the native package directly.
 
+## Progress
+
+[![Plaid progress map](docs/progress.svg)](docs/PROGRESS.md)
+
+Green means a milestone is verified and integrated on `main`; amber means bounded/partial evidence or implementation still has unresolved proof obligations; gray means open. The map deliberately does **not** publish a single overall completion percentage: a mostly green discovery pipeline is not the same thing as a mostly finished native recompiler. `native_complete` remains false until all required closure obligations are proven.
+
+The milestone source of truth is [`docs/progress.json`](docs/progress.json); [`tools/progress.py`](tools/progress.py) generates both the SVG and the detailed [`docs/PROGRESS.md`](docs/PROGRESS.md) table.
+
 ## What is actually new here?
 
 Most individual ingredients already exist: accurate N64 emulation, MIPS dynarecs, static N64 recompilation, modern N64 rendering, and native N64 runtimes. The research problem is turning **open-ended runtime code discovery** into a **closed, complete executable map** that can be permanently linked without game-specific manual metadata.
