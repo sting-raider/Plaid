@@ -1,4 +1,6 @@
-use plaid_core::{GuestAddr, discovery::*, indirect::analyze_indirect, program::*, solver::*};
+use plaid_core::{
+    EvidenceKind, GuestAddr, discovery::*, indirect::analyze_indirect, program::*, solver::*,
+};
 
 fn image(words: Vec<u32>) -> CodeImage {
     CodeImage {
@@ -161,4 +163,67 @@ fn conflicting_or_fabricated_extra_facts_cannot_close() {
         &solve(&m, &[i], Scope::DeclaredStaticImages).unwrap(),
         "unexpected_decoded_edge"
     ));
+}
+
+#[test]
+fn retained_nonzero_entry_verification_cannot_be_closed_by_deleting_derived_blocker() {
+    let i = image(vec![0x08000000, 0]);
+    let mut m = map(&i);
+    let source_unit = "trace:verified-unit".to_string();
+    m.evidence.insert(
+        source_unit.clone(),
+        Evidence {
+            kind: EvidenceKind::Trace,
+            producer: "synthetic-trace".into(),
+            revision: "test".into(),
+            detail: "completed unit whose installed entry was byte-verified".into(),
+        },
+    );
+    let evidence = m.entries.get(&i.base).unwrap().clone();
+    m.entry_verifications.insert(ObservedEntryVerification {
+        entry: i.base.clone(),
+        register_mask: 1,
+        source_unit,
+        generation: 0,
+        evidence,
+    });
+    m.validate().unwrap();
+
+    let report = solve(
+        &m,
+        std::slice::from_ref(&i),
+        Scope::DeclaredStaticImages,
+    )
+    .unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    assert!(has(&report, "restricted_entry"));
+}
+
+#[test]
+fn zero_mask_entry_verification_is_neutral_for_declared_static_closure() {
+    let i = image(vec![0x08000000, 0]);
+    let mut m = map(&i);
+    let source_unit = "trace:verified-unit".to_string();
+    m.evidence.insert(
+        source_unit.clone(),
+        Evidence {
+            kind: EvidenceKind::Trace,
+            producer: "synthetic-trace".into(),
+            revision: "test".into(),
+            detail: "completed unit whose unrestricted entry was byte-verified".into(),
+        },
+    );
+    let evidence = m.entries.get(&i.base).unwrap().clone();
+    m.entry_verifications.insert(ObservedEntryVerification {
+        entry: i.base.clone(),
+        register_mask: 0,
+        source_unit,
+        generation: 0,
+        evidence,
+    });
+    m.validate().unwrap();
+
+    let report = solve(&m, &[i], Scope::DeclaredStaticImages).unwrap();
+    assert_eq!(report.status, ClosureStatus::Closed);
+    assert!(!has(&report, "restricted_entry"));
 }
