@@ -1,0 +1,16 @@
+name: research-dma-event-uniqueness
+
+on:
+  push:
+    branches:
+      - research/dma-event-uniqueness-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  plaid-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run DMA copy-event uniqueness regression
+        run: cargo test --locked -p plaid-core --test dma_event_uniqueness -- --nocapture
