@@ -16,5 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Run selected-edge reducer
+        run: python3 experiments/pointer_guard_delay_slots.py
       - name: Run adversarial pointer guard tests
         run: cargo test -p plaid-core --test pointer_guard_trap -- --nocapture
+      - name: Run full plaid-core tests
+        run: cargo test -p plaid-core
