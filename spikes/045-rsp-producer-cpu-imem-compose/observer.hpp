@@ -43,11 +43,11 @@ static void compose_sp_word(bool write,u32 address,u32 bank,u32 offset,u32 value
 }
 
 static void compose_print() {
-  std::printf("[\n");
+  std::printf("[");
   for(size_t n=0;n<composeEvents.size();n++) {
     const auto& e=composeEvents[n];
     std::printf("%s{\"kind\":\"%s\",\"ordinal\":%llu,\"context\":%llu,\"pc\":%llu,\"phase\":%u,\"word\":%u,\"address\":%u,\"bank\":%u,\"offset\":%u,\"bytes\":%u,\"value\":%llu,\"cpu\":%s}",
-      n?",\n":"",e.kind,(unsigned long long)e.ordinal,(unsigned long long)e.context,(unsigned long long)e.pc,e.phase,e.word,e.address,e.bank,e.offset,e.bytes,(unsigned long long)e.value,e.cpu?"true":"false");
+      n?",":"",e.kind,(unsigned long long)e.ordinal,(unsigned long long)e.context,(unsigned long long)e.pc,e.phase,e.word,e.address,e.bank,e.offset,e.bytes,(unsigned long long)e.value,e.cpu?"true":"false");
   }
-  std::printf("\n]");
+  std::printf("]");
 }
