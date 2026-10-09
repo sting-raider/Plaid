@@ -1,0 +1,35 @@
+name: Research RSP IMEM installation lifetime
+
+on:
+  push:
+    branches: [research/rsp-imem-install-lifetime-gpt56sol]
+    paths:
+      - 'spikes/043-ares-rsp-imem-install-lifetime-gpt56sol/**'
+      - '.github/workflows/research-rsp-imem-install-lifetime.yml'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - name: Compile verifier recipes
+        run: python3 -m py_compile spikes/043-ares-rsp-imem-install-lifetime-gpt56sol/prepare.py spikes/043-ares-rsp-imem-install-lifetime-gpt56sol/verify.py spikes/043-ares-rsp-imem-install-lifetime-gpt56sol/run.py
+      - name: Build pinned ares and run composed lifetime fixture
+        run: python3 spikes/043-ares-rsp-imem-install-lifetime-gpt56sol/run.py | tee rsp-imem-install-lifetime.log
+      - name: Upload durable run evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rsp-imem-install-lifetime-evidence
+          path: |
+            rsp-imem-install-lifetime.log
+            target/ares-rsp-imem-install-lifetime/manifest.json
+            target/ares-rsp-imem-install-lifetime/trace.json
+          if-no-files-found: warn
