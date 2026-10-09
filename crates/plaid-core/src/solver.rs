@@ -400,6 +400,30 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             w.evidence.clone(),
         );
     }
+    // Raw successful SW observations are primitive evidence. Re-derive the
+    // importer overlap relation so deleting only the derived ExecutableWrite
+    // cannot manufacture closure from a hand-edited/partial ProgramMap.
+    for store in &map.word_store_observations {
+        let physical = store.destination.0 & 0x1fff_ffff;
+        let overlaps_executable_backing = map.regions.iter().any(|region| {
+            region.physical_start.is_some_and(|start| {
+                u64::from(start.0) < u64::from(physical) + 4
+                    && u64::from(physical) < u64::from(start.0) + u64::from(region.range.size)
+            })
+        });
+        let already_represented = map
+            .executable_writes
+            .iter()
+            .any(|write| write.evidence == store.evidence);
+        if overlaps_executable_backing && !already_represented {
+            add(
+                "unresolved_executable_write",
+                None,
+                "retained successful cached-RDRAM store overlaps explicit executable backing but its derived executable-write fact is absent",
+                store.evidence.clone(),
+            );
+        }
+    }
     if scope == Scope::DeclaredStaticImages
         && (!map.loads.is_empty()
             || !map.dma_observations.is_empty()
