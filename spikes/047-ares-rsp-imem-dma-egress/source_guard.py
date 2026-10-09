@@ -52,8 +52,9 @@ def check() -> dict:
     # from the wrapping 12-bit offset for the duration of one DMA descriptor.
     require(gopher, "let offset = dma.memaddr & 0x1000;", "gopher bank latch")
     require(gopher, "let mut mem_addr = dma.memaddr & 0xff8;", "gopher source offset")
-    # The same stable-bank expression appears once in each DMA direction.
-    require(gopher, "(offset + (mem_addr & 0xFFF)) as usize", "gopher stable-bank addressing", 2)
+    # The stable-bank slice expression appears as both range endpoints in each
+    # direction, hence four textual witnesses but one descriptor-level rule.
+    require(gopher, "(offset + (mem_addr & 0xFFF)) as usize", "gopher stable-bank addressing", 4)
 
     result = {
         "ares_revision": ARES_REV,
