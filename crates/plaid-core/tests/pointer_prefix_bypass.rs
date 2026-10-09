@@ -110,11 +110,7 @@ fn same_generation_indirect_targets_into_prefix_invalidate_pointer_table_evidenc
     let i = image();
     for observed in [false, true] {
         let mut m = map(&i);
-        add_indirect_bypass(
-            &mut m,
-            i.address(GuestAddr(0x80000014)),
-            observed,
-        );
+        add_indirect_bypass(&mut m, i.address(GuestAddr(0x80000014)), observed);
         m.validate().unwrap();
 
         let analyzed = analyze_indirect(&m, &i).unwrap();
@@ -126,7 +122,9 @@ fn same_generation_indirect_targets_into_prefix_invalidate_pointer_table_evidenc
         );
         let targets = candidates(&analyzed);
         assert!(
-            !targets.iter().any(|pc| matches!(*pc, 0x80000040 | 0x80000050)),
+            !targets
+                .iter()
+                .any(|pc| matches!(*pc, 0x80000040 | 0x80000050)),
             "{} target bypassed the guard but acquired table-derived candidates: {:?}",
             if observed { "observed" } else { "candidate" },
             targets
@@ -161,13 +159,7 @@ fn reachability_outside_prefix_or_generation_does_not_overinvalidate() {
 #[test]
 fn direct_discovery_repartitions_a_declared_mid_prefix_root() {
     let i = image();
-    let discovered = discover_image(
-        rom(),
-        &i,
-        &[i.base.pc, GuestAddr(0x80000014)],
-        1000,
-    )
-    .unwrap();
+    let discovered = discover_image(rom(), &i, &[i.base.pc, GuestAddr(0x80000014)], 1000).unwrap();
 
     assert!(
         discovered
