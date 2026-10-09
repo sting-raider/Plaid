@@ -1,0 +1,52 @@
+name: research-tlb-icache-synonyms
+
+on:
+  push:
+    branches:
+      - research/tlb-icache-synonyms-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  exact-pinned-references:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Plaid worker branch
+        uses: actions/checkout@v4
+
+      - name: Checkout exact pinned ares
+        uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+
+      - name: Checkout exact pinned Gopher64
+        uses: actions/checkout@v4
+        with:
+          repository: gopher64/gopher64
+          ref: e96debac941a26ba4961e5145056c0821d3a56f7
+          path: .refs/gopher64
+
+      - name: Syntax check
+        run: python3 -m py_compile experiments/tlb-icache-synonyms/source_guard.py experiments/tlb-icache-synonyms/model.py experiments/tlb-icache-synonyms/run.py
+
+      - name: Guard exact source contracts
+        run: python3 experiments/tlb-icache-synonyms/source_guard.py
+
+      - name: Run independent reference-index model
+        run: python3 experiments/tlb-icache-synonyms/model.py
+
+      - name: Build and execute exact pinned ares fixture
+        run: python3 experiments/tlb-icache-synonyms/run.py
+
+      - name: Upload result receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tlb-icache-synonyms-receipt
+          path: |
+            target/tlb-icache-synonyms/results.json
+            target/tlb-icache-synonyms/build.json
+            target/tlb-icache-synonyms/build.log
+          if-no-files-found: ignore
