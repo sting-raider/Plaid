@@ -1,0 +1,21 @@
+workflow_run=37918258617
+source_commit=53ccc0d4b9f9d83a4b6b8975005fa62b5efcac42
+exact_step_outcome=failure
+ares_revision=9408cb43d4948fc3ea6e152a307a34348df3fe04
+--- stdout_stderr ---
+PASS: source-derived SDL/SDR -> SP concrete sink model
+dual_single_cases=4/32
+two_word_single_cases=12/32
+repeated_same_sink_single_cases=8/32
+pair_changed_byte_counts=4,8,12
+sd_control_changed_bytes=4
+model_sha256=c3a8569eb20cd9181d3445d2f08aba902bf1917458160140dca248635894ee73
+Traceback (most recent call last):
+  File "/home/runner/work/Plaid/Plaid/spikes/044-ares-cpu-sp-sdl-sdr/run.py", line 159, in <module>
+    main()
+  File "/home/runner/work/Plaid/Plaid/spikes/044-ares-cpu-sp-sdl-sdr/run.py", line 88, in main
+    validate_common(state, initial, other_initial, expected, events)
+  File "/home/runner/work/Plaid/Plaid/spikes/044-ares-cpu-sp-sdl-sdr/run.py", line 66, in validate_common
+    assert bytes(state["after"]) == expected, (state, events)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ({'kind': 'SDL', 'endian': 'big', 'bank': 'dmem', 'offset': 1, 'pc': 18446744072098963460, 'cause': 0, 'epc': 0, 'badva': 0, 'exl': 0, 'before': [160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183], 'after': [0, 17, 34, 51, 68, 85, 102, 119, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183], 'other_before': [80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103], 'other_after': [80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103]}, [{'index': 0, 'size': 1, 'vdelta': 1, 'pdelta': 1, 'sink_word_delta': 0, 'sink_value': 1114112}, {'index': 1, 'size': 2, 'vdelta': 2, 'pdelta': 2, 'sink_word_delta': 0, 'sink_value': 8755}, {'index': 2, 'size': 4, 'vdelta': 4, 'pdelta': 4, 'sink_word_delta': 4, 'sink_value': 1146447479}])
