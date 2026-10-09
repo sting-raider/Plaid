@@ -16,5 +16,13 @@ jobs:
         shell: bash
         run: |
           grep -q 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' refs.lock.toml
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run clippy
+        run: cargo clippy -p plaid-core --all-targets
+      - name: Run semantic adversary
+        run: python3 experiments/pointer_guard_predecessor_bypass.py
       - name: Run predecessor-bypass regression
         run: cargo test -p plaid-core --test pointer_guard_predecessor_bypass -- --nocapture
+      - name: Run full plaid-core suite
+        run: cargo test -p plaid-core
