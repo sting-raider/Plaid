@@ -1,0 +1,79 @@
+name: research-region-physical-alignment-materialize
+
+on:
+  push:
+    branches:
+      - research/region-physical-alignment-gpt56sol
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: github.event.head_commit.message == 'Materialize physical alignment candidate'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply minimal validation fix and final regression
+        shell: python
+        run: |
+          from pathlib import Path
+
+          program = Path('crates/plaid-core/src/program.rs')
+          text = program.read_text()
+          old = '''        for r in &self.regions {
+              r.range.validate(true)?;
+              refs(&r.evidence)?;
+              if r.image.is_empty() {
+          '''
+          # Keep this replacement literal indentation independent by using the exact source form.
+          old = '''        for r in &self.regions {
+            r.range.validate(true)?;
+            refs(&r.evidence)?;
+            if r.image.is_empty() {
+'''
+          new = '''        for r in &self.regions {
+            r.range.validate(true)?;
+            refs(&r.evidence)?;
+            if r
+                .physical_start
+                .is_some_and(|physical| !physical.0.is_multiple_of(4))
+            {
+                return Err("unaligned executable physical mapping".into());
+            }
+            if r.image.is_empty() {
+'''
+          if old not in text:
+              raise SystemExit('program.rs validation anchor not found')
+          program.write_text(text.replace(old, new, 1))
+
+          test = Path('crates/plaid-core/tests/region_physical_alignment.rs')
+          text = test.read_text()
+          start = text.index('#[test]\nfn unaligned_explicit_physical_code_mapping_must_not_close()')
+          end = text.index('\n#[test]\nfn aligned_and_absent_physical_code_mappings_remain_valid()', start)
+          replacement = '''#[test]
+fn unaligned_explicit_physical_code_mapping_is_rejected() {
+    for physical in [1, 2, 3] {
+        let i = image(Some(physical));
+        let m = map(&i);
+        assert_eq!(
+            m.validate().unwrap_err(),
+            "unaligned executable physical mapping"
+        );
+        assert_eq!(
+            solve(&m, std::slice::from_ref(&i), Scope::DeclaredStaticImages).unwrap_err(),
+            "unaligned executable physical mapping"
+        );
+    }
+}
+'''
+          test.write_text(text[:start] + replacement + text[end:])
+      - name: Commit candidate fix
+        run: |
+          git config user.name "plaid-research-worker"
+          git config user.email "actions@users.noreply.github.com"
+          git add crates/plaid-core/src/program.rs crates/plaid-core/tests/region_physical_alignment.rs
+          git commit -m "Reject unaligned executable physical mappings"
+          git push origin HEAD:research/region-physical-alignment-gpt56sol
