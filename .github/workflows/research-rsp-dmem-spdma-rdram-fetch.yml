@@ -1,0 +1,48 @@
+name: Research RSP DMEM reverse DMA CPU fetch
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/rsp-dmem-spdma-rdram-fetch-gpt56sol
+    paths:
+      - 'spikes/043-ares-rsp-dmem-spdma-rdram-fetch/**'
+      - '.github/workflows/research-rsp-dmem-spdma-rdram-fetch.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact pinned ares
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs
+          git init .refs/ares
+          git -C .refs/ares remote add origin https://github.com/ares-emulator/ares.git
+          git -C .refs/ares fetch --depth=1 origin 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git -C .refs/ares checkout --detach 9408cb43d4948fc3ea6e152a307a34348df3fe04
+      - name: Syntax check
+        run: python3 -m py_compile spikes/043-ares-rsp-dmem-spdma-rdram-fetch/run.py spikes/043-ares-rsp-dmem-spdma-rdram-fetch/verify.py
+      - name: Execute exact-pin composition experiment
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p target
+          python3 spikes/043-ares-rsp-dmem-spdma-rdram-fetch/run.py | tee target/rsp-dmem-spdma-rdram-fetch.log
+          sha256sum target/ares-rsp-dmem-spdma-rdram-fetch/results.json
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rsp-dmem-spdma-rdram-fetch-evidence
+          if-no-files-found: warn
+          path: |
+            target/ares-rsp-dmem-spdma-rdram-fetch/results.json
+            target/rsp-dmem-spdma-rdram-fetch.log
+            target/ares-rsp-dmem-spdma-rdram-fetch/baseline-build/build.log
+            target/ares-rsp-dmem-spdma-rdram-fetch/sensor-build/build.log
