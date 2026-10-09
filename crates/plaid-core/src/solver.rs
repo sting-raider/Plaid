@@ -400,6 +400,18 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             w.evidence.clone(),
         );
     }
+    if scope == Scope::DeclaredStaticImages {
+        for verification in &map.entry_verifications {
+            if verification.generation != 0 {
+                add(
+                    "entry_verification_after_invalidation",
+                    Some(verification.entry.clone()),
+                    "entry bytes were verified after an observed invalidation; executable lifetime is not closed for immutable static scope",
+                    verification.evidence.clone(),
+                );
+            }
+        }
+    }
     if scope == Scope::DeclaredStaticImages
         && (!map.loads.is_empty()
             || !map.dma_observations.is_empty()
