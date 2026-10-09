@@ -36,24 +36,28 @@ def worker():
     assert first_raw == second_raw, (first_raw, second_raw)
     facts = json.loads(first_raw)
 
-    expected_true = [
-        "probe_cache_unchanged", "probe_devirt_unchanged", "probe_translation_same",
-        "miss_failure", "miss_cache_unchanged", "miss_devirt_unchanged", "miss_translation_same",
-        "tlbr_staged_matches", "tlbr_cache_unchanged", "tlbr_devirt_unchanged", "tlbr_translation_same",
-        "same_value_tlbr_staged_same", "same_value_tlbr_devirt_unchanged",
-        "oor_tlbr_staged_same", "oor_tlbr_cache_unchanged", "oor_tlbr_devirt_unchanged", "oor_tlbr_translation_same",
-    ]
-    for key in expected_true:
-        assert facts[key] is True, (key, facts)
-    assert facts["probe_slot"] == 9
-    assert facts["probe_failure"] is False
-    assert facts["miss_index"] == 0
-    for key in ["probe_entries_changed", "miss_entries_changed", "tlbr_entries_changed", "same_value_tlbr_entries_changed", "oor_tlbr_entries_changed"]:
-        assert facts[key] == 0, (key, facts)
+    assert facts["tlbp_hit_slot"] == 9
+    assert facts["tlbp_hit_translation_same"] is True
+    assert facts["tlbp_miss_index"] == 0
+    assert facts["tlbp_miss_translation_same"] is True
+    assert facts["tlbr_enable_before_found"] is False
+    assert facts["tlbr_enable_after_found"] is True
+    assert facts["tlbr_enable_after_paddr"] == 0x00060000
+    assert facts["tlbr_enable_asid_after"] == 0x55
+    assert facts["tlbr_disable_before_found"] is True
+    assert facts["tlbr_disable_after_found"] is False
+    assert facts["tlbr_disable_asid_after"] == 10
+    assert facts["all_mapping_entry_changes"] == 0
+    assert facts["all_instruction_cache_snapshots_unchanged"] is True
+    assert facts["all_devirtualize_sentinels_unchanged"] is True
+    assert facts["same_value_tlbr_translation_same"] is True
+    assert facts["out_of_range_tlbr_translation_same"] is True
 
-    assert model["correct_mapping_generations"] == 0
-    assert model["translation_mismatches"] == 0
-    assert model["false_generations_if_cp0_delta_is_mapping"] == model["cp0_changes"]
+    assert model["mapping_entry_mutations"] == 0
+    assert model["tlbp_translation_flips"] == 0
+    assert model["tlbr_active_asid_changes"] > 0
+    assert model["tlbr_sampled_translation_flips"] > 0
+    assert model["false_entry_generations_if_any_cp0_delta_is_entry_write"] == model["cp0_changes"]
 
     evidence = {
         "ares_pin": PIN,
@@ -61,11 +65,12 @@ def worker():
         "model": model,
         "repeat_stdout_sha256": hashlib.sha256(first_raw.encode()).hexdigest(),
         "interpretation": {
-            "tlbp_is_mapping_observer_not_mapping_mutator": True,
-            "tlbr_is_mapping_observer_not_mapping_mutator": True,
-            "cp0_index_and_staging_deltas_are_not_mapping_generations": True,
-            "same_value_tlbr_is_not_evidence_of_no_instruction_execution": True,
-            "translation_cache_and_devirtualize_cache_survive_scoped_ops": True,
+            "original_tlbr_observational_hypothesis_rejected": True,
+            "tlbp_index_side_effect_did_not_change_translation_in_tested_cases": True,
+            "tlbr_did_not_mutate_tlb_entries_or_translation_caches": True,
+            "tlbr_entryhi_asid_can_change_translation_reachability": True,
+            "mapping_entry_generation_and_translation_context_generation_must_be_distinct": True,
+            "same_value_or_out_of_range_tlbr_need_not_change_translation_context": True,
         },
     }
     out = OUTPUT / "results.json"
@@ -73,7 +78,7 @@ def worker():
     digest = hashlib.sha256(out.read_bytes()).hexdigest()
     print("EVIDENCE_JSON=" + json.dumps(evidence, sort_keys=True, separators=(",", ":")))
     print("RESULT_SHA256=" + digest)
-    print("PASS: exact TLBP/TLBR change CP0 observation state without changing translation mappings in the tested scope")
+    print("PASS: TLBR leaves mapping entries/caches intact but EntryHi ASID can change mapped-VA reachability")
 
 
 def main():
