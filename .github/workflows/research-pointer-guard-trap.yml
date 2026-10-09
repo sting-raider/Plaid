@@ -1,0 +1,20 @@
+name: research-pointer-guard-trap
+
+on:
+  push:
+    branches:
+      - research/pointer-guard-trap-gpt56sol
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run adversarial pointer guard tests
+        run: cargo test -p plaid-core --test pointer_guard_trap -- --nocapture
