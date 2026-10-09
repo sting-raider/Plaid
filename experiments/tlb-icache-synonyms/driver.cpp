@@ -13,9 +13,10 @@ static constexpr u64 VaC = 0x00008000ull;  // same I-cache virtual index as VaA
 static constexpr u32 PaA = 0x001000;
 static constexpr u32 PaB = 0x003000;
 static constexpr u32 PaC = 0x005000;
-static constexpr u32 OriOld = 0x34091111;  // ori t1,zero,0x1111
-static constexpr u32 OriNew = 0x34092222;  // ori t1,zero,0x2222
-static constexpr u32 OriThird = 0x34093333;// ori t1,zero,0x3333
+static constexpr u32 OriOld = 0x34091111;   // ori t1,zero,0x1111
+static constexpr u32 OriNew = 0x34092222;   // ori t1,zero,0x2222
+static constexpr u32 OriThird = 0x34093333; // ori t1,zero,0x3333
+static constexpr u32 OriFourth = 0x34094444;// ori t1,zero,0x4444
 
 static void clear_tlb_cache() {
   for(auto& slot : cpu.tlb.tlbCache.entry) {
@@ -147,24 +148,44 @@ int main() {
 
   lineB.setValid(false);
   u32 freshB = execute_one(VaB);
-  if(freshB != 0x2222 || cpu.profile.icacheMisses != missAfterA + 1) return 12;
+  u64 missAfterB = cpu.profile.icacheMisses;
+  if(freshB != 0x2222 || missAfterB != missAfterA + 1) return 12;
 
-  // Remap the same VA to a different physical page with equal payload. TLBWI
-  // itself does not invalidate the resident line, but the physical tag mismatch
-  // must force a refill on the next fetch even though instruction bytes match.
-  put(PaB, OriNew);
-  u32 preRemapTag = cpu.icache.line(VaA).tagKey;
-  bool preRemapValid = cpu.icache.line(VaA).valid();
+  // A TLB mapping change is not itself an I-cache lifetime boundary in pinned
+  // ares. Change PA-A backing, map A away without fetching, then map it back.
+  // The old PA-A resident generation should become reachable again as a hit.
+  put(PaA, OriFourth);
+  u32 beforeAwayTag = lineA.tagKey;
+  bool beforeAwayValid = lineA.valid();
   write_tlb(0, VaA, PaB, PaA);
-  bool afterTlbwiStillValid = cpu.icache.line(VaA).valid();
-  u32 afterTlbwiTag = cpu.icache.line(VaA).tagKey;
+  bool awayStillValid = lineA.valid();
+  u32 awayTag = lineA.tagKey;
+  write_tlb(0, VaA, PaA, PaA);
+  bool backStillValid = lineA.valid();
+  u32 backTag = lineA.tagKey;
+  u64 missBeforeAwayBack = cpu.profile.icacheMisses;
+  u32 awayBack = execute_one(VaA);
+  u64 missAfterAwayBack = cpu.profile.icacheMisses;
+  if(!beforeAwayValid || !awayStillValid || !backStillValid) return 13;
+  if(beforeAwayTag != awayTag || awayTag != backTag) return 14;
+  if(awayBack != 0x2222 || missAfterAwayBack != missBeforeAwayBack) return 15;
+
+  // Now remap the same VA to a different physical page with equal payload.
+  // TLBWI still leaves the old resident line alone immediately, but the next
+  // fetch sees a physical-tag mismatch and must refill despite equal bytes.
+  put(PaB, OriNew);
+  u32 preRemapTag = lineA.tagKey;
+  bool preRemapValid = lineA.valid();
+  write_tlb(0, VaA, PaB, PaA);
+  bool afterTlbwiStillValid = lineA.valid();
+  u32 afterTlbwiTag = lineA.tagKey;
   u64 missBeforeEqualRemap = cpu.profile.icacheMisses;
   u32 equalRemap = execute_one(VaA);
   u64 missAfterEqualRemap = cpu.profile.icacheMisses;
-  u32 equalRemapTag = cpu.icache.line(VaA).tagKey;
-  if(!preRemapValid || !afterTlbwiStillValid || preRemapTag != afterTlbwiTag) return 13;
-  if(equalRemap != 0x2222 || missAfterEqualRemap != missBeforeEqualRemap + 1) return 14;
-  if((equalRemapTag & ~1u) == (preRemapTag & ~1u)) return 15;
+  u32 equalRemapTag = lineA.tagKey;
+  if(!preRemapValid || !afterTlbwiStillValid || preRemapTag != afterTlbwiTag) return 16;
+  if(equalRemap != 0x2222 || missAfterEqualRemap != missBeforeEqualRemap + 1) return 17;
+  if((equalRemapTag & ~1u) == (preRemapTag & ~1u)) return 18;
 
   // Repeat with different bytes to make the remapped generation externally clear.
   put(PaC, OriThird);
@@ -172,7 +193,7 @@ int main() {
   u64 missBeforeDifferentRemap = cpu.profile.icacheMisses;
   u32 differentRemap = execute_one(VaA);
   u64 missAfterDifferentRemap = cpu.profile.icacheMisses;
-  if(differentRemap != 0x3333 || missAfterDifferentRemap != missBeforeDifferentRemap + 1) return 16;
+  if(differentRemap != 0x3333 || missAfterDifferentRemap != missBeforeDifferentRemap + 1) return 19;
 
   std::vector<u8> cacheBytes;
   for(const auto& line : cpu.icache.lines) {
@@ -184,9 +205,9 @@ int main() {
 
   std::printf("{\"idx_a\":%u,\"idx_b\":%u,\"idx_c\":%u,", idxA, idxB, idxC);
   std::printf("\"first\":[%u,%u,%u],\"stale\":[%u,%u],\"divergent_words\":[%u,%u],", firstA, firstB, firstC, staleA, staleB, divergentA, divergentB);
-  std::printf("\"fresh\":[%u,%u],\"equal_remap\":%u,\"different_remap\":%u,", freshA, freshB, equalRemap, differentRemap);
-  std::printf("\"misses\":[%llu,%llu,%llu,%llu,%llu,%llu,%llu],", (unsigned long long)miss0, (unsigned long long)miss1, (unsigned long long)miss2, (unsigned long long)miss3, (unsigned long long)missAfterA, (unsigned long long)missAfterEqualRemap, (unsigned long long)missAfterDifferentRemap);
-  std::printf("\"initial_tags\":[%u,%u],\"pre_remap_tag\":%u,\"post_equal_remap_tag\":%u,", tagA0, tagB0, preRemapTag, equalRemapTag);
+  std::printf("\"fresh\":[%u,%u],\"away_back\":%u,\"equal_remap\":%u,\"different_remap\":%u,", freshA, freshB, awayBack, equalRemap, differentRemap);
+  std::printf("\"misses\":{\"start\":%llu,\"after_a\":%llu,\"after_c\":%llu,\"after_b\":%llu,\"after_a_refill\":%llu,\"after_b_refill\":%llu,\"after_away_back\":%llu,\"after_equal_remap\":%llu,\"after_different_remap\":%llu},", (unsigned long long)miss0, (unsigned long long)miss1, (unsigned long long)miss2, (unsigned long long)miss3, (unsigned long long)missAfterA, (unsigned long long)missAfterB, (unsigned long long)missAfterAwayBack, (unsigned long long)missAfterEqualRemap, (unsigned long long)missAfterDifferentRemap);
+  std::printf("\"initial_tags\":[%u,%u],\"away_back_tag_preserved\":%s,\"pre_remap_tag\":%u,\"post_equal_remap_tag\":%u,", tagA0, tagB0, (beforeAwayTag == awayTag && awayTag == backTag) ? "true" : "false", preRemapTag, equalRemapTag);
   std::printf("\"tlbwi_preserved_resident_valid\":%s,\"icache_sha256\":\"%s\"}\n", afterTlbwiStillValid ? "true" : "false", cacheHash.data());
   return 0;
 }
