@@ -81,17 +81,15 @@ fn constant_jr() -> CodeImage {
 fn unresolved_raw_indirect_execution_must_prevent_static_closure() {
     let image = image(vec![0x0800_0000, 0]); // j 0x80000000; nop
     let mut map = map(&image);
-    insert_raw(
-        &mut map,
-        "trace:raw:1",
-        0x9000_0000,
-        0x9000_0010,
-        7,
-        None,
-    );
+    insert_raw(&mut map, "trace:raw:1", 0x9000_0000, 0x9000_0010, 7, None);
     map.validate().unwrap();
 
-    let report = solve(&map, std::slice::from_ref(&image), Scope::DeclaredStaticImages).unwrap();
+    let report = solve(
+        &map,
+        std::slice::from_ref(&image),
+        Scope::DeclaredStaticImages,
+    )
+    .unwrap();
     assert_eq!(report.status, ClosureStatus::Open);
     assert!(has(&report, "unresolved_raw_indirect_execution"));
 }
@@ -101,14 +99,7 @@ fn uniquely_resolved_raw_observation_does_not_add_a_new_blocker() {
     let image = constant_jr();
     let mut map = analyze_indirect(&map(&image), &image).unwrap();
     let raw_id = "trace:raw:resolved";
-    insert_raw(
-        &mut map,
-        raw_id,
-        0x8000_0008,
-        0x8000_0000,
-        0,
-        None,
-    );
+    insert_raw(&mut map, raw_id, 0x8000_0008, 0x8000_0000, 0, None);
 
     let mut site = map.indirect_sites.pop_first().unwrap();
     site.observed
@@ -118,7 +109,12 @@ fn uniquely_resolved_raw_observation_does_not_add_a_new_blocker() {
     map.indirect_sites.insert(site);
     map.validate().unwrap();
 
-    let report = solve(&map, std::slice::from_ref(&image), Scope::DeclaredStaticImages).unwrap();
+    let report = solve(
+        &map,
+        std::slice::from_ref(&image),
+        Scope::DeclaredStaticImages,
+    )
+    .unwrap();
     assert_eq!(report.status, ClosureStatus::Closed);
     assert!(!has(&report, "unresolved_raw_indirect_execution"));
 }
@@ -139,7 +135,12 @@ fn equal_guest_addresses_without_shared_observation_evidence_do_not_resolve_raw_
     );
     map.validate().unwrap();
 
-    let report = solve(&map, std::slice::from_ref(&image), Scope::DeclaredStaticImages).unwrap();
+    let report = solve(
+        &map,
+        std::slice::from_ref(&image),
+        Scope::DeclaredStaticImages,
+    )
+    .unwrap();
     assert_eq!(report.status, ClosureStatus::Open);
     assert!(has(&report, "unresolved_raw_indirect_execution"));
 }
@@ -149,14 +150,7 @@ fn implicit_source_generation_mismatch_cannot_borrow_equal_pc_target() {
     let image = constant_jr();
     let mut map = analyze_indirect(&map(&image), &image).unwrap();
     let raw_id = "trace:raw:generation-mismatch";
-    insert_raw(
-        &mut map,
-        raw_id,
-        0x8000_0008,
-        0x8000_0000,
-        9,
-        None,
-    );
+    insert_raw(&mut map, raw_id, 0x8000_0008, 0x8000_0000, 9, None);
     let mut site = map.indirect_sites.pop_first().unwrap();
     site.observed
         .entry(image.base.clone())
@@ -164,7 +158,12 @@ fn implicit_source_generation_mismatch_cannot_borrow_equal_pc_target() {
         .insert(raw_id.into());
     map.indirect_sites.insert(site);
 
-    let report = solve(&map, std::slice::from_ref(&image), Scope::DeclaredStaticImages).unwrap();
+    let report = solve(
+        &map,
+        std::slice::from_ref(&image),
+        Scope::DeclaredStaticImages,
+    )
+    .unwrap();
     assert_eq!(report.status, ClosureStatus::Open);
     assert!(has(&report, "unresolved_raw_indirect_execution"));
 }
@@ -176,14 +175,7 @@ fn explicit_source_unit_can_identify_an_older_executing_generation() {
     let raw_id = "trace:raw:old-source";
     let unit_id = "trace:unit:old-source";
     insert_trace_evidence(&mut map, unit_id, "synthetic compile-begin identity");
-    insert_raw(
-        &mut map,
-        raw_id,
-        0x8000_0008,
-        0x8000_0000,
-        9,
-        Some(unit_id),
-    );
+    insert_raw(&mut map, raw_id, 0x8000_0008, 0x8000_0000, 9, Some(unit_id));
     let mut site = map.indirect_sites.pop_first().unwrap();
     site.evidence.insert(unit_id.into());
     site.observed
@@ -192,7 +184,12 @@ fn explicit_source_unit_can_identify_an_older_executing_generation() {
         .insert(raw_id.into());
     map.indirect_sites.insert(site);
 
-    let report = solve(&map, std::slice::from_ref(&image), Scope::DeclaredStaticImages).unwrap();
+    let report = solve(
+        &map,
+        std::slice::from_ref(&image),
+        Scope::DeclaredStaticImages,
+    )
+    .unwrap();
     assert_eq!(report.status, ClosureStatus::Closed);
     assert!(!has(&report, "unresolved_raw_indirect_execution"));
 }
@@ -203,15 +200,12 @@ fn explicit_source_unit_must_be_bound_to_the_declared_source_site() {
     let mut map = analyze_indirect(&map(&image), &image).unwrap();
     let raw_id = "trace:raw:wrong-source-unit";
     let unit_id = "trace:unit:wrong-source-unit";
-    insert_trace_evidence(&mut map, unit_id, "synthetic unrelated compile-begin identity");
-    insert_raw(
+    insert_trace_evidence(
         &mut map,
-        raw_id,
-        0x8000_0008,
-        0x8000_0000,
-        9,
-        Some(unit_id),
+        unit_id,
+        "synthetic unrelated compile-begin identity",
     );
+    insert_raw(&mut map, raw_id, 0x8000_0008, 0x8000_0000, 9, Some(unit_id));
     let mut site = map.indirect_sites.pop_first().unwrap();
     site.observed
         .entry(image.base.clone())
@@ -219,7 +213,12 @@ fn explicit_source_unit_must_be_bound_to_the_declared_source_site() {
         .insert(raw_id.into());
     map.indirect_sites.insert(site);
 
-    let report = solve(&map, std::slice::from_ref(&image), Scope::DeclaredStaticImages).unwrap();
+    let report = solve(
+        &map,
+        std::slice::from_ref(&image),
+        Scope::DeclaredStaticImages,
+    )
+    .unwrap();
     assert_eq!(report.status, ClosureStatus::Open);
     assert!(has(&report, "unresolved_raw_indirect_execution"));
 }
