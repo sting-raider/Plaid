@@ -189,12 +189,7 @@ fn retained_nonzero_entry_verification_cannot_be_closed_by_deleting_derived_bloc
     });
     m.validate().unwrap();
 
-    let report = solve(
-        &m,
-        std::slice::from_ref(&i),
-        Scope::DeclaredStaticImages,
-    )
-    .unwrap();
+    let report = solve(&m, std::slice::from_ref(&i), Scope::DeclaredStaticImages).unwrap();
     assert_eq!(report.status, ClosureStatus::Open);
     assert!(has(&report, "restricted_entry"));
 }
