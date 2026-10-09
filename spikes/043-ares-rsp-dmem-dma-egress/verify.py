@@ -90,8 +90,8 @@ def replay(history: dict, state: dict, enforce_contract: bool = True) -> dict:
             assert event["source"] == expected_source != 0xFFFF_FFFF
             source_cells = [copy.deepcopy(dmem[(expected_source + i) & 0xFFF]) for i in range(4)]
             source_payload = bytes(cell["value"] for cell in source_cells)
-            # This equality is an integrity check only. Source identity above was
-            # derived from the nested current DMA descriptor before looking at bytes.
+            # Integrity only: source identity above is descriptor-derived before
+            # the payload is compared, so equal values cannot select an origin.
             assert source_payload == payload(event["value"], 4)
             for i, cell in enumerate(source_cells):
                 dram[event["dram"] + i] = {
@@ -121,10 +121,19 @@ def replay(history: dict, state: dict, enforce_contract: bool = True) -> dict:
     assert state["multi"] == [word(x) for x in (0x1000, 0x1004, 0x1010, 0x1014)]
     assert state["wrap"] == [word(x) for x in (0x2000, 0x2004, 0x2008, 0x200C)]
 
-    raw_ram = bytearray(8 * 1024 * 1024)
-    for address, cell in dram.items():
-        raw_ram[address] = cell["value"]
-    assert hashlib.sha256(raw_ram).hexdigest() == state["rdram_sha256"]
+    # The fixture asks ares for Expansion Pak before power, but bind the replay
+    # hash to the actual backing rather than turning that setup choice into an
+    # unrelated hard-coded provenance assumption. Ares supports 4 or 8 MiB here.
+    matching_ram_sizes = []
+    for size in (4 * 1024 * 1024, 8 * 1024 * 1024):
+        raw_ram = bytearray(size)
+        for address, cell in dram.items():
+            assert address < size
+            raw_ram[address] = cell["value"]
+        if hashlib.sha256(raw_ram).hexdigest() == state["rdram_sha256"]:
+            matching_ram_sizes.append(size)
+    assert len(matching_ram_sizes) == 1, (matching_ram_sizes, state["rdram_sha256"])
+    rdram_size = matching_ram_sizes[0]
 
     if enforce_contract:
         phase1 = [event for event in events if event["kind"] == K_RSP_SINK and event["phase"] == 1]
@@ -134,8 +143,6 @@ def replay(history: dict, state: dict, enforce_contract: bool = True) -> dict:
         assert all(dram[address]["origin"] == "rsp" and dram[address]["phase"] == 2 for address in range(0x1004, 0x1008))
         assert all(dram[address]["origin"] == "rsp" and dram[address]["phase"] == 3 for address in range(0x1010, 0x1014))
         assert all(dram[address]["origin"] == "cpu" and dram[address]["phase"] == 4 for address in range(0x1014, 0x1018))
-        # SW at 0xffe crosses the bank boundary, so its four producer bytes must
-        # appear on both sides of the wrapped 16-byte DMA source interval.
         assert all(dram[address]["origin"] == "rsp" and dram[address]["phase"] == 5 for address in (0x2006, 0x2007, 0x2008, 0x2009))
         assert 0x1008 not in dram and 0x100C not in dram
 
@@ -149,7 +156,20 @@ def replay(history: dict, state: dict, enforce_contract: bool = True) -> dict:
         "exported_rsp_bytes": sum(cell["origin"] == "rsp" for cell in dram.values()),
         "exported_cpu_bytes": sum(cell["origin"] == "cpu" for cell in dram.values()),
         "exported_initial_bytes": sum(cell["origin"] == "initial" for cell in dram.values()),
+        "rdram_backing_bytes": rdram_size,
     }
+
+
+def _resequence(events: list[dict]) -> list[dict]:
+    """Keep deletion forgeries nontrivial by repairing only ordinal/context IDs."""
+    old_to_new = {}
+    for new_seq, event in enumerate(events, 1):
+        old_to_new[event["seq"]] = new_seq
+    for new_seq, event in enumerate(events, 1):
+        event["seq"] = new_seq
+        if event["context"]:
+            event["context"] = old_to_new.get(event["context"], event["context"])
+    return events
 
 
 def reject_forgeries(history: dict, state: dict) -> int:
@@ -162,11 +182,11 @@ def reject_forgeries(history: dict, state: dict) -> int:
     dma = next(i for i, e in enumerate(original) if e["kind"] == K_DMA_WRITE)
     phase2 = next(i for i, e in enumerate(original) if e["kind"] == K_RSP_SINK and e["phase"] == 2)
 
-    forged = copy.deepcopy(original); forged.pop(same); cases.append(forged)
+    forged = copy.deepcopy(original); forged.pop(same); cases.append(_resequence(forged))
     forged = copy.deepcopy(original); forged[dma]["source"] ^= 4; cases.append(forged)
     forged = copy.deepcopy(original); forged[dma]["dma_pbus"] ^= 8; cases.append(forged)
     forged = copy.deepcopy(original); forged[cpu]["kind"] = K_FOREIGN_SINK; cases.append(forged)
-    forged = copy.deepcopy(original); forged.pop(cpu); cases.append(forged)
+    forged = copy.deepcopy(original); forged.pop(cpu); cases.append(_resequence(forged))
     forged = copy.deepcopy(original); forged[phase2]["context"] += 1; cases.append(forged)
     forged = copy.deepcopy(original); forged[vector]["value"] ^= 1; cases.append(forged)
     forged = copy.deepcopy(original); forged[dma]["dram"] = 0x1008; cases.append(forged)
