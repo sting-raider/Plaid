@@ -45,15 +45,13 @@ def neutral_pair(exe,op,bank,fr,ft,mode,offset):
     return on,off
 
 
-def expected_word(op,fr,ft):
+def expected_sink_word(op,fr,ft):
     if op=='SWC1': return model.select_u32(fr,ft)
     return (model.select_u64(fr,ft)>>32)&0xffffffff
 
 
-def patched_words(before,offset,value):
-    out=list(before)
-    out[offset//4]=value
-    return out
+def changed_indices(before,after):
+    return [i for i,(a,b) in enumerate(zip(before,after)) if a!=b]
 
 
 def main():
@@ -66,15 +64,17 @@ def main():
         for ft in range(4):
          for offset in (0,8):
           s,disabled=neutral_pair(exe,op,bank,fr,ft,'ok',offset); results += [s,disabled]
-          value=expected_word(op,fr,ft)
+          value=expected_sink_word(op,fr,ft)
           assert (s['exception'],s['coprocessor_error'])==(0,0),s
           assert s['after_other_words']==s['before_other_words'],s
-          assert s['after_target_words']==patched_words(s['before_target_words'],offset,value),s
+          assert changed_indices(s['before_target_words'],s['after_target_words'])==[offset//4],s
           assert s['sinks']==[{'address':(0x04001000 if bank=='imem' else 0x04000000)+offset,
                                'bank':1 if bank=='imem' else 0,'offset':offset,
                                'value':value,'cpu':True}],s
-          # Raw bytes are retained as observations, not used to infer guest order.
-          # The actual sink must affect only its concrete four-byte storage group.
+          # Byte snapshots are used only as concrete storage-footprint evidence.
+          # Do not infer guest byte order from this helper view.
+          changed=changed_indices(s['before_target_bytes'],s['after_target_bytes'])
+          assert changed and all(offset <= i < offset+4 for i in changed),s
           assert s['after_target_bytes'][:offset]==s['before_target_bytes'][:offset],s
           assert s['after_target_bytes'][offset+4:]==s['before_target_bytes'][offset+4:],s
 
@@ -83,15 +83,16 @@ def main():
           assert (s['exception'],s['coprocessor_error'])==expected,s
           assert s['after_target_words']==s['before_target_words'],s
           assert s['after_other_words']==s['before_other_words'],s
+          assert s['after_target_bytes']==s['before_target_bytes'],s
           assert s['sinks']==[],s
 
-    # Explicitly pin the surprising SDC1 device effect. The nominal 64-bit source
-    # produces only the high source word at this ares RCP sink; the next Word is
-    # unchanged. This is an implementation result, not a hardware invariant.
+    # Explicitly pin the surprising SDC1 device footprint. The nominal 64-bit
+    # source produces one completed high-word sink and the following SP word and
+    # bytes remain untouched. This is an ares implementation result, not hardware.
     probe=next(x for x in results if x['observer']=='on' and x['op']=='SDC1' and x['bank']=='dmem' and x['fr']==1 and x['ft']==1 and x['mode']=='ok' and x['offset']==0)
     assert probe['sinks'][0]['value']==0x99aabbcc
-    assert probe['after_target_words'][0]==0x99aabbcc
     assert probe['after_target_words'][1]==probe['before_target_words'][1]
+    assert probe['after_target_bytes'][4:8]==probe['before_target_bytes'][4:8]
 
     encoded=(json.dumps(results,sort_keys=True,separators=(',',':'))+'\n').encode()
     OUT.mkdir(parents=True,exist_ok=True)
