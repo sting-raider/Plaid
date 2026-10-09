@@ -1,0 +1,39 @@
+name: research rsp producer cpu imem compose
+on:
+  push:
+    branches:
+      - research/rsp-producer-cpu-imem-compose-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  exact-pin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check canonical base ancestry
+        run: git merge-base --is-ancestor ae41bdba82993ec8e77f47e5f9d3bb9af06f9256 HEAD
+      - name: Fetch exact ares pin
+        run: |
+          mkdir -p .refs
+          git clone --filter=blob:none https://github.com/ares-emulator/ares.git .refs/ares
+          git -C .refs/ares checkout --detach 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          test "$(git -C .refs/ares rev-parse HEAD)" = 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git -C .refs/ares diff --quiet HEAD
+      - name: Syntax and deterministic model
+        run: |
+          python3 -m py_compile spikes/045-rsp-producer-cpu-imem-compose/model.py spikes/045-rsp-producer-cpu-imem-compose/prepare.py spikes/045-rsp-producer-cpu-imem-compose/run.py
+          python3 spikes/045-rsp-producer-cpu-imem-compose/model.py | tee /tmp/model.txt
+      - name: Exact reference execution
+        run: python3 spikes/045-rsp-producer-cpu-imem-compose/run.py | tee /tmp/exact.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rsp-producer-cpu-imem-compose-evidence
+          path: |
+            /tmp/model.txt
+            /tmp/exact.txt
+            target/ares-rsp-producer-cpu-imem-compose/results.json
+          if-no-files-found: warn
