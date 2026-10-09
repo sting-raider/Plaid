@@ -19,13 +19,24 @@ static auto digest_bytes(const u8* data, u32 size) -> string {
   return nall::Hash::SHA256(std::span<const u8>{data, size}).digest();
 }
 
+static auto logical_dmem_digest() -> string {
+  std::array<u8, 4096> bytes{};
+  for(u32 address = 0; address < bytes.size(); address++) {
+    bytes[address] = rsp.dmem.read<Byte>(address);
+  }
+  return digest_bytes(bytes.data(), bytes.size());
+}
+
 static auto scoped_egress_digest() -> string {
-  // Hash exactly the declared DMA destination windows, including the skipped
-  // 0x1008..0x100f hole. This is a stronger scoped effect check than pretending
-  // this fixture explains unrelated RDRAM activity elsewhere in the machine.
+  // Hash logical guest bytes, not ares' host-endian backing layout. Pinned N64
+  // ares uses the lsb memory wrapper, where guest Byte addresses are XORed by 3.
   std::array<u8, 40> bytes{};
-  std::memcpy(bytes.data() + 0, rdram.ram.data + 0x1000, 24);
-  std::memcpy(bytes.data() + 24, rdram.ram.data + 0x2000, 16);
+  for(u32 offset = 0; offset < 24; offset++) {
+    bytes[offset] = rdram.ram.read<Byte>(0x1000 + offset, RBusDevice::ARES_DEBUGGER);
+  }
+  for(u32 offset = 0; offset < 16; offset++) {
+    bytes[24 + offset] = rdram.ram.read<Byte>(0x2000 + offset, RBusDevice::ARES_DEBUGGER);
+  }
   return digest_bytes(bytes.data(), bytes.size());
 }
 
@@ -107,9 +118,11 @@ int main() {
   rdram.hidden.data = hidden.data();
   rdram.mapIdentity = 1;
   std::memset(rdram.ram.data, 0, rdram.ram.size);
-  std::memset(rsp.imem.data, 0, rsp.imem.size);
-  for(u32 index = 0; index < 4096; index++) rsp.dmem.data[index] = u8((index * 37u + 11u) & 0xffu);
-  auto initialDmem = digest_bytes(rsp.dmem.data, 4096);
+  rsp.imem.fill(0);
+  for(u32 address = 0; address < 4096; address++) {
+    rsp.dmem.write<Byte>(address, u8((address * 37u + 11u) & 0xffu));
+  }
+  auto initialDmem = logical_dmem_digest();
 
 #if PLAID_EGRESS_SENSOR
   if(!std::getenv("PLAID_EGRESS_DISABLE")) {
@@ -120,7 +133,7 @@ int main() {
 #endif
 
   // Phase 1: same-value scalar store. Storage effect is real even though bytes do not change.
-  u8 same = rsp.dmem.data[0x040];
+  u8 same = rsp.dmem.read<Byte>(0x040);
   execute_store(1, 0xa0220000, 0x040, true, same);  // SB r2,0(r1)
 
   // Phase 2: ordinary four-byte RSP producer.
@@ -158,7 +171,7 @@ int main() {
   rsp.dmaTransferStep();
   if(rsp.dma.busy.any() || (u32)rsp.dma.current.pbusAddress != 0x008) return 30;
 
-  auto finalDmem = digest_bytes(rsp.dmem.data, 4096);
+  auto finalDmem = logical_dmem_digest();
   auto finalRam = digest_bytes(rdram.ram.data, rdram.ram.size);
   auto egressHash = scoped_egress_digest();
   auto finalMachine = machine_digest();
