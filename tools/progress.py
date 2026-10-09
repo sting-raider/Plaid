@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import html
 import json
-import textwrap
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -54,23 +53,13 @@ def esc(value: object) -> str:
     return html.escape(str(value), quote=True)
 
 
-def wrap_label(label: str, width: int = 14) -> list[str]:
-    lines = textwrap.wrap(label, width=width, break_long_words=False, break_on_hyphens=True)
-    if len(lines) <= 2:
-        return lines
-    return [lines[0], (lines[1][: max(0, width - 1)] + "…")]
-
-
 def render_svg(data: dict) -> str:
-    width = 1200
-    left = 270
-    right = 28
-    top = 112
-    row_height = 82
-    gap = 7
-    cell_height = 48
-    areas = data["areas"]
-    height = top + len(areas) * row_height + 46
+    width = 1100
+    height = 150 + len(data["areas"]) * 70
+    label_x = 24
+    bar_x = 270
+    bar_width = width - bar_x - 30
+    bar_height = 28
 
     out = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
@@ -80,80 +69,69 @@ def render_svg(data: dict) -> str:
         f'<rect width="{width}" height="{height}" rx="12" fill="{COLORS["background"]}"/>',
         f'<text x="24" y="34" fill="{COLORS["text"]}" font-family="ui-sans-serif,system-ui,sans-serif" '
         'font-size="22" font-weight="700">Plaid progress map</text>',
-        f'<text x="24" y="59" fill="{COLORS["muted"]}" font-family="ui-sans-serif,system-ui,sans-serif" '
-        f'font-size="12">Milestone state from docs/progress.json · updated {esc(data.get("updated", "unknown"))}</text>',
+        f'<text x="24" y="57" fill="{COLORS["muted"]}" font-family="ui-sans-serif,system-ui,sans-serif" '
+        f'font-size="12">Auditable milestone counts · updated {esc(data.get("updated", "unknown"))}</text>',
     ]
 
-    legend_x = 24
+    x = 24
     for state, label in (
         ("verified", "verified / integrated"),
         ("partial", "partial / bounded"),
         ("open", "open"),
     ):
+        out.append(f'<rect x="{x}" y="74" width="14" height="14" rx="3" fill="{COLORS[state]}"/>')
         out.append(
-            f'<rect x="{legend_x}" y="75" width="14" height="14" rx="3" fill="{COLORS[state]}"/>'
+            f'<text x="{x + 20}" y="86" fill="{COLORS["muted"]}" '
+            f'font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">{esc(label)}</text>'
         )
-        out.append(
-            f'<text x="{legend_x + 20}" y="87" fill="{COLORS["muted"]}" '
-            'font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">'
-            f'{esc(label)}</text>'
-        )
-        legend_x += 150 if state != "verified" else 190
+        x += 188 if state == "verified" else 154
 
-    usable = width - left - right
-    for row, area in enumerate(areas):
-        y = top + row * row_height
+    for index, area in enumerate(data["areas"]):
+        y = 112 + index * 70
         milestones = area["milestones"]
         counts = {state: 0 for state in STATE_LABEL}
         for milestone in milestones:
             counts[milestone["state"]] += 1
+        total = len(milestones)
 
         out.append(
-            f'<rect x="14" y="{y - 13}" width="{width - 28}" height="{row_height - 6}" '
-            f'rx="8" fill="{COLORS["panel"]}" stroke="{COLORS["border"]}"/>'
-        )
-        out.append(
-            f'<text x="26" y="{y + 10}" fill="{COLORS["text"]}" '
+            f'<text x="{label_x}" y="{y + 16}" fill="{COLORS["text"]}" '
             'font-family="ui-sans-serif,system-ui,sans-serif" font-size="14" font-weight="650">'
             f'{esc(area["name"])}</text>'
         )
-        summary = (
-            f'{counts["verified"]} verified · {counts["partial"]} partial · {counts["open"]} open'
+        out.append(
+            f'<text x="{label_x}" y="{y + 36}" fill="{COLORS["muted"]}" '
+            'font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">'
+            f'{counts["verified"]} verified · {counts["partial"]} partial · {counts["open"]} open</text>'
         )
         out.append(
-            f'<text x="26" y="{y + 31}" fill="{COLORS["muted"]}" '
-            'font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">'
-            f'{esc(summary)}</text>'
+            f'<rect x="{bar_x}" y="{y}" width="{bar_width}" height="{bar_height}" rx="5" '
+            f'fill="{COLORS["panel"]}" stroke="{COLORS["border"]}"/>'
         )
 
-        cell_width = (usable - gap * (len(milestones) - 1)) / len(milestones)
-        for col, milestone in enumerate(milestones):
-            x = left + col * (cell_width + gap)
-            state = milestone["state"]
-            out.append("<g>")
+        cursor = bar_x
+        for state in ("verified", "partial", "open"):
+            count = counts[state]
+            if not count:
+                continue
+            segment = bar_width * count / total
             out.append(
-                f'<title>{esc(milestone["name"])} — {STATE_LABEL[state]}</title>'
+                f'<rect x="{cursor:.2f}" y="{y}" width="{segment:.2f}" height="{bar_height}" '
+                f'fill="{COLORS[state]}"><title>{esc(area["name"])}: {count}/{total} {state}</title></rect>'
             )
-            out.append(
-                f'<rect x="{x:.2f}" y="{y - 1}" width="{cell_width:.2f}" height="{cell_height}" '
-                f'rx="5" fill="{COLORS[state]}" stroke="{COLORS["border"]}" stroke-width="1"/>'
-            )
-            lines = wrap_label(milestone["name"])
-            line_y = y + 18 if len(lines) == 1 else y + 13
-            for i, line in enumerate(lines):
+            if segment >= 58:
                 out.append(
-                    f'<text x="{x + cell_width / 2:.2f}" y="{line_y + i * 12}" '
-                    f'fill="{COLORS["text"]}" text-anchor="middle" '
-                    'font-family="ui-sans-serif,system-ui,sans-serif" font-size="9" '
-                    f'font-weight="600">{esc(line)}</text>'
+                    f'<text x="{cursor + segment / 2:.2f}" y="{y + 19}" fill="{COLORS["text"]}" '
+                    'text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" '
+                    f'font-size="11" font-weight="650">{count}/{total}</text>'
                 )
-            out.append("</g>")
+            cursor += segment
 
     out.append(
-        f'<text x="24" y="{height - 16}" fill="{COLORS["muted"]}" '
+        f'<text x="24" y="{height - 20}" fill="{COLORS["muted"]}" '
         'font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">'
-        'This is subsystem milestone maturity, not an overall completion percentage. '
-        'native_complete remains false until all required closure obligations are proven.</text>'
+        'Milestone maturity, not overall project completion. '
+        'native_complete remains false until required closure obligations are proven.</text>'
     )
     out.append("</svg>")
     return "\n".join(out) + "\n"
