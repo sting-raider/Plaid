@@ -31,3 +31,6 @@ jobs:
 
       - name: Run focused Plaid tests
         run: cargo test --locked -p plaid-core --test tables --test solver
+
+      - name: Run full plaid-core test suite
+        run: cargo test --locked -p plaid-core
