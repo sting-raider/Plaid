@@ -27,12 +27,22 @@ def source_guards():
     assert 'else                 return dmem.write<Word>(address, data);' in rsp
 
 
-def invoke(exe,op,bank,fr,ft,mode,offset):
-    args=[str(exe),op,bank,str(fr),str(ft),mode,str(offset)]
+def invoke(exe,op,bank,fr,ft,mode,offset,observer):
+    args=[str(exe),op,bank,str(fr),str(ft),mode,str(offset),observer]
     a=subprocess.check_output(args,text=True,timeout=20)
     b=subprocess.check_output(args,text=True,timeout=20)
-    assert a==b,(op,bank,fr,ft,mode,offset)
+    assert a==b,(op,bank,fr,ft,mode,offset,observer)
     return json.loads(a)
+
+
+def neutral_pair(exe,op,bank,fr,ft,mode,offset):
+    on=invoke(exe,op,bank,fr,ft,mode,offset,'on')
+    off=invoke(exe,op,bank,fr,ft,mode,offset,'off')
+    a={k:v for k,v in on.items() if k not in ('observer','sinks')}
+    b={k:v for k,v in off.items() if k not in ('observer','sinks')}
+    assert a==b,(on,off)
+    assert off['sinks']==[],off
+    return on,off
 
 
 def expected_word(op,fr,ft):
@@ -40,10 +50,10 @@ def expected_word(op,fr,ft):
     return (model.select_u64(fr,ft)>>32)&0xffffffff
 
 
-def patch_word(before,offset,value):
-    out=bytearray(before)
-    out[offset:offset+4]=value.to_bytes(4,'big')
-    return list(out)
+def patched_words(before,offset,value):
+    out=list(before)
+    out[offset//4]=value
+    return out
 
 
 def main():
@@ -55,34 +65,39 @@ def main():
        for fr in (0,1):
         for ft in range(4):
          for offset in (0,8):
-          s=invoke(exe,op,bank,fr,ft,'ok',offset); results.append(s)
+          s,disabled=neutral_pair(exe,op,bank,fr,ft,'ok',offset); results += [s,disabled]
           value=expected_word(op,fr,ft)
           assert (s['exception'],s['coprocessor_error'])==(0,0),s
-          assert s['after_other']==s['before_other'],s
-          assert s['after_target']==patch_word(s['before_target'],offset,value),s
+          assert s['after_other_words']==s['before_other_words'],s
+          assert s['after_target_words']==patched_words(s['before_target_words'],offset,value),s
           assert s['sinks']==[{'address':(0x04001000 if bank=='imem' else 0x04000000)+offset,
                                'bank':1 if bank=='imem' else 0,'offset':offset,
                                'value':value,'cpu':True}],s
+          # Raw bytes are retained as observations, not used to infer guest order.
+          # The actual sink must affect only its concrete four-byte storage group.
+          assert s['after_target_bytes'][:offset]==s['before_target_bytes'][:offset],s
+          assert s['after_target_bytes'][offset+4:]==s['before_target_bytes'][offset+4:],s
 
-         s=invoke(exe,op,bank,fr,ft,'cu1off',0); results.append(s)
-         assert (s['exception'],s['coprocessor_error'])==(11,1),s
-         assert s['after_target']==s['before_target'] and s['after_other']==s['before_other'] and s['sinks']==[],s
+         for mode,expected in (('cu1off',(11,1)),('misalign',(5,0))):
+          s,disabled=neutral_pair(exe,op,bank,fr,ft,mode,0); results += [s,disabled]
+          assert (s['exception'],s['coprocessor_error'])==expected,s
+          assert s['after_target_words']==s['before_target_words'],s
+          assert s['after_other_words']==s['before_other_words'],s
+          assert s['sinks']==[],s
 
-         s=invoke(exe,op,bank,fr,ft,'misalign',0); results.append(s)
-         assert (s['exception'],s['coprocessor_error'])==(5,0),s
-         assert s['after_target']==s['before_target'] and s['after_other']==s['before_other'] and s['sinks']==[],s
-
-    # Explicitly pin the surprising SDC1 effect: only the high source word reaches
-    # this RCP device adapter. The second four bytes stay at their initial snapshot.
-    probe=next(x for x in results if x['op']=='SDC1' and x['bank']=='dmem' and x['fr']==1 and x['ft']==1 and x['mode']=='ok' and x['offset']==0)
+    # Explicitly pin the surprising SDC1 device effect. The nominal 64-bit source
+    # produces only the high source word at this ares RCP sink; the next Word is
+    # unchanged. This is an implementation result, not a hardware invariant.
+    probe=next(x for x in results if x['observer']=='on' and x['op']=='SDC1' and x['bank']=='dmem' and x['fr']==1 and x['ft']==1 and x['mode']=='ok' and x['offset']==0)
     assert probe['sinks'][0]['value']==0x99aabbcc
-    assert probe['after_target'][4:8]==probe['before_target'][4:8]
+    assert probe['after_target_words'][0]==0x99aabbcc
+    assert probe['after_target_words'][1]==probe['before_target_words'][1]
 
     encoded=(json.dumps(results,sort_keys=True,separators=(',',':'))+'\n').encode()
     OUT.mkdir(parents=True,exist_ok=True)
     (OUT/'results.json').write_bytes(encoded)
     digest=hashlib.sha256(encoded).hexdigest()
-    print(f'PASS: {len(results)} repeated exact-pin COP1-to-SP cases')
+    print(f'PASS: {len(results)} enabled/disabled exact-pin COP1-to-SP observations; every process repeated')
     print('results_sha256='+digest)
 
 if __name__=='__main__': main()
