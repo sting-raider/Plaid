@@ -126,7 +126,7 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
         edge.site.pc.0.checked_add(8) == Some(block.start.pc.0)
             && edge.site.pc.0.checked_add(4) == Some(address.pc.0)
     };
-    if map.entries.keys().any(|address| bypasses_compare(address))
+    if map.entries.keys().any(&bypasses_compare)
         || map
             .direct_edges
             .iter()
@@ -136,7 +136,7 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
                 .candidates
                 .keys()
                 .chain(candidate.observed.keys())
-                .any(|address| bypasses_compare(address))
+                .any(&bypasses_compare)
         })
     {
         return None;
