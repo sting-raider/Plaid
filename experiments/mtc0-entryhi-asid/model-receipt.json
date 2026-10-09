@@ -1,0 +1,12 @@
+{
+  "equal_payload_different_backing_context_switches": 13232,
+  "generated_fetches": 114315,
+  "global_asid_independence_checks": 114315,
+  "histories": 20000,
+  "naive_entry_only_missing": 0,
+  "naive_entry_only_wrong_backing": 47742,
+  "same_value_entryhi_writes": 26379,
+  "same_value_writes_invisible_to_state_diff": 26379,
+  "seed": 344876730692,
+  "sha256": "18574a58aaf6ff2f5fe8067906901f4a6b38a9cec46063689eeabe843ab29c00"
+}
