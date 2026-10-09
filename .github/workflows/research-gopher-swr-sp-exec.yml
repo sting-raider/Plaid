@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
-      GOPHER64_DIR: ${{ runner.temp }}/gopher64
+      GOPHER64_DIR: /tmp/plaid-gopher64-swr-sp
     steps:
       - uses: actions/checkout@v6
 
