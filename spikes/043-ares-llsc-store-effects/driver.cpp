@@ -155,17 +155,18 @@ int main(int argc,char** argv) {
   std::vector<u8> hidden(rdram.ram.size/2); rdram.hidden.data=hidden.data(); rdram.mapIdentity=1;
 
   std::vector<CaseFact> facts;
-  u32 id=0;
-  for(u32 width:{4u,8u}) {
-    const char* p=width==4?"sc":"scd";
-    string n;
-    n=string(p)+"_fail_uncached"; facts.push_back(run_case(++id,strdup(n.data()),width,false,false,true,false,traced));
-    n=string(p)+"_fault_uncached"; facts.push_back(run_case(++id,strdup(n.data()),width,false,false,false,true,traced));
-    n=string(p)+"_uncached_changed"; facts.push_back(run_case(++id,strdup(n.data()),width,false,false,false,false,traced));
-    n=string(p)+"_uncached_same"; facts.push_back(run_case(++id,strdup(n.data()),width,false,true,false,false,traced));
-    n=string(p)+"_cached_changed"; facts.push_back(run_case(++id,strdup(n.data()),width,true,false,false,false,traced));
-    n=string(p)+"_cached_same"; facts.push_back(run_case(++id,strdup(n.data()),width,true,true,false,false,traced));
-  }
+  facts.push_back(run_case(1,"sc_fail_uncached",4,false,false,true,false,traced));
+  facts.push_back(run_case(2,"sc_fault_uncached",4,false,false,false,true,traced));
+  facts.push_back(run_case(3,"sc_uncached_changed",4,false,false,false,false,traced));
+  facts.push_back(run_case(4,"sc_uncached_same",4,false,true,false,false,traced));
+  facts.push_back(run_case(5,"sc_cached_changed",4,true,false,false,false,traced));
+  facts.push_back(run_case(6,"sc_cached_same",4,true,true,false,false,traced));
+  facts.push_back(run_case(7,"scd_fail_uncached",8,false,false,true,false,traced));
+  facts.push_back(run_case(8,"scd_fault_uncached",8,false,false,false,true,traced));
+  facts.push_back(run_case(9,"scd_uncached_changed",8,false,false,false,false,traced));
+  facts.push_back(run_case(10,"scd_uncached_same",8,false,true,false,false,traced));
+  facts.push_back(run_case(11,"scd_cached_changed",8,true,false,false,false,traced));
+  facts.push_back(run_case(12,"scd_cached_same",8,true,true,false,false,traced));
 
   std::printf("{");
 #if PLAID_LLSC_SENSOR
