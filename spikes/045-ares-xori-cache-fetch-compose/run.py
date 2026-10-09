@@ -36,8 +36,9 @@ def source_guard():
     assert "op(0x23, LW, RT, RS, IMMi16);" in decoder
     assert "op(0x2b, SW, RT, RS, IMMi16);" in decoder
     assert "auto CPU::XORI(r64& rt, cr64& rs, u16 imm) -> void {\n  rt.u64 = rs.u64 ^ imm;\n}" in ipu
-    assert "case 0x19: dcacheHitWriteBack(address); break;" in ipu
-    assert "case 0x10: icacheHitInvalidate(address); break;" in ipu
+    assert "case 0x19: {  //dcache hit write back" in ipu
+    assert "case 0x10: {  //icache hit invalidate" in ipu
+    assert "line.writeBack();" in ipu and "line.setValid(false);" in ipu
 
 
 def build():
