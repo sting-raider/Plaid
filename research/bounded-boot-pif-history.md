@@ -78,3 +78,9 @@ is continuing. The separate thirteen-case component fixture executes the correct
 attempt branch. All 100 integration tests and three unit tests pass, along with
 formatting and strict Clippy. No production executable image or solver promotion
 follows from finite read identity.
+
+The separate PIF CLI passes all canonical ROM byte orders, raw witness/attempt
+binding, unused-attempt changes, report tampering, old-version rejection and
+protection of every input. Older SP/PI command tests remain passing. The retained
+contract suite has 23 passing models/source guards; it claims no actual reference
+execution beyond the separately described component/capture experiments.

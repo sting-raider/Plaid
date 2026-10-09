@@ -29,6 +29,7 @@ CASES = (
     ("dcache_writeback", "spikes/034-ares-dcache-writeback-lineage/model.py"),
     ("cop1_store_payload", "spikes/035-ares-cop1-stores/model.py"),
     ("pi_boot_queue_scheduling", "spikes/037-ares-boot-pi-queue-history/test_verify.py"),
+    ("pif_boot_backing", "spikes/041-ares-boot-pif-history/test_verify.py"),
     ("sp_boot_backing", "spikes/040-ares-boot-sp-history/test_verify.py"),
 )
 
