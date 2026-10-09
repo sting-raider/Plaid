@@ -128,16 +128,19 @@ def verify(history, machine):
                     need(int.from_bytes(data, "big") == case["final_word"], f"phase {phase} fetch value")
 
             else:
+                # Phase 4 executes an unrelated uncached SW fixture at 0x7000 before
+                # fetching the executable target. Only target fetch boundaries may
+                # satisfy the provenance join; unrelated fetches remain in history.
+                if e["bus_paddr"] != target:
+                    continue
                 if e["begin"]:
                     need(fetch_begin is None, f"phase {phase} duplicate fetch begin")
                     fetch_begin = e
                     need(not e["cache"], f"phase {phase} fetch unexpectedly cached")
-                    need(e["bus_paddr"] == target, f"phase {phase} fetch bus paddr")
                 else:
                     need(fetch_end is None, f"phase {phase} duplicate fetch end")
                     fetch_end = e
                     need(not e["cache"], f"phase {phase} fetch end unexpectedly cached")
-                    need(e["bus_paddr"] == target, f"phase {phase} fetch end bus paddr")
                     need(e["value"] == case["final_word"], f"phase {phase} fetch boundary value")
 
         need(sink_counts[phase] == case["expected_rsp_sinks"], f"phase {phase} RSP sink count")
