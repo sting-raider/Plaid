@@ -70,9 +70,10 @@ int main(int argc, char** argv) {
   put(0, 0x24020001);  // ADDIU $v0,$zero,1
   put(4, 0x00000000);  // NOP
 
-  // Start with no usable TLB entry. A mapped address must therefore become a
-  // true TLB miss, while an architecturally unused segment must become AdEL.
-  for(auto& entry : cpu.tlb.entry) entry = {};
+  // Preserve the deterministic reset TLB state used by the previously validated
+  // exception-vector fixture. Assigning `entry = {}` here is *not* an empty TLB:
+  // it creates VPN-zero invalid entries and turns low-address true misses into
+  // invalid exceptions. Clear only the lookup cache, never invent entry state.
   for(auto& cached : cpu.tlb.tlbCache.entry) {
     cached.entry = nullptr;
     cached.frequency = 0;
