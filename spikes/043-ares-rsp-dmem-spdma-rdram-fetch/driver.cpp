@@ -149,7 +149,7 @@ int main() {
   if(rsp.dmem.read<Word>(0) != 0x34081234) return 10;
   reverseDma(0x6000);
   if(fetchOne(0x6000) != 0x1234) return 11;
-  finishCase("rsp_sw_dma_fetch",1,0x6000,0x00000000,0x34081234,0x1234,1);
+  finishCase("rsp_sw_dma_fetch",1,0x6000,0x00000000,0x34081234,0x1234,4);
 
   // Phase 2: two same-value RSP stores must remain two distinct writer contexts.
   setupCase(2, 0x34081234, 0x6100);
@@ -158,7 +158,7 @@ int main() {
   runRspStore(0xac220000, 0, 0x34081234);
   reverseDma(0x6100);
   if(fetchOne(0x6100) != 0x1234) return 20;
-  finishCase("same_value_latest_writer",2,0x6100,0x34081234,0x34081234,0x1234,2);
+  finishCase("same_value_latest_writer",2,0x6100,0x34081234,0x34081234,0x1234,8);
 
   // Phase 3: a one-byte RSP SB changes only the instruction's low immediate byte.
   setupCase(3, 0x34081234, 0x6200);
@@ -177,7 +177,7 @@ int main() {
   reverseDma(0x6300);
   runCpuOverwrite(0x6300, 0x34081234);
   if(fetchOne(0x6300) != 0x1234) return 40;
-  finishCase("same_value_cpu_overwrite",4,0x6300,0x00000000,0x34081234,0x1234,1);
+  finishCase("same_value_cpu_overwrite",4,0x6300,0x00000000,0x34081234,0x1234,4);
 
   string digest = machineDigest();
   std::printf("{\"revision\":\"9408cb43d4948fc3ea6e152a307a34348df3fe04\",\"machine_sha256\":\"%s\",\"cases\":[",digest.data());
