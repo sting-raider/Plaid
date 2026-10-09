@@ -22,7 +22,9 @@ jobs:
           ref: e96debac941a26ba4961e5145056c0821d3a56f7
           path: .refs/gopher64
       - name: Compile verifiers
-        run: python3 -m py_compile spikes/043-ares-cpu-sd-sp-sink-gpt56sol/run.py spikes/043-ares-cpu-sd-sp-sink-gpt56sol/crosscheck.py
+        run: python3 -m py_compile spikes/043-ares-cpu-sd-sp-sink-gpt56sol/run.py spikes/043-ares-cpu-sd-sp-sink-gpt56sol/crosscheck.py spikes/043-ares-cpu-sd-sp-sink-gpt56sol/model.py
+      - name: Exercise adversarial sink model
+        run: python3 spikes/043-ares-cpu-sd-sp-sink-gpt56sol/model.py
       - name: Check exact-pin ares/Gopher source topology
         run: python3 spikes/043-ares-cpu-sd-sp-sink-gpt56sol/crosscheck.py
       - name: Build exact pinned ares and run integer SD-to-SP matrix
