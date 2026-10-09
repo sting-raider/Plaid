@@ -40,11 +40,31 @@ jobs:
             echo 'worker: gpt56sol-cpu-sp-producer-context-20261009'
             echo "run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             echo '```text'
-            tail -n 80 /tmp/cpu-sp-producer-context.log
+            echo '--- runner tail ---'
+            tail -n 45 /tmp/cpu-sp-producer-context.log
+            if test -f target/ares-cpu-sp-producer-context/build.log; then
+              echo '--- compiler tail ---'
+              tail -n 90 target/ares-cpu-sp-producer-context/build.log
+            fi
             echo '```'
           } > /tmp/diagnostic.md
           gh issue comment 4 --body-file /tmp/diagnostic.md
           exit 1
+      - name: Publish successful receipt
+        if: steps.experiment.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          {
+            echo 'CHECKPOINT RECEIPT'
+            echo 'worker: gpt56sol-cpu-sp-producer-context-20261009'
+            echo "run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo '```text'
+            tail -n 30 /tmp/cpu-sp-producer-context.log
+            echo '```'
+          } > /tmp/receipt.md
+          gh issue comment 4 --body-file /tmp/receipt.md
       - name: Upload deterministic results
         if: always()
         uses: actions/upload-artifact@v4
