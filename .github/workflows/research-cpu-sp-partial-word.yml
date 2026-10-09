@@ -5,6 +5,9 @@ on:
     branches: [research/cpu-sp-partial-word-gpt56sol]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -21,7 +24,32 @@ jobs:
           python3 -m py_compile spikes/043-ares-cpu-sp-partial-word/*.py
           python3 spikes/043-ares-cpu-sp-partial-word/model.py
       - name: Build exact pinned ares and run fixture
-        run: python3 spikes/043-ares-cpu-sp-partial-word/run.py
+        id: exact
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 spikes/043-ares-cpu-sp-partial-word/run.py 2>&1 | tee "$RUNNER_TEMP/exact-run.log"
+      - name: Preserve exact CI receipt on research branch
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "workflow_run=${{ github.run_id }}"
+            echo "source_commit=${{ github.sha }}"
+            echo "exact_step_outcome=${{ steps.exact.outcome }}"
+            echo "ares_revision=9408cb43d4948fc3ea6e152a307a34348df3fe04"
+            echo "--- stdout_stderr ---"
+            cat "$RUNNER_TEMP/exact-run.log" 2>/dev/null || true
+          } > spikes/043-ares-cpu-sp-partial-word/ci-exact-run.txt
+          git config user.name "Plaid Research CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add spikes/043-ares-cpu-sp-partial-word/ci-exact-run.txt
+          git commit -m "research: record exact ares partial SP run [skip ci]" || true
+          git push origin HEAD:research/cpu-sp-partial-word-gpt56sol
+      - name: Enforce exact-reference result
+        if: steps.exact.outcome != 'success'
+        run: exit 1
       - name: Preserve exact run artifact
         if: always()
         uses: actions/upload-artifact@v4
