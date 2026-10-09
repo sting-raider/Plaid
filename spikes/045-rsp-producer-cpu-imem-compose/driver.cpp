@@ -61,9 +61,10 @@ int main(int argc,char** argv) {
   };
   auto rspInstruction=[&](u32 p,u32 instruction,u32 base,u32 scalar,u8 vectorByte,u32 expected){
     phase(p);rsp.ipu.r[1].u32=base;rsp.ipu.r[2].u32=scalar;rsp.vpu.r[2].byte(0)=vectorByte;
-    rsp.imem.write<Word>(0,instruction);rsp.pipeline={};rsp.branch.setPc(0);rsp.ipu.pc=0;rsp.status.halted=0;rsp.status.broken=0;
+    rsp.imem.write<Word>(0x100,instruction);rsp.imem.write<Word>(0x104,0x0000000du);
+    rsp.pipeline={};rsp.branch.setPc(0x100);rsp.ipu.pc=0x100;rsp.status.halted=0;rsp.status.broken=0;
     for(u32 guard=0;guard<8&&!rsp.status.halted;guard++)rsp.instruction();
-    if(!rsp.status.halted||(u32)rsp.dmem.read<Word>(0)!=expected){std::fprintf(stderr,"rsp phase=%u expected=%08x got=%08x\n",p,expected,(u32)rsp.dmem.read<Word>(0));std::abort();}
+    if(!rsp.status.halted||(u32)rsp.dmem.read<Word>(0)!=expected){std::fprintf(stderr,"rsp phase=%u halted=%u expected=%08x got=%08x\n",p,(u32)rsp.status.halted,expected,(u32)rsp.dmem.read<Word>(0));std::abort();}
   };
   const u32 rspSw=0xac220000u,rspSb=0xa0220000u,rspSbv=(58u<<26)|(1u<<21)|(2u<<16);
   rspInstruction(1,rspSw,0,pure,0,pure);cpuStep(2,0);cpuStep(3,1);
