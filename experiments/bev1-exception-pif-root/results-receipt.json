@@ -1,0 +1,32 @@
+{
+  "result": "VALIDATED",
+  "scope": "exact pinned ares interpreter, synthetic PIF, BEV=1 general exception root",
+  "plaid_base": "211176e7a489fecf8331d02915ee982cd279cb62",
+  "ares_revision": "9408cb43d4948fc3ea6e152a307a34348df3fe04",
+  "validated_branch_head": "37c88e57cf4a5e3c5e65b919b31936fee2990ddf",
+  "workflow_run": 38004246774,
+  "workflow_job": 114069254414,
+  "artifact_id": 11651185304,
+  "artifact_sha256": "ecdadd884f158142a6d07ad1d1ea5deae8cffc5ef69e3856d942f8bbb620fe62",
+  "full_results_sha256": "27ae59f4f372e19b5d62150be3895412a23351ba2c45eb0d30c09952b7341853",
+  "instrumented_evidence_sha256": "014521b49d3fe5bda2433d5328624af8e0d2284320df6b341c3d85e2ac662bf0",
+  "model_result_sha256": "5c08b240f42b970105354d53206871f4deeaacf1ccc94cc9e7bfc9e177517d16",
+  "vector": {
+    "virtual": "0xffffffffbfc00380",
+    "physical": "0x1fc00380",
+    "pif_offset": "0x380"
+  },
+  "handler_word": "0x24020007",
+  "observations": {
+    "normal": "same-fetch PIF-ROM witness at offset 0x380; handler executes v0=7",
+    "busy_latch": "same vector and same handler word execute with no PIF backing read/witness",
+    "lockout": "same vector returns zero with no PIF backing read/witness",
+    "equal_value_decoy": "prior equal word at offset 0x388 remains unattributed; root receives its own witness",
+    "same_offset_mirror_decoy": "prior mirrored read masking to offset 0x380 remains unattributed; root receives its own witness"
+  },
+  "adversarial_model": {
+    "histories": 7,
+    "naive_false_positive_histories": 5,
+    "forged_histories_rejected": 6
+  }
+}
