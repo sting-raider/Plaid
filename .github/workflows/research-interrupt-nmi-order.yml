@@ -30,7 +30,15 @@ jobs:
       - name: Exact source guards
         run: python3 experiments/interrupt-nmi-order-gpt56sol/source_guard.py
       - name: Build baseline and fetch-observed exact ares matrices
-        run: python3 experiments/interrupt-nmi-order-gpt56sol/run.py
+        shell: bash
+        run: |
+          set +e
+          python3 experiments/interrupt-nmi-order-gpt56sol/run.py
+          rc=$?
+          if [ $rc -ne 0 ]; then
+            find target/interrupt-nmi-order-gpt56sol -name build.log -print -exec cat {} \; || true
+            exit $rc
+          fi
       - name: Hash evidence
         run: |
           sha256sum target/interrupt-nmi-order-gpt56sol/results.json target/interrupt-nmi-order-gpt56sol/source_guard.json experiments/interrupt-nmi-order-gpt56sol/model-results.json
