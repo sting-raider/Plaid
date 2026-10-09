@@ -508,6 +508,12 @@ impl ProgramMap {
         for r in &self.regions {
             r.range.validate(true)?;
             refs(&r.evidence)?;
+            if r
+                .physical_start
+                .is_some_and(|physical| !physical.0.is_multiple_of(4))
+            {
+                return Err("unaligned executable physical mapping".into());
+            }
             if r.image.is_empty() {
                 return Err("region has no image identity".into());
             }

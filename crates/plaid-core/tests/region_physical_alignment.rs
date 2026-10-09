@@ -33,20 +33,17 @@ fn map(i: &CodeImage) -> ProgramMap {
 }
 
 #[test]
-fn unaligned_explicit_physical_code_mapping_must_not_close() {
+fn unaligned_explicit_physical_code_mapping_is_rejected() {
     for physical in [1, 2, 3] {
         let i = image(Some(physical));
         let m = map(&i);
-        let report = solve(
-            &m,
-            std::slice::from_ref(&i),
-            Scope::DeclaredStaticImages,
-        )
-        .expect("baseline attack must reach solver until mapping validation is hardened");
         assert_eq!(
-            report.status,
-            ClosureStatus::Open,
-            "physical_start={physical:#010x} must not produce CLOSED"
+            m.validate().unwrap_err(),
+            "unaligned executable physical mapping"
+        );
+        assert_eq!(
+            solve(&m, std::slice::from_ref(&i), Scope::DeclaredStaticImages).unwrap_err(),
+            "unaligned executable physical mapping"
         );
     }
 }
