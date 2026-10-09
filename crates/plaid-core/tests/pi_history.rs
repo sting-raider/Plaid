@@ -612,6 +612,193 @@ mod queue {
                 &f.firmware,
             )
         }
+        mod pif {
+            use super::*;
+            use plaid_core::pif_history::{self as pif, PifHistoryReport};
+            fn fixture() -> Fixture {
+                let mut f = super::fixture();
+                f.history[0]["format"] = json!(pif::FORMAT);
+                f.history[0]["policy"] = json!(pif::POLICY);
+                let pc = 0xffffffffbfc00000u64;
+                f.history.insert(1,json!({"record":"pif_rom_write_attempt","pc":pc,"write":true,"offset":0,"bytes":4,"value":0}));
+                f.history.insert(3,json!({"record":"pif_rom_word","pc":pc,"write":false,"offset":0,"bytes":4,"value":0}));
+                renumber(&mut f.history);
+                f
+            }
+            fn inspect(f: &Fixture) -> Result<PifHistoryReport, String> {
+                pif::inspect_pif_boot_history(
+                    std::io::BufReader::with_capacity(1, Cursor::new(wire(&f.history))),
+                    Cursor::new(wire(&f.fetches)),
+                    &f.rom,
+                    &f.firmware,
+                )
+            }
+            fn verify(r: &PifHistoryReport, f: &Fixture) -> Result<(), String> {
+                pif::verify_pif_boot_history_report(
+                    r,
+                    Cursor::new(wire(&f.history)),
+                    Cursor::new(wire(&f.fetches)),
+                    &f.rom,
+                    &f.firmware,
+                )
+            }
+            fn second_pif(f: &mut Fixture, cached: bool) {
+                let pc = 0xffffffffbfc00804u64;
+                let pa = 0x1fc00804;
+                let begin = f
+                    .history
+                    .iter()
+                    .rposition(|e| e["record"] == "fetch_begin")
+                    .unwrap();
+                for e in &mut f.history[begin..] {
+                    if e["record"] == "end" {
+                        break;
+                    }
+                    e["pc"] = json!(pc);
+                    if e["record"] == "sp_word" {
+                        *e = json!({"record":"pif_rom_word","pc":pc,"write":false,"offset":4,"bytes":4,"value":7});
+                    } else if e["record"] == "fetch" {
+                        e["physical"] = json!(pa);
+                        e["cached"] = json!(cached);
+                    } else {
+                        e["vaddr"] = json!(pc);
+                        e["translated"] = json!(pa);
+                        e["bus"] = json!(pa);
+                        e["cached"] = json!(cached);
+                    }
+                }
+                f.fetches[2]["pc"] = json!(pc);
+                f.fetches[2]["physical"] = json!(pa);
+                f.fetches[2]["cached"] = json!(cached);
+                if cached {
+                    f.fetches[2]["cache_line"] = json!({"slot":64,"tag_key":0x1fc00001,"index":0x800,"words":[7,7,7,7,7,7,7,7]});
+                }
+                renumber(&mut f.history);
+            }
+            #[test]
+            fn pif_backing_and_firmware_equality_remain_separate_source_bound_facts() {
+                let f = fixture();
+                let r = inspect(&f).unwrap();
+                assert_eq!(
+                    (
+                        r.fetches,
+                        r.pif_backed_fetches,
+                        r.supplied_firmware_matching_fetches
+                    ),
+                    (2, 1, 1)
+                );
+                assert_eq!(r.history_sha256, sha256(&wire(&f.history)));
+                assert_eq!(r.samples[0].first_read_ordinal, 3);
+                assert_eq!(r.write_attempts[0].ordinal, 1);
+                let mut prior = super::inspect(&super::fixture()).unwrap();
+                prior.history_sha256 = r.projection.history_sha256.clone();
+                assert_eq!(r.projection, prior);
+                verify(&r, &f).unwrap();
+                assert!(super::inspect(&f).is_err());
+                assert!(inspect(&super::fixture()).is_err());
+                assert!(
+                    !r.mutation_coverage_certified
+                        && !r.executable_lifetime_certified
+                        && !r.native_complete
+                );
+                let mut f = fixture();
+                second_pif(&mut f, false);
+                let r = inspect(&f).unwrap();
+                assert_eq!(
+                    (r.pif_backed_fetches, r.supplied_firmware_matching_fetches),
+                    (2, 1)
+                );
+                assert!(r.samples.iter().any(|s| s.physical.0 == 0x1fc00804
+                    && s.offset == 4
+                    && !s.matches_supplied_firmware));
+            }
+            #[test]
+            fn pif_source_payload_context_shape_and_entire_report_are_rechecked() {
+                for (field, value) in [
+                    ("offset", json!(1)),
+                    ("offset", json!(1984)),
+                    ("bytes", json!(8)),
+                    ("value", json!(1)),
+                    ("context", json!(0)),
+                    ("write", json!(true)),
+                    ("extra", json!(1)),
+                ] {
+                    let mut f = fixture();
+                    f.history[3][field] = value;
+                    assert!(inspect(&f).is_err(), "{field}");
+                }
+                let f = fixture();
+                let r = inspect(&f).unwrap();
+                let mut changed = fixture();
+                changed.history[1]["value"] = json!(1);
+                inspect(&changed).unwrap();
+                assert!(verify(&r, &changed).is_err());
+                let mut changed = fixture();
+                changed.firmware[0] = 1;
+                assert!(inspect(&changed).is_err());
+                let mut changed = fixture();
+                changed.fetches[2]["word"] = json!(8);
+                assert!(inspect(&changed).is_err());
+                for field in [
+                    "mutation_coverage_certified",
+                    "executable_lifetime_certified",
+                    "native_complete",
+                ] {
+                    let mut changed = serde_json::to_value(&r).unwrap();
+                    changed[field] = json!(true);
+                    assert!(verify(&serde_json::from_value(changed).unwrap(), &f).is_err());
+                }
+                let mut changed = r.clone();
+                changed.samples[0].matches_supplied_firmware = false;
+                assert!(verify(&changed, &f).is_err());
+                let mut changed = r.clone();
+                changed.write_attempts.clear();
+                assert!(verify(&changed, &f).is_err());
+                let raw = String::from_utf8(wire(&f.history)).unwrap();
+                for bad in [
+                    raw.replacen("\"offset\":0", "\"offset\":0,\"offset\":0", 1),
+                    raw[..raw.len() - 1].to_owned(),
+                    raw.clone() + "{}\n",
+                ] {
+                    assert!(
+                        pif::inspect_pif_boot_history(
+                            Cursor::new(bad),
+                            Cursor::new(wire(&f.fetches)),
+                            &f.rom,
+                            &f.firmware
+                        )
+                        .is_err()
+                    );
+                }
+                let serialized = serde_json::to_string(&r).unwrap();
+                assert!(
+                    serde_json::from_str::<PifHistoryReport>(&serialized.replacen(
+                        "\"records\":",
+                        "\"records\":1,\"records\":",
+                        1
+                    ))
+                    .is_err()
+                );
+            }
+            #[test]
+            fn missing_ambiguous_and_cached_pif_reads_stay_unknown() {
+                for duplicate in [false, true] {
+                    let mut f = fixture();
+                    if duplicate {
+                        f.history.insert(3, f.history[3].clone());
+                    } else {
+                        f.history.remove(3);
+                    }
+                    renumber(&mut f.history);
+                    assert_eq!(inspect(&f).unwrap().pif_backed_fetches, 0);
+                }
+                let mut f = fixture();
+                second_pif(&mut f, true);
+                let r = inspect(&f).unwrap();
+                assert_eq!(r.pif_backed_fetches, 1);
+                assert_eq!(r.supplied_firmware_matching_fetches, 1);
+            }
+        }
         #[test]
         fn actual_sp_reads_normalized_stores_and_complete_nested_sources_are_bound() {
             let f = fixture();

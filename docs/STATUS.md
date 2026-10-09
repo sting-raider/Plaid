@@ -460,3 +460,11 @@ writes are no-ops. Thirteen actual component cases preserve full independent
 reference/disabled/repeated state and unchanged ROM backing. The smaller capture
 identifies 2055 PIF fetches and preserves every prior source/checkpoint. Full
 validation and strict Rust integration are continuing (ADR-0075).
+
+Strict Rust v4 PIF inspection and complete source rechecking now pass on all
+9,537,688 full-prefix rows. Independent Python agrees with every sample/count/
+digest and the exact entire nested v3 report. The 2055 PIF-backed fetches all
+match supplied firmware; no write attempts occur in this prefix. Together with
+previous finite SP/RAM witnesses this closes the observed backing-domain gap,
+while producer completeness, mutations and executable lifetimes remain OPEN.
+All 100 integration tests plus three units and strict Clippy pass (ADR-0076).
