@@ -22,6 +22,7 @@ jobs:
           set -euo pipefail
           git fetch --no-tags --depth=1 origin cda3b458dc1ac77c639a1afc02a05daac642e861
           git fetch --no-tags --depth=1 origin 5c13859e536bf42fcfae9e56b9104f5ff6292590
+          git fetch --no-tags --depth=1 origin 211176e7a489fecf8331d02915ee982cd279cb62
           test "$(git rev-parse 211176e7a489fecf8331d02915ee982cd279cb62^{commit})" = 211176e7a489fecf8331d02915ee982cd279cb62
 
       - name: Verify exact composed inputs
