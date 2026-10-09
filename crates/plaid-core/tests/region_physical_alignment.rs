@@ -35,8 +35,13 @@ fn map(i: &CodeImage) -> ProgramMap {
 #[test]
 fn unaligned_explicit_physical_code_mapping_is_rejected() {
     for physical in [1, 2, 3] {
-        let i = image(Some(physical));
-        let m = map(&i);
+        let i = image(None);
+        let mut m = map(&i);
+        let mut region = m.regions.iter().next().cloned().unwrap();
+        m.regions.clear();
+        region.physical_start = Some(PhysicalAddr(physical));
+        m.regions.insert(region);
+
         assert_eq!(
             m.validate().unwrap_err(),
             "unaligned executable physical mapping"
