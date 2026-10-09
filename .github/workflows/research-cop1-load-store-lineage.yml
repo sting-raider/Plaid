@@ -1,0 +1,29 @@
+name: Research COP1 load-store lineage
+
+on:
+  push:
+    branches: [research/cop1-load-store-lineage-gpt56sol]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - name: Check exact source and pure lineage model
+        run: |
+          python3 -m py_compile spikes/043-ares-cop1-load-store-lineage/lineage.py spikes/043-ares-cop1-load-store-lineage/source_guard.py spikes/043-ares-cop1-load-store-lineage/run.py
+          python3 spikes/043-ares-cop1-load-store-lineage/source_guard.py
+          python3 spikes/043-ares-cop1-load-store-lineage/lineage.py
+      - name: Build exact pinned ares and run decoded COP1 matrix
+        run: python3 spikes/043-ares-cop1-load-store-lineage/run.py
+      - name: Print harness build logs on failure
+        if: failure()
+        run: |
+          find target/ares-cop1-load-store-lineage -name build.log -print -exec tail -n 180 {} \; || true
