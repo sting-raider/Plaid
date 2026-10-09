@@ -10,7 +10,7 @@ prefix, or `--verify-existing` to recheck complete saved sources. Generated
 licensed reference shadows and raw artifacts stay under ignored `target/`;
 the exact clean ares pin and both disabled recompilers remain mandatory.
 
-## Verdict: VALIDATED for the 10,000-call composition
+## Verdict: VALIDATED for the retained 10,000/610,000-call composition
 
 The original optional sensor emits access-history v3. Its strict projection
 removes only SP rows, renumbers raw fetch contexts and preserves exact complete
@@ -32,6 +32,13 @@ Eleven synthetic forgeries fail; missing, duplicate, foreign and cached reads
 stay unknown. DMA receipts cannot cross intervening unrelated events, and
 missing or ambiguous source receipts stay unbound.
 
+The full prefix passes independent Python replay, full Rust inspection/report
+source rechecking and exact unchanged prior nested report comparison. It has
+9,535,231 records, 596,991 SP-backed fetches and 920 samples. All 512 observed
+DMA stores have unknown source receipts: their RAM addresses exceed the 8-MiB
+backing. Prior complete v2/v1/v0/v5 bytes/checkpoints remain identical. Detailed
+counts, hashes and limits are in `research/bounded-boot-sp-history.md`.
+
 ## Constraints and surprises
 
 A bank read identifies current backing, not firmware/ROM producer lineage. CPU
@@ -42,7 +49,7 @@ separate from this fixed NTSC/6102/8-MiB/deterministic/PIF-HLE prefix.
 
 ## Recommendation
 
-Recheck the full retained prefix and expose a strict original Rust consumer with
-the complete nested source report. Keep ProgramMap/solver behavior and every
+The full retained prefix and strict Rust consumer now pass complete source/report
+checks. Keep ProgramMap/solver behavior and every
 mutation-coverage/lifetime/native flag unchanged. Compose actual PIF reads and
 SP producer history next.

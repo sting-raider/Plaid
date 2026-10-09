@@ -43,8 +43,22 @@ agree on every count, sample and raw/projection/ordered digest. Rust report SHA:
 The full 610,000-call capture also preserves every prior v2/v5 byte and independent
 checkpoint. Complete Rust inspection and entire-report source rechecking pass:
 9,535,231 rows, 596,991 SP-backed fetches, 920 distinct samples and 512 DMA store
-receipts. All receipts bind and no read receipt is left unconsumed. Full Python
-nested replay is still running; its final report comparison is pending.
+records. All 512 DMA receipts are **unbound**: actual source addresses run from
+`0x802000` through `0x802ff8`, beyond the declared 8-MiB RAM backing, so the
+successful identity-RAM read sensor emits no receipt. No read receipt is left
+unconsumed. This corrects the initial closeout's mistaken claim that every DMA
+receipt bound; the consumers themselves already retained these unknowns.
+
+Full independent Python projection/nested replay now passes and agrees with every
+Rust count, sample, receipt and ordered/raw digest, plus the entire exact retained
+v2 Rust report. The full original v3 source has 1,697,134,714 bytes and SHA-256
+`1a5873ca62b802ceecdaa2da4cc21e246b9cab9bdc792d89fa41a90774c620dd`.
+The ordered backing digest is
+`188e0174b243ae0658089c7219fd440c542e710a5aea35bcaee57fd59fbcf553`.
+Python report SHA-256:
+`a6518c091c15bed4b1072775d4868ea47678de49823f289f259624730f3147ba`.
+Rust pretty report: 350,251 bytes, SHA-256
+`14a6fa5d1a0a99d8b0a17790f3a06380da1a9faf896163b152b1d41a1d9bb44b`.
 
 Three Rust integration tests cover full nested sources, raw ordinals, normalized
 store effects, flags/report forgery, changed unused source rows, firmware/fetch

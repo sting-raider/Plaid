@@ -132,3 +132,8 @@ The v3 CLI now passes all source/report/version/input gates. Finish the full
 independent comparison, then compose actual PIF-ROM backing reads and normalized
 PIF backing writes. Keep SI busy-latch/lockout/RAM/cached paths unknown unless an
 actual in-context ROM backing read is observed.
+
+Full v3 Python/Rust replay and source binding now agree, including 512 unknown
+out-of-range DMA receipts. Compose actual PIF ROM reads/writes next, retaining
+current backing separately from supplied-firmware payload equality and ultimate
+SP origin. The 2055 PIF fetches remain the last backing-read domain in this prefix.
