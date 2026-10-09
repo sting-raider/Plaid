@@ -51,8 +51,8 @@ fn retained_successful_store_outside_declared_universe_cannot_close_static_scope
     // physical backing, so executable-destination overlap is deliberately not
     // part of this witness. The primitive still says an SW executed at a source
     // PC absent from the declared finite executable universe.
-    m.word_store_observations
-        .insert(raw_store(&m, 0x9000_0000, 0x8000_1000, 0x0800_0000));
+    let observed = raw_store(&m, 0x9000_0000, 0x8000_1000, 0x0800_0000);
+    m.word_store_observations.insert(observed);
     m.validate().unwrap();
 
     let report = solve(&m, std::slice::from_ref(&i), Scope::DeclaredStaticImages).unwrap();
@@ -69,8 +69,8 @@ fn pc_epoch_and_equal_payload_cannot_launder_successful_store_execution() {
     // equal to its first instruction. None of those facts proves that the J
     // instruction was really an SW. The raw primitive itself is a successful
     // memory effect, which this declared-static scope excludes.
-    m.word_store_observations
-        .insert(raw_store(&m, 0x8000_0000, 0x8000_1000, 0x0800_0000));
+    let observed = raw_store(&m, 0x8000_0000, 0x8000_1000, 0x0800_0000);
+    m.word_store_observations.insert(observed);
     m.validate().unwrap();
 
     let report = solve(&m, std::slice::from_ref(&i), Scope::DeclaredStaticImages).unwrap();
