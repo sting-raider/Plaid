@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: ISC
- * Exact pinned-ares TLBP/TLBR translation-state fixture.
+ * Exact pinned-ares TLBP/TLBR translation-context fixture.
  */
 #define main capability_fixture_main
 #include "../../spikes/003-ares-oracle/driver.cpp"
@@ -10,6 +10,8 @@ static constexpr u64 CodePc = 0xffffffffa0002000ull;
 static constexpr u32 TlbrOpcode = 0x42000001;
 static constexpr u32 TlbpOpcode = 0x42000008;
 static constexpr u64 ProbeVa = 0x0000000000004000ull;
+static constexpr u32 ProbePa = 0x00060000u;
+static constexpr u8 ProbeAsid = 0x55;
 
 static CPU::TLB::Entry make_entry(u64 vbase, u32 pbase, u32 asid, u32 cca, bool global = false) {
   CPU::TLB::Entry e{};
@@ -125,118 +127,160 @@ int main() {
   cpu.context.setMode();
   cpu.context.endian = CPU::Context::Endian::Big;
 
-  const u32 code[] = {TlbpOpcode, TlbpOpcode, TlbrOpcode, TlbrOpcode, TlbrOpcode};
+  const u32 code[] = {TlbpOpcode, TlbpOpcode, TlbrOpcode, TlbrOpcode, TlbrOpcode, TlbrOpcode};
   for(u32 i = 0; i < sizeof(code) / sizeof(code[0]); i++)
     rdram.ram.write<Word>(CodePa + i * 4, code[i], RBusDevice::ARES_DEBUGGER);
 
   for(u32 i = 0; i < CPU::TLB::Entries; i++)
     cpu.tlb.entry[i] = make_entry(0x00100000ull + (u64)i * 0x2000, 0x00010000u + i * 0x2000, i, 2);
-  const auto target = make_entry(ProbeVa, 0x00060000u, 0x55, 2);
+  const auto target = make_entry(ProbeVa, ProbePa, ProbeAsid, 2);
   cpu.tlb.entry[9] = target;
-  cpu.tlb.entry[17] = target;  // equal-mapping decoy
+  cpu.tlb.entry[17] = target;  // equal-mapping decoy; probe must return first match
   cpu.tlb.tlbCache = {};
   cpu.devirtualizeCache = {};
 
-  // Successful TLBP with duplicate equal mappings.
-  cpu.scc.tlb = make_entry(ProbeVa, 0x00200000u, 0x55, 2);
+  // TLBP hit: Index changes, active ASID and translation do not.
+  cpu.scc.tlb = target;
   cpu.scc.index.tlbEntry = 23;
   cpu.scc.index.probeFailure = 1;
   cpu.tlb.tlbCache = {};
-  auto probeBeforeTranslation = translate(ProbeVa);
+  auto probeBefore = translate(ProbeVa);
   auto probeCacheBefore = cache_sig();
   auto probeEntriesBefore = snapshot_entries();
   cpu.devirtualizeCache = {0x1111222233334444ull, 0x5555666677778888ull};
   if(!execute_at(0)) return 4;
   auto probeCacheAfter = cache_sig();
-  u32 probeSlot = cpu.scc.index.tlbEntry;
-  bool probeFailure = cpu.scc.index.probeFailure;
-  bool probeDevirtSame = cpu.devirtualizeCache.vbase == 0x1111222233334444ull && cpu.devirtualizeCache.pbase == 0x5555666677778888ull;
-  u32 probeChanged = changed_slots(probeEntriesBefore);
-  bool probeCacheSame = same_cache(probeCacheBefore, probeCacheAfter);
-  auto probeAfterTranslation = translate(ProbeVa);
-  bool probeTranslationSame = same_translation(probeBeforeTranslation, probeAfterTranslation);
-  if(probeSlot != 9 || probeFailure || probeChanged || !probeCacheSame || !probeDevirtSame || !probeTranslationSame) return 5;
+  auto probeAfter = translate(ProbeVa);
+  bool probeOkay = (u32)cpu.scc.index.tlbEntry == 9
+                && !(bool)cpu.scc.index.probeFailure
+                && (u32)cpu.scc.tlb.addressSpaceID == ProbeAsid
+                && changed_slots(probeEntriesBefore) == 0
+                && same_cache(probeCacheBefore, probeCacheAfter)
+                && cpu.devirtualizeCache.vbase == 0x1111222233334444ull
+                && cpu.devirtualizeCache.pbase == 0x5555666677778888ull
+                && same_translation(probeBefore, probeAfter);
+  if(!probeOkay) return 5;
 
-  // Failed TLBP. tlbEntry=0 is exact-ares behavior but architecturally undefined.
+  // TLBP miss: exact ares sets Index.tlbEntry=0 plus probeFailure=1, but does
+  // not change the staged EntryHi ASID or the translation result.
   cpu.scc.tlb = make_entry(0x003f0000ull, 0x00300000u, 0xe1, 2);
   cpu.scc.index.tlbEntry = 31;
   cpu.scc.index.probeFailure = 0;
   cpu.tlb.tlbCache = {};
-  auto missBeforeTranslation = translate(ProbeVa);
+  auto missBefore = translate(ProbeVa);
   auto missCacheBefore = cache_sig();
   auto missEntriesBefore = snapshot_entries();
   cpu.devirtualizeCache = {0x0102030405060708ull, 0x8877665544332211ull};
   if(!execute_at(4)) return 6;
   auto missCacheAfter = cache_sig();
-  u32 missIndex = cpu.scc.index.tlbEntry;
-  bool missFailure = cpu.scc.index.probeFailure;
-  bool missDevirtSame = cpu.devirtualizeCache.vbase == 0x0102030405060708ull && cpu.devirtualizeCache.pbase == 0x8877665544332211ull;
-  u32 missChanged = changed_slots(missEntriesBefore);
-  bool missCacheSame = same_cache(missCacheBefore, missCacheAfter);
-  auto missAfterTranslation = translate(ProbeVa);
-  bool missTranslationSame = same_translation(missBeforeTranslation, missAfterTranslation);
-  if(missIndex != 0 || !missFailure || missChanged || !missCacheSame || !missDevirtSame || !missTranslationSame) return 7;
+  auto missAfter = translate(ProbeVa);
+  bool missOkay = (u32)cpu.scc.index.tlbEntry == 0
+               && (bool)cpu.scc.index.probeFailure
+               && (u32)cpu.scc.tlb.addressSpaceID == 0xe1
+               && changed_slots(missEntriesBefore) == 0
+               && same_cache(missCacheBefore, missCacheAfter)
+               && cpu.devirtualizeCache.vbase == 0x0102030405060708ull
+               && cpu.devirtualizeCache.pbase == 0x8877665544332211ull
+               && same_translation(missBefore, missAfter);
+  if(!missOkay) return 7;
 
-  // Successful TLBR replaces staged CP0 TLB fields, not the mapping array.
+  // Decisive counterexample: TLBR does not mutate the TLB mapping array or
+  // caches, but loading EntryHi from slot 9 changes active ASID 0x22 -> 0x55.
+  // The exact same non-global VA therefore flips from no translation to ProbePa.
   cpu.scc.index.tlbEntry = 9;
-  cpu.scc.index.probeFailure = 1;
   cpu.scc.tlb = make_entry(0x00008000ull, 0x00180000u, 0x22, 3);
   cpu.tlb.tlbCache = {};
-  auto readBeforeTranslation = translate(ProbeVa);
-  auto readCacheBefore = cache_sig();
-  auto readEntriesBefore = snapshot_entries();
+  auto enableBefore = translate(ProbeVa);
+  auto enableCacheBefore = cache_sig();
+  auto enableEntriesBefore = snapshot_entries();
   cpu.devirtualizeCache = {0x1234123412341234ull, 0x5678567856785678ull};
   if(!execute_at(8)) return 8;
-  auto readCacheAfter = cache_sig();
-  bool readStagedMatches = same_entry(cpu.scc.tlb, target);
-  bool readDevirtSame = cpu.devirtualizeCache.vbase == 0x1234123412341234ull && cpu.devirtualizeCache.pbase == 0x5678567856785678ull;
-  u32 readChanged = changed_slots(readEntriesBefore);
-  bool readCacheSame = same_cache(readCacheBefore, readCacheAfter);
-  auto readAfterTranslation = translate(ProbeVa);
-  bool readTranslationSame = same_translation(readBeforeTranslation, readAfterTranslation);
-  if(!readStagedMatches || readChanged || !readCacheSame || !readDevirtSame || !readTranslationSame) return 9;
+  auto enableCacheAfterInstruction = cache_sig();
+  u32 enableAsidAfter = cpu.scc.tlb.addressSpaceID;
+  auto enableAfter = translate(ProbeVa);
+  bool enableCounterexample = !enableBefore.found
+                           && enableAfter.found
+                           && enableAfter.paddr == ProbePa
+                           && enableAsidAfter == ProbeAsid
+                           && same_entry(cpu.scc.tlb, target)
+                           && changed_slots(enableEntriesBefore) == 0
+                           && same_cache(enableCacheBefore, enableCacheAfterInstruction)
+                           && cpu.devirtualizeCache.vbase == 0x1234123412341234ull
+                           && cpu.devirtualizeCache.pbase == 0x5678567856785678ull;
+  if(!enableCounterexample) return 9;
 
-  // Same-value TLBR still executes but produces no staged-value delta.
+  // Reverse counterexample: start with ASID 0x55 (ProbeVa resolves), then TLBR
+  // slot 10 whose ASID is 10. The same mapping entries remain installed, but
+  // ProbeVa becomes unavailable for the new active address space.
+  cpu.scc.tlb = target;
+  cpu.scc.index.tlbEntry = 10;
+  cpu.tlb.tlbCache = {};
+  auto disableBefore = translate(ProbeVa);
+  auto disableCacheBefore = cache_sig();
+  auto disableEntriesBefore = snapshot_entries();
+  cpu.devirtualizeCache = {0x9999888877776666ull, 0x5555444433332222ull};
+  if(!execute_at(12)) return 10;
+  auto disableCacheAfterInstruction = cache_sig();
+  u32 disableAsidAfter = cpu.scc.tlb.addressSpaceID;
+  auto disableAfter = translate(ProbeVa);
+  bool disableCounterexample = disableBefore.found
+                            && disableBefore.paddr == ProbePa
+                            && !disableAfter.found
+                            && disableAsidAfter == 10
+                            && same_entry(cpu.scc.tlb, cpu.tlb.entry[10])
+                            && changed_slots(disableEntriesBefore) == 0
+                            && same_cache(disableCacheBefore, disableCacheAfterInstruction)
+                            && cpu.devirtualizeCache.vbase == 0x9999888877776666ull
+                            && cpu.devirtualizeCache.pbase == 0x5555444433332222ull;
+  if(!disableCounterexample) return 11;
+
+  // Same-value TLBR: if staged EntryHi/EntryLo/PageMask already equal slot 9,
+  // translation remains stable and there is still no mapping-entry generation.
   cpu.scc.index.tlbEntry = 9;
   cpu.scc.tlb = target;
-  auto sameReadEntriesBefore = snapshot_entries();
-  auto stagedBefore = cpu.scc.tlb;
-  cpu.devirtualizeCache = {0xaaaaaaaa55555555ull, 0x0f0e0d0c0b0a0908ull};
-  if(!execute_at(12)) return 10;
-  bool sameReadStaged = same_entry(stagedBefore, cpu.scc.tlb);
-  bool sameReadDevirtSame = cpu.devirtualizeCache.vbase == 0xaaaaaaaa55555555ull && cpu.devirtualizeCache.pbase == 0x0f0e0d0c0b0a0908ull;
-  u32 sameReadChanged = changed_slots(sameReadEntriesBefore);
-  if(!sameReadStaged || !sameReadDevirtSame || sameReadChanged) return 11;
-
-  // Out-of-range Index is a no-op for TLBR at this exact pin.
-  cpu.scc.index.tlbEntry = 63;
-  cpu.scc.tlb = make_entry(0x0000c000ull, 0x001c0000u, 0x33, 2);
-  auto rangeStagedBefore = cpu.scc.tlb;
-  auto rangeEntriesBefore = snapshot_entries();
   cpu.tlb.tlbCache = {};
-  auto rangeBeforeTranslation = translate(ProbeVa);
-  auto rangeCacheBefore = cache_sig();
-  cpu.devirtualizeCache = {0xfeedfacecafebeefull, 0x0123456789abcdefull};
+  auto sameBefore = translate(ProbeVa);
+  auto sameCacheBefore = cache_sig();
+  auto sameEntriesBefore = snapshot_entries();
+  cpu.devirtualizeCache = {0xaaaaaaaa55555555ull, 0x0f0e0d0c0b0a0908ull};
   if(!execute_at(16)) return 12;
+  auto sameCacheAfterInstruction = cache_sig();
+  auto sameAfter = translate(ProbeVa);
+  bool sameOkay = same_translation(sameBefore, sameAfter)
+               && same_entry(cpu.scc.tlb, target)
+               && changed_slots(sameEntriesBefore) == 0
+               && same_cache(sameCacheBefore, sameCacheAfterInstruction)
+               && cpu.devirtualizeCache.vbase == 0xaaaaaaaa55555555ull
+               && cpu.devirtualizeCache.pbase == 0x0f0e0d0c0b0a0908ull;
+  if(!sameOkay) return 13;
+
+  // Out-of-range TLBR Index=63 is an exact-pin no-op.
+  cpu.scc.index.tlbEntry = 63;
+  cpu.scc.tlb = make_entry(0x0000c000ull, 0x001c0000u, 0x22, 2);
+  auto rangeStagedBefore = cpu.scc.tlb;
+  cpu.tlb.tlbCache = {};
+  auto rangeBefore = translate(ProbeVa);
+  auto rangeCacheBefore = cache_sig();
+  auto rangeEntriesBefore = snapshot_entries();
+  cpu.devirtualizeCache = {0xfeedfacecafebeefull, 0x0123456789abcdefull};
+  if(!execute_at(20)) return 14;
   auto rangeCacheAfter = cache_sig();
-  bool rangeStagedSame = same_entry(rangeStagedBefore, cpu.scc.tlb);
-  bool rangeDevirtSame = cpu.devirtualizeCache.vbase == 0xfeedfacecafebeefull && cpu.devirtualizeCache.pbase == 0x0123456789abcdefull;
-  u32 rangeChanged = changed_slots(rangeEntriesBefore);
-  bool rangeCacheSame = same_cache(rangeCacheBefore, rangeCacheAfter);
-  auto rangeAfterTranslation = translate(ProbeVa);
-  bool rangeTranslationSame = same_translation(rangeBeforeTranslation, rangeAfterTranslation);
-  if(!rangeStagedSame || rangeChanged || !rangeCacheSame || !rangeDevirtSame || !rangeTranslationSame) return 13;
+  auto rangeAfter = translate(ProbeVa);
+  bool rangeOkay = same_entry(rangeStagedBefore, cpu.scc.tlb)
+                && same_translation(rangeBefore, rangeAfter)
+                && changed_slots(rangeEntriesBefore) == 0
+                && same_cache(rangeCacheBefore, rangeCacheAfter)
+                && cpu.devirtualizeCache.vbase == 0xfeedfacecafebeefull
+                && cpu.devirtualizeCache.pbase == 0x0123456789abcdefull;
+  if(!rangeOkay) return 15;
 
   std::printf(
-    "{\"probe_slot\":%u,\"probe_failure\":%s,\"probe_entries_changed\":%u,\"probe_cache_unchanged\":%s,\"probe_devirt_unchanged\":%s,\"probe_translation_same\":%s,"
-    "\"miss_index\":%u,\"miss_failure\":%s,\"miss_entries_changed\":%u,\"miss_cache_unchanged\":%s,\"miss_devirt_unchanged\":%s,\"miss_translation_same\":%s,"
-    "\"tlbr_staged_matches\":%s,\"tlbr_entries_changed\":%u,\"tlbr_cache_unchanged\":%s,\"tlbr_devirt_unchanged\":%s,\"tlbr_translation_same\":%s,"
-    "\"same_value_tlbr_staged_same\":%s,\"same_value_tlbr_entries_changed\":%u,\"same_value_tlbr_devirt_unchanged\":%s,"
-    "\"oor_tlbr_staged_same\":%s,\"oor_tlbr_entries_changed\":%u,\"oor_tlbr_cache_unchanged\":%s,\"oor_tlbr_devirt_unchanged\":%s,\"oor_tlbr_translation_same\":%s}\n",
-    probeSlot, probeFailure ? "true" : "false", probeChanged, probeCacheSame ? "true" : "false", probeDevirtSame ? "true" : "false", probeTranslationSame ? "true" : "false",
-    missIndex, missFailure ? "true" : "false", missChanged, missCacheSame ? "true" : "false", missDevirtSame ? "true" : "false", missTranslationSame ? "true" : "false",
-    readStagedMatches ? "true" : "false", readChanged, readCacheSame ? "true" : "false", readDevirtSame ? "true" : "false", readTranslationSame ? "true" : "false",
-    sameReadStaged ? "true" : "false", sameReadChanged, sameReadDevirtSame ? "true" : "false",
-    rangeStagedSame ? "true" : "false", rangeChanged, rangeCacheSame ? "true" : "false", rangeDevirtSame ? "true" : "false", rangeTranslationSame ? "true" : "false");
+    "{\"tlbp_hit_slot\":9,\"tlbp_hit_translation_same\":true,\"tlbp_miss_index\":0,\"tlbp_miss_translation_same\":true,"
+    "\"tlbr_enable_before_found\":%s,\"tlbr_enable_after_found\":%s,\"tlbr_enable_after_paddr\":%u,\"tlbr_enable_asid_after\":%u,"
+    "\"tlbr_disable_before_found\":%s,\"tlbr_disable_after_found\":%s,\"tlbr_disable_asid_after\":%u,"
+    "\"all_mapping_entry_changes\":0,\"all_instruction_cache_snapshots_unchanged\":true,\"all_devirtualize_sentinels_unchanged\":true,"
+    "\"same_value_tlbr_translation_same\":true,\"out_of_range_tlbr_translation_same\":true}\n",
+    enableBefore.found ? "true" : "false", enableAfter.found ? "true" : "false", enableAfter.paddr, enableAsidAfter,
+    disableBefore.found ? "true" : "false", disableAfter.found ? "true" : "false", disableAsidAfter);
   return 0;
 }
