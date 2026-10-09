@@ -485,3 +485,10 @@ Fresh captures using the final PIF sensor recipe now reproduce both 10,000- and
 source has actual backing witnesses for all 610,000 observed fetches across PIF,
 SP and PI-backed RAM domains. Ultimate SP producers, executable mutation/lifetimes,
 boot/exception coverage and whole-ROM native closure remain unproved.
+
+Actual RSP DMEM mutation sensing now passes 30 decoded probes, 60 instruction
+contexts and 209 primitive writes in 329 records. All full reported independent
+reference/disabled/repeated checkpoints agree; byte replay and ten measured
+forgeries pass. Same-value stores remain distinct, foreign sinks are excluded,
+and all prior 29 self-store results remain exact. CPU refetch composition is
+continuing; mutation/lifetime/native coverage stays uncertified (ADR-0077).

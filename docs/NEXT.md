@@ -155,3 +155,8 @@ SP producer inventory requires subword and FPR producers as well as integer SW:
 Word SP normalization and FR-sensitive FPR semantics. Next, validate scoped RSP
 DMEM sinks and then compose actual instruction/dataflow evidence; same-PC/value
 matching alone is not ultimate source provenance.
+
+Controlled RSP DMEM sink replay now passes actual scalar/vector/wrap/same-value
+cases. Compose it with actual CPU SP refetch to retain distinct writer contexts
+and CPU-overwrite boundaries. Keep initial byte snapshots explicit; neither
+matching values nor instruction PCs prove ultimate producer dataflow/lifetime.
