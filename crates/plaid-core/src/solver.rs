@@ -108,6 +108,14 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 .collect(),
         );
     }
+    if map.fetch_observations.is_empty() && !map.fetch_captures.is_empty() {
+        add(
+            "unverified_fetch_capture",
+            None,
+            "retained raw fetch capture metadata cannot prove zero observed execution without complete raw-source verification",
+            map.fetch_captures.keys().cloned().collect(),
+        );
+    }
     if map.entries.is_empty() {
         add(
             "missing_entry_universe",
