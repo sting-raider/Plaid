@@ -1,0 +1,47 @@
+name: research-ksu-exception-roots
+
+on:
+  push:
+    branches:
+      - research/ksu-exception-root-compose-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  ksu-exception-root-matrix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch exact pinned ares and Gopher64 revisions
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs
+          git clone --filter=blob:none --no-checkout https://github.com/ares-emulator/ares.git .refs/ares
+          git -C .refs/ares fetch origin 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git -C .refs/ares checkout --detach 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          test "$(git -C .refs/ares rev-parse HEAD)" = 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git clone --filter=blob:none --no-checkout https://github.com/gopher64/gopher64.git .refs/gopher64
+          git -C .refs/gopher64 fetch origin e96debac941a26ba4961e5145056c0821d3a56f7
+          git -C .refs/gopher64 checkout --detach e96debac941a26ba4961e5145056c0821d3a56f7
+          test "$(git -C .refs/gopher64 rev-parse HEAD)" = e96debac941a26ba4961e5145056c0821d3a56f7
+
+      - name: Guard exact source identities and semantic seams
+        run: python3 experiments/ares-ksu-exception-roots-gpt56sol/source_guard.py
+
+      - name: Syntax-check runners
+        run: |
+          python3 -m py_compile experiments/ares-ksu-exception-roots-gpt56sol/run.py
+          python3 -m py_compile experiments/ares-ksu-exception-roots-gpt56sol/source_guard.py
+
+      - name: Build and execute adversarial KSU matrix
+        run: python3 experiments/ares-ksu-exception-roots-gpt56sol/run.py
+
+      - name: Hash durable result payload
+        run: sha256sum target/ares-ksu-exception-roots-gpt56sol/results.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ksu-exception-root-results
+          path: target/ares-ksu-exception-roots-gpt56sol/results.json
