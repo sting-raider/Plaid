@@ -26,7 +26,7 @@ struct Context {
   u64 pc = 0, fprEven = 0, fprNamed = 0;
   bool fr = false;
 };
-struct Event {
+struct ProducerEvent {
   u32 ordinal, phase, instruction, rs, rt, gpr, address, bank, offset, value;
   u64 pc, fprEven, fprNamed;
   bool fr;
@@ -34,7 +34,7 @@ struct Event {
 struct Outcome { u32 phase, exception, copError; };
 
 static Context active;
-static std::vector<Event> events;
+static std::vector<ProducerEvent> events;
 static std::vector<Outcome> outcomes;
 static bool tracing = false;
 
