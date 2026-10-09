@@ -1,0 +1,41 @@
+name: Research BEV1 TLB-refill PIF root
+
+on:
+  push:
+    branches: [research/bev1-tlbrefill-pif-root-gpt56sol]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - name: Compile research tools
+        run: |
+          python3 -m py_compile experiments/bev1-tlbrefill-pif-root/model.py experiments/bev1-tlbrefill-pif-root/run.py
+      - name: Run adversarial provenance replay twice
+        run: |
+          set -o pipefail
+          mkdir -p target/bev1-tlbrefill-pif-root
+          python3 experiments/bev1-tlbrefill-pif-root/model.py | tee target/bev1-tlbrefill-pif-root/model-1.log
+          python3 experiments/bev1-tlbrefill-pif-root/model.py | tee target/bev1-tlbrefill-pif-root/model-2.log
+          cmp target/bev1-tlbrefill-pif-root/model-1.log target/bev1-tlbrefill-pif-root/model-2.log
+      - name: Build exact pinned ares and execute real BEV1 32-bit refill root
+        run: |
+          set -o pipefail
+          python3 experiments/bev1-tlbrefill-pif-root/run.py | tee target/bev1-tlbrefill-pif-root/run.log
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bev1-tlbrefill-pif-root-results
+          path: |
+            target/bev1-tlbrefill-pif-root/*.log
+            target/bev1-tlbrefill-pif-root/results.json
+          if-no-files-found: warn
