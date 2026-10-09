@@ -20,8 +20,9 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def require(text: str, needle: str, label: str) -> None:
-    assert text.count(needle) == 1, f"{label}: expected exact single source witness"
+def require(text: str, needle: str, label: str, count: int = 1) -> None:
+    actual = text.count(needle)
+    assert actual == count, f"{label}: expected {count} exact source witness(es), got {actual}"
 
 
 def check() -> dict:
@@ -39,7 +40,9 @@ def check() -> dict:
 
     require(dma, "u64 data = imem.read<Dual>(dma.current.pbusAddress);", "ares IMEM source read")
     require(dma, "rdram.ram.write<Dual>(dma.current.dramAddress, data, RBusDevice::SP_DMA);", "ares completed Dual sink")
-    require(dma, "dma.current.pbusAddress += 8;", "ares source advance")
+    # One increment sits in each transfer direction. The write-DMA branch is
+    # guarded above by the unique IMEM read + Dual RDRAM sink pair.
+    require(dma, "dma.current.pbusAddress += 8;", "ares source/destination advance", 2)
     require(io, "dma.pending.pbusAddress.bit(3,11) = data.bit( 3,11);", "ares PBUS offset latch")
     require(io, "dma.pending.pbusRegion            = data.bit(12);", "ares PBUS bank latch")
     require(rsp, "n1  pbusRegion;", "ares region field")
@@ -49,7 +52,8 @@ def check() -> dict:
     # from the wrapping 12-bit offset for the duration of one DMA descriptor.
     require(gopher, "let offset = dma.memaddr & 0x1000;", "gopher bank latch")
     require(gopher, "let mut mem_addr = dma.memaddr & 0xff8;", "gopher source offset")
-    require(gopher, "(offset + (mem_addr & 0xFFF)) as usize", "gopher stable-bank addressing")
+    # The same stable-bank expression appears once in each DMA direction.
+    require(gopher, "(offset + (mem_addr & 0xFFF)) as usize", "gopher stable-bank addressing", 2)
 
     result = {
         "ares_revision": ARES_REV,
