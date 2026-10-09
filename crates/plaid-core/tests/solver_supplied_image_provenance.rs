@@ -92,14 +92,36 @@ fn equal_payload_with_both_explicit_origins_wrong_must_not_close() {
 }
 
 #[test]
-fn absent_supplied_metadata_is_not_guessed_into_a_conflict() {
+fn one_sided_missing_metadata_is_not_guessed_into_a_conflict() {
     let declared = image();
     let map = map(&declared);
+
+    let mut no_rom = declared.clone();
+    no_rom.rom_offset = None;
+    let mut no_physical = declared.clone();
+    no_physical.physical_start = None;
     let mut bytes_only = declared.clone();
     bytes_only.rom_offset = None;
     bytes_only.physical_start = None;
 
-    let report = report(&map, &bytes_only);
+    for supplied in [no_rom, no_physical, bytes_only] {
+        let report = report(&map, &supplied);
+        assert_eq!(report.status, ClosureStatus::Closed);
+        assert!(!has(&report, "supplied_image_provenance_conflict"));
+    }
+}
+
+#[test]
+fn disjoint_region_provenance_does_not_poison_the_source_join() {
+    let declared = image();
+    let mut map = map(&declared);
+    let mut disjoint = map.regions.first().unwrap().clone();
+    disjoint.range.start = GuestAddr(0x8000_1000);
+    disjoint.rom_offset = Some(RomOffset(0x300));
+    disjoint.physical_start = Some(PhysicalAddr(0x3000));
+    map.regions.insert(disjoint);
+
+    let report = report(&map, &declared);
     assert_eq!(report.status, ClosureStatus::Closed);
     assert!(!has(&report, "supplied_image_provenance_conflict"));
 }
