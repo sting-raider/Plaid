@@ -149,3 +149,9 @@ identity exists for the observed PIF/SP/RAM fetch domains in this fixed prefix;
 this does not establish ultimate SP producers or a mutation census. Continue
 actual RSP DMEM mutation chronology and producer evidence, keeping executable
 lifetimes, boot/exception coverage and whole-ROM certificates open.
+
+SP producer inventory requires subword and FPR producers as well as integer SW:
+2256 SB and six SWC1 effects occur in the verified prefix. Preserve actual full-
+Word SP normalization and FR-sensitive FPR semantics. Next, validate scoped RSP
+DMEM sinks and then compose actual instruction/dataflow evidence; same-PC/value
+matching alone is not ultimate source provenance.
