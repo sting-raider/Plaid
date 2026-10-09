@@ -1,0 +1,24 @@
+name: research-solver-region-provenance-consistency
+
+on:
+  push:
+    branches:
+      - research/solver-region-provenance-consistency-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  plaid-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run region-provenance solver regression
+        run: cargo test -p plaid-core --test solver_region_provenance -- --nocapture
+      - name: Run full plaid-core suite
+        run: cargo test -p plaid-core
+      - name: Run clippy
+        run: cargo clippy -p plaid-core --all-targets -- -D warnings
