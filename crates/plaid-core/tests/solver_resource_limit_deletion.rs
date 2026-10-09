@@ -186,12 +186,10 @@ fn indirect_chain(stages: usize) -> CodeImage {
 }
 
 #[test]
-fn chained_indirect_roots_hit_direct_budget_before_outer_fixed_point_limit() {
-    // This attacks the apparently separate outer fixed-point resource-limit row.
-    // Across budgets below and above convergence, every actual resource-limit
-    // emitted by this multi-pass chain is the direct-CFG form (site=Some). The
-    // fixed-point form (site=None) never appears: each external root adds decoded
-    // instructions, so the shared instruction budget becomes the tighter bound.
+fn small_chained_indirect_roots_hit_direct_budget_before_outer_limit() {
+    // For ordinary small budgets the direct instruction bound dominates this
+    // external-root pattern. The separate test below crosses the outer 512-pass
+    // clamp with a larger raw direct budget.
     let i = indirect_chain(8);
     let mut saw_limit = false;
     let mut saw_converged = false;
@@ -215,4 +213,47 @@ fn chained_indirect_roots_hit_direct_budget_before_outer_fixed_point_limit() {
     }
     assert!(saw_limit);
     assert!(saw_converged);
+}
+
+#[test]
+fn deleting_actual_outer_fixed_point_limit_still_cannot_close() {
+    // The outer iteration count clamps to 512 while direct_cfg receives the raw
+    // budget. With 520 three-normal-instruction JR stages and budget=2048, pass
+    // 512 can add stage 512 as a new root without exhausting direct traversal;
+    // the pipeline then emits the real site=None fixed-point resource limit.
+    let i = indirect_chain(520);
+    let limited = discover_image(rom(), &i, &[i.base.pc], 2048).unwrap();
+    let limits: Vec<_> = limited
+        .map
+        .unresolved
+        .iter()
+        .filter(|u| u.kind == "resource_limit")
+        .collect();
+    assert_eq!(limits.len(), 1);
+    assert!(limits[0].site.is_none());
+    assert_eq!(limited.map.blocks.len(), 512);
+
+    let missing_target = GuestAddr(0x8000_2000);
+    let last_site = limited
+        .map
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == 0x8000_1ff8)
+        .expect("last traversed stage has an indirect site");
+    assert!(last_site.candidates.keys().any(|a| a.pc == missing_target));
+    assert!(!limited.map.blocks.iter().any(|b| b.start.pc == missing_target));
+
+    let edited = without_resource_limit(limited.map);
+    let report = solve(
+        &edited,
+        std::slice::from_ref(&i),
+        Scope::DeclaredStaticImages,
+    )
+    .unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    assert!(!report.blockers.iter().any(|b| b.kind == "resource_limit"));
+    assert!(report.blockers.iter().any(|b| {
+        b.kind == "unresolved_indirect_target"
+            && b.site.as_ref().is_some_and(|a| a.pc.0 == 0x8000_1ff8)
+    }));
 }
