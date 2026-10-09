@@ -1,0 +1,23 @@
+name: research-solver-fetch-capture-count
+
+on:
+  push:
+    branches:
+      - research/solver-fetch-capture-count-laundering-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  plaid-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Guard exact Rabbitizer pin
+        run: grep -F 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' refs.lock.toml
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Focused regression
+        run: cargo test -p plaid-core --test solver_fetch_capture_count -- --nocapture
+      - name: Full plaid-core tests
+        run: cargo test -p plaid-core
+      - name: Clippy
+        run: cargo clippy -p plaid-core --all-targets -- -D warnings
