@@ -44,7 +44,9 @@ def main() -> None:
         "n64-systemtest": args.systemtest,
     }
     heads = {name: git_head(root) for name, root in roots.items()}
-    for name, expected in PINS.items():
+    subprocess.check_call(["git", "-C", str(args.plaid), "merge-base", "--is-ancestor", PINS["plaid"], "HEAD"])
+    for name in ("ares", "gopher64", "mupen64plus-core", "n64-systemtest"):
+        expected = PINS[name]
         if heads[name] != expected:
             raise AssertionError(f"{name} head {heads[name]} != pinned {expected}")
 
@@ -77,7 +79,9 @@ def main() -> None:
 
     checked = {
         "schema": "plaid.eret-target-source-guards.v1",
-        "pins": heads,
+        "tested_plaid_base": PINS["plaid"],
+        "checked_heads": heads,
+        "pins": PINS,
         "guards": {
             "ares": 4,
             "gopher64": 4,
