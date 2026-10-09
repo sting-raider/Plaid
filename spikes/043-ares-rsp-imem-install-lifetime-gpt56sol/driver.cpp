@@ -11,12 +11,12 @@
 using namespace ares;
 using namespace ares::Nintendo64;
 
-struct Event {
+struct PlaidInstallEvent {
   u32 seq, caseId, kind, request, pbus, dram, length, count, skip;
   u64 value;
 };
 
-static std::vector<Event> events;
+static std::vector<PlaidInstallEvent> events;
 static u32 currentCase = 0;
 static u32 nextRequest = 0;
 static u32 activeRequest = 0;
