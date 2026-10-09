@@ -40,6 +40,27 @@ CASES = [
     "guest_count_not_ack",
 ]
 
+GATES = {
+    "near_exact_bev0": (0, 1, 0, 0, 0x80),
+    "cross_bev1": (1, 1, 0, 0, 0x80),
+    "before_deadline": (0, 0, 0, 0, 0),
+    "masked": (0, 1, 0, 0, 0),
+    "ie0": (0, 0, 0, 0, 0x80),
+    "exl1": (0, 1, 1, 0, 0x80),
+    "erl1": (0, 1, 0, 1, 0x80),
+    "compare_clear_new_value": (0, 1, 0, 0, 0x80),
+    "compare_clear_same_value": (0, 1, 0, 0, 0x80),
+    "count_write_keeps_pending": (0, 1, 0, 0, 0x80),
+    "count_forward_changes_deadline": (0, 0, 0, 0, 0),
+    "count_backward_changes_deadline": (0, 0, 0, 0, 0),
+    "wrap_cross": (0, 0, 0, 0, 0),
+    "equal_compare_no_immediate": (0, 0, 0, 0, 0),
+    # The guest MTC0 retires while IM7 is masked, then IM7 is enabled for the
+    # final boundary check. These tuples describe that final boundary.
+    "guest_compare_ack": (0, 1, 0, 0, 0x80),
+    "guest_count_not_ack": (0, 1, 0, 0, 0x80),
+}
+
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -75,6 +96,8 @@ def check_retired(state: dict, pc: int) -> None:
 
 def check(name: str, s: dict) -> None:
     assert s["name"] == name, s
+    assert (s["bev"], s["ie"], s["exl"], s["erl"], s["im"]) == GATES[name], s
+
     if name == "near_exact_bev0":
         check_taken(s, NORMAL_VECTOR, START_PC)
     elif name == "cross_bev1":
