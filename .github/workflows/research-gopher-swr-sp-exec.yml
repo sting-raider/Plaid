@@ -1,0 +1,55 @@
+name: Research Gopher SWR SP execution
+
+on:
+  push:
+    branches:
+      - research/gopher-swr-sp-exec-gpt56sol-b
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gopher-swr-sp-exec:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v2
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential git make pkg-config cmake ninja-build clang libclang-dev \
+            libasound2-dev libpulse-dev libaudio-dev libfribidi-dev libjack-dev \
+            libsndio-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
+            libxfixes-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev \
+            libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev \
+            libdbus-1-dev libibus-1.0-dev libudev-dev libthai-dev libusb-1.0-0-dev \
+            libpipewire-0.3-dev libwayland-dev libdecor-0-dev liburing-dev \
+            libfontconfig-dev
+
+      - name: Checkout exact pinned Gopher64
+        run: |
+          mkdir -p .refs
+          git clone --recurse-submodules https://github.com/gopher64/gopher64.git .refs/gopher64
+          git -C .refs/gopher64 checkout --detach e96debac941a26ba4961e5145056c0821d3a56f7
+          test "$(git -C .refs/gopher64 rev-parse HEAD)" = "e96debac941a26ba4961e5145056c0821d3a56f7"
+
+      - name: Compile harness
+        run: python3 -m py_compile spikes/045-gopher-swr-sp-exec/run.py
+
+      - name: Execute exact-pin differential probe
+        run: |
+          set -o pipefail
+          python3 spikes/045-gopher-swr-sp-exec/run.py | tee gopher-swr-sp-results.txt
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gopher-swr-sp-results
+          path: gopher-swr-sp-results.txt
+          if-no-files-found: error
