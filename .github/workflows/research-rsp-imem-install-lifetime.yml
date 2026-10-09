@@ -22,7 +22,14 @@ jobs:
       - name: Compile verifier recipes
         run: python3 -m py_compile spikes/043-ares-rsp-imem-install-lifetime-gpt56sol/prepare.py spikes/043-ares-rsp-imem-install-lifetime-gpt56sol/verify.py spikes/043-ares-rsp-imem-install-lifetime-gpt56sol/run.py
       - name: Build pinned ares and run composed lifetime fixture
-        run: python3 spikes/043-ares-rsp-imem-install-lifetime-gpt56sol/run.py | tee rsp-imem-install-lifetime.log
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 spikes/043-ares-rsp-imem-install-lifetime-gpt56sol/run.py | tee rsp-imem-install-lifetime.log
+      - name: Print compiler logs on failure
+        if: failure()
+        shell: bash
+        run: find target/ares-rsp-imem-install-lifetime -name build.log -print -exec tail -n 200 {} \; || true
       - name: Upload durable run evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -30,6 +37,7 @@ jobs:
           name: rsp-imem-install-lifetime-evidence
           path: |
             rsp-imem-install-lifetime.log
+            target/ares-rsp-imem-install-lifetime/**/build.log
             target/ares-rsp-imem-install-lifetime/manifest.json
             target/ares-rsp-imem-install-lifetime/trace.json
           if-no-files-found: warn
