@@ -31,12 +31,14 @@ def forbid(text: str, fragment: str, label: str) -> None:
 
 
 def grep(path: Path, needle: str) -> str:
-    # Case-sensitive on purpose: generic debugger 'watchpoint' strings are not
-    # the architectural CP0 WatchLo facility being audited here.
     proc = subprocess.run(["git", "grep", "-n", needle], cwd=path, text=True, stdout=subprocess.PIPE)
     if proc.returncode not in (0, 1):
         raise SystemExit(f"git grep failed in {path}: {proc.returncode}")
     return proc.stdout
+
+
+def paths_from_grep(text: str) -> list[str]:
+    return sorted({line.split(":", 1)[0] for line in text.splitlines() if line.strip()})
 
 
 def digest(path: Path) -> str:
@@ -67,19 +69,23 @@ def main() -> int:
     require(ares_scc, "scc.watchLo.physicalAddress.bit(3,31) = data.bit(3,31);", "ares guest MTC0 address write")
     require(ares_ser, "s(scc.watchLo.trapOnWrite);", "ares WatchLo serialization")
     require(ares_ser, "s(scc.watchLo.trapOnRead);", "ares WatchLo serialization")
-    forbid(ares_exc, "trigger(23", "ares Watch ExcCode trigger must remain absent at this pin")
-    forbid(ares_exc, "Exception::watch", "ares Watch exception wrapper must remain absent at this pin")
+    require(ares_exc, "auto CPU::Exception::watchAddress()            -> void { trigger(23); }", "ares Watch exception wrapper")
 
-    # Exact lower-case watchLo member uses are confined to storage, CP0 access,
-    # and save-state code. A load/store trigger would add another path and force
-    # this guard to fail for review.
+    # Crucial distinction: ares has the ExcCode=23 wrapper, but at this exact pin
+    # no N64 execution path calls it. If a call site appears, this guard fails and
+    # the dynamic disagreement must be re-evaluated.
+    watch_handler_paths = paths_from_grep(grep(ares, "watchAddress"))
+    expected_handler_paths = ["ares/n64/cpu/cpu.hpp", "ares/n64/cpu/exceptions.cpp"]
+    if watch_handler_paths != expected_handler_paths:
+        raise SystemExit(f"new/changed ares watchAddress use site requires review: {watch_handler_paths}")
+
     ares_watchlo = grep(ares, "watchLo")
     allowed = {
         "ares/n64/cpu/cpu.hpp",
         "ares/n64/cpu/interpreter-scc.cpp",
         "ares/n64/cpu/serialization.cpp",
     }
-    seen = {line.split(":", 1)[0] for line in ares_watchlo.splitlines() if line.strip()}
+    seen = set(paths_from_grep(ares_watchlo))
     if not seen or not seen.issubset(allowed):
         raise SystemExit(f"unexpected ares watchLo use sites: {sorted(seen)}")
 
@@ -110,7 +116,7 @@ def main() -> int:
     require(systemtest_cp0, "WatchLo = 0x12", "systemtest WatchLo register id")
     require(systemtest_cp0, "WatchHi = 0x13", "systemtest WatchHi register id")
     system_watch = grep(systemtest, "WatchLo")
-    system_paths = sorted({line.split(":", 1)[0] for line in system_watch.splitlines() if line.strip()})
+    system_paths = paths_from_grep(system_watch)
     if system_paths != ["src/cop0.rs"]:
         raise SystemExit(f"new/changed n64-systemtest WatchLo coverage requires review: {system_paths}")
 
@@ -127,14 +133,15 @@ def main() -> int:
             "systemtest_cop0": digest(systemtest_cp0_path),
         },
         "ares_watchlo_paths": sorted(seen),
+        "ares_watch_handler_paths": watch_handler_paths,
         "systemtest_watchlo_paths": system_paths,
-        "conclusion": "pinned references expose/store Watch state but no executable Watch trigger/test was found in the guarded paths; hardware/manual evidence remains necessary for the root obligation",
+        "conclusion": "ares defines ExcCode 23 and Watch register storage but has no Watch exception call site at this pin; other guarded refs expose/register Watch without a corresponding trigger/test in the audited paths",
     }
     out = ROOT / "target/ares-watch-exception-roots/source_guard.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     print(json.dumps(report, indent=2, sort_keys=True))
-    print("PASS: exact pinned Watch source contracts and omissions guarded")
+    print("PASS: exact pinned Watch source contracts and call-site absence guarded")
     return 0
 
 
