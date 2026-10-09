@@ -34,7 +34,20 @@ jobs:
         run: python3 -m py_compile spikes/043-ares-translated-fetch-join/run.py
 
       - name: Build and execute translated fetch join
-        run: python3 spikes/043-ares-translated-fetch-join/run.py
+        shell: bash
+        run: |
+          set +e
+          python3 spikes/043-ares-translated-fetch-join/run.py
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo '=== sensor compiler diagnostics ==='
+            if [ -f target/ares-translated-fetch-join-spike/sensor/build.log ]; then
+              grep -n -E 'error:|note:|required from|candidate:' target/ares-translated-fetch-join-spike/sensor/build.log || true
+              echo '=== sensor build log tail ==='
+              tail -n 240 target/ares-translated-fetch-join-spike/sensor/build.log
+            fi
+            exit "$status"
+          fi
 
       - name: Hash durable result payloads
         run: |
