@@ -1,0 +1,59 @@
+name: Research CPU SDL SDR into RSP memory
+
+on:
+  push:
+    branches: [research/cpu-sp-sdl-sdr-gpt56sol]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - name: Verify source-derived model
+        run: |
+          python3 -m py_compile spikes/044-ares-cpu-sp-sdl-sdr/*.py
+          python3 spikes/044-ares-cpu-sp-sdl-sdr/model.py
+      - name: Build exact pinned ares and run decoded fixture
+        id: exact
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 spikes/044-ares-cpu-sp-sdl-sdr/run.py 2>&1 | tee "$RUNNER_TEMP/exact-run.log"
+      - name: Preserve exact CI receipt on research branch
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "workflow_run=${{ github.run_id }}"
+            echo "source_commit=${{ github.sha }}"
+            echo "exact_step_outcome=${{ steps.exact.outcome }}"
+            echo "ares_revision=9408cb43d4948fc3ea6e152a307a34348df3fe04"
+            echo "--- stdout_stderr ---"
+            cat "$RUNNER_TEMP/exact-run.log" 2>/dev/null || true
+          } > spikes/044-ares-cpu-sp-sdl-sdr/ci-exact-run.txt
+          git config user.name "Plaid Research CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add spikes/044-ares-cpu-sp-sdl-sdr/ci-exact-run.txt
+          git commit -m "research: record exact SDL SDR SP run [skip ci]" || true
+          git push origin HEAD:research/cpu-sp-sdl-sdr-gpt56sol
+      - name: Enforce exact-reference result
+        if: steps.exact.outcome != 'success'
+        run: exit 1
+      - name: Preserve result artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-sp-sdl-sdr-results
+          path: target/ares-cpu-sp-sdl-sdr/results.json
+          if-no-files-found: ignore
