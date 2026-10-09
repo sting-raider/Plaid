@@ -239,8 +239,18 @@ pub(crate) fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap,
                 }
             }
             out.indirect_sites.insert(site);
-            out.unresolved.insert(Unresolved { kind: "pointer_table_immutability_unproven".into(), site: Some(old.site.clone()),
-                detail: "bounded snapshot candidates do not prove table contents or exhaustive runtime targets".into(), evidence: refs });
+            out.unresolved.insert(Unresolved {
+                kind: "pointer_table_immutability_unproven".into(),
+                site: Some(old.site.clone()),
+                detail: "bounded snapshot candidates do not prove table contents or exhaustive runtime targets".into(),
+                evidence: refs.clone(),
+            });
+            out.unresolved.insert(Unresolved {
+                kind: "pointer_table_target_identity_unproven".into(),
+                site: Some(old.site.clone()),
+                detail: "numeric table targets do not prove target image/generation, mapping context, cache-resident generation or executable lifetime".into(),
+                evidence: refs,
+            });
         } else {
             out.unresolved.insert(Unresolved {
                 kind: "pointer_table_source_missing".into(),
