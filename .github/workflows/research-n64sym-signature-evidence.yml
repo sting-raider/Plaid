@@ -1,0 +1,33 @@
+name: research n64sym signature evidence
+
+on:
+  push:
+    branches:
+      - research/n64sym-signature-evidence-gpt56sol
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install MIPS binutils
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils-mips-linux-gnu g++ make git
+      - name: Run exact-pin experiment
+        run: |
+          python3 -m py_compile experiments/n64sym-signature-evidence/run.py
+          python3 experiments/n64sym-signature-evidence/run.py \
+            --report experiments/n64sym-signature-evidence/report.json | tee /tmp/n64sym-report.log
+      - name: Upload deterministic report
+        uses: actions/upload-artifact@v4
+        with:
+          name: n64sym-signature-evidence-report
+          path: |
+            experiments/n64sym-signature-evidence/report.json
+            /tmp/n64sym-report.log
+          if-no-files-found: error
