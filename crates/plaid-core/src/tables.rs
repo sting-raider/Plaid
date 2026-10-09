@@ -87,9 +87,23 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
         return None;
     }
     let block = blocks[0];
+    let bypasses_guard = |address: &CodeAddress| {
+        address.image == site.site.image
+            && address.generation == site.site.generation
+            && address.pc.0 > block.start.pc.0
+            && address.pc.0 <= pc.0
+    };
     if map.entries.contains_key(&block.start)
+        || map.entries.keys().any(|address| bypasses_guard(address))
+        || map
+            .direct_edges
+            .iter()
+            .any(|edge| bypasses_guard(&edge.target))
         || map.indirect_sites.iter().any(|s| {
-            s.candidates.contains_key(&block.start) || s.observed.contains_key(&block.start)
+            s.candidates
+                .keys()
+                .chain(s.observed.keys())
+                .any(|address| address == &block.start || bypasses_guard(address))
         })
     {
         return None;
