@@ -95,6 +95,7 @@ fn deleting_invalidation_cannot_launder_post_epoch_entry_verification() {
     .unwrap();
     assert_eq!(report.status, ClosureStatus::Open);
     assert!(has(&report, "unresolved_executable_write"));
+    assert!(has(&report, "entry_verification_after_invalidation"));
 
     // Adversary: delete only the derived invalidation/write blocker while keeping
     // the independently typed verification and its later epoch. ADR-0009 requires
@@ -109,4 +110,39 @@ fn deleting_invalidation_cannot_launder_post_epoch_entry_verification() {
     )
     .unwrap();
     assert_eq!(report.status, ClosureStatus::Open);
+    assert!(has(&report, "entry_verification_after_invalidation"));
+    assert!(!has(&report, "unresolved_executable_write"));
+}
+
+#[test]
+fn numeric_generation_equality_cannot_reconcile_distinct_epoch_domains() {
+    // Code generation and verification epoch are intentionally different clocks.
+    // Equal numeric values therefore cannot launder the post-invalidation fact.
+    let image = image(1);
+    let mut map = closed_map(&image);
+    add_entry_verification(&mut map, &image, 1);
+    map.validate().unwrap();
+    let report = solve(
+        &map,
+        std::slice::from_ref(&image),
+        Scope::DeclaredStaticImages,
+    )
+    .unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    assert!(has(&report, "entry_verification_after_invalidation"));
+}
+
+#[test]
+fn entry_verification_source_unit_must_keep_trace_provenance() {
+    let image = image(0);
+    let mut map = closed_map(&image);
+    add_entry_verification(&mut map, &image, 0);
+    let source = map
+        .entry_verifications
+        .first()
+        .expect("verification")
+        .source_unit
+        .clone();
+    map.evidence.get_mut(&source).expect("source evidence").kind = EvidenceKind::Static;
+    assert!(map.validate().is_err());
 }
