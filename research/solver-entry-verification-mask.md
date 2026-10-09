@@ -1,6 +1,6 @@
 # Solver deletion resistance for verified restricted entries
 
-Result: VALIDATED candidate fix, pending final full-suite receipt.
+Result: VALIDATED.
 
 Canonical base: `211176e7a489fecf8331d02915ee982cd279cb62`
 
@@ -21,6 +21,8 @@ The existing discovery path already carries two representations of this conditio
 3. `import_trace` emits `Unresolved { kind: "restricted_entry", ... }` for an installed entry whose mask is nonzero.
 4. The same import retains `ObservedEntryVerification { entry, register_mask, source_unit, generation, evidence }`.
 5. `ProgramMap::validate()` requires the verification entry to exist and its `source_unit` to name Trace evidence.
+
+This composes the earlier `research/mupen-verified-dirty-entries.md` result, which deliberately retained entry masks and existing modeling blockers while treating byte verification as a snapshot fact rather than execution/lifecycle proof. The existing merge regression `verified_entry_requires_exact_completed_words_and_installed_mask` independently exercises the exact completed-word and installed-mask coupling.
 
 Before this branch, `solver::solve()` consumed `map.unresolved` but ignored `map.entry_verifications`. Thus deleting only the derived unresolved item erased the closure blocker even though the retained verification still recorded the unsupported nonzero mask.
 
@@ -52,6 +54,19 @@ Commit `3406e7f76d4e2718f6b03b1a7876b2a61a9dec6a` adds one fail-closed loop to `
 - `register_mask == 0` remains neutral.
 
 No ProgramMap schema, importer, trace format, reference instrumentation, or native path changes are required.
+
+## Validation
+
+The focused solver suite first went green with the candidate fix in Actions run `38003742113`.
+
+Expanded Actions run `38003937745` then passed:
+
+- `cargo test --locked -p plaid-core --test solver -- --nocapture`;
+- `cargo test --locked -p plaid-core`;
+- `cargo fmt --all -- --check`;
+- `cargo clippy --locked -p plaid-core --all-targets -- -D warnings`.
+
+An intermediate expanded run also showed that the complete `plaid-core` test suite was already green before a rustfmt-only correction to the new regression.
 
 ## Adversarial interpretation
 
