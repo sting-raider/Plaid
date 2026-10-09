@@ -1,0 +1,29 @@
+name: Research integer SD into SP memory
+
+on:
+  push:
+    branches: [research/cpu-sd-sp-sink-gpt56sol]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - uses: actions/checkout@v4
+        with:
+          repository: gopher64/gopher64
+          ref: e96debac941a26ba4961e5145056c0821d3a56f7
+          path: .refs/gopher64
+      - name: Compile verifiers
+        run: python3 -m py_compile spikes/043-ares-cpu-sd-sp-sink-gpt56sol/run.py spikes/043-ares-cpu-sd-sp-sink-gpt56sol/crosscheck.py
+      - name: Check exact-pin ares/Gopher source topology
+        run: python3 spikes/043-ares-cpu-sd-sp-sink-gpt56sol/crosscheck.py
+      - name: Build exact pinned ares and run integer SD-to-SP matrix
+        run: python3 spikes/043-ares-cpu-sd-sp-sink-gpt56sol/run.py
