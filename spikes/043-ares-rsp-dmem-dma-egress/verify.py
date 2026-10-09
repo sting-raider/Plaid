@@ -11,6 +11,7 @@ K_INSN_END = 2
 K_CPU_SINK = 3
 K_FOREIGN_SINK = 4
 K_DMA_WRITE = 5
+K_OTHER_RDRAM_WRITE = 6
 
 
 def initial_byte(offset: int) -> int:
@@ -34,12 +35,14 @@ def replay(history: dict, state: dict, enforce_contract: bool = True) -> dict:
     assert [event["seq"] for event in events] == list(range(1, len(events) + 1)), "non-contiguous chronology"
 
     dmem = initial_cells()
-    dram = {}
+    resident = {}
+    dma_exports = {}
     active = None
     contexts = {}
-    rsp_sink_count = cpu_sink_count = dma_write_count = 0
+    rsp_sink_count = cpu_sink_count = dma_write_count = other_rdram_count = 0
     same_value = []
     dma_sources = []
+    competing = []
 
     for event in events:
         kind = event["kind"]
@@ -94,13 +97,37 @@ def replay(history: dict, state: dict, enforce_contract: bool = True) -> dict:
             # the payload is compared, so equal values cannot select an origin.
             assert source_payload == payload(event["value"], 4)
             for i, cell in enumerate(source_cells):
-                dram[event["dram"] + i] = {
+                exported = {
                     **cell,
                     "export_seq": event["seq"],
                     "source": (expected_source + i) & 0xFFF,
+                    "rdram_origin": "sp_dma",
                 }
+                resident[event["dram"] + i] = copy.deepcopy(exported)
+                dma_exports[event["dram"] + i] = copy.deepcopy(exported)
             dma_sources.append((event["dram"], expected_source, event["dma_count"], event["dma_skip"]))
             dma_write_count += 1
+            continue
+        if kind == K_OTHER_RDRAM_WRITE:
+            assert event["bytes"] in (1, 2, 4, 8)
+            data = payload(event["value"], event["bytes"])
+            for i, byte in enumerate(data):
+                address = event["dram"] + i
+                assert (0x1000 <= address < 0x1018) or (0x2000 <= address < 0x2010)
+                resident[address] = {
+                    "value": byte,
+                    "origin": "other_rdram",
+                    "phase": event["phase"],
+                    "context": event["context"],
+                    "writer_seq": event["seq"],
+                    "device": event["device"],
+                    "rdram_origin": "other",
+                }
+            competing.append({
+                "seq": event["seq"], "dram": event["dram"], "bytes": event["bytes"],
+                "device": event["device"], "value": event["value"], "phase": event["phase"],
+            })
+            other_rdram_count += 1
             continue
         raise AssertionError(f"unknown event kind {kind}")
 
@@ -115,8 +142,11 @@ def replay(history: dict, state: dict, enforce_contract: bool = True) -> dict:
     expected_sources = [0x040, 0x044, 0x048, 0x04C, 0xFF8, 0xFFC, 0x000, 0x004]
     assert [source for _, source, _, _ in dma_sources] == expected_sources
 
+    def current_byte(address: int) -> int:
+        return resident.get(address, {"value": 0})["value"]
+
     def word(address: int) -> int:
-        return int.from_bytes(bytes(dram[address + i]["value"] for i in range(4)), "big")
+        return int.from_bytes(bytes(current_byte(address + i) for i in range(4)), "big")
 
     assert state["multi"] == [word(x) for x in (0x1000, 0x1004, 0x1010, 0x1014)]
     assert state["wrap"] == [word(x) for x in (0x2000, 0x2004, 0x2008, 0x200C)]
@@ -125,37 +155,39 @@ def replay(history: dict, state: dict, enforce_contract: bool = True) -> dict:
     # multi-row skip hole. Full RDRAM is retained as a neutrality checkpoint but
     # this bounded lineage trace does not pretend to explain unrelated traffic.
     scoped = bytearray(40)
-    for address, cell in dram.items():
+    for address, cell in resident.items():
         if 0x1000 <= address < 0x1018:
             scoped[address - 0x1000] = cell["value"]
         elif 0x2000 <= address < 0x2010:
             scoped[24 + address - 0x2000] = cell["value"]
         else:
-            raise AssertionError(f"unexpected DMA destination 0x{address:x}")
+            raise AssertionError(f"unexpected tracked RDRAM destination 0x{address:x}")
     assert hashlib.sha256(scoped).hexdigest() == state["egress_sha256"]
     assert state["rdram_bytes"] in (4 * 1024 * 1024, 8 * 1024 * 1024)
 
     if enforce_contract:
         phase1 = [event for event in events if event["kind"] == K_RSP_SINK and event["phase"] == 1]
         assert phase1 and any(event["seq"] in same_value for event in phase1), "same-value RSP store was not retained"
-        assert dram[0x1000]["origin"] == "rsp" and dram[0x1000]["phase"] == 1
-        assert all(dram[address]["origin"] == "initial" for address in (0x1001, 0x1002, 0x1003))
-        assert all(dram[address]["origin"] == "rsp" and dram[address]["phase"] == 2 for address in range(0x1004, 0x1008))
-        assert all(dram[address]["origin"] == "rsp" and dram[address]["phase"] == 3 for address in range(0x1010, 0x1014))
-        assert all(dram[address]["origin"] == "cpu" and dram[address]["phase"] == 4 for address in range(0x1014, 0x1018))
-        assert all(dram[address]["origin"] == "rsp" and dram[address]["phase"] == 5 for address in (0x2006, 0x2007, 0x2008, 0x2009))
-        assert 0x1008 not in dram and 0x100C not in dram
+        assert dma_exports[0x1000]["origin"] == "rsp" and dma_exports[0x1000]["phase"] == 1
+        assert all(dma_exports[address]["origin"] == "initial" for address in (0x1001, 0x1002, 0x1003))
+        assert all(dma_exports[address]["origin"] == "rsp" and dma_exports[address]["phase"] == 2 for address in range(0x1004, 0x1008))
+        assert all(dma_exports[address]["origin"] == "rsp" and dma_exports[address]["phase"] == 3 for address in range(0x1010, 0x1014))
+        assert all(dma_exports[address]["origin"] == "cpu" and dma_exports[address]["phase"] == 4 for address in range(0x1014, 0x1018))
+        assert all(dma_exports[address]["origin"] == "rsp" and dma_exports[address]["phase"] == 5 for address in (0x2006, 0x2007, 0x2008, 0x2009))
+        assert 0x1008 not in dma_exports and 0x100C not in dma_exports
 
     return {
         "events": len(events),
         "rsp_sinks": rsp_sink_count,
         "cpu_sinks": cpu_sink_count,
         "dma_word_writes": dma_write_count,
+        "other_rdram_writes": other_rdram_count,
+        "competing_rdram_writes": competing,
         "same_value_sink_seqs": same_value,
         "dma_sources": [{"dram": d, "dmem": s, "count": c, "skip": k} for d, s, c, k in dma_sources],
-        "exported_rsp_bytes": sum(cell["origin"] == "rsp" for cell in dram.values()),
-        "exported_cpu_bytes": sum(cell["origin"] == "cpu" for cell in dram.values()),
-        "exported_initial_bytes": sum(cell["origin"] == "initial" for cell in dram.values()),
+        "exported_rsp_bytes": sum(cell["origin"] == "rsp" for cell in dma_exports.values()),
+        "exported_cpu_bytes": sum(cell["origin"] == "cpu" for cell in dma_exports.values()),
+        "exported_initial_bytes": sum(cell["origin"] == "initial" for cell in dma_exports.values()),
         "rdram_backing_bytes": state["rdram_bytes"],
         "scoped_egress_sha256": state["egress_sha256"],
     }
