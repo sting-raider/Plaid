@@ -17,6 +17,7 @@ struct EgressEvent {
   u32 bytes = 0;
   u32 dram = 0;
   u32 source = 0xffff'ffff;
+  u32 device = 0xffff'ffff;
   u32 dmaPbus = 0;
   u32 dmaDram = 0;
   u32 dmaLength = 0;
@@ -81,14 +82,34 @@ static auto egress_dmem(u32 offset, u32 bytes, u64 value) -> void {
   egress_push(event);
 }
 
+static auto egress_target_window(u32 address, u32 bytes) -> bool {
+  u64 end = u64(address) + bytes;
+  return (address >= 0x1000 && end <= 0x1018) || (address >= 0x2000 && end <= 0x2010);
+}
+
 static auto egress_rdram(bool write, u32 address, u32 bytes, u32 device, u64 value) -> void {
   using namespace ares::Nintendo64;
-  if(!write || device != (u32)RBusDevice::SP_DMA) return;
+  if(!write) return;
+
+  if(device != (u32)RBusDevice::SP_DMA) {
+    // Capture only competing completed writes that can alter the fixture-owned
+    // destination windows. Unrelated system traffic stays outside this slice.
+    if(!egress_target_window(address, bytes)) return;
+    EgressEvent event{};
+    event.kind = 6;
+    event.dram = address;
+    event.bytes = bytes;
+    event.device = device;
+    event.value = value;
+    egress_push(event);
+    return;
+  }
 
   EgressEvent event{};
   event.kind = 5;
   event.dram = address;
   event.bytes = bytes;
+  event.device = device;
   event.value = value;
   event.dmaPbus = (u32)rsp.dma.current.pbusAddress;
   event.dmaDram = (u32)rsp.dma.current.dramAddress;
@@ -111,9 +132,9 @@ static auto egress_print_events() -> void {
   for(size_t index = 0; index < egressEvents.size(); index++) {
     const auto& e = egressEvents[index];
     std::printf(
-      "%s{\"kind\":%u,\"seq\":%u,\"context\":%u,\"phase\":%u,\"pc\":%u,\"word\":%u,\"offset\":%u,\"bytes\":%u,\"dram\":%u,\"source\":%u,\"dma_pbus\":%u,\"dma_dram\":%u,\"dma_length\":%u,\"dma_count\":%u,\"dma_skip\":%u,\"value\":%llu,\"halted\":%s}",
+      "%s{\"kind\":%u,\"seq\":%u,\"context\":%u,\"phase\":%u,\"pc\":%u,\"word\":%u,\"offset\":%u,\"bytes\":%u,\"dram\":%u,\"source\":%u,\"device\":%u,\"dma_pbus\":%u,\"dma_dram\":%u,\"dma_length\":%u,\"dma_count\":%u,\"dma_skip\":%u,\"value\":%llu,\"halted\":%s}",
       index ? "," : "", e.kind, e.seq, e.context, e.phase, e.pc, e.word,
-      e.offset, e.bytes, e.dram, e.source, e.dmaPbus, e.dmaDram,
+      e.offset, e.bytes, e.dram, e.source, e.device, e.dmaPbus, e.dmaDram,
       e.dmaLength, e.dmaCount, e.dmaSkip, (unsigned long long)e.value,
       e.halted ? "true" : "false");
   }
