@@ -4,8 +4,18 @@
  */
 #include <map>
 #include "../032-ares-queue-identity/observer.hpp"
+#ifndef PLAID_ACCESS_BOOT_FORMAT
 #define PLAID_ACCESS_BOOT_FORMAT "plaid-ares-access-history-v2"
+#endif
+#ifndef PLAID_ACCESS_BOOT_POLICY
 #define PLAID_ACCESS_BOOT_POLICY "identity_ram_buffered_pi_and_actual_queue_scopes"
+#endif
+#ifndef PLAID_QUEUE_BOOT_START
+#define PLAID_QUEUE_BOOT_START access_boot_start
+#endif
+#ifndef PLAID_QUEUE_BOOT_FINISH
+#define PLAID_QUEUE_BOOT_FINISH access_boot_finish
+#endif
 #define PLAID_PI_BOOT_START pi_effect_boot_start
 #define PLAID_PI_BOOT_FINISH pi_effect_boot_finish
 #include "../030-ares-boot-pi-history/observer.hpp"
@@ -93,7 +103,7 @@ static void queue_boot_pi(u32 event,u32 dram,u32 pbus,u32 length,u32 lane,u32 va
   // while the new record above supplies independently observed dispatch identity.
   access_boot_pi(event,dram,pbus,length,lane,value);
 }
-static void access_boot_start(const char* path,const char* romHash,u32 budget,u32 mappedSize,const char* firmwareHash) {
+static void PLAID_QUEUE_BOOT_START(const char* path,const char* romHash,u32 budget,u32 mappedSize,const char* firmwareHash) {
   pi_effect_boot_start(path,romHash,budget,mappedSize,firmwareHash);
   queueIdentityOwner=&ares::Nintendo64::queue;
   nall::plaidQueueObserver=queue_boot_container;
@@ -101,7 +111,7 @@ static void access_boot_start(const char* path,const char* romHash,u32 budget,u3
   plaidCpuQueueDispatchObserver=queue_boot_dispatch;
   plaidPiDmaObserver=queue_boot_pi;
 }
-static void access_boot_finish(u64 fetches) {
+static void PLAID_QUEUE_BOOT_FINISH(u64 fetches) {
   if(bootRequestActive || bootDispatchActive || bootRemovedReady) std::abort();
   nall::plaidQueueObserver=nullptr; plaidPiIoDmaObserver=nullptr; plaidCpuQueueDispatchObserver=nullptr;
   pi_effect_boot_finish(fetches);

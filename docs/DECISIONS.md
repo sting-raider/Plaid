@@ -1057,3 +1057,20 @@ Seven measured-history forgeries fail. Compose these results into boot chronolog
 before introducing a strict Rust consumer. RSP DMEM writes and general producer,
 reset/restore, mutation census and executable lifetime remain open; no reference
 code/runtime dependency, asset or native-complete claim enters production.
+
+## ADR-0073: SP backing events extend chronology without replacing old sources
+
+Status: Accepted for finite research composition, 2026-10-09.
+
+Original optional access-history v3 emits completed SP bank reads/normalized CPU
+and DMA stores on the existing ordinal. Its strict projection restores every v2
+raw context and exact prior source byte; old versions keep their formats/policies.
+The 10,000-call experiment preserves independent unchanged-reference/disabled/
+enabled/repeated state, all v2/v1/v0/v5 sources and 7945 exact SP-backed fetches.
+Missing/ambiguous/foreign/cached reads and stale DMA source receipts stay unknown.
+
+Bank/offset identifies the observed backing only. No ROM/firmware producer,
+RSP DMEM mutation census, executable lifetime or whole-ROM closure is inferred.
+Full-prefix verification and original strict Rust consumption precede broader
+promotion. Generated pinned-reference sources/licenses/assets remain ignored;
+no reference implementation enters the final native path.
