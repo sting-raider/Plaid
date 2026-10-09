@@ -558,6 +558,223 @@ mod queue {
             &f.firmware,
         )
     }
+    mod sp {
+        use super::*;
+        use plaid_core::sp_history::{self as sp, SpHistoryReport};
+        fn fixture() -> Fixture {
+            let mut f = super::fixture();
+            f.history[0]["format"] = json!(sp::FORMAT);
+            f.history[0]["policy"] = json!(sp::POLICY);
+            let begin = f
+                .history
+                .iter()
+                .rposition(|r| r["record"] == "fetch_begin")
+                .unwrap();
+            f.history.insert(begin,row(json!({"record":"scalar","write":false,"address":4096,"aligned_address":4096,"bytes":8,"device":4,"value":7u64<<32})));
+            f.history.insert(begin+1,row(json!({"record":"sp_dma_store","dram":4096,"bank":1,"offset":0,"bytes":8,"value":7u64<<32})));
+            // Nominal SB +3 has a completed four-byte SP sink, preserving full payload.
+            f.history.insert(begin+2,row(json!({"record":"sp_word","write":true,"address":0x04001003,"bank":1,"offset":0,"bytes":4,"value":7,"cpu":true})));
+            for r in f.history.iter_mut().skip(begin + 3) {
+                if r["record"] == "end" {
+                    break;
+                }
+                r["pc"] = json!(0xffffffffa4001000u64);
+                if r["record"] == "scalar" {
+                    *r = json!({"record":"sp_word","pc":0xffffffffa4001000u64,"write":false,"address":0x04001000,
+                        "bank":1,"offset":0,"bytes":4,"value":7,"cpu":true});
+                } else if r["record"] == "fetch" {
+                    r["physical"] = json!(0x04001000);
+                } else {
+                    r["vaddr"] = json!(0xffffffffa4001000u64);
+                    r["translated"] = json!(0x04001000);
+                    r["bus"] = json!(0x04001000);
+                }
+            }
+            f.fetches[2]["pc"] = json!(0xffffffffa4001000u64);
+            f.fetches[2]["physical"] = json!(0x04001000);
+            renumber(&mut f.history);
+            f
+        }
+        fn inspect(f: &Fixture) -> Result<SpHistoryReport, String> {
+            sp::inspect_sp_boot_history(
+                std::io::BufReader::with_capacity(1, Cursor::new(wire(&f.history))),
+                Cursor::new(wire(&f.fetches)),
+                &f.rom,
+                &f.firmware,
+            )
+        }
+        fn verify(r: &SpHistoryReport, f: &Fixture) -> Result<(), String> {
+            sp::verify_sp_boot_history_report(
+                r,
+                Cursor::new(wire(&f.history)),
+                Cursor::new(wire(&f.fetches)),
+                &f.rom,
+                &f.firmware,
+            )
+        }
+        #[test]
+        fn actual_sp_reads_normalized_stores_and_complete_nested_sources_are_bound() {
+            let f = fixture();
+            let r = inspect(&f).unwrap();
+            assert_eq!(
+                (
+                    r.fetches,
+                    r.sp_backed_fetches,
+                    r.other_or_unwitnessed_fetches
+                ),
+                (2, 1, 1)
+            );
+            assert_eq!(r.history_sha256, sha256(&wire(&f.history)));
+            assert_eq!(r.samples.len(), 1);
+            assert_eq!(r.samples[0].bank, 1);
+            assert_eq!(r.samples[0].offset, 0);
+            assert_eq!(r.samples[0].observations, 1);
+            let read = f
+                .history
+                .iter()
+                .find(|e| e["record"] == "sp_word" && e["write"] == false)
+                .unwrap();
+            assert_eq!(
+                r.samples[0].first_read_ordinal,
+                read["ordinal"].as_u64().unwrap()
+            );
+            assert_eq!(r.dma_store_receipts.len(), 1);
+            assert!(r.dma_store_receipts[0].read_ordinal.is_some());
+            assert_eq!(r.projection.accepted_requests, 3);
+            assert_eq!(r.projection.projection.canonical_rom_byte_origins, 4);
+            assert!(
+                !r.mutation_coverage_certified
+                    && !r.executable_lifetime_certified
+                    && !r.native_complete
+            );
+            verify(&r, &f).unwrap();
+            assert!(super::inspect(&f).is_err());
+            let old = super::fixture();
+            assert!(inspect(&old).is_err());
+            for field in [
+                "mutation_coverage_certified",
+                "executable_lifetime_certified",
+                "native_complete",
+            ] {
+                let mut changed = serde_json::to_value(&r).unwrap();
+                changed[field] = json!(true);
+                assert!(verify(&serde_json::from_value(changed).unwrap(), &f).is_err());
+            }
+            let mut changed = r.clone();
+            changed.samples[0].first_read_ordinal += 1;
+            assert!(verify(&changed, &f).is_err());
+            let mut changed = r.clone();
+            changed.dma_store_receipts[0].read_ordinal = None;
+            assert!(verify(&changed, &f).is_err());
+        }
+        #[test]
+        fn sp_source_forgeries_and_full_raw_or_paired_source_changes_fail_closed() {
+            for (field, value) in [
+                ("bank", json!(0)),
+                ("offset", json!(4)),
+                ("bytes", json!(1)),
+                ("context", json!(0)),
+                ("value", json!(0)),
+                ("cpu", json!(1)),
+                ("extra", json!(0)),
+            ] {
+                let mut f = fixture();
+                let read = f
+                    .history
+                    .iter_mut()
+                    .find(|e| e["record"] == "sp_word" && e["write"] == false)
+                    .unwrap();
+                read[field] = value;
+                assert!(inspect(&f).is_err(), "{field}");
+            }
+            let f = fixture();
+            let r = inspect(&f).unwrap();
+            let mut changed = fixture();
+            changed.firmware[0] = 1;
+            assert!(verify(&r, &changed).is_err());
+            let mut changed = fixture();
+            changed.fetches[2]["word"] = json!(8);
+            assert!(inspect(&changed).is_err());
+            let mut changed = fixture();
+            changed
+                .history
+                .iter_mut()
+                .find(|e| e["record"] == "sp_word" && e["write"] == true)
+                .unwrap()["value"] = json!(9);
+            inspect(&changed).unwrap();
+            assert!(verify(&r, &changed).is_err());
+            let raw = String::from_utf8(wire(&f.history)).unwrap();
+            for bad in [
+                raw.replacen("\"bank\":1", "\"bank\":1,\"bank\":1", 1),
+                raw[..raw.len() - 1].to_owned(),
+                raw.clone() + "{}\n",
+            ] {
+                assert!(
+                    sp::inspect_sp_boot_history(
+                        Cursor::new(bad),
+                        Cursor::new(wire(&f.fetches)),
+                        &f.rom,
+                        &f.firmware
+                    )
+                    .is_err()
+                );
+            }
+            let serialized = serde_json::to_string(&r).unwrap();
+            assert!(
+                serde_json::from_str::<SpHistoryReport>(&serialized.replacen(
+                    "\"records\":",
+                    "\"records\":1,\"records\":",
+                    1
+                ))
+                .is_err()
+            );
+        }
+        #[test]
+        fn missing_ambiguous_foreign_cached_reads_and_stale_dma_receipts_stay_unknown() {
+            for mode in 0..4 {
+                let mut f = fixture();
+                let i = f
+                    .history
+                    .iter()
+                    .position(|e| e["record"] == "sp_word" && e["write"] == false)
+                    .unwrap();
+                match mode {
+                    0 => {
+                        f.history.remove(i);
+                    }
+                    1 => {
+                        f.history.insert(i, f.history[i].clone());
+                    }
+                    2 => {
+                        f.history[i]["cpu"] = json!(false);
+                    }
+                    _ => {
+                        for e in &mut f.history[i - 1..] {
+                            if e.get("cached").is_some() {
+                                e["cached"] = json!(true);
+                            }
+                        }
+                        f.fetches[2]["cached"] = json!(true);
+                        f.fetches[2]["cache_line"] = json!({"slot":128,"tag_key":0x04001001,"index":0,"words":[7,7,7,7,7,7,7,7]});
+                    }
+                }
+                renumber(&mut f.history);
+                let r = inspect(&f).unwrap();
+                assert_eq!(r.sp_backed_fetches, 0, "{mode}");
+            }
+            let mut f = fixture();
+            let i = f
+                .history
+                .iter()
+                .position(|e| e["record"] == "sp_dma_store")
+                .unwrap();
+            f.history.insert(i,row(json!({"record":"sp_word","write":false,"address":0x04000000,"bank":0,"offset":0,"bytes":4,"value":7,"cpu":true})));
+            renumber(&mut f.history);
+            let r = inspect(&f).unwrap();
+            assert_eq!(r.dma_store_receipts[0].read_ordinal, None);
+            assert_eq!(r.unconsumed_dma_read_receipts, 1);
+        }
+    }
     #[test]
     fn actual_status_identity_preserves_all_nested_sources_and_open_gate() {
         let f = fixture();
