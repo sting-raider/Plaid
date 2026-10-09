@@ -61,3 +61,8 @@ remain open. The fixed supplied-firmware NTSC/6102/8-MiB/deterministic/PIF-HLE
 prefix proves neither guest-suite completion nor whole-ROM coverage. Mutation
 coverage, executable lifetime and native-complete flags remain false. Compose
 actual PIF reads and producer history next.
+
+The separate v3 CLI inspection/rechecking commands now pass original synthetic
+byte-order equivalence, backing/sink attribution, full source/report changes,
+uncertified-flag tampering and version/input protection. Old PI commands remain
+unchanged and reject v3.

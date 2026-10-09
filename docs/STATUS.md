@@ -440,3 +440,9 @@ capture observations/digests already agree independently. Three adversarial
 integration tests bring the suite to 97 integrations plus three units; formatting,
 strict Clippy and 22 retained research contracts pass. No production image,
 lifetime or closed-world status is promoted.
+
+Separate `inspect-sp-boot-history`/`verify-sp-boot-history` CLI commands now expose
+the strict finite v3 report. Synthetic tests pass canonical ROM byte orders,
+exact backing/sink witnesses, complete source/report tampering, uncertified flags,
+version/truncation rejection and protection of all four inputs. Previous PI CLI
+tests and strict Clippy still pass.

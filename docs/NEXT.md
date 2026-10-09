@@ -127,3 +127,8 @@ Strict Rust v3 inspection/source rechecking now passes the full retained capture
 finish the independent full Python comparison and expose the tested finite CLI.
 Actual PIF reads are the remaining fetch-backing domain; ultimate SP producers,
 ordinary RSP DMEM mutations and executable lifetimes remain separate.
+
+The v3 CLI now passes all source/report/version/input gates. Finish the full
+independent comparison, then compose actual PIF-ROM backing reads and normalized
+PIF backing writes. Keep SI busy-latch/lockout/RAM/cached paths unknown unless an
+actual in-context ROM backing read is observed.

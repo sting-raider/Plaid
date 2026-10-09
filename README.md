@@ -78,6 +78,7 @@ python scripts/test_history.py
 python scripts/test_pi_history.py
 python scripts/test_pi_queue_history.py
 python scripts/test_pi_fetch_lineage.py
+python scripts/test_sp_history.py
 python scripts/test_mupen_hooks.py
 python scripts/test_mupen_execution.py
 python scripts/test_mupen_session.py
@@ -122,6 +123,8 @@ plaid inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.
 plaid verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json>
 plaid inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json>
 plaid verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json>
+plaid inspect-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json>
+plaid verify-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json>
 plaid merge <left.json> <right.json> <out.json>
 plaid solve [rom] <map.json>
 ```
@@ -191,6 +194,15 @@ rechecks both complete sources and all report fields. Mutation coverage, executa
 lifetime and native completion remain uncertified; discrete sample endpoints do
 not define continuous lifetimes. `python scripts/test_pi_fetch_lineage.py` checks
 CLI source/report/version and input-protection gates with original synthetic data.
+
+`inspect-sp-boot-history` checks the separate v3 actual SP backing-read and
+normalized CPU/DMA store protocol against every nested v2/v1/v0/v5 source.
+Uncached fetch samples retain physical mirrors, selected bank/offset and raw read
+ordinals. Missing, ambiguous, foreign and cached reads stay unknown. DMA receipt
+matching cannot cross an unrelated event. `verify-sp-boot-history` reconstructs
+the complete report; bank identity does not certify ultimate origin, mutation
+coverage or lifetime. `python scripts/test_sp_history.py` checks canonical byte
+orders, complete-source/report changes, version separation and input protection.
 
 Additional disposable reference experiments are documented under `spikes/`.
 `python spikes/003-ares-oracle/run.py` builds the pinned ares core separately and
