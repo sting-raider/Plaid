@@ -241,7 +241,13 @@ fn deleting_actual_outer_fixed_point_limit_still_cannot_close() {
         .find(|s| s.site.pc.0 == 0x8000_1ff8)
         .expect("last traversed stage has an indirect site");
     assert!(last_site.candidates.keys().any(|a| a.pc == missing_target));
-    assert!(!limited.map.blocks.iter().any(|b| b.start.pc == missing_target));
+    assert!(
+        !limited
+            .map
+            .blocks
+            .iter()
+            .any(|b| b.start.pc == missing_target)
+    );
 
     let edited = without_resource_limit(limited.map);
     let report = solve(
