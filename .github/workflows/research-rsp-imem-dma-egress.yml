@@ -1,0 +1,55 @@
+name: Research RSP IMEM DMA egress
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/rsp-imem-dma-egress-gpt56sol
+    paths:
+      - 'spikes/047-ares-rsp-imem-dma-egress/**'
+      - 'research/rsp-imem-dma-egress.md'
+      - '.github/workflows/research-rsp-imem-dma-egress.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact pinned references
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs
+          git init .refs/ares
+          git -C .refs/ares remote add origin https://github.com/ares-emulator/ares.git
+          git -C .refs/ares fetch --depth=1 origin 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git -C .refs/ares checkout --detach 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git init .refs/gopher64
+          git -C .refs/gopher64 remote add origin https://github.com/gopher64/gopher64.git
+          git -C .refs/gopher64 fetch --depth=1 origin e96debac941a26ba4961e5145056c0821d3a56f7
+          git -C .refs/gopher64 checkout --detach e96debac941a26ba4961e5145056c0821d3a56f7
+      - name: Syntax and exact-source guards
+        run: |
+          python3 -m py_compile spikes/047-ares-rsp-imem-dma-egress/run.py spikes/047-ares-rsp-imem-dma-egress/verify.py spikes/047-ares-rsp-imem-dma-egress/source_guard.py
+          python3 spikes/047-ares-rsp-imem-dma-egress/source_guard.py
+      - name: Execute reverse-DMA provenance experiment
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p target
+          python3 spikes/047-ares-rsp-imem-dma-egress/run.py | tee target/rsp-imem-dma-egress-run.log
+          sha256sum target/ares-rsp-imem-dma-egress/results.json
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rsp-imem-dma-egress-evidence
+          if-no-files-found: warn
+          path: |
+            target/ares-rsp-imem-dma-egress/results.json
+            target/rsp-imem-dma-egress-run.log
+            target/ares-rsp-imem-dma-egress/baseline-build/build.log
+            target/ares-rsp-imem-dma-egress/sensor-build/build.log
