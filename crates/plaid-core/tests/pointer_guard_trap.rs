@@ -59,9 +59,10 @@ fn has_guard_delay_blocker(map: &ProgramMap) -> bool {
 }
 
 #[test]
-fn current_recognizer_accepts_exceptional_executed_guard_delay_slots() {
+fn exceptional_executed_guard_delay_slots_reject_table_candidates() {
     // Plain BEQ selects the fallthrough dispatch when SLTIU produced nonzero.
-    // Its delay slot executes regardless of branch direction.
+    // Its delay slot executes regardless of branch direction, so any instruction
+    // that can synchronously terminate that path must prevent table recognition.
     const BEQ_T1_ZERO: u32 = 0x11200016;
     let exceptional = [
         ("teq", 0x00000034),
@@ -76,12 +77,11 @@ fn current_recognizer_accepts_exceptional_executed_guard_delay_slots() {
         assert!(has_guard_delay_blocker(&cfg), "{name}: CFG must flag exceptional slot");
 
         let analyzed = analyze_indirect(&cfg, &i).unwrap();
-        assert_eq!(
-            candidate_pcs(&analyzed),
-            [0x80000040, 0x80000050],
-            "{name}: current table recognizer unexpectedly rejected the poisoned guard"
+        assert!(
+            candidate_pcs(&analyzed).is_empty(),
+            "{name}: unreachable dispatch must not gain pointer-table candidates"
         );
-        eprintln!("CURRENT_ACCEPT name={name} slot={slot:08x} candidates=2");
+        eprintln!("EXECUTED_REJECT name={name} slot={slot:08x}");
     }
 }
 
