@@ -32,5 +32,7 @@ jobs:
             libdbus-1-dev libfontconfig1-dev
       - name: Compile Plaid probe runner
         run: python3 -m py_compile spikes/044-gopher-sdc1-sp-exec/run.py
+      - name: Isolate nested Gopher Cargo workspace
+        run: printf '\n[workspace]\n' >> .refs/gopher64/Cargo.toml
       - name: Execute exact-pin Gopher COP1 to SP differential
         run: python3 spikes/044-gopher-sdc1-sp-exec/run.py
