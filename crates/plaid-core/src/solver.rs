@@ -108,6 +108,46 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 .collect(),
         );
     }
+    for observation in &map.indirect_observations {
+        let possible_sources: Vec<_> = map
+            .indirect_sites
+            .iter()
+            .filter(|site| {
+                site.site.pc == observation.site
+                    && match &observation.source_unit {
+                        Some(unit) => site.evidence.contains(unit),
+                        None => site.site.generation == observation.generation,
+                    }
+            })
+            .collect();
+        let unresolved_evidence: EvidenceRefs = observation
+            .evidence
+            .iter()
+            .filter(|raw_ref| {
+                let matches = possible_sources
+                    .iter()
+                    .flat_map(|site| site.observed.iter())
+                    .filter(|(target, refs)| {
+                        target.pc == observation.target && refs.contains(*raw_ref)
+                    })
+                    .count();
+                matches != 1
+            })
+            .cloned()
+            .collect();
+        if !unresolved_evidence.is_empty() {
+            add(
+                "unresolved_raw_indirect_execution",
+                if possible_sources.len() == 1 {
+                    Some(possible_sources[0].site.clone())
+                } else {
+                    None
+                },
+                "raw executed indirect transfer lacks exactly one provenance-linked declared source/target identity",
+                unresolved_evidence,
+            );
+        }
+    }
     if map.entries.is_empty() {
         add(
             "missing_entry_universe",
