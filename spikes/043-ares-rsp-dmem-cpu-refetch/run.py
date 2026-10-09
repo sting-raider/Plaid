@@ -56,6 +56,7 @@ def check(events,initial):
     fetch_pending=None
     phase_writers={}
     rsp_sinks=[];foreign_sinks=[];cpu_writes=[];reads=[]
+    rsp_labels={};foreign_labels={}
     for e in events:
         kind=e['kind']
         if kind=='rsp_begin':
@@ -71,10 +72,14 @@ def check(events,initial):
             for i,b in enumerate(vals):
                 off=(e['offset']+i)&0xfff
                 if off<8: data[off]=b;writer[off]=label
-            rsp_sinks.append(e)
+            rsp_sinks.append(e);rsp_labels[e['phase']]=label
         elif kind=='foreign_sink':
-            assert rsp_active is None and e['context']==0 and e['phase']==6 and e['bytes']==4 and e['offset']==0
-            foreign_sinks.append(e)
+            assert rsp_active is None and e['context']==0 and e['bytes'] in (1,2,4,8)
+            vals=bytes_of(e['value'],e['bytes']);label=f"unknown:{e['ordinal']}"
+            for i,b in enumerate(vals):
+                off=(e['offset']+i)&0xfff
+                if off<8: data[off]=b;writer[off]=label
+            foreign_sinks.append(e);foreign_labels[e['phase']]=label
         elif kind=='cpu_fetch_begin':
             assert fetch_active is None and fetch_pending is None and e['context']==e['ordinal']
             fetch_active=e['context']
@@ -84,7 +89,8 @@ def check(events,initial):
             assert fetch_active is None and fetch_pending==e['context'];fetch_pending=None
         elif kind=='sp_write':
             assert e['cpu'] and e['bank']==0 and e['bytes']==4 and e['context']==0
-            assert len(foreign_sinks)==1 and foreign_sinks[-1]['phase']==e['phase'] and foreign_sinks[-1]['offset']==e['offset'] and foreign_sinks[-1]['value']==e['value']
+            paired=[s for s in foreign_sinks if s['phase']==e['phase'] and s['offset']==e['offset'] and s['bytes']==e['bytes'] and s['value']==e['value'] and s['ordinal']<e['ordinal']]
+            assert len(paired)==1
             vals=bytes_of(e['value'],4);label=f"cpu:{e['ordinal']}"
             for i,b in enumerate(vals):
                 off=e['offset']+i
@@ -99,22 +105,35 @@ def check(events,initial):
         else:
             raise AssertionError('unknown event '+kind)
     assert rsp_active is fetch_active is fetch_pending is None
-    assert [r['phase'] for r in reads]==[1,3,5,7,9]
-    assert [s['phase'] for s in rsp_sinks]==[2,4,8]
-    assert [s['phase'] for s in foreign_sinks]==[6]
-    assert [w['phase'] for w in cpu_writes]==[6] and foreign_sinks[0]['ordinal']<cpu_writes[0]['ordinal']
+    assert [r['phase'] for r in reads]==[1,3,5,7,9,11,13,15,17]
+    assert [s['phase'] for s in rsp_sinks]==[2,4,8,10,12,16]
+    assert [s['phase'] for s in foreign_sinks]==[6,14]
+    assert [w['phase'] for w in cpu_writes]==[6]
+    assert foreign_sinks[0]['ordinal']<cpu_writes[0]['ordinal']
+
     assert len(set(phase_writers[1]))==1 and phase_writers[1][0]=='initial'
-    assert len(set(phase_writers[3]))==1 and phase_writers[3][0].startswith('rsp:')
-    assert len(set(phase_writers[5]))==1 and phase_writers[5][0].startswith('rsp:')
-    assert phase_writers[5]!=phase_writers[3]
+    assert len(set(phase_writers[3]))==1 and phase_writers[3][0]==rsp_labels[2]
+    assert len(set(phase_writers[5]))==1 and phase_writers[5][0]==rsp_labels[4]
+    assert rsp_labels[4]!=rsp_labels[2]  # same-value RSP SW is a new generation
     assert len(set(phase_writers[7]))==1 and phase_writers[7][0].startswith('cpu:')
-    assert phase_writers[9]==phase_writers[7]
+    assert phase_writers[9]==phase_writers[7]  # equal-valued neighbor write cannot steal lineage
+
+    cpu_label=phase_writers[7][0]
+    assert phase_writers[11]==(cpu_label,cpu_label,cpu_label,rsp_labels[10])
+    assert phase_writers[13]==(cpu_label,cpu_label,rsp_labels[12],rsp_labels[10])
+    assert phase_writers[15]==(cpu_label,cpu_label,rsp_labels[12],foreign_labels[14])
+    assert phase_writers[17]==(cpu_label,cpu_label,rsp_labels[12],rsp_labels[16])
+    assert rsp_labels[16]!=rsp_labels[10]  # same-value decoded SB restores a distinct known generation
+
     return dict(phase_writers={str(k):list(v) for k,v in sorted(phase_writers.items())},
-                rsp_sink_ordinals=[e['ordinal'] for e in rsp_sinks],foreign_sink_ordinal=foreign_sinks[0]['ordinal'],cpu_write_ordinal=cpu_writes[0]['ordinal'])
+                rsp_sink_ordinals=[e['ordinal'] for e in rsp_sinks],
+                foreign_sink_ordinals=[e['ordinal'] for e in foreign_sinks],
+                cpu_write_ordinal=cpu_writes[0]['ordinal'])
 
 
 def naive_value_only(events):
-    return all(e['value'] in (0x340800aa,0x34081111) for e in events if e['kind']=='sp_read')
+    plausible={0x340800aa,0x34081111,0x34081122,0x34087722}
+    return all(e['value'] in plausible for e in events if e['kind']=='sp_read')
 
 
 def reject_forgeries(events,initial):
@@ -125,17 +144,20 @@ def reject_forgeries(events,initial):
     x=copy.deepcopy(events);next(e for e in x if e['kind']=='rsp_sink' and e['phase']==8)['offset']=0;cases.append(('decoy_wrong_offset',x,False))
     x=copy.deepcopy(events);next(e for e in x if e['kind']=='rsp_sink' and e['phase']==2)['context']=0;cases.append(('lost_rsp_context',x,False))
     x=copy.deepcopy(events);next(e for e in x if e['kind']=='sp_write')['cpu']=False;cases.append(('cpu_writer_flag',x,False))
-    x=copy.deepcopy(events);next(e for e in x if e['kind']=='foreign_sink')['value']^=1;cases.append(('foreign_sink_pairing',x,False))
+    x=copy.deepcopy(events);next(e for e in x if e['kind']=='foreign_sink' and e['phase']==6)['value']^=1;cases.append(('foreign_sink_pairing',x,False))
+    x=copy.deepcopy(events);next(e for e in x if e['kind']=='rsp_sink' and e['phase']==10)['offset']=2;cases.append(('partial_rsp_wrong_offset',x,False))
+    x=copy.deepcopy(events);next(e for e in x if e['kind']=='rsp_sink' and e['phase']==12)['offset']=3;cases.append(('vector_rsp_wrong_offset',x,False))
+    x=copy.deepcopy(events);next(e for e in x if e['kind']=='foreign_sink' and e['phase']==14)['offset']=4;cases.append(('same_value_foreign_wrong_offset',x,True))
     x=copy.deepcopy(events);next(e for e in x if e['kind']=='sp_read' and e['phase']==5)['value']^=1;cases.append(('forged_read_value',x,False))
     x=copy.deepcopy(events);x[1]['ordinal']=x[0]['ordinal'];cases.append(('duplicate_ordinal',x,False))
-    naive_accepted=False
+    naive_accepted=[]
     for name,history,naive_case in cases:
-        if naive_case: naive_accepted=naive_value_only(history)
+        if naive_case and naive_value_only(history): naive_accepted.append(name)
         try:check(history,initial)
         except AssertionError: rejected.append(name)
         else: raise AssertionError('forged history accepted: '+name)
-    assert naive_accepted
-    return dict(rejected=rejected,naive_value_only_accepts_deleted_generation=True)
+    assert naive_accepted==['delete_same_value_rsp_generation','same_value_foreign_wrong_offset']
+    return dict(rejected=rejected,naive_value_only_accepts=naive_accepted)
 
 
 def parse(raw):
@@ -165,14 +187,14 @@ def main():
         assert original[key]==plain[key]==traced[key]==repeat[key]
     assert plain['trace']['events']==[] and original['trace']['events']==[]
     assert plain['machine_sha256']==traced['machine_sha256']==repeat['machine_sha256']
-    assert traced['word0']==traced['word4']==0x34081111 and traced['t0']==0x1111
+    assert traced['word0']==0x34087722 and traced['word4']==0x34081111 and traced['t0']==0x7722
     lineage=check(traced['trace']['events'],traced['initial_bytes'])
     forged=reject_forgeries(traced['trace']['events'],traced['initial_bytes'])
     result=dict(pin=builder.REV,baseline_equal=True,repeat_equal=True,lineage=lineage,forgeries=forged,raw=traced)
     path=OUTPUT/'results.json';path.write_text(json.dumps(result,indent=2,sort_keys=True)+'\n',encoding='utf-8',newline='\n')
     print(json.dumps({k:result[k] for k in ('pin','baseline_equal','repeat_equal','lineage','forgeries')},sort_keys=True),flush=True)
     print('RESULT_SHA256='+hashlib.sha256(path.read_bytes()).hexdigest(),flush=True)
-    print('PASS exact RSP DMEM generations compose into CPU SP refetch and survive same-value adversaries',flush=True)
+    print('PASS exact RSP DMEM generations compose into CPU SP refetch across split and unknown-byte adversaries',flush=True)
 
 
 if __name__=='__main__':main()
