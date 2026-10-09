@@ -209,3 +209,12 @@ Additional disposable reference experiments are documented under `spikes/`.
 checks original cartridge, linked-memory and exception cases plus eight independent
 Mupen CPU comparisons. It requires Linux G++ C++20 (Windows uses WSL Ubuntu).
 Its explicit synthetic initial state excludes boot and full hardware validation.
+
+`inspect-pif-boot-history` checks separate v4 PIF ROM reads and delegated no-effect
+write attempts against all nested v3/v2/v1/v0/v5 sources. Uncached fetch witnesses
+retain physical mirrors and actual read ordinals; firmware equality remains a
+separate fact. `verify-pif-boot-history` rebuilds the complete report. Missing,
+ambiguous, latch-only, locked, RAM and cached paths stay unknown. Attempts do not
+certify mutation or executable lifetime; native completion remains false.
+`python scripts/test_pif_history.py` tests canonical ROM byte orders, full source/
+report tampering, version separation and protection of all supplied inputs.

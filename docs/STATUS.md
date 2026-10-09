@@ -468,3 +468,8 @@ match supplied firmware; no write attempts occur in this prefix. Together with
 previous finite SP/RAM witnesses this closes the observed backing-domain gap,
 while producer completeness, mutations and executable lifetimes remain OPEN.
 All 100 integration tests plus three units and strict Clippy pass (ADR-0076).
+
+Separate `inspect-pif-boot-history`/`verify-pif-boot-history` commands expose finite
+v4 inspection. Synthetic tests pass canonical byte orders, read/attempt semantics,
+full report/source binding, old-version rejection and all-input protection. All
+older SP/PI CLI tests still pass; 23 retained research contracts/guards pass.
