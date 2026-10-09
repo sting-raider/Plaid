@@ -1,0 +1,63 @@
+name: Research RSP SP-DMA I-cache composition
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/rsp-spdma-icache-compose-gpt56sol
+    paths:
+      - 'experiments/rsp-spdma-icache-compose/**'
+      - 'research/rsp-spdma-icache-compose.md'
+      - '.github/workflows/research-rsp-spdma-icache-compose.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  compose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch exact pinned ares
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs
+          git init .refs/ares
+          git -C .refs/ares remote add origin https://github.com/ares-emulator/ares.git
+          git -C .refs/ares fetch --depth=1 origin 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git -C .refs/ares checkout --detach 9408cb43d4948fc3ea6e152a307a34348df3fe04
+
+      - name: Guard exact source seams
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/rsp-spdma-icache-compose
+          python3 experiments/rsp-spdma-icache-compose/source_guard.py --ares .refs/ares \
+            | tee target/rsp-spdma-icache-compose/source-guard.json
+
+      - name: Syntax check and deterministic replay
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile \
+            experiments/rsp-spdma-icache-compose/model.py \
+            experiments/rsp-spdma-icache-compose/source_guard.py
+          python3 experiments/rsp-spdma-icache-compose/model.py \
+            > target/rsp-spdma-icache-compose/run1.json
+          python3 experiments/rsp-spdma-icache-compose/model.py \
+            > target/rsp-spdma-icache-compose/run2.json
+          cmp target/rsp-spdma-icache-compose/run1.json \
+              target/rsp-spdma-icache-compose/run2.json
+          sha256sum target/rsp-spdma-icache-compose/run1.json \
+            | tee target/rsp-spdma-icache-compose/run1.sha256
+          cat target/rsp-spdma-icache-compose/run1.json
+
+      - name: Upload composition evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rsp-spdma-icache-compose-evidence
+          if-no-files-found: error
+          path: target/rsp-spdma-icache-compose/
