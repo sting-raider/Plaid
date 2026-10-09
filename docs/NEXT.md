@@ -117,3 +117,8 @@ RSP-originated DMEM mutations; PIF reads/initialization are the next source gap.
 The latest RSP worker closeout now reproduces the nonzero SRV bit-12 adversary
 (29 decoded probes); no ordinary RSP store gains an IMEM sink. Include those
 actual DMEM mutations if extending CPU-to-SP source lineage.
+
+The v3 SP boot extension now preserves all prior sources/checkpoints on the
+10,000-call capture. Finish full-prefix independent replay and strict source-bound
+Rust consumption, then compose actual PIF backing and SP producers. Its eleven
+standalone forgeries supplement the actual controlled sensor adversaries.

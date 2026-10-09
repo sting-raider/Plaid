@@ -424,3 +424,10 @@ Latest worker research is reconciled: the decoded RSP self-store fixture now
 passes 29 probes, including the added 15-byte SRV at `0x100f`. Repeated output
 and final DMEM hash match the worker closeout; IMEM remains unchanged throughout.
 The original 28-case result is preserved in its prior ignored directory.
+
+Original optional boot access-history v3 now composes actual SP Word results and
+normalized DMA stores with the existing PI/queue chronology. The 10,000-call
+capture has 7945 exact SP-backed fetches and preserves complete prior v2/v1/v0/v5
+sources and unchanged-reference/disabled/repeated checkpoints. Eleven standalone
+forgeries pass rejection tests. Full-prefix rechecking and strict Rust consumption
+are in progress; no bank identity becomes ultimate origin or executable lifetime.
