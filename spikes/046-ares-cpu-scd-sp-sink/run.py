@@ -81,8 +81,6 @@ def source_guard() -> tuple[dict[str, str], dict[str, int | bool]]:
         assert "impl Test for SCD" in llsc
         assert "soft_assert_eq(scd_status, 1, \"SCD success flag\")" in llsc
         assert "soft_assert_eq(memory, 0x1020_3040_5060_7080, \"Memory after SCD\")" in llsc
-        # The hardware-facing pin independently covers normal-memory SCD and SP SD,
-        # but contains no direct SCD-to-SPMEM case. Keep that absence explicit.
         assert "SCD" not in sp and "scd" not in sp
         comparison["systemtest_sp_sd_upper_word_only"] = True
         comparison["systemtest_scd_rdram_full64"] = True
@@ -99,6 +97,13 @@ def invoke(exe: Path) -> tuple[str, dict, list[str]]:
     noise = [line for line in lines if not line.lstrip().startswith("{")]
     assert json_lines, {"stdout": proc.stdout[-4000:], "stderr": proc.stderr[-4000:]}
     return proc.stdout, json.loads(json_lines[-1]), noise
+
+
+def persist(body: dict) -> bytes:
+    encoded = (json.dumps(body, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    OUTPUT.mkdir(parents=True, exist_ok=True)
+    (OUTPUT / "results.json").write_bytes(encoded)
+    return encoded
 
 
 def main() -> None:
@@ -121,11 +126,28 @@ def main() -> None:
     assert baseline_doc["facts"] == enabled_doc["facts"] == repeat_doc["facts"]
     assert baseline_doc["decoy_ok"] == enabled_doc["decoy_ok"] == repeat_doc["decoy_ok"] is True
 
+    pre_body = {
+        "stage": "observed-before-hypothesis-verification",
+        "ares_revision": ARES_REV,
+        "gopher_revision": GOPHER_REV if GOPHER.exists() else None,
+        "systemtest_revision": SYSTEMTEST_REV if SYSTEMTEST.exists() else None,
+        "baseline_facts": baseline_doc["facts"],
+        "enabled": enabled_doc,
+        "reference_comparison": comparison,
+        "non_json_stdout": {"baseline": baseline_noise, "enabled": enabled_noise},
+        "source_sha256": hashes,
+    }
+    pre_encoded = persist(pre_body)
+    print("OBSERVED_FACTS=" + json.dumps(enabled_doc["facts"], sort_keys=True, separators=(",", ":")))
+    print("OBSERVED_EVENTS=" + json.dumps(enabled_doc["events"], sort_keys=True, separators=(",", ":")))
+    print("OBSERVED_SHA256=" + hashlib.sha256(pre_encoded).hexdigest())
+
     summary = verify_mod.verify(enabled_doc)
     forged = verify_mod.forged_rejections(enabled_doc)
     assert len(forged) == 6
 
     body = {
+        "stage": "verified",
         "ares_revision": ARES_REV,
         "gopher_revision": GOPHER_REV if GOPHER.exists() else None,
         "systemtest_revision": SYSTEMTEST_REV if SYSTEMTEST.exists() else None,
@@ -137,9 +159,7 @@ def main() -> None:
         "non_json_stdout": {"baseline": baseline_noise, "enabled": enabled_noise},
         "source_sha256": hashes,
     }
-    encoded = (json.dumps(body, sort_keys=True, separators=(",", ":")) + "\n").encode()
-    OUTPUT.mkdir(parents=True, exist_ok=True)
-    (OUTPUT / "results.json").write_bytes(encoded)
+    encoded = persist(body)
     print(json.dumps({**summary, "forged_histories_rejected": forged, "neutrality": True, "repeat_deterministic": True, "reference_comparison": comparison, "non_json_stdout_lines": {"baseline": len(baseline_noise), "enabled": len(enabled_noise)}}, sort_keys=True))
     print("TRACE_SHA256=" + hashlib.sha256(enabled_raw.encode()).hexdigest())
     print("RESULT_SHA256=" + hashlib.sha256(encoded).hexdigest())
