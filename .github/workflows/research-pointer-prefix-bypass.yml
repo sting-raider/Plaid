@@ -16,6 +16,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Run deterministic prefix reducer
+        run: python3 experiments/pointer_prefix_bypass.py
       - name: Run pointer prefix bypass regression
         run: cargo test -p plaid-core --test pointer_prefix_bypass -- --nocapture
       - name: Run full plaid-core tests
