@@ -6,7 +6,7 @@ on:
       - research/solver-raw-indirect-closure-gpt56sol
 
 jobs:
-  focused:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,3 +15,9 @@ jobs:
           components: rustfmt, clippy
       - name: Focused regression
         run: cargo test -p plaid-core --test solver_raw_indirect -- --nocapture
+      - name: Full plaid-core tests
+        run: cargo test -p plaid-core
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Strict clippy
+        run: cargo clippy -p plaid-core --all-targets -- -D warnings
