@@ -79,6 +79,9 @@ int main(int argc, char** argv) {
   cpu.scc.epc = epcSentinel;
   cpu.pipeline.setPc(startPc);
 
+  // These fields record the gate presented to the final architectural
+  // instruction-boundary check in each scenario. Keep them causal, rather than
+  // reconstructing them from the resulting exception state.
   u32 bev = 0, ie = 0, exl = 0, erl = 0, im = 0;
   u32 pending_before_write = 0;
   u32 pending_after_write = 0;
@@ -86,68 +89,72 @@ int main(int argc, char** argv) {
   u32 guest_write_executed = 0;
   u32 second_instruction_attempted = 0;
 
+  auto applyGate = [&](u32 b, u32 i, u32 x, u32 e, u32 m) {
+    bev = b; ie = i; exl = x; erl = e; im = m;
+    setGate(b, i, x, e, m);
+  };
   auto setCountCompare = [&](u32 count, u32 compare) {
     cpu.setControlRegister(9, count);
     cpu.setControlRegister(11, compare);
   };
 
   if(!std::strcmp(name, "near_exact_bev0")) {
-    bev=0; ie=1; im=0x80; setGate(bev,ie,0,0,im);
+    applyGate(0,1,0,0,0x80);
     setCountCompare(100,103); cpu.stepCount(6);
     pending_before_instruction = pending7(); runOneInstruction();
   } else if(!std::strcmp(name, "cross_bev1")) {
-    bev=1; ie=1; im=0x80; setGate(bev,ie,0,0,im);
+    applyGate(1,1,0,0,0x80);
     setCountCompare(100,103); cpu.stepCount(8);
     pending_before_instruction = pending7(); runOneInstruction();
   } else if(!std::strcmp(name, "before_deadline")) {
-    setGate(0,0,0,0,0); setCountCompare(100,103); cpu.stepCount(4);
+    applyGate(0,0,0,0,0); setCountCompare(100,103); cpu.stepCount(4);
   } else if(!std::strcmp(name, "masked")) {
-    ie=1; im=0; setGate(0,ie,0,0,im); setCountCompare(100,103); cpu.stepCount(6);
+    applyGate(0,1,0,0,0); setCountCompare(100,103); cpu.stepCount(6);
     pending_before_instruction = pending7(); runOneInstruction();
   } else if(!std::strcmp(name, "ie0")) {
-    im=0x80; setGate(0,0,0,0,im); setCountCompare(100,103); cpu.stepCount(6);
+    applyGate(0,0,0,0,0x80); setCountCompare(100,103); cpu.stepCount(6);
     pending_before_instruction = pending7(); runOneInstruction();
   } else if(!std::strcmp(name, "exl1")) {
-    ie=1; exl=1; im=0x80; setGate(0,ie,exl,0,im); setCountCompare(100,103); cpu.stepCount(6);
+    applyGate(0,1,1,0,0x80); setCountCompare(100,103); cpu.stepCount(6);
     pending_before_instruction = pending7(); runOneInstruction();
   } else if(!std::strcmp(name, "erl1")) {
-    ie=1; erl=1; im=0x80; setGate(0,ie,0,erl,im); setCountCompare(100,103); cpu.stepCount(6);
+    applyGate(0,1,0,1,0x80); setCountCompare(100,103); cpu.stepCount(6);
     pending_before_instruction = pending7(); runOneInstruction();
   } else if(!std::strcmp(name, "compare_clear_new_value")) {
-    setGate(0,1,0,0,0x80); setCountCompare(100,103); cpu.stepCount(6);
+    applyGate(0,1,0,0,0x80); setCountCompare(100,103); cpu.stepCount(6);
     pending_before_write = pending7(); cpu.setControlRegister(11,1000); pending_after_write = pending7();
     pending_before_instruction = pending7(); runOneInstruction();
   } else if(!std::strcmp(name, "compare_clear_same_value")) {
-    setGate(0,1,0,0,0x80); setCountCompare(100,103); cpu.stepCount(6);
+    applyGate(0,1,0,0,0x80); setCountCompare(100,103); cpu.stepCount(6);
     pending_before_write = pending7(); cpu.setControlRegister(11,103); pending_after_write = pending7();
     pending_before_instruction = pending7(); runOneInstruction();
   } else if(!std::strcmp(name, "count_write_keeps_pending")) {
-    setGate(0,1,0,0,0x80); setCountCompare(100,103); cpu.stepCount(6);
+    applyGate(0,1,0,0,0x80); setCountCompare(100,103); cpu.stepCount(6);
     pending_before_write = pending7(); cpu.setControlRegister(9,500); pending_after_write = pending7();
     pending_before_instruction = pending7(); runOneInstruction();
   } else if(!std::strcmp(name, "count_forward_changes_deadline")) {
-    setGate(0,0,0,0,0); setCountCompare(100,110); cpu.setControlRegister(9,108); cpu.stepCount(4);
+    applyGate(0,0,0,0,0); setCountCompare(100,110); cpu.setControlRegister(9,108); cpu.stepCount(4);
   } else if(!std::strcmp(name, "count_backward_changes_deadline")) {
-    setGate(0,0,0,0,0); setCountCompare(100,105); cpu.setControlRegister(9,0); cpu.stepCount(10);
+    applyGate(0,0,0,0,0); setCountCompare(100,105); cpu.setControlRegister(9,0); cpu.stepCount(10);
   } else if(!std::strcmp(name, "wrap_cross")) {
-    setGate(0,0,0,0,0); setCountCompare(0xfffffffeu,1); cpu.stepCount(6);
+    applyGate(0,0,0,0,0); setCountCompare(0xfffffffeu,1); cpu.stepCount(6);
   } else if(!std::strcmp(name, "equal_compare_no_immediate")) {
-    setGate(0,0,0,0,0); setCountCompare(100,100); cpu.stepCount(2);
+    applyGate(0,0,0,0,0); setCountCompare(100,100); cpu.stepCount(2);
   } else if(!std::strcmp(name, "guest_compare_ack")) {
     // Pending timer is masked so the guest MTC0 itself can retire. The same-value
     // Compare write must still acknowledge/clear the producer before IM7 is enabled.
-    setGate(0,1,0,0,0); setCountCompare(100,103); cpu.stepCount(6);
+    applyGate(0,1,0,0,0); setCountCompare(100,103); cpu.stepCount(6);
     pending_before_write = pending7(); cpu.ipu.r[8].u64 = 103; put(0, mtc0T0Compare); put(4, addiuS0);
     runOneInstruction(); guest_write_executed = 1; pending_after_write = pending7();
-    cpu.scc.status.interruptMask = 0x80; cpu.interruptPoll(); second_instruction_attempted = 1;
+    im = 0x80; cpu.scc.status.interruptMask = im; cpu.interruptPoll(); second_instruction_attempted = 1;
     pending_before_instruction = pending7(); runOneInstruction();
   } else if(!std::strcmp(name, "guest_count_not_ack")) {
     // Count write is also reachable via guest MTC0, but unlike Compare it must not
     // acknowledge an already-latched timer interrupt.
-    setGate(0,1,0,0,0); setCountCompare(100,103); cpu.stepCount(6);
+    applyGate(0,1,0,0,0); setCountCompare(100,103); cpu.stepCount(6);
     pending_before_write = pending7(); cpu.ipu.r[8].u64 = 500; put(0, mtc0T0Count); put(4, addiuS0);
     runOneInstruction(); guest_write_executed = 1; pending_after_write = pending7();
-    cpu.scc.status.interruptMask = 0x80; cpu.interruptPoll(); second_instruction_attempted = 1;
+    im = 0x80; cpu.scc.status.interruptMask = im; cpu.interruptPoll(); second_instruction_attempted = 1;
     pending_before_instruction = pending7(); runOneInstruction();
   } else {
     return 5;
