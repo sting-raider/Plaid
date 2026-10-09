@@ -11,9 +11,11 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 ARES = ROOT / ".refs/ares"
 GOPHER = ROOT / ".refs/gopher64"
+SYSTEMTEST = ROOT / ".refs/n64-systemtest"
 OUTPUT = ROOT / "target/ares-cpu-scd-sp-sink"
 ARES_REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 GOPHER_REV = "e96debac941a26ba4961e5145056c0821d3a56f7"
+SYSTEMTEST_REV = "196f5421173220eb2f63a7a99c64795dc0ea0698"
 
 build_spec = importlib.util.spec_from_file_location("ares_oracle_build", ROOT / "spikes/003-ares-oracle/run.py")
 build_mod = importlib.util.module_from_spec(build_spec); build_spec.loader.exec_module(build_mod)
@@ -53,6 +55,9 @@ def source_guard() -> tuple[dict[str, str], dict[str, int | bool]]:
         "ares_rcp_dual_word_writes": 1,
         "gopher_scd_data_writes": 0,
         "gopher_scd_clears_llbit": False,
+        "systemtest_sp_sd_upper_word_only": False,
+        "systemtest_scd_rdram_full64": False,
+        "systemtest_direct_scd_sp_oracle": False,
     }
     if GOPHER.exists():
         assert git_head(GOPHER) == GOPHER_REV
@@ -66,12 +71,34 @@ def source_guard() -> tuple[dict[str, str], dict[str, int | bool]]:
         comparison["gopher_scd_data_writes"] = scd.count("device::memory::data_write(")
         comparison["gopher_scd_clears_llbit"] = True
         hashes["gopher_cpu_instructions"] = hashlib.sha256(gp.read_bytes()).hexdigest()
+    if SYSTEMTEST.exists():
+        assert git_head(SYSTEMTEST) == SYSTEMTEST_REV
+        sp_path = SYSTEMTEST / "src/tests/sp_memory/mod.rs"
+        llsc_path = SYSTEMTEST / "src/tests/arithmetic/ll_sc.rs"
+        sp = sp_path.read_text(encoding="utf-8")
+        llsc = llsc_path.read_text(encoding="utf-8")
+        assert "SD is broken: It only writes the upper 32 bit of the value, touching only 4 bytes" in sp
+        assert "impl Test for SCD" in llsc
+        assert "soft_assert_eq(scd_status, 1, \"SCD success flag\")" in llsc
+        assert "soft_assert_eq(memory, 0x1020_3040_5060_7080, \"Memory after SCD\")" in llsc
+        # The hardware-facing pin independently covers normal-memory SCD and SP SD,
+        # but contains no direct SCD-to-SPMEM case. Keep that absence explicit.
+        assert "SCD" not in sp and "scd" not in sp
+        comparison["systemtest_sp_sd_upper_word_only"] = True
+        comparison["systemtest_scd_rdram_full64"] = True
+        hashes["systemtest_sp_memory"] = hashlib.sha256(sp_path.read_bytes()).hexdigest()
+        hashes["systemtest_ll_sc"] = hashlib.sha256(llsc_path.read_bytes()).hexdigest()
     return hashes, comparison
 
 
-def invoke(exe: Path) -> tuple[str, dict]:
-    raw = subprocess.check_output([str(exe), "enabled"], text=True, timeout=30)
-    return raw, json.loads(raw)
+def invoke(exe: Path) -> tuple[str, dict, list[str]]:
+    proc = subprocess.run([str(exe), "enabled"], text=True, capture_output=True, timeout=30)
+    assert proc.returncode == 0, {"returncode": proc.returncode, "stdout": proc.stdout[-2000:], "stderr": proc.stderr[-2000:]}
+    lines = proc.stdout.splitlines()
+    json_lines = [line for line in lines if line.lstrip().startswith("{")]
+    noise = [line for line in lines if not line.lstrip().startswith("{")]
+    assert json_lines, {"stdout": proc.stdout[-4000:], "stderr": proc.stderr[-4000:]}
+    return proc.stdout, json.loads(json_lines[-1]), noise
 
 
 def main() -> None:
@@ -84,12 +111,13 @@ def main() -> None:
         sp_backing_access=True,
     )
 
-    baseline_raw, baseline_doc = invoke(baseline)
-    enabled_raw, enabled_doc = invoke(instrumented)
-    repeat_raw, repeat_doc = invoke(instrumented)
+    baseline_raw, baseline_doc, baseline_noise = invoke(baseline)
+    enabled_raw, enabled_doc, enabled_noise = invoke(instrumented)
+    repeat_raw, repeat_doc, repeat_noise = invoke(instrumented)
 
     assert baseline_doc["events"] == []
     assert enabled_raw == repeat_raw, "instrumented traces are not byte-identical"
+    assert enabled_noise == repeat_noise
     assert baseline_doc["facts"] == enabled_doc["facts"] == repeat_doc["facts"]
     assert baseline_doc["decoy_ok"] == enabled_doc["decoy_ok"] == repeat_doc["decoy_ok"] is True
 
@@ -100,21 +128,23 @@ def main() -> None:
     body = {
         "ares_revision": ARES_REV,
         "gopher_revision": GOPHER_REV if GOPHER.exists() else None,
+        "systemtest_revision": SYSTEMTEST_REV if SYSTEMTEST.exists() else None,
         "baseline_facts": baseline_doc["facts"],
         "enabled": enabled_doc,
         "summary": summary,
         "forged_histories_rejected": forged,
         "reference_comparison": comparison,
+        "non_json_stdout": {"baseline": baseline_noise, "enabled": enabled_noise},
         "source_sha256": hashes,
     }
     encoded = (json.dumps(body, sort_keys=True, separators=(",", ":")) + "\n").encode()
     OUTPUT.mkdir(parents=True, exist_ok=True)
     (OUTPUT / "results.json").write_bytes(encoded)
-    print(json.dumps({**summary, "forged_histories_rejected": forged, "neutrality": True, "repeat_deterministic": True, "reference_comparison": comparison}, sort_keys=True))
+    print(json.dumps({**summary, "forged_histories_rejected": forged, "neutrality": True, "repeat_deterministic": True, "reference_comparison": comparison, "non_json_stdout_lines": {"baseline": len(baseline_noise), "enabled": len(enabled_noise)}}, sort_keys=True))
     print("TRACE_SHA256=" + hashlib.sha256(enabled_raw.encode()).hexdigest())
     print("RESULT_SHA256=" + hashlib.sha256(encoded).hexdigest())
     for key in sorted(hashes): print(f"SOURCE_{key.upper()}_SHA256={hashes[key]}")
-    print("PASS: successful SCD reaches one measured SP Word sink in pinned ares; failed/faulting SCD does not, same-value success remains a writer generation, and Gopher64 source structurally disagrees on Dual sink width")
+    print("PASS: successful SCD reaches one measured SP Word sink in pinned ares; failed/faulting SCD does not, same-value success remains a writer generation, Gopher64 structurally disagrees, and n64-systemtest provides only adjacent SCD-RDRAM/SP-SD hardware evidence")
 
 
 if __name__ == "__main__":
