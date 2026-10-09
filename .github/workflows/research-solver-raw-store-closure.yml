@@ -14,3 +14,5 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Run adversarial solver regression
         run: cargo test -p plaid-core --test solver_raw_store -- --nocapture
+      - name: Run full plaid-core suite
+        run: cargo test -p plaid-core
