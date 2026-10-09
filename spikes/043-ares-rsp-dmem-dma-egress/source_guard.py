@@ -13,6 +13,10 @@ EXPECTED = {
     "ares/n64/rsp/io.cpp": "60cc9b1efb2e90c127098a736c5213ea0bf77d2e3bd6e5b112e55752289af860",
     "ares/n64/rdram/rdram.hpp": "6a77c2fa0bbb320ff6b2855ea6379541a67096bed6b91cc6cd2697584112b1cf",
 }
+EXTRA_HASHED = (
+    "ares/n64/memory/memory.hpp",
+    "ares/n64/memory/lsb/writable.hpp",
+)
 
 
 def sha(path: Path) -> str:
@@ -22,8 +26,8 @@ def sha(path: Path) -> str:
 def check() -> dict:
     assert subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REF, text=True).strip() == REV
     subprocess.run(["git", "-c", "core.autocrlf=true", "diff", "--quiet", "HEAD"], cwd=REF, check=True)
-    hashes = {name: sha(REF / name) for name in EXPECTED}
-    assert hashes == EXPECTED, (hashes, EXPECTED)
+    hashes = {name: sha(REF / name) for name in (*EXPECTED, *EXTRA_HASHED)}
+    assert {name: hashes[name] for name in EXPECTED} == EXPECTED
 
     dma = (REF / "ares/n64/rsp/dma.cpp").read_text(encoding="utf-8")
     fragment = """      } else {
@@ -54,9 +58,19 @@ def check() -> dict:
     assert rdram.count(completed) == 1
     assert rdram.count("if(address >= size) return;") >= 2
 
-    return {"revision": REV, "sha256": hashes}
+    memory = (REF / "ares/n64/memory/memory.hpp").read_text(encoding="utf-8")
+    assert memory.count('#include "lsb/readable.hpp"') == 1
+    assert memory.count('#include "lsb/writable.hpp"') == 1
+
+    lsb = (REF / "ares/n64/memory/lsb/writable.hpp").read_text(encoding="utf-8")
+    assert lsb.count("address & maskByte ^ 3") == 2
+    assert lsb.count("address & maskHalf ^ 2") == 2
+    assert lsb.count("address & maskWord ^ 0") == 2
+    assert "if constexpr(Size == Word) *(u32*)&data[address & maskWord ^ 0] = value;" in lsb
+
+    return {"revision": REV, "sha256": hashes, "n64_memory_layout": "lsb-byte-xor3"}
 
 
 if __name__ == "__main__":
     print(json.dumps(check(), sort_keys=True))
-    print("PASS exact pinned SP write-DMA and completed identity-RDRAM source contract")
+    print("PASS exact pinned SP write-DMA, identity-RDRAM, and logical-byte layout source contract")
