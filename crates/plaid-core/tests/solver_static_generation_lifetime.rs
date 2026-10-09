@@ -67,12 +67,7 @@ fn two_generations_can_be_independent_declared_static_roots() {
     let m = combine(map(&i0), map(&i1));
     m.validate().unwrap();
 
-    let report = solve(
-        &m,
-        &[i0.clone(), i1.clone()],
-        Scope::DeclaredStaticImages,
-    )
-    .unwrap();
+    let report = solve(&m, &[i0.clone(), i1.clone()], Scope::DeclaredStaticImages).unwrap();
     assert_eq!(report.status, ClosureStatus::Closed);
     assert!(report.blockers.is_empty());
 
