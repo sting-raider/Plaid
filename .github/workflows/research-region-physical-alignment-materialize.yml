@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   materialize:
-    if: github.event.head_commit.message == 'Materialize physical alignment candidate v2'
+    if: github.event.head_commit.message == 'Materialize physical alignment candidate v3'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,27 +23,8 @@ jobs:
 
           program = Path('crates/plaid-core/src/program.rs')
           text = program.read_text()
-          old = '''        for r in &self.regions {
-              r.range.validate(true)?;
-              refs(&r.evidence)?;
-              if r.image.is_empty() {
-          '''
-          old = '''        for r in &self.regions {
-            r.range.validate(true)?;
-            refs(&r.evidence)?;
-            if r.image.is_empty() {
-          '''.replace('          if', '            if')
-          new = '''        for r in &self.regions {
-            r.range.validate(true)?;
-            refs(&r.evidence)?;
-            if r
-                .physical_start
-                .is_some_and(|physical| !physical.0.is_multiple_of(4))
-            {
-                return Err("unaligned executable physical mapping".into());
-            }
-            if r.image.is_empty() {
-          '''.replace('          ', '')
+          old = "        for r in &self.regions {\n            r.range.validate(true)?;\n            refs(&r.evidence)?;\n            if r.image.is_empty() {\n"
+          new = "        for r in &self.regions {\n            r.range.validate(true)?;\n            refs(&r.evidence)?;\n            if r\n                .physical_start\n                .is_some_and(|physical| !physical.0.is_multiple_of(4))\n            {\n                return Err(\"unaligned executable physical mapping\".into());\n            }\n            if r.image.is_empty() {\n"
           if old not in text:
               raise SystemExit('program.rs validation anchor not found')
           program.write_text(text.replace(old, new, 1))
@@ -52,22 +33,7 @@ jobs:
           text = test.read_text()
           start = text.index('#[test]\nfn unaligned_explicit_physical_code_mapping_must_not_close()')
           end = text.index('\n#[test]\nfn aligned_and_absent_physical_code_mappings_remain_valid()', start)
-          replacement = '''#[test]
-          fn unaligned_explicit_physical_code_mapping_is_rejected() {
-              for physical in [1, 2, 3] {
-                  let i = image(Some(physical));
-                  let m = map(&i);
-                  assert_eq!(
-                      m.validate().unwrap_err(),
-                      "unaligned executable physical mapping"
-                  );
-                  assert_eq!(
-                      solve(&m, std::slice::from_ref(&i), Scope::DeclaredStaticImages).unwrap_err(),
-                      "unaligned executable physical mapping"
-                  );
-              }
-          }
-          '''.replace('          ', '')
+          replacement = "#[test]\nfn unaligned_explicit_physical_code_mapping_is_rejected() {\n    for physical in [1, 2, 3] {\n        let i = image(Some(physical));\n        let m = map(&i);\n        assert_eq!(\n            m.validate().unwrap_err(),\n            \"unaligned executable physical mapping\"\n        );\n        assert_eq!(\n            solve(&m, std::slice::from_ref(&i), Scope::DeclaredStaticImages).unwrap_err(),\n            \"unaligned executable physical mapping\"\n        );\n    }\n}\n"
           test.write_text(text[:start] + replacement + text[end:])
           PY
       - name: Commit candidate fix
