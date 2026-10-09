@@ -344,7 +344,7 @@ Implemented:
   retain raw nonmutation. Reference write decomposition differs; callback counts
   supply no hardware atomicity proof. General mutation/lifetime coverage remains open.
 
-Verification: 92 Rust integration tests, formatting, strict Clippy, CLI integration,
+Verification: 94 Rust integration tests and three unit tests, formatting, strict Clippy, CLI integration,
 strict C99 exporter, actual pinned Mupen hook, CPU and full-core session tests pass.
 The patch also passes application checking against the clean pinned Git index.
 Rust/CLI/compile-only tests use Windows, Rust 1.98, Python 3.12 and GCC 15.2.
@@ -399,3 +399,13 @@ Recovered RSP self-store code now passes 28 decoded probes: ordinary scalar/vect
 Original bounded boot history v2 now records accepted PI requests, actual queue identities and CPU dispatch/status scopes. The 8,823,189-record prefix preserves exact complete v1/v0/v5 sources and all 1,638,808 ROM byte origins; three status links are identified and request 4 remains without status. Twelve synthetic/four actual forgeries fail. Rust v1 rechecking keeps its exact prior report hash and rejects v2. Original strict Rust v2 inspection/report rechecking now consumes the complete raw source and reproduces every scheduling count/link plus the entire unchanged nested v1 report. Six adversarial integration tests keep unknown/unbound/read/direct/canceled/rejected/save/load boundaries explicit. No guest/native completion or executable lifetime is promoted (ADR-0069/0070).
 
 Explicit `inspect-pi-queue-boot-history`/`verify-pi-queue-boot-history` CLI commands now expose the strict finite v2 report. Canonical ROM byte orders, actual request links, source/report tampering, old-version rejection, truncated/forged captures and protection of every input pass original synthetic CLI tests. Native/guest completion remains false.
+
+Original Rust observed PI-to-fetch lineage now joins successful raw v2 writers
+through exact read/fill contexts while keeping backing and resident histories
+separate. Full-prefix inspection/source rechecking agrees with independent Python:
+10,954 fully attributed fetch observations in 185 samples, preserving every nested
+prior report. Equal/changed reloads, ordinary/burst writes, mixed words, tag changes,
+invalidation, unsupported fills, ambiguous reads and between-pass source changes
+have adversarial tests. Mutation coverage/lifetime/native flags remain false.
+The 599,046 remaining fetches are uncached CPU SP (596,991) and PIF (2055) paths;
+actual SP backing-read capture is next, with ultimate producer history separate.

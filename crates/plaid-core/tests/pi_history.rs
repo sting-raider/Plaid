@@ -598,6 +598,192 @@ mod queue {
         );
     }
     #[test]
+    fn lineage_joins_raw_writer_ordinals_and_rechecks_complete_nested_evidence() {
+        use plaid_core::pi_fetch_lineage::{
+            PiFetchLineageReport, inspect_pi_fetch_lineage, verify_pi_fetch_lineage_report,
+        };
+        let f = fixture();
+        let report = inspect_pi_fetch_lineage(
+            Cursor::new(wire(&f.history)),
+            Cursor::new(wire(&f.fetches)),
+            &f.rom,
+            &f.firmware,
+        )
+        .unwrap();
+        assert_eq!(report.projection, inspect(&f).unwrap());
+        assert_eq!(
+            (
+                report.fetches,
+                report.fully_attributed_fetches,
+                report.partially_attributed_fetches,
+                report.unattributed_fetches,
+                report.observed_rom_byte_fetches,
+                report.single_transfer_word_fetches
+            ),
+            (2, 1, 0, 1, 4, 1)
+        );
+        assert_eq!(report.samples.len(), 1);
+        let sample = &report.samples[0];
+        assert!(!sample.cached);
+        assert_eq!(
+            (sample.first_fetch, sample.last_fetch, sample.observations),
+            (1, 1, 1)
+        );
+        assert_eq!(
+            sample.read_ordinal,
+            f.history
+                .iter()
+                .find(|r| r["record"] == "scalar" && r["write"] == false && r["device"] == 3)
+                .unwrap()["ordinal"]
+                .as_u64()
+        );
+        let writers: Vec<_> = f
+            .history
+            .iter()
+            .filter(|r| r["record"] == "scalar" && r["pi"]["transfer"] == 1)
+            .map(|r| r["ordinal"].as_u64().unwrap())
+            .collect();
+        for (n, byte) in sample.bytes.iter().enumerate() {
+            let b = byte.unwrap();
+            assert_eq!(
+                (b.rom_offset.0, b.transfer, b.writer_ordinal),
+                (0x2000 + n as u64, 1, writers[n])
+            );
+        }
+        assert!(
+            !report.mutation_coverage_certified
+                && !report.executable_lifetime_certified
+                && !report.native_complete
+        );
+        verify_pi_fetch_lineage_report(
+            &report,
+            Cursor::new(wire(&f.history)),
+            Cursor::new(wire(&f.fetches)),
+            &f.rom,
+            &f.firmware,
+        )
+        .unwrap();
+        for field in [
+            "mutation_coverage_certified",
+            "executable_lifetime_certified",
+            "native_complete",
+        ] {
+            let mut r = serde_json::to_value(&report).unwrap();
+            r[field] = json!(true);
+            let forged: PiFetchLineageReport = serde_json::from_value(r).unwrap();
+            assert!(
+                verify_pi_fetch_lineage_report(
+                    &forged,
+                    Cursor::new(wire(&f.history)),
+                    Cursor::new(wire(&f.fetches)),
+                    &f.rom,
+                    &f.firmware
+                )
+                .is_err()
+            );
+        }
+        let mut forged = report.clone();
+        forged.samples[0].bytes[0].as_mut().unwrap().writer_ordinal += 1;
+        assert!(
+            verify_pi_fetch_lineage_report(
+                &forged,
+                Cursor::new(wire(&f.history)),
+                Cursor::new(wire(&f.fetches)),
+                &f.rom,
+                &f.firmware
+            )
+            .is_err()
+        );
+        let mut f = fixture();
+        let at = f
+            .history
+            .iter()
+            .position(|r| r["record"] == "scalar" && r["write"] == false && r["device"] == 3)
+            .unwrap();
+        f.history.insert(at, f.history[at].clone());
+        renumber(&mut f.history);
+        let unknown = inspect_pi_fetch_lineage(
+            Cursor::new(wire(&f.history)),
+            Cursor::new(wire(&f.fetches)),
+            &f.rom,
+            &f.firmware,
+        )
+        .unwrap();
+        assert_eq!(unknown.unattributed_fetches, 2);
+        assert!(unknown.samples.is_empty());
+    }
+    struct ChangedOnReplay {
+        cursor: Cursor<Vec<u8>>,
+        replacement: Vec<u8>,
+        rewinds: usize,
+        change_at: usize,
+    }
+    impl std::io::Read for ChangedOnReplay {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            std::io::Read::read(&mut self.cursor, buf)
+        }
+    }
+    impl std::io::BufRead for ChangedOnReplay {
+        fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+            std::io::BufRead::fill_buf(&mut self.cursor)
+        }
+        fn consume(&mut self, n: usize) {
+            std::io::BufRead::consume(&mut self.cursor, n);
+        }
+    }
+    impl std::io::Seek for ChangedOnReplay {
+        fn seek(&mut self, position: std::io::SeekFrom) -> std::io::Result<u64> {
+            if position == std::io::SeekFrom::Start(0) {
+                self.rewinds += 1;
+                if self.rewinds == self.change_at {
+                    self.cursor = Cursor::new(self.replacement.clone());
+                }
+            }
+            std::io::Seek::seek(&mut self.cursor, position)
+        }
+    }
+    #[test]
+    fn lineage_replay_rejects_changes_to_either_prevalidated_source() {
+        use plaid_core::pi_fetch_lineage::inspect_pi_fetch_lineage;
+        let f = fixture();
+        let mut changed = f.history.clone();
+        changed[0]["budget"] = json!(1);
+        let history = ChangedOnReplay {
+            cursor: Cursor::new(wire(&f.history)),
+            replacement: wire(&changed),
+            rewinds: 0,
+            change_at: 1,
+        };
+        let error =
+            inspect_pi_fetch_lineage(history, Cursor::new(wire(&f.fetches)), &f.rom, &f.firmware)
+                .unwrap_err();
+        assert!(
+            error.contains("between validation and lineage replay"),
+            "{error}"
+        );
+        let mut changed = f.fetches.clone();
+        changed[0]["budget"] = json!(1);
+        let fetched = ChangedOnReplay {
+            cursor: Cursor::new(wire(&f.fetches)),
+            replacement: wire(&changed),
+            rewinds: 0,
+            change_at: 2,
+        };
+        let error =
+            inspect_pi_fetch_lineage(Cursor::new(wire(&f.history)), fetched, &f.rom, &f.firmware)
+                .unwrap_err();
+        assert!(
+            error.contains("between validation and lineage replay"),
+            "{error}"
+        );
+        let mut cursor = Cursor::new(wire(&f.history));
+        cursor.set_position(1);
+        assert!(
+            inspect_pi_fetch_lineage(cursor, Cursor::new(wire(&f.fetches)), &f.rom, &f.firmware)
+                .is_err()
+        );
+    }
+    #[test]
     fn same_deadline_cancellation_save_and_rejection_do_not_invent_status() {
         let mut f = fixture();
         // Cancel request 2, retain request 3 at an equal deadline, then save.
