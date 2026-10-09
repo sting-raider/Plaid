@@ -1,7 +1,7 @@
 use plaid_core::{
     GuestAddr,
     discovery::{CodeImage, direct_cfg},
-    program::{CodeAddress, GuestRange, RomOffset},
+    program::{CodeAddress, RomOffset},
     rom::{CanonicalRom, sha256},
     solver::{ClosureStatus, Scope, solve},
 };
@@ -30,21 +30,16 @@ fn supplied_image(words: [u32; 2], rom_offset: Option<RomOffset>) -> CodeImage {
 
 #[test]
 fn explicit_rom_source_without_canonical_byte_witness_cannot_close() {
-    // The canonical ROM says the source bytes are two NOPs.  The supplied image
+    // The canonical ROM says the source bytes are two NOPs. The supplied image
     // instead contains an immutable self-loop, but authenticates *its own* bytes
     // and claims the exact same ROM offset as the Region derived below.
     let rom = canonical_rom([0, 0]);
     let image = supplied_image([0x0800_0000, 0], Some(RomOffset(64)));
     assert_ne!(&rom.bytes()[64..72], &[0x08, 0, 0, 0, 0, 0, 0, 0]);
 
-    let map = direct_cfg(
-        rom.identity.clone(),
-        &image,
-        &[GuestAddr(0x8000_0000)],
-        32,
-    )
-    .unwrap()
-    .map;
+    let map = direct_cfg(rom.identity.clone(), &image, &[GuestAddr(0x8000_0000)], 32)
+        .unwrap()
+        .map;
     map.validate().unwrap();
 
     let report = solve(
@@ -66,14 +61,9 @@ fn explicit_rom_source_without_canonical_byte_witness_cannot_close() {
 fn image_without_claimed_rom_source_keeps_declared_static_semantics() {
     let rom = canonical_rom([0, 0]);
     let image = supplied_image([0x0800_0000, 0], None);
-    let map = direct_cfg(
-        rom.identity,
-        &image,
-        &[GuestAddr(0x8000_0000)],
-        32,
-    )
-    .unwrap()
-    .map;
+    let map = direct_cfg(rom.identity, &image, &[GuestAddr(0x8000_0000)], 32)
+        .unwrap()
+        .map;
 
     let report = solve(&map, &[image], Scope::DeclaredStaticImages).unwrap();
     assert_eq!(report.status, ClosureStatus::Closed);
