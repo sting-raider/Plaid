@@ -1,0 +1,63 @@
+name: research-count-compare-interrupt
+
+on:
+  push:
+    branches:
+      - research/count-compare-interrupt-producer-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  count-compare-producer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch exact pinned references
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs
+          git clone --filter=blob:none --no-checkout https://github.com/ares-emulator/ares.git .refs/ares
+          git -C .refs/ares fetch origin 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git -C .refs/ares checkout --detach 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          test "$(git -C .refs/ares rev-parse HEAD)" = 9408cb43d4948fc3ea6e152a307a34348df3fe04
+
+          git clone --filter=blob:none --no-checkout https://github.com/gopher64/gopher64.git .refs/gopher64
+          git -C .refs/gopher64 fetch origin e96debac941a26ba4961e5145056c0821d3a56f7
+          git -C .refs/gopher64 checkout --detach e96debac941a26ba4961e5145056c0821d3a56f7
+          test "$(git -C .refs/gopher64 rev-parse HEAD)" = e96debac941a26ba4961e5145056c0821d3a56f7
+
+          git clone --filter=blob:none --no-checkout https://github.com/mupen64plus/mupen64plus-core.git .refs/mupen64plus-core
+          git -C .refs/mupen64plus-core fetch origin ba95bab92a76744753bfe61470823a4937850ab0
+          git -C .refs/mupen64plus-core checkout --detach ba95bab92a76744753bfe61470823a4937850ab0
+          test "$(git -C .refs/mupen64plus-core rev-parse HEAD)" = ba95bab92a76744753bfe61470823a4937850ab0
+
+          git clone --filter=blob:none --no-checkout https://github.com/lemmy-64/n64-systemtest.git .refs/n64-systemtest
+          git -C .refs/n64-systemtest fetch origin 196f5421173220eb2f63a7a99c64795dc0ea0698
+          git -C .refs/n64-systemtest checkout --detach 196f5421173220eb2f63a7a99c64795dc0ea0698
+          test "$(git -C .refs/n64-systemtest rev-parse HEAD)" = 196f5421173220eb2f63a7a99c64795dc0ea0698
+
+      - name: Syntax-check research scripts
+        run: python3 -m py_compile experiments/count-compare-interrupt/source_guard.py experiments/count-compare-interrupt/model.py experiments/count-compare-interrupt/run.py
+
+      - name: Guard exact reference source contracts
+        run: python3 experiments/count-compare-interrupt/source_guard.py
+
+      - name: Run adversarial causal model
+        run: python3 experiments/count-compare-interrupt/model.py
+
+      - name: Build and execute exact ares matrix
+        run: python3 experiments/count-compare-interrupt/run.py
+
+      - name: Hash durable evidence
+        run: sha256sum target/count-compare-interrupt/source_guard.json target/count-compare-interrupt/model.out target/count-compare-interrupt/results.json
+
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: count-compare-interrupt-evidence
+          path: |
+            target/count-compare-interrupt/source_guard.json
+            target/count-compare-interrupt/model.out
+            target/count-compare-interrupt/results.json
