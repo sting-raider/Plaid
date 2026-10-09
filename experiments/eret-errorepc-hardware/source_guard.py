@@ -46,9 +46,16 @@ def main():
 
     st = roots["systemtest"] / "src/tests/cop0/mod.rs"
     stt = st.read_text()
-    require(stt, "pub struct ErrorEPCNoMasking {}", "systemtest ErrorEPC test")
-    require(stt, "unsafe { cop0::set_errorepc(value); }", "systemtest ErrorEPC write")
-    require(stt, "let expected = value;", "systemtest exact readback expectation")
+    marker = "pub struct ErrorEPCNoMasking {}"
+    require(stt, marker, "systemtest ErrorEPC test")
+    start = stt.index(marker)
+    next_struct = stt.find("\npub struct ", start + len(marker))
+    if next_struct < 0:
+        raise AssertionError("systemtest ErrorEPC block terminator not found")
+    error_block = stt[start:next_struct]
+    require(error_block, "unsafe { cop0::set_errorepc(value); }", "systemtest ErrorEPC write")
+    require(error_block, "let expected = value;", "systemtest exact readback expectation")
+    require(error_block, "let readback = cop0::errorepc();", "systemtest ErrorEPC readback")
 
     result = {
         "pins": PINS,
