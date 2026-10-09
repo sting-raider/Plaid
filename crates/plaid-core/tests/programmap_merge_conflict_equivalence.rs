@@ -73,7 +73,12 @@ fn duplicate_semantics_union_provenance_without_fabricating_conflicts() {
     assert_eq!(merged.blocks.len(), 1);
     let block = merged.blocks.first().unwrap();
     assert_eq!(block.evidence, ["a".to_string(), "b".to_string()].into());
-    assert!(!merged.unresolved.iter().any(|u| u.kind == "conflicting_block"));
+    assert!(
+        !merged
+            .unresolved
+            .iter()
+            .any(|u| u.kind == "conflicting_block")
+    );
 }
 
 #[test]
@@ -142,7 +147,11 @@ fn different_conflict_keys_remain_independent() {
             .count(),
         1
     );
-    let second_block = merged.blocks.iter().find(|block| block.start == second).unwrap();
+    let second_block = merged
+        .blocks
+        .iter()
+        .find(|block| block.start == second)
+        .unwrap();
     assert_eq!(
         second_block.evidence,
         ["a".to_string(), "b".to_string()].into()
