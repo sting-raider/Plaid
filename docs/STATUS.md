@@ -446,3 +446,10 @@ the strict finite v3 report. Synthetic tests pass canonical ROM byte orders,
 exact backing/sink witnesses, complete source/report tampering, uncertified flags,
 version/truncation rejection and protection of all four inputs. Previous PI CLI
 tests and strict Clippy still pass.
+
+Full v3 SP composition is now independently validated: Python and Rust agree on
+every 596,991 fetch witness, 920 samples, raw/ordered digest and the entire exact
+prior v2 report. All prior v2/v1/v0/v5 bytes/checkpoints are unchanged. All 512
+observed DMA stores correctly retain unknown receipts because their source
+addresses exceed the declared RAM backing. Actual PIF reads and SP producer
+history remain the next source gaps; native closure/lifetime stay OPEN.

@@ -68,7 +68,9 @@ def verify(budget):
         paired_fetch_sha256=digest(current/'traced.ndjson'),checkpoint_unchanged=True)
     path=current/'sp-history-results.json'
     path.write_text(json.dumps(report,indent=2,sort_keys=True)+'\n',encoding='utf-8',newline='\n')
-    print(json.dumps({k:v for k,v in report.items() if k not in ('samples','queue','pi_effects','prior')},sort_keys=True),flush=True)
+    summary={k:v for k,v in report.items() if k not in ('samples','queue','pi_effects','prior','dma_store_receipts')}
+    summary.update(dma_stores=len(report['dma_store_receipts']),bound_dma_receipts=sum(r['read_ordinal'] is not None for r in report['dma_store_receipts']))
+    print(json.dumps(summary,sort_keys=True),flush=True)
     print('REPORT_SHA256='+digest(path),flush=True)
     print('PASS finite actual SP backing reads/stores with complete strict v2/v1/v0/v5 sources',flush=True)
 
