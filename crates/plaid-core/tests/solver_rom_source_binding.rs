@@ -33,12 +33,17 @@ fn supplied_image(words: [u32; 2], rom_offset: Option<RomOffset>) -> CodeImage {
 }
 
 fn image_bytes(image: &CodeImage) -> Vec<u8> {
-    image.words.iter().flat_map(|word| word.to_be_bytes()).collect()
+    image
+        .words
+        .iter()
+        .flat_map(|word| word.to_be_bytes())
+        .collect()
 }
 
 fn claimed_rom_bytes<'a>(rom: &'a CanonicalRom, image: &CodeImage) -> Option<&'a [u8]> {
     let offset = usize::try_from(image.rom_offset?.0).ok()?;
-    rom.bytes().get(offset..offset.checked_add(image_bytes(image).len())?)
+    rom.bytes()
+        .get(offset..offset.checked_add(image_bytes(image).len())?)
 }
 
 fn map_for(rom: &CanonicalRom, image: &CodeImage) -> plaid_core::program::ProgramMap {
@@ -56,7 +61,10 @@ fn declared_static_closed_does_not_authenticate_claimed_rom_offset() {
 
     // The supplied image authenticates its own content and agrees with the Region's
     // metadata, but those bytes are not present at the claimed canonical ROM offset.
-    assert_ne!(claimed_rom_bytes(&rom, &image).unwrap(), image_bytes(&image));
+    assert_ne!(
+        claimed_rom_bytes(&rom, &image).unwrap(),
+        image_bytes(&image)
+    );
     assert_eq!(map.regions.first().unwrap().rom_offset, image.rom_offset);
 
     let report = solve(&map, &[image], Scope::DeclaredStaticImages).unwrap();
@@ -96,7 +104,10 @@ fn canonical_from_rom_control_is_byte_consistent_with_claimed_location() {
     .unwrap();
     let map = map_for(&rom, &image);
 
-    assert_eq!(claimed_rom_bytes(&rom, &image).unwrap(), image_bytes(&image));
+    assert_eq!(
+        claimed_rom_bytes(&rom, &image).unwrap(),
+        image_bytes(&image)
+    );
     let report = solve(&map, &[image], Scope::DeclaredStaticImages).unwrap();
     assert_eq!(report.status, ClosureStatus::Closed);
     assert!(!report.native_complete);
