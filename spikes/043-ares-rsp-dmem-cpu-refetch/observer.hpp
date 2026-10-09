@@ -32,7 +32,10 @@ static void mix_rsp_instruction(bool begin,u32 pc,u32 word,u32 next,bool halted)
 
 static void mix_rsp_dmem(u32 offset,u32 bytes,u64 value) {
   if(!mixEnabled) return;
-  if(!mixRspContext) std::abort();
+  if(!mixRspContext) {
+    mix_push("foreign_sink",0,cpu.ipu.pc,0,offset,0,offset,bytes,value,false);
+    return;
+  }
   mix_push("rsp_sink",mixRspContext,mixRspPc,mixRspWord,offset,0,offset,bytes,value,false);
 }
 
