@@ -20,6 +20,8 @@ jobs:
           mkdir -p .refs
           git clone --filter=blob:none https://github.com/ares-emulator/ares.git .refs/ares
           git -C .refs/ares checkout 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git clone --filter=blob:none https://github.com/lemmy-64/n64-systemtest.git .refs/n64-systemtest
+          git -C .refs/n64-systemtest checkout 196f5421173220eb2f63a7a99c64795dc0ea0698
           git clone --filter=blob:none https://github.com/mupen64plus/mupen64plus-core.git .refs/mupen64plus-core
           git -C .refs/mupen64plus-core checkout ba95bab92a76744753bfe61470823a4937850ab0
           git clone --filter=blob:none https://github.com/gopher64/gopher64.git .refs/gopher64
