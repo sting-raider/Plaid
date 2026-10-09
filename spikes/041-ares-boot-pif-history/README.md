@@ -10,7 +10,7 @@ Delegated write attempts to read-only ROM must remain distinct from mutations.
 The 10,000-call v4 capture preserves every prior v3/v2/v1/v0/v5 source and
 independent reference/disabled/repeated checkpoint. Its 2457 PIF bank reads supply
 2055 exact fetch witnesses. Thirteen actual component adversaries validate read
-paths and no-effect write attempts. Full-prefix rechecking remains in progress.
+paths and no-effect write attempts. Full-prefix rechecking and independent Python/Rust comparison pass.
 See `research/bounded-boot-pif-history.md` for measurements.
 Generated separately licensed exact-reference sources, binaries and supplied
 ROM/firmware stay ignored. The callback consumes an existing read result or delegated
@@ -27,6 +27,5 @@ fixed finite boot prefix is not a mutation/lifetime or whole-ROM certificate.
 
 ## Recommendation
 
-Require complete prior v3/v2/v1/v0/v5 source equality, independent reference/
-disabled/repeated checkpoints and strict source-bound read/attempt replay before
-promoting this composition. Keep unknown and uncertified paths explicit.
+Complete prior v3/v2/v1/v0/v5 source equality, independent reference/disabled/
+repeated checkpoints and strict source-bound replay now pass. Keep unknown and uncertified paths explicit.

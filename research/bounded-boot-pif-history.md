@@ -42,7 +42,7 @@ Ordered backing SHA-256:
 Corrected Python report SHA-256:
 `b308b5bf39ec8558446c83dfc60a5187c99d0da78cb5365cd0feaa364e91f3a1`.
 
-Full-prefix validation is continuing. Generated reference sources, original
+Full-prefix validation passes as detailed below. Generated reference sources, original
 copyright notices, binaries, raw traces and supplied ROM/firmware remain ignored.
 The fixed NTSC/6102/8-MiB/deterministic/PIF-HLE prefix proves neither complete
 mutation coverage nor executable lifetime nor whole-ROM closure. All certification
@@ -73,8 +73,8 @@ The smaller Rust report SHA-256 is
 `a9c80b7098b0ccf6a39a6ef1fc1e8fd74e1e05fdab732590a3284f326037f691`.
 
 The read-only correction changes only the write-attempt branch of the observer;
-these captured prefixes contain no such attempts. A fresh final-recipe capture
-is continuing. The separate thirteen-case component fixture executes the corrected
+these captured prefixes contain no such attempts. A fresh capture using the final PIF read/attempt recipe
+now reproduces both prefixes, every raw/projection digest and report hash. The separate thirteen-case component fixture executes the corrected
 attempt branch. All 100 integration tests and three unit tests pass, along with
 formatting and strict Clippy. No production executable image or solver promotion
 follows from finite read identity.
