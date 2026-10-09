@@ -193,7 +193,12 @@ fn stale_content_derived_image_identity_cannot_close() {
 
     let mut forged = original.clone();
     forged.words[0] = 0x24080002;
-    let report = solve(&m, std::slice::from_ref(&forged), Scope::DeclaredStaticImages).unwrap();
+    let report = solve(
+        &m,
+        std::slice::from_ref(&forged),
+        Scope::DeclaredStaticImages,
+    )
+    .unwrap();
     assert_eq!(report.status, ClosureStatus::Open);
     assert!(has(&report, "instruction_source_identity_mismatch"));
 
