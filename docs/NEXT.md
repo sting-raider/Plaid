@@ -143,3 +143,9 @@ ares ROM backing is read-only, so delegated attempts are distinct no-effect
 records. Finish complete v4 source/replay comparison and strict Rust integration.
 Then pursue ultimate SP producers and actual RSP DMEM mutation chronology;
 backing reads alone cannot certify executable lifetimes or whole-ROM closure.
+
+Strict v4 PIF full-source replay and independent comparison now pass. Backing
+identity exists for the observed PIF/SP/RAM fetch domains in this fixed prefix;
+this does not establish ultimate SP producers or a mutation census. Continue
+actual RSP DMEM mutation chronology and producer evidence, keeping executable
+lifetimes, boot/exception coverage and whole-ROM certificates open.

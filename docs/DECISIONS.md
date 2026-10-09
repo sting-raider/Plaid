@@ -1108,3 +1108,15 @@ actual component adversaries preserve independent reference/disabled/repeated
 state and unchanged ROM backing. The smaller boot prefix also preserves all
 previous sources/checkpoints. No reference code, runtime dependency or asset is
 added to production; producer completeness, lifetime and native closure stay open.
+
+## ADR-0076: Strict PIF reports bind complete finite sources
+
+Status: Accepted for finite inspection, 2026-10-09.
+
+An original typed streaming v4 Rust adapter validates raw PIF read/attempt kinds,
+normalized payloads and actual fetch contexts before complete unchanged nested
+v3/v2/v1/v0/v5 verification. Every sample, attempted write, raw digest and nested
+report is rebuilt during source rechecking. Three adversarial integration tests
+and full-prefix independent Python/Rust comparison pass. Attempts confer no
+mutation, and firmware equality is distinct from current backing identity.
+Keep mutation/lifetime/native flags false and ProgramMap/solver unchanged.

@@ -47,3 +47,34 @@ copyright notices, binaries, raw traces and supplied ROM/firmware remain ignored
 The fixed NTSC/6102/8-MiB/deterministic/PIF-HLE prefix proves neither complete
 mutation coverage nor executable lifetime nor whole-ROM closure. All certification
 flags remain false; ProgramMap and solver are unchanged.
+
+## Strict Rust inspection
+
+The original typed streaming v4 adapter validates all raw read/attempt fields and
+fetch scopes before feeding the unchanged strict v3/v2/v1/v0/v5 consumers. A
+report recheck rebuilds every field and digest from both complete raw sources,
+canonical ROM and supplied firmware. Three adversarial integration tests cover
+wrong kinds/payloads/widths/offsets, duplicated/truncated data, missing/ambiguous/
+cached reads, changed unused attempts and forged reports. A synthetic differing
+bank read proves that observed backing and supplied-firmware equality are separate.
+
+Complete 610,000-call inspection and source rechecking pass, with 9,537,688 rows,
+2055 PIF-backed fetches and 50 samples. Python and Rust agree on every observation,
+digest and the entire exact nested v3 report. The original v4 source is
+1,697,485,372 bytes with SHA-256
+`6290b782040af1a010d82918ae2d050b9014d9aa22f86a70f6ee8e1cb3ff2856`.
+Ordered backing digest:
+`6d6daafb51683ed1669de4b5717ccacd9563f9a2296f0ebe47fb03844a0b4e64`.
+Python report SHA-256:
+`a1fc1469dab433b2c08e4e56f263c7f13efbaa2db1ef7900faf97ebb4a0c1ca4`.
+Rust report SHA-256:
+`8b273a9471003c958d4df57d6aea1c7629b07ce0ee0eb50424aba1404fb0ae30`.
+The smaller Rust report SHA-256 is
+`a9c80b7098b0ccf6a39a6ef1fc1e8fd74e1e05fdab732590a3284f326037f691`.
+
+The read-only correction changes only the write-attempt branch of the observer;
+these captured prefixes contain no such attempts. A fresh final-recipe capture
+is continuing. The separate thirteen-case component fixture executes the corrected
+attempt branch. All 100 integration tests and three unit tests pass, along with
+formatting and strict Clippy. No production executable image or solver promotion
+follows from finite read identity.

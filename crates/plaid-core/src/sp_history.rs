@@ -58,15 +58,15 @@ pub struct SpHistoryReport {
     pub native_complete: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
-enum Wire {
+pub(crate) enum Wire {
     Sp(SpRecord),
     Legacy(queue::Wire),
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
-enum SpRecord {
+pub(crate) enum SpRecord {
     SpWord {
         ordinal: u64,
         context: u64,
@@ -89,6 +89,53 @@ enum SpRecord {
         bytes: u32,
         value: u64,
     },
+}
+impl Wire {
+    pub(crate) fn base(&self) -> Option<&history::Record> {
+        match self {
+            Self::Legacy(queue::Wire::Legacy(pi_history::Wire::Base(r))) => Some(r),
+            _ => None,
+        }
+    }
+    pub(crate) fn base_mut(&mut self) -> Option<&mut history::Record> {
+        match self {
+            Self::Legacy(queue::Wire::Legacy(pi_history::Wire::Base(r))) => Some(r),
+            _ => None,
+        }
+    }
+    pub(crate) fn identity(&self) -> Option<(u64, u64, GuestVirtualAddr, &'static str)> {
+        match self {
+            Self::Sp(SpRecord::SpWord {
+                ordinal,
+                context,
+                pc,
+                ..
+            }) => Some((*ordinal, *context, *pc, "sp_word")),
+            Self::Sp(SpRecord::SpDmaStore {
+                ordinal,
+                context,
+                pc,
+                ..
+            }) => Some((*ordinal, *context, *pc, "sp_dma_store")),
+            Self::Legacy(queue::Wire::Schedule(s)) => Some(s.identity()),
+            Self::Legacy(queue::Wire::Legacy(r)) => r.identity(),
+        }
+    }
+    pub(crate) fn renumber(&mut self, next: u64, scope: u64) {
+        match self {
+            Self::Sp(SpRecord::SpWord {
+                ordinal, context, ..
+            })
+            | Self::Sp(SpRecord::SpDmaStore {
+                ordinal, context, ..
+            }) => {
+                *ordinal = next;
+                *context = scope;
+            }
+            Self::Legacy(queue::Wire::Schedule(s)) => s.renumber(next, scope),
+            Self::Legacy(queue::Wire::Legacy(r)) => r.renumber(next, scope),
+        }
+    }
 }
 struct ReadWitness {
     ordinal: u64,
