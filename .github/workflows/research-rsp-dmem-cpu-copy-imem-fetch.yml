@@ -40,6 +40,7 @@ jobs:
       - name: Run adversarial composition
         run: |
           set -euo pipefail
+          mkdir -p target/rsp-dmem-cpu-copy-imem-fetch
           python3 experiments/rsp-dmem-cpu-copy-imem-fetch/model.py | tee target/rsp-dmem-cpu-copy-imem-fetch/run.log
           sha256sum target/rsp-dmem-cpu-copy-imem-fetch/results.json
 
