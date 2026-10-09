@@ -54,6 +54,34 @@ fn source<'a>(images: &'a [CodeImage], address: &CodeAddress) -> Option<&'a Code
     Some(first)
 }
 
+fn supplied_region_provenance_conflict(
+    image: &CodeImage,
+    region: &Region,
+    pc: crate::GuestAddr,
+) -> bool {
+    let Some(image_delta) = pc.0.checked_sub(image.base.pc.0) else {
+        return false;
+    };
+    let Some(region_delta) = pc.0.checked_sub(region.range.start.0) else {
+        return false;
+    };
+    let rom_conflict = match (image.rom_offset, region.rom_offset) {
+        (Some(image_offset), Some(region_offset)) => {
+            image_offset.0.checked_add(u64::from(image_delta))
+                != region_offset.0.checked_add(u64::from(region_delta))
+        }
+        _ => false,
+    };
+    let physical_conflict = match (image.physical_start, region.physical_start) {
+        (Some(image_start), Some(region_start)) => {
+            u64::from(image_start.0) + u64::from(image_delta)
+                != u64::from(region_start.0) + u64::from(region_delta)
+        }
+        _ => false,
+    };
+    rom_conflict || physical_conflict
+}
+
 fn allowed_static_effect(word: u32, pc: crate::GuestAddr) -> bool {
     let i = decode(word, pc);
     if !i.is_valid() || i.is_trap() || i.is_float() {
@@ -168,18 +196,34 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 );
             }
         }
-        if !map.regions.iter().any(|r| {
-            r.image == b.start.image
-                && r.generation == b.start.generation
-                && r.range.start.0 <= b.start.pc.0
-                && r.range.end() >= range.end()
-        }) {
+        let covering_regions: Vec<_> = map
+            .regions
+            .iter()
+            .filter(|r| {
+                r.image == b.start.image
+                    && r.generation == b.start.generation
+                    && r.range.start.0 <= b.start.pc.0
+                    && r.range.end() >= range.end()
+            })
+            .collect();
+        if covering_regions.is_empty() {
             add(
                 "unknown_executable_region",
                 Some(b.start.clone()),
                 "block is not contained by a matching executable region",
                 b.evidence.clone(),
             );
+        } else {
+            for region in covering_regions {
+                if supplied_region_provenance_conflict(image, region, b.start.pc) {
+                    add(
+                        "supplied_image_provenance_conflict",
+                        Some(b.start.clone()),
+                        "supplied instruction image contradicts explicit executable Region provenance",
+                        region.evidence.clone(),
+                    );
+                }
+            }
         }
     }
     for edge in &map.direct_edges {
