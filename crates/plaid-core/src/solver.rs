@@ -400,6 +400,17 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             w.evidence.clone(),
         );
     }
+    if scope == Scope::DeclaredStaticImages && !map.word_store_observations.is_empty() {
+        add(
+            "dynamic_effect_outside_scope",
+            None,
+            "declared static scope cannot include successful word-store execution",
+            map.word_store_observations
+                .iter()
+                .flat_map(|w| w.evidence.clone())
+                .collect(),
+        );
+    }
     if scope == Scope::DeclaredStaticImages
         && (!map.loads.is_empty()
             || !map.dma_observations.is_empty()
