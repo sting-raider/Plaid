@@ -1,0 +1,63 @@
+name: research-pagemask-icache-remap-compose
+
+on:
+  push:
+    branches:
+      - research/pagemask-icache-remap-compose-gpt56sol
+    paths:
+      - experiments/pagemask-icache-remap/**
+      - research/pagemask-icache-remap-compose.md
+      - .github/workflows/research-pagemask-icache-remap-compose.yml
+  workflow_dispatch:
+
+jobs:
+  exact-pinned-composition:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Plaid worker branch
+        uses: actions/checkout@v4
+
+      - name: Checkout exact pinned ares
+        uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+
+      - name: Checkout exact pinned Gopher64
+        uses: actions/checkout@v4
+        with:
+          repository: gopher64/gopher64
+          ref: e96debac941a26ba4961e5145056c0821d3a56f7
+          path: .refs/gopher64
+
+      - name: Checkout exact pinned n64-systemtest
+        uses: actions/checkout@v4
+        with:
+          repository: lemmy-64/n64-systemtest
+          ref: 196f5421173220eb2f63a7a99c64795dc0ea0698
+          path: .refs/n64-systemtest
+
+      - name: Syntax check
+        run: python3 -m py_compile experiments/pagemask-icache-remap/source_guard.py experiments/pagemask-icache-remap/model.py experiments/pagemask-icache-remap/run.py
+
+      - name: Guard exact source contracts
+        run: python3 experiments/pagemask-icache-remap/source_guard.py
+
+      - name: Run adversarial composition model
+        run: python3 experiments/pagemask-icache-remap/model.py
+
+      - name: Build and execute exact pinned ares composition fixture
+        run: python3 experiments/pagemask-icache-remap/run.py
+
+      - name: Upload composition receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pagemask-icache-remap-compose-receipt
+          path: |
+            target/pagemask-icache-remap/results.json
+            target/pagemask-icache-remap/build.json
+            target/pagemask-icache-remap/build.log
+          if-no-files-found: ignore
