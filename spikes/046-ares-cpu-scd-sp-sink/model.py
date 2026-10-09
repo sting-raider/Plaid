@@ -5,9 +5,9 @@ import hashlib
 import json
 
 INITIAL_HI = 0x11223344
-INITIAL_LO = 0xFFFFFFF0
+INITIAL_LO = 0xFFFFFFFF
 INITIAL64 = (INITIAL_HI << 32) | INITIAL_LO
-DELTA = 0x20
+DELTA = 1
 CHANGED64 = (INITIAL64 + DELTA) & 0xFFFFFFFFFFFFFFFF
 
 
@@ -44,7 +44,7 @@ def report() -> dict:
 
 def self_test() -> dict:
     doc = report()
-    assert CHANGED64 == 0x1122334500000010
+    assert CHANGED64 == 0x1122334500000000
     assert rcp_dual_write(CHANGED64) == [{"offset": 0, "value": 0x11223345}]
     assert doc["changed_sink_words"] == [0x11223345, INITIAL_LO]
     assert doc["same_sink_words"] == [INITIAL_HI, INITIAL_LO]
