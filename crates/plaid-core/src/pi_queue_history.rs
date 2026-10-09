@@ -45,14 +45,14 @@ pub struct PiQueueHistoryReport {
     pub native_complete: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub(crate) enum Wire {
     Schedule(Schedule),
     Legacy(pi_history::Wire),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Schedule {
     Queue {
@@ -126,7 +126,7 @@ pub(crate) enum Schedule {
     },
 }
 impl Schedule {
-    fn identity(&self) -> (u64, u64, GuestVirtualAddr, &'static str) {
+    pub(crate) fn identity(&self) -> (u64, u64, GuestVirtualAddr, &'static str) {
         let (ordinal, context, pc, name) = match self {
             Self::Queue {
                 ordinal,
@@ -172,6 +172,33 @@ impl Schedule {
             } => (*ordinal, *context, *pc, "pi_status_scope"),
         };
         (ordinal, context, pc, name)
+    }
+    pub(crate) fn renumber(&mut self, next: u64, scope: u64) {
+        let (ordinal, context) = match self {
+            Self::Queue {
+                ordinal, context, ..
+            }
+            | Self::PiRequestBegin {
+                ordinal, context, ..
+            }
+            | Self::PiRequestEnd {
+                ordinal, context, ..
+            }
+            | Self::DispatchBegin {
+                ordinal, context, ..
+            }
+            | Self::DispatchEnd {
+                ordinal, context, ..
+            }
+            | Self::PiCopyRequest {
+                ordinal, context, ..
+            }
+            | Self::PiStatusScope {
+                ordinal, context, ..
+            } => (ordinal, context),
+        };
+        *ordinal = next;
+        *context = scope;
     }
 }
 struct Request {

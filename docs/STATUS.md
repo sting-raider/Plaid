@@ -431,3 +431,12 @@ capture has 7945 exact SP-backed fetches and preserves complete prior v2/v1/v0/v
 sources and unchanged-reference/disabled/repeated checkpoints. Eleven standalone
 forgeries pass rejection tests. Full-prefix rechecking and strict Rust consumption
 are in progress; no bank identity becomes ultimate origin or executable lifetime.
+
+The original strict Rust v3 consumer now passes full 610,000-call inspection and
+complete report source rechecking: 596,991 SP fetches, 920 samples and 512 DMA
+store receipts. Its nested source report remains complete; every observation
+retains raw v3 ordinals. Full Python nested replay is pending, while all smaller
+capture observations/digests already agree independently. Three adversarial
+integration tests bring the suite to 97 integrations plus three units; formatting,
+strict Clippy and 22 retained research contracts pass. No production image,
+lifetime or closed-world status is promoted.

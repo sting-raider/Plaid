@@ -122,3 +122,8 @@ The v3 SP boot extension now preserves all prior sources/checkpoints on the
 10,000-call capture. Finish full-prefix independent replay and strict source-bound
 Rust consumption, then compose actual PIF backing and SP producers. Its eleven
 standalone forgeries supplement the actual controlled sensor adversaries.
+
+Strict Rust v3 inspection/source rechecking now passes the full retained capture;
+finish the independent full Python comparison and expose the tested finite CLI.
+Actual PIF reads are the remaining fetch-backing domain; ultimate SP producers,
+ordinary RSP DMEM mutations and executable lifetimes remain separate.

@@ -1074,3 +1074,20 @@ RSP DMEM mutation census, executable lifetime or whole-ROM closure is inferred.
 Full-prefix verification and original strict Rust consumption precede broader
 promotion. Generated pinned-reference sources/licenses/assets remain ignored;
 no reference implementation enters the final native path.
+
+## ADR-0074: Strict v3 inspection binds finite SP observations to nested sources
+
+Status: Accepted for finite inspection, 2026-10-09.
+
+An original typed streaming Rust adapter validates actual SP backing rows and
+raw fetch contexts before projecting into the unchanged strict v2/v1/v0/v5
+consumers. Full source rechecking binds each sample, normalized store receipt,
+raw digest and complete nested report. Missing/ambiguous/foreign/cached reads
+stay unknown; DMA receipts cannot cross an unrelated event.
+
+Independent smaller-prefix Python evidence agrees on every finite fact/digest;
+full-prefix Rust inspection/rechecking also passes. Three original adversarial
+integration tests cover raw source and report binding. A bank read is current
+backing identity only; store receipt matching is not ultimate byte origin or
+DMA timing/lifetime proof. Keep all certification flags false and leave the
+ProgramMap/solver unchanged. No reference runtime dependency is introduced.
