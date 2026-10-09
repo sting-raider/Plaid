@@ -419,3 +419,8 @@ mirrors and banks remain explicit; unrelated data reads, status IO and cached-SP
 freeze cannot supply fetch backing. Seven measured-history forgeries fail.
 Boot composition is in progress; producer census and lifetime remain open
 (ADR-0072).
+
+Latest worker research is reconciled: the decoded RSP self-store fixture now
+passes 29 probes, including the added 15-byte SRV at `0x100f`. Repeated output
+and final DMEM hash match the worker closeout; IMEM remains unchanged throughout.
+The original 28-case result is preserved in its prior ignored directory.

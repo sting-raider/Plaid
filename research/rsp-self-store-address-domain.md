@@ -38,3 +38,20 @@ CPU writes, SP DMA, debugger/reset/restore and general IMEM lifetime remain
 mutation obligations. This test does not prove all RSP behavior, reachability,
 full state neutrality or whole-ROM closure. The reference itself is unmodified;
 licensed upstream builds and all generated results stay ignored.
+
+## Latest worker closeout reproduced, 2026-10-09
+
+Worker commit `f1ada1d` added `SRV @ 0x100f`: unlike aligned SRV, it writes
+15 bytes while bit 12 is set. The primary fixture now includes that 29th decoded
+probe, preserving the previous 28 cases and the Windows runner. All IMEM bytes
+remain unchanged and repeated complete JSON matches. Its final DMEM hash matches
+the worker closeout exactly:
+`7e8ad5017488ba03437fc1a7a4ecb000dfa5991c2fe7b2a0e0f3a80bbbdb7813`.
+The retained primary result hash is
+`d04a2728422bd184bdcde85469b145384a12f0f9ef8ab7fb98f240f805b10055`;
+the original 28-case result stays under its earlier ignored output directory.
+
+The newer worker note on branch head `761d1b5` and D-cache closeout `6cff6dc`
+were inspected. Their scope agrees with ADR-0067/0068: this real SRV effect is
+DMEM-only, and the previously reproduced D-cache mutation revision prevents
+stale equal-value writeback snapshots. No additional general lifetime is proved.

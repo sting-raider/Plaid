@@ -113,3 +113,7 @@ repeat state and seven forgeries (ADR-0072). Compose it into a separate boot
 history version with exact prior-source projection, then add a strict original
 Rust consumer. Keep CPU DMEM/IMEM backing separate from ultimate ROM origin and
 RSP-originated DMEM mutations; PIF reads/initialization are the next source gap.
+
+The latest RSP worker closeout now reproduces the nonzero SRV bit-12 adversary
+(29 decoded probes); no ordinary RSP store gains an IMEM sink. Include those
+actual DMEM mutations if extending CPU-to-SP source lineage.

@@ -125,6 +125,10 @@ int main() {
     runDecoded(store.wrapName, instruction, 0x0fff, false, [&] {});
   }
 
+  // Worker closeout adds the real SRV write path with the would-be IMEM bit set.
+  u32 srvInstruction = (58u << 26) | (1u << 21) | (2u << 16) | (5u << 11);
+  runDecoded("SRV@0x100f", srvInstruction, 0x100f, false, [&] {});
+
   string finalImem = digest(rsp.imem.data, 4096);
   string finalDmem = digest(rsp.dmem.data, 4096);
   std::printf("{\"probes\":[");
@@ -137,5 +141,5 @@ int main() {
     results.size(), finalImem.data(), finalDmem.data());
 
   ares::Nintendo64::system.unload();
-  return results.size() == 28 ? 0 : 70;
+  return results.size() == 29 ? 0 : 70;
 }

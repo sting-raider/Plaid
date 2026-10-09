@@ -15,7 +15,7 @@ ARES_REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 GOPHER_REV = "e96debac941a26ba4961e5145056c0821d3a56f7"
 N64TEST_REV = "196f5421173220eb2f63a7a99c64795dc0ea0698"
 DRIVER = Path(__file__).with_name("driver.cpp")
-OUTPUT = ROOT / "target/ares-rsp-self-store-spike"
+OUTPUT = ROOT / "target/ares-rsp-self-store-spike-29"
 VECTOR_STORES = {"SBV","SDV","SFV","SHV","SLV","SPV","SQV","SRV","SSV","STV","SUV","SWV"}
 VECTOR_BASE_1000_STORES = VECTOR_STORES - {"STV"}
 
@@ -143,14 +143,17 @@ def main():
     raw2 = subprocess.check_output([str(exe)], text=True, timeout=30)
     assert raw1 == raw2
     observed = json.loads(raw1)
-    assert observed["probe_count"] == 28
-    expected = {"SB", "SH", "SW-wrap", "SW-bit12"}
+    assert observed["probe_count"] == 29
+    expected = {"SB", "SH", "SW-wrap", "SW-bit12", "SRV@0x100f"}
     for name in VECTOR_STORES:
         expected.add(name + "@0x1000")
         expected.add(name + "@0x0fff")
     assert {p["name"] for p in observed["probes"]} == expected
     assert [p['name'] for p in observed['probes'] if not p['changed_dmem']] == ['SRV@0x1000']
     assert all(p['changed_dmem'] > 0 for p in observed['probes'] if p['name'] != 'SRV@0x1000')
+    by_name = {p['name']:p for p in observed['probes']}
+    assert by_name['SRV@0x100f']['changed_dmem'] == 15
+    assert by_name['SRV@0x100f']['dmem_sha256'] == '7e8ad5017488ba03437fc1a7a4ecb000dfa5991c2fe7b2a0e0f3a80bbbdb7813'
 
     result = {
         "ares_revision": ARES_REV,
