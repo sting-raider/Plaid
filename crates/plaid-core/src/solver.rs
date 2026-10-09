@@ -104,19 +104,17 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 let Some(b_physical) = b.physical_start else {
                     continue;
                 };
-                let overlap_start =
-                    u64::from(a.range.start.0.max(b.range.start.0));
+                let overlap_start = u64::from(a.range.start.0.max(b.range.start.0));
                 let overlap_end = a.range.end().min(b.range.end());
                 if overlap_start >= overlap_end {
                     continue;
                 }
-                let a_at_overlap = u64::from(a_physical.0)
-                    + (overlap_start - u64::from(a.range.start.0));
-                let b_at_overlap = u64::from(b_physical.0)
-                    + (overlap_start - u64::from(b.range.start.0));
+                let a_at_overlap =
+                    u64::from(a_physical.0) + (overlap_start - u64::from(a.range.start.0));
+                let b_at_overlap =
+                    u64::from(b_physical.0) + (overlap_start - u64::from(b.range.start.0));
                 if a_at_overlap != b_at_overlap {
-                    let evidence: EvidenceRefs =
-                        a.evidence.union(&b.evidence).cloned().collect();
+                    let evidence: EvidenceRefs = a.evidence.union(&b.evidence).cloned().collect();
                     add(
                         "ambiguous_executable_physical_mapping",
                         None,
