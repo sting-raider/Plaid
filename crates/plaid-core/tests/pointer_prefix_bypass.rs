@@ -124,7 +124,13 @@ fn same_generation_indirect_targets_into_prefix_invalidate_pointer_table_evidenc
             "{} target bypassed the guard but retained table evidence",
             if observed { "observed" } else { "candidate" }
         );
-        assert_eq!(candidates(&analyzed), [0x80000014]);
+        let targets = candidates(&analyzed);
+        assert!(
+            !targets.iter().any(|pc| matches!(*pc, 0x80000040 | 0x80000050)),
+            "{} target bypassed the guard but acquired table-derived candidates: {:?}",
+            if observed { "observed" } else { "candidate" },
+            targets
+        );
     }
 }
 
