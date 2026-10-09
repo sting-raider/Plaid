@@ -1,0 +1,16 @@
+name: research-solver-conflicting-region-mapping
+
+on:
+  push:
+    branches:
+      - research/solver-conflicting-region-mapping-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  plaid-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run conflicting-region solver regression
+        run: cargo test -p plaid-core --test solver_conflicting_region_mapping -- --nocapture
