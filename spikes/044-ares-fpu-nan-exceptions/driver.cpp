@@ -23,13 +23,13 @@ struct Fixture {
 };
 
 static auto fixtureFor(const char* name) -> Fixture {
-  // The labels use the legacy-MIPS convention implemented by the pinned ares
-  // source: snan(f32) is true when fraction bit 22 is one. That convention is
-  // the reverse of modern IEEE-754 quiet-bit naming, so raw bits are canonical.
+  // Avoid sNaN/qNaN labels here. Pinned n64-systemtest uses modern IEEE naming
+  // (bit 22 clear = signaling, set = quiet), while pinned ares' helper named
+  // snan(f32) returns bit 22. Raw bits are therefore the unambiguous identity.
   if(!std::strcmp(name, "finite")) return {name, 0x3f800000u, 0x40000000u, 0u};
-  if(!std::strcmp(name, "mips_snan_masked")) return {name, 0x7fc00001u, 0x3f800000u, 0u};
-  if(!std::strcmp(name, "mips_snan_enabled")) return {name, 0x7fc00001u, 0x3f800000u, 1u << 11};
-  if(!std::strcmp(name, "mips_qnan")) return {name, 0x7fa00001u, 0x3f800000u, 0u};
+  if(!std::strcmp(name, "nan_bit22_set_masked")) return {name, 0x7fc00001u, 0x3f800000u, 0u};
+  if(!std::strcmp(name, "nan_bit22_set_enabled")) return {name, 0x7fc00001u, 0x3f800000u, 1u << 11};
+  if(!std::strcmp(name, "nan_bit22_clear")) return {name, 0x7fa00001u, 0x3f800000u, 0u};
   if(!std::strcmp(name, "subnormal")) return {name, 0x00000001u, 0x3f800000u, 0u};
   return {nullptr, 0, 0, 0};
 }
