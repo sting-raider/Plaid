@@ -68,7 +68,7 @@ fn compile_begin_evidence(map: &ProgramMap, unit: u64) -> String {
 }
 
 #[test]
-fn current_main_accepts_unrelated_compile_unit_as_verified_entry_source() {
+fn unrelated_compile_unit_must_not_validate_as_verified_entry_source() {
     let words = vec![0x03e0_0008, 0];
     let mut trace = base_trace(words.clone());
     push(
@@ -108,9 +108,8 @@ fn current_main_accepts_unrelated_compile_unit_as_verified_entry_source() {
     verification.source_unit = unrelated;
     forged.entry_verifications.insert(verification);
 
-    // Baseline witness: current validation proves only "some Trace evidence",
-    // not that the selected unit produced this verified entry.
-    assert!(forged.validate().is_ok());
+    // Desired invariant. This fails on current main-derived validation.
+    assert!(forged.validate().is_err());
 }
 
 #[test]
