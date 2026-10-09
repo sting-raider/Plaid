@@ -3,6 +3,9 @@ name: Research CPU SCD SP sink
 on:
   push:
     branches: [research/cpu-scd-sp-sink-gpt56sol]
+    paths:
+      - 'spikes/046-ares-cpu-scd-sp-sink/**'
+      - '.github/workflows/research-cpu-scd-sp-sink.yml'
   workflow_dispatch:
 
 permissions:
@@ -25,8 +28,15 @@ jobs:
           repository: gopher64/gopher64
           ref: e96debac941a26ba4961e5145056c0821d3a56f7
           path: .refs/gopher64
+      - uses: actions/checkout@v4
+        with:
+          repository: lemmy-64/n64-systemtest
+          ref: 196f5421173220eb2f63a7a99c64795dc0ea0698
+          path: .refs/n64-systemtest
       - name: Compile Python verifier
         run: python3 -m py_compile spikes/046-ares-cpu-scd-sp-sink/*.py
+      - name: Run source-derived Dual sink model
+        run: python3 spikes/046-ares-cpu-scd-sp-sink/model.py | tee /tmp/cpu-scd-sp-model.log
       - name: Build exact pinned ares and execute SCD SP sink fixture
         id: experiment
         continue-on-error: true
@@ -45,8 +55,10 @@ jobs:
             echo 'worker: gpt56sol-cpu-scd-sp-sink-20261009'
             echo "run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             echo '```text'
+            echo '--- source-derived model ---'
+            cat /tmp/cpu-scd-sp-model.log || true
             echo '--- runner tail ---'
-            tail -n 55 /tmp/cpu-scd-sp-sink.log || true
+            tail -n 65 /tmp/cpu-scd-sp-sink.log || true
             if test -f target/ares-cpu-scd-sp-sink/instrumented/build.log; then
               echo '--- compiler errors ---'
               grep -nE 'driver\.cpp|error:|undefined reference|collect2:' target/ares-cpu-scd-sp-sink/instrumented/build.log | tail -n 120 || true
@@ -68,7 +80,10 @@ jobs:
             echo 'worker: gpt56sol-cpu-scd-sp-sink-20261009'
             echo "run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             echo '```text'
-            tail -n 35 /tmp/cpu-scd-sp-sink.log
+            echo '--- source-derived model ---'
+            cat /tmp/cpu-scd-sp-model.log
+            echo '--- exact run ---'
+            tail -n 45 /tmp/cpu-scd-sp-sink.log
             echo '```'
           } > /tmp/receipt.md
           gh issue comment 4 --body-file /tmp/receipt.md
