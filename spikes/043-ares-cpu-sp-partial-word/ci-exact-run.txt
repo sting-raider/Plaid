@@ -1,24 +1,55 @@
-workflow_run=37915564924
-source_commit=4f8d30d3836a57b9905418503e91d2caba6baeb7
-exact_step_outcome=failure
+workflow_run=37915653040
+source_commit=208e2b0daeecb62321ce8936dab6685d632064c9
+exact_step_outcome=success
 ares_revision=9408cb43d4948fc3ea6e152a307a34348df3fe04
 --- stdout_stderr ---
-Traceback (most recent call last):
-  File "/home/runner/work/Plaid/Plaid/spikes/043-ares-cpu-sp-partial-word/run.py", line 26, in <module>
-    model = importlib.util.module_from_spec(mspec); mspec.loader.exec_module(model)
-                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "<frozen importlib._bootstrap_external>", line 995, in exec_module
-  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
-  File "/home/runner/work/Plaid/Plaid/spikes/043-ares-cpu-sp-partial-word/model.py", line 12, in <module>
-    @dataclass(frozen=True)
-     ^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.12/dataclasses.py", line 1258, in wrap
-    return _process_class(cls, init, repr, eq, order, unsafe_hash,
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.12/dataclasses.py", line 983, in _process_class
-    and _is_type(type, cls, dataclasses, dataclasses.KW_ONLY,
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.12/dataclasses.py", line 749, in _is_type
-    ns = sys.modules.get(cls.__module__).__dict__
-         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'NoneType' object has no attribute '__dict__'. Did you mean: '__dir__'?
+PASS: 40 repeated exact-pinned-ares SWL/SWR/SP-IMEM cases
+single_full_word_sink_cases=32/32
+two_subwrite_same_word_cases=8/8
+pair_collateral_cases=6/8
+results_sha256=855189757dcbe990e12e6cbf9fe5abe73bd20528fffd55c44afa8ef3c124c335
+CASE {"op":"SWL","endian":"big","offset":0,"after":[17,34,51,68,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWL","endian":"big","offset":1,"after":[0,17,34,51,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWL","endian":"big","offset":2,"after":[0,0,17,34,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWL","endian":"big","offset":3,"after":[0,0,0,17,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWL","endian":"big","offset":4,"after":[160,161,162,163,17,34,51,68,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWL","endian":"big","offset":5,"after":[160,161,162,163,0,17,34,51,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWL","endian":"big","offset":6,"after":[160,161,162,163,0,0,17,34,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWL","endian":"big","offset":7,"after":[160,161,162,163,0,0,0,17,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWR","endian":"big","offset":0,"after":[68,0,0,0,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWR","endian":"big","offset":1,"after":[51,68,0,0,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWR","endian":"big","offset":2,"after":[34,51,0,0,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWR","endian":"big","offset":3,"after":[17,34,51,68,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWR","endian":"big","offset":4,"after":[160,161,162,163,68,0,0,0,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWR","endian":"big","offset":5,"after":[160,161,162,163,51,68,0,0,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWR","endian":"big","offset":6,"after":[160,161,162,163,34,51,0,0,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWR","endian":"big","offset":7,"after":[160,161,162,163,17,34,51,68,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWL","endian":"little","offset":0,"after":[160,161,162,163,0,0,0,17,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWL","endian":"little","offset":1,"after":[160,161,162,163,0,0,17,34,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWL","endian":"little","offset":2,"after":[160,161,162,163,0,17,34,51,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWL","endian":"little","offset":3,"after":[160,161,162,163,17,34,51,68,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWL","endian":"little","offset":4,"after":[0,0,0,17,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWL","endian":"little","offset":5,"after":[0,0,17,34,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWL","endian":"little","offset":6,"after":[0,17,34,51,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWL","endian":"little","offset":7,"after":[17,34,51,68,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWR","endian":"little","offset":0,"after":[160,161,162,163,17,34,51,68,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWR","endian":"little","offset":1,"after":[160,161,162,163,34,51,68,0,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWR","endian":"little","offset":2,"after":[160,161,162,163,51,68,0,0,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWR","endian":"little","offset":3,"after":[160,161,162,163,68,0,0,0,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWR","endian":"little","offset":4,"after":[17,34,51,68,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWR","endian":"little","offset":5,"after":[34,51,68,0,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWR","endian":"little","offset":6,"after":[51,68,0,0,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"SWR","endian":"little","offset":7,"after":[68,0,0,0,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"PAIR","endian":"big","offset":0,"after":[17,34,51,68,164,165,166,167,168,169,170,171,172,173,174,175]}
+CASE {"op":"PAIR","endian":"big","offset":1,"after":[0,17,34,51,68,0,0,0,168,169,170,171,172,173,174,175]}
+CASE {"op":"PAIR","endian":"big","offset":2,"after":[0,0,17,34,51,68,0,0,168,169,170,171,172,173,174,175]}
+CASE {"op":"PAIR","endian":"big","offset":3,"after":[0,0,0,17,34,51,0,0,168,169,170,171,172,173,174,175]}
+CASE {"op":"PAIR","endian":"little","offset":0,"after":[160,161,162,163,17,34,51,68,168,169,170,171,172,173,174,175]}
+CASE {"op":"PAIR","endian":"little","offset":1,"after":[0,0,0,17,34,51,68,0,168,169,170,171,172,173,174,175]}
+CASE {"op":"PAIR","endian":"little","offset":2,"after":[0,0,17,34,51,68,0,0,168,169,170,171,172,173,174,175]}
+CASE {"op":"PAIR","endian":"little","offset":3,"after":[0,17,34,51,68,0,0,0,168,169,170,171,172,173,174,175]}
+source_ipu_sha256=495c2589d6c5b34e144a5d2cd02cf2372771dc8642af590e9d46389a157e6152
+source_memory_sha256=55f833718501d018d7e81e089a1ca53a9891154b8952cc2ec1b5126fda632c74
+source_rcp_sha256=54089251052dbffddf7ae77819c3a3bb494cf7269ae874a3015a23907370a69c
+source_rsp_io_sha256=60cc9b1efb2e90c127098a736c5213ea0bf77d2e3bd6e5b112e55752289af860
+source_writable_sha256=29d6d71b9b92e095f34bd1809c5d3f8afb74cb16857e1f597854165d70d9df06
