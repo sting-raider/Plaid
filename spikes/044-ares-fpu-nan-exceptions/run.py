@@ -15,13 +15,14 @@ OUT = ROOT / "target" / "ares-fpu-nan-exceptions"
 ARES_PIN = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 MUPEN_PIN = "ba95bab92a76744753bfe61470823a4937850ab0"
 GOPHER_PIN = "e96debac941a26ba4961e5145056c0821d3a56f7"
+SYSTEMTEST_PIN = "196f5421173220eb2f63a7a99c64795dc0ea0698"
 SENTINEL = 0xA5A5A5A5DEADBEEF
 
 CASES = [
     "finite",
-    "mips_snan_masked",
-    "mips_snan_enabled",
-    "mips_qnan",
+    "nan_bit22_set_masked",
+    "nan_bit22_set_enabled",
+    "nan_bit22_clear",
     "subnormal",
 ]
 
@@ -31,24 +32,23 @@ EXPECTED = {
         "fcsr": 0x00000000,
         "exception": 0,
     },
-    # Legacy-MIPS sNaN encoding: fraction bit 22 = 1. With Invalid disabled,
-    # ares records cause+sticky flag, completes the add, canonicalizes NaN,
+    # Raw 0x7fc00001 has fraction bit 22 set. Pinned ares records Invalid
+    # cause+sticky flag; with Invalid masked it completes, canonicalizes NaN,
     # and writes the destination.
-    "mips_snan_masked": {
+    "nan_bit22_set_masked": {
         "dest_after": 0x000000007FBFFFFF,
         "fcsr": 0x00010040,
         "exception": 0,
     },
-    # The same raw operand with Invalid enabled raises FPE before destination
-    # writeback. The enable and cause bits remain visible; sticky flag is clear.
-    "mips_snan_enabled": {
+    # Same raw input with Invalid enabled raises FPE before destination writeback.
+    "nan_bit22_set_enabled": {
         "dest_after": SENTINEL,
         "fcsr": 0x00010800,
         "exception": 15,
     },
-    # Legacy-MIPS qNaN encoding: fraction bit 22 = 0. Pinned ares classifies
-    # this as Unimplemented Operation and always raises FPE.
-    "mips_qnan": {
+    # Raw 0x7fa00001 has fraction bit 22 clear. Pinned ares classifies it as
+    # Unimplemented Operation and always raises FPE.
+    "nan_bit22_clear": {
         "dest_after": SENTINEL,
         "fcsr": 0x00020000,
         "exception": 15,
@@ -93,13 +93,37 @@ def source_guards() -> dict[str, str]:
         if marker not in text:
             raise AssertionError(f"ares source guard missing: {marker}")
 
-    qnan_i = text.index(markers[2])
-    subnormal_i = text.index(markers[3], qnan_i)
-    snan_i = text.index(markers[4], subnormal_i)
-    if not qnan_i < subnormal_i < snan_i:
+    bit22_clear_nan_i = text.index(markers[2])
+    subnormal_i = text.index(markers[3], bit22_clear_nan_i)
+    bit22_set_nan_i = text.index(markers[4], subnormal_i)
+    if not bit22_clear_nan_i < subnormal_i < bit22_set_nan_i:
         raise AssertionError("ares input classification order changed")
 
-    # Independent references are deliberately guards for disagreement, not
+    # n64-systemtest is hardware-test evidence, not an emulator vote. Its
+    # naming follows modern IEEE convention and therefore exposes why the raw
+    # bit identities above are safer than copying the pinned ares helper name.
+    systemtest = ROOT / ".refs" / "n64-systemtest"
+    if systemtest.exists():
+        require_pin(systemtest, SYSTEMTEST_PIN, "n64-systemtest")
+        cop1 = (systemtest / "src/cop1.rs").read_text()
+        tests = (systemtest / "src/tests/cop1/mod.rs").read_text()
+        for marker in (
+            "SIGNALLING_NAN_START_32: f32 = unsafe { transmute(0x7F800001u32) }",
+            "SIGNALLING_NAN_END_32: f32 = unsafe { transmute(0x7FBFFFFFu32) }",
+            "QUIET_NAN_START_32: f32 = unsafe { transmute(0x7FC00000u32) }",
+            "SUBNORMAL_MIN_POSITIVE_32: f32 = unsafe { transmute::<u32, f32>(0x00000001) }",
+        ):
+            if marker not in cop1:
+                raise AssertionError(f"n64-systemtest COP1 source guard missing: {marker}")
+        for marker in (
+            "Signalling NANs don't work at all. If either one of the inputs has this value, UnimplementedOperationException is fired",
+            "Quiet NANs are supported, but they are signalling. Also all NANs (including negative ones) are treated equally",
+            "const COP1_RESULT_NAN_32: f32 = FConst::SIGNALLING_NAN_END_32;",
+        ):
+            if marker not in tests:
+                raise AssertionError(f"n64-systemtest expectation guard missing: {marker}")
+
+    # These emulator references are deliberately guards for disagreement, not
     # promoted to oracles. Their pinned source currently lacks the ares split.
     mupen = ROOT / ".refs" / "mupen64plus-core"
     if mupen.exists():
@@ -126,6 +150,7 @@ def source_guards() -> dict[str, str]:
 
     return {
         "ares": ARES_PIN,
+        "n64-systemtest": SYSTEMTEST_PIN if systemtest.exists() else "not-checked-out",
         "mupen64plus": MUPEN_PIN if mupen.exists() else "not-checked-out",
         "gopher64": GOPHER_PIN if gopher.exists() else "not-checked-out",
     }
