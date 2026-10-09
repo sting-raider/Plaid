@@ -1038,3 +1038,22 @@ PI-attributed fetch observations. Sample endpoints remain discrete observations;
 unobserved same-value mutations cannot be excluded by value equality. Keep
 mutation-coverage, executable-lifetime and native flags false and leave ProgramMap
 and solver unchanged. Actual SP/PIF sources and their producers remain separate.
+
+## ADR-0072: CPU SP fetch identity requires the actual bank read result
+
+Status: Accepted for finite reference sensing, 2026-10-09.
+
+The original controlled sensor observes the existing completed `RSP::readWord`
+result, normalized `RSP::writeWord` effect and direct SP-DMA storage sinks in
+generated separately licensed reference shadows. Physical mirrors remain raw
+addresses; bank bit 12 and aligned modulo-bank offset identify backing. Cached
+SP access and status IO cannot inherit a backing witness from their addresses.
+
+Eighteen actual CPU steps preserve every independent baseline/disabled/repeated
+checkpoint and full reported state. Twelve fetches have exact read contexts;
+equal stores retain distinct events and SB records a full-word sink. Three DMA
+stores pair to actual RAM receipts without inventing ultimate source lineage.
+Seven measured-history forgeries fail. Compose these results into boot chronology
+before introducing a strict Rust consumer. RSP DMEM writes and general producer,
+reset/restore, mutation census and executable lifetime remain open; no reference
+code/runtime dependency, asset or native-complete claim enters production.
