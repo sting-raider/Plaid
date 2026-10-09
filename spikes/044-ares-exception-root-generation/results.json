@@ -1,0 +1,28 @@
+{
+  "plaid_base": "ae41bdba82993ec8e77f47e5f9d3bb9af06f9256",
+  "ares_revision": "9408cb43d4948fc3ea6e152a307a34348df3fe04",
+  "actions_run": 37933901521,
+  "actions_job": 113831050291,
+  "model_report_sha256": "fb73e817fb097ca91caa100d5d5e179ec3b736df3785776f86618e6aa2000c8e",
+  "dynamic_evidence_sha256": "f794aabf9f70f9755e719138ed13d70d0a26334dab01d5a5702ca6ebbb2710cb",
+  "dynamic_evidence": {
+    "backing_word": 604110850,
+    "icache_hits": 1,
+    "icache_misses": 2,
+    "refilled_handler": 2,
+    "refilled_resident_word": 604110850,
+    "refilled_root_pc": 18446744071562068352,
+    "stale_handler": 1,
+    "stale_resident_word": 604110849,
+    "stale_root_pc": 18446744071562068352,
+    "vector_va": 18446744071562068352,
+    "warm_handler": 1
+  },
+  "model": {
+    "history_count": 6,
+    "forged_current_backing_rejections": 4,
+    "same_value_generation_substitution_rejected": true,
+    "refill_before_write_remains_stale": true,
+    "post_write_refill_selects_new_generation": true
+  }
+}
