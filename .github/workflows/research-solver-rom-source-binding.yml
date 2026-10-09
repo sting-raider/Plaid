@@ -20,7 +20,7 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Run ROM source-binding regression
         run: cargo test -p plaid-core --test solver_rom_source_binding -- --nocapture
-      - name: Run full plaid-core suite
-        run: cargo test -p plaid-core
       - name: Run clippy
         run: cargo clippy -p plaid-core --all-targets -- -D warnings
+      - name: Run full plaid-core suite
+        run: cargo test -p plaid-core
