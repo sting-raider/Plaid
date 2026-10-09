@@ -106,16 +106,14 @@ fn equal_payload_other_generation_cannot_cover_limited_generation() {
     );
 
     let merged = merge_maps(&edited, &complete_decoy.map).unwrap();
-    let report = solve(
-        &merged,
-        &[original, decoy],
-        Scope::DeclaredStaticImages,
-    )
-    .unwrap();
+    let report = solve(&merged, &[original, decoy], Scope::DeclaredStaticImages).unwrap();
     assert_eq!(report.status, ClosureStatus::Open);
     assert!(report.blockers.iter().any(|b| {
         b.site.as_ref().is_some_and(|a| a.generation == 0)
-            && matches!(b.kind.as_str(), "missing_decoded_block" | "missing_decoded_edge")
+            && matches!(
+                b.kind.as_str(),
+                "missing_decoded_block" | "missing_decoded_edge"
+            )
     }));
 }
 
