@@ -12,6 +12,19 @@ fn image(words: Vec<u32>) -> CodeImage {
         physical_start: None,
     }
 }
+fn content_image(words: Vec<u32>) -> CodeImage {
+    let bytes: Vec<u8> = words.iter().flat_map(|word| word.to_be_bytes()).collect();
+    CodeImage {
+        base: CodeAddress {
+            pc: GuestAddr(0x80000000),
+            image: plaid_core::rom::sha256(&bytes),
+            generation: 0,
+        },
+        words,
+        rom_offset: None,
+        physical_start: None,
+    }
+}
 fn map(i: &CodeImage) -> ProgramMap {
     direct_cfg(
         RomIdentity {
@@ -161,4 +174,26 @@ fn conflicting_or_fabricated_extra_facts_cannot_close() {
         &solve(&m, &[i], Scope::DeclaredStaticImages).unwrap(),
         "unexpected_decoded_edge"
     ));
+}
+
+#[test]
+fn stale_content_derived_image_identity_cannot_close() {
+    let original = content_image(vec![0x24080001, 0x08000000, 0]);
+    let m = map(&original);
+    assert_eq!(
+        solve(
+            &m,
+            std::slice::from_ref(&original),
+            Scope::DeclaredStaticImages
+        )
+        .unwrap()
+        .status,
+        ClosureStatus::Closed
+    );
+
+    let mut forged = original.clone();
+    forged.words[0] = 0x24080002;
+    let report = solve(&m, &[forged], Scope::DeclaredStaticImages).unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    assert!(has(&report, "instruction_source_identity_mismatch"));
 }
