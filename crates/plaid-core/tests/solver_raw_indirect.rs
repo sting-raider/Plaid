@@ -223,3 +223,88 @@ fn explicit_source_unit_must_be_bound_to_the_declared_source_site() {
     assert_eq!(report.status, ClosureStatus::Open);
     assert!(has(&report, "unresolved_raw_indirect_execution"));
 }
+
+#[test]
+fn deleting_importers_uncorrelated_diagnostic_cannot_launder_raw_transfer() {
+    use plaid_core::{
+        merge::import_trace,
+        program::{PhysicalAddr, RomOffset},
+        trace::{DiscoveryTrace, EventRecord, TraceEvent, TraceHeader},
+    };
+
+    let mut image = constant_jr();
+    image.rom_offset = Some(RomOffset(64));
+    image.physical_start = Some(PhysicalAddr(0));
+    let mut trace = DiscoveryTrace {
+        header: TraceHeader {
+            schema_version: 0,
+            rom: RomIdentity {
+                sha256: "a".repeat(64),
+                size: 4096,
+            },
+            engine: "solver-raw-indirect-test".into(),
+            revision: "pin".into(),
+            capabilities: Default::default(),
+        },
+        events: vec![
+            EventRecord {
+                seq: 0,
+                data: TraceEvent::CompileBegin {
+                    unit: 0,
+                    start: image.base.pc,
+                    physical_start: image.physical_start,
+                    delay_slot_entry: false,
+                },
+            },
+            EventRecord {
+                seq: 1,
+                data: TraceEvent::EntryInstalled {
+                    unit: 0,
+                    pc: image.base.pc,
+                    register_mask: 0,
+                },
+            },
+            EventRecord {
+                seq: 2,
+                data: TraceEvent::UnitCompiled {
+                    unit: 0,
+                    start: image.base.pc,
+                    words: image.words.clone(),
+                },
+            },
+        ],
+    };
+    trace.events.push(EventRecord {
+        seq: 3,
+        data: TraceEvent::IndirectTargetObserved {
+            site: GuestAddr(0x8000_0008),
+            target: GuestAddr(0x9000_0000),
+            delay_slot_pc: Some(GuestAddr(0x8000_000c)),
+            source_unit: Some(0),
+        },
+    });
+
+    let imported = import_trace(&trace, std::slice::from_ref(&image), 100).unwrap();
+    assert_eq!(imported.indirect_observations.len(), 1);
+    assert!(
+        imported
+            .unresolved
+            .iter()
+            .any(|u| u.kind == "uncorrelated_indirect_observation")
+    );
+
+    let mut laundered = analyze_indirect(&imported, &image).unwrap();
+    laundered
+        .unresolved
+        .retain(|u| u.kind != "uncorrelated_indirect_observation");
+    assert!(laundered.unresolved.is_empty());
+
+    let report = solve(
+        &laundered,
+        std::slice::from_ref(&image),
+        Scope::DeclaredStaticImages,
+    )
+    .unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    assert!(has(&report, "unresolved_raw_indirect_execution"));
+}
