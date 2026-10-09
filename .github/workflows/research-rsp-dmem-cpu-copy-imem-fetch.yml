@@ -1,0 +1,56 @@
+name: research-rsp-dmem-cpu-copy-imem-fetch
+
+on:
+  push:
+    branches:
+      - research/rsp-dmem-cpu-copy-imem-fetch-gpt56sol
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  composition:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Fetch exact prior research heads
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin cda3b458dc1ac77c639a1afc02a05daac642e861
+          git fetch --no-tags --depth=1 origin 5c13859e536bf42fcfae9e56b9104f5ff6292590
+          test "$(git rev-parse 211176e7a489fecf8331d02915ee982cd279cb62^{commit})" = 211176e7a489fecf8331d02915ee982cd279cb62
+
+      - name: Verify exact composed inputs
+        run: |
+          set -euo pipefail
+          python3 experiments/rsp-dmem-cpu-copy-imem-fetch/source_guard.py
+
+      - name: Compile Python
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            experiments/rsp-dmem-cpu-copy-imem-fetch/source_guard.py \
+            experiments/rsp-dmem-cpu-copy-imem-fetch/model.py
+
+      - name: Run adversarial composition
+        run: |
+          set -euo pipefail
+          python3 experiments/rsp-dmem-cpu-copy-imem-fetch/model.py | tee target/rsp-dmem-cpu-copy-imem-fetch/run.log
+          sha256sum target/rsp-dmem-cpu-copy-imem-fetch/results.json
+
+      - name: Repository sanity
+        run: |
+          set -euo pipefail
+          git diff --check
+          git status --short
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rsp-dmem-cpu-copy-imem-fetch-evidence
+          path: |
+            target/rsp-dmem-cpu-copy-imem-fetch/results.json
+            target/rsp-dmem-cpu-copy-imem-fetch/run.log
