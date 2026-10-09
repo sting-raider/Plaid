@@ -1,0 +1,36 @@
+name: Research RSP DMEM CPU refetch composition
+
+on:
+  push:
+    branches: [research/rsp-dmem-cpu-refetch-gpt56sol]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - name: Syntax check
+        run: python3 -m py_compile spikes/043-ares-rsp-dmem-cpu-refetch/prepare.py spikes/043-ares-rsp-dmem-cpu-refetch/run.py
+      - name: Execute exact pinned ares composition
+        shell: bash
+        run: |
+          set +e
+          python3 spikes/043-ares-rsp-dmem-cpu-refetch/run.py
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            find target/ares-rsp-dmem-cpu-refetch -name '*build.log' -type f -print -exec tail -n 100 {} \; || true
+          fi
+          exit "$status"
+      - name: Retain deterministic result
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rsp-dmem-cpu-refetch-results
+          path: target/ares-rsp-dmem-cpu-refetch/results.json
