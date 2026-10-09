@@ -48,11 +48,15 @@ def main() -> int:
     assert "if(self.context.bits == 64) vectorOffset = 0x0080;" in exc
 
     # Gopher64 at this exact pin translates KSEG by address bits and otherwise
-    # enters TLB lookup without consulting KSU/UX/SX/KX, and its TLB refill root
-    # only selects 0 or 0x180. Preserve this as a reference limitation/disagreement.
+    # enters TLB lookup without consulting KSU/UX/SX/KX, and its TLB refill code
+    # assigns only 0 or the default 0x180. Do not use unrelated 0x80 literals in
+    # the file as a proxy for XTLB support.
     assert "pub fn translate_address" in gmem
     assert "return device::tlb::get_physical_address(device, address, access_type);" in gmem
-    assert "vector_offset = 0;" in gexc and "0x80" not in gexc
+    tlb_fn = gexc[gexc.index("pub fn tlb_miss_exception"):gexc.index("pub fn reset_event")]
+    assert "let mut vector_offset = 0x180;" in tlb_fn
+    assert "vector_offset = 0;" in tlb_fn
+    assert "vector_offset = 0x80" not in tlb_fn and "vector_offset = 0x080" not in tlb_fn
 
     print("PASS: exact pinned ares/Gopher64 source identities and semantic seams match")
     return 0
