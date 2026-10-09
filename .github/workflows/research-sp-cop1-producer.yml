@@ -22,3 +22,7 @@ jobs:
           python3 spikes/043-ares-sp-cop1-producer/source_guard.py
       - name: Build exact pinned ares and run decoded SWC1 SP matrix
         run: python3 spikes/043-ares-sp-cop1-producer/run.py
+      - name: Print harness build logs on failure
+        if: failure()
+        run: |
+          find target/ares-sp-cop1-producer -name build.log -print -exec tail -n 160 {} \; || true
