@@ -514,6 +514,11 @@ impl ProgramMap {
             if let Some(o) = r.rom_offset {
                 rom_range(o, r.range.size)?;
             }
+            if let Some(physical) = r.physical_start
+                && u64::from(physical.0) + u64::from(r.range.size) > 1u64 << 32
+            {
+                return Err("region physical span overflow".into());
+            }
             if let Some(o) = &r.overlay
                 && self.overlays.get(o).is_none_or(|x| x.image != r.image)
             {
