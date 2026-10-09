@@ -137,3 +137,9 @@ Full v3 Python/Rust replay and source binding now agree, including 512 unknown
 out-of-range DMA receipts. Compose actual PIF ROM reads/writes next, retaining
 current backing separately from supplied-firmware payload equality and ultimate
 SP origin. The 2055 PIF fetches remain the last backing-read domain in this prefix.
+
+PIF write probes require a correction to the earlier next-step wording: pinned
+ares ROM backing is read-only, so delegated attempts are distinct no-effect
+records. Finish complete v4 source/replay comparison and strict Rust integration.
+Then pursue ultimate SP producers and actual RSP DMEM mutation chronology;
+backing reads alone cannot certify executable lifetimes or whole-ROM closure.
