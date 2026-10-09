@@ -28,6 +28,8 @@ static constexpr u64 FPRS[4] = {
   0x1122334455667788ull, 0x99aabbccddeeff00ull,
   0x0123456789abcdefull, 0xfedcba9876543210ull,
 };
+static constexpr u32 DINIT[4] = {0x80818283,0x84858687,0x88898a8b,0x8c8d8e8f};
+static constexpr u32 IINIT[4] = {0xc0c1c2c3,0xc4c5c6c7,0xc8c9cacb,0xcccdcecf};
 
 static void resetCpu(bool fr, bool cu1) {
   cpu.dcache.power(false);
@@ -48,13 +50,20 @@ static void resetCpu(bool fr, bool cu1) {
 }
 
 static void resetSp() {
-  for(u32 i=0;i<32;i++) {
-    rsp.dmem.write<Byte>(i,0x80+i);
-    rsp.imem.write<Byte>(i,0xc0+i);
+  for(u32 i=0;i<4;i++) {
+    rsp.dmem.write<Word>(i*4,DINIT[i]);
+    rsp.imem.write<Word>(i*4,IINIT[i]);
   }
 }
 
-static void printBank(const char* key, bool imem) {
+static void printWords(const char* key, bool imem) {
+  std::printf("\"%s\":[",key);
+  auto& memory = imem ? rsp.imem : rsp.dmem;
+  for(u32 i=0;i<4;i++) std::printf("%s%u",i ? "," : "",(u32)memory.read<Word>(i*4));
+  std::printf("]");
+}
+
+static void printBytes(const char* key, bool imem) {
   std::printf("\"%s\":[",key);
   auto& memory = imem ? rsp.imem : rsp.dmem;
   for(u32 i=0;i<16;i++) std::printf("%s%u",i ? "," : "",(u32)memory.read<Byte>(i));
@@ -72,19 +81,22 @@ static void printSinks() {
 }
 
 int main(int argc,char** argv) {
-  if(argc!=7) return 2;
+  if(argc!=8) return 2;
   const char* op=argv[1];
   const char* bank=argv[2];
   int fr=std::atoi(argv[3]);
   int ft=std::atoi(argv[4]);
   const char* mode=argv[5];
   int offset=std::atoi(argv[6]);
+  const char* observeArg=argv[7];
   if(std::strcmp(op,"SWC1") && std::strcmp(op,"SDC1")) return 2;
   if(std::strcmp(bank,"dmem") && std::strcmp(bank,"imem")) return 2;
   if(fr<0 || fr>1 || ft<0 || ft>3 || offset<0 || offset>15) return 2;
   if(std::strcmp(mode,"ok") && std::strcmp(mode,"cu1off") && std::strcmp(mode,"misalign")) return 2;
+  if(std::strcmp(observeArg,"on") && std::strcmp(observeArg,"off")) return 2;
   bool isImem=!std::strcmp(bank,"imem");
   bool cu1=std::strcmp(mode,"cu1off");
+  bool observe=!std::strcmp(observeArg,"on");
 
   Headless frontend; platform=&frontend;
   frontend.cartPak->setAttribute("title","Plaid COP1 SP sink fixture");
@@ -102,18 +114,20 @@ int main(int argc,char** argv) {
   if(!std::strcmp(mode,"misalign")) offset = !std::strcmp(op,"SWC1") ? 1 : 4;
   cpu.ipu.r[1].u64=base;
 
-  std::printf("{\"op\":\"%s\",\"bank\":\"%s\",\"fr\":%d,\"ft\":%d,\"mode\":\"%s\",\"offset\":%d,",
-    op,bank,fr,ft,mode,offset);
-  printBank("before_target",isImem); std::printf(","); printBank("before_other",!isImem); std::printf(",");
+  std::printf("{\"op\":\"%s\",\"bank\":\"%s\",\"fr\":%d,\"ft\":%d,\"mode\":\"%s\",\"offset\":%d,\"observer\":\"%s\",",
+    op,bank,fr,ft,mode,offset,observeArg);
+  printWords("before_target_words",isImem); std::printf(","); printWords("before_other_words",!isImem); std::printf(",");
+  printBytes("before_target_bytes",isImem); std::printf(",");
 
-  plaidSpWordObserver=spWord;
+  if(observe) plaidSpWordObserver=spWord;
   if(!std::strcmp(op,"SWC1")) cpu.SWC1(ft,cpu.ipu.r[1],offset);
   else cpu.SDC1(ft,cpu.ipu.r[1],offset);
   plaidSpWordObserver=nullptr;
 
   std::printf("\"exception\":%u,\"coprocessor_error\":%u,\"badva\":%llu,",
     (u32)cpu.scc.cause.exceptionCode,(u32)cpu.scc.cause.coprocessorError,(unsigned long long)cpu.scc.badVirtualAddress);
-  printBank("after_target",isImem); std::printf(","); printBank("after_other",!isImem); std::printf(","); printSinks(); std::printf("}\n");
+  printWords("after_target_words",isImem); std::printf(","); printWords("after_other_words",!isImem); std::printf(",");
+  printBytes("after_target_bytes",isImem); std::printf(","); printSinks(); std::printf("}\n");
   ares::Nintendo64::system.unload();
   return 0;
 }
