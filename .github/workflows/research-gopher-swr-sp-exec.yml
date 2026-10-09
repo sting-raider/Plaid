@@ -13,6 +13,8 @@ jobs:
   gopher-swr-sp-exec:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      GOPHER64_DIR: ${{ runner.temp }}/gopher64
     steps:
       - uses: actions/checkout@v6
 
@@ -33,12 +35,12 @@ jobs:
 
       - name: Checkout exact pinned Gopher64
         run: |
-          mkdir -p .refs
-          git clone https://github.com/gopher64/gopher64.git .refs/gopher64
-          git -C .refs/gopher64 checkout --detach e96debac941a26ba4961e5145056c0821d3a56f7
-          git -C .refs/gopher64 submodule update --init --recursive
-          test "$(git -C .refs/gopher64 rev-parse HEAD)" = "e96debac941a26ba4961e5145056c0821d3a56f7"
-          test -z "$(git -C .refs/gopher64 status --porcelain)"
+          rm -rf "$GOPHER64_DIR"
+          git clone https://github.com/gopher64/gopher64.git "$GOPHER64_DIR"
+          git -C "$GOPHER64_DIR" checkout --detach e96debac941a26ba4961e5145056c0821d3a56f7
+          git -C "$GOPHER64_DIR" submodule update --init --recursive
+          test "$(git -C "$GOPHER64_DIR" rev-parse HEAD)" = "e96debac941a26ba4961e5145056c0821d3a56f7"
+          test -z "$(git -C "$GOPHER64_DIR" status --porcelain)"
 
       - name: Compile harness
         run: python3 -m py_compile spikes/045-gopher-swr-sp-exec/run.py
