@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "updated": "2026-10-09",
+  "legend": {
+    "verified": "Verified and integrated on main",
+    "partial": "Implemented or evidenced, but proof/coverage is incomplete",
+    "open": "Not implemented or not yet demonstrated"
+  },
+  "areas": [
+    {
+      "name": "Discovery & ProgramMap",
+      "milestones": [
+        {"name": "ROM normalization & identity", "state": "verified"},
+        {"name": "ProgramMap schema & validation", "state": "verified"},
+        {"name": "Dynamic trace import", "state": "verified"},
+        {"name": "Direct CFG recovery", "state": "verified"},
+        {"name": "Evidence merge & conflicts", "state": "verified"},
+        {"name": "Local indirect certificates", "state": "verified"},
+        {"name": "Cross-block indirect proofs", "state": "partial"},
+        {"name": "Jump/pointer-table recovery", "state": "partial"},
+        {"name": "Known-library/signature evidence", "state": "open"},
+        {"name": "Commercial-ROM map validation", "state": "open"}
+      ]
+    },
+    {
+      "name": "Executable Provenance",
+      "milestones": [
+        {"name": "Physical/cache fetch context", "state": "verified"},
+        {"name": "I-cache snapshots/fill outcomes", "state": "verified"},
+        {"name": "PI request/queue/source history", "state": "verified"},
+        {"name": "SP/PIF backing witnesses", "state": "verified"},
+        {"name": "CPU executable-store sensing", "state": "partial"},
+        {"name": "CPU copy/transform lineage", "state": "partial"},
+        {"name": "RSP writer/dataflow lineage", "state": "partial"},
+        {"name": "Cache writeback/restore lineage", "state": "partial"},
+        {"name": "Decompression/relocation lineage", "state": "open"},
+        {"name": "Complete mutation census", "state": "open"}
+      ]
+    },
+    {
+      "name": "Closed-World Proof",
+      "milestones": [
+        {"name": "Fail-closed solver & diagnostics", "state": "verified"},
+        {"name": "Source/certificate rechecking", "state": "verified"},
+        {"name": "Direct-control-flow closure", "state": "verified"},
+        {"name": "Finite indirect-target closure", "state": "partial"},
+        {"name": "Execution-root completeness", "state": "partial"},
+        {"name": "TLB/context/cache composition", "state": "partial"},
+        {"name": "Pointer-table immutability proof", "state": "partial"},
+        {"name": "Overlay/executable lifetimes", "state": "open"},
+        {"name": "RSP executable-universe proof", "state": "open"},
+        {"name": "First ROM reaches CLOSED", "state": "open"}
+      ]
+    },
+    {
+      "name": "Native AOT Compiler",
+      "milestones": [
+        {"name": "Architecture-neutral IR", "state": "open"},
+        {"name": "Integer MIPS lowering", "state": "open"},
+        {"name": "x86-64 object emission", "state": "open"},
+        {"name": "ARM64 object emission", "state": "open"},
+        {"name": "Native direct calls", "state": "open"},
+        {"name": "Finite native indirect dispatch", "state": "open"},
+        {"name": "Native differential verifier", "state": "open"},
+        {"name": "Link/package model", "state": "open"}
+      ]
+    },
+    {
+      "name": "Native Runtime",
+      "milestones": [
+        {"name": "Guest memory/MMIO runtime", "state": "open"},
+        {"name": "Interrupt/timing/event runtime", "state": "open"},
+        {"name": "Controller input", "state": "open"},
+        {"name": "Save devices", "state": "open"},
+        {"name": "Audio path", "state": "open"},
+        {"name": "RSP runtime/native path", "state": "open"},
+        {"name": "Renderer integration", "state": "open"},
+        {"name": "Native launch/cache packaging", "state": "open"}
+      ]
+    },
+    {
+      "name": "Compatibility",
+      "milestones": [
+        {"name": "Synthetic discovery corpus", "state": "verified"},
+        {"name": "Mupen/ares differential oracles", "state": "verified"},
+        {"name": "n64-systemtest research corpus", "state": "partial"},
+        {"name": "First commercial ROM mapped", "state": "open"},
+        {"name": "First commercial ROM CLOSED", "state": "open"},
+        {"name": "First native synthetic executable", "state": "open"},
+        {"name": "First native commercial boot", "state": "open"},
+        {"name": "First native gameplay", "state": "open"},
+        {"name": "Representative 25-game set", "state": "open"},
+        {"name": "100-game campaign", "state": "open"}
+      ]
+    }
+  ]
+}
