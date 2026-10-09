@@ -20,7 +20,8 @@ def sensor(builder):
     key=hashlib.sha256(b''.join(p.read_bytes() for p in inputs)).hexdigest()
     out=OUTPUT/('sensor-'+key[:12]);exe=out/'oracle-flow'
     if exe.exists(): return exe
-    builder.build(HERE/'baseline.cpp',out,rdram_scalar_access=True,extra_sources=inputs)
+    builder.build(HERE/'baseline.cpp',out,raw_fetch_access=True,physical_fetch_access=True,
+        rdram_scalar_access=True,extra_sources=inputs)
     generate(REF,out)
     flags=['-O1','-std=c++20','-msse4.1','-DSLJIT_HAVE_CONFIG_PRE=1','-DSLJIT_HAVE_CONFIG_POST=1']
     includes=[out/'include',*(REF/p for p in ('ares','nall','.','thirdparty','thirdparty/xxhash','ares/n64/system'))]
