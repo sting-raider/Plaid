@@ -24,7 +24,7 @@ pub(crate) struct ChainCertificate {
     pub words_sha256: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ChainEdge {
     pub site: CodeAddress,
@@ -123,8 +123,6 @@ fn roots(map: &ProgramMap, image: &CodeImage) -> BTreeSet<GuestAddr> {
         .filter(in_image)
         .map(|address| address.pc)
         .collect();
-    // Unknown incoming indirect/cross-image transfers are boundaries, even if
-    // their targets are finite candidates. Do not recursively assume proofs.
     roots.extend(
         map.indirect_sites
             .iter()
@@ -244,8 +242,6 @@ pub(crate) fn certificate(
     if blocks.len() < 2 {
         return None;
     }
-    // Contradictory map facts cannot serve as a second, different CFG. Missing
-    // facts are rejected here as well as by the solver's general CFG check.
     for block in &blocks {
         if !validate_block_and_incoming(map, &expected, block) {
             return None;
