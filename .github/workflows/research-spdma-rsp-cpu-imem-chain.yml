@@ -1,0 +1,38 @@
+name: research spdma rsp cpu imem chain
+on:
+  push:
+    branches:
+      - research/spdma-rsp-cpu-imem-chain-gpt56sol
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Fetch exact prior research commits
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin 7041402beb2ce63a43336ae627372098af50ff0f
+          git fetch --no-tags origin 3c89a579aef404dba01aab2353ac2f8723750907
+          git fetch --no-tags origin 537f230bc85788c4ff573a716a42acb7809f4989
+      - name: Guard inputs
+        run: python3 experiments/spdma-rsp-cpu-imem-chain/source_guard.py
+      - name: Syntax
+        run: python3 -m py_compile experiments/spdma-rsp-cpu-imem-chain/model.py experiments/spdma-rsp-cpu-imem-chain/source_guard.py
+      - name: Run composition twice
+        run: |
+          set -euo pipefail
+          mkdir -p target/spdma-rsp-cpu-imem-chain
+          python3 experiments/spdma-rsp-cpu-imem-chain/model.py | tee target/spdma-rsp-cpu-imem-chain/run1.txt
+          python3 experiments/spdma-rsp-cpu-imem-chain/model.py > target/spdma-rsp-cpu-imem-chain/run2.txt
+          diff -u target/spdma-rsp-cpu-imem-chain/run1.txt target/spdma-rsp-cpu-imem-chain/run2.txt
+          grep -F 'RESULT_SHA256=a7305b902d39d1963a98c33106f5009aac33898f8860bbe248f7f5e8721e75b3' target/spdma-rsp-cpu-imem-chain/run1.txt
+      - name: Repository whitespace check
+        run: git diff --check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spdma-rsp-cpu-imem-chain-evidence
+          path: target/spdma-rsp-cpu-imem-chain/
