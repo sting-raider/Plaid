@@ -1,8 +1,6 @@
 name: Research Gopher SDC1 SP executable sink
 
 on:
-  push:
-    branches: [research/gopher-sdc1-sp-exec-gpt56sol]
   workflow_dispatch:
 
 jobs:
