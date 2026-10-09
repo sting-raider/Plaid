@@ -7,7 +7,8 @@ This note measures the current strict Rust `inspect-pi-queue-boot-history` / `ve
 ## Exact revisions
 
 - Plaid canonical base: `ae41bdba82993ec8e77f47e5f9d3bb9af06f9256`
-- Research measurement head: `880b3bc64f7bffd6eafd953e92f50289a42dfee0`
+- Primary measurement head: `880b3bc64f7bffd6eafd953e92f50289a42dfee0`
+- Regression/repeat head: `8dc1293dbdd5065945ef117b9382cd1e372d1980`
 - Pinned ares revision from `refs.lock.toml`: `9408cb43d4948fc3ea6e152a307a34348df3fe04`
 - Pinned ares source inspected: `nall/nall/priority-queue.hpp`; its queue is a fixed binary min-heap. The benchmark below measures Plaid's strict history consumer, not ares queue runtime memory.
 
@@ -85,6 +86,24 @@ The 1m-row history SHA-256 was `01a8b3ac213e383727b241ab689d2647fbd3025acedb0507
 The 10k-to-250k endpoints imply about 65 bytes of additional peak RSS per retained token on this particular optimized build/allocator. That is an empirical slope, not a Rust layout or platform invariant.
 
 The 250k history SHA-256 was `6dac27e741001d082bd5c81cee96faf3c4736bc9fe6c45db607a38cb767d4a5a`; its report SHA-256 was `19f8d50ae99174f8ed8efb405d19e80ac61c139f6726011f5c58a22678f37b2e`.
+
+## Regression and repeat receipt
+
+A second successful workflow, run `37915743915` at head `8dc1293dbdd5065945ef117b9382cd1e372d1980`, first ran:
+
+```sh
+cargo test --release --locked -p plaid-core --test pi_history
+```
+
+Result: **19 passed, 0 failed**.
+
+The workflow then repeated the complete benchmark on a different Ubuntu 24.04 hosted runner. Deterministic source and report SHA-256 values were identical to the primary run. The 1m legacy-row case measured 3.76 s / 4,236 KB on the first inspect and 3.78 s / 4,308 KB on verification. The 250k-token case measured 0.29 s / 20,200 KB on first inspect and 0.28 s / 20,200 KB on verification. Hosted CPU speed changed materially; the resident-memory shape did not.
+
+Repeat artifact:
+
+- artifact ID: `11608648753`
+- artifact ZIP SHA-256: `e62cd43f596c499bb698d72c7227f1fb509d4be994e746734dc86361411a80d6`
+- result JSON SHA-256: `a84c1324971ca70deee8c343544ecf90de56e3055f9b160b61f323f62939348f`
 
 ## Result
 
