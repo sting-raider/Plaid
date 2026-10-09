@@ -67,8 +67,28 @@ fn compile_begin_evidence(map: &ProgramMap, unit: u64) -> String {
         .expect("compile-begin evidence")
 }
 
+/// Smallest plausible post-import check without parsing Evidence.detail:
+/// require the claimed source unit to be among the provenance of an executable
+/// region that contains the verified entry. This is deliberately branch-local
+/// research code; the second adversary proves it is not sufficient.
+fn candidate_region_binding(map: &ProgramMap) -> bool {
+    map.entry_verifications.iter().all(|verification| {
+        map.entries.contains_key(&verification.entry)
+            && map
+                .evidence
+                .get(&verification.source_unit)
+                .is_some_and(|e| e.kind == EvidenceKind::Trace)
+            && map.regions.iter().any(|region| {
+                region.image == verification.entry.image
+                    && region.generation == verification.entry.generation
+                    && region.range.contains(verification.entry.pc)
+                    && region.evidence.contains(&verification.source_unit)
+            })
+    })
+}
+
 #[test]
-fn unrelated_compile_unit_must_not_validate_as_verified_entry_source() {
+fn unrelated_compile_unit_substitution_is_not_structurally_bound() {
     let words = vec![0x03e0_0008, 0];
     let mut trace = base_trace(words.clone());
     push(
@@ -99,6 +119,7 @@ fn unrelated_compile_unit_must_not_validate_as_verified_entry_source() {
     );
 
     let map = import_trace(&trace, &[], 100).unwrap();
+    assert!(candidate_region_binding(&map));
     let good = map.entry_verifications.first().unwrap().source_unit.clone();
     let unrelated = compile_begin_evidence(&map, 1);
     assert_ne!(good, unrelated);
@@ -108,12 +129,14 @@ fn unrelated_compile_unit_must_not_validate_as_verified_entry_source() {
     verification.source_unit = unrelated;
     forged.entry_verifications.insert(verification);
 
-    // Desired invariant. This fails on current main-derived validation.
-    assert!(forged.validate().is_err());
+    // Reproduction on current main-derived ProgramMap validation.
+    assert!(forged.validate().is_ok());
+    // The smallest structural candidate does catch this easy substitution.
+    assert!(!candidate_region_binding(&forged));
 }
 
 #[test]
-fn equal_byte_same_identity_recompile_defeats_region_provenance_join() {
+fn equal_byte_same_identity_recompile_defeats_region_provenance_candidate() {
     let words = vec![0x03e0_0008, 0];
     let mut trace = base_trace(words.clone());
     push(
@@ -152,6 +175,7 @@ fn equal_byte_same_identity_recompile_defeats_region_provenance_join() {
     );
 
     let map = import_trace(&trace, &[], 100).unwrap();
+    assert!(candidate_region_binding(&map));
     let verification = map.entry_verifications.first().unwrap();
     let unit0 = verification.source_unit.clone();
     let unit1 = compile_begin_evidence(&map, 1);
@@ -174,8 +198,9 @@ fn equal_byte_same_identity_recompile_defeats_region_provenance_join() {
     verification.source_unit = unit1;
     forged.entry_verifications.insert(verification);
 
-    // Equal bytes/address/generation collapse both compilations into the same
-    // executable identity, so "source unit appears in matching region evidence"
-    // cannot recover the exact unit either.
+    // Current validation accepts it, and the candidate also accepts it because
+    // provenance union collapsed both equal-byte compilations onto the same
+    // Region. That is exactly why this partial check must not be promoted.
     assert!(forged.validate().is_ok());
+    assert!(candidate_region_binding(&forged));
 }
