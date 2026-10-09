@@ -54,6 +54,30 @@ fn source<'a>(images: &'a [CodeImage], address: &CodeAddress) -> Option<&'a Code
     Some(first)
 }
 
+fn conflicting_region_provenance(a: &Region, b: &Region) -> Option<crate::GuestAddr> {
+    if a.image != b.image || a.generation != b.generation {
+        return None;
+    }
+    let overlap_start = u64::from(a.range.start.0).max(u64::from(b.range.start.0));
+    let overlap_end = a.range.end().min(b.range.end());
+    if overlap_start >= overlap_end {
+        return None;
+    }
+    let a_delta = overlap_start - u64::from(a.range.start.0);
+    let b_delta = overlap_start - u64::from(b.range.start.0);
+    let rom_conflict = match (a.rom_offset, b.rom_offset) {
+        (Some(a_offset), Some(b_offset)) => a_offset.0 + a_delta != b_offset.0 + b_delta,
+        _ => false,
+    };
+    let physical_conflict = match (a.physical_start, b.physical_start) {
+        (Some(a_start), Some(b_start)) => {
+            u64::from(a_start.0) + a_delta != u64::from(b_start.0) + b_delta
+        }
+        _ => false,
+    };
+    (rom_conflict || physical_conflict).then_some(crate::GuestAddr(overlap_start as u32))
+}
+
 fn allowed_static_effect(word: u32, pc: crate::GuestAddr) -> bool {
     let i = decode(word, pc);
     if !i.is_valid() || i.is_trap() || i.is_float() {
@@ -97,6 +121,25 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         .filter(|b| !b.delay_slot_entry)
         .map(|b| b.start.clone())
         .collect();
+    if scope == Scope::DeclaredStaticImages {
+        let regions: Vec<_> = map.regions.iter().collect();
+        for (index, a) in regions.iter().enumerate() {
+            for b in &regions[index + 1..] {
+                if let Some(pc) = conflicting_region_provenance(a, b) {
+                    add(
+                        "conflicting_region_provenance",
+                        Some(CodeAddress {
+                            pc,
+                            image: a.image.clone(),
+                            generation: a.generation,
+                        }),
+                        "overlapping regions for one executable identity assert incompatible ROM or physical backing",
+                        a.evidence.union(&b.evidence).cloned().collect(),
+                    );
+                }
+            }
+        }
+    }
     if !map.fetch_observations.is_empty() {
         add(
             "fetch_execution_identity_unknown",
