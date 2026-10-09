@@ -6,11 +6,25 @@ on:
       - research/region-physical-span-overflow-gpt56sol
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   plaid-core:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Apply candidate validation fix
+        run: python3 spikes/region-physical-span-overflow/apply_candidate_fix.py
+      - name: Commit candidate validation fix if needed
+        run: |
+          if ! git diff --quiet -- crates/plaid-core/src/program.rs; then
+            git config user.name "Plaid research worker"
+            git config user.email "actions@users.noreply.github.com"
+            git add crates/plaid-core/src/program.rs
+            git commit -m "fix: reject overflowing executable physical spans"
+            git push origin HEAD:research/region-physical-span-overflow-gpt56sol
+          fi
       - uses: dtolnay/rust-toolchain@stable
       - name: Run physical-span regression
         run: cargo test -p plaid-core --test region_physical_span -- --nocapture
