@@ -56,7 +56,12 @@ fn extra_region(
 
 fn report(map: &ProgramMap, image: &CodeImage) -> SolveReport {
     map.validate().unwrap();
-    solve(map, std::slice::from_ref(image), Scope::DeclaredStaticImages).unwrap()
+    solve(
+        map,
+        std::slice::from_ref(image),
+        Scope::DeclaredStaticImages,
+    )
+    .unwrap()
 }
 
 fn has(report: &SolveReport, kind: &str) -> bool {
@@ -93,13 +98,8 @@ fn partially_overlapping_affine_disagreement_must_not_close() {
     let mut map = map(&image);
     // At guest 0x8000_0004 the canonical row implies ROM+4 / physical+4.
     // This row deliberately claims ROM+8 / physical+8 instead.
-    map.regions.insert(extra_region(
-        &map,
-        0x8000_0004,
-        4,
-        Some(8),
-        Some(0x1008),
-    ));
+    map.regions
+        .insert(extra_region(&map, 0x8000_0004, 4, Some(8), Some(0x1008)));
 
     let report = report(&map, &image);
     assert_eq!(report.status, ClosureStatus::Open);
@@ -131,13 +131,8 @@ fn consistent_partial_overlap_and_unknown_metadata_are_not_false_blockers() {
 fn disjoint_same_identity_regions_are_not_a_conflict() {
     let image = image();
     let mut map = map(&image);
-    map.regions.insert(extra_region(
-        &map,
-        0x8000_1000,
-        4,
-        Some(128),
-        Some(0x3000),
-    ));
+    map.regions
+        .insert(extra_region(&map, 0x8000_1000, 4, Some(128), Some(0x3000)));
     assert_eq!(report(&map, &image).status, ClosureStatus::Closed);
 }
 
@@ -152,7 +147,10 @@ fn merge_order_cannot_launder_same_identity_provenance_conflict() {
         .insert(extra_region(&left, 0x8000_0000, 8, Some(64), Some(0x2000)));
     right.validate().unwrap();
 
-    for merged in [merge_maps(&left, &right).unwrap(), merge_maps(&right, &left).unwrap()] {
+    for merged in [
+        merge_maps(&left, &right).unwrap(),
+        merge_maps(&right, &left).unwrap(),
+    ] {
         let report = report(&merged, &image);
         assert_eq!(report.status, ClosureStatus::Open);
         assert!(has(&report, "conflicting_region_provenance"));
