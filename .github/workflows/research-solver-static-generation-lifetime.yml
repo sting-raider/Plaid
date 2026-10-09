@@ -1,0 +1,26 @@
+name: research-solver-static-generation-lifetime
+
+on:
+  push:
+    branches:
+      - research/solver-static-generation-lifetime-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  plaid-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Run indistinguishability model
+        run: python3 experiments/solver_static_generation_lifetime.py
+      - name: Run focused solver tests
+        run: cargo test -p plaid-core --test solver_static_generation_lifetime -- --nocapture
+      - name: Run full plaid-core suite
+        run: cargo test -p plaid-core
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run clippy
+        run: cargo clippy -p plaid-core --all-targets -- -D warnings
