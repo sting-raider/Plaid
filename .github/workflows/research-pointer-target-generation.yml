@@ -1,0 +1,33 @@
+name: research-pointer-target-generation
+
+on:
+  push:
+    branches:
+      - research/pointer-target-generation-gpt56sol
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run adversarial model twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile experiments/pointer_target_generation_lifetime.py
+          python3 experiments/pointer_target_generation_lifetime.py > /tmp/ptg-a.txt
+          python3 experiments/pointer_target_generation_lifetime.py > /tmp/ptg-b.txt
+          cmp /tmp/ptg-a.txt /tmp/ptg-b.txt
+          cat /tmp/ptg-a.txt
+          sha256sum experiments/pointer_target_generation_lifetime.py /tmp/ptg-a.txt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run focused Plaid tests
+        run: cargo test --locked -p plaid-core --test tables --test solver
