@@ -18,16 +18,32 @@ jobs:
         run: grep -q 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' refs.lock.toml
       - name: Compile release benchmark
         run: cargo test --release -p plaid-core --test programmap_merge_scalability --no-run
-      - name: Measure baseline merge scaling and RSS
+      - name: Measure current-main merge scaling and RSS
         env:
           MERGE_BENCH_SIZES: 500,1000,2000,4000,8000
           MERGE_BENCH_REPEATS: 3
-        run: /usr/bin/time -v cargo test --release -p plaid-core --test programmap_merge_scalability benchmark_programmap_merge_scaling -- --ignored --nocapture
-      - name: Run merge regression suite
+        run: /usr/bin/time -v cargo test --release -p plaid-core --test programmap_merge_scalability benchmark_programmap_merge_scaling -- --ignored --nocapture 2>&1 | tee baseline.log
+      - name: Apply indexed conflict prototype
+        run: git apply --check research/programmap-merge-indexed-conflicts.patch && git apply research/programmap-merge-indexed-conflicts.patch
+      - name: Run merge regression suite with prototype
         run: cargo test -p plaid-core --test merge -- --nocapture
-      - name: Run full plaid-core suite
+      - name: Run full plaid-core suite with prototype
         run: cargo test -p plaid-core
-      - name: Check formatting
+      - name: Check formatting with prototype
         run: cargo fmt --all -- --check
-      - name: Run clippy
+      - name: Run clippy with prototype
         run: cargo clippy -p plaid-core --all-targets -- -D warnings
+      - name: Compile patched release benchmark
+        run: cargo test --release -p plaid-core --test programmap_merge_scalability --no-run
+      - name: Measure indexed merge scaling and RSS
+        env:
+          MERGE_BENCH_SIZES: 500,1000,2000,4000,8000
+          MERGE_BENCH_REPEATS: 3
+        run: /usr/bin/time -v cargo test --release -p plaid-core --test programmap_merge_scalability benchmark_programmap_merge_scaling -- --ignored --nocapture 2>&1 | tee indexed.log
+      - name: Retain benchmark receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: programmap-merge-scalability
+          path: |
+            baseline.log
+            indexed.log
