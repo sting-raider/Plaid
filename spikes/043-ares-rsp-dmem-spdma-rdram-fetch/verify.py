@@ -35,6 +35,13 @@ def verify(history, machine):
             bounds[key][1] = e
     need(all(end is not None for _, end in bounds.values()), "unterminated context")
 
+    # This fixture intentionally composes the already-validated RSP primitive
+    # sink boundary. Scalar SW reaches that boundary as four byte writes, not as
+    # one synthetic word event. Keeping the primitive events is what lets writer
+    # generation remain distinct even when all four payload bytes are unchanged.
+    need(all(e["bytes"] == 1 and 0 <= e["value"] < 256 for e in history["rsp_sinks"]),
+         "fixture expected primitive byte sinks")
+
     sink_counts = {p: 0 for p in cases}
     fetch_origins = {}
     fetch_read_ord = {}
@@ -73,7 +80,6 @@ def verify(history, machine):
                 need(begin["ordinal"] < ordinal < end["ordinal"], f"phase {phase} sink outside context")
                 need(begin["pc"] == e["pc"] and begin["word"] == e["word"], f"phase {phase} sink context mismatch")
                 width = e["bytes"]
-                need(width in (1, 2, 4, 8), f"phase {phase} sink width")
                 data = bytes_be(e["value"], width)
                 for i, byte in enumerate(data):
                     off = (e["offset"] + i) & 0xfff
@@ -164,11 +170,17 @@ def verify(history, machine):
     need(all(o["kind"] == "rsp_sink" for o in roots[1]), "phase 1 did not retain RSP roots")
 
     phase2_sinks = [e for e in history["rsp_sinks"] if e["phase"] == 2]
-    need(len(phase2_sinks) == 2, "phase 2 needs two same-value sinks")
-    need(phase2_sinks[0]["value"] == phase2_sinks[1]["value"] and phase2_sinks[0]["offset"] == phase2_sinks[1]["offset"],
-         "phase 2 stores are not same-value")
-    need(phase2_sinks[0]["context"] != phase2_sinks[1]["context"], "phase 2 writer generations collapsed")
-    latest = phase2_sinks[1]["context"]
+    need(len(phase2_sinks) == 8, "phase 2 needs eight primitive byte sinks")
+    contexts = []
+    for e in phase2_sinks:
+        if e["context"] not in contexts:
+            contexts.append(e["context"])
+    need(len(contexts) == 2, "phase 2 needs two writer contexts")
+    groups = [[e for e in phase2_sinks if e["context"] == ctx] for ctx in contexts]
+    need(all(len(group) == 4 for group in groups), "phase 2 writer context sink cardinality")
+    signature = lambda group: [(e["offset"], e["bytes"], e["value"]) for e in group]
+    need(signature(groups[0]) == signature(groups[1]), "phase 2 stores are not same-value")
+    latest = contexts[1]
     need(all(o["kind"] == "rsp_sink" and o["context"] == latest for o in roots[2]),
          "phase 2 fetch did not inherit latest same-value writer")
 
