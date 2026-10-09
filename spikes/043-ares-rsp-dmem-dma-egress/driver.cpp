@@ -19,6 +19,16 @@ static auto digest_bytes(const u8* data, u32 size) -> string {
   return nall::Hash::SHA256(std::span<const u8>{data, size}).digest();
 }
 
+static auto scoped_egress_digest() -> string {
+  // Hash exactly the declared DMA destination windows, including the skipped
+  // 0x1008..0x100f hole. This is a stronger scoped effect check than pretending
+  // this fixture explains unrelated RDRAM activity elsewhere in the machine.
+  std::array<u8, 40> bytes{};
+  std::memcpy(bytes.data() + 0, rdram.ram.data + 0x1000, 24);
+  std::memcpy(bytes.data() + 24, rdram.ram.data + 0x2000, 16);
+  return digest_bytes(bytes.data(), bytes.size());
+}
+
 static auto machine_digest() -> string {
   std::vector<u64> words;
   auto add = [&](auto value) { words.push_back(u64(value)); };
@@ -150,10 +160,11 @@ int main() {
 
   auto finalDmem = digest_bytes(rsp.dmem.data, 4096);
   auto finalRam = digest_bytes(rdram.ram.data, rdram.ram.size);
+  auto egressHash = scoped_egress_digest();
   auto finalMachine = machine_digest();
 
-  std::printf("{\"state\":{\"initial_dmem_sha256\":\"%s\",\"dmem_sha256\":\"%s\",\"rdram_sha256\":\"%s\",\"machine_sha256\":\"%s\",\"multi\":[%u,%u,%u,%u],\"wrap\":[%u,%u,%u,%u]},\"events\":",
-    initialDmem.data(), finalDmem.data(), finalRam.data(), finalMachine.data(),
+  std::printf("{\"state\":{\"initial_dmem_sha256\":\"%s\",\"dmem_sha256\":\"%s\",\"rdram_sha256\":\"%s\",\"egress_sha256\":\"%s\",\"rdram_bytes\":%u,\"machine_sha256\":\"%s\",\"multi\":[%u,%u,%u,%u],\"wrap\":[%u,%u,%u,%u]},\"events\":",
+    initialDmem.data(), finalDmem.data(), finalRam.data(), egressHash.data(), rdram.ram.size, finalMachine.data(),
     (u32)rdram.ram.read<Word>(0x1000, RBusDevice::ARES_DEBUGGER),
     (u32)rdram.ram.read<Word>(0x1004, RBusDevice::ARES_DEBUGGER),
     (u32)rdram.ram.read<Word>(0x1010, RBusDevice::ARES_DEBUGGER),
