@@ -63,16 +63,17 @@ def write_history(path: Path, base_rows, axis: str, count: int):
             total_bytes += len(data)
         for row in base_rows[:-1]:
             emit(row)
-        # The existing fixture has three successful insertions. Identity stress
-        # rows are accepted non-PI insertions with exact successive token IDs.
-        # Reusing slot zero keeps observed slot count constant while tokens stay
-        # retained in the consumer BTreeMap. Neutral kind=1 rows retain no token.
+        # Neutral rows are actual legacy scalar records, so they traverse the full
+        # v2 -> v1 -> v0 nested projection/inspection path. Successful RDRAM writes
+        # outside a fetch context add only counts/hash evidence, not retained causal
+        # identities. Identity rows instead stay at v2 and grow the retained token
+        # BTreeMap. The existing fixture starts with exactly three inserted tokens.
         for i in range(count):
             ordinal = base_count + i + 1
             if axis == "neutral":
-                row = dict(record="queue", ordinal=ordinal, context=0, pc=0,
-                           kind=1, slot=0, other=0, event=0, clock=0,
-                           valid=False, token=0, request=0, active_request=0)
+                row = dict(record="scalar", ordinal=ordinal, context=0, pc=0,
+                           write=True, address=0, aligned_address=0,
+                           bytes=4, device=3, value=0)
             else:
                 row = dict(record="queue", ordinal=ordinal, context=0, pc=0,
                            kind=4, slot=0, other=0, event=2, clock=10,
@@ -164,6 +165,8 @@ def main():
                 expected_insertions = 3 + (count if axis == "identity" else 0)
                 if report["successful_insertions"] != expected_insertions:
                     raise RuntimeError((axis, count, report["successful_insertions"], expected_insertions))
+                if axis == "neutral" and report["projection"]["projection"]["event_counts"]["scalar"] < count:
+                    raise RuntimeError(f"nested legacy projection did not consume neutral rows: {count}")
                 meta.update(
                     report_sha256=sha256(output1),
                     report_bytes=output1.stat().st_size,
