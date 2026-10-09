@@ -98,6 +98,8 @@ def worker():
     sensor_exe = builder.build(
         sensor_src,
         OUT / "sensor-build",
+        raw_fetch_access=True,
+        physical_fetch_access=True,
         rdram_scalar_access=True,
         fetch_boundary_access=True,
         rsp_dmem_access=True,
