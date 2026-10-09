@@ -1,0 +1,78 @@
+name: Research RSP microcode lifetime
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/rsp-microcode-lifetime-gpt56sol
+    paths:
+      - 'spikes/043-ares-rsp-microcode-lifetime/**'
+      - '.github/workflows/research-rsp-microcode-lifetime.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  experiment:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact pinned ares
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs
+          git init .refs/ares
+          git -C .refs/ares remote add origin https://github.com/ares-emulator/ares.git
+          git -C .refs/ares fetch --depth=1 origin 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git -C .refs/ares checkout --detach 9408cb43d4948fc3ea6e152a307a34348df3fe04
+      - name: Syntax and adversarial model self-test
+        run: |
+          python3 -m py_compile spikes/043-ares-rsp-microcode-lifetime/run.py
+          python3 spikes/043-ares-rsp-microcode-lifetime/run.py --self-test
+      - name: Execute exact-pin composed experiment
+        shell: bash
+        run: |
+          mkdir -p target
+          set +e
+          python3 spikes/043-ares-rsp-microcode-lifetime/run.py 2>&1 | tee target/rsp-microcode-lifetime-run.log
+          status=${PIPESTATUS[0]}
+          echo "$status" > target/rsp-microcode-lifetime-status
+          exit 0
+      - name: Post durable experiment checkpoint
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, urllib.request
+          root=pathlib.Path('target')
+          status=(root/'rsp-microcode-lifetime-status').read_text().strip() if (root/'rsp-microcode-lifetime-status').exists() else 'missing'
+          result=root/'ares-rsp-microcode-lifetime/results.json'
+          result_sha=hashlib.sha256(result.read_bytes()).hexdigest() if result.exists() else 'missing'
+          log=(root/'rsp-microcode-lifetime-run.log').read_text(errors='replace').splitlines() if (root/'rsp-microcode-lifetime-run.log').exists() else []
+          tail='\n'.join(log[-18:])
+          body=(f"CHECKPOINT\nworker: gpt56sol-rsp-microcode-lifetime-20261009\n"
+                f"commit: {os.environ['GITHUB_SHA']}\nactions_run: {os.environ['GITHUB_RUN_ID']}\n"
+                f"exit_status: {status}\nresults_sha256: {result_sha}\n"
+                f"evidence_tail:\n```text\n{tail}\n```")
+          req=urllib.request.Request('https://api.github.com/repos/sting-raider/Plaid/issues/4/comments',
+              data=json.dumps({'body':body}).encode(), method='POST',
+              headers={'Authorization':f"Bearer {os.environ['GH_TOKEN']}",'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'})
+          with urllib.request.urlopen(req) as r:
+              print(r.status)
+          PY
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rsp-microcode-lifetime-evidence
+          if-no-files-found: warn
+          path: |
+            target/ares-rsp-microcode-lifetime/results.json
+            target/rsp-microcode-lifetime-run.log
+            target/ares-rsp-microcode-lifetime/traced-build/traced-build.log
+      - name: Enforce experiment success
+        if: always()
+        run: test "$(cat target/rsp-microcode-lifetime-status 2>/dev/null || echo missing)" = 0
