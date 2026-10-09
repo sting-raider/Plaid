@@ -32,7 +32,7 @@ The deterministic 100,000-history common-EPC fuzz produced 624,838 `ERET` events
 
 ## Exact-source guards
 
-`verify_sources.py` is intended to run against clean checkouts at the exact pins above. It asserts the specific source contracts used by the note, including the important negative result that pinned Mupen's pure interpreter stops on `ERET` while ERL is set rather than jumping to ErrorEPC.
+`verify_sources.py` is intended to run against clean checkouts at the exact pins above. It asserts the specific source contracts used by the note, including the important negative result that pinned Mupen's pure interpreter stops on `ERET` while ERL is set rather than jumping to ErrorEPC. For Plaid itself, the guard requires this research branch to descend from the tested base commit and rechecks the current fail-closed `eret` classification.
 
 Example:
 
