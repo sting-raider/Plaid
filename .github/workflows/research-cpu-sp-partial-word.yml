@@ -1,0 +1,31 @@
+name: Research CPU partial stores into RSP IMEM
+
+on:
+  push:
+    branches: [research/cpu-sp-partial-word-gpt56sol]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - name: Verify deterministic source-derived model
+        run: |
+          python3 -m py_compile spikes/043-ares-cpu-sp-partial-word/*.py
+          python3 spikes/043-ares-cpu-sp-partial-word/model.py
+      - name: Build exact pinned ares and run fixture
+        run: python3 spikes/043-ares-cpu-sp-partial-word/run.py
+      - name: Preserve exact run artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-sp-partial-word-results
+          path: target/ares-cpu-sp-partial-word/results.json
+          if-no-files-found: ignore
