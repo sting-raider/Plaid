@@ -19,10 +19,25 @@ jobs:
           repository: ares-emulator/ares
           ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
           path: .refs/ares
+      - uses: actions/checkout@v4
+        with:
+          repository: gopher64/gopher64
+          ref: e96debac941a26ba4961e5145056c0821d3a56f7
+          path: .refs/gopher64
+      - uses: actions/checkout@v4
+        with:
+          repository: lemmy-64/n64-systemtest
+          ref: 196f5421173220eb2f63a7a99c64795dc0ea0698
+          path: .refs/n64-systemtest
       - name: Verify source-derived model
         run: |
           python3 -m py_compile spikes/044-ares-cpu-sp-sdl-sdr/*.py
           python3 spikes/044-ares-cpu-sp-sdl-sdr/model.py
+      - name: Compare exact pinned references
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 spikes/044-ares-cpu-sp-sdl-sdr/compare_refs.py 2>&1 | tee "$RUNNER_TEMP/reference-compare.log"
       - name: Build exact pinned ares and run decoded fixture
         id: exact
         continue-on-error: true
@@ -39,7 +54,11 @@ jobs:
             echo "source_commit=${{ github.sha }}"
             echo "exact_step_outcome=${{ steps.exact.outcome }}"
             echo "ares_revision=9408cb43d4948fc3ea6e152a307a34348df3fe04"
-            echo "--- stdout_stderr ---"
+            echo "gopher_revision=e96debac941a26ba4961e5145056c0821d3a56f7"
+            echo "systemtest_revision=196f5421173220eb2f63a7a99c64795dc0ea0698"
+            echo "--- reference_compare ---"
+            cat "$RUNNER_TEMP/reference-compare.log" 2>/dev/null || true
+            echo "--- exact_run ---"
             cat "$RUNNER_TEMP/exact-run.log" 2>/dev/null || true
           } > spikes/044-ares-cpu-sp-sdl-sdr/ci-exact-run.txt
           git config user.name "Plaid Research CI"
