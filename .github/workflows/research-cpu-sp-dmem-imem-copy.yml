@@ -1,0 +1,78 @@
+name: Research CPU SP DMEM to IMEM copy
+
+on:
+  push:
+    branches:
+      - research/cpu-sp-dmem-imem-copy-gpt56sol
+    paths:
+      - 'spikes/043-cpu-sp-dmem-imem-copy-gpt56sol/**'
+      - '.github/workflows/research-cpu-sp-dmem-imem-copy.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  exact-pin-experiment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch exact pinned ares
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs/ares
+          git -C .refs/ares init
+          git -C .refs/ares remote add origin https://github.com/ares-emulator/ares.git
+          git -C .refs/ares fetch --depth=1 origin 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git -C .refs/ares checkout --detach FETCH_HEAD
+          test "$(git -C .refs/ares rev-parse HEAD)" = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
+
+      - name: Run exact-pin fixture and adversarial verifier
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p target/ares-cpu-sp-dmem-imem-copy-spike
+          python3 spikes/043-cpu-sp-dmem-imem-copy-gpt56sol/run.py \
+            | tee target/ares-cpu-sp-dmem-imem-copy-spike/ci.log
+
+      - name: Upload reproducibility receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-sp-dmem-imem-copy-${{ github.sha }}
+          if-no-files-found: ignore
+          path: |
+            target/ares-cpu-sp-dmem-imem-copy-spike/results.json
+            target/ares-cpu-sp-dmem-imem-copy-spike/ci.log
+            target/ares-cpu-sp-dmem-imem-copy-spike/**/sensor-build.log
+            target/ares-cpu-sp-dmem-imem-copy-spike/**/build.json
+
+      - name: Publish successful ledger receipt
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG=target/ares-cpu-sp-dmem-imem-copy-spike/ci.log
+          RESULT_SHA=$(grep '^RESULT_SHA256=' "$LOG" | tail -1 | cut -d= -f2)
+          EVENT_SHA=$(grep '^EVENT_SHA256=' "$LOG" | tail -1 | cut -d= -f2)
+          CERT_SHA=$(grep '^CERTIFICATE_SHA256=' "$LOG" | tail -1 | cut -d= -f2)
+          BODY=$(cat <<EOF
+          CHECKPOINT
+          worker: gpt56sol-cpu-sp-dmem-imem-copy-20261009
+          branch: research/cpu-sp-dmem-imem-copy-gpt56sol
+          validated_head: ${GITHUB_SHA}
+          exact_ares: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          result_sha256: ${RESULT_SHA}
+          event_sha256: ${EVENT_SHA}
+          certificate_sha256: ${CERT_SHA}
+          evidence: Branch-only exact-pin Actions execution PASSed the baseline == observer-disabled == observer-enabled state/step checks, byte-identical repeated traced run, expected positive/rejected dataflow cases, and eight forged-history rejection tests.
+          reproduce: python3 spikes/043-cpu-sp-dmem-imem-copy-gpt56sol/run.py
+          run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          EOF
+          )
+          gh api "repos/${GITHUB_REPOSITORY}/issues/4/comments" -f body="$BODY" >/dev/null
