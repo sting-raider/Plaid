@@ -5,6 +5,10 @@ on:
     branches: [research/cpu-sp-producer-context-gpt56sol]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -19,7 +23,28 @@ jobs:
       - name: Compile Python verifier
         run: python3 -m py_compile spikes/043-ares-cpu-sp-producer-context/*.py
       - name: Build exact pinned ares and execute producer-context fixture
-        run: python3 spikes/043-ares-cpu-sp-producer-context/run.py
+        id: experiment
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 spikes/043-ares-cpu-sp-producer-context/run.py 2>&1 | tee /tmp/cpu-sp-producer-context.log
+      - name: Publish bounded failure diagnostic
+        if: steps.experiment.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          {
+            echo 'CHECKPOINT DIAGNOSTIC'
+            echo 'worker: gpt56sol-cpu-sp-producer-context-20261009'
+            echo "run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo '```text'
+            tail -n 80 /tmp/cpu-sp-producer-context.log
+            echo '```'
+          } > /tmp/diagnostic.md
+          gh issue comment 4 --body-file /tmp/diagnostic.md
+          exit 1
       - name: Upload deterministic results
         if: always()
         uses: actions/upload-artifact@v4
