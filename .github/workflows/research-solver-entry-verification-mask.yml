@@ -1,0 +1,17 @@
+name: research-solver-entry-verification-mask
+
+on:
+  push:
+    branches:
+      - research/solver-entry-verification-mask-gpt56sol
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Focused solver regression
+        run: cargo test --locked -p plaid-core --test solver -- --nocapture
