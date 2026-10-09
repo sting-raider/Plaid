@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import json
 import subprocess
+import sys
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -16,6 +17,7 @@ buildmod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(buildmod)
 lspec = importlib.util.spec_from_file_location("cop1_lineage", HERE / "lineage.py")
 lineage = importlib.util.module_from_spec(lspec)
+sys.modules[lspec.name] = lineage
 lspec.loader.exec_module(lineage)
 
 SOURCE_PHYS = 0x4000
