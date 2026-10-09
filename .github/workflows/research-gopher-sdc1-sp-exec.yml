@@ -26,10 +26,11 @@ jobs:
       - name: Install native build prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang libclang-dev cmake ninja-build pkg-config \
+          sudo apt-get install -y clang llvm libclang-dev cmake ninja-build pkg-config \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev \
             libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev libudev-dev \
             libdbus-1-dev libfontconfig1-dev
+          command -v llvm-ar
       - name: Compile Plaid probe runner
         run: python3 -m py_compile spikes/044-gopher-sdc1-sp-exec/run.py
       - name: Isolate nested Gopher Cargo workspace
