@@ -453,3 +453,10 @@ prior v2 report. All prior v2/v1/v0/v5 bytes/checkpoints are unchanged. All 512
 observed DMA stores correctly retain unknown receipts because their source
 addresses exceed the declared RAM backing. Actual PIF reads and SP producer
 history remain the next source gaps; native closure/lifetime stay OPEN.
+
+Optional boot chronology v4 now adds actual PIF ROM reads and distinct delegated
+write attempts. The initial writable-ROM assumption was falsified: Memory::Readable
+writes are no-ops. Thirteen actual component cases preserve full independent
+reference/disabled/repeated state and unchanged ROM backing. The smaller capture
+identifies 2055 PIF fetches and preserves every prior source/checkpoint. Full
+validation and strict Rust integration are continuing (ADR-0075).

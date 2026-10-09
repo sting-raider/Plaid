@@ -1091,3 +1091,20 @@ integration tests cover raw source and report binding. A bank read is current
 backing identity only; store receipt matching is not ultimate byte origin or
 DMA timing/lifetime proof. Keep all certification flags false and leave the
 ProgramMap/solver unchanged. No reference runtime dependency is introduced.
+
+## ADR-0075: PIF-ROM read identity and write attempts are separate observations
+
+Status: Accepted for finite research composition, 2026-10-09.
+
+Actual PIF ROM reads extend access-history v4 while preserving the exact prior
+v3/v2/v1/v0/v5 sources. Only an existing matching read within the uncached fetch
+interval supplies offset identity. Address/value equality cannot supply that
+witness for latch, lockout, RAM or cached paths.
+
+The actual write probe falsified writable-ROM assumptions: pinned ares uses
+Memory::Readable and its delegate is a no-op. Retain delegated attempts as a
+distinct record kind; never infer backing effects from their payloads. Thirteen
+actual component adversaries preserve independent reference/disabled/repeated
+state and unchanged ROM backing. The smaller boot prefix also preserves all
+previous sources/checkpoints. No reference code, runtime dependency or asset is
+added to production; producer completeness, lifetime and native closure stay open.
