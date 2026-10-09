@@ -601,6 +601,24 @@ impl ProgramMap {
                 return Err("DMA destination overflow".into());
             }
         }
+        // A copy_event is the identity of one observed DMA transaction, even
+        // when one transfer covers several executable subranges. Equivalent
+        // observations may accumulate provenance, but one event cannot name
+        // incompatible source/destination/extent tuples.
+        for load in &self.loads {
+            if let Some(copy) = &load.copy_event {
+                let mut transactions = self
+                    .dma_observations
+                    .iter()
+                    .filter(|d| d.evidence.contains(copy))
+                    .map(|d| (d.rom_offset, d.physical_destination, d.size));
+                if let Some(first) = transactions.next()
+                    && transactions.any(|transaction| transaction != first)
+                {
+                    return Err("load copy event has conflicting observed DMA identity".into());
+                }
+            }
+        }
         for o in &self.indirect_observations {
             if !o.site.0.is_multiple_of(4) || !o.target.0.is_multiple_of(4) {
                 return Err("unaligned indirect observation".into());
