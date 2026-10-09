@@ -24,7 +24,7 @@ jobs:
           MERGE_BENCH_REPEATS: 3
         run: /usr/bin/time -v cargo test --release -p plaid-core --test programmap_merge_scalability benchmark_programmap_merge_scaling -- --ignored --nocapture 2>&1 | tee baseline.log
       - name: Apply indexed conflict prototype
-        run: python3 experiments/apply_programmap_merge_index.py && git diff --check && git diff -- crates/plaid-core/src/merge.rs | tee indexed.patch
+        run: python3 experiments/apply_programmap_merge_index.py && cargo fmt --all && git diff --check && git diff -- crates/plaid-core/src/merge.rs | tee indexed.patch
       - name: Run semantic-equivalence matrix with prototype
         run: cargo test -p plaid-core --test programmap_merge_conflict_equivalence -- --nocapture
       - name: Run merge regression suite with prototype
