@@ -30,7 +30,7 @@ def main() -> None:
         "auto line(u64 vaddr) -> Line& { return lines[vaddr >> 5 & 0x1ff]; }",
         "const u32 t = paddr & ~0x0000'0fffu;",
         "cpu.busReadBurst<ICache>(tag | index, words);",
-        "u16  index;",
+        "u32  tagKey;    // valid bit (bit 0) + tag",
     ])
     gopher_sha = check(GOPHER / "src/device/cache.rs", [
         "let line_index = ((phys_address >> 5) & 0x1FF) as usize;",
