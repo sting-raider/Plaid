@@ -1,0 +1,51 @@
+name: research-cached-copy-writeback-fetch
+
+on:
+  push:
+    branches:
+      - research/cached-copy-writeback-fetch-compose-gpt56sol
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  composition:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify exact prior research receipts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin \
+            research/cpu-copy-rdram-gpt56sol \
+            research/dcache-eviction-lineage-gpt56sol \
+            research/ares-rdram-uncached-fetch-gpt56sol
+
+          test "$(git rev-parse 9760f94fbfb9389b107ae58239db6817f8a7a964:research/ares-cpu-copy-provenance.md)" = "dd525733e5c574d36dd5e52d5ef6b55bcaf03f5b"
+          test "$(git rev-parse 2f701615d77630f1b9407f2f1a2032894114a4e7:research/ares-dcache-eviction-lineage.md)" = "3192ea9b1d89bc9579f8380f766cdfa0f73c5024"
+          test "$(git rev-parse 77a268281fa330e6d117523c2e342abbdad7639e:research/rdram-uncached-fetch-provenance.md)" = "633fff4c2711ae4d7f3bbaf1d1c23c854d6252f7"
+
+          grep -F 'rev = "9408cb43d4948fc3ea6e152a307a34348df3fe04"' refs.lock.toml
+
+      - name: Run deterministic composition verifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile experiments/cached_copy_writeback_fetch.py
+          python3 experiments/cached_copy_writeback_fetch.py | tee /tmp/run1.txt
+          python3 experiments/cached_copy_writeback_fetch.py | tee /tmp/run2.txt
+          cmp /tmp/run1.txt /tmp/run2.txt
+          grep -F 'REPORT_SHA256=6c74ec8c9340b0f0e1b8414c6206b1e374fb0de39639368e81c28c60e02606b8' /tmp/run1.txt
+          grep -F 'PASS: cached-copy lineage survives resident D-cache -> full-line writeback -> exact uncached fetch without value-equality shortcuts' /tmp/run1.txt
+          cp /tmp/run1.txt composition-report.txt
+
+      - name: Upload composition receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: cached-copy-writeback-fetch-report
+          path: composition-report.txt
