@@ -35,7 +35,7 @@ jobs:
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add crates/plaid-core/src/program.rs crates/plaid-core/src/merge.rs crates/plaid-core/src/solver.rs
-            git commit -m "fix: retain raw target-dispatch evidence"
+            git add crates/plaid-core/src/program.rs crates/plaid-core/src/merge.rs crates/plaid-core/src/solver.rs crates/plaid-core/tests/solver_target_dispatch.rs
+            git commit -m "test: format target-dispatch regression"
             git push origin HEAD:${GITHUB_REF_NAME}
           fi
