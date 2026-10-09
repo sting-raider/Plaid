@@ -49,8 +49,12 @@ static void setupCase(u32 phase, u32 initialWord, u32 target) {
   rsp.dmem.write<Word>(0, initialWord);
   rsp.dmem.write<Word>(4, 0);
   rdram.ram.write<Dual>(target, 0, RBusDevice::ARES_DEBUGGER);
+  // Uncached CPU store fixture: SW r9,0(r10), then NOP. This code is prepared
+  // outside the measured phase so its debugger write cannot masquerade as provenance.
+  rdram.ram.write<Word>(0x7000, 0xad490000, RBusDevice::ARES_DEBUGGER);
+  rdram.ram.write<Word>(0x7004, 0x00000000, RBusDevice::ARES_DEBUGGER);
   for(auto& r : rsp.ipu.r) r.u32 = 0;
-  cpu.ipu.r[8].u64 = 0;
+  for(auto& r : cpu.ipu.r) r.u64 = 0;
   cpu.scc.cause.exceptionCode = 0;
 }
 
@@ -75,6 +79,15 @@ static void reverseDma(u32 target) {
      (u32)rsp.dma.current.pbusAddress != 0 || (u32)rsp.dma.current.dramAddress != target) std::abort();
   rsp.dmaTransferStep();
   if(rsp.dma.busy.any()) std::abort();
+}
+
+static void runCpuOverwrite(u32 target, u32 data) {
+  cpu.ipu.r[9].u64 = data;
+  cpu.ipu.r[10].u64 = 0xffffffffa0000000ull | target;
+  cpu.scc.cause.exceptionCode = 0;
+  cpu.pipeline.setPc(0xffffffffa0007000ull);
+  if(cpu.instruction()) cpu.synchronize();
+  if(cpu.scc.cause.exceptionCode != 0) std::abort();
 }
 
 static u32 fetchOne(u32 target) {
@@ -156,13 +169,13 @@ int main() {
   if(fetchOne(0x6200) != 0x1256) return 31;
   finishCase("partial_byte_lineage",3,0x6200,0x34081234,0x34081256,0x1256,1);
 
-  // Phase 4: an actual VR4300 uncached bus write of the same value after DMA
-  // supersedes the DMA/RSP destination generation even though payload is equal.
+  // Phase 4: a decoded VR4300 uncached SW writes the same value after DMA.
+  // The equal payload must still replace the DMA/RSP destination generation.
   setupCase(4, 0x00000000, 0x6300);
   setObservers(traced);
   runRspStore(0xac220000, 0, 0x34081234);
   reverseDma(0x6300);
-  cpu.busWrite<Word>(0x6300, 0x34081234);
+  runCpuOverwrite(0x6300, 0x34081234);
   if(fetchOne(0x6300) != 0x1234) return 40;
   finishCase("same_value_cpu_overwrite",4,0x6300,0x00000000,0x34081234,0x1234,1);
 
