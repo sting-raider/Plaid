@@ -96,11 +96,14 @@ def source_audit() -> dict:
 
 def generate_drivers() -> tuple[Path, Path]:
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    source = (HERE / "driver.cpp").read_text(encoding="utf-8")
+    # Keep the real fixture at its repository path so its relative include of spike 003
+    # continues to resolve there. Copying the fixture text into target/ changes the include
+    # base and turns an experiment into an accidental preprocessor scavenger hunt.
+    fixture = (HERE / "driver.cpp").resolve().as_posix()
     baseline = OUTPUT / "baseline.cpp"
     sensor = OUTPUT / "sensor.cpp"
-    baseline.write_text("#define PLAID_SENSOR 0\n" + source, encoding="utf-8", newline="\n")
-    sensor.write_text("#define PLAID_SENSOR 1\n" + source, encoding="utf-8", newline="\n")
+    baseline.write_text(f'#define PLAID_SENSOR 0\n#include "{fixture}"\n', encoding="utf-8", newline="\n")
+    sensor.write_text(f'#define PLAID_SENSOR 1\n#include "{fixture}"\n', encoding="utf-8", newline="\n")
     return baseline, sensor
 
 
