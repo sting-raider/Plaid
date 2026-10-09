@@ -1,6 +1,10 @@
 # RSP DMEM -> reverse SP DMA -> RDRAM -> CPU fetch
 
-Status: experimental, exact pinned ares fixture.
+Status: **VALIDATED** bounded exact-pinned ares interpreter fixture.
+
+Primary receipt: GitHub Actions run `37916462499` at research head
+`94203baaaf70b2d45974e23b67b9a3b6326ec5e5`, `results.json` SHA-256
+`f443d1c594e199e15aba2f805f630659f527cad3e2824f148ae83d870f2eb5d8`.
 
 Hypothesis: in the controlled interpreter scope, byte provenance from actual decoded
 RSP DMEM stores can be carried through an actual SP write-DMA into RDRAM and then
@@ -23,14 +27,15 @@ Cases:
 
 - `rsp_sw_dma_fetch`: decoded RSP `SW` creates `ORI t0,zero,0x1234`; reverse SP DMA
   copies it to RDRAM and an uncached CPU fetch executes it.
-- `same_value_latest_writer`: two equal decoded RSP `SW` sinks both occur. Replay
-  must retain the second writer context even though backing bytes never differ.
+- `same_value_latest_writer`: two equal decoded RSP `SW` instructions produce two
+  distinct four-byte primitive writer contexts. Replay must retain the second
+  writer context even though backing bytes never differ.
 - `partial_byte_lineage`: decoded RSP `SB` changes only byte 3 of an existing
   instruction from immediate `0x1234` to `0x1256`; the other three fetched byte
   roots must remain the explicit initial snapshot.
-- `same_value_cpu_overwrite`: after DMA, an actual `CPU::busWrite<Word>` using
-  `VR4300_UNCACHED` writes the same word. The later fetch must root in that CPU
-  write, not the older SP-DMA/RSP chain.
+- `same_value_cpu_overwrite`: after DMA, a decoded uncached VR4300 `SW` writes the
+  same word through the real CPU memory path. The later fetch must root in that
+  CPU write, not the older SP-DMA/RSP chain.
 
 `verify.py` replays per-byte origins and rejects seven measured-history forgeries:
 latest equal-writer deletion, DMA destination drift, partial-store payload drift,
