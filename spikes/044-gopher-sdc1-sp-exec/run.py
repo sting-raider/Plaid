@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""Execute pinned Gopher64's COP1 stores into CPU-visible SP memory.
-
-This runner patches only a cfg(test) module into the exact pinned Gopher64
-checkout. The probe calls Gopher's real COP1 store handlers and routes SP
-writes through the checkout's real memory map. In observed runs, only the
-SP-memory function pointer is wrapped; the wrapper records the completed call
-then delegates to the original rsp_interface::write_mem sink. Baseline and
-observed final SP memory must match exactly.
-"""
+"""Execute pinned Gopher64 COP1 stores into CPU-visible SP memory."""
 from __future__ import annotations
 
 import hashlib
@@ -49,22 +41,17 @@ fn make_device(fr: bool, cu1: bool) -> Box<device::Device> {
     device::memory::init(&mut d);
     device::rsp_interface::init(&mut d);
     let mut status = 0;
-    if fr {
-        status |= device::cop0::COP0_STATUS_FR;
-    }
-    if cu1 {
-        status |= device::cop0::COP0_STATUS_CU1;
-    }
+    if fr { status |= device::cop0::COP0_STATUS_FR; }
+    if cu1 { status |= device::cop0::COP0_STATUS_CU1; }
     d.cpu.cop0.regs[device::cop0::COP0_STATUS_REG] = status;
     d
 }
 
-fn seed_window(d: &mut device::Device, start: usize) -> Vec<u8> {
+fn seed_window(d: &mut device::Device, start: usize) {
     let seed: Vec<u8> = (0..SENTINEL_LEN)
         .map(|i| 0xa0u8.wrapping_add(i as u8))
         .collect();
     d.rsp.mem[start..start + SENTINEL_LEN].copy_from_slice(&seed);
-    seed
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -72,62 +59,45 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 fn event_hex(events: &[(u64, u32, u32)]) -> String {
-    events
-        .iter()
+    events.iter()
         .map(|(a, v, m)| format!("{a:08x}:{v:08x}:{m:08x}"))
         .collect::<Vec<_>>()
         .join(",")
 }
 
-fn run_sdc1(
-    base: u64,
-    fr: bool,
-    payload: u64,
-    observed: bool,
-    cu1: bool,
-) -> (Vec<u8>, Vec<u8>, Vec<(u64, u32, u32)>) {
+fn run_sdc1(base: u64, fr: bool, payload: u64, observed: bool, cu1: bool)
+    -> (Vec<u8>, Vec<u8>, Vec<(u64, u32, u32)>)
+{
     let mut d = make_device(fr, cu1);
     let start = (base as usize) & 0x1fff;
-    let seed = seed_window(&mut d, start);
+    seed_window(&mut d, start);
     d.cpu.gpr[RS as usize] = base;
     device::cop1::set_fpr_double(&mut d, FT as usize, f64::from_bits(payload));
     EVENTS.lock().unwrap().clear();
-    if observed {
-        d.memory.memory_map_write[SP_MAP_INDEX] = observed_rsp_write;
-    }
+    if observed { d.memory.memory_map_write[SP_MAP_INDEX] = observed_rsp_write; }
     device::cop1::sdc1(&mut d, opcode(OPC_SDC1, RS, FT));
     let window = d.rsp.mem[start..start + SENTINEL_LEN].to_vec();
     let all = d.rsp.mem.to_vec();
     let events = EVENTS.lock().unwrap().clone();
-    if !observed {
-        assert!(events.is_empty());
-    }
-    assert_eq!(seed.len(), SENTINEL_LEN);
+    if !observed { assert!(events.is_empty()); }
     (all, window, events)
 }
 
-fn run_swc1(
-    base: u64,
-    bits: u32,
-    observed: bool,
-) -> (Vec<u8>, Vec<u8>, Vec<(u64, u32, u32)>) {
+fn run_swc1(base: u64, bits: u32, observed: bool)
+    -> (Vec<u8>, Vec<u8>, Vec<(u64, u32, u32)>)
+{
     let mut d = make_device(true, true);
     let start = (base as usize) & 0x1fff;
-    let seed = seed_window(&mut d, start);
+    seed_window(&mut d, start);
     d.cpu.gpr[RS as usize] = base;
     device::cop1::set_fpr_single(&mut d, FT as usize, f32::from_bits(bits), false);
     EVENTS.lock().unwrap().clear();
-    if observed {
-        d.memory.memory_map_write[SP_MAP_INDEX] = observed_rsp_write;
-    }
+    if observed { d.memory.memory_map_write[SP_MAP_INDEX] = observed_rsp_write; }
     device::cop1::swc1(&mut d, opcode(OPC_SWC1, RS, FT));
     let window = d.rsp.mem[start..start + SENTINEL_LEN].to_vec();
     let all = d.rsp.mem.to_vec();
     let events = EVENTS.lock().unwrap().clone();
-    if !observed {
-        assert!(events.is_empty());
-    }
-    assert_eq!(seed.len(), SENTINEL_LEN);
+    if !observed { assert!(events.is_empty()); }
     (all, window, events)
 }
 
@@ -139,19 +109,13 @@ fn check_sdc1(name: &str, base: u64, fr: bool, payload: u64) {
     assert_eq!(&observed[..8], &payload.to_be_bytes());
     assert_eq!(&observed[8..], &[0xa8, 0xa9, 0xaa, 0xab]);
     let phys = base & 0x1fff_ffff;
-    assert_eq!(
-        events,
-        vec![
-            (phys, (payload >> 32) as u32, 0xffff_ffff),
-            (phys + 4, payload as u32, 0xffff_ffff),
-        ]
-    );
+    assert_eq!(events, vec![
+        (phys, (payload >> 32) as u32, 0xffff_ffff),
+        (phys + 4, payload as u32, 0xffff_ffff),
+    ]);
     println!(
         "PLAID_PROBE scenario={name} neutrality=equal writes={} events={} bytes={} next={}",
-        events.len(),
-        event_hex(&events),
-        hex(&observed[..8]),
-        hex(&observed[8..])
+        events.len(), event_hex(&events), hex(&observed[..8]), hex(&observed[8..])
     );
 }
 
@@ -166,43 +130,17 @@ fn check_swc1(name: &str, base: u64, bits: u32) {
     assert_eq!(events, vec![(phys, bits, 0xffff_ffff)]);
     println!(
         "PLAID_PROBE scenario={name} neutrality=equal writes={} events={} bytes={} next={}",
-        events.len(),
-        event_hex(&events),
-        hex(&observed[..4]),
-        hex(&observed[4..8])
+        events.len(), event_hex(&events), hex(&observed[..4]), hex(&observed[4..8])
     );
 }
 
 #[test]
 fn gopher_cop1_sp_storage_effect() {
-    check_sdc1(
-        "sdc1_dmem_fr1",
-        0xffff_ffff_a400_0020,
-        true,
-        0x1122_3344_5566_7788,
-    );
-    check_sdc1(
-        "sdc1_imem_fr1",
-        0xffff_ffff_a400_1020,
-        true,
-        0x0123_4567_89ab_cdef,
-    );
-    check_sdc1(
-        "sdc1_dmem_fr0_odd",
-        0xffff_ffff_a400_0040,
-        false,
-        0x1020_3040_5060_7080,
-    );
-    check_swc1(
-        "swc1_dmem_control",
-        0xffff_ffff_a400_0060,
-        0xdead_beef,
-    );
-    check_swc1(
-        "swc1_imem_control",
-        0xffff_ffff_a400_1060,
-        0x1357_9bdf,
-    );
+    check_sdc1("sdc1_dmem_fr1", 0xffff_ffff_a400_0020, true, 0x1122_3344_5566_7788);
+    check_sdc1("sdc1_imem_fr1", 0xffff_ffff_a400_1020, true, 0x0123_4567_89ab_cdef);
+    check_sdc1("sdc1_dmem_fr0_odd", 0xffff_ffff_a400_0040, false, 0x1020_3040_5060_7080);
+    check_swc1("swc1_dmem_control", 0xffff_ffff_a400_0060, 0xdead_beef);
+    check_swc1("swc1_imem_control", 0xffff_ffff_a400_1060, 0x1357_9bdf);
 
     let base = 0xffff_ffff_a400_0080;
     let (baseline_all, baseline, _) = run_sdc1(base, true, 0x8877_6655_4433_2211, false, false);
@@ -213,8 +151,7 @@ fn gopher_cop1_sp_storage_effect() {
     assert_eq!(observed, vec![0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab]);
     println!(
         "PLAID_PROBE scenario=sdc1_cu1_disabled neutrality=equal writes=0 events=none bytes={} next={}",
-        hex(&observed[..8]),
-        hex(&observed[8..])
+        hex(&observed[..8]), hex(&observed[8..])
     );
 }
 '''
@@ -234,7 +171,6 @@ def source_guard() -> str:
     cop1 = (GOPHER / "src/device/cop1.rs").read_text()
     memory = (GOPHER / "src/device/memory.rs").read_text()
     rsp = (GOPHER / "src/device/rsp_interface.rs").read_text()
-
     start = cop1.index("pub fn sdc1(")
     end = cop1.index("fn mfc1(", start)
     sdc1 = cop1[start:end]
@@ -270,33 +206,32 @@ def install_probe() -> None:
     probe.write_text(RUST_PROBE)
 
 
+def extract_probe_lines(output: str) -> list[str]:
+    lines: list[str] = []
+    for raw in output.splitlines():
+        marker = raw.find("PLAID_PROBE ")
+        if marker >= 0:
+            lines.append(raw[marker:].strip())
+    return lines
+
+
 def run_once() -> list[str]:
     env = os.environ.copy()
     env["CARGO_TERM_COLOR"] = "never"
     env["RUST_BACKTRACE"] = "1"
     cmd = [
-        "cargo",
-        "test",
-        "--no-default-features",
-        "--lib",
+        "cargo", "test", "--no-default-features", "--lib",
         "plaid_sdc1_probe::gopher_cop1_sp_storage_effect",
-        "--",
-        "--nocapture",
-        "--test-threads=1",
+        "--", "--nocapture", "--test-threads=1",
     ]
     proc = subprocess.run(
-        cmd,
-        cwd=GOPHER,
-        env=env,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        check=False,
+        cmd, cwd=GOPHER, env=env, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False,
     )
     sys.stdout.write(proc.stdout)
     if proc.returncode != 0:
         raise SystemExit(f"Gopher executable probe failed with exit {proc.returncode}")
-    lines = [line.strip() for line in proc.stdout.splitlines() if line.strip().startswith("PLAID_PROBE ")]
+    lines = extract_probe_lines(proc.stdout)
     if len(lines) != 6:
         raise SystemExit(f"expected 6 probe lines, got {len(lines)}: {lines!r}")
     return lines
