@@ -1,0 +1,54 @@
+name: research-eret-target-provenance
+
+on:
+  push:
+    branches:
+      - research/eret-target-provenance-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Clone exact pinned references
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/refs
+          git clone --filter=blob:none https://github.com/ares-emulator/ares.git /tmp/refs/ares
+          git -C /tmp/refs/ares checkout 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git clone --filter=blob:none https://github.com/gopher64/gopher64.git /tmp/refs/gopher64
+          git -C /tmp/refs/gopher64 checkout e96debac941a26ba4961e5145056c0821d3a56f7
+          git clone --filter=blob:none https://github.com/mupen64plus/mupen64plus-core.git /tmp/refs/mupen64plus-core
+          git -C /tmp/refs/mupen64plus-core checkout ba95bab92a76744753bfe61470823a4937850ab0
+          git clone --filter=blob:none https://github.com/lemmy-64/n64-systemtest.git /tmp/refs/n64-systemtest
+          git -C /tmp/refs/n64-systemtest checkout 196f5421173220eb2f63a7a99c64795dc0ea0698
+
+      - name: Run exact-source guards
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile experiments/eret-target-provenance/verify_sources.py
+          python3 experiments/eret-target-provenance/verify_sources.py \
+            --plaid . \
+            --ares /tmp/refs/ares \
+            --gopher64 /tmp/refs/gopher64 \
+            --mupen /tmp/refs/mupen64plus-core \
+            --systemtest /tmp/refs/n64-systemtest | tee /tmp/eret-source-guards.json
+
+      - name: Run adversarial replay twice
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile experiments/eret-target-provenance/model.py
+          python3 experiments/eret-target-provenance/model.py > /tmp/eret-model-1.txt
+          python3 experiments/eret-target-provenance/model.py > /tmp/eret-model-2.txt
+          cmp /tmp/eret-model-1.txt /tmp/eret-model-2.txt
+          grep -q 'REPORT_SHA256 994d5fa3a83c7ced1ad2ebc40c4fbf9b1c95f1b298fe2f4d94b243a41969b530' /tmp/eret-model-1.txt
+          sha256sum experiments/eret-target-provenance/model.py /tmp/eret-model-1.txt
+          tail -n 40 /tmp/eret-model-1.txt
