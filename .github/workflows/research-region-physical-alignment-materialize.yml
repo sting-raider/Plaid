@@ -10,15 +10,15 @@ permissions:
 
 jobs:
   materialize:
-    if: github.event.head_commit.message == 'Materialize physical alignment candidate'
+    if: github.event.head_commit.message == 'Materialize physical alignment candidate v2'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Apply minimal validation fix and final regression
-        shell: python
         run: |
+          python - <<'PY'
           from pathlib import Path
 
           program = Path('crates/plaid-core/src/program.rs')
@@ -28,12 +28,11 @@ jobs:
               refs(&r.evidence)?;
               if r.image.is_empty() {
           '''
-          # Keep this replacement literal indentation independent by using the exact source form.
           old = '''        for r in &self.regions {
             r.range.validate(true)?;
             refs(&r.evidence)?;
             if r.image.is_empty() {
-'''
+          '''.replace('          if', '            if')
           new = '''        for r in &self.regions {
             r.range.validate(true)?;
             refs(&r.evidence)?;
@@ -44,7 +43,7 @@ jobs:
                 return Err("unaligned executable physical mapping".into());
             }
             if r.image.is_empty() {
-'''
+          '''.replace('          ', '')
           if old not in text:
               raise SystemExit('program.rs validation anchor not found')
           program.write_text(text.replace(old, new, 1))
@@ -54,22 +53,23 @@ jobs:
           start = text.index('#[test]\nfn unaligned_explicit_physical_code_mapping_must_not_close()')
           end = text.index('\n#[test]\nfn aligned_and_absent_physical_code_mappings_remain_valid()', start)
           replacement = '''#[test]
-fn unaligned_explicit_physical_code_mapping_is_rejected() {
-    for physical in [1, 2, 3] {
-        let i = image(Some(physical));
-        let m = map(&i);
-        assert_eq!(
-            m.validate().unwrap_err(),
-            "unaligned executable physical mapping"
-        );
-        assert_eq!(
-            solve(&m, std::slice::from_ref(&i), Scope::DeclaredStaticImages).unwrap_err(),
-            "unaligned executable physical mapping"
-        );
-    }
-}
-'''
+          fn unaligned_explicit_physical_code_mapping_is_rejected() {
+              for physical in [1, 2, 3] {
+                  let i = image(Some(physical));
+                  let m = map(&i);
+                  assert_eq!(
+                      m.validate().unwrap_err(),
+                      "unaligned executable physical mapping"
+                  );
+                  assert_eq!(
+                      solve(&m, std::slice::from_ref(&i), Scope::DeclaredStaticImages).unwrap_err(),
+                      "unaligned executable physical mapping"
+                  );
+              }
+          }
+          '''.replace('          ', '')
           test.write_text(text[:start] + replacement + text[end:])
+          PY
       - name: Commit candidate fix
         run: |
           git config user.name "plaid-research-worker"
