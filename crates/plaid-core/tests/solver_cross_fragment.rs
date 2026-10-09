@@ -65,12 +65,7 @@ fn equal_payload_different_generation_target_cannot_discharge_split_jump() {
     let source = fragment(0x8000_0000, "split", 0, vec![0x0800_0004, 0]);
     let target_decoy = fragment(0x8000_0010, "split", 1, vec![0x0800_0004, 0]);
     let map = merge_maps(&discovered(&source), &discovered(&target_decoy)).unwrap();
-    let report = solve(
-        &map,
-        &[source, target_decoy],
-        Scope::DeclaredStaticImages,
-    )
-    .unwrap();
+    let report = solve(&map, &[source, target_decoy], Scope::DeclaredStaticImages).unwrap();
 
     assert_eq!(report.status, ClosureStatus::Open);
     assert!(has(&report, "unresolved_direct_target"));
