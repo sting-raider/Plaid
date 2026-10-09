@@ -1,7 +1,9 @@
-workflow_run=37915653040
-source_commit=208e2b0daeecb62321ce8936dab6685d632064c9
+workflow_run=37915972499
+source_commit=b82bddc98633d2ca7f94f2b38505c27bbd9cb3cb
 exact_step_outcome=success
 ares_revision=9408cb43d4948fc3ea6e152a307a34348df3fe04
+gopher_revision=e96debac941a26ba4961e5145056c0821d3a56f7
+systemtest_revision=196f5421173220eb2f63a7a99c64795dc0ea0698
 --- stdout_stderr ---
 PASS: 40 repeated exact-pinned-ares SWL/SWR/SP-IMEM cases
 single_full_word_sink_cases=32/32
