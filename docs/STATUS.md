@@ -473,3 +473,9 @@ Separate `inspect-pif-boot-history`/`verify-pif-boot-history` commands expose fi
 v4 inspection. Synthetic tests pass canonical byte orders, read/attempt semantics,
 full report/source binding, old-version rejection and all-input protection. All
 older SP/PI CLI tests still pass; 23 retained research contracts/guards pass.
+
+A full-source-bound SP writer-site inventory now finds 54,253 CPU effects at 69
+sites: 51,991 SW, 2256 SB and six COP1 SWC1 effects. These are normalized actual
+SP Word sinks; opcode width and source dataflow remain separate. Integer-SW-only
+producer census would miss observed subword/FPR writers. RSP DMEM sink testing
+is continuing; no mutation/lifetime certificate follows from this inventory.
