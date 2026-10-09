@@ -1,0 +1,22 @@
+name: research-indirect-delay-slot
+
+on:
+  push:
+    branches:
+      - research/indirect-delay-slot-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Guard exact Rabbitizer revision
+        run: |
+          grep -F 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' refs.lock.toml
+          grep -F 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' crates/plaid-core/Cargo.toml
+      - name: Run bounded delay-slot experiment
+        run: cargo test -p plaid-core --test indirect_delay_slot -- --nocapture
+      - name: Run full plaid-core regression suite
+        run: cargo test -p plaid-core
