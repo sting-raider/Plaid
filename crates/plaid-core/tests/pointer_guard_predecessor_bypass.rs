@@ -7,12 +7,7 @@ fn image() -> CodeImage {
         0x11200016, // beq t1,zero,exit; selected table path is fallthrough
         0,          // branch delay slot
         0x3c088000, // dispatch block starts here
-        0x25080100,
-        0x00045080,
-        0x010a4021,
-        0x8d080000,
-        0x01000008,
-        0,
+        0x25080100, 0x00045080, 0x010a4021, 0x8d080000, 0x01000008, 0,
     ]);
     for offset in [0x40, 0x50, 0x60] {
         words[offset / 4] = 0x08000000 | (offset as u32 / 4);
@@ -189,7 +184,12 @@ fn fixed_point_discovery_with_post_compare_roots_must_not_certify_table_bound() 
         .into_iter()
         .map(|pc| {
             let discovered = discover_image(rom(), &i, &[i.base.pc, GuestAddr(pc)], 1000).unwrap();
-            assert!(discovered.map.entries.contains_key(&i.address(GuestAddr(pc))));
+            assert!(
+                discovered
+                    .map
+                    .entries
+                    .contains_key(&i.address(GuestAddr(pc)))
+            );
             (
                 pc,
                 pointer_table_evidence_count(&discovered.map),
