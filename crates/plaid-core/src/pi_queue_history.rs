@@ -47,14 +47,14 @@ pub struct PiQueueHistoryReport {
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-enum Wire {
+pub(crate) enum Wire {
     Schedule(Schedule),
     Legacy(pi_history::Wire),
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
-enum Schedule {
+pub(crate) enum Schedule {
     Queue {
         ordinal: u64,
         context: u64,

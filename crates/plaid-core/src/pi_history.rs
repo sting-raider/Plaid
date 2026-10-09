@@ -93,6 +93,25 @@ struct PiContext {
     lane: u32,
 }
 
+impl PiScalar {
+    pub(crate) fn access(&self) -> history::Record {
+        history::Record::Scalar {
+            ordinal: self.ordinal,
+            context: self.context,
+            pc: self.pc,
+            write: self.write,
+            address: self.address,
+            aligned_address: self.aligned_address,
+            bytes: self.bytes,
+            device: self.device,
+            value: self.value,
+        }
+    }
+    pub(crate) fn lane_identity(&self) -> (u64, u32, u32) {
+        (self.pi.transfer, self.pi.block, self.pi.lane)
+    }
+}
+
 impl Wire {
     pub(crate) fn identity(&self) -> Option<(u64, u64, GuestVirtualAddr, &'static str)> {
         let (ordinal, context, pc, kind) = match self {

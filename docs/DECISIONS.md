@@ -1021,3 +1021,20 @@ This replays observed identities, not full heap contents, hardware transfer timi
 guest-suite completion or executable lifetime. Requests without observed status
 are not a live-queue census. Keep every native/guest/transfer completion flag false;
 no ProgramMap/solver behavior or reference runtime dependency is introduced.
+
+## ADR-0071: Observed byte chains precede executable lifetime certification
+
+Status: Accepted for finite inspection, 2026-10-09.
+
+A separate original Rust report now replays the validated complete v2/v5 sources.
+It retains raw PI writer ordinals and snapshots byte chains only through actual
+adjacent identity-RAM burst/fill or unambiguous uncached read contexts. Backing
+writes cannot retroactively replace resident cache history; ordinary scalar/burst
+writes remove earlier PI chains even for equal payloads. Tag/invalidating/unknown
+transitions fail closed. Separate source digests reject changes during replay.
+
+Independent full-prefix Python replay agrees with all 185 samples and 10,954
+PI-attributed fetch observations. Sample endpoints remain discrete observations;
+unobserved same-value mutations cannot be excluded by value equality. Keep
+mutation-coverage, executable-lifetime and native flags false and leave ProgramMap
+and solver unchanged. Actual SP/PIF sources and their producers remain separate.
