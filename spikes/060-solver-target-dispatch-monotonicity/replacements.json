@@ -1,0 +1,47 @@
+[
+  {
+    "path": "crates/plaid-core/src/program.rs",
+    "old": "#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]\n#[serde(deny_unknown_fields)]\npub struct ObservedWordStore {",
+    "new": "#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]\n#[serde(rename_all = \"snake_case\")]\npub enum TargetDispatchKind {\n    TargetLookup { delay_slot_entry: bool },\n    RuntimeLink,\n}\n\n/// Raw target-dispatch evidence without a source-site identity. A lookup or\n/// runtime link is not an executed indirect transfer and cannot borrow one.\n#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]\n#[serde(deny_unknown_fields)]\npub struct ObservedTargetDispatch {\n    pub target: GuestAddr,\n    pub generation: u64,\n    pub kind: TargetDispatchKind,\n    pub evidence: EvidenceRefs,\n}\n\n#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]\n#[serde(deny_unknown_fields)]\npub struct ObservedWordStore {"
+  },
+  {
+    "path": "crates/plaid-core/src/program.rs",
+    "old": "    #[serde(default)]\n    pub indirect_observations: BTreeSet<ObservedIndirect>,\n    #[serde(default)]\n    pub entry_verifications: BTreeSet<ObservedEntryVerification>,",
+    "new": "    #[serde(default)]\n    pub indirect_observations: BTreeSet<ObservedIndirect>,\n    #[serde(default)]\n    pub target_dispatch_observations: BTreeSet<ObservedTargetDispatch>,\n    #[serde(default)]\n    pub entry_verifications: BTreeSet<ObservedEntryVerification>,"
+  },
+  {
+    "path": "crates/plaid-core/src/program.rs",
+    "old": "            indirect_observations: BTreeSet::new(),\n            entry_verifications: BTreeSet::new(),",
+    "new": "            indirect_observations: BTreeSet::new(),\n            target_dispatch_observations: BTreeSet::new(),\n            entry_verifications: BTreeSet::new(),"
+  },
+  {
+    "path": "crates/plaid-core/src/program.rs",
+    "old": "        for store in &self.word_store_observations {",
+    "new": "        for dispatch in &self.target_dispatch_observations {\n            if !dispatch.target.0.is_multiple_of(4) {\n                return Err(\"unaligned target-dispatch observation\".into());\n            }\n            refs(&dispatch.evidence)?;\n            if dispatch.evidence.iter().any(|id| {\n                self.evidence\n                    .get(id)\n                    .is_none_or(|e| e.kind != EvidenceKind::Trace)\n            }) {\n                return Err(\"target-dispatch observation lacks trace provenance\".into());\n            }\n        }\n        for store in &self.word_store_observations {"
+  },
+  {
+    "path": "crates/plaid-core/src/merge.rs",
+    "old": "    ObservedIndirect,\n    ObservedWordStore,",
+    "new": "    ObservedIndirect,\n    ObservedTargetDispatch,\n    ObservedWordStore,"
+  },
+  {
+    "path": "crates/plaid-core/src/merge.rs",
+    "old": "    out.indirect_observations = union(&left.indirect_observations, &right.indirect_observations);\n    out.entry_verifications = union(&left.entry_verifications, &right.entry_verifications);",
+    "new": "    out.indirect_observations = union(&left.indirect_observations, &right.indirect_observations);\n    out.target_dispatch_observations = union(\n        &left.target_dispatch_observations,\n        &right.target_dispatch_observations,\n    );\n    out.entry_verifications = union(&left.entry_verifications, &right.entry_verifications);"
+  },
+  {
+    "path": "crates/plaid-core/src/merge.rs",
+    "old": "            TraceEvent::TargetLookup { target, .. } | TraceEvent::RuntimeLink { target } => {\n                // Lookups never establish source-correlated indirect targets.\n                out.unresolved.insert(Unresolved {\n                    kind: \"uncorrelated_target\".into(),\n                    site: None,\n                    detail: format!(\"target {:08x} has no source-site correlation\", target.0),\n                    evidence,\n                });\n            }",
+    "new": "            TraceEvent::TargetLookup {\n                target,\n                delay_slot_entry,\n            } => {\n                out.target_dispatch_observations\n                    .insert(ObservedTargetDispatch {\n                        target: *target,\n                        generation: epoch,\n                        kind: TargetDispatchKind::TargetLookup {\n                            delay_slot_entry: *delay_slot_entry,\n                        },\n                        evidence: evidence.clone(),\n                    });\n                // Lookups never establish source-correlated indirect targets.\n                out.unresolved.insert(Unresolved {\n                    kind: \"uncorrelated_target\".into(),\n                    site: None,\n                    detail: format!(\"target {:08x} has no source-site correlation\", target.0),\n                    evidence,\n                });\n            }\n            TraceEvent::RuntimeLink { target } => {\n                out.target_dispatch_observations\n                    .insert(ObservedTargetDispatch {\n                        target: *target,\n                        generation: epoch,\n                        kind: TargetDispatchKind::RuntimeLink,\n                        evidence: evidence.clone(),\n                    });\n                // Runtime links likewise lack a source-site identity.\n                out.unresolved.insert(Unresolved {\n                    kind: \"uncorrelated_target\".into(),\n                    site: None,\n                    detail: format!(\"target {:08x} has no source-site correlation\", target.0),\n                    evidence,\n                });\n            }"
+  },
+  {
+    "path": "crates/plaid-core/src/merge.rs",
+    "old": "    canonicalize(&mut out.indirect_observations);\n    canonicalize(&mut out.entry_verifications);",
+    "new": "    canonicalize(&mut out.indirect_observations);\n    canonicalize(&mut out.target_dispatch_observations);\n    canonicalize(&mut out.entry_verifications);"
+  },
+  {
+    "path": "crates/plaid-core/src/solver.rs",
+    "old": "    if map.entries.is_empty() {",
+    "new": "    for dispatch in &map.target_dispatch_observations {\n        let detail = match dispatch.kind {\n            TargetDispatchKind::TargetLookup { delay_slot_entry } => format!(\n                \"raw target lookup at {:08x} (delay-slot entry {delay_slot_entry}) has no source-site correlation\",\n                dispatch.target.0\n            ),\n            TargetDispatchKind::RuntimeLink => format!(\n                \"raw runtime link to {:08x} has no source-site correlation\",\n                dispatch.target.0\n            ),\n        };\n        add(\n            \"unresolved_raw_target_dispatch\",\n            None,\n            &detail,\n            dispatch.evidence.clone(),\n        );\n    }\n    if map.entries.is_empty() {"
+  }
+]
