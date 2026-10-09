@@ -55,7 +55,7 @@ def check(events,initial):
     fetch_active=None
     fetch_pending=None
     phase_writers={}
-    rsp_sinks=[];cpu_writes=[];reads=[]
+    rsp_sinks=[];foreign_sinks=[];cpu_writes=[];reads=[]
     for e in events:
         kind=e['kind']
         if kind=='rsp_begin':
@@ -72,6 +72,9 @@ def check(events,initial):
                 off=(e['offset']+i)&0xfff
                 if off<8: data[off]=b;writer[off]=label
             rsp_sinks.append(e)
+        elif kind=='foreign_sink':
+            assert rsp_active is None and e['context']==0 and e['phase']==6 and e['bytes']==4 and e['offset']==0
+            foreign_sinks.append(e)
         elif kind=='cpu_fetch_begin':
             assert fetch_active is None and fetch_pending is None and e['context']==e['ordinal']
             fetch_active=e['context']
@@ -81,6 +84,7 @@ def check(events,initial):
             assert fetch_active is None and fetch_pending==e['context'];fetch_pending=None
         elif kind=='sp_write':
             assert e['cpu'] and e['bank']==0 and e['bytes']==4 and e['context']==0
+            assert len(foreign_sinks)==1 and foreign_sinks[-1]['phase']==e['phase'] and foreign_sinks[-1]['offset']==e['offset'] and foreign_sinks[-1]['value']==e['value']
             vals=bytes_of(e['value'],4);label=f"cpu:{e['ordinal']}"
             for i,b in enumerate(vals):
                 off=e['offset']+i
@@ -97,15 +101,16 @@ def check(events,initial):
     assert rsp_active is fetch_active is fetch_pending is None
     assert [r['phase'] for r in reads]==[1,3,5,7,9]
     assert [s['phase'] for s in rsp_sinks]==[2,4,8]
-    assert [w['phase'] for w in cpu_writes]==[6]
+    assert [s['phase'] for s in foreign_sinks]==[6]
+    assert [w['phase'] for w in cpu_writes]==[6] and foreign_sinks[0]['ordinal']<cpu_writes[0]['ordinal']
     assert len(set(phase_writers[1]))==1 and phase_writers[1][0]=='initial'
     assert len(set(phase_writers[3]))==1 and phase_writers[3][0].startswith('rsp:')
     assert len(set(phase_writers[5]))==1 and phase_writers[5][0].startswith('rsp:')
-    assert phase_writers[5]!=phase_writers[3]  # same-value RSP rewrite is a new generation
+    assert phase_writers[5]!=phase_writers[3]
     assert len(set(phase_writers[7]))==1 and phase_writers[7][0].startswith('cpu:')
-    assert phase_writers[9]==phase_writers[7]  # equal-valued RSP write at +4 cannot steal +0 origin
+    assert phase_writers[9]==phase_writers[7]
     return dict(phase_writers={str(k):list(v) for k,v in sorted(phase_writers.items())},
-                rsp_sink_ordinals=[e['ordinal'] for e in rsp_sinks],cpu_write_ordinal=cpu_writes[0]['ordinal'])
+                rsp_sink_ordinals=[e['ordinal'] for e in rsp_sinks],foreign_sink_ordinal=foreign_sinks[0]['ordinal'],cpu_write_ordinal=cpu_writes[0]['ordinal'])
 
 
 def naive_value_only(events):
@@ -113,17 +118,14 @@ def naive_value_only(events):
 
 
 def reject_forgeries(events,initial):
-    rejected=[]
-    cases=[]
-    # Delete the second same-value RSP sink. Values still match, lineage must not.
-    x=copy.deepcopy(events);x.remove(next(e for e in x if e['kind']=='rsp_sink' and e['phase']==4));
+    rejected=[];cases=[]
+    x=copy.deepcopy(events);x.remove(next(e for e in x if e['kind']=='rsp_sink' and e['phase']==4))
     for n,e in enumerate(x,1):e['ordinal']=n
-    # Contexts are ordinal identities, so deleting an event without rewriting contexts must fail immediately.
     cases.append(('delete_same_value_rsp_generation',x,True))
-    # Make the equal-valued decoy target the fetched word; phase 9 must no longer inherit the CPU writer.
     x=copy.deepcopy(events);next(e for e in x if e['kind']=='rsp_sink' and e['phase']==8)['offset']=0;cases.append(('decoy_wrong_offset',x,False))
     x=copy.deepcopy(events);next(e for e in x if e['kind']=='rsp_sink' and e['phase']==2)['context']=0;cases.append(('lost_rsp_context',x,False))
     x=copy.deepcopy(events);next(e for e in x if e['kind']=='sp_write')['cpu']=False;cases.append(('cpu_writer_flag',x,False))
+    x=copy.deepcopy(events);next(e for e in x if e['kind']=='foreign_sink')['value']^=1;cases.append(('foreign_sink_pairing',x,False))
     x=copy.deepcopy(events);next(e for e in x if e['kind']=='sp_read' and e['phase']==5)['value']^=1;cases.append(('forged_read_value',x,False))
     x=copy.deepcopy(events);x[1]['ordinal']=x[0]['ordinal'];cases.append(('duplicate_ordinal',x,False))
     naive_accepted=False
