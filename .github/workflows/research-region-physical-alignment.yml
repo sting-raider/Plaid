@@ -1,0 +1,23 @@
+name: research-region-physical-alignment
+
+on:
+  push:
+    branches:
+      - research/region-physical-alignment-gpt56sol
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Focused physical-alignment regression
+        run: cargo test --locked -p plaid-core --test region_physical_alignment -- --nocapture
+      - name: Full plaid-core suite
+        run: cargo test --locked -p plaid-core
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --locked -p plaid-core --all-targets -- -D warnings
