@@ -11,7 +11,8 @@ PIN = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 
 with (ROOT / "refs.lock.toml").open("rb") as f:
     refs = tomllib.load(f)
-assert refs["source"]["ares"]["rev"] == PIN
+ares_ref = next(repo for repo in refs["repo"] if repo["name"] == "ares")
+assert ares_ref["rev"] == PIN
 assert subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REF, text=True).strip() == PIN
 
 rsp_path = REF / "ares/n64/rsp/serialization.cpp"
