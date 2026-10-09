@@ -12,11 +12,9 @@ EXPECTED = {
     "ares/n64/rsp/dma.cpp": "b5d8a1c4b45c2d84c487d98725caa465ac4b5fbea4761beff51ca1a1ba93d7b6",
     "ares/n64/rsp/io.cpp": "60cc9b1efb2e90c127098a736c5213ea0bf77d2e3bd6e5b112e55752289af860",
     "ares/n64/rdram/rdram.hpp": "6a77c2fa0bbb320ff6b2855ea6379541a67096bed6b91cc6cd2697584112b1cf",
+    "ares/n64/memory/memory.hpp": "673de0205f34c3da47095bce162e5706924cb24cddaac3080a2a40e0d444b6eb",
+    "ares/n64/memory/lsb/writable.hpp": "52565f0359450110af0836d37540a7fb8f77cb10a6e444286a5b09c14c8fd2f0",
 }
-EXTRA_HASHED = (
-    "ares/n64/memory/memory.hpp",
-    "ares/n64/memory/lsb/writable.hpp",
-)
 
 
 def sha(path: Path) -> str:
@@ -26,8 +24,8 @@ def sha(path: Path) -> str:
 def check() -> dict:
     assert subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REF, text=True).strip() == REV
     subprocess.run(["git", "-c", "core.autocrlf=true", "diff", "--quiet", "HEAD"], cwd=REF, check=True)
-    hashes = {name: sha(REF / name) for name in (*EXPECTED, *EXTRA_HASHED)}
-    assert {name: hashes[name] for name in EXPECTED} == EXPECTED
+    hashes = {name: sha(REF / name) for name in EXPECTED}
+    assert hashes == EXPECTED, (hashes, EXPECTED)
 
     dma = (REF / "ares/n64/rsp/dma.cpp").read_text(encoding="utf-8")
     fragment = """      } else {
