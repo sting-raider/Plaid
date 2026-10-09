@@ -121,19 +121,19 @@ def replay(history: dict, state: dict, enforce_contract: bool = True) -> dict:
     assert state["multi"] == [word(x) for x in (0x1000, 0x1004, 0x1010, 0x1014)]
     assert state["wrap"] == [word(x) for x in (0x2000, 0x2004, 0x2008, 0x200C)]
 
-    # The fixture asks ares for Expansion Pak before power, but bind the replay
-    # hash to the actual backing rather than turning that setup choice into an
-    # unrelated hard-coded provenance assumption. Ares supports 4 or 8 MiB here.
-    matching_ram_sizes = []
-    for size in (4 * 1024 * 1024, 8 * 1024 * 1024):
-        raw_ram = bytearray(size)
-        for address, cell in dram.items():
-            assert address < size
-            raw_ram[address] = cell["value"]
-        if hashlib.sha256(raw_ram).hexdigest() == state["rdram_sha256"]:
-            matching_ram_sizes.append(size)
-    assert len(matching_ram_sizes) == 1, (matching_ram_sizes, state["rdram_sha256"])
-    rdram_size = matching_ram_sizes[0]
+    # Reconstruct exactly the fixture-owned destination windows, including the
+    # multi-row skip hole. Full RDRAM is retained as a neutrality checkpoint but
+    # this bounded lineage trace does not pretend to explain unrelated traffic.
+    scoped = bytearray(40)
+    for address, cell in dram.items():
+        if 0x1000 <= address < 0x1018:
+            scoped[address - 0x1000] = cell["value"]
+        elif 0x2000 <= address < 0x2010:
+            scoped[24 + address - 0x2000] = cell["value"]
+        else:
+            raise AssertionError(f"unexpected DMA destination 0x{address:x}")
+    assert hashlib.sha256(scoped).hexdigest() == state["egress_sha256"]
+    assert state["rdram_bytes"] in (4 * 1024 * 1024, 8 * 1024 * 1024)
 
     if enforce_contract:
         phase1 = [event for event in events if event["kind"] == K_RSP_SINK and event["phase"] == 1]
@@ -156,7 +156,8 @@ def replay(history: dict, state: dict, enforce_contract: bool = True) -> dict:
         "exported_rsp_bytes": sum(cell["origin"] == "rsp" for cell in dram.values()),
         "exported_cpu_bytes": sum(cell["origin"] == "cpu" for cell in dram.values()),
         "exported_initial_bytes": sum(cell["origin"] == "initial" for cell in dram.values()),
-        "rdram_backing_bytes": rdram_size,
+        "rdram_backing_bytes": state["rdram_bytes"],
+        "scoped_egress_sha256": state["egress_sha256"],
     }
 
 
