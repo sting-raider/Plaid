@@ -7,6 +7,7 @@
 #define main capability_fixture_main
 #include "../003-ares-oracle/driver.cpp"
 #undef main
+#include <array>
 #include <cstdlib>
 #include <vector>
 #include <nall/hash/sha256.hpp>
@@ -27,8 +28,7 @@ int main(int argc,char** argv) {
   bool traced=!strcmp(argv[1],"traced");
   MixFrontend frontend;platform=&frontend;
   frontend.cartPak->setAttribute("title","Plaid RSP DMEM CPU refetch composition");
-  frontend.cartPak->setAttribute("region","NTSC");
-  frontend.cartPak->setAttribute("cic","CIC-NUS-6102");
+  frontend.cartPak->setAttribute("region","NTSC");frontend.cartPak->setAttribute("cic","CIC-NUS-6102");
   frontend.cartPak->append("program.rom",8192);
   Node::System root;if(!load(root,"[Nintendo] Nintendo 64 (NTSC)")) return 3;
   option("Expansion Pak","true");option("Deterministic Entropy","true");option("Recompiler","false");
@@ -86,8 +86,6 @@ int main(int argc,char** argv) {
     }
   };
 
-  // Initial snapshot -> RSP generation 1 -> same-value RSP generation 2 ->
-  // same-value CPU overwrite -> equal-valued RSP decoy at another word.
   cpuFetch(1,0,0x00aa);
   rspStore(2,0,producedWord);cpuFetch(3,0,0x1111);
   rspStore(4,0,producedWord);cpuFetch(5,0,0x1111);
@@ -96,17 +94,14 @@ int main(int argc,char** argv) {
 
   #if PLAID_COMPOSE_SENSOR
   mixEnabled=false;
+  string machineHash=mix_machine_digest();
+  #else
+  string machineHash=nall::Hash::SHA256(std::span<const u8>{rsp.dmem.data,rsp.dmem.size}).digest();
   #endif
   std::printf("{\"initial_bytes\":[");
   for(size_t i=0;i<initialBytes.size();i++) std::printf("%s%u",i?",":"",initialBytes[i]);
   std::printf("],\"word0\":%u,\"word4\":%u,\"t0\":%u,\"machine_sha256\":\"%s\",\"trace\":",
-    (u32)rsp.dmem.read<Word>(0),(u32)rsp.dmem.read<Word>(4),(u32)cpu.ipu.r[8].u32,
-    #if PLAID_COMPOSE_SENSOR
-    mix_machine_digest().data()
-    #else
-    nall::Hash::SHA256(std::span<const u8>{rsp.dmem.data,rsp.dmem.size}).digest().data()
-    #endif
-  );
+    (u32)rsp.dmem.read<Word>(0),(u32)rsp.dmem.read<Word>(4),(u32)cpu.ipu.r[8].u32,machineHash.data());
   #if PLAID_COMPOSE_SENSOR
   mix_print();
   #else
