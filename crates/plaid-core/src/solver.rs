@@ -3,7 +3,6 @@ use crate::{
     discovery::{CodeImage, decode, direct_cfg},
     indirect::verify_constant,
     program::*,
-    rom::CanonicalRom,
 };
 use serde::Serialize;
 use std::collections::BTreeSet;
@@ -73,66 +72,7 @@ fn allowed_static_effect(word: u32, pc: crate::GuestAddr) -> bool {
     }
 }
 
-fn rom_region_matches(
-    rom: &CanonicalRom,
-    region: &Region,
-    image: &CodeImage,
-    range: &GuestRange,
-) -> bool {
-    let Some(base_offset) = region.rom_offset else {
-        return true;
-    };
-    let Some(delta) = range.start.0.checked_sub(region.range.start.0) else {
-        return false;
-    };
-    let Some(begin_u64) = base_offset.0.checked_add(u64::from(delta)) else {
-        return false;
-    };
-    let Some(end_u64) = begin_u64.checked_add(u64::from(range.size)) else {
-        return false;
-    };
-    let (Ok(begin), Ok(end)) = (usize::try_from(begin_u64), usize::try_from(end_u64)) else {
-        return false;
-    };
-    let Some(expected) = rom.bytes().get(begin..end) else {
-        return false;
-    };
-    let mut supplied = Vec::with_capacity(range.size as usize);
-    for offset in (0..range.size).step_by(4) {
-        let pc = crate::GuestAddr(range.start.0 + offset);
-        let Some(word) = image.word(pc) else {
-            return false;
-        };
-        supplied.extend(word.to_be_bytes());
-    }
-    supplied == expected
-}
-
 pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<SolveReport, String> {
-    solve_inner(map, images, scope, None)
-}
-
-/// Solve with an independently supplied canonical ROM witness. Explicit Region ROM
-/// provenance is only discharged when the named ProgramMap ROM and executable bytes
-/// agree with this witness at the claimed affine offsets.
-pub fn solve_with_rom(
-    map: &ProgramMap,
-    images: &[CodeImage],
-    scope: Scope,
-    rom: &CanonicalRom,
-) -> Result<SolveReport, String> {
-    if map.rom != rom.identity {
-        return Err("solver canonical ROM witness does not match ProgramMap identity".into());
-    }
-    solve_inner(map, images, scope, Some(rom))
-}
-
-fn solve_inner(
-    map: &ProgramMap,
-    images: &[CodeImage],
-    scope: Scope,
-    canonical_rom: Option<&CanonicalRom>,
-) -> Result<SolveReport, String> {
     map.validate()?;
     for image in images {
         GuestRange {
@@ -228,45 +168,18 @@ fn solve_inner(
                 );
             }
         }
-        let covering_regions: Vec<_> = map
-            .regions
-            .iter()
-            .filter(|r| {
-                r.image == b.start.image
-                    && r.generation == b.start.generation
-                    && r.range.start.0 <= b.start.pc.0
-                    && r.range.end() >= range.end()
-            })
-            .collect();
-        if covering_regions.is_empty() {
+        if !map.regions.iter().any(|r| {
+            r.image == b.start.image
+                && r.generation == b.start.generation
+                && r.range.start.0 <= b.start.pc.0
+                && r.range.end() >= range.end()
+        }) {
             add(
                 "unknown_executable_region",
                 Some(b.start.clone()),
                 "block is not contained by a matching executable region",
                 b.evidence.clone(),
             );
-        }
-        if scope == Scope::DeclaredStaticImages {
-            for region in covering_regions
-                .into_iter()
-                .filter(|r| r.rom_offset.is_some())
-            {
-                match canonical_rom {
-                    None => add(
-                        "canonical_rom_source_unverified",
-                        Some(b.start.clone()),
-                        "explicit executable ROM-source provenance lacks an independent canonical ROM byte witness",
-                        region.evidence.clone(),
-                    ),
-                    Some(rom) if !rom_region_matches(rom, region, image, &range) => add(
-                        "canonical_rom_source_mismatch",
-                        Some(b.start.clone()),
-                        "supplied executable bytes disagree with the canonical ROM at the Region's claimed offset",
-                        region.evidence.clone(),
-                    ),
-                    Some(_) => {}
-                }
-            }
         }
     }
     for edge in &map.direct_edges {
@@ -531,10 +444,10 @@ fn solve_inner(
     }
     let assumptions = if scope == Scope::DeclaredStaticImages {
         vec![
-            "Only explicitly declared image entries execute; code bytes stay immutable.".into(),
-            "Interrupts, exceptions, DMA, MMIO, overlays, RSP and external entry sources are excluded.".into(),
-            "32-bit guest address compatibility model and the supported integer/control-flow subset only.".into(),
-        ]
+        "Only explicitly declared image entries execute; code bytes stay immutable.".into(),
+        "Interrupts, exceptions, DMA, MMIO, overlays, RSP and external entry sources are excluded.".into(),
+        "32-bit guest address compatibility model and the supported integer/control-flow subset only.".into(),
+    ]
     } else {
         Vec::new()
     };
