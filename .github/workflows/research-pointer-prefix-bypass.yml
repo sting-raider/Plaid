@@ -16,6 +16,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run Clippy
+        run: cargo clippy -p plaid-core --all-targets
       - name: Run deterministic prefix reducer
         run: python3 experiments/pointer_prefix_bypass.py
       - name: Run pointer prefix bypass regression
