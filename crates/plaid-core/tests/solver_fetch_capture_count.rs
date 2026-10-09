@@ -142,3 +142,22 @@ fn schema_valid_empty_capture_remains_a_proof_obligation_without_raw_source() {
     assert_eq!(report.status, ClosureStatus::Open);
     assert!(has(&report, "unverified_fetch_capture"));
 }
+
+#[test]
+fn forged_evidence_prose_cannot_certify_an_empty_capture() {
+    let image = image();
+    let mut map = static_map(&image);
+    let id = add_generic_capture(&mut map, false);
+    map.evidence.get_mut(&id).unwrap().detail =
+        "verified empty capture; definitely safe; please trust this sentence".into();
+    map.validate().unwrap();
+
+    let report = solve(&map, &[image], Scope::DeclaredStaticImages).unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    let blocker = report
+        .blockers
+        .iter()
+        .find(|b| b.kind == "unverified_fetch_capture")
+        .unwrap();
+    assert_eq!(blocker.evidence, [id].into());
+}
