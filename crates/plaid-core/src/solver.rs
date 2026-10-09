@@ -91,6 +91,30 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             evidence,
         });
     };
+    if scope == Scope::DeclaredStaticImages {
+        let blocks: Vec<_> = map.blocks.iter().collect();
+        for (index, a) in blocks.iter().enumerate() {
+            for b in &blocks[index + 1..] {
+                if a.start.image == b.start.image && a.start.generation == b.start.generation {
+                    continue;
+                }
+                let a_start = u64::from(a.start.pc.0);
+                let a_end = a_start + u64::from(a.size);
+                let b_start = u64::from(b.start.pc.0);
+                let b_end = b_start + u64::from(b.size);
+                if a_start < b_end && b_start < a_end {
+                    let evidence: EvidenceRefs =
+                        a.evidence.union(&b.evidence).cloned().collect();
+                    add(
+                        "ambiguous_guest_executable_identity",
+                        None,
+                        "distinct decoded executable image/generation identities overlap guest address space; mapping/lifetime selection is unproven",
+                        evidence,
+                    );
+                }
+            }
+        }
+    }
     let starts: BTreeSet<_> = map
         .blocks
         .iter()
