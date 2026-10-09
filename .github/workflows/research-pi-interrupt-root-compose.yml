@@ -1,0 +1,58 @@
+name: research-pi-interrupt-root-compose
+
+on:
+  push:
+    branches:
+      - research/pi-interrupt-root-compose-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  pi-interrupt-root-compose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch exact pinned references
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs target/pi-interrupt-root-compose
+          git clone --filter=blob:none --no-checkout https://github.com/ares-emulator/ares.git .refs/ares
+          git -C .refs/ares fetch origin 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git -C .refs/ares checkout --detach 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git clone --filter=blob:none --no-checkout https://github.com/mupen64plus/mupen64plus-core.git .refs/mupen64plus-core
+          git -C .refs/mupen64plus-core fetch origin ba95bab92a76744753bfe61470823a4937850ab0
+          git -C .refs/mupen64plus-core checkout --detach ba95bab92a76744753bfe61470823a4937850ab0
+          git clone --filter=blob:none --no-checkout https://github.com/gopher64/gopher64.git .refs/gopher64
+          git -C .refs/gopher64 fetch origin e96debac941a26ba4961e5145056c0821d3a56f7
+          git -C .refs/gopher64 checkout --detach e96debac941a26ba4961e5145056c0821d3a56f7
+
+      - name: Guard exact source seams
+        run: python3 experiments/pi-interrupt-root-compose-gpt56sol/source_guard.py
+
+      - name: Syntax-check adversarial model
+        run: python3 -m py_compile experiments/pi-interrupt-root-compose-gpt56sol/model.py experiments/pi-interrupt-root-compose-gpt56sol/source_guard.py
+
+      - name: Execute deterministic and fuzzed causal replay
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 experiments/pi-interrupt-root-compose-gpt56sol/model.py | tee target/pi-interrupt-root-compose/results.txt
+          grep -q '^PASS:' target/pi-interrupt-root-compose/results.txt
+          grep -q '^RESULT_SHA256=' target/pi-interrupt-root-compose/results.txt
+
+      - name: Hash durable receipts
+        shell: bash
+        run: |
+          sha256sum \
+            experiments/pi-interrupt-root-compose-gpt56sol/model.py \
+            experiments/pi-interrupt-root-compose-gpt56sol/source_guard.py \
+            target/pi-interrupt-root-compose/results.txt \
+            | tee target/pi-interrupt-root-compose/sha256.txt
+
+      - name: Upload receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pi-interrupt-root-compose-results
+          path: target/pi-interrupt-root-compose/
