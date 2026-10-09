@@ -33,14 +33,9 @@ fn supplied_image(words: [u32; 2], rom_offset: Option<RomOffset>) -> CodeImage {
 }
 
 fn map_for(rom: &CanonicalRom, image: &CodeImage) -> plaid_core::program::ProgramMap {
-    direct_cfg(
-        rom.identity.clone(),
-        image,
-        &[GuestAddr(0x8000_0000)],
-        32,
-    )
-    .unwrap()
-    .map
+    direct_cfg(rom.identity.clone(), image, &[GuestAddr(0x8000_0000)], 32)
+        .unwrap()
+        .map
 }
 
 #[test]
@@ -137,14 +132,12 @@ fn matching_canonical_rom_witness_can_discharge_explicit_source() {
     )
     .unwrap();
     assert_eq!(report.status, ClosureStatus::Closed);
-    assert!(
-        !report.blockers.iter().any(|b| {
-            matches!(
-                b.kind.as_str(),
-                "canonical_rom_source_unverified" | "canonical_rom_source_mismatch"
-            )
-        })
-    );
+    assert!(!report.blockers.iter().any(|b| {
+        matches!(
+            b.kind.as_str(),
+            "canonical_rom_source_unverified" | "canonical_rom_source_mismatch"
+        )
+    }));
 }
 
 #[test]
