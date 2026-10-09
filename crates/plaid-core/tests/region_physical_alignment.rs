@@ -59,12 +59,7 @@ fn aligned_and_absent_physical_code_mappings_remain_valid() {
         let i = image(physical);
         let m = map(&i);
         m.validate().unwrap();
-        let report = solve(
-            &m,
-            std::slice::from_ref(&i),
-            Scope::DeclaredStaticImages,
-        )
-        .unwrap();
+        let report = solve(&m, std::slice::from_ref(&i), Scope::DeclaredStaticImages).unwrap();
         assert_eq!(report.status, ClosureStatus::Closed);
     }
 }
