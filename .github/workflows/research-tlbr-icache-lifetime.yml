@@ -1,0 +1,70 @@
+name: research-tlbr-icache-lifetime
+
+on:
+  push:
+    branches:
+      - research/tlbr-icache-lifetime-gpt56sol
+    paths:
+      - experiments/tlbr-icache-lifetime/**.py
+      - experiments/tlbr-icache-lifetime/**.cpp
+      - .github/workflows/research-tlbr-icache-lifetime.yml
+  workflow_dispatch:
+
+jobs:
+  exact-pinned-references:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Plaid worker branch
+        uses: actions/checkout@v4
+
+      - name: Checkout exact pinned ares
+        uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+
+      - name: Checkout exact pinned Gopher64
+        uses: actions/checkout@v4
+        with:
+          repository: gopher64/gopher64
+          ref: e96debac941a26ba4961e5145056c0821d3a56f7
+          path: .refs/gopher64
+
+      - name: Checkout exact pinned Mupen64Plus Core
+        uses: actions/checkout@v4
+        with:
+          repository: mupen64plus/mupen64plus-core
+          ref: ba95bab92a76744753bfe61470823a4937850ab0
+          path: .refs/mupen64plus-core
+
+      - name: Checkout exact pinned n64-systemtest
+        uses: actions/checkout@v4
+        with:
+          repository: lemmy-64/n64-systemtest
+          ref: 196f5421173220eb2f63a7a99c64795dc0ea0698
+          path: .refs/n64-systemtest
+
+      - name: Syntax check
+        run: python3 -m py_compile experiments/tlbr-icache-lifetime/source_guard.py experiments/tlbr-icache-lifetime/model.py experiments/tlbr-icache-lifetime/run.py
+
+      - name: Guard exact source contracts
+        run: python3 experiments/tlbr-icache-lifetime/source_guard.py
+
+      - name: Run adversarial composition model
+        run: python3 experiments/tlbr-icache-lifetime/model.py
+
+      - name: Build and execute exact pinned ares fixture
+        run: python3 experiments/tlbr-icache-lifetime/run.py
+
+      - name: Upload result receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tlbr-icache-lifetime-receipt
+          path: |
+            target/tlbr-icache-lifetime/results.json
+            target/tlbr-icache-lifetime/build.json
+            target/tlbr-icache-lifetime/build.log
+          if-no-files-found: ignore
