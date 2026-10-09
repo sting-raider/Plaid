@@ -33,25 +33,29 @@ def worker() -> None:
     assert state["stale"] == [0x1111, 0x1111]
     assert state["divergent_words"] == [0x34092222, 0x34091111]
     assert state["fresh"] == [0x2222, 0x2222]
+    assert state["away_back"] == 0x2222
+    assert state["away_back_tag_preserved"] is True
     assert state["equal_remap"] == 0x2222
     assert state["different_remap"] == 0x3333
     assert state["tlbwi_preserved_resident_valid"] is True
-    # Initial A miss, same-index C hit, different-index B miss; then one-color
-    # refill, other-color refill, equal-payload remap refill, different remap refill.
+
     misses = state["misses"]
-    assert misses[1] == misses[0] + 1
-    assert misses[2] == misses[1]
-    assert misses[3] == misses[2] + 1
-    assert misses[4] == misses[3] + 1
-    assert misses[5] == misses[4] + 2  # B refill + equal-payload remap
-    assert misses[6] == misses[5] + 1
+    assert misses["after_a"] == misses["start"] + 1
+    assert misses["after_c"] == misses["after_a"]              # same ares slot/tag hit
+    assert misses["after_b"] == misses["after_c"] + 1         # virtual-color miss
+    assert misses["after_a_refill"] == misses["after_b"] + 1
+    assert misses["after_b_refill"] == misses["after_a_refill"] + 1
+    assert misses["after_away_back"] == misses["after_b_refill"]  # TLBWI away/back did not kill resident line
+    assert misses["after_equal_remap"] == misses["after_away_back"] + 1
+    assert misses["after_different_remap"] == misses["after_equal_remap"] + 1
+
     OUTPUT.mkdir(parents=True, exist_ok=True)
     result = OUTPUT / "results.json"
     result.write_text(json.dumps(state, sort_keys=True, indent=2) + "\n")
     digest = hashlib.sha256(result.read_bytes()).hexdigest()
     print("RESULT_SHA256=" + digest)
     print("RESULT=" + json.dumps(state, sort_keys=True, separators=(",", ":")))
-    print("PASS: exact pinned ares admits divergent cacheable TLB synonym residents; physical-tag remaps refill")
+    print("PASS: exact pinned ares admits divergent cacheable TLB synonym residents; TLB remap alone is not a resident lifetime boundary; physical-tag fetch remaps refill")
 
 
 def main() -> None:
