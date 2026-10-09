@@ -107,7 +107,7 @@ static auto egress_rdram(bool write, u32 address, u32 bytes, u32 device, u64 val
 }
 
 static auto egress_print_events() -> void {
-  std::printf("["");
+  std::printf("[");
   for(size_t index = 0; index < egressEvents.size(); index++) {
     const auto& e = egressEvents[index];
     std::printf(
