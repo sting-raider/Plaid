@@ -21,11 +21,16 @@ jobs:
           repository: gopher64/gopher64
           ref: e96debac941a26ba4961e5145056c0821d3a56f7
           path: .refs/gopher64
+      - uses: actions/checkout@v4
+        with:
+          repository: lemmy-64/n64-systemtest
+          ref: 196f5421173220eb2f63a7a99c64795dc0ea0698
+          path: .refs/n64-systemtest
       - name: Compile verifiers
         run: python3 -m py_compile spikes/043-ares-cpu-sd-sp-sink-gpt56sol/run.py spikes/043-ares-cpu-sd-sp-sink-gpt56sol/crosscheck.py spikes/043-ares-cpu-sd-sp-sink-gpt56sol/model.py
       - name: Exercise adversarial sink model
         run: python3 spikes/043-ares-cpu-sd-sp-sink-gpt56sol/model.py
-      - name: Check exact-pin ares/Gopher source topology
+      - name: Check exact-pin ares/Gopher/systemtest source evidence
         run: python3 spikes/043-ares-cpu-sd-sp-sink-gpt56sol/crosscheck.py
       - name: Build exact pinned ares and run integer SD-to-SP matrix
         run: python3 spikes/043-ares-cpu-sd-sp-sink-gpt56sol/run.py
