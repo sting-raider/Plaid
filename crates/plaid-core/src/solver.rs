@@ -108,6 +108,24 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 .collect(),
         );
     }
+    for dispatch in &map.target_dispatch_observations {
+        let detail = match dispatch.kind {
+            TargetDispatchKind::TargetLookup { delay_slot_entry } => format!(
+                "raw target lookup at {:08x} (delay-slot entry {delay_slot_entry}) has no source-site correlation",
+                dispatch.target.0
+            ),
+            TargetDispatchKind::RuntimeLink => format!(
+                "raw runtime link to {:08x} has no source-site correlation",
+                dispatch.target.0
+            ),
+        };
+        add(
+            "unresolved_raw_target_dispatch",
+            None,
+            &detail,
+            dispatch.evidence.clone(),
+        );
+    }
     if map.entries.is_empty() {
         add(
             "missing_entry_universe",

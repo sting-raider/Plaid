@@ -215,6 +215,24 @@ pub struct ObservedIndirect {
     pub evidence: EvidenceRefs,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetDispatchKind {
+    TargetLookup { delay_slot_entry: bool },
+    RuntimeLink,
+}
+
+/// Raw target-dispatch evidence without a source-site identity. A lookup or
+/// runtime link is not an executed indirect transfer and cannot borrow one.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ObservedTargetDispatch {
+    pub target: GuestAddr,
+    pub generation: u64,
+    pub kind: TargetDispatchKind,
+    pub evidence: EvidenceRefs,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservedWordStore {
@@ -429,6 +447,8 @@ pub struct ProgramMap {
     #[serde(default)]
     pub indirect_observations: BTreeSet<ObservedIndirect>,
     #[serde(default)]
+    pub target_dispatch_observations: BTreeSet<ObservedTargetDispatch>,
+    #[serde(default)]
     pub entry_verifications: BTreeSet<ObservedEntryVerification>,
     #[serde(default)]
     pub word_store_observations: BTreeSet<ObservedWordStore>,
@@ -457,6 +477,7 @@ impl ProgramMap {
             loads: BTreeSet::new(),
             dma_observations: BTreeSet::new(),
             indirect_observations: BTreeSet::new(),
+            target_dispatch_observations: BTreeSet::new(),
             entry_verifications: BTreeSet::new(),
             word_store_observations: BTreeSet::new(),
             fetch_captures: BTreeMap::new(),
@@ -619,6 +640,19 @@ impl ProgramMap {
                 return Err("missing indirect source-unit trace provenance".into());
             }
             refs(&o.evidence)?;
+        }
+        for dispatch in &self.target_dispatch_observations {
+            if !dispatch.target.0.is_multiple_of(4) {
+                return Err("unaligned target-dispatch observation".into());
+            }
+            refs(&dispatch.evidence)?;
+            if dispatch.evidence.iter().any(|id| {
+                self.evidence
+                    .get(id)
+                    .is_none_or(|e| e.kind != EvidenceKind::Trace)
+            }) {
+                return Err("target-dispatch observation lacks trace provenance".into());
+            }
         }
         for store in &self.word_store_observations {
             if !store.site.0.is_multiple_of(4)

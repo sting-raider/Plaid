@@ -16,6 +16,7 @@ macro_rules! facts { ($($t:ty),*) => { $(impl Fact for $t { fn refs(&mut self) -
 facts!(
     ObservedDma,
     ObservedIndirect,
+    ObservedTargetDispatch,
     ObservedWordStore,
     ObservedEntryVerification,
     ObservedFetch,
@@ -67,6 +68,10 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
     out.loads = union(&left.loads, &right.loads);
     out.dma_observations = union(&left.dma_observations, &right.dma_observations);
     out.indirect_observations = union(&left.indirect_observations, &right.indirect_observations);
+    out.target_dispatch_observations = union(
+        &left.target_dispatch_observations,
+        &right.target_dispatch_observations,
+    );
     out.entry_verifications = union(&left.entry_verifications, &right.entry_verifications);
     out.fetch_observations = union(&left.fetch_observations, &right.fetch_observations);
     for (id, capture) in &right.fetch_captures {
@@ -564,8 +569,36 @@ fn import(
                     evidence,
                 });
             }
-            TraceEvent::TargetLookup { target, .. } | TraceEvent::RuntimeLink { target } => {
+            TraceEvent::TargetLookup {
+                target,
+                delay_slot_entry,
+            } => {
+                out.target_dispatch_observations
+                    .insert(ObservedTargetDispatch {
+                        target: *target,
+                        generation: epoch,
+                        kind: TargetDispatchKind::TargetLookup {
+                            delay_slot_entry: *delay_slot_entry,
+                        },
+                        evidence: evidence.clone(),
+                    });
                 // Lookups never establish source-correlated indirect targets.
+                out.unresolved.insert(Unresolved {
+                    kind: "uncorrelated_target".into(),
+                    site: None,
+                    detail: format!("target {:08x} has no source-site correlation", target.0),
+                    evidence,
+                });
+            }
+            TraceEvent::RuntimeLink { target } => {
+                out.target_dispatch_observations
+                    .insert(ObservedTargetDispatch {
+                        target: *target,
+                        generation: epoch,
+                        kind: TargetDispatchKind::RuntimeLink,
+                        evidence: evidence.clone(),
+                    });
+                // Runtime links likewise lack a source-site identity.
                 out.unresolved.insert(Unresolved {
                     kind: "uncorrelated_target".into(),
                     site: None,
@@ -580,6 +613,7 @@ fn import(
     // correlation, preserving every event ID without rescanning on each event.
     canonicalize(&mut out.dma_observations);
     canonicalize(&mut out.indirect_observations);
+    canonicalize(&mut out.target_dispatch_observations);
     canonicalize(&mut out.entry_verifications);
     canonicalize(&mut out.word_store_observations);
     canonicalize(&mut out.executable_writes);
