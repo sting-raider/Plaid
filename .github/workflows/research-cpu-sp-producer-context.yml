@@ -1,0 +1,29 @@
+name: Research CPU SP producer context
+
+on:
+  push:
+    branches: [research/cpu-sp-producer-context-gpt56sol]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - name: Compile Python verifier
+        run: python3 -m py_compile spikes/043-ares-cpu-sp-producer-context/*.py
+      - name: Build exact pinned ares and execute producer-context fixture
+        run: python3 spikes/043-ares-cpu-sp-producer-context/run.py
+      - name: Upload deterministic results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-sp-producer-context-results
+          path: target/ares-cpu-sp-producer-context/results.json
+          if-no-files-found: ignore
