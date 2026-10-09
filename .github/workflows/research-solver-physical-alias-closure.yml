@@ -1,0 +1,18 @@
+name: research-solver-physical-alias-closure
+
+on:
+  push:
+    branches:
+      - research/solver-physical-alias-closure-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  plaid-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run physical-alias solver regression
+        run: cargo test -p plaid-core --test solver_physical_alias -- --nocapture
+      - name: Run full plaid-core suite
+        run: cargo test -p plaid-core
