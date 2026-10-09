@@ -34,7 +34,7 @@ jobs:
       - name: Hash result and guarded sources
         run: |
           sha256sum target/nmi-root-fetch-provenance/results.json
-          sha256sum .refs/ares/ares/n64/cpu/cpu.cpp .refs/ares/ares/n64/cpu/exceptions.cpp .refs/ares/ares/n64/pif/io.cpp
+          sha256sum .refs/ares/ares/n64/cpu/cpu.cpp .refs/ares/ares/n64/cpu/exceptions.cpp .refs/ares/ares/n64/pif/io.cpp .refs/ares/ares/n64/si/io.cpp
 
       - name: Retain result payload
         uses: actions/upload-artifact@v4
