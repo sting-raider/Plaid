@@ -6,25 +6,11 @@ on:
       - research/solver-physical-alias-closure-gpt56sol
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   plaid-core:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Apply and checkpoint smallest candidate fix
-        shell: bash
-        run: |
-          python spikes/043-solver-physical-alias-gpt56sol/apply_candidate_fix.py
-          if ! git diff --quiet -- crates/plaid-core/src/solver.rs; then
-            git config user.name github-actions[bot]
-            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-            git add crates/plaid-core/src/solver.rs
-            git commit -m "Fail closed on conflicting physical executable identities"
-            git push origin HEAD:research/solver-physical-alias-closure-gpt56sol
-          fi
       - uses: dtolnay/rust-toolchain@stable
       - name: Run physical-alias solver regression
         run: cargo test -p plaid-core --test solver_physical_alias -- --nocapture
