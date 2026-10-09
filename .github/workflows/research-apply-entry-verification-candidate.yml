@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   apply-and-test:
-    if: ${{ !contains(github.event.head_commit.message, '[candidate-applied]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,8 +37,8 @@ jobs:
               }
           }
           '''
-          # Dedent the literal without depending on Python's textwrap formatting.
-          old = old.replace('          ', '')
+          # Correct the indentation above to exactly match Rust source.
+          old = old.replace('              ', '            ').replace('          }\n          ', '        }\n')
           new = '''        for verification in &self.entry_verifications {
             address(&verification.entry)?;
             refs(&verification.evidence)?;
@@ -60,9 +59,10 @@ jobs:
             }
         }
 '''
-          if old not in text:
-              raise SystemExit('program.rs candidate anchor not found')
-          program.write_text(text.replace(old, new, 1))
+          if 'let source_unit_region = self.regions.iter().any' not in text:
+              if old not in text:
+                  raise SystemExit('program.rs candidate anchor not found')
+              program.write_text(text.replace(old, new, 1))
 
           test = Path('crates/plaid-core/tests/entry_verification_source_unit.rs')
           text = test.read_text()
@@ -75,9 +75,10 @@ jobs:
     assert!(forged.validate().is_err());
     assert!(!candidate_region_binding(&forged));
 '''
-          if old not in text:
+          if old in text:
+              test.write_text(text.replace(old, new, 1))
+          elif new not in text:
               raise SystemExit('test candidate anchor not found')
-          test.write_text(text.replace(old, new, 1))
           PY
       - name: Focused candidate matrix
         run: cargo test -p plaid-core --test entry_verification_source_unit -- --nocapture
@@ -86,8 +87,12 @@ jobs:
       - name: Commit candidate
         shell: bash
         run: |
+          git add crates/plaid-core/src/program.rs crates/plaid-core/tests/entry_verification_source_unit.rs
+          if git diff --cached --quiet; then
+            echo 'candidate already applied; nothing to commit'
+            exit 0
+          fi
           git config user.name 'Plaid Research Worker'
           git config user.email 'actions@users.noreply.github.com'
-          git add crates/plaid-core/src/program.rs crates/plaid-core/tests/entry_verification_source_unit.rs
           git commit -m 'research: candidate region-bind entry verification source unit [candidate-applied]'
           git push origin HEAD:research/entry-verification-source-unit-binding-gpt56sol
