@@ -77,7 +77,6 @@ static void clearException() {
   cpu.scc.badVirtualAddress = 0;
   cpu.scc.sysadFrozen = false;
   cpu.context.setMode();
-  cpu.context.endian = CPU::Context::Endian::Big;
 }
 
 static void putCode(u32 instruction) {
@@ -174,8 +173,17 @@ int main(int argc, char** argv) {
   ares::Nintendo64::system.power(false);
   if(cpu.recompiler.enabled || rsp.recompiler.enabled) return 4;
   std::vector<u8> hidden(rdram.ram.size / 2); rdram.hidden.data = hidden.data(); rdram.mapIdentity = 1;
+
+  // LLD/SCD are reserved in ares when the current address context is both
+  // 32-bit and non-kernel. Pin exactly kernel+32-bit rather than relying on
+  // power-on privilege state; KSEG1 remains a direct uncached segment here.
+  cpu.scc.status.errorLevel = 0;
+  cpu.scc.status.exceptionLevel = 0;
+  cpu.scc.status.privilegeMode = 0;
+  cpu.scc.status.kernelExtendedAddressing = 0;
+  cpu.scc.configuration.bigEndian = 1;
   cpu.context.setMode();
-  cpu.context.endian = CPU::Context::Endian::Big;
+  if(!cpu.context.kernelMode() || cpu.context.bits != 32 || !cpu.context.bigEndian()) return 5;
   tracing = enabled;
 
   std::vector<CaseFact> facts;
