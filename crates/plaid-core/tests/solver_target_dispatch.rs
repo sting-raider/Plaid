@@ -3,9 +3,7 @@ use plaid_core::{
     discovery::CodeImage,
     indirect::analyze_indirect,
     merge::{import_trace, merge_maps},
-    program::{
-        CodeAddress, PhysicalAddr, ProgramMap, RomIdentity, RomOffset, TargetDispatchKind,
-    },
+    program::{CodeAddress, PhysicalAddr, ProgramMap, RomIdentity, RomOffset, TargetDispatchKind},
     solver::{ClosureStatus, Scope, SolveReport, solve},
     trace::{DiscoveryTrace, EventRecord, TraceEvent, TraceHeader},
 };
@@ -104,15 +102,26 @@ fn delete_only_derived_target_blocker(mut map: ProgramMap) -> ProgramMap {
         .find(|u| u.kind == "uncorrelated_target")
         .expect("importer must derive the target blocker")
         .clone();
-    assert!(blocker.evidence.iter().all(|id| map.evidence.contains_key(id)));
+    assert!(
+        blocker
+            .evidence
+            .iter()
+            .all(|id| map.evidence.contains_key(id))
+    );
     map.unresolved.remove(&blocker);
-    assert!(map
-        .unresolved
-        .iter()
-        .all(|u| u.kind != "uncorrelated_target"));
+    assert!(
+        map.unresolved
+            .iter()
+            .all(|u| u.kind != "uncorrelated_target")
+    );
     // The trace event provenance record and typed raw primitive still exist.
     // Only the derived diagnostic was deleted.
-    assert!(blocker.evidence.iter().all(|id| map.evidence.contains_key(id)));
+    assert!(
+        blocker
+            .evidence
+            .iter()
+            .all(|id| map.evidence.contains_key(id))
+    );
     assert_eq!(map.target_dispatch_observations.len(), 1);
     map.validate().unwrap();
     map
@@ -120,7 +129,12 @@ fn delete_only_derived_target_blocker(mut map: ProgramMap) -> ProgramMap {
 
 fn assert_raw_gate(map: ProgramMap, i: &CodeImage) {
     let edited = delete_only_derived_target_blocker(map);
-    let report = solve(&edited, std::slice::from_ref(i), Scope::DeclaredStaticImages).unwrap();
+    let report = solve(
+        &edited,
+        std::slice::from_ref(i),
+        Scope::DeclaredStaticImages,
+    )
+    .unwrap();
     assert_eq!(report.status, ClosureStatus::Open);
     assert!(has(&report, "unresolved_raw_target_dispatch"));
 }
@@ -187,7 +201,11 @@ fn certified_indirect_decoy_cannot_launder_source_uncorrelated_lookup() {
         }),
     );
     let map = analyze_indirect(&map, &i).unwrap();
-    assert!(map.indirect_sites.iter().any(|site| site.closed_proof.is_some()));
+    assert!(
+        map.indirect_sites
+            .iter()
+            .any(|site| site.closed_proof.is_some())
+    );
     assert_raw_gate(map, &i);
 }
 
@@ -212,16 +230,23 @@ fn raw_dispatch_survives_roundtrip_merge_and_same_target_kind_distinction() {
     assert_eq!(merged, merge_maps(&merged, &merged).unwrap());
     let roundtrip = ProgramMap::from_json(&merged.to_json().unwrap()).unwrap();
     assert_eq!(roundtrip, merged);
-    assert!(roundtrip.target_dispatch_observations.iter().any(|o| matches!(
-        o.kind,
-        TargetDispatchKind::TargetLookup {
-            delay_slot_entry: true
-        }
-    )));
-    assert!(roundtrip
-        .target_dispatch_observations
-        .iter()
-        .any(|o| matches!(o.kind, TargetDispatchKind::RuntimeLink)));
+    assert!(
+        roundtrip
+            .target_dispatch_observations
+            .iter()
+            .any(|o| matches!(
+                o.kind,
+                TargetDispatchKind::TargetLookup {
+                    delay_slot_entry: true
+                }
+            ))
+    );
+    assert!(
+        roundtrip
+            .target_dispatch_observations
+            .iter()
+            .any(|o| matches!(o.kind, TargetDispatchKind::RuntimeLink))
+    );
 }
 
 #[test]
@@ -243,10 +268,11 @@ fn raw_dispatch_rejects_forged_non_trace_provenance() {
         .unwrap()
         .clone();
     map.evidence.get_mut(&evidence).unwrap().kind = EvidenceKind::Static;
-    assert!(map
-        .validate()
-        .unwrap_err()
-        .contains("target-dispatch observation lacks trace provenance"));
+    assert!(
+        map.validate()
+            .unwrap_err()
+            .contains("target-dispatch observation lacks trace provenance")
+    );
 }
 
 #[test]
