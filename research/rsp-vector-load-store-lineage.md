@@ -67,12 +67,16 @@ change source generation while leaving vector values indistinguishable by conten
 
 ## Executed observations
 
-GitHub Actions run `37921653332` on Ubuntu 24.04 built and executed exact pinned
-ares from clean source. Syntax/model/source guards passed, the decoded reference
-fixture passed, a second reference execution was byte-identical, and all six
-reference vector/DMEM outputs matched the replay model.
+Final GitHub Actions run `37921935199` on Ubuntu 24.04 checked out research head
+`abed01fdaa124815d6418298254649f58845195e`, fetched both exact pinned references,
+verified the ares interpreter/decoder blobs and the Gopher64 RSP source blob, built
+and executed exact pinned ares from clean source, and uploaded the evidence.
+Syntax/model/source guards passed, the decoded reference fixture passed, a second
+reference execution was byte-identical, and all six reference vector/DMEM outputs
+matched the replay model. Earlier clean run `37921653332` produced the same result,
+reference-stdout and model hashes.
 
-Evidence hashes from that run:
+Evidence hashes from the final cross-reference run:
 
 - results JSON SHA-256:
   `b67edae8dd4a0eb3fd0e7e0abe6117e8f89da495bccb77a6c196b10786d7e46d`
@@ -81,7 +85,7 @@ Evidence hashes from that run:
 - replay/model SHA-256:
   `afe4f5549b16c3be78088b1b4a109c1646b9c7f3b10da7f11244848fe4e212a3`
 - uploaded evidence artifact ZIP SHA-256:
-  `43fa5e781b47c2206b7dfb57967d82997aa4bcbd43a2c1000341bb270daeec32`
+  `03f01f3c1abd53346cd79897acaa9a06faae32b27767c54c2d3c50c7d40f4ec0`
 
 The strongest counterexample is `mixed_same_value_no_diff`: all 16 destination
 bytes are `0x44` before and after, and all vector bytes are also `0x44`. Numeric
