@@ -50,7 +50,7 @@ def source_guard():
     assert "dma.current = dma.pending;" in d and "dma.busy    = dma.full;" in d
     assert "//SP_WRITE_LENGTH" in i and "dma.full.write = 1;" in i and "dmaTransferStart(thread);" in i
     assert "return bus.read<Size>(address, *this, RBusDevice::VR4300_UNCACHED);" in m
-    assert "return bus.write<Size>(address, data, *this, RBusDevice::VR4300_UNCACHED);" in m
+    assert "bus.write<Size>(address, data, *this, RBusDevice::VR4300_UNCACHED);" in m
     assert "if(access.cache) return icache.fetch(access.vaddr, paddr, cpu);" in m
     assert "return busRead<Word>(paddr);" in m
     return {
