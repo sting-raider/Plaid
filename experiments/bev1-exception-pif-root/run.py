@@ -36,8 +36,9 @@ def source_guard() -> None:
     refs = (ROOT / "refs.lock.toml").read_text()
     assert f'rev = "{PIN}"' in refs
     exception = (REF / "ares/n64/cpu/exceptions.cpp").read_text()
-    assert exception.count("0xffffffffbfc00200") >= 1
-    assert exception.count("0x180") >= 1
+    assert exception.count("(s32)0xbfc0'0200") == 1
+    assert exception.count("u16 vectorOffset = 0x0180;") == 1
+    assert exception.count("self.pipeline.setPc(vectorBase + vectorOffset);") == 1
     pif_io = (REF / "ares/n64/pif/io.cpp").read_text()
     assert pif_io.count("return rom.read<Word>(address);") == 1
     memory = (REF / "ares/n64/cpu/memory.cpp").read_text()
