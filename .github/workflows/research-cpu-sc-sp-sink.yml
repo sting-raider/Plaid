@@ -1,0 +1,81 @@
+name: Research CPU SC SP sink
+
+on:
+  push:
+    branches: [research/cpu-sc-sp-sink-gpt56sol]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - uses: actions/checkout@v4
+        with:
+          repository: gopher64/gopher64
+          ref: e96debac941a26ba4961e5145056c0821d3a56f7
+          path: .refs/gopher64
+      - name: Compile Python verifier
+        run: python3 -m py_compile spikes/045-ares-cpu-sc-sp-sink/*.py
+      - name: Build exact pinned ares and execute SC SP sink fixture
+        id: experiment
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 spikes/045-ares-cpu-sc-sp-sink/run.py 2>&1 | tee /tmp/cpu-sc-sp-sink.log
+      - name: Publish bounded failure diagnostic
+        if: steps.experiment.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          {
+            echo 'CHECKPOINT DIAGNOSTIC'
+            echo 'worker: gpt56sol-cpu-sc-sp-sink-20261009'
+            echo "run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo '```text'
+            echo '--- runner tail ---'
+            tail -n 45 /tmp/cpu-sc-sp-sink.log || true
+            if test -f target/ares-cpu-sc-sp-sink/instrumented/build.log; then
+              echo '--- compiler errors ---'
+              grep -nE 'driver\.cpp|error:|undefined reference|collect2:' target/ares-cpu-sc-sp-sink/instrumented/build.log | tail -n 100 || true
+              echo '--- compiler tail ---'
+              tail -n 35 target/ares-cpu-sc-sp-sink/instrumented/build.log || true
+            fi
+            echo '```'
+          } > /tmp/diagnostic.md
+          gh issue comment 4 --body-file /tmp/diagnostic.md
+          exit 1
+      - name: Publish successful receipt
+        if: steps.experiment.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          {
+            echo 'CHECKPOINT RECEIPT'
+            echo 'worker: gpt56sol-cpu-sc-sp-sink-20261009'
+            echo "run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo '```text'
+            tail -n 30 /tmp/cpu-sc-sp-sink.log
+            echo '```'
+          } > /tmp/receipt.md
+          gh issue comment 4 --body-file /tmp/receipt.md
+      - name: Upload deterministic results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-sc-sp-sink-results
+          path: target/ares-cpu-sc-sp-sink/results.json
+          if-no-files-found: ignore
