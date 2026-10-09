@@ -26,12 +26,14 @@ def require(text: str, fragment: str, label: str) -> None:
 
 
 def forbid(text: str, fragment: str, label: str) -> None:
-    if fragment.lower() in text.lower():
+    if fragment in text:
         raise SystemExit(f"unexpected pinned source contract {label}: {fragment!r}")
 
 
 def grep(path: Path, needle: str) -> str:
-    proc = subprocess.run(["git", "grep", "-n", "-i", needle], cwd=path, text=True, stdout=subprocess.PIPE)
+    # Case-sensitive on purpose: generic debugger 'watchpoint' strings are not
+    # the architectural CP0 WatchLo facility being audited here.
+    proc = subprocess.run(["git", "grep", "-n", needle], cwd=path, text=True, stdout=subprocess.PIPE)
     if proc.returncode not in (0, 1):
         raise SystemExit(f"git grep failed in {path}: {proc.returncode}")
     return proc.stdout
@@ -47,7 +49,8 @@ def main() -> int:
             raise SystemExit(f"{name} pin mismatch")
 
     ares = REFS["ares"][0]
-    ares_cpu = (ares / "ares/n64/cpu/cpu.hpp").read_text()
+    ares_cpu_path = ares / "ares/n64/cpu/cpu.hpp"
+    ares_cpu = ares_cpu_path.read_text()
     ares_scc_path = ares / "ares/n64/cpu/interpreter-scc.cpp"
     ares_scc = ares_scc_path.read_text()
     ares_exc_path = ares / "ares/n64/cpu/exceptions.cpp"
@@ -64,12 +67,12 @@ def main() -> int:
     require(ares_scc, "scc.watchLo.physicalAddress.bit(3,31) = data.bit(3,31);", "ares guest MTC0 address write")
     require(ares_ser, "s(scc.watchLo.trapOnWrite);", "ares WatchLo serialization")
     require(ares_ser, "s(scc.watchLo.trapOnRead);", "ares WatchLo serialization")
-    forbid(ares_exc, "watch", "ares exception implementation must remain absent at this pin")
     forbid(ares_exc, "trigger(23", "ares Watch ExcCode trigger must remain absent at this pin")
+    forbid(ares_exc, "Exception::watch", "ares Watch exception wrapper must remain absent at this pin")
 
-    # Lower-case watchLo should be confined to storage, CP0 access, and save-state
-    # code. A memory/load-store trigger would add another path and invalidate the
-    # executable disagreement hypothesis.
+    # Exact lower-case watchLo member uses are confined to storage, CP0 access,
+    # and save-state code. A load/store trigger would add another path and force
+    # this guard to fail for review.
     ares_watchlo = grep(ares, "watchLo")
     allowed = {
         "ares/n64/cpu/cpu.hpp",
@@ -114,7 +117,7 @@ def main() -> int:
     report = {
         "pins": {name: rev for name, (_path, rev) in REFS.items()},
         "sha256": {
-            "ares_cpu_hpp": digest(ares / "ares/n64/cpu/cpu.hpp"),
+            "ares_cpu_hpp": digest(ares_cpu_path),
             "ares_interpreter_scc": digest(ares_scc_path),
             "ares_exceptions": digest(ares_exc_path),
             "ares_serialization": digest(ares_ser_path),
@@ -125,7 +128,7 @@ def main() -> int:
         },
         "ares_watchlo_paths": sorted(seen),
         "systemtest_watchlo_paths": system_paths,
-        "conclusion": "pinned references expose/store Watch state but no executable Watch trigger/test was found; hardware/manual evidence must remain authoritative for the root obligation",
+        "conclusion": "pinned references expose/store Watch state but no executable Watch trigger/test was found in the guarded paths; hardware/manual evidence remains necessary for the root obligation",
     }
     out = ROOT / "target/ares-watch-exception-roots/source_guard.json"
     out.parent.mkdir(parents=True, exist_ok=True)
