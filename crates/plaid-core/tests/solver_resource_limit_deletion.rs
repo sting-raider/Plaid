@@ -39,11 +39,13 @@ fn deleting_direct_cfg_resource_limit_cannot_manufacture_closure() {
     // retained. A complete pass is otherwise a finite closed static loop.
     let i = image(vec![0x0000_0000, 0x0800_0001, 0x0000_0000]);
     let limited = discover_image(rom(), &i, &[i.base.pc], 1).unwrap();
-    assert!(limited
-        .map
-        .unresolved
-        .iter()
-        .any(|u| u.kind == "resource_limit" && u.site.is_some()));
+    assert!(
+        limited
+            .map
+            .unresolved
+            .iter()
+            .any(|u| u.kind == "resource_limit" && u.site.is_some())
+    );
 
     let edited = without_resource_limit(limited.map);
     let report = solve(
@@ -62,11 +64,13 @@ fn deleting_direct_cfg_resource_limit_cannot_manufacture_closure() {
     }));
 
     let complete = discover_image(rom(), &i, &[i.base.pc], 16).unwrap();
-    assert!(!complete
-        .map
-        .unresolved
-        .iter()
-        .any(|u| u.kind == "resource_limit"));
+    assert!(
+        !complete
+            .map
+            .unresolved
+            .iter()
+            .any(|u| u.kind == "resource_limit")
+    );
     assert_eq!(
         solve(
             &complete.map,
@@ -103,15 +107,14 @@ fn inferred_target_survives_direct_limit_and_keeps_deleted_limit_open() {
         .iter()
         .find(|s| s.site.pc.0 == 0x8000_0008)
         .expect("source indirect site retained");
-    assert!(site
-        .candidates
-        .keys()
-        .any(|a| a.pc.0 == 0x8000_0020));
-    assert!(limited
-        .map
-        .unresolved
-        .iter()
-        .any(|u| u.kind == "resource_limit" && u.site.is_some()));
+    assert!(site.candidates.keys().any(|a| a.pc.0 == 0x8000_0020));
+    assert!(
+        limited
+            .map
+            .unresolved
+            .iter()
+            .any(|u| u.kind == "resource_limit" && u.site.is_some())
+    );
 
     let edited = without_resource_limit(limited.map);
     let report = solve(
