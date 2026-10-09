@@ -52,6 +52,11 @@ fn guarded_pointer_table_yields_candidates_with_snapshot_provenance_and_no_closu
             .iter()
             .any(|u| u.kind == "pointer_table_immutability_unproven")
     );
+    assert!(
+        m.unresolved
+            .iter()
+            .any(|u| u.kind == "pointer_table_target_identity_unproven")
+    );
     assert_eq!(m, ProgramMap::from_json(&m.to_json().unwrap()).unwrap());
     let d = discover_image(rom(), &i, &[i.base.pc], 1000).unwrap();
     assert!(d.map.blocks.iter().any(|b| b.start.pc.0 == 0x80000040));
@@ -63,6 +68,12 @@ fn guarded_pointer_table_yields_candidates_with_snapshot_provenance_and_no_closu
             .blockers
             .iter()
             .any(|b| b.kind == "unresolved_indirect_site")
+    );
+    assert!(
+        report
+            .blockers
+            .iter()
+            .any(|b| b.kind == "pointer_table_target_identity_unproven")
     );
 }
 
