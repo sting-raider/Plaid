@@ -1,4 +1,4 @@
-use plaid_core::{GuestAddr, discovery::*, indirect::*, program::*};
+use plaid_core::{GuestAddr, discovery::*, indirect::*, program::*, solver::*};
 
 fn image(words: Vec<u32>) -> CodeImage {
     CodeImage {
@@ -44,6 +44,12 @@ fn diamond(right_imm: u16) -> CodeImage {
     ])
 }
 
+fn entry_target_diamond() -> CodeImage {
+    let mut i = diamond(0x0000);
+    i.words[3] = 0x35080000; // left also targets 0x80000000
+    i
+}
+
 fn site<'a>(m: &'a ProgramMap) -> &'a IndirectSite {
     m.indirect_sites.first().unwrap()
 }
@@ -80,6 +86,17 @@ fn stale_join_proof_fails_when_one_arm_changes() {
     let mut changed = i.clone();
     changed.words[6] = 0x35080080;
     assert!(!verify_constant(&m, &changed, site(&m)));
+}
+
+#[test]
+fn deleting_one_required_edge_invalidates_join_proof() {
+    let i = diamond(0x0040);
+    let m = analyze_indirect(&map(&i), &i).unwrap();
+    let mut deleted = m.clone();
+    deleted
+        .direct_edges
+        .retain(|edge| edge.site.pc.0 != 0x8000001c);
+    assert!(!verify_constant(&deleted, &i, site(&m)));
 }
 
 #[test]
@@ -120,6 +137,20 @@ fn linking_control_on_one_arm_is_rejected() {
 }
 
 #[test]
+fn loop_on_path_is_rejected() {
+    let i = image(vec![
+        0x3c088000, // entry: lui t0,0x8000
+        0x152affff, // loop: bne t1,t2,loop
+        0x34000000, // delay slot
+        0x35080040, // exit: ori t0,t0,0x40
+        0x01000008, // jr t0
+        0x00000000,
+    ]);
+    let m = analyze_indirect(&map(&i), &i).unwrap();
+    assert!(site(&m).closed_proof.is_none());
+}
+
+#[test]
 fn equal_target_from_different_scalar_computation_is_allowed() {
     let mut i = diamond(0x0040);
     i.words[6] = 0x25080040; // addiu t0,t0,0x40 instead of ori; same target value
@@ -127,4 +158,29 @@ fn equal_target_from_different_scalar_computation_is_allowed() {
     let s = site(&m);
     assert_eq!(s.candidates.first_key_value().unwrap().0.pc.0, 0x80000040);
     assert!(verify_constant(&m, &i, s));
+}
+
+#[test]
+fn equal_join_removes_declared_static_indirect_blocker() {
+    let i = entry_target_diamond();
+    let m = analyze_indirect(&map(&i), &i).unwrap();
+    assert!(verify_constant(&m, &i, site(&m)));
+    assert_eq!(
+        solve(&m, std::slice::from_ref(&i), Scope::DeclaredStaticImages)
+            .unwrap()
+            .status,
+        ClosureStatus::Closed
+    );
+}
+
+#[test]
+fn final_jr_delay_slot_remains_separate_closure_obligation() {
+    let mut i = entry_target_diamond();
+    i.words[11] = 0x0000000c; // syscall in JR delay slot
+    let m = analyze_indirect(&map(&i), &i).unwrap();
+    assert!(site(&m).closed_proof.is_some());
+    assert_eq!(
+        solve(&m, &[i], Scope::DeclaredStaticImages).unwrap().status,
+        ClosureStatus::Open
+    );
 }
