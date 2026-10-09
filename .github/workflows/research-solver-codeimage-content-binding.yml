@@ -1,0 +1,27 @@
+name: research solver codeimage content binding
+
+on:
+  push:
+    branches:
+      - research/solver-codeimage-content-binding-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Focused regression
+        run: cargo test -p plaid-core --test solver stale_content_derived_image_identity_cannot_close -- --exact
+      - name: plaid-core tests
+        if: ${{ success() }}
+        run: cargo test -p plaid-core
+      - name: Formatting
+        if: ${{ success() }}
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        if: ${{ success() }}
+        run: cargo clippy -p plaid-core --all-targets -- -D warnings
