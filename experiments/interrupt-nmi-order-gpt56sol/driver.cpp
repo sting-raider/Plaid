@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
   Node::System root;
   if(!load(root, "[Nintendo] Nintendo 64 (NTSC)")) return 3;
   option("Expansion Pak", "true"); option("Deterministic Entropy", "true"); option("Recompiler", "false");
-  cartridgeSlot.port->allocate(); cartridgeSlot.port->connect(); system.power(false);
+  cartridgeSlot.port->allocate(); cartridgeSlot.port->connect(); ares::Nintendo64::system.power(false);
   std::vector<u8> hidden(rdram.ram.size / 2); rdram.hidden.data = hidden.data(); rdram.mapIdentity = 1;
   if(cpu.recompiler.enabled || rsp.recompiler.enabled) return 4;
   for(auto& reg : cpu.ipu.r) reg.u64 = 0;
@@ -109,5 +109,5 @@ int main(int argc, char** argv) {
     name, mode, bev,ie,exl,erl,ip,im,nmi,clearNmi,clearIp,
     (unsigned long long)first.pc,(unsigned long long)first.epc,(unsigned long long)first.errorepc,first.exl,first.erl,first.bev,first.ip,first.nmi,(unsigned long long)first.s0,(unsigned long long)first.s1,first.fetches,
     (unsigned long long)second.pc,(unsigned long long)second.epc,(unsigned long long)second.errorepc,second.exl,second.erl,second.bev,second.ip,second.nmi,(unsigned long long)second.s0,(unsigned long long)second.s1,second.fetches);
-  system.unload(); return 0;
+  ares::Nintendo64::system.unload(); return 0;
 }
