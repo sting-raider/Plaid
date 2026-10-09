@@ -479,3 +479,9 @@ sites: 51,991 SW, 2256 SB and six COP1 SWC1 effects. These are normalized actual
 SP Word sinks; opcode width and source dataflow remain separate. Integer-SW-only
 producer census would miss observed subword/FPR writers. RSP DMEM sink testing
 is continuing; no mutation/lifetime certificate follows from this inventory.
+
+Fresh captures using the final PIF sensor recipe now reproduce both 10,000- and
+610,000-call sources, reports and independent checkpoints exactly. The full
+source has actual backing witnesses for all 610,000 observed fetches across PIF,
+SP and PI-backed RAM domains. Ultimate SP producers, executable mutation/lifetimes,
+boot/exception coverage and whole-ROM native closure remain unproved.
