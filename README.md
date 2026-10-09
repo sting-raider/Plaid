@@ -77,6 +77,7 @@ python scripts/test_cache_fetch.py
 python scripts/test_history.py
 python scripts/test_pi_history.py
 python scripts/test_pi_queue_history.py
+python scripts/test_pi_fetch_lineage.py
 python scripts/test_mupen_hooks.py
 python scripts/test_mupen_execution.py
 python scripts/test_mupen_session.py
@@ -119,6 +120,8 @@ plaid inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson
 plaid verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json>
 plaid inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json>
 plaid verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json>
+plaid inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json>
+plaid verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json>
 plaid merge <left.json> <right.json> <out.json>
 plaid solve [rom] <map.json>
 ```
@@ -179,6 +182,15 @@ requests without status are not a live-queue census or transfer timing proof.
 The older consumers reject v2, and guest/native completion remains false.
 `python scripts/test_pi_queue_history.py` tests canonical byte orders, forged
 identities, complete-source/report changes and input-overwrite protection.
+
+`inspect-pi-fetch-lineage` reports observed PI byte chains at fetched RAM words,
+with raw writer/fill/read ordinals and the entire prior queue/effect/source report.
+Backing writes do not retroactively replace resident I-cache chains. Mixed words
+and unsupported/ambiguous paths stay partial or unknown. `verify-pi-fetch-lineage`
+rechecks both complete sources and all report fields. Mutation coverage, executable
+lifetime and native completion remain uncertified; discrete sample endpoints do
+not define continuous lifetimes. `python scripts/test_pi_fetch_lineage.py` checks
+CLI source/report/version and input-protection gates with original synthetic data.
 
 Additional disposable reference experiments are documented under `spikes/`.
 `python spikes/003-ares-oracle/run.py` builds the pinned ares core separately and

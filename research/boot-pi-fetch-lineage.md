@@ -55,3 +55,5 @@ fetches are cached and have the recorded PI chains above. This makes the actual
 CPU-to-SP backing-read sensor, followed by PIF and SP producer history, the next
 concrete source-coverage task; assigning ROM origin from SP addresses would be
 unsound. No additional reference execution is claimed by replaying retained data.
+
+Separate CLI inspection/rechecking now passes synthetic byte-order equivalence, raw writer checks, uncertified-flag/writer/source tampering, version/truncation rejection and protection of every input. Commands remain distinct from native artifact generation.
