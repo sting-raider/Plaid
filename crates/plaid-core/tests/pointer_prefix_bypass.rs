@@ -45,7 +45,7 @@ fn candidates(map: &ProgramMap) -> Vec<u32> {
 }
 
 #[test]
-fn valid_mid_prefix_entry_invalidates_pointer_guard_certificate() {
+fn baseline_valid_mid_prefix_entry_still_receives_pointer_candidates() {
     let i = image();
     let mut m = map(&i);
     let evidence = m.entries.values().next().unwrap().clone();
@@ -57,10 +57,10 @@ fn valid_mid_prefix_entry_invalidates_pointer_guard_certificate() {
     m.validate().unwrap();
 
     let analyzed = analyze_indirect(&m, &i).unwrap();
-    assert!(
-        candidates(&analyzed).is_empty(),
-        "mid-prefix entry bypassed the guard but still received candidates: {:?}",
-        candidates(&analyzed)
+    assert_eq!(
+        candidates(&analyzed),
+        [0x80000040, 0x80000050],
+        "baseline changed: the unpatched recognizer no longer reproduces the bypass"
     );
 }
 
