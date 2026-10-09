@@ -1,0 +1,48 @@
+{
+  "builtin_corpus": {
+    "duplicate_crc_b_groups": 0,
+    "duplicate_full_tuple_groups": 0,
+    "symbols": 5881,
+    "symbols_with_relocations": 4930,
+    "unique_crc_b": 5881,
+    "unique_full_tuple": 5881
+  },
+  "does_not_prove": [
+    "that any n64sym match is wrong",
+    "that the built-in corpus contains crc collisions after generator deduplication",
+    "that a symbol hint establishes code reachability, byte provenance, immutability, or closure"
+  ],
+  "generator_identity_adversary": {
+    "alpha_then_beta_signature": "alpha 0x000C 0x076D7C20 0x92AA615F",
+    "alpha_then_beta_warning": "# warning: skipped beta (have alpha, crc: 92AA615F)",
+    "beta_then_alpha_signature": "beta 0x000C 0x076D7C20 0x92AA615F",
+    "beta_then_alpha_warning": "# warning: skipped alpha (have beta, crc: 92AA615F)",
+    "conclusion": "byte-identical distinct symbol names collapse to the first crc_b identity"
+  },
+  "n64sym_revision": "ccf4600f3389f1a84bde23339225cf372fdf7712",
+  "plaid_experiment": "n64sym-signature-evidence-v1",
+  "relocation_normalization": {
+    "conclusion": "byte-distinct relocation targets intentionally inhabit one n64sym signature class",
+    "nonreloc_mutation_match": "NO_MATCH",
+    "nonreloc_sha256": "7cc45ddef238e46881f628b48c1371691ca954fda682218a8639cc82e12d9242",
+    "original_match": "MATCH",
+    "original_sha256": "0a182d4da2341f510213a00ae11f3398f138c25985f28c503f649c33ef3d9430",
+    "original_word": "0x0c000000",
+    "relocated_match": "MATCH",
+    "relocated_sha256": "2c6e76c91ca259a01fb8e65b89c27947b50671aefb77534d30479d9de430a693",
+    "relocated_word": "0x0c123456",
+    "signature": [
+      "# sig_v1",
+      "",
+      "gamma 0x0010 0x328DCA26 0xF6C672A8",
+      " .targ26 external_target 0x000"
+    ]
+  },
+  "result": "VALIDATED",
+  "source_sha256": {
+    "LICENSE.md": "5a060e234d7d92edf81387957dc8baf1e67e6790db9954206e02560bc9676834",
+    "src/builtin_signatures.sig": "edb4ce7cbf5d74ea64387c11f0b7a87358ad5882b7995c97562b295c26cd54b0",
+    "src/n64sig.cpp": "2cef1a51b1c3d44b29880c832f00c1e623bfe80ac2a09a8421bb2f300bfb6b98",
+    "src/signaturefile.cpp": "e0156bef06163dc45916134bc77385246a08544956495fe8f1c8c74de5bc3249"
+  }
+}
