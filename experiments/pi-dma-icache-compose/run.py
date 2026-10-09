@@ -18,19 +18,42 @@ SECOND = 0x34083333
 TARGET = 0x4000
 
 
+def qualified_sources():
+    """Qualify the global ares queue without touching pinned reference source.
+
+    The fixture includes the broad oracle harness, which imports nall::queue and
+    makes bare `queue` ambiguous to GCC. Generate a same-directory source copy so
+    the two intended accesses name ares::Nintendo64::queue explicitly while all
+    semantic fixture code and reference source remain unchanged.
+    """
+    source = (HERE / "driver.cpp").read_text()
+    assert source.count("queue.") == 2
+    qualified = source.replace("queue.", "ares::Nintendo64::queue.")
+    driver = HERE / ".driver-qualified.cpp"
+    baseline = HERE / ".baseline-qualified.cpp"
+    driver.write_text(qualified)
+    baseline.write_text(
+        "/* generated build wrapper; source of truth is driver.cpp */\n"
+        "#define PLAID_PI_CACHE_COMPOSE_SENSOR 0\n"
+        "#include \".driver-qualified.cpp\"\n"
+    )
+    return baseline, driver
+
+
 def build():
     subprocess.run(["python3", str(HERE / "source_guard.py"), "--ares", str(ROOT / ".refs/ares")], check=True)
     spec = importlib.util.spec_from_file_location("ares_builder", ROOT / "spikes/003-ares-oracle/run.py")
     builder = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(builder)
+    baseline_source, sensor_source = qualified_sources()
     baseline = builder.build(
-        HERE / "baseline.cpp",
+        baseline_source,
         OUT / "baseline",
         extra_sources=(HERE / "driver.cpp",),
     )
     sensor = builder.build(
-        HERE / "driver.cpp",
+        sensor_source,
         OUT / "sensor",
         raw_fetch_access=True,
         physical_fetch_access=True,
@@ -39,6 +62,7 @@ def build():
         rdram_scalar_access=True,
         fetch_boundary_access=True,
         pi_dma_access=True,
+        extra_sources=(HERE / "driver.cpp",),
     )
     return baseline, sensor
 
