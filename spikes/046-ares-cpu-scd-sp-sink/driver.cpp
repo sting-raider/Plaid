@@ -77,6 +77,7 @@ static void clearException() {
   cpu.scc.badVirtualAddress = 0;
   cpu.scc.sysadFrozen = false;
   cpu.context.setMode();
+  cpu.context.endian = CPU::Context::Endian::Big;
 }
 
 static void putCode(u32 instruction) {
@@ -144,8 +145,8 @@ static CaseFact runCase(u32 id, u32 bank, const char* kind) {
   bool fail = !std::strcmp(kind, "fail");
   bool fault = !std::strcmp(kind, "fault");
   bool changed = !std::strcmp(kind, "changed");
-  if(!fail) execute(id, encodeI(0x34, 1, 2, 0));  // LLD r2,0(r1): establish a real reservation and 64-bit payload.
-  if(changed) execute(id, encodeI(0x19, 2, 2, 1)); // DADDIU carries through 0xffffffff into the high Word.
+  if(!fail) execute(id, encodeI(0x34, 1, 2, 0));   // LLD r2,0(r1): real SP reservation + Dual payload.
+  if(changed) execute(id, encodeI(0x19, 2, 2, 1)); // DADDIU carry changes both halves of the 64-bit source.
   u64 source = cpu.ipu.r[2].u64;
   execute(id, encodeI(0x3c, 1, 2, fault ? 1 : 0)); // SCD r2,offset(r1)
 
@@ -173,15 +174,8 @@ int main(int argc, char** argv) {
   ares::Nintendo64::system.power(false);
   if(cpu.recompiler.enabled || rsp.recompiler.enabled) return 4;
   std::vector<u8> hidden(rdram.ram.size / 2); rdram.hidden.data = hidden.data(); rdram.mapIdentity = 1;
-
-  cpu.scc.status.errorLevel = 0;
-  cpu.scc.status.exceptionLevel = 0;
-  cpu.scc.status.vectorLocation = 0;
-  cpu.scc.status.privilegeMode = 0;
-  cpu.scc.status.kernelExtendedAddressing = 1;
-  cpu.scc.configuration.bigEndian = 1;
   cpu.context.setMode();
-  if(cpu.context.bits != 64 || !cpu.context.bigEndian()) return 5;
+  cpu.context.endian = CPU::Context::Endian::Big;
   tracing = enabled;
 
   std::vector<CaseFact> facts;
