@@ -1,8 +1,34 @@
-workflow_run=37918536393
-source_commit=4f0d7cc77df6c115070bfbb3977e80f18e7c47f9
+workflow_run=37918775541
+source_commit=448caf9930387d8f5c3a25e5cc3940c82e9260bb
 exact_step_outcome=success
 ares_revision=9408cb43d4948fc3ea6e152a307a34348df3fe04
---- stdout_stderr ---
+gopher_revision=e96debac941a26ba4961e5145056c0821d3a56f7
+systemtest_revision=196f5421173220eb2f63a7a99c64795dc0ea0698
+--- reference_compare ---
+CASE SDL off0: ares=11223344a4a5a6a7 gopher=1122334455667788
+CASE SDL off1: ares=0011223344556677 gopher=0011223344556677
+CASE SDL off2: ares=0000112233445566 gopher=0000112233445566
+CASE SDL off3: ares=0000001122334455 gopher=0000001122334455
+CASE SDL off4: ares=a0a1a2a311223344 gopher=0000000011223344
+CASE SDL off5: ares=a0a1a2a300112233 gopher=0000000000112233
+CASE SDL off6: ares=a0a1a2a300001122 gopher=0000000000001122
+CASE SDL off7: ares=a0a1a2a300000011 gopher=0000000000000011
+CASE SDR off0: ares=88000000a4a5a6a7 gopher=8800000000000000
+CASE SDR off1: ares=77880000a4a5a6a7 gopher=7788000000000000
+CASE SDR off2: ares=66778800a4a5a6a7 gopher=6677880000000000
+CASE SDR off3: ares=55667788a4a5a6a7 gopher=5566778800000000
+CASE SDR off4: ares=4455667788000000 gopher=4455667788000000
+CASE SDR off5: ares=3344556677880000 gopher=3344556677880000
+CASE SDR off6: ares=2233445566778800 gopher=2233445566778800
+CASE SDR off7: ares=11223344a4a5a6a7 gopher=1122334455667788
+PASS: exact pinned references disagree on 10/16 big-endian SDL/SDR SP images
+ares_gopher_mismatches=10/16
+hardware_systemtest_sdl_sdr_oracle=absent
+hardware_systemtest_sd_control=upper32_only
+gopher_cpu_sha256=f2136f77815ecacbfe3c6a748b9070d295a2cb77561a850495806e623a6ed4c5
+gopher_rsp_sha256=a5864c02f742bc922284d7866bbe76fe80efda63d3a3c69af7e37c50fe661053
+systemtest_spmem_sha256=9096a6eefc7a8a248642ca782e25be67f51d9620d81cf2a7322e9fd5254af074
+--- exact_run ---
 PASS: source-derived SDL/SDR -> SP concrete sink model
 dual_single_cases=4/32
 two_word_single_cases=12/32
