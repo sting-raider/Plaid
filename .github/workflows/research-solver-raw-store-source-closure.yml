@@ -1,0 +1,25 @@
+name: research-solver-raw-store-source-closure
+
+on:
+  push:
+    branches:
+      - research/solver-raw-store-source-closure-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  plaid-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run focused adversarial regression
+        run: cargo test -p plaid-core --test solver_raw_store_source -- --nocapture
+      - name: Run full plaid-core suite
+        if: success()
+        run: cargo test -p plaid-core
+      - name: Check formatting
+        if: success()
+        run: cargo fmt --all -- --check
+      - name: Check clippy
+        if: success()
+        run: cargo clippy -p plaid-core --all-targets -- -D warnings
