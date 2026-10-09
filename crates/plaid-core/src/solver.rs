@@ -91,6 +91,42 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             evidence,
         });
     };
+    if scope == Scope::DeclaredStaticImages {
+        let regions: Vec<_> = map.regions.iter().collect();
+        for (index, a) in regions.iter().enumerate() {
+            let Some(a_physical) = a.physical_start else {
+                continue;
+            };
+            for b in &regions[index + 1..] {
+                if a.image != b.image || a.generation != b.generation {
+                    continue;
+                }
+                let Some(b_physical) = b.physical_start else {
+                    continue;
+                };
+                let overlap_start =
+                    u64::from(a.range.start.0.max(b.range.start.0));
+                let overlap_end = a.range.end().min(b.range.end());
+                if overlap_start >= overlap_end {
+                    continue;
+                }
+                let a_at_overlap = u64::from(a_physical.0)
+                    + (overlap_start - u64::from(a.range.start.0));
+                let b_at_overlap = u64::from(b_physical.0)
+                    + (overlap_start - u64::from(b.range.start.0));
+                if a_at_overlap != b_at_overlap {
+                    let evidence: EvidenceRefs =
+                        a.evidence.union(&b.evidence).cloned().collect();
+                    add(
+                        "ambiguous_executable_physical_mapping",
+                        None,
+                        "same executable image/generation assigns incompatible explicit physical backing to overlapping guest bytes",
+                        evidence,
+                    );
+                }
+            }
+        }
+    }
     let starts: BTreeSet<_> = map
         .blocks
         .iter()
