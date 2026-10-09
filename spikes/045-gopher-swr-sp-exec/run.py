@@ -17,7 +17,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-GOPHER = ROOT / ".refs" / "gopher64"
+GOPHER = Path(os.environ.get("GOPHER64_DIR", ROOT / ".refs" / "gopher64")).resolve()
 REV = "e96debac941a26ba4961e5145056c0821d3a56f7"
 MARKER = "// PLAID_GOPHER_SWR_SP_EXEC_PROBE_V1"
 PROBE_PATH = GOPHER / "src/plaid_swr_sp_probe.rs"
