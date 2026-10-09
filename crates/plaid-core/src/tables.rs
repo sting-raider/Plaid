@@ -108,6 +108,40 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
     }
     let branch = image.word(edge.site.pc)?;
     let compare_pc = GuestAddr(edge.site.pc.0.checked_sub(4)?);
+
+    // The table bound is established by the SLTIU immediately before this
+    // branch. Alternate execution that enters the branch can reuse an
+    // unconstrained/stale flag and still select the dispatch edge. When the
+    // selected dispatch is the sequential branch fallthrough, entering the
+    // physical delay-slot word also skips both compare and branch and then
+    // falls directly into the dispatch block. Keep image/generation identity
+    // explicit; equal guest PCs in another executable generation are unrelated.
+    let bypasses_compare = |address: &CodeAddress| {
+        if address.image != site.site.image || address.generation != site.site.generation {
+            return false;
+        }
+        if address.pc == edge.site.pc {
+            return true;
+        }
+        edge.site.pc.0.checked_add(8) == Some(block.start.pc.0)
+            && edge.site.pc.0.checked_add(4) == Some(address.pc.0)
+    };
+    if map.entries.keys().any(|address| bypasses_compare(address))
+        || map
+            .direct_edges
+            .iter()
+            .any(|candidate| bypasses_compare(&candidate.target))
+        || map.indirect_sites.iter().any(|candidate| {
+            candidate
+                .candidates
+                .keys()
+                .chain(candidate.observed.keys())
+                .any(|address| bypasses_compare(address))
+        })
+    {
+        return None;
+    }
+
     let compare = image.word(compare_pc)?;
     if compare >> 26 != 11 || field(compare, 21) != index {
         return None;
