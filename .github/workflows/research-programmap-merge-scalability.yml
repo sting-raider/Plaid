@@ -1,0 +1,33 @@
+name: research-programmap-merge-scalability
+
+on:
+  push:
+    branches:
+      - research/programmap-merge-scalability-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  merge-scaling:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Guard pinned Rabbitizer revision
+        run: grep -q 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' refs.lock.toml
+      - name: Compile release benchmark
+        run: cargo test --release -p plaid-core --test programmap_merge_scalability --no-run
+      - name: Measure baseline merge scaling and RSS
+        env:
+          MERGE_BENCH_SIZES: 500,1000,2000,4000,8000
+          MERGE_BENCH_REPEATS: 3
+        run: /usr/bin/time -v cargo test --release -p plaid-core --test programmap_merge_scalability benchmark_programmap_merge_scaling -- --ignored --nocapture
+      - name: Run merge regression suite
+        run: cargo test -p plaid-core --test merge -- --nocapture
+      - name: Run full plaid-core suite
+        run: cargo test -p plaid-core
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run clippy
+        run: cargo clippy -p plaid-core --all-targets -- -D warnings
