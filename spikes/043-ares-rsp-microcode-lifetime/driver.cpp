@@ -110,15 +110,11 @@ int main(int argc, char** argv) {
   std::vector<u8> hidden(rdram.ram.size / 2); rdram.hidden.data = hidden.data();
   rdram.mapIdentity = 1;
 
-  // Distinct source regions. 0x4000 and 0x5000 intentionally hold identical bytes.
   put64(0x1000, 0x2401000124020002ull); put64(0x1008, 0x2403000324040004ull);
   put64(0x2000, 0x2405000500000000ull); put64(0x2008, 0xdeadbeefdeadbeefull); put64(0x2010, 0x2406000600000000ull);
   put64(0x3000, 0x2407000700000000ull); put64(0x3008, 0x2408000800000000ull);
   put64(0x4000, 0x2409000900000000ull); put64(0x5000, 0x2409000900000000ull);
   put64(0x6000, 0x240a000a00000000ull); put64(0x7000, 0x240b000b00000000ull); put64(0x7100, 0x240c000c00000000ull);
-
-  // Old second-row instruction used to prove a count/skip request is only
-  // partially installed after its first row.
   rsp.imem.write<Word>(0x108, 0x24060055);
 
 #if PLAID_RSP_LIFETIME_OBSERVER
@@ -136,26 +132,20 @@ int main(int argc, char** argv) {
   std::vector<u32> checkpoints;
   std::vector<u32> handoff;
 
-  // 1: one promoted descriptor owns two 8-byte fragments in a 16-byte row.
   clearDma(); queueRead(0x1000, 0x000, 0x008); rsp.dmaTransferStep();
   checkpoints.push_back(executeOne(0x000)); checkpoints.push_back(executeOne(0x008));
 
-  // 2: count/skip remains one transfer across two scheduled rows. Between rows,
-  // first destination bytes are new but the second row is still old.
   clearDma(); queueRead(0x2000, 0x100, (1u << 12) | (1u << 23));
   rsp.dmaTransferStep();
   checkpoints.push_back(executeOne(0x100));
-  checkpoints.push_back(executeOne(0x108)); // old 0x24060055; request not complete
+  checkpoints.push_back(executeOne(0x108));
   if(!rsp.dma.busy.any()) return 20;
   rsp.dmaTransferStep();
-  checkpoints.push_back(executeOne(0x108)); // now 0x24060006
+  checkpoints.push_back(executeOne(0x108));
 
-  // 3: one 16-byte transfer wraps inside the IMEM bank.
   clearDma(); queueRead(0x3000, 0xff8, 0x008); rsp.dmaTransferStep();
   checkpoints.push_back(executeOne(0xff8)); checkpoints.push_back(executeOne(0x000));
 
-  // 4+5: A completes and pending B is promoted inside the same transfer-step.
-  // BUSY is 1 before and after, and equal payload cannot collapse the identities.
   clearDma(); queueRead(0x4000, 0x200, 0x000); queueRead(0x5000, 0x200, 0x000);
   handoff.push_back((u32)rsp.dma.busy.any()); handoff.push_back((u32)rsp.dma.full.any());
   rsp.dmaTransferStep();
@@ -164,22 +154,19 @@ int main(int argc, char** argv) {
   rsp.dmaTransferStep();
   checkpoints.push_back(executeOne(0x200));
 
-  // A non-overlapping direct write must not kill B's 0x200 lifetime; an
-  // overlapping write must. Both are real CPU-originated SP-memory sinks.
   rsp.writeWord(0x04001300, 0x240d000d, cpu);
   checkpoints.push_back(executeOne(0x200));
   rsp.writeWord(0x04001200, 0x240e000e, cpu);
   checkpoints.push_back(executeOne(0x200));
 
-  // 6+7: compose the prior lifecycle counterexample. B is committed pending,
-  // then its addresses mutate to C. Only promotion freezes the descriptor/token.
+  u64 untouched380 = rsp.imem.read<Dual>(0x380);
   clearDma(); queueRead(0x6000, 0x300, 0x000); queueRead(0x7000, 0x380, 0x000);
   setPendingAddress(0x7100, 0x3c0);
-  rsp.dmaTransferStep(); // transfer 6 completes; mutated C becomes transfer 7
+  rsp.dmaTransferStep();
   if((u32)rsp.dma.current.dramAddress != 0x7100 || (u32)rsp.dma.current.pbusAddress != 0x3c0) return 30;
   rsp.dmaTransferStep();
   checkpoints.push_back(executeOne(0x3c0));
-  if(rsp.imem.read<Dual>(0x380) != 0) return 31;
+  if(rsp.imem.read<Dual>(0x380) != untouched380) return 31;
 
   const std::vector<u32> expectedWords{
     0x24010001,0x24030003,0x24050005,0x24060055,0x24060006,
