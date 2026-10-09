@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - research/tlb-icache-synonyms-gpt56sol
+    paths:
+      - experiments/tlb-icache-synonyms/**.py
+      - experiments/tlb-icache-synonyms/**.cpp
+      - .github/workflows/research-tlb-icache-synonyms.yml
   workflow_dispatch:
 
 jobs:
