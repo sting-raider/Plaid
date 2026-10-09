@@ -57,7 +57,7 @@ Cache-visible executable lifetime, relocation discovery completeness, and target
 
 Deterministic attacks include distinct preimages collapsing to one postimage, generation swaps, same-value repeated relocations, byte-identical overlay reload generations, cross-generation HI16/LO16 pairs, missing writes, reordered writes, non-advancing generations, and equal-payload decoy events.
 
-The fixed-seed fuzz axis exercises 100,000 cases per class. In local execution before CI hardening:
+The fixed-seed fuzz axis exercises 100,000 cases per class. Exact-pin CI produced:
 
 - naive generation-swap false accepts: 100,000 / 100,000;
 - strict generation-swap rejects: 100,000 / 100,000;
@@ -66,7 +66,24 @@ The fixed-seed fuzz axis exercises 100,000 cases per class. In local execution b
 - naive cross-load HI16/LO16 accepts: 100,000 / 100,000;
 - strict cross-load HI16/LO16 rejects: 100,000 / 100,000.
 
-The preliminary deterministic report digest was `78ad10aa9533dca441c81b4063bff87fd98da3d00ef933d7d883f46488deb87f`.
+## Reproduction and receipts
+
+Branch workflow: `.github/workflows/research-runtime-relocation-provenance.yml`.
+
+Reproduce locally with an exact N64Recomp checkout:
+
+```sh
+python3 -m py_compile experiments/runtime_relocation_provenance.py
+python3 experiments/runtime_relocation_provenance.py --source-root /path/to/N64Recomp
+```
+
+Authoritative GitHub Actions run `38004080089` at branch head `4e397992c473c398e1d9e44823a0c3b8b28afeb7` succeeded. It cloned the exact N64Recomp pin, verified both source blobs, ran the reducer twice and required `cmp` equality before uploading receipts.
+
+- semantic report digest embedded in both outputs: `78ad10aa9533dca441c81b4063bff87fd98da3d00ef933d7d883f46488deb87f`
+- committed experiment SHA-256: `78d133c07b85fc352c1659190e5ac7eb0c6cff977a6ae36e52a011dedf269615`
+- emitted JSON file SHA-256: `585f33160ed068c5cac7541017e592c0b5924f5289e2f78b82e5dbb01ce97836`
+- artifact ID: `11650735657`
+- artifact ZIP SHA-256: `68b34f33d20fd5c4b5c3117e70d493da4ca6bfe8ca77b99bec4e575682e30ffc`
 
 ## Interpretation
 
@@ -85,4 +102,4 @@ Thus a relocation proof may establish a backing/storage postimage generation and
 
 Do not clear `unverified_relocation` from a fact shaped only like the current `Relocation` tuple. If/when a production verifier is added, represent relocation as a provenance-bearing mutation receipt with explicit input/load generation, preimage, event/write identity, output generation, and pair identity where applicable. Equal bytes, equal targets, and equal sites must not merge generations.
 
-No production Plaid file is changed by this branch. CI source-guard and final receipts are recorded separately in the issue closeout.
+No production Plaid file is changed by this branch. The result is a bounded evidence-contract validation, not a whole-ROM relocation census and not a hardware-universal relocation semantics claim.
