@@ -1,0 +1,25 @@
+name: Research cached code patch visibility
+
+on:
+  push:
+    branches: [research/cached-code-patch-visibility-sol]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - name: Run adversarial provenance reducer
+        run: |
+          python3 -m py_compile experiments/cached_code_patch_visibility.py spikes/043-ares-cached-code-patch-visibility/run.py
+          python3 experiments/cached_code_patch_visibility.py
+          python3 experiments/cached_code_patch_visibility.py
+      - name: Build exact pinned ares and execute cached patch fixture
+        run: python3 spikes/043-ares-cached-code-patch-visibility/run.py
