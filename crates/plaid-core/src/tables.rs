@@ -136,6 +136,8 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
         let instruction = decode(slot, ds);
         if !instruction.is_valid()
             || instruction.has_delay_slot()
+            || instruction.is_trap()
+            || matches!(instruction.opcode_name(), "syscall" | "break" | "eret")
             || instruction.destination_gpr() == Some(u32::from(index))
         {
             return None;
