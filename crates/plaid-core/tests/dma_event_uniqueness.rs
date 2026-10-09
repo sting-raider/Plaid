@@ -1,4 +1,4 @@
-use plaid_core::{EvidenceKind, GuestAddr, program::*};
+use plaid_core::{EvidenceKind, GuestAddr, merge::merge_maps, program::*};
 
 #[derive(Clone, Copy)]
 struct CopyFact {
@@ -78,26 +78,40 @@ const A: CopyFact = CopyFact {
     size: 8,
 };
 
+const B: CopyFact = CopyFact {
+    image: "img-b",
+    generation: 1,
+    guest: 0x8000_0020,
+    rom: 80,
+    physical: 32,
+    size: 8,
+};
+
 #[test]
 fn one_copy_event_cannot_name_two_distinct_dma_transactions() {
     let mut map = base_map();
     add_copy(&mut map, A, "copy0");
-    add_copy(
-        &mut map,
-        CopyFact {
-            image: "img-b",
-            generation: 1,
-            guest: 0x8000_0020,
-            rom: 80,
-            physical: 32,
-            size: 8,
-        },
-        "copy0",
-    );
+    add_copy(&mut map, B, "copy0");
 
     assert!(
         map.validate().is_err(),
         "one source-bound copy event must not certify two incompatible DMA transactions"
+    );
+}
+
+#[test]
+fn independently_valid_fragments_cannot_merge_one_event_into_two_transactions() {
+    let mut left = base_map();
+    add_copy(&mut left, A, "copy0");
+    left.validate().unwrap();
+
+    let mut right = base_map();
+    add_copy(&mut right, B, "copy0");
+    right.validate().unwrap();
+
+    assert!(
+        merge_maps(&left, &right).is_err(),
+        "individually valid evidence fragments must not compose one event identity into two DMAs"
     );
 }
 
@@ -142,18 +156,7 @@ fn distinct_copy_events_may_name_distinct_dma_transactions() {
         "a different completed synthetic DMA event",
     );
     add_copy(&mut map, A, "copy0");
-    add_copy(
-        &mut map,
-        CopyFact {
-            image: "img-b",
-            generation: 1,
-            guest: 0x8000_0020,
-            rom: 80,
-            physical: 32,
-            size: 8,
-        },
-        "copy1",
-    );
+    add_copy(&mut map, B, "copy1");
 
     map.validate().unwrap();
 }
