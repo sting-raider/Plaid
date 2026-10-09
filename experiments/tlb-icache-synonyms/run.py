@@ -43,7 +43,7 @@ def worker() -> None:
     assert misses[2] == misses[1]
     assert misses[3] == misses[2] + 1
     assert misses[4] == misses[3] + 1
-    assert misses[5] >= misses[4] + 2  # B refill + equal-payload remap
+    assert misses[5] == misses[4] + 2  # B refill + equal-payload remap
     assert misses[6] == misses[5] + 1
     OUTPUT.mkdir(parents=True, exist_ok=True)
     result = OUTPUT / "results.json"
