@@ -1,0 +1,53 @@
+name: Research RSP vector load-store lineage
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/rsp-vector-load-store-lineage-sol
+    paths:
+      - 'spikes/043-ares-rsp-vector-load-store-lineage/**'
+      - '.github/workflows/research-rsp-vector-load-store-lineage.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact pinned ares
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs
+          git init .refs/ares
+          git -C .refs/ares remote add origin https://github.com/ares-emulator/ares.git
+          git -C .refs/ares fetch --depth=1 origin 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git -C .refs/ares checkout --detach 9408cb43d4948fc3ea6e152a307a34348df3fe04
+      - name: Syntax, model, and source guards
+        run: |
+          python3 -m py_compile \
+            spikes/043-ares-rsp-vector-load-store-lineage/model.py \
+            spikes/043-ares-rsp-vector-load-store-lineage/source_guard.py \
+            spikes/043-ares-rsp-vector-load-store-lineage/run.py
+          python3 spikes/043-ares-rsp-vector-load-store-lineage/model.py
+          python3 spikes/043-ares-rsp-vector-load-store-lineage/source_guard.py .refs/ares
+      - name: Execute exact-pin experiment
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p target
+          python3 spikes/043-ares-rsp-vector-load-store-lineage/run.py | tee target/rsp-vector-load-store-lineage.log
+          sha256sum target/ares-rsp-vector-load-store-lineage/results.json
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rsp-vector-load-store-lineage-evidence
+          if-no-files-found: warn
+          path: |
+            target/ares-rsp-vector-load-store-lineage/results.json
+            target/rsp-vector-load-store-lineage.log
+            target/ares-rsp-vector-load-store-lineage/build/build.log
