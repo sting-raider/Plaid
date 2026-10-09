@@ -84,7 +84,10 @@ def adversaries(doc):
     return len(checks)
 
 def main():
-    instrumented=builder.build(HERE/'driver.cpp',OUTPUT/'instrumented',extra_sources=(HERE/'observer.hpp',),rdram_burst_access=True,rdram_scalar_access=True)
+    # The shared reference builder requires raw/effective fetch sensing whenever
+    # RDRAM burst callbacks are present. Those fetch observers stay null in this
+    # fixture; enabling the build capability does not add a guest access.
+    instrumented=builder.build(HERE/'driver.cpp',OUTPUT/'instrumented',extra_sources=(HERE/'observer.hpp',),raw_fetch_access=True,physical_fetch_access=True,rdram_burst_access=True,rdram_scalar_access=True)
     baseline=builder.build(HERE/'baseline.cpp',OUTPUT/'baseline',extra_sources=(HERE/'driver.cpp',HERE/'observer.hpp'))
     baseline_raw,base=invoke(baseline,'plain')
     plain_raw,plain=invoke(instrumented,'plain')
