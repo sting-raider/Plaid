@@ -15,7 +15,7 @@ REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 OUTPUT = ROOT / "target/ares-oracle-spike"
 
 
-def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False, rdram_scalar_access=False, fetch_boundary_access=False, pi_dma_access=False, queue_access=False, sp_backing_access=False, pif_backing_access=False):
+def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False, rdram_scalar_access=False, fetch_boundary_access=False, pi_dma_access=False, queue_access=False, sp_backing_access=False, pif_backing_access=False, rsp_dmem_access=False):
     if cache_fill_access: assert raw_fetch_access and physical_fetch_access
     if cache_operation_access: assert raw_fetch_access and physical_fetch_access
     if rdram_burst_access: assert raw_fetch_access and physical_fetch_access
@@ -47,6 +47,8 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
         "sp_recipe":hashlib.sha256((ROOT/"spikes/039-ares-cpu-sp-fetch/prepare.py").read_bytes()).hexdigest() if sp_backing_access else None,
         "pif_backing_access":pif_backing_access,
         "pif_recipe":hashlib.sha256((ROOT/"spikes/041-ares-boot-pif-history/prepare.py").read_bytes()).hexdigest() if pif_backing_access else None,
+        "rsp_dmem_access":rsp_dmem_access,
+        "rsp_dmem_recipe":hashlib.sha256((ROOT/"spikes/042-ares-rsp-dmem-history/prepare.py").read_bytes()).hexdigest() if rsp_dmem_access else None,
         "extra_sources":{str(Path(p).relative_to(ROOT)):hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in extra_sources},
         "fixture_driver":hashlib.sha256(Path(__file__).with_name("driver.cpp").read_bytes()).hexdigest(),
         "recipe":hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
@@ -137,6 +139,12 @@ struct PlaidQueueDispatchScope {
                 ram = "// Project-owned successful identity-mapped ordinary RAM callbacks.\nusing PlaidRdramScalarObserver = void (*)(bool, u32, u32, u32, u64);\ninline PlaidRdramScalarObserver plaidRdramScalarObserver = nullptr;\n" + ram
                 destination.parent.mkdir(parents=True,exist_ok=True)
                 destination.write_text(ram)
+        elif rsp_dmem_access:
+            # An RSP-only shadow also needs precedence over upstream headers.
+            # Do not inherit stale CPU/RDRAM shadows from a prior option set.
+            for name in ("cpu/cpu.hpp","rdram/rdram.hpp"):
+                (output/"include/n64"/name).unlink(missing_ok=True)
+            includes.insert(0, output / "include")
         include_flags = [part for path in includes for part in ("-I",str(path))]
         core = (REF / "ares/ares/ares.cpp.in").read_text().replace("#include <ares/resource/resource.cpp>", "// UI-only resources omitted in headless build.")
         for key, value in {"ARES_NAME":"Plaid pinned ares oracle", "ARES_VERSION":REV,
@@ -269,6 +277,10 @@ struct PlaidQueueDispatchScope {
             module.generate(REF, output)
         else:
             (output / "include/n64/pif/pif.hpp").unlink(missing_ok=True)
+        if rsp_dmem_access:
+            spec = importlib.util.spec_from_file_location("plaid_rsp_dmem_generation", ROOT/"spikes/042-ares-rsp-dmem-history/prepare.py")
+            module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+            module.generate(REF, output,sp_backing=sp_backing_access)
         objects = []
         with (output / "build.log").open("w") as log:
             for name, source in [("sljit",REF / "thirdparty/sljit/sljit_src/sljitLir.c"),("libco",REF / "libco/libco.c")]:

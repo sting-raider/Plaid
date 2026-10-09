@@ -1120,3 +1120,19 @@ report is rebuilt during source rechecking. Three adversarial integration tests
 and full-prefix independent Python/Rust comparison pass. Attempts confer no
 mutation, and firmware equality is distinct from current backing identity.
 Keep mutation/lifetime/native flags false and ProgramMap/solver unchanged.
+
+## ADR-0077: RSP primitive sinks require actual instruction contexts
+
+Status: Accepted for controlled research sensing, 2026-10-09.
+
+An optional generated RSP sensor brackets existing interpreted instruction
+prologue/epilogue scopes and observes completed primitive DMEM stores. Thirty
+actual scalar/vector probes preserve independent reference/disabled/repeated
+state and replay every sink. Same-value effects remain distinct; out-of-instruction
+sinks cannot inherit RSP identity. The first 29 prior results remain exact.
+
+Record actual initial backing bytes: the reference fill helper uses a host byte
+pattern, so a guest-endian numeric-fill assumption failed. Primitive counts are
+not atomicity or complete mutation/lifetime proof. Generated ISC-reference
+shadows and required notices remain ignored; production gains no reference code
+or runtime dependency. Test CPU refetch composition before broader promotion.
