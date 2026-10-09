@@ -1,0 +1,24 @@
+workflow_run=37915564924
+source_commit=4f8d30d3836a57b9905418503e91d2caba6baeb7
+exact_step_outcome=failure
+ares_revision=9408cb43d4948fc3ea6e152a307a34348df3fe04
+--- stdout_stderr ---
+Traceback (most recent call last):
+  File "/home/runner/work/Plaid/Plaid/spikes/043-ares-cpu-sp-partial-word/run.py", line 26, in <module>
+    model = importlib.util.module_from_spec(mspec); mspec.loader.exec_module(model)
+                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 995, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/home/runner/work/Plaid/Plaid/spikes/043-ares-cpu-sp-partial-word/model.py", line 12, in <module>
+    @dataclass(frozen=True)
+     ^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/dataclasses.py", line 1258, in wrap
+    return _process_class(cls, init, repr, eq, order, unsafe_hash,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/dataclasses.py", line 983, in _process_class
+    and _is_type(type, cls, dataclasses, dataclasses.KW_ONLY,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/dataclasses.py", line 749, in _is_type
+    ns = sys.modules.get(cls.__module__).__dict__
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute '__dict__'. Did you mean: '__dir__'?
