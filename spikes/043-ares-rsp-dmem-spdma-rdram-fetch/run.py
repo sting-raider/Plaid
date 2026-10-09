@@ -65,6 +65,10 @@ def source_guard():
 
 def materialize_drivers():
     source = (HERE / "driver.cpp").read_text(encoding="utf-8")
+    oracle = ROOT / "spikes/003-ares-oracle/driver.cpp"
+    observer = HERE / "observer.hpp"
+    source = source.replace('#include "../003-ares-oracle/driver.cpp"', f'#include "{oracle}"')
+    source = source.replace('#include "observer.hpp"', f'#include "{observer}"')
     OUT.mkdir(parents=True, exist_ok=True)
     baseline = OUT / "baseline.cpp"
     sensor = OUT / "sensor.cpp"
