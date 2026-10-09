@@ -77,11 +77,7 @@ static bool same_cache(const CacheSig& a, const CacheSig& b) {
   return a.slot == b.slot && a.frequency == b.frequency;
 }
 
-struct Translation {
-  bool found = false;
-  bool cache = false;
-  u32 paddr = 0;
-};
+struct Translation { bool found; bool cache; u32 paddr; };
 
 static Translation translate(u64 vaddr) {
   auto a = cpu.tlb.load(vaddr, true);
@@ -92,11 +88,11 @@ static bool same_translation(const Translation& a, const Translation& b) {
   return a.found == b.found && a.cache == b.cache && a.paddr == b.paddr;
 }
 
-static bool execute_at(u32 codeOffset) {
+static bool execute_at(u32 offset) {
   cpu.scc.cause.exceptionCode = 0;
   cpu.scc.status.exceptionLevel = 0;
   cpu.scc.status.errorLevel = 0;
-  cpu.pipeline.setPc(CodePc + codeOffset);
+  cpu.pipeline.setPc(CodePc + offset);
   if(cpu.instruction()) cpu.synchronize();
   return cpu.scc.cause.exceptionCode == 0;
 }
@@ -126,7 +122,6 @@ int main() {
   cpu.scc.status.exceptionLevel = 0;
   cpu.scc.status.privilegeMode = 0;
   cpu.scc.status.kernelExtendedAddressing = 0;
-  cpu.scc.status.enable.coprocessor0 = 1;
   cpu.context.setMode();
   cpu.context.endian = CPU::Context::Endian::Big;
 
@@ -136,17 +131,13 @@ int main() {
 
   for(u32 i = 0; i < CPU::TLB::Entries; i++)
     cpu.tlb.entry[i] = make_entry(0x00100000ull + (u64)i * 0x2000, 0x00010000u + i * 0x2000, i, 2);
-
   const auto target = make_entry(ProbeVa, 0x00060000u, 0x55, 2);
   cpu.tlb.entry[9] = target;
-  cpu.tlb.entry[17] = target;  // equal-mapping decoy; TLBP must return first matching slot.
+  cpu.tlb.entry[17] = target;  // equal-mapping decoy
   cpu.tlb.tlbCache = {};
   cpu.devirtualizeCache = {};
 
-  // Successful TLBP. Prime the translation cache first, then compare it before
-  // and immediately after the instruction. The later translation check happens
-  // only after that cache snapshot so its frequency increment cannot mask an
-  // instruction-side effect.
+  // Successful TLBP with duplicate equal mappings.
   cpu.scc.tlb = make_entry(ProbeVa, 0x00200000u, 0x55, 2);
   cpu.scc.index.tlbEntry = 23;
   cpu.scc.index.probeFailure = 1;
@@ -154,21 +145,19 @@ int main() {
   auto probeBeforeTranslation = translate(ProbeVa);
   auto probeCacheBefore = cache_sig();
   auto probeEntriesBefore = snapshot_entries();
-  cpu.devirtualizeCache.vbase = 0x1111222233334444ull;
-  cpu.devirtualizeCache.pbase = 0x5555666677778888ull;
+  cpu.devirtualizeCache = {0x1111222233334444ull, 0x5555666677778888ull};
   if(!execute_at(0)) return 4;
   auto probeCacheAfter = cache_sig();
-  bool probeDevirtSame = cpu.devirtualizeCache.vbase == 0x1111222233334444ull
-                      && cpu.devirtualizeCache.pbase == 0x5555666677778888ull;
-  if((u32)cpu.scc.index.tlbEntry != 9 || (bool)cpu.scc.index.probeFailure) return 5;
-  if(changed_slots(probeEntriesBefore) != 0) return 6;
-  if(!same_cache(probeCacheBefore, probeCacheAfter)) return 7;
+  u32 probeSlot = cpu.scc.index.tlbEntry;
+  bool probeFailure = cpu.scc.index.probeFailure;
+  bool probeDevirtSame = cpu.devirtualizeCache.vbase == 0x1111222233334444ull && cpu.devirtualizeCache.pbase == 0x5555666677778888ull;
+  u32 probeChanged = changed_slots(probeEntriesBefore);
+  bool probeCacheSame = same_cache(probeCacheBefore, probeCacheAfter);
   auto probeAfterTranslation = translate(ProbeVa);
-  if(!same_translation(probeBeforeTranslation, probeAfterTranslation)) return 8;
+  bool probeTranslationSame = same_translation(probeBeforeTranslation, probeAfterTranslation);
+  if(probeSlot != 9 || probeFailure || probeChanged || !probeCacheSame || !probeDevirtSame || !probeTranslationSame) return 5;
 
-  // Failed TLBP. The exact ares implementation documents tlbEntry=0 as
-  // technically undefined on miss, but probeFailure is authoritative. No TLB
-  // entry/cache/devirtualization state may change.
+  // Failed TLBP. tlbEntry=0 is exact-ares behavior but architecturally undefined.
   cpu.scc.tlb = make_entry(0x003f0000ull, 0x00300000u, 0xe1, 2);
   cpu.scc.index.tlbEntry = 31;
   cpu.scc.index.probeFailure = 0;
@@ -176,19 +165,19 @@ int main() {
   auto missBeforeTranslation = translate(ProbeVa);
   auto missCacheBefore = cache_sig();
   auto missEntriesBefore = snapshot_entries();
-  cpu.devirtualizeCache.vbase = 0x0102030405060708ull;
-  cpu.devirtualizeCache.pbase = 0x8877665544332211ull;
-  if(!execute_at(4)) return 9;
+  cpu.devirtualizeCache = {0x0102030405060708ull, 0x8877665544332211ull};
+  if(!execute_at(4)) return 6;
   auto missCacheAfter = cache_sig();
-  bool missDevirtSame = cpu.devirtualizeCache.vbase == 0x0102030405060708ull
-                     && cpu.devirtualizeCache.pbase == 0x8877665544332211ull;
-  if(!(bool)cpu.scc.index.probeFailure || (u32)cpu.scc.index.tlbEntry != 0) return 10;
-  if(changed_slots(missEntriesBefore) != 0) return 11;
-  if(!same_cache(missCacheBefore, missCacheAfter)) return 12;
+  u32 missIndex = cpu.scc.index.tlbEntry;
+  bool missFailure = cpu.scc.index.probeFailure;
+  bool missDevirtSame = cpu.devirtualizeCache.vbase == 0x0102030405060708ull && cpu.devirtualizeCache.pbase == 0x8877665544332211ull;
+  u32 missChanged = changed_slots(missEntriesBefore);
+  bool missCacheSame = same_cache(missCacheBefore, missCacheAfter);
   auto missAfterTranslation = translate(ProbeVa);
-  if(!same_translation(missBeforeTranslation, missAfterTranslation)) return 13;
+  bool missTranslationSame = same_translation(missBeforeTranslation, missAfterTranslation);
+  if(missIndex != 0 || !missFailure || missChanged || !missCacheSame || !missDevirtSame || !missTranslationSame) return 7;
 
-  // Successful TLBR with deliberately misleading staged CP0 TLB fields.
+  // Successful TLBR replaces staged CP0 TLB fields, not the mapping array.
   cpu.scc.index.tlbEntry = 9;
   cpu.scc.index.probeFailure = 1;
   cpu.scc.tlb = make_entry(0x00008000ull, 0x00180000u, 0x22, 3);
@@ -196,72 +185,58 @@ int main() {
   auto readBeforeTranslation = translate(ProbeVa);
   auto readCacheBefore = cache_sig();
   auto readEntriesBefore = snapshot_entries();
-  cpu.devirtualizeCache.vbase = 0x1234123412341234ull;
-  cpu.devirtualizeCache.pbase = 0x5678567856785678ull;
-  if(!execute_at(8)) return 14;
+  cpu.devirtualizeCache = {0x1234123412341234ull, 0x5678567856785678ull};
+  if(!execute_at(8)) return 8;
   auto readCacheAfter = cache_sig();
-  bool readDevirtSame = cpu.devirtualizeCache.vbase == 0x1234123412341234ull
-                     && cpu.devirtualizeCache.pbase == 0x5678567856785678ull;
-  if(!same_entry(cpu.scc.tlb, target)) return 15;
-  if(changed_slots(readEntriesBefore) != 0) return 16;
-  if(!same_cache(readCacheBefore, readCacheAfter)) return 17;
+  bool readStagedMatches = same_entry(cpu.scc.tlb, target);
+  bool readDevirtSame = cpu.devirtualizeCache.vbase == 0x1234123412341234ull && cpu.devirtualizeCache.pbase == 0x5678567856785678ull;
+  u32 readChanged = changed_slots(readEntriesBefore);
+  bool readCacheSame = same_cache(readCacheBefore, readCacheAfter);
   auto readAfterTranslation = translate(ProbeVa);
-  if(!same_translation(readBeforeTranslation, readAfterTranslation)) return 18;
+  bool readTranslationSame = same_translation(readBeforeTranslation, readAfterTranslation);
+  if(!readStagedMatches || readChanged || !readCacheSame || !readDevirtSame || !readTranslationSame) return 9;
 
-  // Same-value TLBR must remain a real CP0 operation without becoming a mapping
-  // generation merely because the staged fields happen already to match.
+  // Same-value TLBR still executes but produces no staged-value delta.
   cpu.scc.index.tlbEntry = 9;
   cpu.scc.tlb = target;
   auto sameReadEntriesBefore = snapshot_entries();
   auto stagedBefore = cpu.scc.tlb;
-  cpu.devirtualizeCache.vbase = 0xaaaaaaaa55555555ull;
-  cpu.devirtualizeCache.pbase = 0x0f0e0d0c0b0a0908ull;
-  if(!execute_at(12)) return 19;
+  cpu.devirtualizeCache = {0xaaaaaaaa55555555ull, 0x0f0e0d0c0b0a0908ull};
+  if(!execute_at(12)) return 10;
   bool sameReadStaged = same_entry(stagedBefore, cpu.scc.tlb);
-  bool sameReadDevirtSame = cpu.devirtualizeCache.vbase == 0xaaaaaaaa55555555ull
-                         && cpu.devirtualizeCache.pbase == 0x0f0e0d0c0b0a0908ull;
-  if(!sameReadStaged || changed_slots(sameReadEntriesBefore) != 0) return 20;
+  bool sameReadDevirtSame = cpu.devirtualizeCache.vbase == 0xaaaaaaaa55555555ull && cpu.devirtualizeCache.pbase == 0x0f0e0d0c0b0a0908ull;
+  u32 sameReadChanged = changed_slots(sameReadEntriesBefore);
+  if(!sameReadStaged || !sameReadDevirtSame || sameReadChanged) return 11;
 
   // Out-of-range Index is a no-op for TLBR at this exact pin.
   cpu.scc.index.tlbEntry = 63;
   cpu.scc.tlb = make_entry(0x0000c000ull, 0x001c0000u, 0x33, 2);
-  auto outOfRangeStaged = cpu.scc.tlb;
-  auto outOfRangeEntriesBefore = snapshot_entries();
+  auto rangeStagedBefore = cpu.scc.tlb;
+  auto rangeEntriesBefore = snapshot_entries();
   cpu.tlb.tlbCache = {};
   auto rangeBeforeTranslation = translate(ProbeVa);
   auto rangeCacheBefore = cache_sig();
-  cpu.devirtualizeCache.vbase = 0xfeedfacecafebeefull;
-  cpu.devirtualizeCache.pbase = 0x0123456789abcdefull;
-  if(!execute_at(16)) return 21;
+  cpu.devirtualizeCache = {0xfeedfacecafebeefull, 0x0123456789abcdefull};
+  if(!execute_at(16)) return 12;
   auto rangeCacheAfter = cache_sig();
-  bool rangeDevirtSame = cpu.devirtualizeCache.vbase == 0xfeedfacecafebeefull
-                      && cpu.devirtualizeCache.pbase == 0x0123456789abcdefull;
-  if(!same_entry(outOfRangeStaged, cpu.scc.tlb)) return 22;
-  if(changed_slots(outOfRangeEntriesBefore) != 0) return 23;
-  if(!same_cache(rangeCacheBefore, rangeCacheAfter)) return 24;
+  bool rangeStagedSame = same_entry(rangeStagedBefore, cpu.scc.tlb);
+  bool rangeDevirtSame = cpu.devirtualizeCache.vbase == 0xfeedfacecafebeefull && cpu.devirtualizeCache.pbase == 0x0123456789abcdefull;
+  u32 rangeChanged = changed_slots(rangeEntriesBefore);
+  bool rangeCacheSame = same_cache(rangeCacheBefore, rangeCacheAfter);
   auto rangeAfterTranslation = translate(ProbeVa);
-  if(!same_translation(rangeBeforeTranslation, rangeAfterTranslation)) return 25;
+  bool rangeTranslationSame = same_translation(rangeBeforeTranslation, rangeAfterTranslation);
+  if(!rangeStagedSame || rangeChanged || !rangeCacheSame || !rangeDevirtSame || !rangeTranslationSame) return 13;
 
-  std::printf("{\"probe_slot\":%u,\"probe_failure\":%s,\"probe_entries_changed\":0,\"probe_cache_unchanged\":%s,\"probe_devirt_unchanged\":%s,\"probe_translation_same\":%s,\"miss_index\":%u,\"miss_failure\":%s,\"miss_entries_changed\":0,\"miss_cache_unchanged\":%s,\"miss_devirt_unchanged\":%s,\"miss_translation_same\":%s,\"tlbr_staged_matches\":%s,\"tlbr_entries_changed\":0,\"tlbr_cache_unchanged\":%s,\"tlbr_devirt_unchanged\":%s,\"tlbr_translation_same\":%s,\"same_value_tlbr_staged_same\":%s,\"same_value_tlbr_devirt_unchanged\":%s,\"oor_tlbr_staged_same\":%s,\"oor_tlbr_entries_changed\":0,\"oor_tlbr_cache_unchanged\":%s,\"oor_tlbr_devirt_unchanged\":%s,\"oor_tlbr_translation_same\":%s}\n",
-    (u32)9,
-    (bool)cpu.scc.index.probeFailure ? "true" : "false",
-    same_cache(probeCacheBefore, probeCacheAfter) ? "true" : "false",
-    probeDevirtSame ? "true" : "false",
-    same_translation(probeBeforeTranslation, probeAfterTranslation) ? "true" : "false",
-    (u32)0,
-    "true",
-    same_cache(missCacheBefore, missCacheAfter) ? "true" : "false",
-    missDevirtSame ? "true" : "false",
-    same_translation(missBeforeTranslation, missAfterTranslation) ? "true" : "false",
-    same_entry(cpu.tlb.entry[9], target) ? "true" : "false",
-    same_cache(readCacheBefore, readCacheAfter) ? "true" : "false",
-    readDevirtSame ? "true" : "false",
-    same_translation(readBeforeTranslation, readAfterTranslation) ? "true" : "false",
-    sameReadStaged ? "true" : "false",
-    sameReadDevirtSame ? "true" : "false",
-    same_entry(outOfRangeStaged, cpu.scc.tlb) ? "true" : "false",
-    same_cache(rangeCacheBefore, rangeCacheAfter) ? "true" : "false",
-    rangeDevirtSame ? "true" : "false",
-    same_translation(rangeBeforeTranslation, rangeAfterTranslation) ? "true" : "false");
+  std::printf(
+    "{\"probe_slot\":%u,\"probe_failure\":%s,\"probe_entries_changed\":%u,\"probe_cache_unchanged\":%s,\"probe_devirt_unchanged\":%s,\"probe_translation_same\":%s,"
+    "\"miss_index\":%u,\"miss_failure\":%s,\"miss_entries_changed\":%u,\"miss_cache_unchanged\":%s,\"miss_devirt_unchanged\":%s,\"miss_translation_same\":%s,"
+    "\"tlbr_staged_matches\":%s,\"tlbr_entries_changed\":%u,\"tlbr_cache_unchanged\":%s,\"tlbr_devirt_unchanged\":%s,\"tlbr_translation_same\":%s,"
+    "\"same_value_tlbr_staged_same\":%s,\"same_value_tlbr_entries_changed\":%u,\"same_value_tlbr_devirt_unchanged\":%s,"
+    "\"oor_tlbr_staged_same\":%s,\"oor_tlbr_entries_changed\":%u,\"oor_tlbr_cache_unchanged\":%s,\"oor_tlbr_devirt_unchanged\":%s,\"oor_tlbr_translation_same\":%s}\n",
+    probeSlot, probeFailure ? "true" : "false", probeChanged, probeCacheSame ? "true" : "false", probeDevirtSame ? "true" : "false", probeTranslationSame ? "true" : "false",
+    missIndex, missFailure ? "true" : "false", missChanged, missCacheSame ? "true" : "false", missDevirtSame ? "true" : "false", missTranslationSame ? "true" : "false",
+    readStagedMatches ? "true" : "false", readChanged, readCacheSame ? "true" : "false", readDevirtSame ? "true" : "false", readTranslationSame ? "true" : "false",
+    sameReadStaged ? "true" : "false", sameReadChanged, sameReadDevirtSame ? "true" : "false",
+    rangeStagedSame ? "true" : "false", rangeChanged, rangeCacheSame ? "true" : "false", rangeDevirtSame ? "true" : "false", rangeTranslationSame ? "true" : "false");
   return 0;
 }
