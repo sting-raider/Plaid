@@ -42,7 +42,7 @@ def load_patched_builder():
         return plaidDelivered;"""
                 assert ram.count(plaidTranslatedOld) == 1
                 ram = ram.replace(plaidTranslatedOld, plaidTranslatedNew)
-                ram = "// Project-owned completed translated ordinary RAM read callback.\\nusing PlaidRdramTranslatedObserver = void (*)(u32, u32, u32, u32, u32, u64, u64, u32, u32, u32);\\ninline PlaidRdramTranslatedObserver plaidRdramTranslatedObserver = nullptr;\\n" + ram
+                ram = "// Project-owned completed translated ordinary RAM read callback.\nusing PlaidRdramTranslatedObserver = void (*)(u32, u32, u32, u32, u32, u64, u64, u32, u32, u32);\ninline PlaidRdramTranslatedObserver plaidRdramTranslatedObserver = nullptr;\n" + ram
 '''
     patched = source[:insert_at] + injection + source[insert_at:]
     module = types.ModuleType("plaid_translated_fetch_builder")
