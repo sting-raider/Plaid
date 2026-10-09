@@ -1,0 +1,20 @@
+name: research-pointer-guard-predecessor-bypass
+
+on:
+  push:
+    branches:
+      - research/pointer-guard-predecessor-bypass-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  plaid-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify pinned Rabbitizer revision
+        shell: bash
+        run: |
+          grep -q 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' refs.lock.toml
+      - name: Run predecessor-bypass regression
+        run: cargo test -p plaid-core --test pointer_guard_predecessor_bypass -- --nocapture
