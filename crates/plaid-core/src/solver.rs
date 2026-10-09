@@ -3,6 +3,7 @@ use crate::{
     discovery::{CodeImage, decode, direct_cfg},
     indirect::verify_constant,
     program::*,
+    rom::sha256,
 };
 use serde::Serialize;
 use std::collections::BTreeSet;
@@ -39,6 +40,23 @@ pub struct SolveReport {
     pub assumptions: Vec<String>,
     pub blockers: BTreeSet<Blocker>,
     pub discharged: BTreeSet<Unresolved>,
+}
+
+fn content_digest_claim(image: &str) -> Option<&str> {
+    let digest = image.strip_prefix("trace-").unwrap_or(image);
+    (digest.len() == 64
+        && digest
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+    .then_some(digest)
+}
+
+fn content_digest(image: &CodeImage) -> String {
+    let mut bytes = Vec::with_capacity(image.words.len() * 4);
+    for word in &image.words {
+        bytes.extend(word.to_be_bytes());
+    }
+    sha256(&bytes)
 }
 
 fn source<'a>(images: &'a [CodeImage], address: &CodeAddress) -> Option<&'a CodeImage> {
@@ -91,6 +109,24 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             evidence,
         });
     };
+    // Current production image constructors use either a raw SHA-256 (ROM/load
+    // images) or `trace-<SHA-256>` (trace-only compiled units). Recheck that
+    // self-authenticating claim before trusting the supplied words. Opaque image
+    // labels remain a v0 compatibility surface until CodeImage carries a separate
+    // mandatory content digest.
+    for image in images {
+        if let Some(claimed) = content_digest_claim(&image.base.image) {
+            let actual = content_digest(image);
+            if actual != claimed {
+                add(
+                    "instruction_source_identity_mismatch",
+                    Some(image.base.clone()),
+                    "supplied instruction bytes do not match their content-derived image identity",
+                    EvidenceRefs::new(),
+                );
+            }
+        }
+    }
     let starts: BTreeSet<_> = map
         .blocks
         .iter()
