@@ -193,6 +193,40 @@ fn stale_content_derived_image_identity_cannot_close() {
 
     let mut forged = original.clone();
     forged.words[0] = 0x24080002;
+    let report = solve(&m, std::slice::from_ref(&forged), Scope::DeclaredStaticImages).unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    assert!(has(&report, "instruction_source_identity_mismatch"));
+
+    let bytes: Vec<u8> = forged
+        .words
+        .iter()
+        .flat_map(|word| word.to_be_bytes())
+        .collect();
+    forged.base.image = plaid_core::rom::sha256(&bytes);
+    let report = solve(&m, &[forged], Scope::DeclaredStaticImages).unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    assert!(has(&report, "missing_instruction_source"));
+    assert!(!has(&report, "instruction_source_identity_mismatch"));
+}
+
+#[test]
+fn stale_trace_prefixed_image_identity_cannot_close() {
+    let mut original = content_image(vec![0x24080001, 0x08000000, 0]);
+    original.base.image = format!("trace-{}", original.base.image);
+    let m = map(&original);
+    assert_eq!(
+        solve(
+            &m,
+            std::slice::from_ref(&original),
+            Scope::DeclaredStaticImages
+        )
+        .unwrap()
+        .status,
+        ClosureStatus::Closed
+    );
+
+    let mut forged = original.clone();
+    forged.words[0] = 0x24080002;
     let report = solve(&m, &[forged], Scope::DeclaredStaticImages).unwrap();
     assert_eq!(report.status, ClosureStatus::Open);
     assert!(has(&report, "instruction_source_identity_mismatch"));
