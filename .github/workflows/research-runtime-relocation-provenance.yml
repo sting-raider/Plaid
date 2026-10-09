@@ -1,0 +1,37 @@
+name: research runtime relocation provenance
+
+on:
+  push:
+    branches:
+      - research/runtime-relocation-provenance-gpt56sol
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out exact pinned N64Recomp
+        run: |
+          git clone --filter=blob:none https://github.com/N64Recomp/N64Recomp.git /tmp/N64Recomp
+          git -C /tmp/N64Recomp checkout ffb39cdad1da5de07eaaa48bd1db4a89a7986771
+          test "$(git -C /tmp/N64Recomp rev-parse HEAD)" = "ffb39cdad1da5de07eaaa48bd1db4a89a7986771"
+      - name: Run exact-source-guarded relocation experiment twice
+        run: |
+          python3 -m py_compile experiments/runtime_relocation_provenance.py
+          python3 experiments/runtime_relocation_provenance.py --source-root /tmp/N64Recomp | tee /tmp/relocation-run-1.json
+          python3 experiments/runtime_relocation_provenance.py --source-root /tmp/N64Recomp | tee /tmp/relocation-run-2.json
+          cmp /tmp/relocation-run-1.json /tmp/relocation-run-2.json
+          sha256sum experiments/runtime_relocation_provenance.py /tmp/relocation-run-1.json | tee /tmp/sha256sums.txt
+      - name: Upload deterministic receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-relocation-provenance
+          path: |
+            /tmp/relocation-run-1.json
+            /tmp/relocation-run-2.json
+            /tmp/sha256sums.txt
+          if-no-files-found: error
