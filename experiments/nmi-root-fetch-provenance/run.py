@@ -32,7 +32,8 @@ def source_guards(ref: Path):
     cpu = ref / "ares/n64/cpu/cpu.cpp"
     exc = ref / "ares/n64/cpu/exceptions.cpp"
     pif = ref / "ares/n64/pif/io.cpp"
-    c, e, p = cpu.read_text(), exc.read_text(), pif.read_text()
+    si = ref / "ares/n64/si/io.cpp"
+    c, e, p, s = cpu.read_text(), exc.read_text(), pif.read_text(), si.read_text()
     nmi = c.index("if (scc.nmiPending)")
     fetch = c.index("auto access = devirtualize<Read, Word>(ipu.pc);")
     assert nmi < fetch
@@ -41,7 +42,8 @@ def source_guards(ref: Path):
     assert "scc.nmiPending = 0" not in c
     assert "self.pipeline.setPc(0xffff'ffff'bfc0'0000);" in e
     assert "return rom.read<Word>(address);" in p
-    return {"cpu":sha(cpu),"exceptions":sha(exc),"pif_io":sha(pif)}
+    assert "writeForceFinish();" in s and "io.ioBusy = 0;" in s
+    return {"cpu":sha(cpu),"exceptions":sha(exc),"pif_io":sha(pif),"si_io":sha(si)}
 
 def run_one(exe: Path, mode: str, firmware: Path):
     raw = subprocess.check_output([str(exe), mode, str(firmware)], text=True, timeout=30)
@@ -81,7 +83,9 @@ def verify(rows, fw0):
     latch = inst["clear_busy_equal"]
     ev = event(latch)
     assert ev["returned"] == fw0 and ev["witness"] is None
-    assert latch["backing_reads"] == 0 and latch["machine"]["si_io_busy"] == 1
+    # Pinned SI::readWord force-finishes an outstanding write before returning the latch,
+    # so post-read ioBusy is deliberately clear even though this was the busy-latch path.
+    assert latch["backing_reads"] == 0 and latch["machine"]["si_io_busy"] == 0
 
     lock = inst["clear_lockout"]
     ev = event(lock)
