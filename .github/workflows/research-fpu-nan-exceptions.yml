@@ -1,0 +1,46 @@
+name: Research FPU NaN exceptions
+
+on:
+  push:
+    branches:
+      - research/fpu-nan-exceptions-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  exact-pin-matrix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout exact pinned references
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs
+          git clone --filter=blob:none https://github.com/ares-emulator/ares.git .refs/ares
+          git -C .refs/ares checkout 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git clone --filter=blob:none https://github.com/mupen64plus/mupen64plus-core.git .refs/mupen64plus-core
+          git -C .refs/mupen64plus-core checkout ba95bab92a76744753bfe61470823a4937850ab0
+          git clone --filter=blob:none https://github.com/gopher64/gopher64.git .refs/gopher64
+          git -C .refs/gopher64 checkout e96debac941a26ba4961e5145056c0821d3a56f7
+
+      - name: Syntax-check runner
+        run: python3 -m py_compile spikes/044-ares-fpu-nan-exceptions/run.py spikes/003-ares-oracle/run.py
+
+      - name: Execute exact-pin ADD.S matrix
+        run: python3 spikes/044-ares-fpu-nan-exceptions/run.py | tee /tmp/fpu-matrix.log
+
+      - name: Repeat and require stable result hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 spikes/044-ares-fpu-nan-exceptions/run.py | tee /tmp/fpu-matrix-repeat.log
+          test "$(grep '^RESULT_SHA256=' /tmp/fpu-matrix.log)" = "$(grep '^RESULT_SHA256=' /tmp/fpu-matrix-repeat.log)"
+
+      - name: Upload deterministic result
+        uses: actions/upload-artifact@v4
+        with:
+          name: ares-fpu-nan-exceptions
+          path: target/ares-fpu-nan-exceptions/results.json
+          if-no-files-found: error
