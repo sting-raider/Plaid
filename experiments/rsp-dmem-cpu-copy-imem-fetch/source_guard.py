@@ -32,7 +32,7 @@ INPUTS = [
         "5c13859e536bf42fcfae9e56b9104f5ff6292590",
         "spikes/043-cpu-sp-dmem-imem-copy-gpt56sol/run.py",
         "f7fdad02b938c973a6c3b23b161d7e2c6f5022fb",
-        '"source_read_ordinal"' if False else "read_ordinal",
+        "read_ordinal",
     ),
     (
         "211176e7a489fecf8331d02915ee982cd279cb62",
@@ -59,16 +59,8 @@ def main() -> None:
         assert blob == expected_blob, (commit, path, blob, expected_blob)
         text = subprocess.check_output(["git", "show", f"{commit}:{path}"], cwd=ROOT, text=True)
         assert required_text in text, (path, required_text)
-        assert ARES in text or path == "research/rsp-imem-provenance.md", path
+        assert ARES in text, path
 
-    # The base RSP IMEM note itself names the exact ares pin too. Keep this
-    # separate only so a future wording edit cannot silently weaken the guard.
-    base_note = subprocess.check_output(
-        ["git", "show", "211176e7a489fecf8331d02915ee982cd279cb62:research/rsp-imem-provenance.md"],
-        cwd=ROOT,
-        text=True,
-    )
-    assert ARES in base_note
     print("PASS: exact prior research commits/blobs and refs.lock ares pin verified")
 
 
