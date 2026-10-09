@@ -47,9 +47,16 @@ assert "struct TlbCache" in cpu_hpp
 
 probe = function_body(scc, "auto CPU::TLBP() -> void {")
 read = function_body(scc, "auto CPU::TLBR() -> void {")
-for forbidden in ["devirtualizeCache = {}", "tlb.entry["]:
-    assert forbidden not in probe, (forbidden, probe)
-    assert forbidden not in read, (forbidden, read)
+for body in (probe, read):
+    for forbidden in [
+        "devirtualizeCache = {}",
+        "tlb.entry[index] = scc.tlb",
+        "tlb.entry[scc.index.tlbEntry] = scc.tlb",
+        ".synchronize();",
+        "debugger.tlbWrite(",
+        "tlbCache = {}",
+    ]:
+        assert forbidden not in body, (forbidden, body)
 assert "scc.index." in probe
 assert "scc.tlb = tlb.entry[scc.index.tlbEntry];" in read
 
@@ -66,11 +73,11 @@ for needle in [
 
 g_read = function_body(gopher, "pub fn read(device: &mut device::Device, index: u64) {")
 g_probe = function_body(gopher, "pub fn probe(device: &mut device::Device) {")
-for forbidden in ["tlb_unmap(", "tlb_map(", "tlb_entries[index as usize] ="]:
-    assert forbidden not in g_read, (forbidden, g_read)
-    assert forbidden not in g_probe, (forbidden, g_probe)
+for body in (g_read, g_probe):
+    for forbidden in ["tlb_unmap(", "tlb_map(", "tlb_entries[index as usize] ="]:
+        assert forbidden not in body, (forbidden, body)
 
 print(
-    f"PASS exact pins: ares {ARES_PIN} TLBP/TLBR touch staged COP0 state only; "
+    f"PASS exact pins: ares {ARES_PIN} TLBP/TLBR have no TLB-write/cache-invalidation path; "
     f"Gopher64 {GOPHER_PIN} independently keeps read/probe separate from TLB map/unmap"
 )
