@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard the exact pinned ares/Gopher integer-SD SP sink topology."""
+"""Guard exact pinned ares/Gopher/systemtest integer-SD SP evidence."""
 from pathlib import Path
 import hashlib
 import json
@@ -9,8 +9,10 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 ARES = ROOT / ".refs/ares"
 GOPHER = ROOT / ".refs/gopher64"
+SYSTEMTEST = ROOT / ".refs/n64-systemtest"
 ARES_REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 GOPHER_REV = "e96debac941a26ba4961e5145056c0821d3a56f7"
+SYSTEMTEST_REV = "196f5421173220eb2f63a7a99c64795dc0ea0698"
 
 
 def head(path: Path) -> str:
@@ -34,8 +36,9 @@ def function_body(text: str, signature: str) -> str:
 def main() -> None:
     assert head(ARES) == ARES_REV
     assert head(GOPHER) == GOPHER_REV
-    subprocess.run(["git", "diff", "--quiet", "HEAD"], cwd=ARES, check=True)
-    subprocess.run(["git", "diff", "--quiet", "HEAD"], cwd=GOPHER, check=True)
+    assert head(SYSTEMTEST) == SYSTEMTEST_REV
+    for ref in (ARES, GOPHER, SYSTEMTEST):
+        subprocess.run(["git", "diff", "--quiet", "HEAD"], cwd=ref, check=True)
 
     ares_ipu = (ARES / "ares/n64/cpu/interpreter-ipu.cpp").read_text()
     ares_sd = function_body(ares_ipu, "auto CPU::SD(cr64& rt, cr64& rs, s16 imm) -> void")
@@ -55,14 +58,18 @@ def main() -> None:
     gopher_sd = function_body(gopher_cpu, "pub fn sd(device: &mut device::Device, opcode: u32)")
     gopher_writes = gopher_sd.count("device::memory::data_write")
     gopher_second = "phys_address + 4" in gopher_sd
-    # This exact pin models the architectural doubleword as two Word writes.
     assert gopher_writes == 2, gopher_sd
     assert gopher_second, gopher_sd
-
     gopher_memory = (GOPHER / "src/device/memory.rs").read_text()
     assert "rsp_interface::write_mem" in gopher_memory
     gopher_rsp = (GOPHER / "src/device/rsp_interface.rs").read_text()
     assert "pub fn write_mem" in gopher_rsp
+
+    systemtest = (SYSTEMTEST / "src/tests/sp_memory/mod.rs").read_text()
+    assert "// - SD is broken: It only writes the upper 32 bit of the value, touching only 4 bytes" in systemtest
+    assert "spmem_64.add(0).write_volatile(0xABCDEF98_76543210);" in systemtest
+    assert "spmem.add(0).read_volatile() }, 0xABCDEF98" in systemtest
+    assert "spmem.add(1).read_volatile() }, 0xBADDECAF" in systemtest
 
     result = {
         "ares_revision": ARES_REV,
@@ -73,12 +80,15 @@ def main() -> None:
         "gopher_sd_data_write_calls": gopher_writes,
         "gopher_sd_second_address": gopher_second,
         "gopher_sp_map_to_rsp_write_mem": "rsp_interface::write_mem" in gopher_memory,
+        "systemtest_revision": SYSTEMTEST_REV,
+        "systemtest_sd_upper_word_expected": "0xABCDEF98" in systemtest,
+        "systemtest_sd_next_word_preserved": "spmem.add(1).read_volatile() }, 0xBADDECAF" in systemtest,
     }
     encoded = (json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n").encode()
     digest = hashlib.sha256(encoded).hexdigest()
     print(encoded.decode().strip())
     print("crosscheck_sha256=" + digest)
-    print("PASS: exact-pin integer SD sink-width disagreement is structurally guarded")
+    print("PASS: ares one-Word SD matches pinned n64-systemtest expectation; pinned Gopher64 disagrees")
 
 
 if __name__ == "__main__":
