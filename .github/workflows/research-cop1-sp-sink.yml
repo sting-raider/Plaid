@@ -1,0 +1,22 @@
+name: Research COP1 stores into SP memory
+
+on:
+  push:
+    branches: [research/cop1-sp-sink-gpt56sol]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - name: Compile verifier
+        run: python3 -m py_compile spikes/043-ares-cop1-sp-sink/run.py
+      - name: Build exact pinned ares and run COP1-to-SP matrix
+        run: python3 spikes/043-ares-cop1-sp-sink/run.py
