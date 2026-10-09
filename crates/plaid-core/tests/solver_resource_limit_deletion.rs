@@ -1,6 +1,7 @@
 use plaid_core::{
     GuestAddr,
     discovery::CodeImage,
+    merge::merge_maps,
     pipeline::discover_image,
     program::{CodeAddress, RomIdentity},
     solver::{ClosureStatus, Scope, solve},
@@ -81,6 +82,41 @@ fn deleting_direct_cfg_resource_limit_cannot_manufacture_closure() {
         .status,
         ClosureStatus::Closed
     );
+}
+
+#[test]
+fn equal_payload_other_generation_cannot_cover_limited_generation() {
+    let words = vec![0x0000_0000, 0x0800_0001, 0x0000_0000];
+    let original = image(words.clone());
+    let limited = discover_image(rom(), &original, &[original.base.pc], 1).unwrap();
+    let edited = without_resource_limit(limited.map);
+
+    let mut decoy = image(words);
+    decoy.base.generation = 1;
+    let complete_decoy = discover_image(rom(), &decoy, &[decoy.base.pc], 16).unwrap();
+    assert_eq!(
+        solve(
+            &complete_decoy.map,
+            std::slice::from_ref(&decoy),
+            Scope::DeclaredStaticImages,
+        )
+        .unwrap()
+        .status,
+        ClosureStatus::Closed
+    );
+
+    let merged = merge_maps(&edited, &complete_decoy.map).unwrap();
+    let report = solve(
+        &merged,
+        &[original, decoy],
+        Scope::DeclaredStaticImages,
+    )
+    .unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    assert!(report.blockers.iter().any(|b| {
+        b.site.as_ref().is_some_and(|a| a.generation == 0)
+            && matches!(b.kind.as_str(), "missing_decoded_block" | "missing_decoded_edge")
+    }));
 }
 
 #[test]
