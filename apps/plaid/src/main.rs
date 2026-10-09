@@ -4,6 +4,9 @@ use plaid_core::{
     fetch::{import_boot_fetch, import_fetch, verify_boot_fetch_capture, verify_fetch_capture},
     history::{AccessHistoryReport, inspect_boot_history, verify_boot_history_report},
     merge::{import_trace_with_rom, merge_maps},
+    pi_fetch_lineage::{
+        PiFetchLineageReport, inspect_pi_fetch_lineage, verify_pi_fetch_lineage_report,
+    },
     pi_history::{PiHistoryReport, inspect_pi_boot_history, verify_pi_boot_history_report},
     pi_queue_history::{
         PiQueueHistoryReport, inspect_pi_queue_boot_history, verify_pi_queue_boot_history_report,
@@ -19,6 +22,45 @@ use std::{env, fs, io::BufReader, process::ExitCode};
 fn run() -> Result<(), String> {
     let args: Vec<_> = env::args().skip(1).collect();
     match args.as_slice() {
+        [
+            command,
+            rom_path,
+            firmware_path,
+            fetch_path,
+            history_path,
+            output,
+        ] if command == "inspect-pi-fetch-lineage" || command == "verify-pi-fetch-lineage" => {
+            let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
+            let firmware = fs::read(firmware_path).map_err(|e| e.to_string())?;
+            let fetched = BufReader::new(fs::File::open(fetch_path).map_err(|e| e.to_string())?);
+            let history = BufReader::new(fs::File::open(history_path).map_err(|e| e.to_string())?);
+            if command == "verify-pi-fetch-lineage" {
+                let report: PiFetchLineageReport =
+                    serde_json::from_str(&fs::read_to_string(output).map_err(|e| e.to_string())?)
+                        .map_err(|e| e.to_string())?;
+                verify_pi_fetch_lineage_report(&report, history, fetched, &rom, &firmware)?;
+                println!(
+                    "Observed PI fetch lineage matches both complete sources and supplied inputs"
+                );
+            } else {
+                if let Ok(destination) = fs::canonicalize(output) {
+                    for source in [rom_path, firmware_path, fetch_path, history_path] {
+                        if destination == fs::canonicalize(source).map_err(|e| e.to_string())? {
+                            return Err("inspection output would overwrite an input".into());
+                        }
+                    }
+                }
+                let report = inspect_pi_fetch_lineage(history, fetched, &rom, &firmware)?;
+                let encoded =
+                    serde_json::to_string_pretty(&report).map_err(|e| e.to_string())? + "\n";
+                fs::write(output, encoded).map_err(|e| e.to_string())?;
+                println!(
+                    "inspected {} fetches and {} observed PI-byte fetch chains; mutation coverage and executable lifetime remain uncertified",
+                    report.fetches,
+                    report.fully_attributed_fetches + report.partially_attributed_fetches
+                );
+            }
+        }
         [
             command,
             rom_path,
@@ -291,7 +333,7 @@ fn run() -> Result<(), String> {
         }
         _ => {
             return Err(
-                "usage: plaid rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | merge <left.json> <right.json> <output.json>"
+                "usage: plaid rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | merge <left.json> <right.json> <output.json>"
                     .into(),
             );
         }

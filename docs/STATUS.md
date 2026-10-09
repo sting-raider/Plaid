@@ -409,3 +409,5 @@ invalidation, unsupported fills, ambiguous reads and between-pass source changes
 have adversarial tests. Mutation coverage/lifetime/native flags remain false.
 The 599,046 remaining fetches are uncached CPU SP (596,991) and PIF (2055) paths;
 actual SP backing-read capture is next, with ultimate producer history separate.
+
+The separate `inspect-pi-fetch-lineage`/`verify-pi-fetch-lineage` commands now expose the observed-chain report. Synthetic CLI tests pass all ROM byte orders, raw writer attribution, source/report tampering, version/truncation rejection and protection of every supplied input.
