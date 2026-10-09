@@ -96,16 +96,22 @@ def reverse_endian_paddr(size: int, paddr: int) -> int:
 
 
 def rcp_sink(size: int, paddr: int, data: int) -> tuple[int, int]:
-    """Exact Memory::RCP write normalization to the concrete writeWord sink."""
+    """Exact Memory::RCP write normalization to the concrete writeWord sink.
+
+    Byte/Half are intentionally NOT pre-truncated here. Pinned ares forwards the
+    full u64 argument into Memory::RCP::write and only the final u32 writeWord
+    conversion truncates it. This lets higher source bits populate lanes outside
+    the nominal subwrite width, a behavior confirmed by the decoded fixture.
+    """
     if size == BYTE:
-        value = (data & 0xff) << {0: 24, 1: 16, 2: 8, 3: 0}[paddr & 3]
+        value = data << {0: 24, 1: 16, 2: 8, 3: 0}[paddr & 3]
     elif size == HALF:
-        value = (data & 0xffff) << (16 if (paddr & 2) == 0 else 0)
+        value = data << (16 if (paddr & 2) == 0 else 0)
     elif size == WORD:
-        value = data & 0xffffffff
+        value = data
     elif size == DUAL:
         # Critical exact-reference behavior: one writeWord only, using high 32 bits.
-        value = (data >> 32) & 0xffffffff
+        value = data >> 32
     else:
         raise ValueError(size)
     return paddr & ~3, value & 0xffffffff
