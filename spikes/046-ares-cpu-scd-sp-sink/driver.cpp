@@ -85,6 +85,10 @@ static void putCode(u32 instruction) {
 
 static void execute(u32 caseId, u32 instruction) {
   putCode(instruction);
+  // This synthetic harness rewrites one backing instruction slot between
+  // logical steps. Flush the I-cache so the requested opcode, rather than a
+  // stale prior LLD, is what the interpreter actually fetches and executes.
+  cpu.icache.power(false);
   cpu.pipeline.setPc(CodeVA);
   active.caseId = caseId;
   active.pc = CodeVA;
