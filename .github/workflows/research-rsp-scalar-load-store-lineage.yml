@@ -1,0 +1,91 @@
+name: Research RSP scalar load-store lineage
+
+on:
+  push:
+    branches: [research/rsp-scalar-load-store-lineage-gpt56sol]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - uses: actions/checkout@v4
+        with:
+          repository: gopher64/gopher64
+          ref: e96debac941a26ba4961e5145056c0821d3a56f7
+          path: .refs/gopher64
+      - name: Python syntax
+        run: python3 -m py_compile spikes/043-ares-rsp-scalar-load-store-lineage/run.py spikes/043-ares-rsp-scalar-load-store-lineage/verify.py
+      - name: Execute exact pinned experiment
+        id: exact
+        shell: bash
+        run: |
+          mkdir -p target/ares-rsp-scalar-load-store-lineage
+          set +e
+          python3 spikes/043-ares-rsp-scalar-load-store-lineage/run.py > target/ares-rsp-scalar-load-store-lineage/ci-output.txt 2>&1
+          status=$?
+          cat target/ares-rsp-scalar-load-store-lineage/ci-output.txt
+          if [ "$status" -ne 0 ]; then
+            find target -path '*ares-rsp-scalar-load-store-lineage*' -name '*build.log' -type f -print -exec tail -n 120 {} \; > target/ares-rsp-scalar-load-store-lineage/build-tail.txt || true
+            cat target/ares-rsp-scalar-load-store-lineage/build-tail.txt || true
+          fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+      - name: Publish success checkpoint
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          {
+            echo 'CHECKPOINT'
+            echo 'worker: gpt56sol-rsp-scalar-load-store-lineage-20261009'
+            echo "branch: $GITHUB_REF_NAME"
+            echo "head: $GITHUB_SHA"
+            echo "exact_pin_run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo 'status: exact pinned ares experiment PASS'
+            echo '```text'
+            tail -n 14 target/ares-rsp-scalar-load-store-lineage/ci-output.txt
+            echo '```'
+          } > target/ares-rsp-scalar-load-store-lineage/ledger-success.md
+          gh issue comment 4 --repo "$GITHUB_REPOSITORY" --body-file target/ares-rsp-scalar-load-store-lineage/ledger-success.md
+      - name: Publish failure diagnostic
+        if: failure() && steps.exact.outputs.status != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          {
+            echo 'CHECKPOINT'
+            echo 'worker: gpt56sol-rsp-scalar-load-store-lineage-20261009'
+            echo "branch: $GITHUB_REF_NAME"
+            echo "head: $GITHUB_SHA"
+            echo "exact_pin_run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo 'status: exact pinned ares experiment FAILED; diagnostic follows'
+            echo '```text'
+            tail -n 100 target/ares-rsp-scalar-load-store-lineage/ci-output.txt 2>/dev/null || true
+            tail -n 100 target/ares-rsp-scalar-load-store-lineage/build-tail.txt 2>/dev/null || true
+            echo '```'
+          } > target/ares-rsp-scalar-load-store-lineage/ledger-failure.md
+          gh issue comment 4 --repo "$GITHUB_REPOSITORY" --body-file target/ares-rsp-scalar-load-store-lineage/ledger-failure.md
+      - name: Retain deterministic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rsp-scalar-load-store-lineage-evidence
+          path: |
+            target/ares-rsp-scalar-load-store-lineage/results.json
+            target/ares-rsp-scalar-load-store-lineage/ci-output.txt
+            target/ares-rsp-scalar-load-store-lineage/build-tail.txt
+          if-no-files-found: ignore
