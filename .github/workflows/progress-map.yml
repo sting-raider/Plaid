@@ -1,0 +1,29 @@
+name: Progress map
+
+on:
+  pull_request:
+    paths:
+      - "docs/progress.json"
+      - "docs/progress.svg"
+      - "docs/PROGRESS.md"
+      - "tools/progress.py"
+      - ".github/workflows/progress-map.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/progress.json"
+      - "docs/progress.svg"
+      - "docs/PROGRESS.md"
+      - "tools/progress.py"
+      - ".github/workflows/progress-map.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify generated progress files
+        run: python tools/progress.py --check
