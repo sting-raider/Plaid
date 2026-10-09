@@ -31,16 +31,16 @@ fn diamond(right_imm: u16) -> CodeImage {
     image(vec![
         0x3c088000,             // lui   t0,0x8000
         0x15200004,             // bnez  t1,right
-        0x00000000,             // nop
+        0x34000000,             // ori   zero,zero,0 (semantic nop, canonical scalar opcode)
         0x35080040,             // ori   t0,t0,0x40   (left)
         0x0800000a,             // j     join
-        0x00000000,             // nop
+        0x34000000,             // ori   zero,zero,0
         0x35080000 | u32::from(right_imm), // ori t0,t0,right_imm
         0x0800000a,             // j     join
-        0x00000000,             // nop
-        0x00000000,             // padding
+        0x34000000,             // ori   zero,zero,0
+        0x00000000,             // unreachable padding
         0x01000008,             // join: jr t0
-        0x00000000,             // nop
+        0x00000000,             // final JR slot is outside target-value proof
     ])
 }
 
@@ -51,13 +51,7 @@ fn site<'a>(m: &'a ProgramMap) -> &'a IndirectSite {
 #[test]
 fn equal_two_predecessor_join_is_certified_and_rechecked() {
     let i = diamond(0x0040);
-    let base = map(&i);
-    println!("entries={:#?}", base.entries.keys().collect::<Vec<_>>());
-    println!("blocks={:#?}", base.blocks);
-    println!("edges={:#?}", base.direct_edges);
-    println!("indirect={:#?}", base.indirect_sites);
-    let m = analyze_indirect(&base, &i).unwrap();
-    println!("analyzed_indirect={:#?}", m.indirect_sites);
+    let m = analyze_indirect(&map(&i), &i).unwrap();
     let s = site(&m);
     assert_eq!(s.site.pc.0, 0x80000028);
     assert_eq!(s.candidates.first_key_value().unwrap().0.pc.0, 0x80000040);
