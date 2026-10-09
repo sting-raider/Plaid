@@ -1,0 +1,50 @@
+name: research-translated-fetch-join
+
+on:
+  push:
+    branches:
+      - research/translated-fetch-join-gpt56sol
+    paths:
+      - 'spikes/043-ares-translated-fetch-join/**'
+      - '.github/workflows/research-translated-fetch-join.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: research-translated-fetch-join-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  translated-fetch-join:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch exact pinned ares revision
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs
+          git clone --filter=blob:none --no-checkout https://github.com/ares-emulator/ares.git .refs/ares
+          git -C .refs/ares fetch origin 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git -C .refs/ares checkout --detach 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          test "$(git -C .refs/ares rev-parse HEAD)" = 9408cb43d4948fc3ea6e152a307a34348df3fe04
+
+      - name: Syntax-check runner
+        run: python3 -m py_compile spikes/043-ares-translated-fetch-join/run.py
+
+      - name: Build and execute translated fetch join
+        run: python3 spikes/043-ares-translated-fetch-join/run.py
+
+      - name: Hash durable result payloads
+        run: |
+          sha256sum target/ares-translated-fetch-join-spike/results.json
+          sha256sum target/ares-translated-fetch-join-spike/manifest.json
+
+      - name: Upload result payloads
+        uses: actions/upload-artifact@v4
+        with:
+          name: translated-fetch-join-results
+          path: |
+            target/ares-translated-fetch-join-spike/results.json
+            target/ares-translated-fetch-join-spike/manifest.json
