@@ -40,13 +40,13 @@ struct Phase {
   u32 fr, rt9, exception;
   bool frozen;
 };
-struct Event {
+struct SpSinkEvent {
   u64 ordinal;
   u32 phase, address, bank, offset, value;
   bool write, cpu;
 };
 static std::vector<Phase> phases;
-static std::vector<Event> events;
+static std::vector<SpSinkEvent> events;
 static u32 currentPhase = 0;
 static bool sensorEnabled = false;
 
