@@ -15,10 +15,11 @@ the interpreter selects one of 512 I-cache slots from virtual address bits while
 the selected line is hit-tested against a physical 4-KiB tag. Therefore two
 cacheable virtual synonyms for the same physical instruction line can occupy two
 different resident slots, and invalidating/refilling only one slot can leave the
-other synonym executing an older generation. Rewriting a TLB entry to a
-physical page with a different tag should leave the old resident slot intact at
-TLBWI time but force a miss/refill on the next fetch, even if the instruction
-payload is identical.
+other synonym executing an older generation. Rewriting a TLB entry should not
+itself end a resident lifetime; a remap away and back with no intervening fetch
+should be able to expose the old line again. Conversely, fetching through a
+same-VA remap to a different physical tag should force a miss/refill even if the
+instruction payload is identical.
 
 The independent pinned Gopher64 source is deliberately compared rather than
 assumed equivalent. Its cache fetch path indexes from physical address, so a
@@ -38,10 +39,15 @@ disabled and identity RDRAM:
 4. Only the VA `0x4000` slot is invalidated/refilled. It executes `0x2222` while
    VA `0x5000` still executes `0x1111` from the same physical backing.
 5. After the second color is invalidated/refilled both execute `0x2222`.
-6. TLBWI remaps VA `0x4000` to PA `0x3000` containing identical `0x2222`
-   instruction bytes. TLBWI itself preserves the resident cache slot, but the
-   subsequent physical-tag mismatch must cause a miss/refill.
-7. A second remap to PA `0x5000` with `0x3333` makes the new generation visible.
+6. PA `0x1000` backing is changed again to `0x4444`; VA `0x4000` is TLBWI-remapped
+   away and then back with no intervening fetch. The resident tag/valid state
+   survives and the restored mapping executes stale `0x2222` with no new miss.
+7. TLBWI remaps VA `0x4000` to PA `0x3000` containing identical resident
+   `0x2222` instruction bytes. TLBWI itself still preserves the old cache slot,
+   but the subsequent physical-tag mismatch causes a miss/refill despite equal
+   payload values.
+8. A second remap to PA `0x5000` with `0x3333` makes the new generation visible
+   after another miss/refill.
 
 `model.py` independently implements only the source-derived index/tag rules for
 the two pinned references and constructs the one-color-refill counterexample.
