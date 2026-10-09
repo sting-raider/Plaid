@@ -23,6 +23,8 @@ struct Headless : ares::Platform {
 
 static constexpr u32 CodePA = 0x6000;
 static constexpr u64 CodeVA = 0xffffffffa0006000ull;
+static constexpr u32 ReservationPA = 0x2000;
+static constexpr u64 ReservationVA = 0xffffffffa0002000ull;
 static constexpr u64 DmemVA = 0xffffffffa4000000ull;
 static constexpr u64 ImemVA = 0xffffffffa4001000ull;
 static constexpr u32 InitialHi = 0x11223344u;
@@ -86,8 +88,7 @@ static void putCode(u32 instruction) {
 static void execute(u32 caseId, u32 instruction) {
   putCode(instruction);
   // This synthetic harness rewrites one backing instruction slot between
-  // logical steps. Flush the I-cache so the requested opcode, rather than a
-  // stale prior LLD, is what the interpreter actually fetches and executes.
+  // logical steps. Flush the I-cache so the requested opcode is fetched.
   cpu.icache.power(false);
   cpu.pipeline.setPc(CodeVA);
   active.caseId = caseId;
@@ -110,6 +111,10 @@ static void setWords(u32 bank, u32 hi, u32 lo) {
 }
 static u32 getWord(u32 bank, u32 offset) {
   return bank ? rsp.imem.read<Word>(offset) : rsp.dmem.read<Word>(offset);
+}
+static void setReservationWords() {
+  rdram.ram.write<Word>(ReservationPA + 0, InitialHi, RBusDevice::ARES_DEBUGGER);
+  rdram.ram.write<Word>(ReservationPA + 4, InitialLo, RBusDevice::ARES_DEBUGGER);
 }
 
 static void append64(std::vector<u8>& out, u64 value) {
@@ -136,9 +141,11 @@ static CaseFact runCase(u32 id, u32 bank, const char* kind) {
   cpu.scc.llbit = 0; cpu.scc.ll = 0;
   for(auto& r : cpu.ipu.r) r.u64 = 0;
   setWords(bank, InitialHi, InitialLo);
+  setReservationWords();
   u64 target = bank ? ImemVA : DmemVA;
   cpu.ipu.r[1].u64 = target;
   cpu.ipu.r[2].u64 = Initial64;
+  cpu.ipu.r[3].u64 = ReservationVA;
 
   tracing = true;
 #if PLAID_SCD_SP_SENSOR
@@ -148,10 +155,14 @@ static CaseFact runCase(u32 id, u32 bank, const char* kind) {
   bool fail = !std::strcmp(kind, "fail");
   bool fault = !std::strcmp(kind, "fault");
   bool changed = !std::strcmp(kind, "changed");
-  if(!fail) execute(id, encodeI(0x34, 1, 2, 0));   // LLD r2,0(r1): real SP reservation + Dual payload.
-  if(changed) execute(id, encodeI(0x19, 2, 2, 1)); // DADDIU carry changes both halves of the 64-bit source.
+  // Exact pinned ares freezes the CPU on a Dual read from any non-RDRAM area,
+  // so an SP-targeted LLD cannot be the reservation producer. Use a decoded,
+  // valid RDRAM LLD solely to establish llbit and the 64-bit source payload;
+  // the measured operation remains the decoded SCD to CPU-visible SPMEM.
+  if(!fail) execute(id, encodeI(0x34, 3, 2, 0));   // LLD r2,0(r3), valid RDRAM reservation.
+  if(changed) execute(id, encodeI(0x19, 2, 2, 1)); // DADDIU carry changes both halves of source.
   u64 source = cpu.ipu.r[2].u64;
-  execute(id, encodeI(0x3c, 1, 2, fault ? 1 : 0)); // SCD r2,offset(r1)
+  execute(id, encodeI(0x3c, 1, 2, fault ? 1 : 0)); // SCD r2,offset(r1), target is SP DMEM/IMEM.
 
   tracing = false;
 #if PLAID_SCD_SP_SENSOR
