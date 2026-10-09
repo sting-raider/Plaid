@@ -41,10 +41,12 @@ jobs:
             echo "run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             echo '```text'
             echo '--- runner tail ---'
-            tail -n 45 /tmp/cpu-sp-producer-context.log
+            tail -n 35 /tmp/cpu-sp-producer-context.log
             if test -f target/ares-cpu-sp-producer-context/build.log; then
+              echo '--- compiler errors ---'
+              grep -nE 'driver\.cpp|error:|undefined reference|collect2:' target/ares-cpu-sp-producer-context/build.log | tail -n 100 || true
               echo '--- compiler tail ---'
-              tail -n 90 target/ares-cpu-sp-producer-context/build.log
+              tail -n 35 target/ares-cpu-sp-producer-context/build.log
             fi
             echo '```'
           } > /tmp/diagnostic.md
