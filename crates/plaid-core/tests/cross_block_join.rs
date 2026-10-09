@@ -51,7 +51,13 @@ fn site<'a>(m: &'a ProgramMap) -> &'a IndirectSite {
 #[test]
 fn equal_two_predecessor_join_is_certified_and_rechecked() {
     let i = diamond(0x0040);
-    let m = analyze_indirect(&map(&i), &i).unwrap();
+    let base = map(&i);
+    println!("entries={:#?}", base.entries.keys().collect::<Vec<_>>());
+    println!("blocks={:#?}", base.blocks);
+    println!("edges={:#?}", base.direct_edges);
+    println!("indirect={:#?}", base.indirect_sites);
+    let m = analyze_indirect(&base, &i).unwrap();
+    println!("analyzed_indirect={:#?}", m.indirect_sites);
     let s = site(&m);
     assert_eq!(s.site.pc.0, 0x80000028);
     assert_eq!(s.candidates.first_key_value().unwrap().0.pc.0, 0x80000040);
