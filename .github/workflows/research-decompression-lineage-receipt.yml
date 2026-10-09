@@ -1,0 +1,32 @@
+name: research decompression lineage receipt
+
+on:
+  push:
+    branches:
+      - research/decompression-lineage-receipt-gpt56sol
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run deterministic decompression-lineage adversaries twice
+        run: |
+          python3 -m py_compile experiments/decompression_lineage_receipt.py
+          python3 experiments/decompression_lineage_receipt.py | tee /tmp/decompression-run-1.txt
+          python3 experiments/decompression_lineage_receipt.py | tee /tmp/decompression-run-2.txt
+          cmp /tmp/decompression-run-1.txt /tmp/decompression-run-2.txt
+          sha256sum experiments/decompression_lineage_receipt.py /tmp/decompression-run-1.txt | tee /tmp/sha256sums.txt
+      - name: Upload deterministic receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: decompression-lineage-receipt
+          path: |
+            /tmp/decompression-run-1.txt
+            /tmp/decompression-run-2.txt
+            /tmp/sha256sums.txt
+          if-no-files-found: error
