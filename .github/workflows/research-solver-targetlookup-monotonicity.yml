@@ -5,6 +5,9 @@ on:
     branches:
       - research/solver-targetlookup-monotonicity-gpt56sol
 
+permissions:
+  contents: write
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -13,6 +16,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Apply candidate fix
+        run: python3 spikes/060-solver-target-dispatch-monotonicity/apply_replacements.py
+      - name: Format candidate
+        run: cargo fmt --all
       - name: Focused regression
         run: cargo test -p plaid-core --test solver_target_dispatch -- --nocapture
       - name: Full plaid-core tests
@@ -21,3 +28,14 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Strict clippy
         run: cargo clippy -p plaid-core --all-targets -- -D warnings
+      - name: Diff sanity
+        run: git diff --check
+      - name: Checkpoint candidate source
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add crates/plaid-core/src/program.rs crates/plaid-core/src/merge.rs crates/plaid-core/src/solver.rs
+            git commit -m "fix: retain raw target-dispatch evidence"
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
