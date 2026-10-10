@@ -1,8 +1,6 @@
 name: Research pointer-table D-cache load source
 
 on:
-  push:
-    branches: [research/pointer-table-dcache-load-source-gpt56sol]
   workflow_dispatch:
 
 permissions:
