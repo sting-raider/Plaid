@@ -57,7 +57,8 @@ fn load(destination: u32, rom_offset: u64) -> LoadMapping {
 fn matching_copy_backed_load_and_region_validate() {
     let mut map = base_map();
     map.loads.insert(load(0x8000_1000, 0x100));
-    map.validate().expect("matching importer-shaped mapping must validate");
+    map.validate()
+        .expect("matching importer-shaped mapping must validate");
 }
 
 #[test]
@@ -68,6 +69,19 @@ fn copy_event_cannot_authenticate_an_unrelated_guest_destination() {
     assert!(
         map.validate().is_err(),
         "one real DMA/physical witness must not authenticate a LoadMapping at an unrelated guest range"
+    );
+}
+
+#[test]
+fn copy_event_cannot_authenticate_a_shifted_subrange_with_same_source_start() {
+    let mut map = base_map();
+    let mut shifted = load(0x8000_1008, 0x100);
+    shifted.destination.size = 0x10;
+    map.loads.insert(shifted);
+
+    assert!(
+        map.validate().is_err(),
+        "matching ROM/physical starts are insufficient when the guest executable span differs"
     );
 }
 
