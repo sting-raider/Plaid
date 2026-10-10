@@ -91,6 +91,41 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             evidence,
         });
     };
+    // A partitioned proof source cannot assign two different words to one
+    // execution identity. Check every supplied word independently of CFG roots
+    // so an interior fragment cannot evade source() at a block start.
+    for image in images {
+        for offset in (0..image.size()?).step_by(4) {
+            let pc = crate::GuestAddr(image.base.pc.0 + offset);
+            let mut words = images
+                .iter()
+                .filter(|candidate| {
+                    candidate.base.image == image.base.image
+                        && candidate.base.generation == image.base.generation
+                })
+                .filter_map(|candidate| candidate.word(pc));
+            let first = words.next().expect("current image covers its own word");
+            if words.any(|word| word != first) {
+                let site = image.address(pc);
+                let evidence = map
+                    .regions
+                    .iter()
+                    .filter(|region| {
+                        region.image == site.image
+                            && region.generation == site.generation
+                            && region.range.contains(site.pc)
+                    })
+                    .flat_map(|region| region.evidence.iter().cloned())
+                    .collect();
+                add(
+                    "conflicting_instruction_sources",
+                    Some(site),
+                    "supplied CodeImage fragments disagree on bytes for one execution identity",
+                    evidence,
+                );
+            }
+        }
+    }
     let starts: BTreeSet<_> = map
         .blocks
         .iter()
