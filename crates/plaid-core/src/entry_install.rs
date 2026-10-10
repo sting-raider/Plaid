@@ -52,7 +52,7 @@ fn verify_projection(
     expected: &ProgramMap,
 ) -> Result<(), String> {
     map.validate()?;
-    if &map.rom != &trace.header.rom {
+    if map.rom != trace.header.rom {
         return Err("entry-install source trace does not match ProgramMap ROM".into());
     }
 
