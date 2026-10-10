@@ -1,0 +1,33 @@
+name: Research solver overlapping CodeImage source
+
+on:
+  push:
+    branches:
+      - research/solver-overlapping-codeimage-source-gpt56sol
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  plaid-core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain and exact decoder pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup show
+          rustup component add rustfmt clippy
+          grep -F 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' crates/plaid-core/Cargo.toml
+          grep -F 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' refs.lock.toml
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Overlapping-source adversarial matrix
+        run: cargo test -p plaid-core --test solver_overlapping_codeimage_source -- --nocapture
+      - name: Full plaid-core tests
+        run: cargo test -p plaid-core
+      - name: Clippy
+        run: cargo clippy -p plaid-core --tests -- -D warnings
