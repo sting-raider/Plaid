@@ -1,7 +1,10 @@
 use plaid_core::{
     EvidenceKind,
     fetch::{FORMAT, INITIAL_STATE, REVISION},
-    program::{Evidence, EvidenceRefs, FetchCapture, GuestVirtualAddr, ObservedFetch, ProgramMap, RomIdentity},
+    program::{
+        Evidence, EvidenceRefs, FetchCapture, GuestVirtualAddr, ObservedFetch, ProgramMap,
+        RomIdentity,
+    },
 };
 
 const TRACE_SHA: &str = "1111111111111111111111111111111111111111111111111111111111111111";
@@ -71,22 +74,10 @@ fn rejects_missing_capture_sequence_even_when_occurrence_totals_match() {
 
     // These summaries claim six occurrences, but every claimed occurrence is
     // constrained to sequence IDs 0..=4. Sequence 5 has no possible owner.
-    map.fetch_observations.insert(summary(
-        &capture,
-        0x8000_0000,
-        0x1111_1111,
-        0,
-        4,
-        4,
-    ));
-    map.fetch_observations.insert(summary(
-        &capture,
-        0x8000_0004,
-        0x2222_2222,
-        1,
-        3,
-        2,
-    ));
+    map.fetch_observations
+        .insert(summary(&capture, 0x8000_0000, 0x1111_1111, 0, 4, 4));
+    map.fetch_observations
+        .insert(summary(&capture, 0x8000_0004, 0x2222_2222, 1, 3, 2));
 
     let error = map
         .validate()
@@ -100,30 +91,12 @@ fn accepts_interleaved_summaries_when_interval_union_covers_capture() {
 
     // A, B, C, C, B, A is one concrete history satisfying these summaries.
     // Occurrences need not be contiguous, so interval overlap itself is valid.
-    map.fetch_observations.insert(summary(
-        &capture,
-        0x8000_0000,
-        0x1111_1111,
-        0,
-        5,
-        2,
-    ));
-    map.fetch_observations.insert(summary(
-        &capture,
-        0x8000_0004,
-        0x2222_2222,
-        1,
-        4,
-        2,
-    ));
-    map.fetch_observations.insert(summary(
-        &capture,
-        0x8000_0008,
-        0x3333_3333,
-        2,
-        3,
-        2,
-    ));
+    map.fetch_observations
+        .insert(summary(&capture, 0x8000_0000, 0x1111_1111, 0, 5, 2));
+    map.fetch_observations
+        .insert(summary(&capture, 0x8000_0004, 0x2222_2222, 1, 4, 2));
+    map.fetch_observations
+        .insert(summary(&capture, 0x8000_0008, 0x3333_3333, 2, 3, 2));
 
     map.validate().unwrap();
 }
