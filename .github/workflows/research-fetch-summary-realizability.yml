@@ -37,6 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 experiments/fetch-summary-realizability/apply_candidate.py
+          cargo fmt --all
           git diff --check
           git diff -- crates/plaid-core/src/program.rs
       - name: Format
