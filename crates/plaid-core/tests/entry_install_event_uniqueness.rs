@@ -132,10 +132,9 @@ fn source_bound_verifier_rejects_cross_map_install_event_laundering() {
 
     let mut right = left.clone();
     right.entries.clear();
-    right.entries.insert(
-        address(0x8000_0008, "boot", 0),
-        [install.clone()].into(),
-    );
+    right
+        .entries
+        .insert(address(0x8000_0008, "boot", 0), [install.clone()].into());
     right.validate().unwrap();
 
     let merged = merge_maps(&left, &right).unwrap();

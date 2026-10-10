@@ -76,7 +76,9 @@ fn verify_projection(
         }
         let actual_entries = entry_uses(map, &id);
         if actual_entries != expected_entries {
-            return Err("EntryInstalled event is missing or bound to a different entry identity".into());
+            return Err(
+                "EntryInstalled event is missing or bound to a different entry identity".into(),
+            );
         }
     }
     Ok(())
