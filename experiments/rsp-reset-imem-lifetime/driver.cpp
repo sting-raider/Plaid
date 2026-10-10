@@ -53,7 +53,7 @@ int main() {
   option("Recompiler", "false");
   cartridgeSlot.port->allocate();
   cartridgeSlot.port->connect();
-  system.power(false);
+  ares::Nintendo64::system.power(false);
   if(cpu.recompiler.enabled || rsp.recompiler.enabled) return 3;
   std::vector<u8> hidden(rdram.ram.size / 2);
   rdram.hidden.data = hidden.data();
@@ -91,7 +91,7 @@ int main() {
   string resetBefore = digest(rsp.imem.data, rsp.imem.size);
   u32 resetBusyBefore = rsp.dma.busy.any();
   u32 resetFullBefore = rsp.dma.full.any();
-  system.power(true);
+  ares::Nintendo64::system.power(true);
   string resetAfter = digest(rsp.imem.data, rsp.imem.size);
   bool resetCleared = resetAfter == zeroHash
     && rsp.ipu.pc == 0
@@ -107,7 +107,7 @@ int main() {
   rsp.status.halted = 0;
   queueRead(0x1000, 0x300);
   bool equalHadState = rsp.ipu.pc == 0x2a0 && rsp.dma.busy.any();
-  system.power(true);
+  ares::Nintendo64::system.power(true);
   string equalAfter = digest(rsp.imem.data, rsp.imem.size);
   bool equalPayloadReset = equalBefore == equalAfter
     && equalAfter == zeroHash
@@ -120,7 +120,7 @@ int main() {
   // Cold power also clears an installed nonzero image.
   rsp.imem.write<Dual>(0x200, 0x2407000724080008ull);
   string coldBefore = digest(rsp.imem.data, rsp.imem.size);
-  system.power(false);
+  ares::Nintendo64::system.power(false);
   string coldAfter = digest(rsp.imem.data, rsp.imem.size);
   bool coldCleared = coldAfter == zeroHash && coldBefore != coldAfter;
   if(!coldCleared) return 40;
@@ -135,6 +135,6 @@ int main() {
     equalBefore.data(), equalAfter.data(), equalPayloadReset ? "true" : "false",
     coldBefore.data(), coldAfter.data(), coldCleared ? "true" : "false");
 
-  system.unload();
+  ares::Nintendo64::system.unload();
   return 0;
 }
