@@ -1,0 +1,55 @@
+name: research-evidence-manifest-composition
+
+on:
+  push:
+    branches:
+      - research/evidence-manifest-composition-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Guard canonical base assumptions
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' refs.lock.toml
+          git diff --check HEAD^ HEAD
+      - name: Compile research model
+        run: python3 -m py_compile experiments/evidence-manifest-composition/model.py
+      - name: Run deterministic model twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 experiments/evidence-manifest-composition/model.py | tee results-1.json
+          python3 experiments/evidence-manifest-composition/model.py | tee results-2.json
+          python3 - <<'PY'
+          import json
+          expected = '519772b1ad3bdaa555a30c49fd92b65c14e3be9b6aff5d2c5b58434467e13fec'
+          a = json.load(open('results-1.json'))
+          b = json.load(open('results-2.json'))
+          assert a['semantic_sha256'] == expected, a['semantic_sha256']
+          assert b['semantic_sha256'] == expected, b['semantic_sha256']
+          assert a['semantic_sha256'] == b['semantic_sha256']
+          assert a['fuzz']['cases'] == 4000
+          assert all(a['matrix'].values())
+          print('semantic_sha256=' + expected)
+          print('events=' + str(a['benchmark']['events']))
+          print('manifest_bytes=' + str(a['benchmark']['manifest_bytes']))
+          print('event_leaf_bytes=' + str(a['benchmark']['event_leaf_bytes']))
+          PY
+      - name: Untouched core regression suite
+        run: cargo test --locked -p plaid-core
+      - name: Rust formatting and lint sanity
+        shell: bash
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --locked -p plaid-core --all-targets -- -D warnings
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evidence-manifest-composition-results
+          path: |
+            results-1.json
+            results-2.json
