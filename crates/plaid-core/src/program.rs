@@ -568,6 +568,14 @@ impl ProgramMap {
             l.destination.validate(true)?;
             rom_range(l.rom_offset, l.destination.size)?;
             refs(&l.evidence)?;
+            if !self.regions.iter().any(|r| {
+                r.image == l.image
+                    && r.generation == l.generation
+                    && r.range == l.destination
+                    && r.rom_offset == Some(l.rom_offset)
+            }) {
+                return Err("load has no matching executable region".into());
+            }
             if let Some(copy) = &l.copy_event
                 && (!l.evidence.contains(copy)
                     || self
