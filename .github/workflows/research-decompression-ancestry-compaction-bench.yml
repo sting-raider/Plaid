@@ -1,0 +1,39 @@
+name: research decompression ancestry compaction benchmark
+
+on:
+  push:
+    branches:
+      - research/decompression-ancestry-compaction-gpt56sol
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run direct-build equivalence and RSS benchmark twice
+        run: |
+          set -euo pipefail
+          python3 -m py_compile experiments/decompression_ancestry_compaction.py experiments/decompression_ancestry_compaction_bench.py
+          python3 experiments/decompression_ancestry_compaction_bench.py | tee /tmp/bench-run-1.txt
+          python3 experiments/decompression_ancestry_compaction_bench.py | tee /tmp/bench-run-2.txt
+          grep '^EQUIVALENCE_SHA256=' /tmp/bench-run-1.txt > /tmp/equivalence-1.txt
+          grep '^EQUIVALENCE_SHA256=' /tmp/bench-run-2.txt > /tmp/equivalence-2.txt
+          cmp /tmp/equivalence-1.txt /tmp/equivalence-2.txt
+          grep '^PASS:' /tmp/bench-run-1.txt
+          grep '^PASS:' /tmp/bench-run-2.txt
+          sha256sum experiments/decompression_ancestry_compaction.py experiments/decompression_ancestry_compaction_bench.py /tmp/bench-run-1.txt /tmp/bench-run-2.txt | tee /tmp/sha256sums.txt
+      - name: Upload benchmark receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: decompression-ancestry-compaction-benchmark
+          path: |
+            /tmp/bench-run-1.txt
+            /tmp/bench-run-2.txt
+            /tmp/equivalence-1.txt
+            /tmp/equivalence-2.txt
+            /tmp/sha256sums.txt
+          if-no-files-found: error
