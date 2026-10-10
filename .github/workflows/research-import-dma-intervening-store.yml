@@ -7,18 +7,28 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   plaid-core:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Guard pinned Rabbitizer revision
         shell: bash
         run: |
           set -euo pipefail
           grep -q '724a49a5b4dbfb99f1a9e6992e63964fd29c90c8' Cargo.lock
+      - name: Apply candidate fix
+        run: python3 spikes/import-dma-intervening-store/patch_merge.py
+      - name: Check candidate diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git diff -- crates/plaid-core/src/merge.rs
       - name: Focused regression
         run: cargo test --locked -p plaid-core --test import_dma_intervening_store -- --nocapture
       - name: Full plaid-core suite
@@ -27,3 +37,16 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Clippy
         run: cargo clippy --locked -p plaid-core --all-targets -- -D warnings
+      - name: Checkpoint validated candidate source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- crates/plaid-core/src/merge.rs; then
+            echo 'candidate fix already committed'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/plaid-core/src/merge.rs
+          git commit -m 'fix: revoke stale DMA source after observed store'
+          git push origin HEAD:research/import-dma-intervening-store-gpt56sol
