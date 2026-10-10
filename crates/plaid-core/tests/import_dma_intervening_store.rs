@@ -9,7 +9,7 @@ use plaid_core::{
 fn rom_and_words() -> (CanonicalRom, Vec<u32>) {
     let mut bytes = vec![0; 4096];
     bytes[..4].copy_from_slice(&[0x80, 0x37, 0x12, 0x40]);
-    let words = vec![0x0800_0000, 0];
+    let words: Vec<u32> = vec![0x0800_0000, 0];
     bytes[64..68].copy_from_slice(&words[0].to_be_bytes());
     bytes[68..72].copy_from_slice(&words[1].to_be_bytes());
     (CanonicalRom::from_bytes(&bytes).unwrap(), words)
@@ -130,7 +130,7 @@ fn non_overlapping_store_after_dma_does_not_revoke_copy() {
 #[test]
 fn changed_value_snapshot_already_fails_closed() {
     let (rom, _words) = rom_and_words();
-    let changed = vec![0x2402_0001, 0];
+    let changed: Vec<u32> = vec![0x2402_0001, 0];
     let trace = trace_with_prefix(
         &rom,
         &changed,
