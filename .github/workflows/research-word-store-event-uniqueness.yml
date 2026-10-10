@@ -18,9 +18,10 @@ jobs:
         run: git apply --recount research/word-store-event-uniqueness.patch
       - name: Format candidate working tree
         run: cargo fmt --all
-      - name: Preserve formatted production diff
+      - name: Preserve formatted diffs
         run: |
           mkdir -p target/research-word-store-event-uniqueness
+          git diff > target/research-word-store-event-uniqueness/formatted-all.patch
           git diff -- crates/plaid-core/src/program.rs > target/research-word-store-event-uniqueness/formatted-production.patch
           test -s target/research-word-store-event-uniqueness/formatted-production.patch
       - name: Focused regression
@@ -36,5 +37,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: word-store-event-uniqueness-candidate
-          path: target/research-word-store-event-uniqueness/formatted-production.patch
+          path: target/research-word-store-event-uniqueness/*.patch
           if-no-files-found: error
