@@ -1,0 +1,39 @@
+name: research decompression ancestry compaction
+
+on:
+  push:
+    branches:
+      - research/decompression-ancestry-compaction-gpt56sol
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run compaction equivalence, adversaries, and benchmarks twice
+        run: |
+          set -euo pipefail
+          python3 -m py_compile experiments/decompression_ancestry_compaction.py
+          python3 experiments/decompression_ancestry_compaction.py | tee /tmp/compaction-run-1.txt
+          python3 experiments/decompression_ancestry_compaction.py | tee /tmp/compaction-run-2.txt
+          grep '^SEMANTIC_SHA256=' /tmp/compaction-run-1.txt > /tmp/semantic-1.txt
+          grep '^SEMANTIC_SHA256=' /tmp/compaction-run-2.txt > /tmp/semantic-2.txt
+          cmp /tmp/semantic-1.txt /tmp/semantic-2.txt
+          grep '^PASS:' /tmp/compaction-run-1.txt
+          grep '^PASS:' /tmp/compaction-run-2.txt
+          sha256sum experiments/decompression_ancestry_compaction.py /tmp/compaction-run-1.txt /tmp/compaction-run-2.txt | tee /tmp/sha256sums.txt
+      - name: Upload research receipts
+        uses: actions/upload-artifact@v4
+        with:
+          name: decompression-ancestry-compaction
+          path: |
+            /tmp/compaction-run-1.txt
+            /tmp/compaction-run-2.txt
+            /tmp/semantic-1.txt
+            /tmp/semantic-2.txt
+            /tmp/sha256sums.txt
+          if-no-files-found: error
