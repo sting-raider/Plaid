@@ -442,6 +442,72 @@ pub struct ProgramMap {
     pub unresolved: BTreeSet<Unresolved>,
 }
 
+fn fetch_summaries_realizable(fetch_count: u64, summaries: &[(u64, u64, u64)]) -> bool {
+    if fetch_count == 0 {
+        return summaries.is_empty();
+    }
+
+    let mut endpoints = BTreeMap::<u64, usize>::new();
+    let mut interior = Vec::with_capacity(summaries.len());
+    for (index, &(first, last, occurrences)) in summaries.iter().enumerate() {
+        let endpoint_count = if first == last { 1 } else { 2 };
+        let Some(remaining) = occurrences.checked_sub(endpoint_count) else {
+            return false;
+        };
+        interior.push(remaining);
+        for seq in [first, last] {
+            if endpoints.insert(seq, index).is_some_and(|old| old != index) {
+                return false;
+            }
+        }
+    }
+
+    // Each remaining occurrence is a unit-time job whose release is first+1
+    // and deadline is last-1. Fixed endpoint positions are unavailable. For
+    // interval release/deadline windows, earliest-deadline assignment is a
+    // complete feasibility test. Consume whole free gaps rather than iterating
+    // over every raw fetch sequence position.
+    let mut active = BTreeMap::<u64, u64>::new();
+    let mut previous = None;
+    for (&seq, &owner) in &endpoints {
+        let start = previous.map_or(0, |old: u64| old + 1);
+        let Some(mut slots) = seq.checked_sub(start) else {
+            return false;
+        };
+        while slots != 0 {
+            let Some((&deadline, &demand)) = active.iter().next() else {
+                return false;
+            };
+            if deadline < seq || demand == 0 {
+                return false;
+            }
+            let used = slots.min(demand);
+            slots -= used;
+            let remaining = demand - used;
+            if remaining == 0 {
+                active.remove(&deadline);
+            } else {
+                active.insert(deadline, remaining);
+            }
+        }
+
+        let (first, last, _) = summaries[owner];
+        if last == seq && active.contains_key(&seq) {
+            return false;
+        }
+        if first == seq
+            && last > seq
+            && interior[owner] != 0
+            && active.insert(last, interior[owner]).is_some()
+        {
+            return false;
+        }
+        previous = Some(seq);
+    }
+
+    previous.is_some_and(|seq| seq.checked_add(1) == Some(fetch_count)) && active.is_empty()
+}
+
 impl ProgramMap {
     pub fn new(rom: RomIdentity) -> Self {
         Self {
@@ -644,6 +710,7 @@ impl ProgramMap {
         let mut fetch_totals = BTreeMap::<&str, u64>::new();
         let mut fetch_keys = BTreeSet::new();
         let mut fetch_endpoints = BTreeMap::new();
+        let mut fetch_constraints = BTreeMap::<&str, Vec<(u64, u64, u64)>>::new();
         for (id, capture) in &self.fetch_captures {
             if let Some(inputs) = &capture.boot_inputs {
                 inputs.validate()?;
@@ -709,6 +776,7 @@ impl ProgramMap {
                 return Err("invalid fetch capture identity, bounds or provenance".into());
             }
             fetch_totals.insert(id, 0);
+            fetch_constraints.insert(id, Vec::new());
         }
         for f in &self.fetch_observations {
             refs(&f.evidence)?;
@@ -773,10 +841,18 @@ impl ProgramMap {
             *total = total
                 .checked_add(f.occurrences)
                 .ok_or("fetch count overflow")?;
+            fetch_constraints
+                .get_mut(f.capture.as_str())
+                .unwrap()
+                .push((f.first_seq, f.last_seq, f.occurrences));
         }
         for (id, total) in fetch_totals {
-            if total != self.fetch_captures[id].fetch_count {
+            let fetch_count = self.fetch_captures[id].fetch_count;
+            if total != fetch_count {
                 return Err("fetch summaries do not account for capture count".into());
+            }
+            if !fetch_summaries_realizable(fetch_count, fetch_constraints.get(id).unwrap()) {
+                return Err("fetch summaries are not jointly realizable".into());
             }
         }
         for r in &self.relocations {
