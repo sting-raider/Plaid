@@ -1,0 +1,19 @@
+name: research-load-region-binding
+
+on:
+  push:
+    branches:
+      - research/load-region-binding-gpt56sol
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run load-region binding regression
+        run: cargo test --locked -p plaid-core --test load_region_binding -- --nocapture
