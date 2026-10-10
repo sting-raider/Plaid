@@ -1,0 +1,61 @@
+name: Research RSP reset IMEM lifetime
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - research/rsp-reset-imem-lifetime-gpt56sol
+    paths:
+      - 'experiments/rsp-reset-imem-lifetime/**'
+      - 'research/rsp-reset-imem-lifetime.md'
+      - '.github/workflows/research-rsp-reset-imem-lifetime.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact pinned references
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs
+          git init .refs/ares
+          git -C .refs/ares remote add origin https://github.com/ares-emulator/ares.git
+          git -C .refs/ares fetch --depth=1 origin 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git -C .refs/ares checkout --detach 9408cb43d4948fc3ea6e152a307a34348df3fe04
+
+          git init .refs/mupen64plus-core
+          git -C .refs/mupen64plus-core remote add origin https://github.com/mupen64plus/mupen64plus-core.git
+          git -C .refs/mupen64plus-core fetch --depth=1 origin ba95bab92a76744753bfe61470823a4937850ab0
+          git -C .refs/mupen64plus-core checkout --detach ba95bab92a76744753bfe61470823a4937850ab0
+
+          git init .refs/gopher64
+          git -C .refs/gopher64 remote add origin https://github.com/gopher64/gopher64.git
+          git -C .refs/gopher64 fetch --depth=1 origin e96debac941a26ba4961e5145056c0821d3a56f7
+          git -C .refs/gopher64 checkout --detach e96debac941a26ba4961e5145056c0821d3a56f7
+      - name: Source guard and adversarial model
+        run: |
+          python3 -m py_compile experiments/rsp-reset-imem-lifetime/{source_guard.py,model.py,run.py}
+          python3 experiments/rsp-reset-imem-lifetime/source_guard.py | tee source-guard.log
+          python3 experiments/rsp-reset-imem-lifetime/model.py | tee model.log
+      - name: Execute exact pinned ares fixture
+        shell: bash
+        run: |
+          mkdir -p target
+          python3 experiments/rsp-reset-imem-lifetime/run.py 2>&1 | tee target/rsp-reset-imem-lifetime.log
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rsp-reset-imem-lifetime-evidence
+          if-no-files-found: warn
+          path: |
+            source-guard.log
+            model.log
+            target/rsp-reset-imem-lifetime.log
+            target/ares-rsp-reset-imem-lifetime/results.json
+            target/ares-rsp-reset-imem-lifetime/build.json
