@@ -1,0 +1,24 @@
+name: research-word-store-event-uniqueness
+
+on:
+  push:
+    branches:
+      - research/word-store-event-uniqueness-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Focused regression
+        run: cargo test --locked -p plaid-core --test word_store_event_uniqueness
+      - name: Full plaid-core suite
+        run: cargo test --locked -p plaid-core
+      - name: Format check
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --locked -p plaid-core --all-targets -- -D warnings
