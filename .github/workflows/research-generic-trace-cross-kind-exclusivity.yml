@@ -17,5 +17,29 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Verify pinned Rabbitizer revision
         run: grep -F '724a49a5b4dbfb99f1a9e6992e63964fd29c90c8' refs.lock.toml Cargo.lock
+      - name: Apply candidate fix
+        run: python3 spikes/generic-trace-cross-kind-exclusivity/apply_candidate_fix.py
+      - name: Format candidate
+        run: cargo fmt --all
       - name: Run focused regression
         run: cargo test --locked -p plaid-core --test generic_trace_cross_kind_exclusivity -- --nocapture
+      - name: Run full plaid-core suite
+        run: cargo test --locked -p plaid-core
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run clippy
+        run: cargo clippy --locked -p plaid-core --all-targets -- -D warnings
+      - name: Commit validated candidate fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          if git diff --quiet -- crates/plaid-core/src/program.rs crates/plaid-core/tests/generic_trace_cross_kind_exclusivity.rs; then
+            echo "candidate fix already committed"
+            exit 0
+          fi
+          git config user.name "Plaid research worker"
+          git config user.email "actions@users.noreply.github.com"
+          git add crates/plaid-core/src/program.rs crates/plaid-core/tests/generic_trace_cross_kind_exclusivity.rs
+          git commit -m "fix: reject generic cross-kind trace event reuse"
+          git push origin HEAD:research/generic-trace-cross-kind-exclusivity-gpt56sol
