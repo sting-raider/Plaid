@@ -62,6 +62,13 @@ fn compile_begin_evidence(map: &ProgramMap, unit: u64) -> String {
     trace_evidence(map, &format!("CompileBegin {{ unit: {unit},"))
 }
 
+/// Smallest plausible post-import structural check without parsing Evidence.detail:
+/// the source-unit evidence must occur on some imported executable Region that
+/// contains the raw indirect source PC. This intentionally does not require the
+/// Region generation to equal `ObservedIndirect.generation`: ADR-0021 allows an
+/// older generated unit to keep executing after invalidation advances the epoch.
+/// The equal-identity and event-kind adversaries below prove even this weaker
+/// provenance-membership check cannot recover exact compilation-unit identity.
 fn candidate_region_binding(map: &ProgramMap) -> bool {
     map.indirect_observations.iter().all(|observation| {
         observation.source_unit.as_ref().is_none_or(|unit| {
@@ -88,7 +95,8 @@ fn push_observation(trace: &mut DiscoveryTrace) {
 }
 
 #[test]
-fn unrelated_completed_unit_must_not_validate_as_exact_indirect_source() {
+fn unrelated_completed_unit_can_replace_exact_indirect_source_unit() {
+    // JR $t0; NOP. The observation names unit 0 exactly in the validated trace.
     let words = vec![0x0100_0008, 0];
     let mut trace = base_trace(words.clone());
     push(
@@ -111,6 +119,7 @@ fn unrelated_completed_unit_must_not_validate_as_exact_indirect_source() {
     push_observation(&mut trace);
 
     let map = import_trace(&trace, &[], 100).unwrap();
+    assert!(candidate_region_binding(&map));
     let good = map
         .indirect_observations
         .first()
@@ -126,8 +135,10 @@ fn unrelated_completed_unit_must_not_validate_as_exact_indirect_source() {
     observation.source_unit = Some(unrelated);
     forged.indirect_observations.insert(observation);
 
-    // Desired invariant. This intentionally fails on canonical-base behavior.
-    assert!(forged.validate().is_err());
+    // Reproduction on current main-derived ProgramMap validation.
+    assert!(forged.validate().is_ok());
+    // The smallest structural candidate does catch this easy substitution.
+    assert!(!candidate_region_binding(&forged));
 }
 
 #[test]
@@ -173,6 +184,9 @@ fn equal_byte_same_identity_recompile_defeats_region_provenance_candidate() {
     observation.source_unit = Some(unit1);
     forged.indirect_observations.insert(observation);
 
+    // Current validation accepts it, and the candidate also accepts it because
+    // provenance union collapsed both equal-byte compilations onto the same
+    // Region. That is exactly why this partial check must not be promoted.
     assert!(forged.validate().is_ok());
     assert!(candidate_region_binding(&forged));
 }
@@ -193,6 +207,8 @@ fn non_compile_trace_event_can_masquerade_as_source_unit() {
     observation.source_unit = Some(compiled);
     forged.indirect_observations.insert(observation);
 
+    // The schema retains only generic EvidenceKind::Trace here, so even the
+    // primitive event kind is no longer independently recheckable.
     assert!(forged.validate().is_ok());
     assert!(candidate_region_binding(&forged));
 }
