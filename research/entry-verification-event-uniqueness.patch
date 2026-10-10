@@ -1,0 +1,44 @@
+diff --git a/crates/plaid-core/src/program.rs b/crates/plaid-core/src/program.rs
+index 0883332..0000000 100644
+--- a/crates/plaid-core/src/program.rs
++++ b/crates/plaid-core/src/program.rs
+@@ -632,6 +632,7 @@ impl ProgramMap {
+             }
+             refs(&store.evidence)?;
+         }
++        let mut verification_events = BTreeMap::<&str, (CodeAddress, u32, String, u64)>::new();
+         for verification in &self.entry_verifications {
+             address(&verification.entry)?;
+             refs(&verification.evidence)?;
+@@ -644,6 +645,29 @@ impl ProgramMap {
+             {
+                 return Err("verified entry missing installed identity or unit provenance".into());
+             }
++            let semantics = (
++                verification.entry.clone(),
++                verification.register_mask,
++                verification.source_unit.clone(),
++                verification.generation,
++            );
++            for id in &verification.evidence {
++                // source_unit has its own typed role and may legitimately be
++                // shared by multiple verification events from one compiled unit.
++                if id == &verification.source_unit {
++                    continue;
++                }
++                if self
++                    .evidence
++                    .get(id)
++                    .is_some_and(|e| e.kind == EvidenceKind::Trace)
++                    && verification_events
++                        .insert(id.as_str(), semantics.clone())
++                        .is_some_and(|old| old != semantics)
++                {
++                    return Err(
++                        "entry verification trace event has conflicting semantics".into(),
++                    );
++                }
++            }
+         }
+         let mut fetch_totals = BTreeMap::<&str, u64>::new();
+         let mut fetch_keys = BTreeSet::new();
