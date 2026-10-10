@@ -644,6 +644,7 @@ impl ProgramMap {
         let mut fetch_totals = BTreeMap::<&str, u64>::new();
         let mut fetch_keys = BTreeSet::new();
         let mut fetch_endpoints = BTreeMap::new();
+        let mut fetch_intervals = BTreeMap::<&str, Vec<(u64, u64)>>::new();
         for (id, capture) in &self.fetch_captures {
             if let Some(inputs) = &capture.boot_inputs {
                 inputs.validate()?;
@@ -773,10 +774,29 @@ impl ProgramMap {
             *total = total
                 .checked_add(f.occurrences)
                 .ok_or("fetch count overflow")?;
+            fetch_intervals
+                .entry(f.capture.as_str())
+                .or_default()
+                .push((f.first_seq, f.last_seq));
         }
         for (id, total) in fetch_totals {
-            if total != self.fetch_captures[id].fetch_count {
+            let capture_count = self.fetch_captures[id].fetch_count;
+            if total != capture_count {
                 return Err("fetch summaries do not account for capture count".into());
+            }
+            let mut intervals = fetch_intervals.remove(id).unwrap_or_default();
+            intervals.sort_unstable();
+            let mut covered_until = 0;
+            for (start, end) in intervals {
+                if start > covered_until {
+                    return Err("fetch summaries leave unaccounted sequence position".into());
+                }
+                if end >= covered_until {
+                    covered_until = end.checked_add(1).ok_or("fetch sequence overflow")?;
+                }
+            }
+            if covered_until != capture_count {
+                return Err("fetch summaries leave unaccounted sequence position".into());
             }
         }
         for r in &self.relocations {
