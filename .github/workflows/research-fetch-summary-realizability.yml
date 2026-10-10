@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   plaid-core:
@@ -36,7 +36,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 experiments/fetch-summary-realizability/apply_candidate.py
+          if grep -q '^fn fetch_summaries_realizable(' crates/plaid-core/src/program.rs; then
+            echo 'candidate already materialized'
+          else
+            python3 experiments/fetch-summary-realizability/apply_candidate.py
+          fi
           cargo fmt --all
           git diff --check
           git diff -- crates/plaid-core/src/program.rs
@@ -48,3 +52,16 @@ jobs:
         run: cargo test --locked -p plaid-core
       - name: Clippy
         run: cargo clippy --locked -p plaid-core --all-targets -- -D warnings
+      - name: Materialize tested candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- crates/plaid-core/src/program.rs; then
+            echo 'program.rs candidate is already committed'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/plaid-core/src/program.rs
+          git commit -m 'research: materialize fetch-summary realizability candidate'
+          git push origin HEAD:research/fetch-summary-realizability-gpt56sol
