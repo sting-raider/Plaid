@@ -74,6 +74,19 @@ fn legacy_load_cannot_borrow_region_with_wrong_guest_span() {
 }
 
 #[test]
+fn legacy_load_cannot_borrow_region_with_wrong_extent() {
+    let mut forged = legacy_load_map();
+    let mut region = forged.regions.first().unwrap().clone();
+    forged.regions.clear();
+    region.range.size = 4;
+    forged.regions.insert(region);
+    assert!(
+        forged.validate().is_err(),
+        "same start/image/generation is insufficient when executable extent differs"
+    );
+}
+
+#[test]
 fn exact_legacy_load_region_without_physical_mapping_remains_valid() {
     let r = rom();
     let map = record_load(
@@ -84,5 +97,15 @@ fn exact_legacy_load_region_without_physical_mapping_remains_valid() {
     .unwrap();
     assert_eq!(map.loads.len(), 1);
     assert_eq!(map.regions.len(), 1);
+    assert!(map.validate().is_ok());
+}
+
+#[test]
+fn exact_match_is_not_invalidated_by_unrelated_region_decoy() {
+    let mut map = legacy_load_map();
+    let mut decoy = map.regions.first().unwrap().clone();
+    decoy.range.start = GuestAddr(0x8000_0010);
+    decoy.rom_offset = Some(RomOffset(80));
+    map.regions.insert(decoy);
     assert!(map.validate().is_ok());
 }
