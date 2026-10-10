@@ -6,27 +6,11 @@ on:
       - research/overlay-region-binding-gpt56sol
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Apply candidate fix
-        run: python3 experiments/overlay-region-binding/apply_fix.py
-      - name: Commit candidate fix
-        run: |
-          if ! git diff --quiet -- crates/plaid-core/src/program.rs; then
-            git config user.name "plaid-research-worker"
-            git config user.email "plaid-research-worker@users.noreply.github.com"
-            git add crates/plaid-core/src/program.rs
-            git commit -m "fix: bind regions to exact overlay descriptors"
-            git push origin HEAD:${GITHUB_REF_NAME}
-          fi
       - name: Toolchain components
         run: rustup component add rustfmt clippy
       - name: Focused regression
