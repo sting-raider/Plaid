@@ -1,0 +1,24 @@
+name: research-solver-rsp-microcode-closure
+
+on:
+  push:
+    branches:
+      - research/solver-rsp-microcode-closure-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  plaid-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Run focused solver regression
+        run: cargo test -p plaid-core --test solver_rsp_microcode_closure -- --nocapture
+      - name: Run full plaid-core suite
+        run: cargo test -p plaid-core
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run clippy
+        run: cargo clippy -p plaid-core --all-targets -- -D warnings
