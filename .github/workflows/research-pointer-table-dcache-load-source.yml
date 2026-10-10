@@ -29,7 +29,10 @@ jobs:
             spikes/047-ares-pointer-table-dcache-load-source/run_exact.py \
             spikes/047-ares-pointer-table-dcache-load-source/verify.py
       - name: Build exact pinned ares and execute dispatch matrix
-        run: python3 spikes/047-ares-pointer-table-dcache-load-source/run_exact.py | tee /tmp/actual.log
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 spikes/047-ares-pointer-table-dcache-load-source/run_exact.py | tee /tmp/actual.log
       - name: Strict generation replay and adversarial forgeries
         shell: bash
         run: |
