@@ -11,6 +11,7 @@ runner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(runner)
 _original_patch_dcache = runner.patch_dcache
 _original_run_case = runner.run_case
+_original_build_instrumented = runner.build_instrumented
 
 
 def patch_dcache_and_cpu(output):
@@ -32,6 +33,14 @@ def patch_dcache_and_cpu(output):
     destination.write_text(routed)
 
 
+def build_instrumented_with_provenance():
+    exe, inputs = _original_build_instrumented()
+    inputs = dict(inputs)
+    inputs["wrapper"] = runner.sha(Path(__file__).resolve())
+    inputs["upstream_cpu"] = runner.sha(runner.REF / "ares/n64/cpu/cpu.cpp")
+    return exe, inputs
+
+
 def diagnostic_run_case(exe, mode, scenario):
     raw, doc = _original_run_case(exe, mode, scenario)
     # driver.cpp stores the controlled code offset. Convert it to the actual
@@ -49,6 +58,7 @@ def diagnostic_run_case(exe, mode, scenario):
 
 
 runner.patch_dcache = patch_dcache_and_cpu
+runner.build_instrumented = build_instrumented_with_provenance
 runner.run_case = diagnostic_run_case
 # Refuse to reuse an older instrumented binary whose generated source recipe may
 # have been different. Baseline caching remains safe because it is unmodified.
