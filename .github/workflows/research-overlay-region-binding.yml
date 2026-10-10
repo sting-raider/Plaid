@@ -1,0 +1,23 @@
+name: research-overlay-region-binding
+
+on:
+  push:
+    branches:
+      - research/overlay-region-binding-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain components
+        run: rustup component add rustfmt clippy
+      - name: Focused regression
+        run: cargo test --locked -p plaid-core --test overlay_region_binding
+      - name: Full plaid-core suite
+        run: cargo test --locked -p plaid-core
+      - name: Formatting
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --locked -p plaid-core --all-targets -- -D warnings
