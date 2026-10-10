@@ -10,7 +10,7 @@ index 0883332..0000000 100644
          for verification in &self.entry_verifications {
              address(&verification.entry)?;
              refs(&verification.evidence)?;
-@@ -644,6 +645,29 @@ impl ProgramMap {
+@@ -644,6 +645,31 @@ impl ProgramMap {
              {
                  return Err("verified entry missing installed identity or unit provenance".into());
              }
