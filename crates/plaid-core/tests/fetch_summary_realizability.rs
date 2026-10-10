@@ -90,6 +90,38 @@ fn rejects_interval_covered_but_globally_impossible_summary_set() {
 }
 
 #[test]
+fn rejects_trailing_sequence_hole_from_prior_coverage_adversary() {
+    let (mut map, capture) = map_with_capture(6);
+
+    map.fetch_observations
+        .insert(summary(&capture, 0x8000_0000, 0x1111_1111, 0, 4, 4));
+    map.fetch_observations
+        .insert(summary(&capture, 0x8000_0004, 0x2222_2222, 1, 3, 2));
+
+    assert_eq!(
+        map.validate().unwrap_err(),
+        "fetch summaries are not jointly realizable"
+    );
+}
+
+#[test]
+fn rejects_internal_sequence_hole_despite_equal_payloads() {
+    let (mut map, capture) = map_with_capture(8);
+
+    map.fetch_observations
+        .insert(summary(&capture, 0x8000_0000, 0xdead_beef, 0, 3, 4));
+    map.fetch_observations
+        .insert(summary(&capture, 0x8000_0004, 0xdead_beef, 1, 2, 2));
+    map.fetch_observations
+        .insert(summary(&capture, 0x8000_0008, 0xdead_beef, 5, 7, 2));
+
+    assert_eq!(
+        map.validate().unwrap_err(),
+        "fetch summaries are not jointly realizable"
+    );
+}
+
+#[test]
 fn accepts_concrete_interleaved_history_summary_set() {
     let (mut map, capture) = map_with_capture(7);
 
