@@ -86,6 +86,26 @@ fn rejects_missing_capture_sequence_even_when_occurrence_totals_match() {
 }
 
 #[test]
+fn rejects_internal_sequence_hole_despite_equal_payload_decoys() {
+    let (mut map, capture) = map_with_capture(8);
+
+    // The left summaries deliberately overlap enough for the occurrence total
+    // to reach eight while sequence 4 remains outside every interval. All words
+    // are equal, proving payload equality cannot manufacture chronology.
+    map.fetch_observations
+        .insert(summary(&capture, 0x8000_0000, 0xdead_beef, 0, 3, 4));
+    map.fetch_observations
+        .insert(summary(&capture, 0x8000_0004, 0xdead_beef, 1, 2, 2));
+    map.fetch_observations
+        .insert(summary(&capture, 0x8000_0008, 0xdead_beef, 5, 7, 2));
+
+    let error = map
+        .validate()
+        .expect_err("an internal capture sequence hole must remain impossible");
+    assert_eq!(error, "fetch summaries leave unaccounted sequence position");
+}
+
+#[test]
 fn accepts_interleaved_summaries_when_interval_union_covers_capture() {
     let (mut map, capture) = map_with_capture(6);
 
