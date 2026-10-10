@@ -1,0 +1,21 @@
+name: research-load-region-destination-binding
+
+on:
+  push:
+    branches:
+      - research/load-region-destination-binding-gpt56sol
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Focused regression
+        run: cargo test -p plaid-core --test load_region_destination_binding -- --nocapture
+      - name: Full plaid-core tests
+        run: cargo test -p plaid-core
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy -p plaid-core --all-targets -- -D warnings
