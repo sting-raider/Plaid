@@ -59,3 +59,4 @@ jobs:
             target/rsp-reset-imem-lifetime.log
             target/ares-rsp-reset-imem-lifetime/results.json
             target/ares-rsp-reset-imem-lifetime/build.json
+            target/ares-rsp-reset-imem-lifetime/build.log
