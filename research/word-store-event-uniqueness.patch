@@ -1,5 +1,4 @@
 diff --git a/crates/plaid-core/src/program.rs b/crates/plaid-core/src/program.rs
-index 9d3b6f2..0000000 100644
 --- a/crates/plaid-core/src/program.rs
 +++ b/crates/plaid-core/src/program.rs
 @@ -617,6 +617,7 @@ impl ProgramMap {
