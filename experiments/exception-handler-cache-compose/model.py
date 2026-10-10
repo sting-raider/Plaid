@@ -2,7 +2,7 @@
 """Adversarial exception-root provenance model.
 
 Backing storage generations and resident I-cache generations are intentionally
-separate.  The bad verifier under test attributes one selected root fetch to the
+separate. The bad verifier under test attributes one selected root fetch to the
 latest equal-valued backing generation and ignores resident ancestry.
 """
 from __future__ import annotations
@@ -146,14 +146,13 @@ def fixed() -> dict:
     assert changed_fetch["value"] != changed_fetch["latest_backing_value"]
     assert strict(changed) and not naive_last_fetch_accepts(changed)
 
-    # Missing/reordered/invalidated histories must fail closed.
-    missing_fill = [events[0], copy.deepcopy(events[1])]
+    # Layout after the first fetch is write, fill, fetch. Delete or reorder the
+    # fill, or invalidate before reusing that fetch receipt, and strict replay fails.
+    missing_fill = [copy.deepcopy(events[0]), copy.deepcopy(events[2])]
     assert not strict(missing_fill)
-    invalidated = copy.deepcopy(events[:2]) + [{"kind": "invalidate"}, copy.deepcopy(events[1])]
+    invalidated = copy.deepcopy(events[:3]) + [{"kind": "invalidate"}, copy.deepcopy(events[2])]
     assert not strict(invalidated)
-    reordered = [events[0], copy.deepcopy(events[1]), copy.deepcopy(events[1])]
-    reordered[1]["kind"] = "fetch"
-    reordered[2]["kind"] = "fill"
+    reordered = [copy.deepcopy(events[0]), copy.deepcopy(events[2]), copy.deepcopy(events[1])]
     assert not strict(reordered)
 
     # Equal-payload fills are distinct resident generations.
