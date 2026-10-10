@@ -30,7 +30,11 @@ fn known_image(rom: &CanonicalRom) -> CodeImage {
     image
 }
 
-fn trace_with_prefix(rom: &CanonicalRom, words: &[u32], mut prefix: Vec<TraceEvent>) -> DiscoveryTrace {
+fn trace_with_prefix(
+    rom: &CanonicalRom,
+    words: &[u32],
+    mut prefix: Vec<TraceEvent>,
+) -> DiscoveryTrace {
     prefix.extend([
         TraceEvent::CompileBegin {
             unit: 0,
@@ -101,11 +105,7 @@ fn assert_store_revoked_source(map: &plaid_core::program::ProgramMap) {
 #[test]
 fn overlapping_same_value_store_after_dma_must_revoke_dma_byte_origin() {
     let (rom, words) = rom_and_words();
-    let trace = trace_with_prefix(
-        &rom,
-        &words,
-        vec![dma(), store(0x8000_0000, words[0])],
-    );
+    let trace = trace_with_prefix(&rom, &words, vec![dma(), store(0x8000_0000, words[0])]);
     let map = import_trace_with_rom(&trace, &[], &rom, 100).unwrap();
 
     assert_eq!(map.word_store_observations.len(), 1);
@@ -116,11 +116,7 @@ fn overlapping_same_value_store_after_dma_must_revoke_dma_byte_origin() {
 fn same_value_store_cannot_fall_back_to_equal_known_image() {
     let (rom, words) = rom_and_words();
     let known = known_image(&rom);
-    let trace = trace_with_prefix(
-        &rom,
-        &words,
-        vec![dma(), store(0x8000_0000, words[0])],
-    );
+    let trace = trace_with_prefix(&rom, &words, vec![dma(), store(0x8000_0000, words[0])]);
     let map = import_trace_with_rom(&trace, &[known], &rom, 100).unwrap();
 
     assert_store_revoked_source(&map);
@@ -146,11 +142,7 @@ fn invalidation_does_not_make_a_superseded_dma_writer_current_again() {
 #[test]
 fn overlapping_store_before_dma_is_superseded_by_later_copy() {
     let (rom, words) = rom_and_words();
-    let trace = trace_with_prefix(
-        &rom,
-        &words,
-        vec![store(0x8000_0000, words[0]), dma()],
-    );
+    let trace = trace_with_prefix(&rom, &words, vec![store(0x8000_0000, words[0]), dma()]);
     let map = import_trace_with_rom(&trace, &[], &rom, 100).unwrap();
     assert_eq!(map.loads.len(), 1);
     assert!(
@@ -184,11 +176,7 @@ fn later_dma_after_store_and_invalidation_restores_copy_provenance() {
 #[test]
 fn non_overlapping_store_after_dma_does_not_revoke_copy() {
     let (rom, words) = rom_and_words();
-    let trace = trace_with_prefix(
-        &rom,
-        &words,
-        vec![dma(), store(0x8000_0100, words[0])],
-    );
+    let trace = trace_with_prefix(&rom, &words, vec![dma(), store(0x8000_0100, words[0])]);
     let map = import_trace_with_rom(&trace, &[], &rom, 100).unwrap();
     assert_eq!(map.loads.len(), 1);
     assert!(
@@ -202,11 +190,7 @@ fn non_overlapping_store_after_dma_does_not_revoke_copy() {
 fn changed_value_store_is_also_a_causal_writer_not_a_dma_snapshot_mismatch() {
     let (rom, _words) = rom_and_words();
     let changed: Vec<u32> = vec![0x2402_0001, 0];
-    let trace = trace_with_prefix(
-        &rom,
-        &changed,
-        vec![dma(), store(0x8000_0000, changed[0])],
-    );
+    let trace = trace_with_prefix(&rom, &changed, vec![dma(), store(0x8000_0000, changed[0])]);
     let map = import_trace_with_rom(&trace, &[], &rom, 100).unwrap();
     assert_store_revoked_source(&map);
 }
