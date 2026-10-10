@@ -1,0 +1,37 @@
+diff --git a/crates/plaid-core/src/program.rs b/crates/plaid-core/src/program.rs
+index 9d3b6f2..0000000 100644
+--- a/crates/plaid-core/src/program.rs
++++ b/crates/plaid-core/src/program.rs
+@@ -617,6 +617,7 @@ impl ProgramMap {
+             }
+             refs(&o.evidence)?;
+         }
++        let mut word_store_events = BTreeMap::<&str, (u32, u32, u32, u64)>::new();
+         for store in &self.word_store_observations {
+             if !store.site.0.is_multiple_of(4)
+                 || !store.destination.0.is_multiple_of(4)
+@@ -626,6 +627,21 @@ impl ProgramMap {
+                 return Err("invalid observed cached RDRAM word store".into());
+             }
+             refs(&store.evidence)?;
++            let semantics = (
++                store.site.0,
++                store.destination.0,
++                store.value,
++                store.generation,
++            );
++            for id in &store.evidence {
++                if self
++                    .evidence
++                    .get(id)
++                    .is_some_and(|e| e.kind == EvidenceKind::Trace)
++                    && word_store_events
++                        .insert(id.as_str(), semantics)
++                        .is_some_and(|old| old != semantics)
++                {
++                    return Err("word store trace event has conflicting semantics".into());
++                }
++            }
+         }
+         for verification in &self.entry_verifications {
+             address(&verification.entry)?;
