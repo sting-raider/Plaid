@@ -16,15 +16,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Apply candidate fix
-        shell: bash
         run: |
-          set -euo pipefail
-          if grep -q 'indirect trace event has conflicting semantics' crates/plaid-core/src/program.rs; then
-            echo 'candidate fix already applied'
-          else
-            git apply --check research/indirect-event-uniqueness.patch
-            git apply research/indirect-event-uniqueness.patch
-          fi
+          python3 spikes/indirect-event-uniqueness/apply_candidate_fix.py
           cargo fmt --all
       - name: Run raw indirect event uniqueness regression
         run: cargo test --locked -p plaid-core --test indirect_event_uniqueness -- --nocapture
