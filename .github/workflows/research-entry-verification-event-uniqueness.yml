@@ -1,0 +1,28 @@
+name: research-entry-verification-event-uniqueness
+
+on:
+  push:
+    branches:
+      - research/entry-verification-event-uniqueness-gpt56sol
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  plaid-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run entry verification event uniqueness regression
+        run: cargo test --locked -p plaid-core --test entry_verification_event_uniqueness -- --nocapture
+      - name: Run full plaid-core suite
+        if: success()
+        run: cargo test --locked -p plaid-core
+      - name: Check formatting
+        if: success()
+        run: cargo fmt --all -- --check
+      - name: Run clippy
+        if: success()
+        run: cargo clippy --locked -p plaid-core --all-targets -- -D warnings
