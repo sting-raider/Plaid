@@ -4,7 +4,8 @@ path = Path("crates/plaid-core/src/program.rs")
 text = path.read_text()
 marker = "        let mut fetch_totals = BTreeMap::<&str, u64>::new();\n"
 if "primitive trace event reused across incompatible event roles" in text:
-    raise SystemExit("candidate already applied")
+    print("candidate already applied")
+    raise SystemExit(0)
 if text.count(marker) != 1:
     raise SystemExit(f"expected one insertion marker, found {text.count(marker)}")
 
