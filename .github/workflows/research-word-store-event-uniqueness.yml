@@ -14,6 +14,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - name: Apply candidate guard
+        run: git apply research/word-store-event-uniqueness.patch
       - name: Focused regression
         run: cargo test --locked -p plaid-core --test word_store_event_uniqueness
       - name: Full plaid-core suite
