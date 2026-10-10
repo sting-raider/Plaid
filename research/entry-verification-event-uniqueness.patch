@@ -10,7 +10,7 @@ index 0883332..0000000 100644
          for verification in &self.entry_verifications {
              address(&verification.entry)?;
              refs(&verification.evidence)?;
-@@ -644,6 +645,31 @@ impl ProgramMap {
+@@ -644,6 +645,29 @@ impl ProgramMap {
              {
                  return Err("verified entry missing installed identity or unit provenance".into());
              }
@@ -34,9 +34,7 @@ index 0883332..0000000 100644
 +                        .insert(id.as_str(), semantics.clone())
 +                        .is_some_and(|old| old != semantics)
 +                {
-+                    return Err(
-+                        "entry verification trace event has conflicting semantics".into(),
-+                    );
++                    return Err("entry verification trace event has conflicting semantics".into());
 +                }
 +            }
          }
