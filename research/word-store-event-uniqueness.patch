@@ -1,7 +1,8 @@
 diff --git a/crates/plaid-core/src/program.rs b/crates/plaid-core/src/program.rs
+index 0883332..f1ab0e8 100644
 --- a/crates/plaid-core/src/program.rs
 +++ b/crates/plaid-core/src/program.rs
-@@ -617,6 +617,7 @@ impl ProgramMap {
+@@ -620,6 +620,7 @@ impl ProgramMap {
              }
              refs(&o.evidence)?;
          }
@@ -9,7 +10,7 @@ diff --git a/crates/plaid-core/src/program.rs b/crates/plaid-core/src/program.rs
          for store in &self.word_store_observations {
              if !store.site.0.is_multiple_of(4)
                  || !store.destination.0.is_multiple_of(4)
-@@ -626,6 +627,21 @@ impl ProgramMap {
+@@ -628,6 +629,24 @@ impl ProgramMap {
                  return Err("invalid observed cached RDRAM word store".into());
              }
              refs(&store.evidence)?;
