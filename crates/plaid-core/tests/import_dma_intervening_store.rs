@@ -1,7 +1,8 @@
 use plaid_core::{
     GuestAddr,
+    discovery::CodeImage,
     merge::import_trace_with_rom,
-    program::{PhysicalAddr, RomOffset},
+    program::{GuestRange, PhysicalAddr, RomOffset},
     rom::CanonicalRom,
     trace::{DiscoveryTrace, EventRecord, TraceEvent, TraceHeader},
 };
@@ -13,6 +14,20 @@ fn rom_and_words() -> (CanonicalRom, Vec<u32>) {
     bytes[64..68].copy_from_slice(&words[0].to_be_bytes());
     bytes[68..72].copy_from_slice(&words[1].to_be_bytes());
     (CanonicalRom::from_bytes(&bytes).unwrap(), words)
+}
+
+fn known_image(rom: &CanonicalRom) -> CodeImage {
+    let mut image = CodeImage::from_rom(
+        rom,
+        RomOffset(64),
+        GuestRange {
+            start: GuestAddr(0x8000_0000),
+            size: 8,
+        },
+    )
+    .unwrap();
+    image.physical_start = Some(PhysicalAddr(0));
+    image
 }
 
 fn trace_with_prefix(rom: &CanonicalRom, words: &[u32], mut prefix: Vec<TraceEvent>) -> DiscoveryTrace {
@@ -94,12 +109,75 @@ fn overlapping_same_value_store_after_dma_must_revoke_dma_byte_origin() {
 }
 
 #[test]
+fn same_value_store_cannot_fall_back_to_equal_known_image() {
+    let (rom, words) = rom_and_words();
+    let known = known_image(&rom);
+    let trace = trace_with_prefix(
+        &rom,
+        &words,
+        vec![dma(), store(0x8000_0000, words[0])],
+    );
+    let map = import_trace_with_rom(&trace, &[known], &rom, 100).unwrap();
+
+    assert!(map.loads.is_empty());
+    assert!(
+        map.unresolved
+            .iter()
+            .any(|u| u.kind == "unknown_executable_source"),
+        "equal bytes in a supplied image cannot replace superseded writer provenance"
+    );
+}
+
+#[test]
+fn invalidation_does_not_make_a_superseded_dma_writer_current_again() {
+    let (rom, words) = rom_and_words();
+    let trace = trace_with_prefix(
+        &rom,
+        &words,
+        vec![
+            dma(),
+            store(0x8000_0000, words[0]),
+            TraceEvent::Invalidate { range: None },
+        ],
+    );
+    let map = import_trace_with_rom(&trace, &[], &rom, 100).unwrap();
+
+    assert!(map.loads.is_empty());
+    assert!(
+        map.unresolved
+            .iter()
+            .any(|u| u.kind == "unknown_executable_source")
+    );
+}
+
+#[test]
 fn overlapping_store_before_dma_is_superseded_by_later_copy() {
     let (rom, words) = rom_and_words();
     let trace = trace_with_prefix(
         &rom,
         &words,
         vec![store(0x8000_0000, words[0]), dma()],
+    );
+    let map = import_trace_with_rom(&trace, &[], &rom, 100).unwrap();
+    assert_eq!(map.loads.len(), 1);
+    assert!(
+        !map.unresolved
+            .iter()
+            .any(|u| u.kind == "unknown_executable_source")
+    );
+}
+
+#[test]
+fn later_dma_after_store_and_invalidation_restores_copy_provenance() {
+    let (rom, words) = rom_and_words();
+    let trace = trace_with_prefix(
+        &rom,
+        &words,
+        vec![
+            store(0x8000_0000, words[0]),
+            TraceEvent::Invalidate { range: None },
+            dma(),
+        ],
     );
     let map = import_trace_with_rom(&trace, &[], &rom, 100).unwrap();
     assert_eq!(map.loads.len(), 1);
