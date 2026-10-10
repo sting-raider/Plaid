@@ -19,6 +19,8 @@ jobs:
         run: |
           python3 spikes/indirect-event-uniqueness/apply_candidate_fix.py
           cargo fmt --all
+      - name: Verify integration patch matches committed candidate
+        run: git apply --reverse --check research/indirect-event-uniqueness.patch
       - name: Run raw indirect event uniqueness regression
         run: cargo test --locked -p plaid-core --test indirect_event_uniqueness -- --nocapture
       - name: Run full plaid-core suite
