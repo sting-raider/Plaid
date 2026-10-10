@@ -1,0 +1,53 @@
+name: research-exception-handler-cache-compose
+
+on:
+  push:
+    branches:
+      - research/exception-handler-cache-compose-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  exact-pin-compose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch exact pinned ares revision
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs
+          git clone --filter=blob:none --no-checkout https://github.com/ares-emulator/ares.git .refs/ares
+          git -C .refs/ares fetch origin 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git -C .refs/ares checkout --detach 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          test "$(git -C .refs/ares rev-parse HEAD)" = 9408cb43d4948fc3ea6e152a307a34348df3fe04
+
+      - name: Syntax and exact-source guards
+        run: |
+          python3 -m py_compile \
+            experiments/exception-handler-cache-compose/source_guard.py \
+            experiments/exception-handler-cache-compose/model.py \
+            experiments/exception-handler-cache-compose/run.py
+          python3 experiments/exception-handler-cache-compose/source_guard.py
+
+      - name: Run adversarial generation model
+        run: python3 experiments/exception-handler-cache-compose/model.py
+
+      - name: Build and execute exact-pinned ares fixture
+        run: python3 experiments/exception-handler-cache-compose/run.py
+
+      - name: Hash durable evidence
+        run: |
+          sha256sum \
+            target/exception-handler-cache-compose/results.json \
+            target/exception-handler-cache-compose/model-report.json
+
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: exception-handler-cache-compose
+          path: |
+            target/exception-handler-cache-compose/results.json
+            target/exception-handler-cache-compose/model-report.json
+            target/exception-handler-cache-compose/build.json
