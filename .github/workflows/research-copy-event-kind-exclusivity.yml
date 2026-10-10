@@ -1,0 +1,19 @@
+name: research-copy-event-kind-exclusivity
+
+on:
+  push:
+    branches:
+      - research/copy-event-kind-exclusivity-gpt56sol
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run focused regression
+        run: cargo test --locked -p plaid-core --test copy_event_kind_exclusivity -- --nocapture
