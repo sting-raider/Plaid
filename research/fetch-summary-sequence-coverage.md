@@ -72,6 +72,19 @@ small alphabet, verifies that every genuine summary set passes the new invariant
 constructs a family of forged trailing-hole summaries that pass the legacy aggregate
 checks but fail coverage.
 
+The same model also deliberately preserves a stronger counterexample that defeats both
+the legacy and candidate predicates without contradicting this bounded result. For a
+seven-event capture:
+
+- A: `[0,2]`, `occurrences=3`
+- B: `[1,3]`, `occurrences=2`
+- C: `[4,6]`, `occurrences=2`
+
+The interval union covers `0..=6`, all endpoints are distinct, and total occurrences are
+seven. Yet no exact history exists: A's three occurrences force A at sequence 1 while
+B requires sequence 1 as its first occurrence. This is why interval coverage must not
+be promoted into a whole-summary feasibility certificate.
+
 ## Closed-world impact
 
 This closes one deletion/fabrication path in the raw evidence substrate: a map can no
@@ -87,10 +100,12 @@ having this specific impossible chronology.
 ## Remaining gap
 
 Interval-union coverage is necessary, not a proof that every arbitrary set of interval
-counts has a globally realizable assignment of individual occurrences. A stronger
-whole-summary feasibility proof is separate work and should not be silently inferred
-from this result. Raw fetch summaries also remain finite observations, not reachability,
-lifetime, cache-residency or source-completeness certificates.
+counts has a globally realizable assignment of individual occurrences. The explicit
+seven-event A/B/C counterexample above passes interval coverage while having zero
+concrete histories. A stronger whole-summary feasibility proof is separate work and
+should not be silently inferred from this result. Raw fetch summaries also remain finite
+observations, not reachability, lifetime, cache-residency or source-completeness
+certificates.
 
 ## Reproduction
 
@@ -114,4 +129,4 @@ To reproduce the original red result, run the focused regression against canonic
 Adopt the small `ProgramMap::validate` interval-union recheck together with the focused
 regression. Preserve the distinction between an interval's *possible* occurrence
 positions and actual per-event chronology. Do not use this invariant to infer missing
-occurrences or collapse equal-valued summaries.
+occurrences, prove global summary feasibility, or collapse equal-valued summaries.
