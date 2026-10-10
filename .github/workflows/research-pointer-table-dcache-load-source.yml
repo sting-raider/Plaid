@@ -1,0 +1,53 @@
+name: Research pointer-table D-cache load source
+
+on:
+  push:
+    branches: [research/pointer-table-dcache-load-source-gpt56sol]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - name: Guard exact reference pin and scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -A3 'name = "ares"' refs.lock.toml | grep 'rev = "9408cb43d4948fc3ea6e152a307a34348df3fe04"'
+          python3 -m py_compile \
+            spikes/047-ares-pointer-table-dcache-load-source/run.py \
+            spikes/047-ares-pointer-table-dcache-load-source/run_exact.py \
+            spikes/047-ares-pointer-table-dcache-load-source/verify.py
+      - name: Build exact pinned ares and execute dispatch matrix
+        run: python3 spikes/047-ares-pointer-table-dcache-load-source/run_exact.py | tee /tmp/actual.log
+      - name: Strict generation replay and adversarial forgeries
+        shell: bash
+        run: |
+          set -euo pipefail
+          E=target/ares-pointer-table-dcache-load-source/evidence.json
+          python3 spikes/047-ares-pointer-table-dcache-load-source/verify.py "$E" > /tmp/verify-a.log
+          python3 spikes/047-ares-pointer-table-dcache-load-source/verify.py "$E" > /tmp/verify-b.log
+          cmp /tmp/verify-a.log /tmp/verify-b.log
+          cat /tmp/verify-a.log
+          sha256sum "$E" /tmp/actual.log /tmp/verify-a.log \
+            spikes/047-ares-pointer-table-dcache-load-source/driver.cpp \
+            spikes/047-ares-pointer-table-dcache-load-source/verify.py
+      - name: Run plaid-core regression suite
+        run: cargo test --locked -p plaid-core
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pointer-table-dcache-load-source-results
+          path: |
+            target/ares-pointer-table-dcache-load-source/evidence.json
+            /tmp/actual.log
+            /tmp/verify-a.log
