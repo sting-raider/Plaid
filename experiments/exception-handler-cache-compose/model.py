@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Adversarial model for exception-root handler byte provenance.
+"""Adversarial exception-root provenance model.
 
-This deliberately separates backing storage generations from resident I-cache fill
-identity.  It tests the tempting but unsound rule "vector PC + current backing
-bytes identifies the handler that executed".
+Backing storage generations and resident I-cache generations are intentionally
+separate.  The bad verifier under test attributes one selected root fetch to the
+latest equal-valued backing generation and ignores resident ancestry.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ OUT = ROOT / "target/exception-handler-cache-compose/model-report.json"
 
 @dataclass
 class State:
-    backing_generation: int = 0
+    backing_gen: int = 0
     backing_value: int = 0
     next_fill: int = 0
     resident_fill: int | None = None
@@ -29,218 +29,185 @@ class State:
     valid: bool = False
 
 
-def apply(state: State, event: dict) -> None:
-    kind = event["kind"]
+def apply(s: State, e: dict) -> None:
+    kind = e["kind"]
     if kind == "write":
-        state.backing_generation += 1
-        state.backing_value = event["value"]
-        if event.get("generation") != state.backing_generation:
-            raise ValueError("wrong write generation")
-        return
-    if kind == "invalidate":
-        state.valid = False
-        return
-    if kind == "fill":
-        state.next_fill += 1
-        if event.get("fill") != state.next_fill:
-            raise ValueError("wrong fill generation")
-        if event.get("parent") != state.backing_generation:
-            raise ValueError("fill parent is not current backing generation")
-        if event.get("value") != state.backing_value:
-            raise ValueError("fill payload differs from backing")
-        state.resident_fill = state.next_fill
-        state.resident_parent = state.backing_generation
-        state.resident_value = state.backing_value
-        state.valid = True
-        return
-    if kind == "fetch":
-        if not state.valid or state.resident_fill is None:
-            raise ValueError("fetch without valid resident line")
-        if event.get("fill") != state.resident_fill:
-            raise ValueError("fetch references wrong resident fill")
-        if event.get("parent") != state.resident_parent:
-            raise ValueError("fetch references wrong backing parent")
-        if event.get("value") != state.resident_value:
-            raise ValueError("fetch payload differs from resident line")
-        return
-    raise ValueError(f"unknown event {kind}")
+        s.backing_gen += 1
+        if e.get("generation") != s.backing_gen:
+            raise ValueError("write generation")
+        s.backing_value = e["value"]
+    elif kind == "invalidate":
+        s.valid = False
+    elif kind == "fill":
+        s.next_fill += 1
+        if e.get("fill") != s.next_fill:
+            raise ValueError("fill generation")
+        if e.get("parent") != s.backing_gen or e.get("value") != s.backing_value:
+            raise ValueError("fill parent/payload")
+        s.resident_fill = s.next_fill
+        s.resident_parent = s.backing_gen
+        s.resident_value = s.backing_value
+        s.valid = True
+    elif kind == "fetch":
+        if not s.valid or s.resident_fill is None:
+            raise ValueError("fetch without resident")
+        if e.get("fill") != s.resident_fill or e.get("parent") != s.resident_parent:
+            raise ValueError("fetch ancestry")
+        if e.get("value") != s.resident_value:
+            raise ValueError("fetch payload")
+    else:
+        raise ValueError("unknown event")
 
 
-def strict_verify(events: list[dict]) -> bool:
-    state = State()
+def strict(events: list[dict]) -> bool:
+    s = State()
     try:
-        for event in events:
-            apply(state, event)
+        for e in events:
+            apply(s, e)
     except (KeyError, TypeError, ValueError):
         return False
     return True
 
 
-def value_only_latest_backing_verify(events: list[dict]) -> bool:
-    """A deliberately unsound verifier that ignores fill/parent identity."""
+def naive_last_fetch_accepts(events: list[dict]) -> bool:
+    """Unsoundly judge only the selected final fetch from current backing bits."""
     generation = 0
     value = 0
-    for event in events:
-        kind = event.get("kind")
-        if kind == "write":
+    last = None
+    for e in events:
+        if e.get("kind") == "write":
             generation += 1
-            value = event["value"]
-        elif kind == "fetch":
-            if event.get("value") != value:
-                return False
-            # This is the bug under attack: matching current bits are promoted to
-            # current-backing provenance regardless of resident cache ancestry.
-            if event.get("claimed_latest_parent", generation) != generation:
-                return False
-    return True
+            value = e["value"]
+        elif e.get("kind") == "fetch":
+            last = e
+    return bool(
+        last
+        and last.get("value") == value
+        and last.get("claimed_latest_parent", generation) == generation
+    )
 
 
-def write(events: list[dict], state: State, value: int) -> None:
-    events.append({"kind": "write", "generation": state.backing_generation + 1, "value": value})
-    apply(state, events[-1])
+def write(events: list[dict], s: State, value: int) -> None:
+    e = {"kind": "write", "generation": s.backing_gen + 1, "value": value}
+    events.append(e)
+    apply(s, e)
 
 
-def invalidate(events: list[dict], state: State) -> None:
-    events.append({"kind": "invalidate"})
-    apply(state, events[-1])
+def invalidate(events: list[dict], s: State) -> None:
+    e = {"kind": "invalidate"}
+    events.append(e)
+    apply(s, e)
 
 
-def fill(events: list[dict], state: State) -> None:
-    events.append({
-        "kind": "fill",
-        "fill": state.next_fill + 1,
-        "parent": state.backing_generation,
-        "value": state.backing_value,
-    })
-    apply(state, events[-1])
+def fill(events: list[dict], s: State) -> None:
+    e = {"kind": "fill", "fill": s.next_fill + 1, "parent": s.backing_gen, "value": s.backing_value}
+    events.append(e)
+    apply(s, e)
 
 
-def fetch(events: list[dict], state: State) -> dict:
-    if not state.valid:
-        fill(events, state)
-    event = {
+def fetch(events: list[dict], s: State) -> dict:
+    if not s.valid:
+        fill(events, s)
+    e = {
         "kind": "fetch",
-        "fill": state.resident_fill,
-        "parent": state.resident_parent,
-        "value": state.resident_value,
-        "latest_backing_generation": state.backing_generation,
-        "latest_backing_value": state.backing_value,
+        "fill": s.resident_fill,
+        "parent": s.resident_parent,
+        "value": s.resident_value,
+        "latest_backing_generation": s.backing_gen,
+        "latest_backing_value": s.backing_value,
     }
-    events.append(event)
-    apply(state, event)
-    return event
+    events.append(e)
+    apply(s, e)
+    return e
 
 
-def fixed_adversaries() -> dict:
-    # Same-value storage generation: every visible bit is identical but ancestry is not.
+def fixed() -> dict:
+    # Same-value write after fill: bits match latest backing, ancestry does not.
     events: list[dict] = []
-    state = State()
-    write(events, state, 0x24100022)
-    first = fetch(events, state)
-    write(events, state, 0x24100022)
-    stale = fetch(events, state)
+    s = State()
+    write(events, s, 0x24100022)
+    first = fetch(events, s)
+    write(events, s, 0x24100022)
+    stale = fetch(events, s)
     assert first["parent"] == stale["parent"] == 1
     assert stale["latest_backing_generation"] == 2
-    assert stale["value"] == stale["latest_backing_value"]
-    assert strict_verify(events)
+    forged = copy.deepcopy(events)
+    forged[-1]["parent"] = 2
+    forged[-1]["claimed_latest_parent"] = 2
+    assert strict(events) and not strict(forged) and naive_last_fetch_accepts(forged)
 
-    forged_latest = copy.deepcopy(events)
-    forged_latest[-1]["parent"] = 2
-    forged_latest[-1]["claimed_latest_parent"] = 2
-    assert not strict_verify(forged_latest)
-    assert value_only_latest_backing_verify(forged_latest)
-
-    # Changed backing while resident is valid: current RAM does not even predict bits.
+    # Changed backing: current bytes cannot even predict the resident instruction.
     changed: list[dict] = []
-    changed_state = State()
-    write(changed, changed_state, 0x24100011)
-    fetch(changed, changed_state)
-    write(changed, changed_state, 0x24100022)
-    changed_fetch = fetch(changed, changed_state)
+    t = State()
+    write(changed, t, 0x24100011)
+    fetch(changed, t)
+    write(changed, t, 0x24100022)
+    changed_fetch = fetch(changed, t)
     assert changed_fetch["value"] != changed_fetch["latest_backing_value"]
-    assert strict_verify(changed)
-    assert not value_only_latest_backing_verify(changed)
+    assert strict(changed) and not naive_last_fetch_accepts(changed)
 
-    # Explicit invalidation forbids reuse of the old resident generation.
-    invalidated = copy.deepcopy(events[:2])
-    invalidated.append({"kind": "invalidate"})
-    invalidated.append(copy.deepcopy(events[1]))
-    assert not strict_verify(invalidated)
-
-    # A fetch cannot invent a resident generation if its fill record was deleted.
+    # Missing/reordered/invalidated histories must fail closed.
     missing_fill = [events[0], copy.deepcopy(events[1])]
-    assert not strict_verify(missing_fill)
-
-    # A fill cannot be moved after the fetch it supposedly explains.
+    assert not strict(missing_fill)
+    invalidated = copy.deepcopy(events[:2]) + [{"kind": "invalidate"}, copy.deepcopy(events[1])]
+    assert not strict(invalidated)
     reordered = [events[0], copy.deepcopy(events[1]), copy.deepcopy(events[1])]
     reordered[1]["kind"] = "fetch"
     reordered[2]["kind"] = "fill"
-    assert not strict_verify(reordered)
+    assert not strict(reordered)
 
-    # Equal-payload decoy fill generation is not interchangeable with the resident one.
+    # Equal-payload fills are distinct resident generations.
     decoy: list[dict] = []
-    decoy_state = State()
-    write(decoy, decoy_state, 7)
-    a = fetch(decoy, decoy_state)
-    invalidate(decoy, decoy_state)
-    b = fetch(decoy, decoy_state)
+    d = State()
+    write(decoy, d, 7)
+    a = fetch(decoy, d)
+    invalidate(decoy, d)
+    b = fetch(decoy, d)
     assert a["value"] == b["value"] and a["fill"] != b["fill"]
     forged_decoy = copy.deepcopy(decoy)
     forged_decoy[-1]["fill"] = a["fill"]
-    assert not strict_verify(forged_decoy)
+    assert not strict(forged_decoy)
 
     return {
         "same_value_latest_backing_false_attribution": True,
         "changed_value_current_backing_prediction_fails": True,
-        "invalidated_resident_forgery_rejected": True,
-        "missing_fill_forgery_rejected": True,
-        "reordered_fill_forgery_rejected": True,
+        "missing_fill_rejected": True,
+        "invalidated_resident_rejected": True,
+        "reordered_fill_rejected": True,
         "equal_payload_fill_decoy_rejected": True,
     }
 
 
 def fuzz(seed: int = 0x504C414944, histories: int = 20_000, actions: int = 32) -> dict:
     rng = random.Random(seed)
-    same_value_false_attributions = 0
-    changed_value_stale_fetches = 0
-    fetches = 0
-    fills = 0
-    writes = 0
+    same_value_false = changed_stale = fetches = fills = writes = 0
     for _ in range(histories):
         events: list[dict] = []
-        state = State()
-        write(events, state, rng.randrange(4))
-        writes += 1
-        fetch(events, state)
-        fetches += 1
-        fills += 1
+        s = State()
+        write(events, s, rng.randrange(4)); writes += 1
+        fetch(events, s); fetches += 1; fills += 1
         for _ in range(actions):
             choice = rng.randrange(100)
             if choice < 46:
-                # Small value alphabet intentionally produces equal-payload fresh generations.
-                write(events, state, rng.randrange(4))
-                writes += 1
+                write(events, s, rng.randrange(4)); writes += 1
             elif choice < 62:
-                invalidate(events, state)
+                invalidate(events, s)
             else:
-                before_fills = state.next_fill
-                item = fetch(events, state)
-                fetches += 1
-                fills += state.next_fill - before_fills
+                before = s.next_fill
+                item = fetch(events, s)
+                fetches += 1; fills += s.next_fill - before
                 if item["parent"] != item["latest_backing_generation"]:
                     if item["value"] == item["latest_backing_value"]:
-                        same_value_false_attributions += 1
+                        same_value_false += 1
                         forged = copy.deepcopy(events)
                         forged[-1]["parent"] = item["latest_backing_generation"]
                         forged[-1]["claimed_latest_parent"] = item["latest_backing_generation"]
-                        if strict_verify(forged):
-                            raise AssertionError("strict verifier accepted forged latest-backing parent")
-                        if not value_only_latest_backing_verify(forged):
-                            raise AssertionError("value-only verifier failed to demonstrate false acceptance")
+                        if strict(forged) or not naive_last_fetch_accepts(forged):
+                            raise AssertionError("latest-backing forgery test failed")
                     else:
-                        changed_value_stale_fetches += 1
-        if not strict_verify(events):
-            raise AssertionError("strict verifier rejected generated valid history")
+                        changed_stale += 1
+        if not strict(events):
+            raise AssertionError("valid generated history rejected")
     return {
         "seed": seed,
         "histories": histories,
@@ -248,23 +215,23 @@ def fuzz(seed: int = 0x504C414944, histories: int = 20_000, actions: int = 32) -
         "writes": writes,
         "fills": fills,
         "fetches": fetches,
-        "same_value_latest_backing_false_attributions": same_value_false_attributions,
-        "changed_value_stale_fetches": changed_value_stale_fetches,
+        "same_value_latest_backing_false_attributions": same_value_false,
+        "changed_value_stale_fetches": changed_stale,
     }
 
 
 def main() -> int:
-    report = {
-        "schema": 1,
-        "fixed": fixed_adversaries(),
-        "fuzz": fuzz(),
-    }
-    raw = json.dumps(report, sort_keys=True, separators=(",", ":")).encode()
-    digest = hashlib.sha256(raw).hexdigest()
+    report = {"schema": 1, "fixed": fixed(), "fuzz": fuzz()}
+    canonical = json.dumps(report, sort_keys=True, separators=(",", ":")).encode()
+    digest = hashlib.sha256(canonical).hexdigest()
     report["sha256"] = digest
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
-    print(f"PASS MODEL_SHA256={digest} same_value_false_attributions={report['fuzz']['same_value_latest_backing_false_attributions']} changed_stale={report['fuzz']['changed_value_stale_fetches']}")
+    print(
+        "PASS MODEL_SHA256=" + digest
+        + f" same_value_false_attributions={report['fuzz']['same_value_latest_backing_false_attributions']}"
+        + f" changed_stale={report['fuzz']['changed_value_stale_fetches']}"
+    )
     return 0
 
 
