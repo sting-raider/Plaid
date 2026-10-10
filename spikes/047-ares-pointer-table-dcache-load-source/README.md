@@ -1,5 +1,9 @@
 # Spike 047: cacheable pointer-table load source
 
+Result: **VALIDATED for this bounded exact-reference fixture.** The durable
+analysis and proof obligations are recorded in
+`research/ares-pointer-table-dcache-load-source.md`.
+
 This bounded experiment asks which causal generation supplies a cacheable CPU
 pointer-table `LW` that immediately feeds `JR`. It is intentionally narrower than
 a pointer-table closure certificate: it validates an exact load-source join on
