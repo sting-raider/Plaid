@@ -515,7 +515,12 @@ impl ProgramMap {
                 rom_range(o, r.range.size)?;
             }
             if let Some(o) = &r.overlay
-                && self.overlays.get(o).is_none_or(|x| x.image != r.image)
+                && self.overlays.get(o).is_none_or(|x| {
+                    x.image != r.image
+                        || r.rom_offset != Some(x.rom_offset)
+                        || r.range.start != x.load_address
+                        || r.range.size != x.size
+                })
             {
                 return Err("unknown or mismatched overlay".into());
             }
