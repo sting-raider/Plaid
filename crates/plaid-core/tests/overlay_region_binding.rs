@@ -1,4 +1,4 @@
-use plaid_core::{EvidenceKind, GuestAddr, program::*};
+use plaid_core::{EvidenceKind, GuestAddr, merge::merge_maps, program::*};
 
 fn base_map() -> ProgramMap {
     let mut map = ProgramMap::new(RomIdentity {
@@ -61,6 +61,15 @@ fn region_cannot_borrow_same_image_overlay_with_different_rom_source() {
 }
 
 #[test]
+fn overlay_bound_region_requires_its_rom_source() {
+    let mut map = base_map();
+    let mut region = matching_region(1);
+    region.rom_offset = None;
+    map.regions.insert(region);
+    assert!(map.validate().is_err());
+}
+
+#[test]
 fn region_cannot_borrow_same_image_overlay_with_different_load_address() {
     let mut map = base_map();
     let mut region = matching_region(1);
@@ -85,4 +94,14 @@ fn mismatched_overlay_image_remains_rejected() {
     region.image = "image-b".into();
     map.regions.insert(region);
     assert!(map.validate().is_err());
+}
+
+#[test]
+fn merge_already_rejects_conflicting_overlay_identity() {
+    let left = base_map();
+    let mut right = base_map();
+    right.overlays.get_mut("ovl").unwrap().rom_offset = RomOffset(0x80);
+    left.validate().unwrap();
+    right.validate().unwrap();
+    assert!(merge_maps(&left, &right).is_err());
 }
