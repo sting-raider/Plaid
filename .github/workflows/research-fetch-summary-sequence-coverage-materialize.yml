@@ -1,0 +1,47 @@
+name: Research materialize fetch summary coverage candidate
+
+on:
+  push:
+    branches:
+      - research/fetch-summary-sequence-coverage-gpt56sol
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain and exact decoder pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup component add rustfmt clippy
+          grep -F 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' crates/plaid-core/Cargo.toml
+          grep -F 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' refs.lock.toml
+      - name: Apply guarded candidate
+        run: python3 experiments/fetch-summary-sequence-coverage/apply_candidate.py
+      - name: Format candidate
+        run: cargo fmt --all
+      - name: Focused adversarial matrix
+        run: cargo test -p plaid-core --test fetch_summary_sequence_coverage -- --nocapture
+      - name: Full plaid-core tests
+        run: cargo test -p plaid-core
+      - name: Clippy
+        run: cargo clippy -p plaid-core --tests -- -D warnings
+      - name: Materialize validated production diff on research branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- crates/plaid-core/src/program.rs; then
+            echo 'candidate already committed'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/plaid-core/src/program.rs
+          git commit -m 'fix: reject fetch summary sequence holes'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
