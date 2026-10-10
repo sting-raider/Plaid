@@ -23,7 +23,27 @@ jobs:
           rustup component add rustfmt clippy
           grep -F 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' crates/plaid-core/Cargo.toml
           grep -F 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' refs.lock.toml
+      - name: Deterministic realizability model
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile experiments/fetch-summary-realizability/model.py experiments/fetch-summary-realizability/apply_candidate.py
+          python3 experiments/fetch-summary-realizability/model.py > /tmp/model-1.json
+          python3 experiments/fetch-summary-realizability/model.py > /tmp/model-2.json
+          cmp /tmp/model-1.json /tmp/model-2.json
+          cat /tmp/model-1.json
+      - name: Apply candidate validator
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 experiments/fetch-summary-realizability/apply_candidate.py
+          git diff --check
+          git diff -- crates/plaid-core/src/program.rs
       - name: Format
         run: cargo fmt --all -- --check
       - name: Fetch summary realizability adversarial matrix
         run: cargo test --locked -p plaid-core --test fetch_summary_realizability -- --nocapture
+      - name: Full plaid-core tests
+        run: cargo test --locked -p plaid-core
+      - name: Clippy
+        run: cargo clippy --locked -p plaid-core --all-targets -- -D warnings
