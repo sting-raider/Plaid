@@ -68,8 +68,7 @@ fn retained_rsp_microcode_recreates_static_scope_blocker_after_diagnostic_deleti
     assert!(has(&report, "dynamic_effect_outside_scope"));
 
     // Equal payload cannot collapse a second RSP executable fact into static scope.
-    map.rsp_microcodes
-        .insert(microcode('b', 0x100, evidence));
+    map.rsp_microcodes.insert(microcode('b', 0x100, evidence));
     map.unresolved.clear();
     let report = solve(
         &map,
