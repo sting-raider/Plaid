@@ -84,6 +84,20 @@ fn store(destination: u32, value: u32) -> TraceEvent {
     }
 }
 
+fn assert_store_revoked_source(map: &plaid_core::program::ProgramMap) {
+    assert!(map.loads.is_empty());
+    assert!(
+        map.unresolved
+            .iter()
+            .any(|u| u.kind == "intervening_executable_store")
+    );
+    assert!(
+        map.unresolved
+            .iter()
+            .any(|u| u.kind == "unknown_executable_source")
+    );
+}
+
 #[test]
 fn overlapping_same_value_store_after_dma_must_revoke_dma_byte_origin() {
     let (rom, words) = rom_and_words();
@@ -95,17 +109,7 @@ fn overlapping_same_value_store_after_dma_must_revoke_dma_byte_origin() {
     let map = import_trace_with_rom(&trace, &[], &rom, 100).unwrap();
 
     assert_eq!(map.word_store_observations.len(), 1);
-    assert!(
-        map.loads.is_empty(),
-        "a later successful store supersedes the DMA writer even when the word value is unchanged: {:?}",
-        map.loads
-    );
-    assert!(
-        map.unresolved
-            .iter()
-            .any(|u| u.kind == "unknown_executable_source"),
-        "the first compilation should remain source-unknown after the DMA provenance is superseded"
-    );
+    assert_store_revoked_source(&map);
 }
 
 #[test]
@@ -119,13 +123,7 @@ fn same_value_store_cannot_fall_back_to_equal_known_image() {
     );
     let map = import_trace_with_rom(&trace, &[known], &rom, 100).unwrap();
 
-    assert!(map.loads.is_empty());
-    assert!(
-        map.unresolved
-            .iter()
-            .any(|u| u.kind == "unknown_executable_source"),
-        "equal bytes in a supplied image cannot replace superseded writer provenance"
-    );
+    assert_store_revoked_source(&map);
 }
 
 #[test]
@@ -142,12 +140,7 @@ fn invalidation_does_not_make_a_superseded_dma_writer_current_again() {
     );
     let map = import_trace_with_rom(&trace, &[], &rom, 100).unwrap();
 
-    assert!(map.loads.is_empty());
-    assert!(
-        map.unresolved
-            .iter()
-            .any(|u| u.kind == "unknown_executable_source")
-    );
+    assert_store_revoked_source(&map);
 }
 
 #[test]
@@ -206,7 +199,7 @@ fn non_overlapping_store_after_dma_does_not_revoke_copy() {
 }
 
 #[test]
-fn changed_value_snapshot_already_fails_closed() {
+fn changed_value_store_is_also_a_causal_writer_not_a_dma_snapshot_mismatch() {
     let (rom, _words) = rom_and_words();
     let changed: Vec<u32> = vec![0x2402_0001, 0];
     let trace = trace_with_prefix(
@@ -215,10 +208,5 @@ fn changed_value_snapshot_already_fails_closed() {
         vec![dma(), store(0x8000_0000, changed[0])],
     );
     let map = import_trace_with_rom(&trace, &[], &rom, 100).unwrap();
-    assert!(map.loads.is_empty());
-    assert!(
-        map.unresolved
-            .iter()
-            .any(|u| u.kind == "executable_load_bytes_mismatch")
-    );
+    assert_store_revoked_source(&map);
 }
