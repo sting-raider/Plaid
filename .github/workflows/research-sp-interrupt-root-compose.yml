@@ -1,0 +1,47 @@
+name: Research SP interrupt root composition
+
+on:
+  push:
+    branches: [research/sp-interrupt-root-compose-gpt56sol]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch exact pinned references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .refs
+          fetch_ref() {
+            local name="$1" url="$2" rev="$3"
+            git init -q ".refs/${name}"
+            git -C ".refs/${name}" remote add origin "$url"
+            git -C ".refs/${name}" fetch -q --depth=1 origin "$rev"
+            git -C ".refs/${name}" checkout -q --detach FETCH_HEAD
+          }
+          fetch_ref ares https://github.com/ares-emulator/ares.git 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          fetch_ref gopher64 https://github.com/gopher64/gopher64.git e96debac941a26ba4961e5145056c0821d3a56f7
+          fetch_ref n64-systemtest https://github.com/lemmy-64/n64-systemtest.git 196f5421173220eb2f63a7a99c64795dc0ea0698
+
+      - name: Compile and run causal falsifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/sp-interrupt-root-compose
+          python3 -m py_compile experiments/sp-interrupt-root-compose/model.py experiments/sp-interrupt-root-compose/source_guard.py
+          python3 experiments/sp-interrupt-root-compose/model.py | tee artifacts/sp-interrupt-root-compose/model.txt
+          python3 experiments/sp-interrupt-root-compose/source_guard.py | tee artifacts/sp-interrupt-root-compose/source_guard.txt
+          sha256sum artifacts/sp-interrupt-root-compose/*.txt | tee artifacts/sp-interrupt-root-compose/artifact-sha256.txt
+
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: sp-interrupt-root-compose-evidence
+          path: artifacts/sp-interrupt-root-compose
