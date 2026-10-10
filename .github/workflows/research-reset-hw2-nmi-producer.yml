@@ -27,6 +27,7 @@ jobs:
       - name: Source guard
         run: |
           set -euxo pipefail
+          mkdir -p target/reset-hw2-nmi-producer
           python3 -m py_compile experiments/reset-hw2-nmi-producer/source_guard.py experiments/reset-hw2-nmi-producer/model.py
           PLAID_REFS=.refs-research python3 experiments/reset-hw2-nmi-producer/source_guard.py | tee target/reset-hw2-nmi-producer/source-guard.stdout
       - name: Execute adversarial model twice
