@@ -19,8 +19,10 @@ fn empty_map() -> ProgramMap {
 }
 
 fn add_copy(map: &mut ProgramMap) {
-    map.evidence
-        .insert(COPY.into(), trace_evidence("one concrete RomDmaObserved event"));
+    map.evidence.insert(
+        COPY.into(),
+        trace_evidence("one concrete RomDmaObserved event"),
+    );
     let evidence: EvidenceRefs = [COPY.to_string()].into();
     map.dma_observations.insert(ObservedDma {
         rom_offset: RomOffset(64),
@@ -95,15 +97,16 @@ fn copy_event_cannot_also_be_entry_verification_event() {
     let mut map = empty_map();
     add_copy(&mut map);
     let unit = "trace:synthetic:11";
-    map.evidence
-        .insert(unit.into(), trace_evidence("one concrete CompileBegin event"));
+    map.evidence.insert(
+        unit.into(),
+        trace_evidence("one concrete CompileBegin event"),
+    );
     let entry = CodeAddress {
         pc: GuestAddr(0x8000_0000),
         image: "copied-image".into(),
         generation: 0,
     };
-    map.entries
-        .insert(entry.clone(), [unit.to_string()].into());
+    map.entries.insert(entry.clone(), [unit.to_string()].into());
     map.entry_verifications.insert(ObservedEntryVerification {
         entry,
         register_mask: 0,
@@ -123,8 +126,10 @@ fn distinct_primitive_event_ids_remain_valid() {
     let mut map = empty_map();
     add_copy(&mut map);
     let store = "trace:synthetic:8";
-    map.evidence
-        .insert(store.into(), trace_evidence("one concrete CpuWordStoreObserved event"));
+    map.evidence.insert(
+        store.into(),
+        trace_evidence("one concrete CpuWordStoreObserved event"),
+    );
     map.word_store_observations.insert(ObservedWordStore {
         site: GuestAddr(0x8000_1000),
         destination: GuestAddr(0x8000_0000),
@@ -151,9 +156,10 @@ fn independently_valid_maps_cannot_merge_cross_kind_event_identity() {
     left.validate().unwrap();
 
     let mut right = empty_map();
-    right
-        .evidence
-        .insert(COPY.into(), trace_evidence("one concrete RomDmaObserved event"));
+    right.evidence.insert(
+        COPY.into(),
+        trace_evidence("one concrete RomDmaObserved event"),
+    );
     right.word_store_observations.insert(ObservedWordStore {
         site: GuestAddr(0x8000_1000),
         destination: GuestAddr(0x8000_0000),
@@ -166,5 +172,9 @@ fn independently_valid_maps_cannot_merge_cross_kind_event_identity() {
     assert!(
         merge_maps(&left, &right).is_err(),
         "merge must not launder one raw event identity across primitive event kinds"
+    );
+    assert!(
+        merge_maps(&right, &left).is_err(),
+        "merge order must not change copy-event kind exclusivity"
     );
 }
