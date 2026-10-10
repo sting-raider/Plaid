@@ -3,6 +3,7 @@
 //! Keep this crate free of ROM assets and game-specific assumptions.
 
 pub mod discovery;
+pub mod entry_install;
 pub mod fetch;
 pub mod history;
 pub mod indirect;

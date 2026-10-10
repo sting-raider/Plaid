@@ -17,3 +17,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Run entry install event uniqueness regression
         run: cargo test --locked -p plaid-core --test entry_install_event_uniqueness -- --nocapture
+      - name: Run full plaid-core suite
+        run: cargo test --locked -p plaid-core
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run clippy
+        run: cargo clippy --locked -p plaid-core --all-targets -- -D warnings

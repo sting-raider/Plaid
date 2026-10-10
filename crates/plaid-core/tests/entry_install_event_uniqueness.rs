@@ -1,6 +1,7 @@
 use plaid_core::{
     EvidenceKind, GuestAddr,
     discovery::CodeImage,
+    entry_install::verify_entry_install_projection,
     merge::{import_trace, merge_maps},
     program::{CodeAddress, Evidence, PhysicalAddr, ProgramMap, RomIdentity, RomOffset},
     trace::{DiscoveryTrace, EventRecord, TraceEvent, TraceHeader},
@@ -67,9 +68,14 @@ fn trace(entries: &[u32]) -> DiscoveryTrace {
     }
 }
 
-fn imported(entries: &[u32]) -> ProgramMap {
+fn imported(source: &DiscoveryTrace) -> ProgramMap {
     let known = image();
-    import_trace(&trace(entries), &[known], 100).unwrap()
+    import_trace(source, &[known], 100).unwrap()
+}
+
+fn verify(source: &DiscoveryTrace, map: &ProgramMap) -> Result<(), String> {
+    let known = image();
+    verify_entry_install_projection(source, &[known], map, 100)
 }
 
 fn trace_id_with(map: &ProgramMap, needle: &str) -> String {
@@ -89,11 +95,13 @@ fn address(pc: u32, image: &str, generation: u64) -> CodeAddress {
 }
 
 #[test]
-fn one_entry_install_event_cannot_authenticate_two_entry_identities() {
+fn source_bound_verifier_rejects_one_install_event_on_two_entry_identities() {
+    let source = trace(&[0x8000_0000]);
     let original = address(0x8000_0000, "boot", 0);
-    let base = imported(&[original.pc.0]);
+    let base = imported(&source);
     let install = trace_id_with(&base, "EntryInstalled");
     assert!(base.entries[&original].contains(&install));
+    verify(&source, &base).unwrap();
 
     let forgeries = [
         ("different PC", address(0x8000_0008, "boot", 0)),
@@ -106,16 +114,20 @@ fn one_entry_install_event_cannot_authenticate_two_entry_identities() {
             .entries
             .insert(forged_entry, [install.clone()].into());
         assert!(
-            forged.validate().is_err(),
-            "one concrete EntryInstalled event was accepted for an incompatible {axis}"
+            forged.validate().is_ok(),
+            "control changed: ProgramMap alone unexpectedly rejected {axis}"
+        );
+        assert!(
+            verify(&source, &forged).is_err(),
+            "source recheck accepted one EntryInstalled event for an incompatible {axis}"
         );
     }
 }
 
 #[test]
-fn independently_valid_fragments_cannot_merge_one_install_event_into_two_roots() {
-    let original = address(0x8000_0000, "boot", 0);
-    let left = imported(&[original.pc.0]);
+fn source_bound_verifier_rejects_cross_map_install_event_laundering() {
+    let source = trace(&[0x8000_0000]);
+    let left = imported(&source);
     let install = trace_id_with(&left, "EntryInstalled");
 
     let mut right = left.clone();
@@ -126,33 +138,54 @@ fn independently_valid_fragments_cannot_merge_one_install_event_into_two_roots()
     );
     right.validate().unwrap();
 
+    let merged = merge_maps(&left, &right).unwrap();
+    merged.validate().unwrap();
     assert!(
-        merge_maps(&left, &right).is_err(),
-        "independently valid fragments reused one EntryInstalled event as two roots"
+        verify(&source, &merged).is_err(),
+        "source recheck accepted one EntryInstalled event composed into two roots"
     );
 }
 
 #[test]
 fn distinct_install_events_may_install_distinct_entries() {
-    let map = imported(&[0x8000_0000, 0x8000_0008]);
+    let source = trace(&[0x8000_0000, 0x8000_0008]);
+    let map = imported(&source);
     map.validate().unwrap();
+    verify(&source, &map).unwrap();
     assert!(map.entries.contains_key(&address(0x8000_0000, "boot", 0)));
     assert!(map.entries.contains_key(&address(0x8000_0008, "boot", 0)));
 }
 
 #[test]
 fn compile_trace_provenance_is_legitimately_shared_across_entries() {
-    let map = imported(&[0x8000_0000, 0x8000_0008]);
+    let source = trace(&[0x8000_0000, 0x8000_0008]);
+    let map = imported(&source);
     let compile_begin = trace_id_with(&map, "CompileBegin");
     let first = &map.entries[&address(0x8000_0000, "boot", 0)];
     let second = &map.entries[&address(0x8000_0008, "boot", 0)];
     assert!(first.contains(&compile_begin));
     assert!(second.contains(&compile_begin));
+    verify(&source, &map).unwrap();
+}
+
+#[test]
+fn source_bound_verifier_rejects_tampered_event_metadata() {
+    let source = trace(&[0x8000_0000]);
+    let mut map = imported(&source);
+    let install = trace_id_with(&map, "EntryInstalled");
+    map.evidence
+        .get_mut(&install)
+        .unwrap()
+        .detail
+        .push_str("; forged detail");
+    map.validate().unwrap();
+    assert!(verify(&source, &map).is_err());
 }
 
 #[test]
 fn equivalent_entry_may_accumulate_non_event_provenance() {
-    let mut map = imported(&[0x8000_0000]);
+    let source = trace(&[0x8000_0000]);
+    let mut map = imported(&source);
     map.evidence.insert(
         "aux".into(),
         Evidence {
@@ -167,4 +200,5 @@ fn equivalent_entry_may_accumulate_non_event_provenance() {
         .unwrap()
         .insert("aux".into());
     map.validate().unwrap();
+    verify(&source, &map).unwrap();
 }
