@@ -55,6 +55,11 @@ def main() -> None:
         ("B", 1, 2, 2),
         ("C", 5, 7, 2),
     )
+    full_coverage_unrealizable = (
+        ("A", 0, 2, 3),
+        ("B", 1, 3, 2),
+        ("C", 4, 6, 2),
+    )
 
     assert legacy_accepts(6, tail_hole)
     assert not coverage_accepts(6, tail_hole)
@@ -62,6 +67,18 @@ def main() -> None:
 
     assert legacy_accepts(8, internal_hole)
     assert not coverage_accepts(8, internal_hole)
+
+    # Coverage is deliberately only a necessary invariant. This set covers all
+    # seven sequence positions and passes the candidate predicate, yet no exact
+    # history exists: A's count forces sequence 1 to be A while B requires it as
+    # B's first occurrence. Keep this counterexample so the bounded fix is not
+    # later mistaken for a global summary-realizability proof.
+    assert legacy_accepts(7, full_coverage_unrealizable)
+    assert coverage_accepts(7, full_coverage_unrealizable)
+    assert not any(
+        summarize(history) == full_coverage_unrealizable
+        for history in product("ABC", repeat=7)
+    )
 
     forged_family = []
     for count in range(5, 13):
@@ -84,6 +101,9 @@ def main() -> None:
         "tail_hole_concrete_histories": 0,
         "internal_hole_legacy_accepts": True,
         "internal_hole_coverage_accepts": False,
+        "full_coverage_unrealizable_legacy_accepts": True,
+        "full_coverage_unrealizable_coverage_accepts": True,
+        "full_coverage_unrealizable_concrete_histories": 0,
         "forged_tail_hole_counts": forged_family,
         "genuine_histories_checked": genuine_histories,
     }
