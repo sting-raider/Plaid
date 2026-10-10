@@ -601,6 +601,20 @@ impl ProgramMap {
                 return Err("DMA destination overflow".into());
             }
         }
+        let mut primitive_trace_roles = BTreeMap::<String, &'static str>::new();
+        let mut claim_trace_role = |id: &str, role: &'static str| -> Result<(), String> {
+            if self
+                .evidence
+                .get(id)
+                .is_some_and(|e| e.kind == EvidenceKind::Trace)
+                && primitive_trace_roles
+                    .insert(id.to_string(), role)
+                    .is_some_and(|old| old != role)
+            {
+                return Err("trace evidence reused across incompatible primitive roles".into());
+            }
+            Ok(())
+        };
         for o in &self.indirect_observations {
             if !o.site.0.is_multiple_of(4) || !o.target.0.is_multiple_of(4) {
                 return Err("unaligned indirect observation".into());
@@ -619,6 +633,12 @@ impl ProgramMap {
                 return Err("missing indirect source-unit trace provenance".into());
             }
             refs(&o.evidence)?;
+            for id in &o.evidence {
+                claim_trace_role(id, "indirect_event")?;
+            }
+            if let Some(unit) = &o.source_unit {
+                claim_trace_role(unit, "source_unit")?;
+            }
         }
         for store in &self.word_store_observations {
             if !store.site.0.is_multiple_of(4)
@@ -628,6 +648,9 @@ impl ProgramMap {
                 return Err("invalid observed cached RDRAM word store".into());
             }
             refs(&store.evidence)?;
+            for id in &store.evidence {
+                claim_trace_role(id, "word_store_event")?;
+            }
         }
         for verification in &self.entry_verifications {
             address(&verification.entry)?;
@@ -640,6 +663,10 @@ impl ProgramMap {
             {
                 return Err("verified entry missing installed identity or unit provenance".into());
             }
+            for id in &verification.evidence {
+                claim_trace_role(id, "entry_verification_event")?;
+            }
+            claim_trace_role(&verification.source_unit, "source_unit")?;
         }
         let mut fetch_totals = BTreeMap::<&str, u64>::new();
         let mut fetch_keys = BTreeSet::new();

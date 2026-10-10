@@ -85,8 +85,7 @@ fn verification(event: &str, source_unit: &str) -> ObservedEntryVerification {
 #[test]
 fn one_trace_event_cannot_be_both_store_and_indirect() {
     let mut map = base_map();
-    map.word_store_observations
-        .insert(store("trace:session:1"));
+    map.word_store_observations.insert(store("trace:session:1"));
     map.indirect_observations
         .insert(indirect("trace:session:1", None));
     assert!(
@@ -111,8 +110,7 @@ fn one_trace_event_cannot_be_both_indirect_and_entry_verification() {
 #[test]
 fn raw_event_identity_cannot_masquerade_as_compile_begin_source_unit() {
     let mut map = base_map();
-    map.word_store_observations
-        .insert(store("trace:session:3"));
+    map.word_store_observations.insert(store("trace:session:3"));
     map.indirect_observations
         .insert(indirect("trace:session:4", Some("trace:session:3")));
     assert!(
@@ -144,12 +142,9 @@ fn cross_map_merge_cannot_launder_a_cross_kind_event_collision() {
 #[test]
 fn distinct_events_and_shared_source_units_remain_valid() {
     let mut map = base_map();
-    map.word_store_observations
-        .insert(store("trace:session:1"));
-    map.indirect_observations.insert(indirect(
-        "trace:session:2",
-        Some("trace:session:0"),
-    ));
+    map.word_store_observations.insert(store("trace:session:1"));
+    map.indirect_observations
+        .insert(indirect("trace:session:2", Some("trace:session:0")));
     map.entry_verifications
         .insert(verification("trace:session:3", "trace:session:0"));
     assert!(map.validate().is_ok());
@@ -158,8 +153,7 @@ fn distinct_events_and_shared_source_units_remain_valid() {
 #[test]
 fn raw_event_provenance_may_still_propagate_to_derived_facts() {
     let mut map = base_map();
-    map.word_store_observations
-        .insert(store("trace:session:1"));
+    map.word_store_observations.insert(store("trace:session:1"));
     map.regions.insert(Region {
         image: "image".into(),
         generation: 0,
