@@ -3,6 +3,10 @@ from pathlib import Path
 
 path = Path("crates/plaid-core/src/merge.rs")
 text = path.read_text()
+marker = "let mut word_stores = Vec::<(u64, PhysicalAddr, EvidenceRefs)>::new();"
+if marker in text:
+    print("candidate fix already applied")
+    raise SystemExit(0)
 
 replacements = [
     (
