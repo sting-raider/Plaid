@@ -62,12 +62,7 @@ fn conflicting_interior_fragment_must_fail_closed() {
 
     // Same opaque execution identity and same interior PC, but different bytes.
     // This fragment does not contain the block/entry root at 0x80000000.
-    let conflicting = image(
-        0x80000004,
-        "opaque-overlap-test",
-        7,
-        vec![0x24090003],
-    );
+    let conflicting = image(0x80000004, "opaque-overlap-test", 7, vec![0x24090003]);
     let report = solve(
         &map,
         &[primary.clone(), conflicting],
@@ -76,19 +71,17 @@ fn conflicting_interior_fragment_must_fail_closed() {
     .unwrap();
 
     assert_eq!(report.status, ClosureStatus::Open, "{report:#?}");
-    assert!(has(&report, "conflicting_instruction_sources"), "{report:#?}");
+    assert!(
+        has(&report, "conflicting_instruction_sources"),
+        "{report:#?}"
+    );
 }
 
 #[test]
 fn equal_interior_fragment_is_not_a_conflict() {
     let primary = primary();
     let map = map(&primary);
-    let equal = image(
-        0x80000004,
-        "opaque-overlap-test",
-        7,
-        vec![0x24090002],
-    );
+    let equal = image(0x80000004, "opaque-overlap-test", 7, vec![0x24090002]);
     let report = solve(&map, &[primary, equal], Scope::DeclaredStaticImages).unwrap();
     assert_eq!(report.status, ClosureStatus::Closed, "{report:#?}");
     assert!(!has(&report, "conflicting_instruction_sources"));
@@ -100,25 +93,10 @@ fn different_execution_identity_does_not_create_same_identity_conflict() {
     let map = map(&primary);
 
     for decoy in [
-        image(
-            0x80000004,
-            "different-image",
-            7,
-            vec![0x24090003],
-        ),
-        image(
-            0x80000004,
-            "opaque-overlap-test",
-            8,
-            vec![0x24090003],
-        ),
+        image(0x80000004, "different-image", 7, vec![0x24090003]),
+        image(0x80000004, "opaque-overlap-test", 8, vec![0x24090003]),
     ] {
-        let report = solve(
-            &map,
-            &[primary.clone(), decoy],
-            Scope::DeclaredStaticImages,
-        )
-        .unwrap();
+        let report = solve(&map, &[primary.clone(), decoy], Scope::DeclaredStaticImages).unwrap();
         assert_eq!(report.status, ClosureStatus::Closed, "{report:#?}");
         assert!(!has(&report, "conflicting_instruction_sources"));
     }
@@ -128,12 +106,7 @@ fn different_execution_identity_does_not_create_same_identity_conflict() {
 fn conflict_covering_block_start_is_already_ambiguous() {
     let primary = primary();
     let map = map(&primary);
-    let conflicting = image(
-        0x80000000,
-        "opaque-overlap-test",
-        7,
-        vec![0x24080009],
-    );
+    let conflicting = image(0x80000000, "opaque-overlap-test", 7, vec![0x24080009]);
     let report = solve(&map, &[primary, conflicting], Scope::DeclaredStaticImages).unwrap();
     assert_eq!(report.status, ClosureStatus::Open, "{report:#?}");
     assert!(has(&report, "missing_instruction_source"), "{report:#?}");
