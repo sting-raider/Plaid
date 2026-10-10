@@ -1,5 +1,5 @@
 diff --git a/crates/plaid-core/src/program.rs b/crates/plaid-core/src/program.rs
-index 0883332..0000000 100644
+index 0883332..c55d79b 100644
 --- a/crates/plaid-core/src/program.rs
 +++ b/crates/plaid-core/src/program.rs
 @@ -601,6 +601,8 @@ impl ProgramMap {
@@ -11,7 +11,7 @@ index 0883332..0000000 100644
          for o in &self.indirect_observations {
              if !o.site.0.is_multiple_of(4) || !o.target.0.is_multiple_of(4) {
                  return Err("unaligned indirect observation".into());
-@@ -619,6 +621,27 @@ impl ProgramMap {
+@@ -619,6 +621,30 @@ impl ProgramMap {
                  return Err("missing indirect source-unit trace provenance".into());
              }
              refs(&o.evidence)?;
