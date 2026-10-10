@@ -163,6 +163,27 @@ fn one_source_unit_may_have_multiple_distinct_verification_events() {
 }
 
 #[test]
+fn source_unit_trace_ref_may_be_shared_as_explicit_unit_provenance() {
+    let mut map = base_map();
+    let entry = code(0x8000_0000, "img-a", 0);
+    map.entry_verifications.insert(verification(
+        entry.clone(),
+        0,
+        "unit0",
+        0,
+        &["unit0", "verify7"],
+    ));
+    map.entry_verifications.insert(verification(
+        entry,
+        0,
+        "unit0",
+        1,
+        &["unit0", "verify8"],
+    ));
+    map.validate().unwrap();
+}
+
+#[test]
 fn equivalent_verification_semantics_may_union_additional_non_event_provenance() {
     let mut map = base_map();
     let entry = code(0x8000_0000, "img-a", 0);
