@@ -6,10 +6,34 @@ on:
       - research/primitive-event-kind-exclusivity-gpt56sol
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  focused:
+  candidate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Apply candidate fix
+        run: python3 spikes/primitive-event-kind-exclusivity/apply_candidate_fix.py
+      - name: Normalize Rust formatting
+        run: cargo fmt --all
       - name: Focused regression
         run: cargo test --locked -p plaid-core --test primitive_event_kind_exclusivity
+      - name: Full plaid-core suite
+        run: cargo test --locked -p plaid-core
+      - name: Formatting gate
+        run: cargo fmt --all -- --check
+      - name: Clippy gate
+        run: cargo clippy --locked -p plaid-core --all-targets -- -D warnings
+      - name: Checkpoint tested candidate source
+        run: |
+          if ! git diff --quiet -- crates/plaid-core/src/program.rs crates/plaid-core/tests/primitive_event_kind_exclusivity.rs; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add crates/plaid-core/src/program.rs crates/plaid-core/tests/primitive_event_kind_exclusivity.rs
+            git commit -m "fix: reject cross-kind primitive trace roles"
+            git push
+          else
+            echo "candidate source already committed"
+          fi
