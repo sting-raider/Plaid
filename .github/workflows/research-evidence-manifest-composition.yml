@@ -11,14 +11,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - name: Guard canonical base assumptions
         shell: bash
         run: |
           set -euo pipefail
           grep -F 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' refs.lock.toml
           git diff --check HEAD^ HEAD
-      - name: Compile research model
-        run: python3 -m py_compile experiments/evidence-manifest-composition/model.py
+      - name: Compile research models
+        run: |
+          python3 -m py_compile experiments/evidence-manifest-composition/model.py
+          python3 -m py_compile experiments/evidence-manifest-composition/ablations.py
       - name: Run deterministic model twice
         shell: bash
         run: |
@@ -40,6 +44,24 @@ jobs:
           print('manifest_bytes=' + str(a['benchmark']['manifest_bytes']))
           print('event_leaf_bytes=' + str(a['benchmark']['event_leaf_bytes']))
           PY
+      - name: Run trust-field ablations twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 experiments/evidence-manifest-composition/ablations.py | tee ablations-1.json
+          python3 experiments/evidence-manifest-composition/ablations.py | tee ablations-2.json
+          python3 - <<'PY'
+          import json
+          expected = '8cc5a6caa077d6bf9a1115fc5b92b43994be5b96d52044efafbaca2afb2acac4'
+          a = json.load(open('ablations-1.json'))
+          b = json.load(open('ablations-2.json'))
+          assert a['semantic_sha256'] == expected, a['semantic_sha256']
+          assert b['semantic_sha256'] == expected, b['semantic_sha256']
+          assert all(a['checks'].values())
+          assert a['size_probe']['external_root_map_bytes'] == 5601
+          assert a['size_probe']['full_manifest_bytes'] == 15601
+          print('ablation_semantic_sha256=' + expected)
+          PY
       - name: Untouched core regression suite
         run: cargo test --locked -p plaid-core
       - name: Rust formatting and lint sanity
@@ -53,3 +75,5 @@ jobs:
           path: |
             results-1.json
             results-2.json
+            ablations-1.json
+            ablations-2.json
