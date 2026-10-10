@@ -65,10 +65,7 @@ fn one_verification_event_cannot_describe_two_different_operations() {
     let e1 = code(0x8000_0020, "img-b", 1);
     let base = verification(e0.clone(), 0, "unit0", 0, &["verify7"]);
     let forgeries = [
-        (
-            "entry",
-            verification(e1, 0, "unit0", 0, &["verify7"]),
-        ),
+        ("entry", verification(e1, 0, "unit0", 0, &["verify7"])),
         (
             "register mask",
             verification(e0.clone(), 0x0000_0001, "unit0", 0, &["verify7"]),
@@ -173,13 +170,8 @@ fn source_unit_trace_ref_may_be_shared_as_explicit_unit_provenance() {
         0,
         &["unit0", "verify7"],
     ));
-    map.entry_verifications.insert(verification(
-        entry,
-        0,
-        "unit0",
-        1,
-        &["unit0", "verify8"],
-    ));
+    map.entry_verifications
+        .insert(verification(entry, 0, "unit0", 1, &["unit0", "verify8"]));
     map.validate().unwrap();
 }
 
@@ -187,19 +179,9 @@ fn source_unit_trace_ref_may_be_shared_as_explicit_unit_provenance() {
 fn equivalent_verification_semantics_may_union_additional_non_event_provenance() {
     let mut map = base_map();
     let entry = code(0x8000_0000, "img-a", 0);
-    map.entry_verifications.insert(verification(
-        entry.clone(),
-        0,
-        "unit0",
-        0,
-        &["verify7"],
-    ));
-    map.entry_verifications.insert(verification(
-        entry,
-        0,
-        "unit0",
-        0,
-        &["verify7", "aux"],
-    ));
+    map.entry_verifications
+        .insert(verification(entry.clone(), 0, "unit0", 0, &["verify7"]));
+    map.entry_verifications
+        .insert(verification(entry, 0, "unit0", 0, &["verify7", "aux"]));
     map.validate().unwrap();
 }
