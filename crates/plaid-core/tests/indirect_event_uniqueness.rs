@@ -132,6 +132,37 @@ fn equivalent_semantics_may_accumulate_provenance() {
 }
 
 #[test]
+fn shared_source_unit_trace_context_is_not_an_event_identity() {
+    let mut map = ProgramMap::new(rom());
+    map.evidence
+        .insert("unit0".into(), trace("CompileBegin unit 0"));
+    map.evidence.insert(
+        "event0".into(),
+        trace("first concrete IndirectTargetObserved event"),
+    );
+    map.evidence.insert(
+        "event1".into(),
+        trace("second concrete IndirectTargetObserved event"),
+    );
+
+    let mut first = observation("event0");
+    first.source_unit = Some("unit0".into());
+    first.evidence.insert("unit0".into());
+
+    let mut second = observation("event1");
+    second.target = GuestAddr(0x8000_0040);
+    second.source_unit = Some("unit0".into());
+    second.evidence.insert("unit0".into());
+
+    map.indirect_observations.insert(first);
+    map.indirect_observations.insert(second);
+    assert!(
+        map.validate().is_ok(),
+        "a CompileBegin source-unit identity is reusable context, not the executed transfer event"
+    );
+}
+
+#[test]
 fn merge_cannot_launder_one_event_into_two_transfers() {
     let left = map_with_event("event0");
     let mut right = map_with_event("event0");
