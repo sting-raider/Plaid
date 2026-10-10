@@ -5,8 +5,7 @@ from pathlib import Path
 
 PATH = Path("crates/plaid-core/src/program.rs")
 
-HELPER = r'''
-fn fetch_summaries_realizable(fetch_count: u64, summaries: &[(u64, u64, u64)]) -> bool {
+HELPER = r'''fn fetch_summaries_realizable(fetch_count: u64, summaries: &[(u64, u64, u64)]) -> bool {
     if fetch_count == 0 {
         return summaries.is_empty();
     }
@@ -20,10 +19,7 @@ fn fetch_summaries_realizable(fetch_count: u64, summaries: &[(u64, u64, u64)]) -
         };
         interior.push(remaining);
         for seq in [first, last] {
-            if endpoints
-                .insert(seq, index)
-                .is_some_and(|old| old != index)
-            {
+            if endpoints.insert(seq, index).is_some_and(|old| old != index) {
                 return false;
             }
         }
@@ -62,10 +58,12 @@ fn fetch_summaries_realizable(fetch_count: u64, summaries: &[(u64, u64, u64)]) -
         if last == seq && active.contains_key(&seq) {
             return false;
         }
-        if first == seq && last > seq && interior[owner] != 0 {
-            if active.insert(last, interior[owner]).is_some() {
-                return false;
-            }
+        if first == seq
+            && last > seq
+            && interior[owner] != 0
+            && active.insert(last, interior[owner]).is_some()
+        {
+            return false;
         }
         previous = Some(seq);
     }
