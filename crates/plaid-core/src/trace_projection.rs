@@ -6,7 +6,10 @@
 
 use crate::{
     EvidenceKind, GuestAddr,
-    program::{ObservedDma, ObservedEntryVerification, ObservedIndirect, ObservedWordStore, PhysicalAddr, ProgramMap, RomOffset},
+    program::{
+        ObservedDma, ObservedEntryVerification, ObservedIndirect, ObservedWordStore, PhysicalAddr,
+        ProgramMap, RomOffset,
+    },
     rom::sha256,
     trace::{DiscoveryTrace, TraceEvent},
 };
@@ -250,7 +253,11 @@ pub fn verify_discovery_trace_projection(
     for id in expected.keys() {
         match seen.get(id).copied().unwrap_or(0) {
             1 => {}
-            0 => return Err(format!("source primitive event {id} is missing from ProgramMap")),
+            0 => {
+                return Err(format!(
+                    "source primitive event {id} is missing from ProgramMap"
+                ));
+            }
             count => {
                 return Err(format!(
                     "source primitive event {id} appears in {count} raw ProgramMap facts"
