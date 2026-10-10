@@ -112,8 +112,10 @@ fn one_event_cannot_change_explicit_source_unit() {
 #[test]
 fn distinct_event_ids_remain_valid_for_distinct_transfers() {
     let mut map = map_with_event("event0");
-    map.evidence
-        .insert("event1".into(), trace("a distinct IndirectTargetObserved event"));
+    map.evidence.insert(
+        "event1".into(),
+        trace("a distinct IndirectTargetObserved event"),
+    );
     let mut second = observation("event1");
     second.target = GuestAddr(0x8000_0040);
     map.indirect_observations.insert(second);
@@ -123,8 +125,10 @@ fn distinct_event_ids_remain_valid_for_distinct_transfers() {
 #[test]
 fn equivalent_semantics_may_accumulate_provenance() {
     let mut map = map_with_event("event0");
-    map.evidence
-        .insert("context".into(), static_evidence("independent supporting context"));
+    map.evidence.insert(
+        "context".into(),
+        static_evidence("independent supporting context"),
+    );
     let mut same = observation("event0");
     same.evidence.insert("context".into());
     map.indirect_observations.insert(same);

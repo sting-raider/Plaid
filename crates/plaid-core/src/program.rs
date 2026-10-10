@@ -601,6 +601,8 @@ impl ProgramMap {
                 return Err("DMA destination overflow".into());
             }
         }
+        let mut indirect_events =
+            BTreeMap::<&str, (u32, u32, Option<u32>, u64, Option<&str>)>::new();
         for o in &self.indirect_observations {
             if !o.site.0.is_multiple_of(4) || !o.target.0.is_multiple_of(4) {
                 return Err("unaligned indirect observation".into());
@@ -619,6 +621,30 @@ impl ProgramMap {
                 return Err("missing indirect source-unit trace provenance".into());
             }
             refs(&o.evidence)?;
+            let semantics = (
+                o.site.0,
+                o.target.0,
+                o.delay_slot_pc.map(|pc| pc.0),
+                o.generation,
+                o.source_unit.as_deref(),
+            );
+            for id in &o.evidence {
+                // CompileBegin provenance is reusable context for many executed
+                // transfers. It is not the identity of this observation event.
+                if o.source_unit.as_deref() == Some(id.as_str()) {
+                    continue;
+                }
+                if self
+                    .evidence
+                    .get(id)
+                    .is_some_and(|e| e.kind == EvidenceKind::Trace)
+                    && indirect_events
+                        .insert(id.as_str(), semantics)
+                        .is_some_and(|old| old != semantics)
+                {
+                    return Err("indirect trace event has conflicting semantics".into());
+                }
+            }
         }
         for store in &self.word_store_observations {
             if !store.site.0.is_multiple_of(4)
