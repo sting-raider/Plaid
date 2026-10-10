@@ -10,6 +10,7 @@ DEFAULT = ROOT / "target/ares-pointer-table-dcache-load-source/evidence.json"
 TABLE = 0x2000
 CONFLICT = 0x4000
 WORD = 4
+MUTATION_PC = 0x80006004
 PTR_A = 0x80007000
 PTR_B = 0x80007100
 PTR_C = 0x80007200
@@ -65,7 +66,7 @@ def replay(case):
             require(e["bytes"] in (1, 2, 4, 8), "bad scalar width")
             require(e["uncached_cpu"], "fixture scalar write is not uncached CPU")
             require(e["bytes"] == WORD and e["address"] == TABLE, "unexpected observed scalar write")
-            require((e["pc"] & 0xFFFFFFFF) == 0x6004, "scalar write at wrong guest instruction")
+            require((e["pc"] & 0xFFFFFFFF) == MUTATION_PC, "scalar write at wrong guest instruction")
             gen = generation("scalar", ordinal, TABLE)
             backing[TABLE] = (e["value"] & 0xFFFFFFFF, gen)
             geninfo[gen] = {"kind": "scalar", "address": TABLE,
@@ -125,7 +126,7 @@ def replay(case):
             line["dirty"] = e["dirty"]
             geninfo[gen] = {"kind": "dwrite", "address": e["paddr"], "value": e["value"],
                             "parent": old_gen, "pc": e["pc"]}
-            require(e["paddr"] == TABLE and (e["pc"] & 0xFFFFFFFF) == 0x6004,
+            require(e["paddr"] == TABLE and (e["pc"] & 0xFFFFFFFF) == MUTATION_PC,
                     "unexpected cached table mutation")
             cached_table_writes.append((ordinal, gen))
             continue
@@ -168,7 +169,7 @@ def replay(case):
     if scenario in ("refill", "same_refill"):
         require(len(conflict_fill_sources) == 1, "slot-reuse case lacks conflict fill")
 
-    # Recheck the final cache state for the table slot.  This prevents a stale
+    # Recheck the final cache state for the table slot. This prevents a stale
     # source generation from being laundered through a post-dispatch slot view.
     final_slot = facts["resident_index"]
     require(final_slot in slots, "final table slot absent")
