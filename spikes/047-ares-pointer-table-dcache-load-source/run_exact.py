@@ -34,6 +34,9 @@ def patch_dcache_and_cpu(output):
 
 def diagnostic_run_case(exe, mode, scenario):
     raw, doc = _original_run_case(exe, mode, scenario)
+    # driver.cpp stores the controlled code offset. Convert it to the actual
+    # KSEG0 guest PC before any cross-build comparisons or source joins.
+    doc["facts"]["dispatch_pc"] |= 0x80000000
     if mode == "traced":
         print("TRACE_DREADS=" + json.dumps({
             "scenario": scenario,
