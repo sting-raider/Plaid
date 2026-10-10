@@ -1,6 +1,11 @@
 # Exception handler root x I-cache residency composition
 
-Status: EXPERIMENTAL until the exact-pin workflow passes.
+Status: **VALIDATED for the bounded exact-pinned ares experiment**.
+
+Successful execution receipt: Actions run `38050813544`, job `114209395345`,
+behavioral result SHA-256
+`9715f83c898ae315ff2be8ed95c19dbf3019e6cd44953f6eec9fabe1d5577dd8`.
+See `research/exception-handler-cache-composition.md` for evidence and limits.
 
 This bounded fixture asks whether selecting the BEV=0 general exception vector
 also identifies the executable bytes that service that root. It composes existing
@@ -16,8 +21,7 @@ select the same vector and execute the older resident handler word until a guest
 CACHE hit-invalidate forces a refill. A successful same-value backing write must
 also remain a distinct storage generation even though handler bits do not change.
 
-If the exact pinned reference instead invalidates/refills the vector line merely
-because exception entry occurred, the hypothesis is rejected.
+The exact pinned reference validated this hypothesis.
 
 ## Exact reference
 
@@ -34,8 +38,8 @@ production runtime.
 2. Execute an actual guest `SYSCALL` from uncached KSEG1 and then the first
    instruction at BEV=0 general vector, warming the KSEG0 I-cache line.
 3. Execute guest KSEG1 `SW` of handler B (`...0x22`) to physical `0x180`.
-4. Trigger the same exception again with no CACHE operation. The falsifiable
-   prediction is that handler A still executes from the resident line.
+4. Trigger the same exception again with no CACHE operation. Handler A still
+   executes from the resident line even though current RDRAM holds B.
 5. Execute guest CACHE hit-invalidate on the vector line, trigger again, and
    require handler B plus a new completed fill.
 6. Execute another successful guest KSEG1 `SW` of handler B, i.e. equal payload
@@ -60,7 +64,7 @@ sha256sum target/exception-handler-cache-compose/results.json \
 `.refs/ares` must be checked out at the exact pin first. The branch workflow does
 that from scratch on Ubuntu 24.04.
 
-## What a pass would prove
+## What the pass proves
 
 Only for this bounded pinned-reference scope, exception-root selection and
 handler-byte identity are separate facts. The root operation must be joined to
