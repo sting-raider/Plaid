@@ -1,0 +1,46 @@
+name: research-reset-hw2-nmi-producer
+
+on:
+  push:
+    branches:
+      - research/reset-hw2-nmi-producer-gpt56sol
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout exact pinned references
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .refs-research
+          git init .refs-research/mupen64plus-core
+          git -C .refs-research/mupen64plus-core remote add origin https://github.com/mupen64plus/mupen64plus-core.git
+          git -C .refs-research/mupen64plus-core fetch --depth=1 origin ba95bab92a76744753bfe61470823a4937850ab0
+          git -C .refs-research/mupen64plus-core checkout --detach FETCH_HEAD
+          git init .refs-research/gopher64
+          git -C .refs-research/gopher64 remote add origin https://github.com/gopher64/gopher64.git
+          git -C .refs-research/gopher64 fetch --depth=1 origin e96debac941a26ba4961e5145056c0821d3a56f7
+          git -C .refs-research/gopher64 checkout --detach FETCH_HEAD
+      - name: Source guard
+        run: |
+          set -euxo pipefail
+          python3 -m py_compile experiments/reset-hw2-nmi-producer/source_guard.py experiments/reset-hw2-nmi-producer/model.py
+          PLAID_REFS=.refs-research python3 experiments/reset-hw2-nmi-producer/source_guard.py | tee target/reset-hw2-nmi-producer/source-guard.stdout
+      - name: Execute adversarial model twice
+        run: |
+          set -euxo pipefail
+          python3 experiments/reset-hw2-nmi-producer/model.py | tee /tmp/model-a.txt
+          cp target/reset-hw2-nmi-producer/results.json /tmp/results-a.json
+          python3 experiments/reset-hw2-nmi-producer/model.py | tee /tmp/model-b.txt
+          diff -u /tmp/model-a.txt /tmp/model-b.txt
+          diff -u /tmp/results-a.json target/reset-hw2-nmi-producer/results.json
+          cp /tmp/model-a.txt target/reset-hw2-nmi-producer/model.stdout
+          sha256sum target/reset-hw2-nmi-producer/*
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: reset-hw2-nmi-producer-evidence
+          path: target/reset-hw2-nmi-producer/
