@@ -1,6 +1,8 @@
 name: Research pointer-table D-cache load source
 
 on:
+  push:
+    branches: [research/pointer-table-dcache-load-source-gpt56sol]
   workflow_dispatch:
 
 permissions:
@@ -40,9 +42,19 @@ jobs:
           python3 spikes/047-ares-pointer-table-dcache-load-source/verify.py "$E" > /tmp/verify-b.log
           cmp /tmp/verify-a.log /tmp/verify-b.log
           cat /tmp/verify-a.log
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          doc = json.loads(Path('target/ares-pointer-table-dcache-load-source/evidence.json').read_text())
+          print('SOURCE_INPUTS=' + json.dumps(doc['source_inputs'], sort_keys=True))
+          PY
           sha256sum "$E" /tmp/actual.log /tmp/verify-a.log \
             spikes/047-ares-pointer-table-dcache-load-source/driver.cpp \
-            spikes/047-ares-pointer-table-dcache-load-source/verify.py
+            spikes/047-ares-pointer-table-dcache-load-source/observer.hpp \
+            spikes/047-ares-pointer-table-dcache-load-source/run.py \
+            spikes/047-ares-pointer-table-dcache-load-source/run_exact.py \
+            spikes/047-ares-pointer-table-dcache-load-source/verify.py \
+            research/ares-pointer-table-dcache-load-source.md
       - name: Run plaid-core regression suite
         run: cargo test --locked -p plaid-core
       - uses: actions/upload-artifact@v4
