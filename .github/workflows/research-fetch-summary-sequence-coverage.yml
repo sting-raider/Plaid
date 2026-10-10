@@ -23,6 +23,10 @@ jobs:
           rustup component add rustfmt clippy
           grep -F 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' crates/plaid-core/Cargo.toml
           grep -F 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' refs.lock.toml
+      - name: Deterministic summary model
+        run: |
+          python3 -m py_compile experiments/fetch-summary-sequence-coverage/model.py
+          python3 experiments/fetch-summary-sequence-coverage/model.py
       - name: Format
         run: cargo fmt --all -- --check
       - name: Fetch summary adversarial matrix
