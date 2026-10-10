@@ -1,6 +1,7 @@
 """Execute run.py while shadowing cpu.cpp so its quoted dcache.cpp include is instrumented."""
 from pathlib import Path
 import importlib.util
+import json
 import re
 import shutil
 
@@ -9,6 +10,7 @@ SPEC = importlib.util.spec_from_file_location("table_load_runner", HERE / "run.p
 runner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(runner)
 _original_patch_dcache = runner.patch_dcache
+_original_run_case = runner.run_case
 
 
 def patch_dcache_and_cpu(output):
@@ -30,7 +32,21 @@ def patch_dcache_and_cpu(output):
     destination.write_text(routed)
 
 
+def diagnostic_run_case(exe, mode, scenario):
+    raw, doc = _original_run_case(exe, mode, scenario)
+    if mode == "traced":
+        print("TRACE_DREADS=" + json.dumps({
+            "scenario": scenario,
+            "dispatch_pc": doc["facts"]["dispatch_pc"],
+            "dreads": doc["events"]["dreads"],
+            "dwrites": doc["events"]["dwrites"],
+            "scalars": doc["events"]["scalars"],
+        }, sort_keys=True), flush=True)
+    return raw, doc
+
+
 runner.patch_dcache = patch_dcache_and_cpu
+runner.run_case = diagnostic_run_case
 # Refuse to reuse an older instrumented binary whose generated source recipe may
 # have been different. Baseline caching remains safe because it is unmodified.
 shutil.rmtree(runner.OUTPUT / "instrumented", ignore_errors=True)
