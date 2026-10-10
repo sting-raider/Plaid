@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   regression:
@@ -15,5 +15,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Apply candidate fix
+        run: python3 spikes/load-region-binding/apply_candidate_fix.py
       - name: Run load-region binding regression
         run: cargo test --locked -p plaid-core --test load_region_binding -- --nocapture
+      - name: Run full plaid-core suite
+        run: cargo test --locked -p plaid-core
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run clippy
+        run: cargo clippy --locked -p plaid-core --all-targets -- -D warnings
+      - name: Commit validated candidate fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          if git diff --quiet -- crates/plaid-core/src/program.rs; then
+            echo "candidate fix already committed"
+            exit 0
+          fi
+          git config user.name "Plaid research worker"
+          git config user.email "actions@users.noreply.github.com"
+          git add crates/plaid-core/src/program.rs
+          git commit -m "fix: bind load mappings to executable regions"
+          git push origin HEAD:research/load-region-binding-gpt56sol
