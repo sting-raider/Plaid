@@ -1,0 +1,21 @@
+name: research-generic-trace-cross-kind-exclusivity
+
+on:
+  push:
+    branches:
+      - research/generic-trace-cross-kind-exclusivity-gpt56sol
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify pinned Rabbitizer revision
+        run: grep -F '724a49a5b4dbfb99f1a9e6992e63964fd29c90c8' refs.lock.toml Cargo.lock
+      - name: Run focused regression
+        run: cargo test --locked -p plaid-core --test generic_trace_cross_kind_exclusivity -- --nocapture
