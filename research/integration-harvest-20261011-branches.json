@@ -324,8 +324,11 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090420656",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090530221"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "reviewed_superseded_source_design",
+      "integration_commit": null,
+      "review_note": "research/cpu-sp-copy-primary-review.md",
+      "replacement_contract_commit": "71ccb10",
+      "regression_commit": "0f00cdc"
     },
     {
       "branch": "research/cpu-sp-imem-subword-gpt56sol",
