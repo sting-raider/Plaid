@@ -60,7 +60,10 @@ fn bind_source(
             && root.root.0 == BEV1_GENERAL_ROOT,
         "root is outside the validated BEV=1 32-bit general-exception scope",
     )?;
-    require(fetch_seq < evidence.fetches, "selected fetch is outside the history")?;
+    require(
+        fetch_seq < evidence.fetches,
+        "selected fetch is outside the history",
+    )?;
 
     let mut exact = evidence.samples.iter().filter(|sample| {
         sample.observations == 1
@@ -149,14 +152,15 @@ pub fn verify_bev1_general_pif_root_source<H: BufRead, F: BufRead + Seek>(
     firmware: &[u8],
 ) -> Result<(), String> {
     require(
-        *receipt == inspect_bev1_general_pif_root_source(
-            receipt.root,
-            receipt.fetch_seq,
-            history,
-            fetched,
-            rom,
-            firmware,
-        )?,
+        *receipt
+            == inspect_bev1_general_pif_root_source(
+                receipt.root,
+                receipt.fetch_seq,
+                history,
+                fetched,
+                rom,
+                firmware,
+            )?,
         "BEV=1 PIF root receipt differs from complete sources/inputs",
     )
 }
@@ -191,7 +195,10 @@ mod tests {
         }
     }
 
-    fn bind(samples: &[PifBackingFetchSample], fetch_seq: u64) -> Result<Bev1GeneralPifRootSourceReceipt, String> {
+    fn bind(
+        samples: &[PifBackingFetchSample],
+        fetch_seq: u64,
+    ) -> Result<Bev1GeneralPifRootSourceReceipt, String> {
         bind_source(
             root(),
             fetch_seq,
@@ -228,7 +235,7 @@ mod tests {
         coalesced.last_fetch = 8;
         coalesced.last_read_ordinal = 41;
         coalesced.observations = 2;
-        assert!(bind(&[coalesced], 4).is_err());
+        assert!(bind(&[coalesced.clone()], 4).is_err());
         assert!(bind(&[coalesced], 8).is_err());
     }
 
