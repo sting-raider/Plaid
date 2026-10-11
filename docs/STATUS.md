@@ -774,3 +774,6 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   origin. Exception causality/classification chronology, BEV=1 refill/XTLB source
   behavior, handler cache/mapping lifetime, remaining root classes, whole-ROM
   closure and native completeness remain OPEN.
+
+- Production now exposes bounded source-bound `reset_producer` replay (ADR-0104). Reset requests and HW2/NMI delivery events carry explicit never-reused generations; deliveries consume one active event once, explicit supersession can represent an observed coalescing boundary, and imported pending events keep request ancestry UNKNOWN. Equal pending/type/count values never merge events. The model intentionally certifies neither Mupen-style accumulation nor Gopher-style replacement as hardware truth. Fresh exact-pin research reproduction and canonical Rust workspace/synthetic validation pass. Physical reset timing/repeated-reset semantics, complete producer census, save/restore identity, simultaneous IRQ/NMI priority, root fetch/byte provenance, executable lifetime, whole-ROM and native completeness remain OPEN.
+
