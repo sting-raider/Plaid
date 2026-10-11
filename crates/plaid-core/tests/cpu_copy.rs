@@ -217,3 +217,36 @@ fn zero_register_failed_reads_and_segment_boundaries_supply_no_copy() {
     }
     assert!(inspect(&segmented).unwrap().witnesses.is_empty());
 }
+
+#[test]
+fn big_endian_byte_expressions_preserve_zero_transform_and_recheck_every_lane() {
+    let value = fixture(Some(0xf00f), false, false);
+    let bytes = serde_json::to_vec(&value).unwrap();
+    let digest = sha256(&bytes);
+    let report = cpu_copy::inspect_cpu_copy_history(&bytes, &digest).unwrap();
+    let expression = &report.witnesses[0].byte_expr;
+    assert_eq!(expression.each_ref().map(|e| e.xor), [0, 0, 0xf0, 0x0f]);
+    assert_eq!(
+        expression.each_ref().map(|e| e.source.0),
+        [0x1000, 0x1001, 0x1002, 0x1003]
+    );
+    assert_eq!(
+        expression.each_ref().map(|e| e.destination.0),
+        [0x2000, 0x2001, 0x2002, 0x2003]
+    );
+    for lane in 0..4 {
+        let mut forged = report.clone();
+        forged.witnesses[0].byte_expr[lane].source.0 ^= 4;
+        assert!(cpu_copy::verify_cpu_copy_report(&forged, &bytes, &digest).is_err());
+        let mut forged = report.clone();
+        forged.witnesses[0].byte_expr[lane].xor ^= 1;
+        assert!(cpu_copy::verify_cpu_copy_report(&forged, &bytes, &digest).is_err());
+    }
+    let zero = inspect(&fixture(Some(0), false, false)).unwrap();
+    let plain = inspect(&fixture(None, false, false)).unwrap();
+    assert_eq!(zero.witnesses[0].byte_expr, plain.witnesses[0].byte_expr);
+    assert_ne!(
+        zero.witnesses[0].transform_context,
+        plain.witnesses[0].transform_context
+    );
+}

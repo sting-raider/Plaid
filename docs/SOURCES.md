@@ -344,3 +344,10 @@ Exact decoder/TLBR/TLBP/TLB/cache objects, source-only Gopher/Mupen disagreement
 and systemtest expectations are checked. All reference implementation/notices
 remain ignored; finite context snapshots and fetch behavior do not establish a
 complete writer/lifetime certificate or hardware semantics.
+
+`crates/plaid-core/src/cpu_copy.rs` is original project-owned compiler-time
+replay of the already-validated spike 044/045 contracts. Exact pinned ares
+LW/LWU/SW/XORI semantics supply behavioral context only; no upstream algorithm
+is copied. Authenticated retained captures compare independent Word and byte
+witnesses without new reference builds. Source receipts bind supplied records,
+not sensor completeness, ultimate storage ancestry or native execution.

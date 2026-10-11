@@ -721,3 +721,9 @@ XORI-zero identity, with complete-source receipt/report rechecking. Saved actual
 captures reproduce the independent two copy and four transform witnesses without
 new reference builds. General producer ancestry, census, executable lifetime and
 whole-ROM/native closure remain OPEN (ADR-0099).
+
+Canonical CPU-copy CLI Actions 38147498790 passes at exact
+`3c0fbe7d3dc5d6b68538c8e168b966dfbe120131`. Rust witnesses now retain each
+big-endian source/destination/XOR byte expression, matching all four measured
+XORI cases. A sixth focused regression rechecks every lane and preserves
+XORI-zero context despite copy-equivalent byte mappings.

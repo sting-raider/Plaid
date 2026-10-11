@@ -44,3 +44,12 @@ was followed by strict Clippy and CLI checks, without repeating the full suite.
 Interpretation remains confined to the
 declared controlled segment/domain; supplied source receipts do not establish
 physical hardware truth, execution-mode/capture completeness or whole-ROM closure.
+
+Follow-up implementation retains four explicit big-endian byte expressions per
+Word witness, anchored to the parent read/context/source receipt. All four
+measured XORI expressions match the independent saved byte mappings. The 0xf00f
+mask maps to [0,0,0xf0,0x0f]; each source/destination lane is explicit. XORI zero
+has copy-equivalent byte expressions but still retains its transform context.
+A sixth Rust test rejects altered source/XOR lanes during report rechecking.
+Focused Rust tests/fmt/strict Clippy pass. Canonical CI 38147498790 is green at
+exact pre-byte-expression CLI head `3c0fbe7d3dc5d6b68538c8e168b966dfbe120131`.
