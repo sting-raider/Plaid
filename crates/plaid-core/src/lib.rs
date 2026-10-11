@@ -39,6 +39,7 @@ pub mod cpu_mutation {
 }
 pub mod discovery;
 pub mod exception_pif;
+pub mod exception_root_generation;
 pub mod exception_roots;
 pub mod fetch;
 pub mod history;
@@ -53,6 +54,7 @@ pub mod pif_history;
 pub mod pipeline;
 pub mod program;
 pub mod rom;
+pub mod root_provenance;
 pub mod rsp_dmem_dma_egress;
 pub mod solver;
 pub mod sp_dma_egress;

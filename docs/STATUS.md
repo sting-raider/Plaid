@@ -775,17 +775,14 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   behavior, handler cache/mapping lifetime, remaining root classes, whole-ROM
   closure and native completeness remain OPEN.
 
+- Cached BEV=0 general exception-root word provenance now has a bounded source-bound
+  replay (ADR-0104). Successful backing writes and I-cache fills retain separate
+  ordinal identities, so a backing rewrite does not relabel an older resident
+  handler and same-valued writes remain distinct generations. An invalidate/refill
+  can advance the supplying generation; a root fetch without captured resident/fill
+  evidence remains UNKNOWN even when current RDRAM has equal bytes. This is only the
+  validated 32-bit, EXL-clear, identity-RDRAM word at physical 0x180 and is separate
+  from ADR-0103's BEV=1/PIF root provenance. Reachability, source-sensor completeness,
+  full handler spans, mapping/cache lifetime, mutation census and whole-ROM/native
+  completeness remain open.
 
-- Production now exposes bounded source-bound `rsp_dmem_dma_egress` replay for
-  completed DMEM-source reverse SP-DMA Word effects (ADR-0104). Each exported
-  byte is selected from the active completed descriptor fragment before payload
-  comparison, so equal values cannot borrow a different DMEM writer. Successful
-  same-value RSP/external writes mint fresh writer generations; concrete unknown
-  writes cut only touched byte ancestry; 4-KiB DMEM wrap is replayed per byte.
-  Unobserved initial DMEM remains `Unobserved` rather than acquiring invented
-  provenance, and complete-source SHA/report reconstruction reject forged source
-  or report identity. Fresh exact-pin ares reproduction retained the validated
-  42-event / 8-DMA-effect history and all nine forged-history rejections. Complete
-  mutation census, SP request lifecycle, hardware timing, downstream RDRAM and
-  executable lifetime, IMEM-source egress, whole-ROM closure and native completeness
-  remain OPEN.
