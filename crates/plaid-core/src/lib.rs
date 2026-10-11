@@ -18,6 +18,7 @@ pub mod pipeline;
 pub mod program;
 pub mod rom;
 pub mod solver;
+pub mod sp_dma_egress;
 pub mod sp_history;
 mod tables;
 pub mod trace;
