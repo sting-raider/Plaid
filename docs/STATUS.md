@@ -527,3 +527,10 @@ image/generation, guest range and ROM source Region. Overlay descriptors must
 match their referenced Region's image, range and ROM source; a descriptor does
 not invent generation or physical backing. Ten adversaries reproduced on prior
 main; all 19 focused controls and the full locked core suite pass (ADR-0082).
+
+Fetch summaries now require a jointly realizable finite sequence, rejecting
+endpoint/quota collisions and sequence holes despite plausible aggregate counts
+or equal payloads. Four adversaries reproduced on prior main. Seven focused
+tests, including a bounded exhaustive concrete-history oracle against the Rust
+validator, pass; the independent 20,000-case model reproduces its exact research
+hash. Source authenticity and capture completeness remain separate (ADR-0083).
