@@ -1592,3 +1592,39 @@ TLBWR, TLBP/TLBR, PageMask/ASID/global chronology, complete mutation census,
 cache/mapping/lifetime composition and whole-ROM/native-complete proof remain
 OPEN. No reference implementation code or runtime dependency enters production,
 and no solver/native-complete gate is weakened.
+
+## ADR-0103: Synchronized snapshot loads mint fresh restore roots
+
+Status: Accepted for bounded compiler-time restore-history replay, 2026-10-11.
+
+The exact-pinned savestate fixture shows that a synchronized load can reinstall
+installed TLB state, active translation context and resident instruction-cache
+state without replaying the live mapping, context-write or fill operations that
+originally produced those values. Production therefore binds one saved snapshot
+identity to opaque digests for those three components and requires every accepted
+load to mint a fresh, monotonically ordered restore epoch plus exactly one root
+for each component. A restored root is qualified by snapshot identity, load
+ordinal and restore epoch. Roots compose only when all three qualifiers agree.
+Equal component digests never repair a mixed-epoch or mixed-snapshot causal
+history, so a later pre-load generation cannot be selected merely because its
+value matches the restored state.
+
+The supplied finite source is externally SHA-256-bound. Malformed/reordered
+records, unknown snapshots, duplicate snapshot identities, reused/reordered
+restore epochs, deleted/duplicate component roots, changed restored digests,
+forged load-boundary metadata and histories with no synchronized load all reject.
+`RestoreRoot`, `RestoreEpoch`, `RestoreEpochReport` and composed-context fields
+are private and not publicly deserializable; callers cannot bypass source replay
+by fabricating a receipt and can only inspect successful results through read-only
+accessors.
+
+This is a bounded compiler-time exploration/savestate chronology contract, not
+N64 hardware behavior. It certifies only the supplied installed-TLB,
+translation-context and resident-I-cache tuple. It does not prove complete sensor
+coverage, every executable-relevant serialized subsystem, byte-level resident
+ancestry, hardware reset/NMI equivalence, executable lifetime, whole-ROM closure
+or native completeness. Canonical TLBWI operation generations (ADR-0102), future
+EntryHi/TLBR context-writer generations and cache byte lineage must compose with
+restore roots without reviving abandoned pre-load histories. No reference
+implementation code/runtime dependency enters production, and no solver or
+native-complete obligation is weakened.
