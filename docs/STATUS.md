@@ -668,3 +668,17 @@ contracts and all prior Rust/CLI/producer/model gates.
 Canonical Actions `38142551330` passes at exact head
 `bff5bd874a16290f527940fb9f63640eb10e2706`, including the eleventh RSP/CPU
 composition context-reuse negative and all prior gates.
+
+Canonical Actions `38143662265` passes at exact head
+`a4d7b99bbfb52d1195e2e08ed34e08fc6b22dd2e`, including retained relocation
+deletion resistance and prior gates. Decompression/compact-ancestry/relocation
+models were independently reproduced and reviewed without production promotion.
+
+Forward SP-DMA DMEM ingress now has a strict finite reference fixture in spike
+051: 27 complete records preserve paired Word source/sink lanes, same-value
+reloads, count/skip, wrap, OOB unknown sources and a direct Word overwrite.
+Unmodified/disabled/enabled reported state agrees and enabled traces repeat;
+twelve measured forgeries and six synthetic tests reject the old runner's
+unchecked payload/type/schema cases. Full core/fmt/strict Clippy pass. Ultimate
+RDRAM ancestry, request lifecycle, census and executable/native closure remain
+OPEN (ADR-0095).

@@ -19,6 +19,7 @@ on:
       - "spikes/048-ares-xori-cache-visibility/**"
       - "spikes/049-ares-pagemask-cache-remap/**"
       - "spikes/050-ares-pi-cache-visibility/**"
+      - "spikes/051-ares-sp-dma-dmem-ingress/**"
       - ".github/workflows/rust.yml"
   pull_request:
     paths:
@@ -37,6 +38,7 @@ on:
       - "spikes/048-ares-xori-cache-visibility/**"
       - "spikes/049-ares-pagemask-cache-remap/**"
       - "spikes/050-ares-pi-cache-visibility/**"
+      - "spikes/051-ares-sp-dma-dmem-ingress/**"
       - ".github/workflows/rust.yml"
   workflow_dispatch:
 
@@ -91,5 +93,7 @@ jobs:
         run: python spikes/049-ares-pagemask-cache-remap/test_verify.py
       - name: Synthetic PI cache visibility contracts
         run: python spikes/050-ares-pi-cache-visibility/test_verify.py
+      - name: Synthetic SP DMA DMEM ingress contracts
+        run: python spikes/051-ares-sp-dma-dmem-ingress/test_verify.py
       - name: Independent fetch-summary assignment oracle
         run: python experiments/fetch-summary-realizability/model.py
