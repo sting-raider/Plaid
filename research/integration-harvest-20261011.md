@@ -299,8 +299,8 @@ seven separate synthetic regressions pass. Full locked workspace, fmt, strict
 workspace Clippy and synthetic CLI pass. The unmodified branch verifier is
 rejected and its bounded fixture is superseded.
 
-The inventory now distinguishes three reconciled source contracts from the
-109 still indexed-only entries. No reference implementation, branch-specific
+The inventory now distinguishes four reconciled source contracts from the
+108 still indexed-only entries. No reference implementation, branch-specific
 workflow or manual build scaffolding is imported into production. These finite
 contracts establish neither complete sensing nor lifetime, general dataflow,
 hardware equivalence, whole-ROM or native closure. Milestone state is unchanged.
@@ -323,3 +323,14 @@ verifier is superseded, with no broader producer/native milestone change.
 Exact-head canonical Actions `38132454063` passes at `05ed9cd`, including all
 seven copy and six transform synthetic contracts alongside the Rust/CLI/model
 gates. Separate fresh pinned-reference neutrality checks remain required.
+
+`a990cfa` reconciles CPU SW/SB/SWC1-to-SP context after reproducing accepted
+selector/bank/bounds forgeries in the branch verifier. Observe actual decoded
+instruction/GPR/FPR context instead of caller metadata, require bank/offset/
+payload checks and replay guest bytes. The first reference run caught a host-
+order IMEM snapshot error; fix capture through guest accessors and preserve the
+gate. Corrected original/disabled/enabled/repeated eight-point checkpoints
+agree; 21 records retain six attributed effects, one unscoped effect and one
+CU1-denied/no-sink case. Sixteen measured forgeries and eight synthetic contracts
+pass, as do full core, fmt and strict workspace Clippy. No ultimate ancestry,
+census, hardware truth, lifetime or native milestone is inferred.

@@ -349,8 +349,9 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078612080",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078889955"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "source_contract_reconciled",
+      "integration_commit": "a990cfa",
+      "integration_note": "research/cpu-sp-producer-primary.md"
     },
     {
       "branch": "research/cpu-sp-sdl-sdr-gpt56sol",
@@ -2210,5 +2211,5 @@
       "integration_commit": "3ff5d3e"
     }
   ],
-  "canonical_source_reconciliation_head": "05ed9cd"
+  "canonical_source_reconciliation_head": "a990cfa"
 }
