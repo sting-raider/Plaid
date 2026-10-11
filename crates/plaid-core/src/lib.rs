@@ -20,6 +20,7 @@ pub mod solver;
 pub mod sp_history;
 mod tables;
 pub mod trace;
+pub mod trace_projection;
 
 use serde::{Deserialize, Serialize};
 

@@ -49,3 +49,32 @@ Research-only TLB/cache, copy/transform, RSP and execution-root findings need
 selective source-contract composition, not wholesale branch merges. Negative
 results and cross-reference disagreements remain explicit obligations. The
 progress map retains its existing milestone states until those states change.
+
+## Batch 2: trace/event integrity
+
+Hypothesis: concrete primitive events must have one role/semantic tuple, while
+explicit compilation-unit contexts remain reusable. Eight structural adversaries
+failed on batch-1 main; the context-sharing control passed. Reviewed/adopted the
+consolidated prep guard and complete-source primitive/entry rechecker, excluding
+the branch-only workflow and patch-generation helper.
+
+Primary review found an additional contradiction: the source rechecker rejected
+a structurally valid observation carrying its explicit source-unit as generic
+provenance. A new positive test reproduced that failure. The rechecker now skips
+only that explicitly typed context, authenticates its source metadata, and still
+requires every source primitive exactly once. A forged context-metadata test
+also passes rejection. Focused suites: 9 structural + 11 primitive + 5 entry.
+Full locked core, fmt and strict Clippy pass on the composed integration.
+
+Superseded candidates (all `research/*-gpt56sol`): dma-event-uniqueness,
+word-store-event-uniqueness, indirect-event-uniqueness,
+entry-verification-event-uniqueness, primitive-event-kind-exclusivity,
+generic-trace-cross-kind-exclusivity, copy-event-kind-exclusivity,
+discovery-trace-source-recheck, entry-install-event-uniqueness (its separate
+module is folded into this rechecker). Entry-verification/indirect source-unit
+Region-membership candidates remain rejected; equal-byte decoys falsify them.
+Global Trace uniqueness and evidence-detail parsing remain rejected.
+
+The solver has no positive verified-source receipt boundary yet. These APIs
+authenticate supplied finite projections and cannot establish sensor coverage,
+arbitrary lifecycle/copy/root completeness or native readiness.
