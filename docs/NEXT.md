@@ -311,3 +311,10 @@ Compose it only with an independently selected/authenticated mapping and retain
 the actual translated transaction address. Geometry alone does not establish
 ASID/global/valid/dirty/CCA, overlapping-entry selection, operation generations,
 resident/backing lineage or executable lifetime; larger unvalidated masks reject.
+
+Bounded guest Cause-write operation replay now exists in software_interrupt
+(ADR-0108). Connect authenticated raw operand/source history and actual
+producer/Status/BEV chronology to the same interrupt boundary before root
+composition. Preserve successful same-value writes as distinct operations and
+keep hardware pending producers independent. Saved state-row adapters do not
+establish callback chronology or complete sensor coverage.

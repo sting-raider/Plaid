@@ -813,3 +813,12 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   Saved actual-source fetches and canonical cache geometry agree without new
   reference builds. Mapping selection/generation/authentication, cache/backing
   ancestry and executable lifetime/native closure remain OPEN (ADR-0107).
+
+- Production software_interrupt now replays externally hash-bound guest MTC0
+  Cause operations. Successful same-value writes retain fresh generations;
+  IP0/IP1 replacement preserves independently produced IP2..IP7. Eleven retained
+  tests and three added adversarial groups reject missing/forged effects, source
+  deletion, report edits, schema aliases and nonzero register-zero operands.
+  All 21 saved state rows agree with the producer relation and next boundary gate.
+  Synthetic protocol adapters do not certify sensed chronology, producer census,
+  handler ancestry/lifetime or whole-ROM/native closure (ADR-0108).
