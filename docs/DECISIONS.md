@@ -1592,3 +1592,21 @@ TLBWR, TLBP/TLBR, PageMask/ASID/global chronology, complete mutation census,
 cache/mapping/lifetime composition and whole-ROM/native-complete proof remain
 OPEN. No reference implementation code or runtime dependency enters production,
 and no solver/native-complete gate is weakened.
+
+## ADR-0103: Cache-error root exclusion requires target-hardware evidence
+
+Status: Accepted for bounded production root policy, 2026-10-11.
+
+For a declared Nintendo 64 / NEC VR4300 execution scope, encode the
+cache-error exception class as `ExcludedByTargetHardware` using NEC manual
+`U10504EJ7V0UM00`, Appendix B.1.7 / Table B-1. The target has no cache
+parity/error mechanism and the cache-error exception does not occur. Preserve
+the manual authority in the report and recompute it from an explicit typed
+target; generic MIPS III remains `Unresolved`.
+
+Emulator silence, finite traces, CacheErr register value equality, or absence
+of a modeled transition are not exclusion evidence. This bounded negative fact
+does not certify general/TLB/interrupt/watch/reset/NMI reachability, exception
+chronology, handler bytes, cache/mapping lifetime, complete root census,
+whole-ROM closure or native completeness. `whole_rom_roots_certified` and
+`native_complete` remain false and no solver gate is weakened.
