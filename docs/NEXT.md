@@ -318,3 +318,9 @@ producer/Status/BEV chronology to the same interrupt boundary before root
 composition. Preserve successful same-value writes as distinct operations and
 keep hardware pending producers independent. Saved state-row adapters do not
 establish callback chronology or complete sensor coverage.
+
+Mapped uncached fetch/backing joining now exists in tlb_fetch (ADR-0063), using
+strict tlb_geometry. Compose its opaque mapping/context references with actual
+TLB-operation and CP0 writer history before claiming mapping ancestry/lifetime.
+Preserve virtual aliases and same-address remaps as independent fetches. Cached
+residency and unsupported region/endian geometry still need separate evidence.

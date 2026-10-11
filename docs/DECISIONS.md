@@ -900,7 +900,7 @@ lineage, hardware correctness or an executable-image identity policy.
 
 ## ADR-0063: Resolve uncached TLB fetch origins per actual fetch context
 
-Status: Accepted for research, 2026-10-09.
+Status: Accepted for bounded production replay, 2026-10-11.
 
 The recovered full ares TLB fixture reproduces the exact worker receipt. Extend
 the finite identity-RDRAM scalar/fetch join only for an actually resolved uncached
@@ -911,6 +911,22 @@ is pinned ares evidence, not an N64-wide hardware assertion. Mapping generations
 TLBWR/restore, broader page/mode cases and exhaustive reachability remain open.
 Original fixtures generate ignored licensed reference builds; no emulator code
 or asset enters production. No ProgramMap or closure gate changes.
+
+Production tlb_fetch now retains one exact completed ordinary-RDRAM Word read
+inside the same mapped uncached fetch context. Recompute translated and
+post-endian bus addresses from the supplied selected mapping; match the actual
+transaction address and delivered word. Invalid halves, ASID/global mismatch,
+cached mappings, missing/ambiguous reads and equal-valued outside reads cannot
+supply a witness. Mapping/context labels remain opaque, not authenticated
+operation generations.
+
+Reuse ADR-0107's strict executed 4-/16-/64-KiB geometry. Malformed masks remain
+unsupported even when the pinned emulator normalizes them to an exercised size.
+Require architectural PFN bases with zero low12 bits; an arithmetically matching
+forged base/read cannot replace a realizable mapping. Nonzero regions and
+large-page reverse-endian combinations stay outside the retained evidence scope.
+Authenticate all source bytes externally and reconstruct every report field.
+All sensor/mapping/context/residency/lifetime/closure/native flags remain false.
 
 ## ADR-0064: Translated RDRAM raw origin and delivered transform are distinct
 
