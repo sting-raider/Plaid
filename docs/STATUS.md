@@ -490,8 +490,12 @@ Actual RSP DMEM mutation sensing now passes 30 decoded probes, 60 instruction
 contexts and 209 primitive writes in 329 records. All full reported independent
 reference/disabled/repeated checkpoints agree; byte replay and ten measured
 forgeries pass. Same-value stores remain distinct, foreign sinks are excluded,
-and all prior 29 self-store results remain exact. CPU refetch composition is
-continuing; mutation/lifetime/native coverage stays uncertified (ADR-0077).
+and all prior 29 self-store results remain exact. The controlled CPU refetch
+composition now passes 31 records, eight RSP byte writes, one CPU Word write,
+four backing-read samples and ten forged histories. Every reported independent
+reference/disabled/enabled/repeated checkpoint agrees. Partial/vector stores
+and foreign-sink boundaries remain separate integration work; complete
+mutation/lifetime/native coverage stays uncertified (ADR-0077).
 
 2026-10-11 integration harvest: finite-static closure now rejects contradictory
 guest/physical executable ownership, overlapping instruction values, stale
