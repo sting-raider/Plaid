@@ -281,3 +281,12 @@ Reproduce BEV=1 refill/XTLB source behavior separately before extending the rule
 and independently discharge interrupt/watch/cache-error/reset/NMI roots. Repeated
 coalesced PIF observations, equal returned bits and matching mirrors stay OPEN
 without per-occurrence same-fetch backing identity.
+
+Production now also has separate source-bound TLBWR selected-slot operation replay
+(ADR-0104). Compose TLBWI and TLBWR occurrence generations with authenticated
+mapping content, legal PageMask/ASID/global state, context writers, actual
+fills/residents and save/restore/reset chronology before using either in
+translation or executable-lifetime certificates. TLBWR replacement identity must
+come from the observed selection/write boundary; CP0 Index, equal payloads and
+snapshot diffs are not substitutes. Hardware random distribution and the complete
+TLB mutation/operation census remain OPEN.

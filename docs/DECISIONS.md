@@ -1618,3 +1618,38 @@ does not prove exception occurrence/classification chronology, BEV/EXL/mode
 writer completeness, BEV=1 refill/XTLB behavior, PIF lifetime/authenticity,
 cache/mapping executable lifetime, root census, whole-ROM closure or native
 completeness. No upstream implementation or runtime dependency enters production.
+
+## ADR-0104: TLBWR operation generations require observed random-selection identity
+
+Status: Accepted for bounded compiler-time observed-history replay, 2026-10-11.
+
+Adopt a strict source-bound TLBWR begin/select/write/end replay separate from the
+TLBWI protocol. Replacement-slot identity comes only from the observed random
+selection boundary for that decoded TLBWR operation. CP0 Index and Wired are
+retained as context and cannot select the written slot. A successful in-range
+selected-slot write mints a fresh ordered operation generation even when the
+before/after entry fingerprints are identical. Equal payload in another slot,
+snapshot inequality, later translation behavior or CP0 Index cannot recover that
+identity. A captured out-of-range selection or exception without a successful
+write retains a no-write attempt but mints no mapping-operation generation.
+
+Require exact selection/write slot agreement, contiguous source ordinals,
+consistent instruction context/epoch/PC, the decoded TLBWR word, normalized
+fingerprints and strict schema. Missing selection on a successful operation,
+in-range success without a write, writes without selection, duplicate or
+reordered boundaries, selected/write slot substitution, faulting writes and
+malformed source all fail closed. Bind the complete supplied source to an
+externally trusted SHA-256 and reconstruct the full report during verification.
+
+The exact pinned ares source at
+`9408cb43d4948fc3ea6e152a307a34348df3fe04` was reproduced with result SHA-256
+`405def4f3c1e33c9cd0a8dd331ee1d33d0e664d1c578692989623796d986c11c`.
+That evidence establishes the bounded source contract and the same-value/Index
+decoy counterexamples; it does not elevate ares random-selection policy or
+Wired edge behavior to hardware truth. Hardware random distribution, complete
+TLB operation sensing/census, mapping semantics, PageMask/ASID/global state,
+TLBP/TLBR/context chronology, backing/alias ancestry, cache residency,
+save/restore/reset chronology, executable lifetime, whole-ROM closure and native
+completeness remain OPEN. `plaid-tlbwi-history-v0` remains unchanged. No
+reference implementation code or runtime dependency enters production and no
+solver/native-complete gate is weakened.

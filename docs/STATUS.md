@@ -774,3 +774,17 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   origin. Exception causality/classification chronology, BEV=1 refill/XTLB source
   behavior, handler cache/mapping lifetime, remaining root classes, whole-ROM
   closure and native completeness remain OPEN.
+
+- Production now exposes separate bounded source-bound `tlbwr_history` replay
+  for decoded TLBWR selected-slot operation generations (ADR-0104). An observed
+  random-selection boundary, not CP0 Index, snapshot diff or equal mapping
+  payload, names the replacement slot. Exact selected-slot writes mint fresh
+  generations even for same-content rewrites; captured out-of-range selections
+  and exception/no-write attempts mint none. Complete-source SHA binding, exact
+  report reconstruction and adversarial Rust regressions reject missing,
+  fabricated, duplicated, reordered and mismatched selection/write boundaries.
+  Exact pinned ares reproduction preserves result SHA-256
+  `405def4f3c1e33c9cd0a8dd331ee1d33d0e664d1c578692989623796d986c11c`.
+  Hardware random distribution, complete TLB census, mapping semantics,
+  PageMask/ASID/global/context chronology, cache residency, save/restore/reset,
+  executable lifetime and whole-ROM/native completeness remain OPEN.

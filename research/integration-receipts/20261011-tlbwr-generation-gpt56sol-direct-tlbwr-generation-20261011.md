@@ -1,116 +1,12 @@
-from __future__ import annotations
-
-import os
-from pathlib import Path
-
-DECISIONS = Path("docs/DECISIONS.md")
-STATUS = Path("docs/STATUS.md")
-NEXT = Path("docs/NEXT.md")
-RECEIPT = Path(
-    "research/integration-receipts/"
-    "20261011-tlbwr-generation-gpt56sol-direct-tlbwr-generation-20261011.md"
-)
-
-
-def append_once(path: Path, marker: str, text: str) -> None:
-    current = path.read_text()
-    if marker in current:
-        raise SystemExit(f"refusing duplicate canonical text in {path}: {marker}")
-    path.write_text(current.rstrip() + "\n\n" + text.strip() + "\n")
-
-
-run_id = os.environ.get("GITHUB_RUN_ID", "UNKNOWN")
-validated_sha = os.environ.get("GITHUB_SHA", "UNKNOWN")
-
-append_once(
-    DECISIONS,
-    "## ADR-0104: TLBWR operation generations require observed random-selection identity",
-    """
-## ADR-0104: TLBWR operation generations require observed random-selection identity
-
-Status: Accepted for bounded compiler-time observed-history replay, 2026-10-11.
-
-Adopt a strict source-bound TLBWR begin/select/write/end replay separate from the
-TLBWI protocol. Replacement-slot identity comes only from the observed random
-selection boundary for that decoded TLBWR operation. CP0 Index and Wired are
-retained as context and cannot select the written slot. A successful in-range
-selected-slot write mints a fresh ordered operation generation even when the
-before/after entry fingerprints are identical. Equal payload in another slot,
-snapshot inequality, later translation behavior or CP0 Index cannot recover that
-identity. A captured out-of-range selection or exception without a successful
-write retains a no-write attempt but mints no mapping-operation generation.
-
-Require exact selection/write slot agreement, contiguous source ordinals,
-consistent instruction context/epoch/PC, the decoded TLBWR word, normalized
-fingerprints and strict schema. Missing selection on a successful operation,
-in-range success without a write, writes without selection, duplicate or
-reordered boundaries, selected/write slot substitution, faulting writes and
-malformed source all fail closed. Bind the complete supplied source to an
-externally trusted SHA-256 and reconstruct the full report during verification.
-
-The exact pinned ares source at
-`9408cb43d4948fc3ea6e152a307a34348df3fe04` was reproduced with result SHA-256
-`405def4f3c1e33c9cd0a8dd331ee1d33d0e664d1c578692989623796d986c11c`.
-That evidence establishes the bounded source contract and the same-value/Index
-decoy counterexamples; it does not elevate ares random-selection policy or
-Wired edge behavior to hardware truth. Hardware random distribution, complete
-TLB operation sensing/census, mapping semantics, PageMask/ASID/global state,
-TLBP/TLBR/context chronology, backing/alias ancestry, cache residency,
-save/restore/reset chronology, executable lifetime, whole-ROM closure and native
-completeness remain OPEN. `plaid-tlbwi-history-v0` remains unchanged. No
-reference implementation code or runtime dependency enters production and no
-solver/native-complete gate is weakened.
-""",
-)
-
-append_once(
-    STATUS,
-    "Production now exposes separate bounded source-bound `tlbwr_history` replay",
-    """
-- Production now exposes separate bounded source-bound `tlbwr_history` replay
-  for decoded TLBWR selected-slot operation generations (ADR-0104). An observed
-  random-selection boundary, not CP0 Index, snapshot diff or equal mapping
-  payload, names the replacement slot. Exact selected-slot writes mint fresh
-  generations even for same-content rewrites; captured out-of-range selections
-  and exception/no-write attempts mint none. Complete-source SHA binding, exact
-  report reconstruction and adversarial Rust regressions reject missing,
-  fabricated, duplicated, reordered and mismatched selection/write boundaries.
-  Exact pinned ares reproduction preserves result SHA-256
-  `405def4f3c1e33c9cd0a8dd331ee1d33d0e664d1c578692989623796d986c11c`.
-  Hardware random distribution, complete TLB census, mapping semantics,
-  PageMask/ASID/global/context chronology, cache residency, save/restore/reset,
-  executable lifetime and whole-ROM/native completeness remain OPEN.
-""",
-)
-
-append_once(
-    NEXT,
-    "Production now also has separate source-bound TLBWR selected-slot operation replay",
-    """
-Production now also has separate source-bound TLBWR selected-slot operation replay
-(ADR-0104). Compose TLBWI and TLBWR occurrence generations with authenticated
-mapping content, legal PageMask/ASID/global state, context writers, actual
-fills/residents and save/restore/reset chronology before using either in
-translation or executable-lifetime certificates. TLBWR replacement identity must
-come from the observed selection/write boundary; CP0 Index, equal payloads and
-snapshot diffs are not substitutes. Hardware random distribution and the complete
-TLB mutation/operation census remain OPEN.
-""",
-)
-
-if RECEIPT.exists():
-    raise SystemExit(f"refusing to overwrite existing receipt: {RECEIPT}")
-RECEIPT.parent.mkdir(parents=True, exist_ok=True)
-RECEIPT.write_text(
-    f"""# TLBWR selected-slot operation generation integration receipt
+# TLBWR selected-slot operation generation integration receipt
 
 Date: 2026-10-11
 Worker: `gpt56sol-direct-tlbwr-generation-20261011`
 Cluster: source-bound TLBWR random-selected mapping-operation generations
 Initial base: `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5`
 Final validated canonical parent: `24689113469e0a3325601d7b6fd41b4d06ecf761`
-Validated integration head before documentation: `{validated_sha}`
-Final validation Actions run: `{run_id}`
+Validated integration head before documentation: `c9d378e171409e02a522be397b5d028c75e7ef71`
+Final validation Actions run: `38154502907`
 
 ## Source research
 
@@ -224,5 +120,3 @@ indirect-target closure, RSP executable identity, whole-ROM closure or native
 completeness. It does not clear solver blockers or enable a native-complete claim.
 
 `progress.json` is unchanged because no whole-project milestone closed.
-"""
-)
