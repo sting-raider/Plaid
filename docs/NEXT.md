@@ -291,3 +291,7 @@ reachability or census completeness. Extend separately to TLB refill/XTLB roots,
 interrupts, reset/NMI and other execution roots. Missing residency stays UNKNOWN;
 equal current bytes never recover a writer or fill generation.
 
+
+## PI interrupt producer composition remains open
+
+Production can replay an authenticated bounded PI completion -> raw MI.PI -> MI mask/poll -> CPU RCP-pending chain without borrowing PI-copy equality or latest-request state. Next work must independently bind accepted request/queue dispatch to completion observations, compose with the generic CPU interrupt eligibility/root gate, account for other MI/timer/software producers plus reset/save/restore chronology, and prove source/sensor completeness for the declared scope. Unknown chronology remains OPEN; this is not a producer census or root-closure waiver.

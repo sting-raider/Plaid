@@ -50,6 +50,7 @@ pub mod loads;
 pub mod merge;
 pub mod pi_fetch_lineage;
 pub mod pi_history;
+pub mod pi_interrupt_history;
 pub mod pi_queue_history;
 pub mod pif_history;
 pub mod pipeline;

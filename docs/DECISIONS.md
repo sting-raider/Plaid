@@ -1649,3 +1649,13 @@ mappings, save/restore/reset behavior, the rest of the handler span, mutation or
 root census completeness, executable lifetime, hardware-wide semantics, whole-ROM
 closure or native completeness. Missing evidence keeps those obligations OPEN.
 
+
+## ADR-0105: PI interrupt producer provenance follows completion and poll operations, not copied bytes
+
+Status: Accepted for bounded compiler-time observed-history inspection, 2026-10-11.
+
+A PI byte copy/request is not evidence that queued completion occurred. Only an explicit completion observation mints a completion generation and may become raw MI.PI producer ancestry. MI mask writes are distinct poll operations even at the same value; interrupt clear lowers the raw line and cuts older completion ancestry. Restore boundaries cut raw-line and mask ancestry to UNKNOWN rather than reconstructing them from equal-looking state. CPU RCP-pending is certifiable only when raw producer ancestry plus observed mask state justify it.
+
+Bind the complete supplied history to an externally trusted SHA-256 and reconstruct the report during verification. Reject PI-copy/payload fields, reordered ordinals, zero/reused request or token identities, deleted source history and report mutation. Do not import emulator queue-capacity/scheduling details as hardware truth or infer producer identity from latest request, equal payload, final state or numeric vector address.
+
+This primitive stops before CPU Status IE/IM/EXL/ERL eligibility and BEV root transfer. Source-sensor completeness, hardware timing, request-to-completion instrumentation coverage, other producers, handler bytes/cache/mapping lifetime, reset/save/restore chronology beyond explicit cuts, interrupt/root census, whole-ROM closure and native completeness remain OPEN. Existing PI queue/fetch evidence is complementary and keeps guest completion unclaimed unless independently evidenced.
