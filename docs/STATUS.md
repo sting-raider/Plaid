@@ -774,3 +774,13 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   origin. Exception causality/classification chronology, BEV=1 refill/XTLB source
   behavior, handler cache/mapping lifetime, remaining root classes, whole-ROM
   closure and native completeness remain OPEN.
+
+- Production now also exposes target-scoped `root_policy` for the VR4300
+  cache-error class (ADR-0104). For `Nintendo64Vr4300` it records
+  `ExcludedByTargetHardware` with NEC manual `U10504EJ7V0UM00` Appendix B.1.7 /
+  Table B-1; generic MIPS III remains `Unresolved`. The report is recomputed
+  from the typed target, forged serialized changes reject, and whole-ROM/native
+  flags remain false. Exact-pinned ares/n64-systemtest/Gopher64 integration
+  reproduction matched the research result. This removes one nonexistent
+  target-specific root class only; interrupt/watch/reset/NMI, exception
+  chronology, handler provenance/lifetime and complete root census remain OPEN.
