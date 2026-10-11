@@ -149,11 +149,7 @@ enum Event<'a> {
 }
 
 fn require(ok: bool, message: &str) -> Result<(), String> {
-    if ok {
-        Ok(())
-    } else {
-        Err(message.into())
-    }
+    if ok { Ok(()) } else { Err(message.into()) }
 }
 
 fn decode_cop1_store(word: u32) -> Result<(Cop1StoreKind, usize), String> {
@@ -234,7 +230,10 @@ fn replay_success(active: &Active<'_>) -> Result<CpuMutationWitness, String> {
         .0
         .checked_add(payload.len() as u32)
         .ok_or("CPU mutation destination overflow")?;
-    require(end <= RDRAM_SIZE, "CPU mutation outside bounded RDRAM scope")?;
+    require(
+        end <= RDRAM_SIZE,
+        "CPU mutation outside bounded RDRAM scope",
+    )?;
 
     let location = expected_location(cache);
     let mut covered = vec![false; payload.len()];
@@ -295,9 +294,15 @@ pub fn inspect_cpu_mutation_history(
     expected_sha256: &str,
 ) -> Result<CpuMutationReport, String> {
     let digest = sha256(source);
-    require(digest == expected_sha256, "CPU mutation source receipt mismatch")?;
+    require(
+        digest == expected_sha256,
+        "CPU mutation source receipt mismatch",
+    )?;
     let history: History = serde_json::from_slice(source).map_err(|error| error.to_string())?;
-    require(history.format == FORMAT, "unsupported CPU mutation history format")?;
+    require(
+        history.format == FORMAT,
+        "unsupported CPU mutation history format",
+    )?;
 
     let mut events: Vec<_> = history
         .begins
@@ -392,7 +397,7 @@ pub fn inspect_cpu_mutation_history(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     const F0: u64 = 0x1122_3344_5566_7788;
     const F1: u64 = 0x99aa_bbcc_ddee_ff00;
@@ -422,7 +427,13 @@ mod tests {
         inspect_cpu_mutation_history(source, &sha256(source))
     }
 
-    fn begin(word: u32, endian: &str, fr: bool, destination: Option<u32>, cache: Option<&str>) -> Value {
+    fn begin(
+        word: u32,
+        endian: &str,
+        fr: bool,
+        destination: Option<u32>,
+        cache: Option<&str>,
+    ) -> Value {
         json!({
             "ordinal": 1,
             "context": 1,
@@ -552,7 +563,7 @@ mod tests {
             begin(word(0x39, 0), "big", false, Some(0x1000), Some("uncached")),
             vec![
                 json!({"ordinal": 2, "context": 1, "location": "backing", "address": 0x1000, "bytes": [0x55, 0x66]}),
-                json!({"ordinal": 3, "context": 1, "location": "backing", "address": 0x1001, "bytes": [0x66, 0x77, 0x88]})
+                json!({"ordinal": 3, "context": 1, "location": "backing", "address": 0x1001, "bytes": [0x66, 0x77, 0x88]}),
             ],
             success_end(4),
         );
@@ -560,7 +571,9 @@ mod tests {
 
         let missing = history(
             begin(word(0x39, 0), "big", false, Some(0x1000), Some("uncached")),
-            vec![json!({"ordinal": 2, "context": 1, "location": "backing", "address": 0x1000, "bytes": [0x55, 0x66, 0x77]})],
+            vec![
+                json!({"ordinal": 2, "context": 1, "location": "backing", "address": 0x1000, "bytes": [0x55, 0x66, 0x77]}),
+            ],
             success_end(3),
         );
         assert!(inspect(&missing).is_err());
