@@ -299,7 +299,7 @@ seven separate synthetic regressions pass. Full locked workspace, fmt, strict
 workspace Clippy and synthetic CLI pass. The unmodified branch verifier is
 rejected and its bounded fixture is superseded.
 
-The inventory now distinguishes four reconciled source contracts from the
+The inventory now distinguishes five reconciled source contracts from the
 108 still indexed-only entries. No reference implementation, branch-specific
 workflow or manual build scaffolding is imported into production. These finite
 contracts establish neither complete sensing nor lifetime, general dataflow,
@@ -339,3 +339,17 @@ Exact-head canonical Actions `38134178095` passes at `a990cfa`, including eight
 CPU SP producer synthetic contracts alongside the existing copy/transform and
 Rust/CLI/model gates. The separate corrected pinned ares neutrality run remains
 the reference-execution receipt; canonical CI checks the finite history contract.
+
+`71ccb10` reconciles actual RSP DMEM -> CPU LW/GPR/SW -> IMEM byte lineage.
+The original verifier accepted three additional high-GPR/address forgeries.
+Sixteen reported unchanged-reference checkpoints agree; 58 records retain three
+copy chains, mixed/unknown source bytes and distinct sink generations. Twenty
+captured forgeries and eight synthetic contracts pass, along with full core,
+fmt and strict workspace Clippy. No ultimate input, census, consumption/lifetime
+or native milestone changes.
+
+A refresh discovers research/ai-interrupt-root-compose-gpt56sol at
+`8015de2443c2105c5caa7b664b9e8edb2f41eddd`, beyond the initial 157-head inventory.
+The catalog now contains 158 research heads: 45 reconciled core candidates, five
+reconciled source contracts and 108 indexed-only entries. The new AI closeout
+reports a reference disagreement; no universal timing policy is adopted.

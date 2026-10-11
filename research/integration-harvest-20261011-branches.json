@@ -17,6 +17,19 @@
       "integration_commit": null
     },
     {
+      "branch": "research/ai-interrupt-root-compose-gpt56sol",
+      "head": "8015de2443c2105c5caa7b664b9e8edb2f41eddd",
+      "notes": [
+        "research/ai-interrupt-root-composition.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6108883740",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6108958858"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
       "branch": "research/ares-cpu-copy-dataflow-gpt56sol",
       "head": "7079fe6d46b6a7ec5a0bc34cf52049e1b5d7385c",
       "notes": [
@@ -1435,8 +1448,9 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079548290",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091049299"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "source_contract_reconciled",
+      "integration_commit": "71ccb10",
+      "integration_note": "research/rsp-cpu-imem-primary.md"
     },
     {
       "branch": "research/rsp-reset-imem-lifetime-gpt56sol",
@@ -2211,5 +2225,5 @@
       "integration_commit": "3ff5d3e"
     }
   ],
-  "canonical_source_reconciliation_head": "a990cfa"
+  "canonical_source_reconciliation_head": "71ccb10"
 }
