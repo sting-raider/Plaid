@@ -61,6 +61,7 @@ pub mod sp_history;
 mod tables;
 pub mod tlb_fetch;
 pub mod tlb_history;
+pub mod tlbr_history;
 pub mod trace;
 pub mod trace_projection;
 pub mod watch_roots;
