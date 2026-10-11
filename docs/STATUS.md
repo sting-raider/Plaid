@@ -796,3 +796,11 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
 
 
 - Production now has a bounded, source-hash-bound PI interrupt-producer replay. Explicit completion observations mint completion generations; raw MI.PI ancestry, MI-mask/poll generations and derived CPU RCP-pending state remain separate. Same-value mask writes still repoll, interrupt clear cuts the prior raw producer, restore boundaries return raw/mask ancestry to UNKNOWN, and PI copy payloads/current snapshots are rejected as completion evidence. Sensor coverage, hardware timing, CPU interrupt gate/root transfer, other producers, handler provenance/lifetime, whole-ROM closure and native completeness remain OPEN (ADR-0105).
+
+- Production `interrupt_roots` now evaluates maskable eligibility at one supplied
+  architectural boundary and rechecks its complete numeric-root receipt. All 32
+  saved actual-reference cases agree: 18 admitted, 14 suppressed. Six Rust
+  regressions retain gating, exact enabled bits, BEV selection and reject edited
+  receipts/suppressed boundaries/type aliases. Producer and Status/BEV chronology,
+  actual root transfer, handler byte lifetime and whole-ROM/native closure remain
+  OPEN (ADR-0106).

@@ -1669,3 +1669,21 @@ A PI byte copy/request is not evidence that queued completion occurred. Only an 
 Bind the complete supplied history to an externally trusted SHA-256 and reconstruct the report during verification. Reject PI-copy/payload fields, reordered ordinals, zero/reused request or token identities, deleted source history and report mutation. Do not import emulator queue-capacity/scheduling details as hardware truth or infer producer identity from latest request, equal payload, final state or numeric vector address.
 
 This primitive stops before CPU Status IE/IM/EXL/ERL eligibility and BEV root transfer. Source-sensor completeness, hardware timing, request-to-completion instrumentation coverage, other producers, handler bytes/cache/mapping lifetime, reset/save/restore chronology beyond explicit cuts, interrupt/root census, whole-ROM closure and native completeness remain OPEN. Existing PI queue/fetch evidence is complementary and keeps guest completion unclaimed unless independently evidenced.
+
+## ADR-0106: Maskable boundary eligibility is separate from root provenance
+
+Status: Accepted for bounded production candidate selection, 2026-10-11.
+
+At one independently authenticated boundary, require an enabled pending bit,
+IE set, EXL clear and ERL clear before selecting the existing BEV-sensitive
+General exception vector. Preserve all normalized Cause.IP/Status.IM input bits
+and their exact intersection. Recheck a serialized receipt by reconstructing it
+from independently supplied state; a receipt's own edited state, equal numeric
+vector or pending bits alone cannot substitute for that input.
+
+The retained 32 actual ares cases support this bounded gate without new reference
+builds. Source-only Gopher agreement is supporting context, not hardware-wide
+proof. No upstream implementation enters production. This primitive does not
+prove producer/status writer chronology, actual transfer, root reachability or
+exclusion, handler byte provenance/lifetime, asynchronous priority, complete root
+census or native closure. Compose those obligations explicitly; no solver waiver.
