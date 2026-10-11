@@ -4,6 +4,12 @@
 
 Implemented:
 
+- Source-preserving discovery solve admission composes externally expected trace
+  sets with canonical raw-primitive and ROM-aware installed-entry rechecks before
+  solving. Reports retain expected sessions and the exact validated map digest.
+  The explicit CLI creates expectations once and rejects source/map deletions;
+  whole-ROM coverage, other source domains and native readiness remain OPEN.
+
 - ProgramMap v0: typed ROM/guest/physical identities, image generations, executable
   regions, blocks, entries, edges, indirect candidates/observations, overlays,
   DMA/load mappings, relocations, writes, microcode identities and provenance.

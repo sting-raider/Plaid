@@ -81,6 +81,58 @@ def main():
             assert any(b["kind"] == "unproven_executable_universe" for b in report["blockers"])
         assert identities[0] == identities[1] == identities[2]
         assert maps[0] == maps[1] == maps[2]
+        # Preserve expectations before submitting editable maps/sources. The CLI
+        # must enforce the stronger installed-entry check as well as raw facts.
+        header=dict(schema_version=0,rom=identities[0],engine='cli-source-test',
+                    revision='r1',capabilities=[])
+        trace_events=[
+            dict(event='compile_begin',unit=1,start=0x80000000,
+                 physical_start=None,delay_slot_entry=False),
+            dict(event='entry_installed',unit=1,pc=0x80000000,register_mask=0),
+            dict(event='unit_compiled',unit=1,start=0x80000000,words=words),
+            dict(event='cpu_word_store_observed',site=0x80000000,
+                 destination=0x80001000,value=0)]
+        def save_trace(path,events):
+            records=[dict(record='header',header=header)]
+            records += [dict(record='event',seq=i,data=data) for i,data in enumerate(events)]
+            records.append(dict(record='end',event_count=len(events)))
+            path.write_text(''.join(json.dumps(r)+'\n' for r in records),encoding='utf-8')
+        traced=directory/'source.ndjson'; save_trace(traced,trace_events)
+        trace_map=directory/'trace-map.json'
+        expectations=directory/'expected.json'
+        rom=directory/'synthetic.z64'
+        run('create-trace-expectations',expectations,traced)
+        preserved=expectations.read_bytes()
+        run('create-trace-expectations',expectations,traced,ok=False)
+        assert expectations.read_bytes()==preserved
+        source_before=traced.read_bytes()
+        run('create-trace-expectations',traced,traced,ok=False)
+        assert traced.read_bytes()==source_before
+        run('import-trace',rom,traced,trace_map)
+        admitted=json.loads(run('solve-traces',rom,trace_map,expectations,traced))
+        assert admitted['format']=='plaid-discovery-source-solve-v0'
+        assert admitted['closure']['status']=='open'
+        assert admitted['closure']['native_complete'] is False
+        assert len(admitted['discovery_sources']['sessions'])==1
+        run('solve-traces',rom,trace_map,expectations,ok=False)
+        original_map=trace_map.read_bytes()
+        edited=json.loads(original_map); edited['word_store_observations']=[]
+        edited['executable_writes']=[]; edited['unresolved']=[]
+        trace_map.write_text(json.dumps(edited),encoding='utf-8')
+        run('solve-traces',rom,trace_map,expectations,traced,ok=False)
+        edited=json.loads(original_map)
+        # Map entries serialize as keyed pairs; remove the install event's use
+        # while leaving its metadata and all primitive facts intact.
+        for entry in edited['entries']:
+            entry[1]=[ref for ref in entry[1] if not ref.endswith(':1')]
+        trace_map.write_text(json.dumps(edited),encoding='utf-8')
+        run('solve-traces',rom,trace_map,expectations,traced,ok=False)
+        trace_map.write_bytes(original_map)
+        shortened=directory/'edited-source.ndjson'; save_trace(shortened,trace_events[:-1])
+        run('solve-traces',rom,trace_map,expectations,shortened,ok=False)
+        unexpected=directory/'unexpected.ndjson'; save_trace(unexpected,trace_events[:-1])
+        run('solve-traces',rom,trace_map,expectations,traced,unexpected,ok=False)
+        assert expectations.read_bytes()==preserved
         merged=directory / "merged.json"
         run("merge",directory/"z64.json",directory/"v64.json",merged)
         assert merged.read_bytes() == maps[0]

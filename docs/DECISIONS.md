@@ -1876,3 +1876,30 @@ entry/ROM-aware recheckers, authenticate other source domains, automatically
 gate solver outputs, prove sensor coverage or determine the complete expected
 set for a ROM execution model. Certificate-boundary wiring and those proof
 obligations remain OPEN; no whole-ROM/native or progress milestone promotion.
+
+## ADR-0114: Source-preserving closure admission composes expectations and projection checks
+
+Status: Accepted for explicit discovery-source admission, 2026-10-12.
+
+Authenticate an independently preserved expected discovery-source set before
+running closure analysis. Compose the canonical primitive rechecker with the
+stronger ROM-aware installed-entry re-import check, using the original import
+known-image set and budget separately from solver instruction witnesses. Return
+the unchanged solver result alongside the expected sessions and exact canonical
+map digest. Authentication failure emits no closure report.
+
+The trusted-boundary CLI creates a new expectation file exclusively and never
+replaces one from later edited artifacts. Source-bound solving requires explicit
+complete source inputs. Deterministic merged source sets preserve independent
+sessions; a deleted negative session or installed-entry binding cannot be healed
+by deleting diagnostics. Retained adversaries demonstrate that deleting a raw
+store can make the ordinary finite-static solve CLOSED, while source-preserving
+admission rejects the edit. Valid finite static scopes still close with their
+existing assumptions; whole-ROM reports remain OPEN and native_complete false.
+
+This is admission for the specified raw primitive and installed-entry domains,
+not authentication of every compiled/derived image projection, a complete source
+expectation census, or a whole-ROM certificate. Other fetch/cache/mutation/root
+sources and coverage/lifetime obligations need their own adapters. ADR-0113's
+standalone-helper boundary is now composed explicitly; no legacy solve API or
+closed-world obligation is weakened. No upstream code or reference rebuild.
