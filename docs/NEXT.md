@@ -329,3 +329,9 @@ TLBWR operation replay now exists beside TLBWI/TLBR (ADR-0109). Compose explicit
 selection/write generations with authenticated normalized mapping content and
 the same fetch context; neither Index nor equal content supplies that ancestry.
 Keep the source/census, ASID/global/CP0, cache and reset/restore obligations OPEN.
+
+Resident-to-backing writeback replay now exists in dcache_writeback (ADR-0067).
+Compose actual CPU copy/transform/store ancestry with its mutation ordinal and
+byte lanes, then bind exported bytes to subsequent executable fills/fetches.
+Cached mutation alone cannot refresh instruction residency; TLB/alias and epoch
+transitions require independent authenticated context and lifetime evidence.
