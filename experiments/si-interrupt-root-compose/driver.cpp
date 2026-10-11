@@ -80,6 +80,7 @@ int main(int argc, char** argv) {
   constexpr u32 causeSentinel = 13;
   constexpr u32 addiuS0 = 0x24101234;  // ADDIU $s0,$zero,0x1234
   constexpr u32 pifRam = 0x1fc007c0;
+  constexpr u32 dmaBuffer = 0x1000;    // deliberately disjoint from planted code
 
   put(0, addiuS0);
   put(4, 0);
@@ -121,7 +122,7 @@ int main(int argc, char** argv) {
   int didAck = 0;
   const char* producer = "none";
 
-  si.ioWrite(0, 0);  // SI_DRAM_ADDRESS
+  si.ioWrite(0, dmaBuffer);  // SI_DRAM_ADDRESS; never overwrite the CPU sentinel
 
   if(!std::strcmp(mode, "request_read")) {
     si.ioWrite(4, pifRam);
