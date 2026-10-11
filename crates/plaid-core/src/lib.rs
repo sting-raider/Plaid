@@ -69,6 +69,7 @@ pub mod tlb_fetch;
 pub mod tlb_geometry;
 pub mod tlb_history;
 pub mod tlbr_history;
+pub mod tlbwr_history;
 pub mod trace;
 pub mod trace_projection;
 pub mod watch_roots;
