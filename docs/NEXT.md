@@ -1,8 +1,9 @@
 # Next
 
 Primary integration harvest (2026-10-11): static executable-identity hardening is
-integrated, along with the trace/event identity prep cluster. Next reconcile
-validated raw-fact solver gates, Region/load/overlay validation and pointer-guard fixes.
+integrated, along with trace/event integrity, retained raw-fact solver gates and
+Region/load/overlay validation. Next reconcile fetch-summary realizability and
+pointer-guard fixes from independently validated research branches.
 Keep TLB/cache/lifetime, producer and execution-root research separate until its
 source contracts compose; do not resume a new architecture lane ahead of this
 harvest. See `research/integration-harvest-20261011.md`.
