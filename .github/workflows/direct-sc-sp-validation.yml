@@ -38,6 +38,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Strict workspace Clippy
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Focused SC SP regressions
+        run: cargo test --locked -p plaid-core cpu_sp_conditional -- --nocapture
       - name: Full workspace tests
         run: cargo test --locked --workspace
       - name: Synthetic CLI checks
