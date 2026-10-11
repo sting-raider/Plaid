@@ -26,7 +26,7 @@ struct History {
     events: Vec<Event>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 enum Event {
     BackingWrite {
@@ -167,8 +167,14 @@ pub fn inspect_exception_root_generation_history(
         "exception root generation source receipt mismatch",
     )?;
     let history: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    require(history.format == FORMAT, "unsupported exception root generation format")?;
-    require(history.policy == POLICY, "unsupported exception root generation policy")?;
+    require(
+        history.format == FORMAT,
+        "unsupported exception root generation format",
+    )?;
+    require(
+        history.policy == POLICY,
+        "unsupported exception root generation policy",
+    )?;
 
     let mut backing: Option<BackingGeneration> = None;
     let mut resident: Option<ResidentGeneration> = None;
@@ -372,7 +378,13 @@ mod tests {
                 backing_write_ordinal: 1
             }
         );
-        assert_eq!(report.witnesses[0].current_backing.unwrap().write_ordinal, 5);
+        assert_eq!(
+            report.witnesses[0]
+                .current_backing
+                .expect("current backing")
+                .write_ordinal,
+            5
+        );
     }
 
     #[test]
@@ -385,7 +397,13 @@ mod tests {
                 backing_write_ordinal: 1
             }
         );
-        assert_eq!(report.witnesses[0].current_backing.unwrap().write_ordinal, 3);
+        assert_eq!(
+            report.witnesses[0]
+                .current_backing
+                .expect("current backing")
+                .write_ordinal,
+            3
+        );
     }
 
     #[test]
@@ -412,7 +430,13 @@ mod tests {
     fn current_backing_without_resident_evidence_stays_unknown() {
         let report = inspect(vec![write(1, 9), root(2, 9)]).unwrap();
         assert_eq!(report.witnesses[0].origin, RootWordOrigin::Unknown);
-        assert_eq!(report.witnesses[0].current_backing.unwrap().write_ordinal, 1);
+        assert_eq!(
+            report.witnesses[0]
+                .current_backing
+                .expect("current backing")
+                .write_ordinal,
+            1
+        );
     }
 
     #[test]
@@ -429,7 +453,8 @@ mod tests {
 
     #[test]
     fn rejects_wrong_physical_or_root_scope() {
-        let wrong_physical = json!({"kind":"backing_write","ordinal":1,"physical":388,"word":1});
+        let wrong_physical =
+            json!({"kind":"backing_write","ordinal":1,"physical":388,"word":1});
         assert!(inspect(vec![wrong_physical]).is_err());
 
         let mut wrong_root = root(2, 1);
