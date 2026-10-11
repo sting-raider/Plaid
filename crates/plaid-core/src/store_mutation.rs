@@ -33,7 +33,7 @@ pub enum StoreEndian {
 #[serde(rename_all = "snake_case")]
 pub enum MutationLayer {
     DcacheResident,
-    IdentityRdramBacking,
+    ObservedRdramBacking,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -212,7 +212,7 @@ impl AresStore64Receipt {
         let required_layer = if self.cached {
             MutationLayer::DcacheResident
         } else {
-            MutationLayer::IdentityRdramBacking
+            MutationLayer::ObservedRdramBacking
         };
         let mut events = BTreeSet::new();
         for (index, (actual, spec)) in self.subwrites.iter().zip(expected).enumerate() {
@@ -267,7 +267,7 @@ mod tests {
         let layer = if cached {
             MutationLayer::DcacheResident
         } else {
-            MutationLayer::IdentityRdramBacking
+            MutationLayer::ObservedRdramBacking
         };
         let subwrites = specs
             .iter()
@@ -345,7 +345,7 @@ mod tests {
     #[test]
     fn cache_resident_and_backing_effects_are_not_interchangeable() {
         let mut cached = receipt(Store64Kind::Sd, StoreEndian::Big, 0x8000_2000, true);
-        cached.subwrites[0].layer = MutationLayer::IdentityRdramBacking;
+        cached.subwrites[0].layer = MutationLayer::ObservedRdramBacking;
         assert!(cached.validate().is_err());
 
         let mut uncached = receipt(Store64Kind::Sd, StoreEndian::Big, 0xa000_2000, false);
