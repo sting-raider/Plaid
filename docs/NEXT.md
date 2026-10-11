@@ -271,3 +271,10 @@ reset chronology before using them in executable-lifetime or translation proofs.
 A same-content legal TLBWI remains a distinct operation; snapshot inequality and
 equal payloads cannot recover occurrence or selected-slot identity. Complete
 sensor coverage and a full TLB mutation census remain OPEN.
+
+The VR4300 cache-error class now has a target-scoped hardware exclusion
+(ADR-0103), so do not seed a fictitious cache-error handler and do not use
+emulator silence as a waiver. Root closure still must prove interrupt/watch/
+reset/NMI and existing exception reachability/classification chronology,
+handler-byte provenance, cache/mapping lifetimes and complete root census.
+Generic MIPS III cache-error remains unresolved.
