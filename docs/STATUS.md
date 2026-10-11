@@ -516,6 +516,15 @@ does not certify; XORI zero retains a distinct observed transform context. Copy
 mode is unchanged and excludes transforms. General transformation, executable
 consumption/lifetime and production/native certificates remain OPEN (ADR-0089).
 
+Controlled CPU-to-SP producer context now comes from actual decoder boundaries,
+with GPR/FPR and FR/CU1 snapshots, physical bank/offset checks and guest-byte
+replay. Eight independent reported checkpoints agree; six attributed writes,
+one unscoped write and one denied-CU1/no-sink case survive in 21 records.
+Sixteen measured forgeries and eight synthetic regressions pass. An IMEM host-
+order snapshot error was caught and corrected through guest accessors. Ultimate
+ancestry, census, hardware semantics, lifetime and native gates remain OPEN
+(ADR-0090).
+
 2026-10-11 integration harvest: finite-static closure now rejects contradictory
 guest/physical executable ownership, overlapping instruction values, stale
 content-derived image IDs and incompatible known Region/CodeImage provenance.

@@ -277,3 +277,10 @@ observers and guarded exact-ares shadows. Gopher64 XORI agreement is source-only
 corroboration; no GPL implementation is copied or linked. Generated ares core
 ISC / SLJIT BSD notices remain ignored. This controlled transformation contract
 does not establish hardware truth or a complete native producer model.
+
+`spikes/046-ares-cpu-sp-producer-context/` composes original actual-decoder and
+completed SP Word callbacks with GPR/FPR snapshots and guest-byte accessors.
+Pinned source/license inspection includes FR selection, COP1 denial, RCP subword
+normalization and generic IMEM storage layout. Generated ignored builds retain
+core ISC / SLJIT BSD notices; no reference implementation is vendored or linked
+into native mode and no hardware/complete-producer claim follows from the probe.
