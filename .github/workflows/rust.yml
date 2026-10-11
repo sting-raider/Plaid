@@ -1,6 +1,8 @@
 name: Rust checks
 
 on:
+  push:
+    branches: [direct-integration/reset-cache-lifetime-gpt56sol-r1]
   workflow_dispatch:
 
 permissions:
