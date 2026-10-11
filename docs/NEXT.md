@@ -125,6 +125,14 @@ later equality. Compose decoded CPU/RSP producers, PIF initialization, complete
 lower-sink census and lifecycle/request identity before claiming ultimate origin
 or RSP closure. Existing v3 reports/CLI remain unchanged (ADR-0116).
 
+The decoded RSP -> DMEM -> CPU register -> IMEM chain now has a generic bounded
+Rust consumer for the authenticated unified source (ADR-0118). Preserve the
+actual source clock, mixed/unknown byte parents and whole-register definition
+cuts. Extend incoming register/initialization ancestry and unify this producer
+context with boot mutation/executable-fetch sources before claiming RSP identity,
+complete mutation coverage or executable consumption/lifetime. Separate RSP
+scalar/DMEM-DMA candidate histories cannot be joined by equal labels or payloads.
+
 The supplied game's IPL3 matches the pinned reference CIC-6105 checksum. Existing
 6102-only boot capture/import profiles must be extended explicitly before using
 them for this game; do not relabel a 6102 run or the conditional static map as

@@ -1996,3 +1996,39 @@ execution from compilation, prove sensor/byte lifetime or the complete root
 universe, authenticate every derived field, or widen whole-ROM/native gates.
 Eight focused admission tests, five existing install projection tests, CLI and
 mandatory full local gate pass. No reference rebuild or progress milestone change.
+
+## ADR-0118: RSP producers compose with CPU definitions and IMEM installs on the actual source clock
+
+Status: Accepted for bounded compiler-time source composition, 2026-10-12.
+
+Use the already validated unified decoder/sink chronology rather than joining
+independently labeled RSP and DMA histories. Verify decoded RSP scalar store
+operands, actual Byte effects, and the observed SBV vector-2/element-0 source.
+Then propagate per-byte captured writers through an exact CPU LW register
+identity into a completed direct-KSEG1 IMEM SW. Same-value RSP writes are fresh
+occurrences. Equal-valued reads into another register cannot replace the selected
+load definition; whole-register ADDU cuts it even if all result bits are equal.
+Foreign DMEM mutations cut touched bytes. Unscoped IMEM stores retain content
+without invented instruction attribution.
+
+A generic typed protocol replaces fixture-event equality. Production assumes no
+specific phase numbers, fixed code PCs, payloads or chain counts. Preserve raw
+ordinals and captured full CPU/RSP snapshots, independent CPU steps and final
+backing snapshots. Require an independently retained complete-source SHA and
+reconstruct every report field. The explicit pinned profile permits controlled
+RSP reentry seeds and CPU continuity, but excludes unobserved cache/TLB/DMA/restore
+interleavings and unsupported instruction/vector sources. No guest executor or
+reference implementation enters production; this is compiler-time verification.
+
+Authenticated retained 58-record/16-checkpoint capture reproduces three chains,
+including mixed CPU/unknown/vector/scalar byte origins. Twenty original measured
+forgeries reject under the Rust protocol. Three unit regressions and generic CLI
+cases pass, including phase/PC renaming to rule out a hardcoded fixture gate.
+Full required local gate passes without a redundant emulator rebuild.
+
+This consumes the stronger canonical source contract in rsp-cpu-imem-primary.md,
+not the source research's rejected verifier or a raw branch module. PR #8's
+broader scalar-load and PR #37's DMEM-DMA consumers remain pending; no invented
+cross-clock bridge. Incoming scalar/vector operands, initial storage roots,
+mutation census, IMEM execution/lifetime and whole-ROM/native completeness remain
+uncertified. All corresponding flags stay false; no milestone or solver waiver.
