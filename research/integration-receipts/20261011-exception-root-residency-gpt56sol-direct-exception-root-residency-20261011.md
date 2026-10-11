@@ -2,12 +2,13 @@
 
 Date: 2026-10-11
 Worker: `gpt56sol-direct-exception-root-residency-20261011`
-Result: validated on the direct-integration branch; canonical main integration pending serialized lease
+Result: BLOCKED at final canonical landing by the new local-validation policy; validated production delta remains staged on the direct-integration branch
 
 ## Base and source research
 
 - Initial base main: `539ff0ce72a98b296a8a28135fda6eab90a2f6ac`.
-- Reconciled canonical bases during validation: `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5` and `dd3f627d2c27f84611439ec1888ec4e3015e6bd2`.
+- Reconciled canonical bases during validation: `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5`, `dd3f627d2c27f84611439ec1888ec4e3015e6bd2`, `9154b30b12026c8c122f654d7fe90f0f67968dce`, `31c10020665e8386656fd943acab111b5c7e1671`, and infrastructure-only head `24689113469e0a3325601d7b6fd41b4d06ecf761`.
+- Final staged branch head at this receipt update: `0836b75ff8b8cee8aab90b8c88ad92032f4e7f59` before this receipt-only update.
 - Source research: `research/exception-root-generation-gpt56sol` at `50c160680c936c1801fabe32907ca45304d3d313`.
 - Durable research note: `research/exception-root-generation.md`.
 - Executable fixture: `spikes/044-ares-exception-root-generation/` on the source research commit.
@@ -31,6 +32,8 @@ Fresh exact-reference runs preserved the original hashes:
 
 The exact fixture reports the same vector for both executions, `handler=1` while the old resident remains, then `handler=2` after invalidate/refill. The adversarial reducer rejects four vector/current-backing forgeries. Repeated model execution is deterministic.
 
+The direct-mapped-slot hardening was also checked against exact pinned ares source: `InstructionCache::line(u64 vaddr)` selects `lines[vaddr >> 5 & 0x1ff]`, while the fill path retains a physical tag. In the bounded direct-mapped KSEG0/identity-RDRAM root scope, `0x180` and `0x4180` therefore compete for one cache slot even when their words are equal. This source check is not treated as a universal hardware certificate.
+
 ## Adopted production invariant
 
 `plaid_core::exception_root_history` is deliberately narrower than the research model. It accepts only a source-bound finite history for the validated BEV=0, non-nested, general-vector, identity-RDRAM cached first-handler-word scope. It first rechecks the supplied `ExceptionRootReceipt` through `resolve_exception_root`.
@@ -42,8 +45,9 @@ The replay:
 - mints a fresh backing generation for every observed backing write, including same-value writes;
 - mints a fresh resident generation for every completed fill;
 - binds a resident fill to the same-physical-address backing generation current at that fill only when the payload agrees;
-- treats invalidation as a resident-lifetime cut;
-- binds the cached root fetch only to the resident generation current at fetch and that resident's fill-time backing generation;
+- keys resident state by the bounded VR4300 direct-mapped I-cache slot while retaining exact physical identity separately;
+- treats every recorded fill as replacing its slot and invalidation as a resident-lifetime cut;
+- binds the cached root fetch only to the exact-physical resident generation current at fetch and that resident's fill-time backing generation;
 - preserves current backing generation only as diagnostic state, never as the cached fetch source;
 - returns `UNKNOWN` when the cached root lacks resident evidence or the resident fill lacks backing-generation ancestry;
 - rejects root-PC/physical/payload/order/source-receipt contradictions rather than selecting a convenient generation.
@@ -64,7 +68,7 @@ Module tests cover:
 8. equal-value write at another physical address cannot steal lineage;
 9. source-hash tampering and reordered ordinals are rejected;
 10. wrong root PC or resident payload is rejected;
-11. BEV=1 and TLB-refill scopes remain unsupported instead of being generalized from this fixture.
+11. BEV=1 and TLB-refill scopes remain unsupported instead of being generalized from this fixture;
 12. equal-value fill at physical `0x4180` evicts the prior `0x180` resident because both occupy the same direct-mapped I-cache slot; the later root fetch remains `UNKNOWN`.
 
 ## Review hardening
@@ -78,29 +82,49 @@ The integration was repeatedly reconciled as main advanced instead of testing on
 - On the TLBWI-generation composition, Rust checks run `38153077270` passed exact decoder pin, `cargo fmt --all -- --check`, strict `cargo clippy --locked --workspace --all-targets -- -D warnings`, `cargo test --locked --workspace`, all canonical synthetic contracts, and the independent fetch-summary oracle.
 - Explicit post-TLBWI branch reconciliation `5c7e027cc7e76c88d7c78d84a9bfcb7b654c995d` passed Rust checks run `38153225089` and exact-reference run `38153225071`.
 - Explicit post-COP1-mutation branch reconciliation `1f19de7d681d24d5595f089393bc88211cb4ed23` passed Rust checks run `38153441380` and exact-reference run `38153441451`.
+- After the direct-mapped-slot hardening and reconciliation through BEV1 PIF + RSP IMEM egress main, branch head `7921ca467bc2cc5baa648c95ce96603a42a43a6d` passed Rust checks run `38154037421`, job `114513193179`: exact decoder pin, `cargo fmt --all -- --check`, strict workspace Clippy, full locked workspace tests, synthetic CLI checks, every retained CPU-copy/XORI/CPU-SP/RSP/cache/SP-ingress/store/TLB contract, and the independent fetch-summary oracle all PASS.
 - An earlier canonical run failed only `cargo fmt --all -- --check`; canonical rustfmt was applied, after which all semantic and workspace gates passed. No gate was weakened.
 
-A temporary branch-only reproduction/format workflow was used solely to obtain exact-pinned evidence and canonical rustfmt in the connector-only environment. It is deleted before production integration and is not a production dependency.
+A temporary branch-only reproduction/format workflow was used solely to obtain exact-pinned evidence and canonical rustfmt before the repository's CI-policy change. It was deleted before the final staged production delta and is not a production dependency.
+
+### Final infrastructure-only reconciliation and blocker
+
+Canonical main then advanced from `31c10020665e8386656fd943acab111b5c7e1671` to `24689113469e0a3325601d7b6fd41b4d06ecf761` solely to make `.github/workflows/rust.yml` manual-only. The branch was reconciled onto that head as `0836b75ff8b8cee8aab90b8c88ad92032f4e7f59`.
+
+`GitHub.compare_commits(7921ca46, 0836b75f)` reports exactly one changed path: `.github/workflows/rust.yml` with 45 deletions. No Rust source, Cargo input, test, synthetic fixture, oracle, script, lockfile, or Plaid production file differs from the fully green `7921ca46` validation tree. `GitHub.compare_commits(24689113, 0836b75f)` reports exactly the three intended production paths: the new history module, one `lib.rs` export, and this receipt.
+
+Issue #4 simultaneously changed project policy: automatic Actions validation is disabled and direct-integration workers should rerun the canonical commands locally. This ChatGPT runtime cannot honestly do that: an attempted `git clone https://github.com/sting-raider/Plaid.git` failed because the shell cannot resolve `github.com`, and both `rustc` and `cargo` are absent (`command -v rustc` / `command -v cargo` return unavailable). The runtime contains no local Plaid checkout or Rust toolchain. No result is fabricated and no new Actions workflow is created to evade the manual-only policy.
+
+Therefore the source-equivalent hardened delta is high-confidence and has a full green validation receipt on the byte-identical Rust/build-input tree, but the literal post-main-change local rerun required by the newly adopted coordination policy cannot be completed in this worker environment. Per the direct-integration rules, this worker does not acquire a main-write lease or merge while that final procedural gate is unavailable.
 
 ## Rejected / intentionally unpromoted scope
 
 - No current-backing, cache-tag, vector-address, or payload-equality shortcut is accepted.
 - No TLB refill/XTLB root executable identity is inferred from the general-vector fixture.
-- BEV=1 behavior from the abstract reducer is not promoted as executable reference evidence by this integration.
+- BEV=1 behavior from the abstract reducer is not promoted as executable reference evidence by this integration; canonical `exception_pif` owns its separately validated source composition.
 - No TLB alias/mapping chronology, restore epoch, reset/NMI, cache-error, interrupt/watch root, full handler execution, mutation census, or whole-ROM root-set certificate is added.
 - Successful finite replay is not sensor completeness or future-execution completeness.
 
 ## Production files
 
-- `crates/plaid-core/src/exception_root_history.rs`
-- `crates/plaid-core/src/lib.rs`
-- canonical `docs/STATUS.md`, `docs/NEXT.md`, `docs/DECISIONS.md` when the serialized final canonical base is fixed
-- this receipt
+The staged net production diff against canonical `24689113469e0a3325601d7b6fd41b4d06ecf761` is exactly:
 
-No `docs/progress.json` milestone changes.
+- `crates/plaid-core/src/exception_root_history.rs`;
+- `crates/plaid-core/src/lib.rs` (one module export);
+- this receipt.
+
+`docs/STATUS.md`, `docs/NEXT.md`, `docs/DECISIONS.md`, and `docs/progress.json` are intentionally unchanged: this bounded evidence consumer does not close or waive a canonical whole-ROM/native proof obligation or change a milestone. The durable receipt records the narrower production invariant and remaining gaps.
 
 ## Remaining proof obligations
 
-Even after integration, this is only a bounded source-bound composition primitive. Whole-ROM closure still requires authenticated exception classification/status chronology, complete mapping/cache histories, handler-byte provenance beyond this first-word identity-RDRAM scope, full executable lifetimes, complete mutation census, interrupt/watch/reset/NMI/cache-error roots, TLB/refill-root composition, restore/save chronology, and a complete execution-root census. Missing evidence remains OPEN.
+Even after eventual integration, this is only a bounded source-bound composition primitive. Whole-ROM closure still requires authenticated exception classification/status chronology, complete mapping/cache histories, handler-byte provenance beyond this first-word identity-RDRAM scope, full executable lifetimes, complete mutation census, interrupt/watch/reset/NMI/cache-error roots, TLB/refill-root composition, restore/save chronology, and a complete execution-root census. Missing evidence remains OPEN.
 
-Final main SHA, final production commit, final canonical CI, and ADR number are recorded by the issue #4 closeout after serialized landing.
+## Handoff required to unblock
+
+A worker with a current local Plaid checkout and Rust toolchain should:
+
+1. fetch canonical `main` and this branch;
+2. reconcile if main has moved;
+3. run `cargo test --locked --workspace`, `cargo fmt --all -- --check`, and `cargo clippy --locked --workspace --all-targets -- -D warnings`, plus the canonical synthetic/oracle checks required by current `AGENTS.md`/workflow policy;
+4. rerun the focused `exception_root_history` regressions;
+5. if fully green, acquire a fresh MAIN-WRITE lease against the then-current main and land the three-path net delta without weakening any OPEN obligation.
