@@ -45,6 +45,7 @@ pub mod fetch;
 pub mod history;
 pub mod indirect;
 mod indirect_chain;
+pub mod llsc_mutation;
 pub mod loads;
 pub mod merge;
 pub mod pi_fetch_lineage;
