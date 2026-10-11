@@ -20,23 +20,23 @@ jobs:
         shell: bash
         run: |
           if ! grep -q 'Production CPU mutation replay (2026-10-11)' docs/STATUS.md; then
-            cat >> docs/STATUS.md <<'EOF'
-
-
-### Production CPU mutation replay (2026-10-11)
-
-- Production now exposes a bounded source-bound `cpu_mutation` consumer for authenticated finite `SWC1`/`SDC1` histories. It rechecks complete-source SHA-256, contiguous scoped chronology, decoded COP1 cause, FR-sensitive FPR lane selection and semantic payload bytes. Cached success remains `cache_resident`; uncached success is `backing`; faulted attempts may emit no byte effect. Callback fragmentation is accepted only when non-overlapping fragments exactly cover the semantic store bytes, so emulator callback count is not promoted into a hardware atomicity claim. Focused adversarial Rust tests and the exact pinned-ares 192-case matrix reproduce. Mutation-census completeness, ultimate FPR ancestry, dirty-line writeback ancestry, executable lifetime, hardware transaction topology, solver closure and native completeness remain OPEN.
-EOF
+            printf '%s\n' \
+              '' \
+              '' \
+              '### Production CPU mutation replay (2026-10-11)' \
+              '' \
+              '- Production now exposes a bounded source-bound `cpu_mutation` consumer for authenticated finite `SWC1`/`SDC1` histories. It rechecks complete-source SHA-256, contiguous scoped chronology, decoded COP1 cause, FR-sensitive FPR lane selection and semantic payload bytes. Cached success remains `cache_resident`; uncached success is `backing`; faulted attempts may emit no byte effect. Callback fragmentation is accepted only when non-overlapping fragments exactly cover the semantic store bytes, so emulator callback count is not promoted into a hardware atomicity claim. Focused adversarial Rust tests and the exact pinned-ares 192-case matrix reproduce. Mutation-census completeness, ultimate FPR ancestry, dirty-line writeback ancestry, executable lifetime, hardware transaction topology, solver closure and native completeness remain OPEN.' \
+              >> docs/STATUS.md
           fi
 
           if ! grep -q 'Production COP1 mutation evidence consumer (2026-10-11)' docs/NEXT.md; then
-            cat >> docs/NEXT.md <<'EOF'
-
-
-### Production COP1 mutation evidence consumer (2026-10-11)
-
-A finite source-bound consumer now validates captured `SWC1`/`SDC1` mutation receipts with FR-normalized payloads and cache/backing separation. The next blocker is still the complete producer side: observe the general successful CPU concrete-mutation boundary below opcode-specific handlers, compose cached resident mutations with later verified dirty-line writeback/backing generations, extend FPR/storage ancestry, and join those generations to executable consumption/lifetimes. Opcode allowlists, equal values, callback counts and bounded captures remain insufficient for a mutation census or CLOSED result.
-EOF
+            printf '%s\n' \
+              '' \
+              '' \
+              '### Production COP1 mutation evidence consumer (2026-10-11)' \
+              '' \
+              'A finite source-bound consumer now validates captured `SWC1`/`SDC1` mutation receipts with FR-normalized payloads and cache/backing separation. The next blocker is still the complete producer side: observe the general successful CPU concrete-mutation boundary below opcode-specific handlers, compose cached resident mutations with later verified dirty-line writeback/backing generations, extend FPR/storage ancestry, and join those generations to executable consumption/lifetimes. Opcode allowlists, equal values, callback counts and bounded captures remain insufficient for a mutation census or CLOSED result.' \
+              >> docs/NEXT.md
           fi
       - name: Commit documentation
         shell: bash
