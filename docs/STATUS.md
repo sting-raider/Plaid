@@ -738,3 +738,19 @@ read 17 does not replace the t0 definition from read 14. Same-value reloads,
 equal-result ORI cuts, failed-load cuts and cross-protocol gates pass ten focused
 Rust tests plus CLI/fmt/strict Clippy. General producer/capture completeness,
 storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
+
+Production CPU-copy lineage now retains every captured successful aligned
+uncached Word SW as a fresh phase-scoped storage generation and composes accepted
+copy/definition witnesses with captured writer chronology at their source address
+and their own destination generation. Forward overlap therefore retains prior
+captured destination generations at later source reads; backward overlap does not.
+Equal-payload histories and same-value rewrites remain causally distinct, and
+phase boundaries cut local writer state. Complete-source rechecking rejects forged
+or deleted lineage. This is deliberately not an ultimate storage-parent claim:
+writer-census completeness, DMA/device interleavings, cached residency, executable
+consumption/lifetime and whole-ROM/native closure remain OPEN (ADR-0101).
+
+Direct-integration validation Actions `38150926408` passes at code head
+`ea163dbbbe0b0cb4da032d292f917616e0b7a5fe`, including fmt, strict workspace
+Clippy, full locked workspace tests, CLI checks, all retained source-contract
+regressions and the independent fetch-summary oracle.
