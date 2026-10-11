@@ -660,3 +660,7 @@ disabled and enabled builds; repeated enabled trace matches its historical hash.
 Ten measured forgeries and eleven synthetic tests pass, along with full core,
 fmt and strict Clippy. Queue labels are not authenticated tokens; producer/census/
 lifetime/native certificates remain false (ADR-0094).
+
+Canonical Actions `38142346588` passes at exact head
+`4c05752a2f2a30dcb64c349ef38fe19b1224f3a9`, including eleven PI/cache
+contracts and all prior Rust/CLI/producer/model gates.
