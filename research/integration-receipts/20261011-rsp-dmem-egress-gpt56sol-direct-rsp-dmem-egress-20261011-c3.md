@@ -27,7 +27,7 @@ After reconciliation with the independently landed IMEM egress primitive, exact-
 
 Main later changed its canonical Rust workflow to manual-only at `24689113469e0a3325601d7b6fd41b4d06ecf761`. After explicit ancestry reconciliation, Actions `38154679139`, job `114515095330` reran focused DMEM tests, exact decoder pin, fmt, strict workspace Clippy, full workspace tests, CLI, all retained synthetic contracts and the fetch-summary oracle; every step passed.
 
-Canonical main then advanced to `0e0e999b626dbda3f47cfd6aa89673618ae20350` with the cached exception-root-generation integration. That integration occupied ADR-0104, so this DMEM decision was renumbered to ADR-0105 before landing. The branch was rebuilt from that canonical tree while preserving the already-tested DMEM module blob byte-for-byte (`cfe45a098f76ad3531866898b936d5cbde4deae7`). A final post-reconciliation validation run is recorded below.
+Canonical main then advanced to `0e0e999b626dbda3f47cfd6aa89673618ae20350` with the cached exception-root-generation integration. That integration occupied ADR-0104, so this DMEM decision was renumbered to ADR-0105 before landing. The branch was rebuilt from that canonical tree while preserving the already-tested DMEM module blob byte-for-byte (`cfe45a098f76ad3531866898b936d5cbde4deae7`).
 
 ## Adopted invariant
 
@@ -59,7 +59,7 @@ Focused production tests cover same-value fresh generations, equal-payload decoy
 
 Pre-final runs: Actions `38154297446` and `38154679139` passed the exact-pin, focused, mandatory workspace and retained synthetic/oracle gates as described above.
 
-Final reconciliation validation: PENDING RECEIPT UPDATE BEFORE LEASE.
+Final reconciliation validation against canonical base `0e0e999b626dbda3f47cfd6aa89673618ae20350`: Actions `38155441657`, job `114517351446`, PASS. The run passed focused `rsp_dmem_dma_egress` tests, exact Rabbitizer dependency pin verification, `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, `cargo test --locked --workspace`, synthetic CLI checks, CPU-copy/XORI/CPU-SP/RSP-CPU-IMEM/cache/PageMask/PI/SP-DMA/RSP-store/EntryHi/TLBR contracts, and the independent fetch-summary assignment oracle. The two branch-only refresh/validation workflows were deleted after this green run and are not production changes.
 
 ## Limitations and remaining proof obligations
 
