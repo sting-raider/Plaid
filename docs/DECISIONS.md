@@ -1903,3 +1903,33 @@ expectation census, or a whole-ROM certificate. Other fetch/cache/mutation/root
 sources and coverage/lifetime obligations need their own adapters. ADR-0113's
 standalone-helper boundary is now composed explicitly; no legacy solve API or
 closed-world obligation is weakened. No upstream code or reference rebuild.
+
+## ADR-0115: Cached root ancestry composes full-line residency and distinct lifecycle cuts
+
+Status: Accepted for bounded pinned-reference root-history composition, 2026-10-12.
+
+Reconcile PR #25's direct-mapped-slot invariant into the canonical existing
+exception_root_generation API. Preserve v0's exact root-word-only format/policy
+and serialized reports. An explicit v1 line profile admits aligned identity-RDRAM
+full 32-byte fills, per-word captured backing writers, index invalidations and
+canonical reset-cache transitions. Every fill replaces the complete resident
+slot, even for equal payloads; each lane retains its own fill-time backing writer.
+Missing backing remains unknown and later equal writes cannot heal it.
+
+Reuse reset_cache_lifetime's exact pinned effect rule rather than adding a second
+policy: NMI preserves cache/backing, system reset clears residency only, full
+power clears both. V1 explicitly declares the existing ares reference profile;
+these effects are not promoted to universal hardware truth. Reject restore,
+translated/degraded accesses, schema mixing and unsupported root state.
+
+Every root fetch still uses the canonical BEV0/EXL-clear/32-bit general-root
+selector and exact physical 0x180. Current backing is diagnostic, never a stale
+resident's source. Source/report rechecking binds the entire finite chronology.
+Eight new composition regressions plus the retained ten root and twelve reset
+regressions pass. Exact relied-on clean source hashes and authenticated retained
+research establish the primitive contracts; no redundant reference rebuild.
+
+The competing PR #25 module is superseded, not merged wholesale. Captured backing
+writer compatibility is not ultimate byte origin. Actual event authentication,
+complete writers/cache/mapping/root census, restore epochs, exception-delivery
+composition, whole-ROM/native closure and progress milestones remain OPEN.

@@ -4,18 +4,25 @@
 //! finite observed backing/fill/invalidation/fetch chronology. It intentionally
 //! does not infer resident code from current backing bytes or equal payloads and
 //! does not claim mutation-census, reachability, lifetime, or whole-ROM closure.
+//! V0 retains its root-word-only contract. V1 explicitly composes full-line
+//! identity-RDRAM slot replacement with the canonical pinned reset/NMI profile;
+//! it excludes translated/degraded accesses and nonmonotonic restore.
 use crate::{
     exception_roots::{
         ExceptionClass, ExceptionRootInput, ExceptionRootReceipt, ExceptionVectorClass,
         KernelAddressMode, resolve_exception_root,
     },
     program::PhysicalAddr,
+    reset_cache_lifetime::{PROFILE as RESET_PROFILE, ResetCacheTransitionKind, expected_effects},
     rom::sha256,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 pub const FORMAT: &str = "plaid-exception-root-generation-history-v0";
 pub const POLICY: &str = "identity_rdram_cached_bev0_general_word";
+pub const LINE_FORMAT: &str = "plaid-exception-root-generation-history-v1";
+pub const LINE_POLICY: &str = "identity_rdram_cached_bev0_general_lines";
 const ROOT_PHYSICAL: PhysicalAddr = PhysicalAddr(0x0000_0180);
 
 #[derive(Debug, Deserialize)]
@@ -23,6 +30,8 @@ const ROOT_PHYSICAL: PhysicalAddr = PhysicalAddr(0x0000_0180);
 struct History {
     format: String,
     policy: String,
+    #[serde(default)]
+    profile: Option<String>,
     events: Vec<Event>,
 }
 
@@ -49,6 +58,22 @@ enum Event {
         physical: PhysicalAddr,
         word: u32,
     },
+    /// A completed 32-byte fill, including lanes without a captured writer.
+    FillLine {
+        ordinal: u64,
+        physical_line: PhysicalAddr,
+        words: [u32; 8],
+    },
+    IndexInvalidate {
+        ordinal: u64,
+        physical_line: PhysicalAddr,
+    },
+    Lifecycle {
+        ordinal: u64,
+        transition: ResetCacheTransitionKind,
+        resident_reinitialized: bool,
+        backing_reinitialized: bool,
+    },
 }
 
 impl Event {
@@ -57,16 +82,23 @@ impl Event {
             Self::BackingWrite { ordinal, .. }
             | Self::Fill { ordinal, .. }
             | Self::Invalidate { ordinal, .. }
-            | Self::RootFetch { ordinal, .. } => *ordinal,
+            | Self::RootFetch { ordinal, .. }
+            | Self::FillLine { ordinal, .. }
+            | Self::IndexInvalidate { ordinal, .. }
+            | Self::Lifecycle { ordinal, .. } => *ordinal,
         }
     }
 
-    fn physical(&self) -> PhysicalAddr {
+    fn physical(&self) -> Option<PhysicalAddr> {
         match self {
             Self::BackingWrite { physical, .. }
             | Self::Fill { physical, .. }
             | Self::Invalidate { physical, .. }
-            | Self::RootFetch { physical, .. } => *physical,
+            | Self::RootFetch { physical, .. } => Some(*physical),
+            Self::FillLine { physical_line, .. } | Self::IndexInvalidate { physical_line, .. } => {
+                Some(*physical_line)
+            }
+            Self::Lifecycle { .. } => None,
         }
     }
 }
@@ -104,6 +136,8 @@ pub struct ExceptionRootWordWitness {
 pub struct ExceptionRootGenerationReport {
     pub format: String,
     pub policy: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
     pub source_sha256: String,
     pub records: usize,
     pub root_fetches: usize,
@@ -115,10 +149,28 @@ pub struct ExceptionRootGenerationReport {
 }
 
 #[derive(Debug, Clone, Copy)]
+struct ResidentWord {
+    backing_write_ordinal: Option<u64>,
+    word: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct ResidentGeneration {
     fill_ordinal: u64,
-    backing_write_ordinal: u64,
-    word: u32,
+    physical_line: PhysicalAddr,
+    words: [Option<ResidentWord>; 8],
+}
+
+fn slot(physical: PhysicalAddr) -> u16 {
+    ((physical.0 >> 5) & 0x1ff) as u16
+}
+
+fn valid_word(physical: PhysicalAddr) -> bool {
+    physical.0 < 8 * 1024 * 1024 && physical.0.is_multiple_of(4)
+}
+
+fn valid_line(physical: PhysicalAddr) -> bool {
+    valid_word(physical) && physical.0.is_multiple_of(32)
 }
 
 fn require(ok: bool, message: &str) -> Result<(), String> {
@@ -153,6 +205,12 @@ fn require_validated_root(input: ExceptionRootInput) -> Result<ExceptionRootRece
 /// silently refreshes an existing resident line. If a root fetch has no captured
 /// resident/fill witness, its origin remains `Unknown` even when current backing
 /// contains identical bits.
+///
+/// V1 fills replace an entire direct-mapped slot and preserve each captured word
+/// writer separately. Missing backing at fill time stays unknown after later
+/// equal-valued writes. Lifecycle effects reuse the pinned reset/cache contract:
+/// NMI preserves both domains, system reset ends residency, full power ends both.
+/// These effects are reference-profile obligations, not hardware-wide claims.
 pub fn inspect_exception_root_generation_history(
     source: &[u8],
     expected_sha256: &str,
@@ -163,17 +221,17 @@ pub fn inspect_exception_root_generation_history(
         "exception root generation source receipt mismatch",
     )?;
     let history: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
+    let line_scope = history.format == LINE_FORMAT;
     require(
-        history.format == FORMAT,
-        "unsupported exception root generation format",
-    )?;
-    require(
-        history.policy == POLICY,
-        "unsupported exception root generation policy",
+        (history.format == FORMAT && history.policy == POLICY && history.profile.is_none())
+            || (line_scope
+                && history.policy == LINE_POLICY
+                && history.profile.as_deref() == Some(RESET_PROFILE)),
+        "unsupported exception root generation format/policy/profile",
     )?;
 
-    let mut backing: Option<BackingGeneration> = None;
-    let mut resident: Option<ResidentGeneration> = None;
+    let mut backing = BTreeMap::<PhysicalAddr, BackingGeneration>::new();
+    let mut resident = BTreeMap::<u16, ResidentGeneration>::new();
     let mut witnesses = Vec::new();
 
     for (index, event) in history.events.iter().enumerate() {
@@ -181,46 +239,151 @@ pub fn inspect_exception_root_generation_history(
             event.ordinal() == index as u64 + 1,
             "noncontiguous exception root generation ordinals",
         )?;
-        require(
-            event.physical() == ROOT_PHYSICAL,
-            "exception root generation event targets an unsupported physical word",
-        )?;
+        if !line_scope {
+            require(
+                matches!(
+                    event,
+                    Event::BackingWrite { .. }
+                        | Event::Fill { .. }
+                        | Event::Invalidate { .. }
+                        | Event::RootFetch { .. }
+                ) && event.physical() == Some(ROOT_PHYSICAL),
+                "exception root generation event targets an unsupported physical word or operation",
+            )?;
+        }
         match *event {
-            Event::BackingWrite { ordinal, word, .. } => {
-                backing = Some(BackingGeneration {
-                    write_ordinal: ordinal,
-                    word,
-                });
+            Event::BackingWrite {
+                ordinal,
+                physical,
+                word,
+            } => {
+                require(valid_word(physical), "invalid identity-RDRAM backing word")?;
+                backing.insert(
+                    physical,
+                    BackingGeneration {
+                        write_ordinal: ordinal,
+                        word,
+                    },
+                );
             }
             Event::Fill { ordinal, word, .. } => {
-                let source = backing.ok_or("cache fill lacks a captured backing generation")?;
+                require(!line_scope, "v1 requires a completed full-line fill")?;
+                let source = backing
+                    .get(&ROOT_PHYSICAL)
+                    .copied()
+                    .ok_or("cache fill lacks a captured backing generation")?;
                 require(
                     word == source.word,
                     "cache fill payload differs from its captured backing generation",
                 )?;
-                resident = Some(ResidentGeneration {
-                    fill_ordinal: ordinal,
-                    backing_write_ordinal: source.write_ordinal,
+                let mut words = [None; 8];
+                words[0] = Some(ResidentWord {
                     word,
+                    backing_write_ordinal: Some(source.write_ordinal),
                 });
+                resident.insert(
+                    slot(ROOT_PHYSICAL),
+                    ResidentGeneration {
+                        fill_ordinal: ordinal,
+                        physical_line: ROOT_PHYSICAL,
+                        words,
+                    },
+                );
             }
-            Event::Invalidate { .. } => resident = None,
+            Event::Invalidate { .. } => {
+                require(!line_scope, "v1 requires explicit index invalidation")?;
+                resident.remove(&slot(ROOT_PHYSICAL));
+            }
+            Event::FillLine {
+                ordinal,
+                physical_line,
+                words,
+            } => {
+                require(
+                    line_scope && valid_line(physical_line),
+                    "invalid identity-RDRAM full-line fill",
+                )?;
+                let mut lanes = [None; 8];
+                for (index, word) in words.into_iter().enumerate() {
+                    let physical = PhysicalAddr(physical_line.0 + index as u32 * 4);
+                    let source = backing.get(&physical).copied();
+                    if let Some(source) = source {
+                        require(
+                            word == source.word,
+                            "line fill payload differs from its captured backing generation",
+                        )?;
+                    }
+                    lanes[index] = Some(ResidentWord {
+                        word,
+                        backing_write_ordinal: source.map(|s| s.write_ordinal),
+                    });
+                }
+                // Any fill replaces the whole slot, including equal-valued lines.
+                resident.insert(
+                    slot(physical_line),
+                    ResidentGeneration {
+                        fill_ordinal: ordinal,
+                        physical_line,
+                        words: lanes,
+                    },
+                );
+            }
+            Event::IndexInvalidate { physical_line, .. } => {
+                require(
+                    line_scope && valid_line(physical_line),
+                    "invalid identity-RDRAM index invalidation",
+                )?;
+                resident.remove(&slot(physical_line));
+            }
+            Event::Lifecycle {
+                transition,
+                resident_reinitialized,
+                backing_reinitialized,
+                ..
+            } => {
+                require(
+                    line_scope,
+                    "lifecycle requires explicit pinned line profile",
+                )?;
+                require(
+                    (resident_reinitialized, backing_reinitialized) == expected_effects(transition),
+                    "lifecycle effects disagree with pinned-reference profile",
+                )?;
+                if resident_reinitialized {
+                    resident.clear();
+                }
+                if backing_reinitialized {
+                    backing.clear();
+                }
+            }
             Event::RootFetch {
                 ordinal,
                 input,
                 word,
-                ..
+                physical,
             } => {
                 let architectural_root = require_validated_root(input)?;
-                let origin = match resident {
-                    Some(resident) => {
+                require(
+                    physical == ROOT_PHYSICAL,
+                    "root fetch targets unsupported physical word",
+                )?;
+                let captured = resident
+                    .get(&slot(physical))
+                    .filter(|line| line.physical_line == PhysicalAddr(physical.0 & !31));
+                let origin = match captured.and_then(|line| {
+                    line.words[((physical.0 & 31) / 4) as usize].map(|word| (line, word))
+                }) {
+                    Some((resident, lane)) => {
                         require(
-                            word == resident.word,
+                            word == lane.word,
                             "root fetch payload differs from captured resident generation",
                         )?;
-                        RootWordOrigin::Resident {
-                            fill_ordinal: resident.fill_ordinal,
-                            backing_write_ordinal: resident.backing_write_ordinal,
+                        match lane.backing_write_ordinal {
+                            Some(backing_write_ordinal) => RootWordOrigin::Resident {
+                                fill_ordinal: resident.fill_ordinal,
+                                backing_write_ordinal,
+                            },
+                            None => RootWordOrigin::Unknown,
                         }
                     }
                     None => RootWordOrigin::Unknown,
@@ -230,7 +393,7 @@ pub fn inspect_exception_root_generation_history(
                     architectural_root,
                     physical: ROOT_PHYSICAL,
                     word,
-                    current_backing: backing,
+                    current_backing: backing.get(&physical).copied(),
                     origin,
                 });
             }
@@ -240,6 +403,7 @@ pub fn inspect_exception_root_generation_history(
     Ok(ExceptionRootGenerationReport {
         format: history.format,
         policy: history.policy,
+        profile: history.profile,
         source_sha256: digest,
         records: history.events.len(),
         root_fetches: witnesses.len(),

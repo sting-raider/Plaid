@@ -4,6 +4,12 @@
 
 Implemented:
 
+- Cached general-root replay v1 composes full 32-byte I-cache fills, direct slot
+  replacement and per-word captured backing writers with canonical pinned
+  NMI/reset/power effects. Equal-value conflicting fills end residency; NMI
+  preserves both domains, reset clears residency, power clears both. V0 stays
+  compatible; finite receipts certify neither census nor executable lifetime.
+
 - Source-preserving discovery solve admission composes externally expected trace
   sets with canonical raw-primitive and ROM-aware installed-entry rechecks before
   solving. Reports retain expected sessions and the exact validated map digest.

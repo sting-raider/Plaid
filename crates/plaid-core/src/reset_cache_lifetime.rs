@@ -72,7 +72,7 @@ fn require(ok: bool, message: &str) -> Result<(), String> {
     if ok { Ok(()) } else { Err(message.into()) }
 }
 
-fn expected_effects(kind: ResetCacheTransitionKind) -> (bool, bool) {
+pub(crate) fn expected_effects(kind: ResetCacheTransitionKind) -> (bool, bool) {
     match kind {
         ResetCacheTransitionKind::Nmi => (false, false),
         ResetCacheTransitionKind::SystemReset => (true, false),
