@@ -1967,3 +1967,32 @@ code under its ISC license, stored with the diagnostic, to identify the supplied
 ROM as CIC-6105 (seed 0x91 checksum 0x8618a45bc2d3). No upstream production code
 or game bytes enter Plaid/git. The existing 6102-only boot profile is not widened
 by this result; a correct game capture remains a separate declared-source task.
+
+## ADR-0117: Compilation roots and captured words survive source-preserving closure admission
+
+Status: Accepted for explicit discovery-source admission, 2026-10-12.
+
+Compose completed compilation projections with the existing primitive/install
+checks. Canonical source re-import determines each completed unit's roots and
+execution identity. Retain its exact begin/completion evidence and required
+root provenance even when no EntryInstalled event was observed. Additional
+legitimate merged roots are allowed; the solver independently rederives their
+CFG. Supplied instruction words for captured identities must match the original
+snapshot, including legacy opaque image labels. Missing instruction inputs stay
+solver blockers rather than acquiring invented sources.
+
+A primary red regression retained one closed self-loop and deleted a second
+compiled unit containing unresolved JR, preserving both units' source metadata.
+The old admission emitted CLOSED for the reduced declared-static map. New
+admission rejects its missing compiled root. Another regression replaces opaque
+solver instruction bytes with a self-loop while keeping authenticated compile
+metadata/root identity; new admission rejects that word substitution. Extra
+merged roots, existing install checks and positive bounded static closure remain
+valid. Complete sources and original import context remain mandatory.
+
+This strengthens ADR-0114's explicit boundary. Legacy primitive/installed-entry
+helpers and ordinary solve keep their declared contracts. It does not infer
+execution from compilation, prove sensor/byte lifetime or the complete root
+universe, authenticate every derived field, or widen whole-ROM/native gates.
+Eight focused admission tests, five existing install projection tests, CLI and
+mandatory full local gate pass. No reference rebuild or progress milestone change.

@@ -102,9 +102,11 @@ plaid solve-traces <rom> <map.json> <expected.json> <trace.ndjson>...
 Expectation creation refuses to overwrite an existing file. Preserve that file
 under a stronger trust boundary than editable maps and traces; recreating it from
 an edited submission removes deletion resistance. `solve-traces` authenticates
-the exact expected source set and rechecks raw primitives and installed-entry
+the exact expected source set and rechecks raw primitives, installed-entry
 projections using the ROM-aware importer before running the existing whole-ROM
-solver. Its report includes the expectations and canonical map digest. It uses
+solver. Completed compilations must retain their source-bound roots, even without
+install events; supplied instruction words cannot replace the captured snapshot.
+Its report includes the expectations and canonical map digest. It uses
 the same empty known-image set and budget as CLI `import-trace`; library callers
 must supply their original import context separately from solver image witnesses.
 This does not authenticate every derived fact, prove complete sensors, or replace

@@ -347,6 +347,82 @@ pub fn verify_discovery_trace_projection_with_entries_and_rom(
     verify_entry_projection(trace, map, &expected)
 }
 
+/// Authenticate installed entries and retain each completed compilation's
+/// canonical root projection, including sources without EntryInstalled events.
+/// Extra roots from legitimate map composition are allowed; source-derived roots
+/// cannot disappear behind retained metadata. CFG semantics remain the solver's
+/// independently rederived obligation, not a comparison of mutable diagnostics.
+/// Supplied instruction words for those execution identities must match the
+/// captured snapshot. Missing instruction inputs remain a solver blocker.
+pub fn verify_discovery_trace_execution_projection_with_rom(
+    trace: &DiscoveryTrace,
+    known: &[CodeImage],
+    rom: &CanonicalRom,
+    map: &ProgramMap,
+    images: &[CodeImage],
+    budget: usize,
+) -> Result<(), String> {
+    verify_discovery_trace_projection(map, trace)?;
+    let expected = import_trace_with_rom(trace, known, rom, budget)?;
+    verify_entry_projection(trace, map, &expected)?;
+    let session = sha256(trace.to_ndjson()?.as_bytes());
+    let mut units = BTreeMap::<u64, String>::new();
+    for event in &trace.events {
+        let id = source_event_id(&session, event.seq);
+        match &event.data {
+            TraceEvent::CompileBegin { unit, .. } => {
+                units.insert(*unit, id);
+            }
+            TraceEvent::UnitCompiled { unit, start, words } => {
+                let begin = units
+                    .get(unit)
+                    .ok_or("compiled source lost begin context")?;
+                for reference in [begin, &id] {
+                    let evidence = expected
+                        .evidence
+                        .get(reference)
+                        .ok_or("re-import lost compilation evidence")?;
+                    if map.evidence.get(reference) != Some(evidence) {
+                        return Err(
+                            "compilation evidence disagrees with complete source trace".into()
+                        );
+                    }
+                }
+                let roots = entry_uses(&expected, begin);
+                if roots.is_empty() || !roots.is_subset(&entry_uses(map, begin)) {
+                    return Err(
+                        "compiled source root is missing or bound to a different identity".into(),
+                    );
+                }
+                // Original import witnesses and later solver witnesses are
+                // separate inputs. Even legacy opaque image labels cannot let
+                // different instruction bytes replace this captured snapshot.
+                let identities: BTreeSet<_> = roots
+                    .iter()
+                    .map(|root| (&root.image, root.generation))
+                    .collect();
+                for (index, word) in words.iter().enumerate() {
+                    let pc = GuestAddr(start.0 + index as u32 * 4);
+                    if images
+                        .iter()
+                        .filter(|image| {
+                            identities.contains(&(&image.base.image, image.base.generation))
+                        })
+                        .filter_map(|image| image.word(pc))
+                        .any(|supplied| supplied != *word)
+                    {
+                        return Err(
+                            "solver instruction source disagrees with captured compilation".into(),
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 fn entry_uses(map: &ProgramMap, id: &str) -> BTreeSet<CodeAddress> {
     map.entries
         .iter()
