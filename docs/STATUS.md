@@ -499,3 +499,11 @@ content-derived image IDs and incompatible known Region/CodeImage provenance.
 The primary reproduced seven false-CLOSED families on `211176e`, then retained
 all nine consolidated regressions. Unknown metadata and generation labels do
 not invent provenance or chronology. Whole-ROM closure remains OPEN (ADR-0078).
+
+Trace primitive identities now reject incompatible roles or semantic forks,
+including DMA copy vs source-unit collisions and merge laundering. A separate
+complete-DiscoveryTrace rechecker authenticates raw DMA/store/indirect/verification
+projections and optional exact installed entries. Explicit compilation-unit
+context may be shared in provenance, with source metadata independently checked.
+All 25 focused regressions pass. This authenticates supplied finite evidence,
+not sensor completeness or executable lifetime (ADR-0079).

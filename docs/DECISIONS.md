@@ -1153,3 +1153,21 @@ obligations. Preserve the nine consolidated tests and reject the superseded
 physical-only, generation-order and cross-fragment proposals. No upstream code
 is reused; the existing exact MIT Rabbitizer dependency is unchanged. Whole-ROM
 closure and native completeness remain unproved.
+
+## ADR-0079: Trace operation identity and reusable context have distinct roles
+
+Status: Accepted, 2026-10-11.
+
+One concrete trace event cannot fork primitive semantics or cross DMA/store/
+indirect/verification/source-unit roles. Explicit compilation-unit context may
+be shared and propagated into provenance; generic derived-fact provenance is
+not globally unique. Consolidate role checking in ProgramMap validation. Keep
+source authentication in a separate complete-DiscoveryTrace verifier, replaying
+epochs and exact primitive projections and optionally re-importing installed
+entries. Do not parse evidence prose or join by equal bytes. The primary's
+additional positive control falsified the prep rechecker's treatment of shared
+source-unit provenance; the same explicit-context exemption now composes across
+both layers, with independent source-unit metadata checks. Global uniqueness
+and Region-membership source binding are rejected. No upstream code is reused.
+Source authentication proves neither sensor completeness nor whole-ROM closure;
+future positive certificates must require an appropriate verified-source input.
