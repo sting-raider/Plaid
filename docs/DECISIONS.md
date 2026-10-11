@@ -1618,3 +1618,12 @@ does not prove exception occurrence/classification chronology, BEV/EXL/mode
 writer completeness, BEV=1 refill/XTLB behavior, PIF lifetime/authenticity,
 cache/mapping executable lifetime, root census, whole-ROM closure or native
 completeness. No upstream implementation or runtime dependency enters production.
+
+## ADR-0104: Reset producer identity is generation-based, not pending-value identity
+
+Status: Accepted for bounded compiler-time source-bound replay, 2026-10-11.
+
+Adopt an observed reset-producer history that keeps reset-request generations and HW2/NMI event generations explicit, unique and one-shot. Multiple active events may share the same delivery kind and schedule value without merging; an observed coalescing implementation may record an explicit supersession edge. Neither accumulation nor supersession is promoted to N64 hardware policy. Imported pending events whose request ancestry is unavailable remain producer-UNKNOWN even when their numeric fields match earlier events.
+
+This follows the portable result shared by exact pinned Mupen64Plus and Gopher64 despite their disagreement: Mupen can accumulate distinct equal `(type,count)` queue nodes while Gopher uses a replaceable NMI slot, and both consume/disable a selected event before handler delivery. Equal pending state, type/count, PC or payload values therefore do not prove causal identity. Fresh exact-pin reproduction passed during integration. Physical reset timing, repeated-reset hardware semantics, producer census, save/restore identity, IRQ/NMI priority, NMI root/fetch/byte provenance, executable lifetime, whole-ROM closure and native completeness remain OPEN. No reference implementation code enters production and no solver gate is weakened.
+
