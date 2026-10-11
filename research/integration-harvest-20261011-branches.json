@@ -1323,8 +1323,11 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090530221",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091126619"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "reviewed_model_only",
+      "integration_commit": null,
+      "review_note": "research/rsp-imem-fetch-primary-review.md",
+      "review_base": "4e1272b",
+      "regression_commit": "4fed4b1"
     },
     {
       "branch": "research/rsp-dmem-cpu-refetch-gpt56sol",
