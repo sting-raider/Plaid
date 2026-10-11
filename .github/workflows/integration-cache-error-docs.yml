@@ -1,0 +1,92 @@
+name: integration-cache-error-docs
+
+on:
+  push:
+    branches:
+      - direct-integration/cache-error-exclusion-gpt56sol-direct-cache-error-exclusion-20261011
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-docs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: direct-integration/cache-error-exclusion-gpt56sol-direct-cache-error-exclusion-20261011
+      - name: Append cache-error policy documentation
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def append_once(path, marker, text):
+              p = Path(path)
+              current = p.read_text()
+              if marker not in current:
+                  if not current.endswith("\n"):
+                      current += "\n"
+                  p.write_text(current + "\n" + text.strip() + "\n")
+
+          append_once(
+              "docs/DECISIONS.md",
+              "## ADR-0104: Cache-error root exclusion requires target-hardware evidence",
+              r'''
+          ## ADR-0104: Cache-error root exclusion requires target-hardware evidence
+
+          Status: Accepted for bounded production root policy, 2026-10-11.
+
+          For a declared Nintendo 64 / NEC VR4300 execution scope, encode the
+          cache-error exception class as `ExcludedByTargetHardware` using NEC manual
+          `U10504EJ7V0UM00`, Appendix B.1.7 / Table B-1. The target has no cache
+          parity/error mechanism and the cache-error exception does not occur. Preserve
+          the manual authority in the report and recompute it from an explicit typed
+          target; generic MIPS III remains `Unresolved`.
+
+          Emulator silence, finite traces, CacheErr register value equality, or absence
+          of a modeled transition are not exclusion evidence. This bounded negative fact
+          does not certify general/TLB/interrupt/watch/reset/NMI reachability, exception
+          chronology, handler bytes, cache/mapping lifetime, complete root census,
+          whole-ROM closure or native completeness. `whole_rom_roots_certified` and
+          `native_complete` remain false and no solver gate is weakened.
+          ''')
+
+          append_once(
+              "docs/STATUS.md",
+              "Production now also exposes target-scoped `root_policy` for the VR4300 cache-error class (ADR-0104).",
+              r'''
+          - Production now also exposes target-scoped `root_policy` for the VR4300
+            cache-error class (ADR-0104). For `Nintendo64Vr4300` it records
+            `ExcludedByTargetHardware` with NEC manual `U10504EJ7V0UM00` Appendix B.1.7 /
+            Table B-1; generic MIPS III remains `Unresolved`. The report is recomputed
+            from the typed target, forged serialized changes reject, and whole-ROM/native
+            flags remain false. Exact-pinned ares/n64-systemtest/Gopher64 integration
+            reproduction matched the research result. This removes one nonexistent
+            target-specific root class only; interrupt/watch/reset/NMI, exception
+            chronology, handler provenance/lifetime and complete root census remain OPEN.
+          ''')
+
+          append_once(
+              "docs/NEXT.md",
+              "The VR4300 cache-error class now has a target-scoped hardware exclusion (ADR-0104)",
+              r'''
+          The VR4300 cache-error class now has a target-scoped hardware exclusion
+          (ADR-0104), so do not seed a fictitious cache-error handler and do not use
+          emulator silence as a waiver. Root closure still must prove interrupt/watch/
+          reset/NMI and existing exception reachability/classification chronology,
+          handler-byte provenance, cache/mapping lifetimes and complete root census.
+          Generic MIPS III cache-error remains unresolved.
+          ''')
+      - name: Commit documentation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name "Plaid integration worker"
+          git config user.email "143122949+sting-raider@users.noreply.github.com"
+          git add docs/DECISIONS.md docs/STATUS.md docs/NEXT.md
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Document VR4300 cache-error root exclusion as ADR-0104"
+          git push origin HEAD:direct-integration/cache-error-exclusion-gpt56sol-direct-cache-error-exclusion-20261011
