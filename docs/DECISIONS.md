@@ -1592,3 +1592,29 @@ TLBWR, TLBP/TLBR, PageMask/ASID/global chronology, complete mutation census,
 cache/mapping/lifetime composition and whole-ROM/native-complete proof remain
 OPEN. No reference implementation code or runtime dependency enters production,
 and no solver/native-complete gate is weakened.
+
+
+## ADR-0103: BEV=1 PIF root provenance requires same-fetch backing identity
+
+Status: Accepted for bounded production source composition, 2026-10-11.
+
+Compose the typed exception-root candidate with the existing strict PIF v4 source
+replayer only for the validated BEV=1, EXL-clear, 32-bit-kernel general vector at
+`ffffffffbfc00380`. A supplied-PIF source receipt requires one caller-selected
+fetch sequence that survives complete-source replay as exactly one singleton PIF
+backing observation at physical `1fc00380`, normalized PIF offset `0x380`, with
+the fetched Word matching the supplied firmware. Retain the exact fetch sequence,
+backing-read ordinal, complete history digest, ordered fetch/backing digest and
+supplied-firmware digest. Recompute the receipt from all original sources when
+verifying it.
+
+Do not infer provenance from vector address, returned bits, a prior/latest equal
+PIF read, physical/masked-offset equality or a coalesced repeated sample. The
+validated SI-busy-latch case executes identical bits at the identical root with
+no PIF-ROM backing read, so missing same-fetch evidence remains UNKNOWN. Repeated
+identical backed observations are conservatively rejected until production keeps
+per-occurrence identity. This authenticates one observed handler fetch source; it
+does not prove exception occurrence/classification chronology, BEV/EXL/mode
+writer completeness, BEV=1 refill/XTLB behavior, PIF lifetime/authenticity,
+cache/mapping executable lifetime, root census, whole-ROM closure or native
+completeness. No upstream implementation or runtime dependency enters production.
