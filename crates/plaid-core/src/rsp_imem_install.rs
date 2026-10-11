@@ -181,7 +181,10 @@ pub fn inspect_rsp_imem_install_history(
         "RSP IMEM installation source receipt mismatch",
     )?;
     let history: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    require(history.format == FORMAT, "unsupported RSP IMEM installation format")?;
+    require(
+        history.format == FORMAT,
+        "unsupported RSP IMEM installation format",
+    )?;
     require(
         history.events.len() as u64 <= history::MAX_RECORDS,
         "RSP IMEM installation history exceeds record bound",
@@ -209,7 +212,10 @@ pub fn inspect_rsp_imem_install_history(
                 count,
                 skip,
             } => {
-                require(active.is_none(), "RSP IMEM request promoted while another is active")?;
+                require(
+                    active.is_none(),
+                    "RSP IMEM request promoted while another is active",
+                )?;
                 require(
                     *request > last_promoted,
                     "RSP IMEM request generation is not strictly monotonic",
@@ -288,7 +294,9 @@ pub fn inspect_rsp_imem_install_history(
                 });
             }
             Event::Complete { ordinal, request } => {
-                let request_state = active.take().ok_or("RSP IMEM completion without active request")?;
+                let request_state = active
+                    .take()
+                    .ok_or("RSP IMEM completion without active request")?;
                 require(
                     request_state.request == *request,
                     "RSP IMEM completion does not match active request",
@@ -311,7 +319,10 @@ pub fn inspect_rsp_imem_install_history(
             }
         }
     }
-    require(active.is_none(), "RSP IMEM history ended with an active request")?;
+    require(
+        active.is_none(),
+        "RSP IMEM history ended with an active request",
+    )?;
 
     Ok(RspImemInstallReport {
         format: history.format,
