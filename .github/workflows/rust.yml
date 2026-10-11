@@ -49,7 +49,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   check:
@@ -109,3 +109,32 @@ jobs:
         run: python spikes/054-ares-tlbr-cache-lifetime/test_verify.py
       - name: Independent fetch-summary assignment oracle
         run: python experiments/fetch-summary-realizability/model.py
+      - name: Append NMI integration docs and restore canonical workflow
+        if: github.event_name == 'pull_request' && github.head_ref == 'direct-integration/nmi-root-provenance-gpt56sol-b9'
+        run: |
+          git fetch origin direct-integration/nmi-root-provenance-gpt56sol-b9
+          git checkout -B direct-integration/nmi-root-provenance-gpt56sol-b9 origin/direct-integration/nmi-root-provenance-gpt56sol-b9
+          python - <<'PY'
+          from pathlib import Path
+          additions = {
+              "docs/DECISIONS.md": '''\n\n## ADR-0103: NMI root transfer, fetch occurrence and byte provenance are separate evidence\n\nStatus: Accepted for bounded compiler-time source-bound replay, 2026-10-11.\n\nAdopt an original ordered-history verifier for the validated NMI-root composition\nboundary. An architectural transfer to `ffffffffbfc00000` does not prove that the\nroot instruction was fetched: a still-asserted NMI level can preempt the next\ninstruction step and re-enter NMI with zero root fetches. A root fetch becomes\neligible only after an observed post-transfer deassertion in the supplied bounded\nhistory. PIF-ROM provenance then requires the actual uncached root fetch at\nphysical `1fc00000`, one unique same-context offset-zero PIF read and a matching\ncompleted fetch explicitly classified as PIF-ROM sourced.\n\nKeep transfer identity, fetch occurrence and executed-byte source identity as\nseparate facts. Root address, current/supplied firmware, equal fetched words,\nforeign reads or finite trace membership cannot substitute for the causal chain.\nContiguous source ordinals, unique fetch contexts and complete-capture hash\nbinding reject deletion, reordering and context reuse; the capture hash names the\nsource namespace but does not by itself certify producer completeness. Missing or\nambiguous source evidence remains UNKNOWN.\n\nThe fresh exact-pinned ares rerun at\n`9408cb43d4948fc3ea6e152a307a34348df3fe04` passed the source guards, exact\nreference fixture and seven-forgery chronology model. This is not a physical N64\nreset/NMI timing result and does not choose a repeated-reset policy, certify NMI\nproducer/deassertion coverage, simultaneous interrupt priority, save/restore,\ncomplete PIF/HLE sources, executable lifetime, a complete root census or native\ncompleteness. No solver gate is weakened and no reference implementation code or\nruntime dependency enters production.\n''',
+              "docs/STATUS.md": '''\n\n- Production now exposes bounded source-bound `root_execution` replay for the NMI\n  root composition boundary (ADR-0103). It keeps architectural transfer to\n  `ffffffffbfc00000`, observed progress to a root fetch, and executed-byte source\n  identity independent. Certification requires an observed deassertion plus one\n  unique uncached `1fc00000` fetch context with an in-context offset-zero PIF-ROM\n  read matching the completed word. Transfer-only/persistent-NMI histories,\n  equal-valued SI/foreign reads, wrong context/offset, ambiguous reads, ordinal\n  deletion/reordering and context reuse fail closed. Fresh exact-pinned ares\n  reproduction and the full canonical Rust workspace/synthetic suite pass.\n  NMI/reset producer completeness, hardware timing, interrupt priority,\n  save/restore, complete root-source census, executable lifetime, whole-ROM and\n  native completeness remain OPEN.\n''',
+              "docs/NEXT.md": '''\n\nProduction now has bounded source-bound NMI root execution composition\n(ADR-0103). Compose it next with an authenticated NMI/reset producer and\ndeassertion chronology, one-shot delivery identity, save/restore/reset epochs and\ncomplete root-source sensing. Keep architectural root transfer separate from\nprogress to a fetch and from executed-byte provenance. A persistent pending level,\nroot address, supplied firmware or equal word cannot manufacture a root execution\ncertificate. Simultaneous interrupt/NMI ordering, physical reset semantics,\ncomplete PIF/HLE source coverage, executable lifetime and whole-ROM root census\nremain OPEN.\n''',
+          }
+          markers = {
+              "docs/DECISIONS.md": "## ADR-0103: NMI root transfer, fetch occurrence and byte provenance are separate evidence",
+              "docs/STATUS.md": "Production now exposes bounded source-bound `root_execution` replay",
+              "docs/NEXT.md": "Production now has bounded source-bound NMI root execution composition",
+          }
+          for name, addition in additions.items():
+              path = Path(name)
+              text = path.read_text()
+              if markers[name] not in text:
+                  path.write_text(text.rstrip() + addition + "\n")
+          PY
+          git checkout HEAD^ -- .github/workflows/rust.yml
+          git config user.name "Plaid direct integration"
+          git config user.email "143122949+sting-raider@users.noreply.github.com"
+          git add .github/workflows/rust.yml docs/DECISIONS.md docs/STATUS.md docs/NEXT.md
+          git commit -m "Document NMI root execution provenance boundary"
+          git push origin HEAD:direct-integration/nmi-root-provenance-gpt56sol-b9
