@@ -281,3 +281,6 @@ Reproduce BEV=1 refill/XTLB source behavior separately before extending the rule
 and independently discharge interrupt/watch/cache-error/reset/NMI roots. Repeated
 coalesced PIF observations, equal returned bits and matching mirrors stay OPEN
 without per-occurrence same-fetch backing identity.
+
+Production now has policy-neutral reset/HW2/NMI producer-generation replay (ADR-0104). Compose only certified NMI delivery generations into the separate NMI root-transfer/fetch/source chain; imported/unknown ancestry must remain UNKNOWN. Add an explicit save/restore chronology contract before preserving producer identity across restored pending rows, and retain Mupen/Gopher repeated-reset disagreement until stronger hardware/system-test evidence resolves it. Physical reset timing, complete producer/root census, simultaneous IRQ/NMI priority, executable lifetime and whole-ROM closure remain OPEN.
+
