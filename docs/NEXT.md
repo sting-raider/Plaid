@@ -97,6 +97,17 @@ need. No new research lane. See `research/integration-harvest-20261011.md`.
 
 Native lowering remains deferred until discovery is demonstrably useful.
 
+Source-preserving discovery solve admission now rechecks external expectations,
+raw primitives and ROM-aware installed entries before emitting a closure report.
+Preserve expected sets independently at trusted capture/import boundaries; do not
+recreate them from edited submissions. Compose other source domains, compiled
+image projections and complete sensor/lifetime obligations next (ADR-0114).
+
+The user-supplied Ocarina of Time US revision-2 ROM has an ignored local conditional
+entry-window baseline: 293 blocks, 45 indirect sites and an OPEN whole-ROM report.
+The explicit initial mapping is a hypothesis, not authenticated boot evidence.
+Use it to prioritize real executable discovery; keep game bytes/maps/traces local.
+
 Keep user ROMs in ignored `roms/` and derived maps/traces in ignored `artifacts/`.
 
 EBus hidden fetches require a separate derived-bits source witness or Unknown; retain actual read context and hidden-storage lifecycle before any origin promotion (ADR-0062).

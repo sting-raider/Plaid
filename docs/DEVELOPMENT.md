@@ -92,6 +92,24 @@ Numbers accept decimal or `0x` notation.
 
 `discover` requires an explicit load mapping. Trace import compares captured DMA-backed code against canonical ROM bytes. Supplying a ROM to `solve` enables source-witness rechecking. The CLI whole-ROM solve path remains fail-closed; producing a report is not the same as reaching `CLOSED`.
 
+For discovery sources preserved independently at a trusted capture/import boundary:
+
+```bash
+plaid create-trace-expectations <new-expected.json> <trace.ndjson>...
+plaid solve-traces <rom> <map.json> <expected.json> <trace.ndjson>...
+```
+
+Expectation creation refuses to overwrite an existing file. Preserve that file
+under a stronger trust boundary than editable maps and traces; recreating it from
+an edited submission removes deletion resistance. `solve-traces` authenticates
+the exact expected source set and rechecks raw primitives and installed-entry
+projections using the ROM-aware importer before running the existing whole-ROM
+solver. Its report includes the expectations and canonical map digest. It uses
+the same empty known-image set and budget as CLI `import-trace`; library callers
+must supply their original import context separately from solver image witnesses.
+This does not authenticate every derived fact, prove complete sensors, or replace
+fetch/cache/mutation/lifetime verification for other evidence domains.
+
 Use `plaid --help` and the relevant subcommand `--help` for the exact current argument list.
 
 ## Source-bound history consumers

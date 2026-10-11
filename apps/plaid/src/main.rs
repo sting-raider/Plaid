@@ -5,6 +5,7 @@ use plaid_core::{
         verify_cpu_copy_report, verify_cpu_definition_report,
     },
     discovery::CodeImage,
+    evidence_manifest::DiscoveryTraceManifestSet,
     fetch::{import_boot_fetch, import_fetch, verify_boot_fetch_capture, verify_fetch_capture},
     history::{AccessHistoryReport, inspect_boot_history, verify_boot_history_report},
     merge::{import_trace_with_rom, merge_maps},
@@ -19,15 +20,98 @@ use plaid_core::{
     pipeline::discover_image,
     program::{GuestRange, ProgramMap, RomOffset},
     rom::CanonicalRom,
-    solver::{Scope, solve},
+    solver::{DiscoverySourceInputs, Scope, solve, solve_with_discovery_sources},
     sp_history::{SpHistoryReport, inspect_sp_boot_history, verify_sp_boot_history_report},
     trace::DiscoveryTrace,
 };
-use std::{env, fs, io::BufReader, process::ExitCode};
+use std::{
+    env, fs,
+    io::{BufReader, Write},
+    process::ExitCode,
+};
+
+fn trace_sources(paths: &[String]) -> Result<Vec<DiscoveryTrace>, String> {
+    paths
+        .iter()
+        .map(|path| {
+            DiscoveryTrace::from_ndjson(&fs::read_to_string(path).map_err(|e| e.to_string())?)
+        })
+        .collect()
+}
+
+fn rom_images(rom: &CanonicalRom, map: &ProgramMap) -> Result<Vec<CodeImage>, String> {
+    let mut images: Vec<CodeImage> = Vec::new();
+    for region in &map.regions {
+        if let Some(offset) = region.rom_offset {
+            let mut image = CodeImage::from_rom(rom, offset, region.range.clone())?;
+            // Partial regions may reference a larger image's identity.
+            // Only complete hash-matching source witnesses enter here.
+            if image.base.image == region.image {
+                image.base.generation = region.generation;
+                if !images
+                    .iter()
+                    .any(|old| old.base == image.base && old.words == image.words)
+                {
+                    images.push(image);
+                }
+            }
+        }
+    }
+    Ok(images)
+}
 
 fn run() -> Result<(), String> {
     let args: Vec<_> = env::args().skip(1).collect();
     match args.as_slice() {
+        [command, output, sources @ ..]
+            if command == "create-trace-expectations" && !sources.is_empty() =>
+        {
+            let traces = trace_sources(sources)?;
+            let expected = DiscoveryTraceManifestSet::from_traces(&traces)?;
+            let encoded =
+                serde_json::to_string_pretty(&expected).map_err(|e| e.to_string())? + "\n";
+            // Expectations are created once at a trusted boundary, never silently
+            // replaced from subsequently edited sources or maps.
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(output)
+                .map_err(|e| e.to_string())?;
+            file.write_all(encoded.as_bytes())
+                .map_err(|e| e.to_string())?;
+            println!(
+                "preserved {} discovery source expectations; retain this file independently of editable maps and sources",
+                expected.sessions.len()
+            );
+        }
+        [command, rom_path, map_path, expectations_path, sources @ ..]
+            if command == "solve-traces" && !sources.is_empty() =>
+        {
+            let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
+            let map =
+                ProgramMap::from_json(&fs::read_to_string(map_path).map_err(|e| e.to_string())?)?;
+            let expected: DiscoveryTraceManifestSet =
+                serde_json::from_slice(&fs::read(expectations_path).map_err(|e| e.to_string())?)
+                    .map_err(|e| e.to_string())?;
+            let traces = trace_sources(sources)?;
+            let images = rom_images(&rom, &map)?;
+            let report = solve_with_discovery_sources(
+                &map,
+                &images,
+                Scope::WholeRom,
+                &DiscoverySourceInputs {
+                    expected: &expected,
+                    traces: &traces,
+                    rom: &rom,
+                    known_images: &[],
+                    import_budget: 1_000_000,
+                },
+            )?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
+            );
+        }
         [command, source_path, expected_sha256, output]
             if matches!(
                 command.as_str(),
@@ -353,23 +437,7 @@ fn run() -> Result<(), String> {
             if map.rom != rom.identity {
                 return Err("map does not match canonical ROM".into());
             }
-            let mut images: Vec<CodeImage> = Vec::new();
-            for region in &map.regions {
-                if let Some(offset) = region.rom_offset {
-                    let mut image = CodeImage::from_rom(&rom, offset, region.range.clone())?;
-                    // Partial regions may reference a larger image's identity.
-                    // Only complete hash-matching source witnesses enter here.
-                    if image.base.image == region.image {
-                        image.base.generation = region.generation;
-                        if !images
-                            .iter()
-                            .any(|old| old.base == image.base && old.words == image.words)
-                        {
-                            images.push(image);
-                        }
-                    }
-                }
-            }
+            let images = rom_images(&rom, &map)?;
             let report = solve(&map, &images, Scope::WholeRom)?;
             println!(
                 "{}",
@@ -463,7 +531,7 @@ fn run() -> Result<(), String> {
         }
         _ => {
             return Err(
-                "usage: plaid inspect-cpu-definitions <history.json> <external-source-sha256> <report.json> | verify-cpu-definitions <history.json> <external-source-sha256> <report.json> | inspect-cpu-copy-history <history.json> <external-source-sha256> <report.json> | verify-cpu-copy-history <history.json> <external-source-sha256> <report.json> | rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | verify-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | inspect-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | verify-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | merge <left.json> <right.json> <output.json>"
+                "usage: plaid create-trace-expectations <new-expected.json> <trace.ndjson>... | solve-traces <rom> <map.json> <expected.json> <trace.ndjson>... | inspect-cpu-definitions <history.json> <external-source-sha256> <report.json> | verify-cpu-definitions <history.json> <external-source-sha256> <report.json> | inspect-cpu-copy-history <history.json> <external-source-sha256> <report.json> | verify-cpu-copy-history <history.json> <external-source-sha256> <report.json> | rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | verify-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | inspect-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | verify-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | merge <left.json> <right.json> <output.json>"
                     .into(),
             );
         }

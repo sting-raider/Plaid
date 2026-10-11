@@ -1,9 +1,12 @@
 //! Closure of a declared finite CFG is distinct from whole-ROM native readiness.
 use crate::{
     discovery::{CodeImage, decode, direct_cfg},
+    evidence_manifest::DiscoveryTraceManifestSet,
     indirect::verify_constant,
     program::*,
-    rom::sha256,
+    rom::{CanonicalRom, sha256},
+    trace::DiscoveryTrace,
+    trace_projection::verify_discovery_trace_projection_with_entries_and_rom,
 };
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
@@ -40,6 +43,64 @@ pub struct SolveReport {
     pub assumptions: Vec<String>,
     pub blockers: BTreeSet<Blocker>,
     pub discharged: BTreeSet<Unresolved>,
+}
+
+/// Closure admission with independently preserved discovery-source expectations.
+/// This authenticates raw trace primitives and installed-entry projections, not
+/// sensor completeness or every derived fact in the map. Other source domains
+/// and all existing closure obligations still require their own verification.
+#[derive(Debug, Clone, Serialize)]
+pub struct DiscoverySourceSolveReport {
+    pub format: String,
+    /// Commitment to the exact canonical map passed to the solver.
+    pub map_sha256: String,
+    pub discovery_sources: DiscoveryTraceManifestSet,
+    pub closure: SolveReport,
+}
+
+pub struct DiscoverySourceInputs<'a> {
+    pub expected: &'a DiscoveryTraceManifestSet,
+    pub traces: &'a [DiscoveryTrace],
+    pub rom: &'a CanonicalRom,
+    /// Known images supplied at the original import, which can differ from the
+    /// instruction witnesses supplied to the solver.
+    pub known_images: &'a [CodeImage],
+    pub import_budget: usize,
+}
+
+/// Authenticate the external source set and its primitive/installed-entry
+/// projections before solving. Preserve `expected` outside editable artifacts;
+/// constructing it from the submitted sources here would defeat deletion
+/// resistance. Re-import uses the same known images and budget as the original
+/// trace import. It never upgrades finite observations into a coverage proof.
+pub fn solve_with_discovery_sources(
+    map: &ProgramMap,
+    images: &[CodeImage],
+    scope: Scope,
+    sources: &DiscoverySourceInputs<'_>,
+) -> Result<DiscoverySourceSolveReport, String> {
+    if map.rom != sources.rom.identity {
+        return Err("map does not match canonical ROM".into());
+    }
+    sources
+        .expected
+        .verify_primitive_projections(map, sources.traces)?;
+    for trace in sources.traces {
+        verify_discovery_trace_projection_with_entries_and_rom(
+            trace,
+            sources.known_images,
+            sources.rom,
+            map,
+            sources.import_budget,
+        )?;
+    }
+    let closure = solve(map, images, scope)?;
+    Ok(DiscoverySourceSolveReport {
+        format: "plaid-discovery-source-solve-v0".into(),
+        map_sha256: sha256(map.to_json()?.as_bytes()),
+        discovery_sources: sources.expected.clone(),
+        closure,
+    })
 }
 
 fn source<'a>(images: &'a [CodeImage], address: &CodeAddress) -> Option<&'a CodeImage> {
