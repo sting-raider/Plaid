@@ -1,0 +1,84 @@
+name: Direct integration exception-root slot hardening
+
+on:
+  push:
+    branches:
+      - direct-integration/exception-root-residency-gpt56sol-20261011
+    paths:
+      - ".github/workflows/direct-integration-exception-root-slot-hardening.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: direct-integration/exception-root-residency-gpt56sol-20261011
+          fetch-depth: 0
+      - name: Apply slot-sensitive fail-closed replay hardening
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/plaid-core/src/exception_root_history.rs")
+          s = path.read_text()
+
+          def replace_once(old, new):
+              global s
+              count = s.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one replacement, found {count}: {old[:80]!r}")
+              s = s.replace(old, new, 1)
+
+          replace_once(
+              "struct Resident {\n    generation: u64,\n",
+              "struct Resident {\n    physical: PhysicalAddr,\n    generation: u64,\n",
+          )
+          replace_once(
+              "fn direct_physical(root: GuestVirtualAddr) -> PhysicalAddr {\n",
+              "// The VR4300 instruction cache is 16 KiB, direct-mapped, with 32-byte lines.\n// Within this bounded identity-RDRAM scope, these nine index bits determine the\n// resident slot. Physical identity remains separate and is checked at fetch.\nfn icache_slot(physical: PhysicalAddr) -> u16 {\n    ((physical.0 >> 5) & 0x01ff) as u16\n}\n\nfn direct_physical(root: GuestVirtualAddr) -> PhysicalAddr {\n",
+          )
+          replace_once(
+              "let mut resident = BTreeMap::<PhysicalAddr, Resident>::new();",
+              "let mut resident = BTreeMap::<u16, Resident>::new();",
+          )
+          replace_once(
+              "resident.insert(\n                    physical,\n                    Resident {\n                        generation: resident_generation,",
+              "resident.insert(\n                    icache_slot(physical),\n                    Resident {\n                        physical,\n                        generation: resident_generation,",
+          )
+          replace_once(
+              "resident.remove(&physical);",
+              "resident.remove(&icache_slot(physical));",
+          )
+          replace_once(
+              "let current = backing.get(&physical).copied();\n                resolution = Some(match resident.get(&physical).copied() {",
+              "let current = backing.get(&physical).copied();\n                let resident_line = resident\n                    .get(&icache_slot(physical))\n                    .copied()\n                    .filter(|line| line.physical == physical);\n                resolution = Some(match resident_line {",
+          )
+
+          marker = "    #[test]\n    fn tampered_source_hash_and_reordered_ordinals_are_rejected() {"
+          regression = '''    #[test]\n    fn conflicting_direct_mapped_fill_evicts_equal_value_root_residency() {\n        let alias = PhysicalAddr(0x4180);\n        assert_eq!(icache_slot(PHYS), icache_slot(alias));\n        let report = inspect(vec![\n            Event::BackingWrite {\n                ordinal: 1,\n                physical: PHYS,\n                word: OLD,\n            },\n            Event::Fill {\n                ordinal: 2,\n                physical: PHYS,\n                word: OLD,\n            },\n            Event::BackingWrite {\n                ordinal: 3,\n                physical: alias,\n                word: OLD,\n            },\n            Event::Fill {\n                ordinal: 4,\n                physical: alias,\n                word: OLD,\n            },\n            Event::RootFetch {\n                ordinal: 5,\n                pc: ROOT,\n                physical: PHYS,\n                cached: true,\n                word: OLD,\n            },\n        ])\n        .unwrap();\n        assert!(matches!(\n            report.resolution,\n            ExceptionRootFetchResolution::Unknown {\n                reason: RootHistoryUnknownReason::MissingResidentGeneration,\n                ..\n            }\n        ));\n    }\n\n'''
+          if s.count(marker) != 1:
+              raise SystemExit("test insertion marker missing or duplicated")
+          s = s.replace(marker, regression + marker, 1)
+          path.write_text(s)
+
+          receipt = Path("research/integration-receipts/20261011-exception-root-residency-gpt56sol-direct-exception-root-residency-20261011.md")
+          r = receipt.read_text()
+          old = "11. BEV=1 and TLB-refill scopes remain unsupported instead of being generalized from this fixture.\n\n## Canonical validation\n"
+          new = "11. BEV=1 and TLB-refill scopes remain unsupported instead of being generalized from this fixture.\n12. equal-value fill at physical `0x4180` evicts the prior `0x180` resident because both occupy the same direct-mapped I-cache slot; the later root fetch remains `UNKNOWN`.\n\n## Review hardening\n\nA withdrawn overlapping integration worker identified a pre-merge adversary in the first draft: residency was keyed by full physical address, which could preserve two impossible simultaneous residents in one direct-mapped cache slot. The production replay now keys resident state by the VR4300 16 KiB / 32-byte-line cache slot while retaining exact physical identity in the resident witness. Every fill replaces the slot, invalidation conservatively cuts the slot, and a fetch can reuse a resident only when that slot's exact physical identity matches. Equal-value alias fills do not rescue the evicted witness. This finding blocked main integration until the revised branch passed the full canonical gates.\n\n## Canonical validation\n"
+          if r.count(old) != 1:
+              raise SystemExit("receipt insertion marker missing or duplicated")
+          receipt.write_text(r.replace(old, new, 1))
+          PY
+          cargo fmt --all
+      - name: Commit hardened production replay and remove helper
+        run: |
+          git config user.name "plaid-direct-integration"
+          git config user.email "actions@users.noreply.github.com"
+          git add crates/plaid-core/src/exception_root_history.rs research/integration-receipts/20261011-exception-root-residency-gpt56sol-direct-exception-root-residency-20261011.md
+          git rm .github/workflows/direct-integration-exception-root-slot-hardening.yml
+          git commit -m "Harden exception-root residency for direct-mapped cache slots"
+          git push origin HEAD:direct-integration/exception-root-residency-gpt56sol-20261011
