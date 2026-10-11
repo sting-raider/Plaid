@@ -32,7 +32,7 @@ The research evidence establishes the bounded portable facts used here:
 4. A value-only `(Count, Compare)` snapshot is insufficient to identify timer causal state.
 5. Exact Count-rewrite/equality scheduling is not portable evidence: the pinned references disagree, and the pinned n64-systemtest revision has no dedicated hardware-arbitrating fixture for that timing question.
 
-Current canonical `main` was inspected during integration. It already carried exception-root and later NMI-root production evidence, but no production Count/Compare timer producer history replay. The timer cluster therefore remained genuinely unconsumed and did not duplicate the active interrupt-gate or software-IP0/IP1 integration lanes.
+Current canonical `main` was inspected repeatedly during integration as other serialized direct integrations landed. Main already carried exception-root, NMI-root, cached exception-generation and Watch-root production evidence, but no production Count/Compare timer producer history replay. The timer cluster therefore remained genuinely unconsumed and did not duplicate the interrupt-gate or software-IP0/IP1 integration lanes.
 
 ## Adopted invariant and production abstraction
 
@@ -73,7 +73,7 @@ Thus the new abstraction cannot waive missing closure evidence.
 - Rejected promoting the ares/Mupen Count-rewrite scheduling behavior to hardware truth.
 - Preserved the reference disagreement until hardware/system-test evidence resolves it.
 - The first production validation attempt failed only `cargo fmt --all -- --check`; the exact rustfmt changes were applied before the accepted validation runs.
-- Temporary branch-only CI scaffolding is validation machinery and is not intended for canonical `main`.
+- Temporary branch-only CI scaffolding was used only to execute the canonical gates after `rust.yml` became manual-only, and was removed from the clean integration branch before main-write contention.
 
 ## Files changed for production
 
@@ -91,15 +91,25 @@ Intended canonical diff:
 
 Fresh rerun of exact-pin research job `114055349538` in Actions run lineage `37999959747`: **PASS** for exact reference checkout, source guards, adversarial model, exact ares matrix and durable evidence hashing/upload.
 
-### Production validation before latest-main reconciliation
+### Production validation before canonical drift
 
 Actions run `38154534765` on integration head `934a18440e2b0f7a03418505a6374afb429af8d2`: **PASS**.
 
-### Production validation after reconciliation onto canonical main `60c5af29a9199ae207d487b4d791b13fb21ae708`
+### Production validation after NMI-root reconciliation
 
-Actions run `38154701888`, job `114515162151`, tested integration head `bae6e1adffc5e4c82dc84992a326ba1289a4774b`: **PASS**.
+Actions run `38154701888`, job `114515162151`, tested integration head `bae6e1adffc5e4c82dc84992a326ba1289a4774b` on canonical parent `60c5af29a9199ae207d487b4d791b13fb21ae708`: **PASS**.
 
-Passed gates include:
+### Production validation after cached exception-generation reconciliation
+
+Actions run `38155172970`, job `114516552941`, validation head `af9577d5011a4b85c8f634e6b35dfb947d543efb` on canonical parent `0e0e999b626dbda3f47cfd6aa89673618ae20350`: **PASS**. The temporary workflow was removed afterward.
+
+### Final production validation after Watch-root reconciliation
+
+Canonical main advanced under the serialized write lease to `1453b0da1c3948021d155f482a9c910ea18e1387` with the fail-closed Watch exception obligation. The timer branch was reconciled onto that exact tree while preserving `exception_root_generation`, `root_provenance`, and `watch_roots` exports.
+
+Actions run `38155463435`, job `114517415668`, validation head `370d0255c1036ab9f66ae7d49449c3c311344ccb`: **PASS**. The corresponding code/production tree before adding temporary validation scaffolding was merge head `526c7dffa839dc42aa3f6e3d46fa4c5ca92348d5`; the temporary workflow was removed in clean head `8ad2f354ad395a7f6b3e45d4fa75903874f307f4` before this receipt-only update.
+
+The accepted latest-main gate passed:
 
 - exact decoder dependency-pin guard;
 - `cargo fmt --all -- --check`;
