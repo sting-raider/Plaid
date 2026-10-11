@@ -1052,8 +1052,10 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091072963",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091150954"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "source_contract_reconciled",
+      "integration_commit": "4c05752",
+      "review_note": "research/pi-cache-primary.md",
+      "review_base": "3ba69b0"
     },
     {
       "branch": "research/pi-interrupt-root-compose-gpt56sol",
@@ -2243,5 +2245,5 @@
       "integration_commit": "3ff5d3e"
     }
   ],
-  "canonical_source_reconciliation_head": "809637f"
+  "canonical_source_reconciliation_head": "4c05752"
 }
