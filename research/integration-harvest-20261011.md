@@ -375,3 +375,12 @@ source/fetch verifier. Nine primary finite composition contracts now pass.
 No new reference sensing or executable lifetime is claimed. Catalog counts:
 45 core, five source contracts, one reference disagreement, one model-only
 review and 106 indexed-only heads; total 158.
+
+`0f00cdc` retains continuity through an intervening equal-valued SP load after
+reviewing the standalone CPU SP-copy branch. Its authenticated artifact controls
+and eight adversaries reproduce; three additional discontinuity/PC forgeries
+remain accepted. Main's actual decoder contract supersedes that design; the old
+fifteen-phase fixture is not claimed freshly run or wholly ported. Ten current
+composition regressions pass. Canonical CI `38140046718` passes the preceding
+nine-case regression head `4fed4b1`. The catalog now records 105 indexed-only
+heads plus 53 reconciled/reviewed dispositions, total 158.

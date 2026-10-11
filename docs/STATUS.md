@@ -619,3 +619,7 @@ lifetime and native closure remain OPEN (ADR-0091).
 Canonical Actions `38139630729` passes at exact head
 `71ccb10b94a8c617250e4ec38984d4f686de4f96`, including the eight composition
 contracts and all existing Rust/CLI/copy/transform/producer/model gates.
+
+Canonical Actions `38140046718` passes at exact head
+`4fed4b16898deede3bd766c78e3c81e2bd03962f`, including the added BREAK-context
+negative control and all existing gates.
