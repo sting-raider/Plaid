@@ -91,15 +91,49 @@ fn inspect(value: &Value) -> Result<TlbFetchReport, String> {
 #[test]
 fn execution_backed_pagemask_geometry_produces_exact_backing_witnesses() {
     let cases = [
-        (0u32, 0x4000u64, 0x4000u64, 0x1000u32, 0x2000u32, 0x1000u32, 0u8),
-        (0b11u32 << 13, 0x21000, 0x20000, 0x10000, 0x20000, 0x11000, 0),
-        (0b11u32 << 13, 0x2c000, 0x28000, 0x30000, 0x40000, 0x40000, 1),
-        (0b1111u32 << 13, 0x45000, 0x40000, 0x50000, 0x70000, 0x55000, 0),
-        (0b1111u32 << 13, 0x70000, 0x60000, 0x80000, 0xa0000, 0xa0000, 1),
+        (
+            0u32, 0x4000u64, 0x4000u64, 0x1000u32, 0x2000u32, 0x1000u32, 0u8,
+        ),
+        (
+            0b11u32 << 13,
+            0x21000,
+            0x20000,
+            0x10000,
+            0x20000,
+            0x11000,
+            0,
+        ),
+        (
+            0b11u32 << 13,
+            0x2c000,
+            0x28000,
+            0x30000,
+            0x40000,
+            0x40000,
+            1,
+        ),
+        (
+            0b1111u32 << 13,
+            0x45000,
+            0x40000,
+            0x50000,
+            0x70000,
+            0x55000,
+            0,
+        ),
+        (
+            0b1111u32 << 13,
+            0x70000,
+            0x60000,
+            0x80000,
+            0xa0000,
+            0xa0000,
+            1,
+        ),
     ];
 
-    for (index, (mask, vaddr, entry_va, p0, p1, expected_pa, selected))
-        in cases.into_iter().enumerate()
+    for (index, (mask, vaddr, entry_va, p0, p1, expected_pa, selected)) in
+        cases.into_iter().enumerate()
     {
         let word = 0x3409_1111u32 + index as u32;
         let value = history(vec![
@@ -145,7 +179,15 @@ fn fixed_4k_equal_value_decoy_cannot_replace_large_page_translation() {
             1,
             0x21000,
             7,
-            mapping("map-16k", 0b11 << 13, 0x20000, 7, false, 0x10000, 0x20000),
+            mapping(
+                "map-16k",
+                0b11 << 13,
+                0x20000,
+                7,
+                false,
+                0x10000,
+                0x20000,
+            ),
             0x20000,
             0x20000,
             false,
@@ -169,7 +211,16 @@ fn selected_half_validity_and_asid_are_checked_before_certification() {
     );
     invalid_mapping["lo0"]["valid"] = json!(false);
     let invalid = history(vec![
-        begin(1, 1, 0x91000, 7, invalid_mapping, 0x11000, 0x11000, false),
+        begin(
+            1,
+            1,
+            0x91000,
+            7,
+            invalid_mapping,
+            0x11000,
+            0x11000,
+            false,
+        ),
         read(2, 0x11000, 0x340b_3333),
         end(3, 1, 1, 0x91000, 0x340b_3333),
     ]);
@@ -181,7 +232,15 @@ fn selected_half_validity_and_asid_are_checked_before_certification() {
             1,
             0x21000,
             99,
-            mapping("map-asid", 0b11 << 13, 0x20000, 7, false, 0x10000, 0x20000),
+            mapping(
+                "map-asid",
+                0b11 << 13,
+                0x20000,
+                7,
+                false,
+                0x10000,
+                0x20000,
+            ),
             0x11000,
             0x11000,
             false,
@@ -197,7 +256,15 @@ fn selected_half_validity_and_asid_are_checked_before_certification() {
             1,
             0x2c000,
             99,
-            mapping("map-global", 0b11 << 13, 0x28000, 7, true, 0x30000, 0x40000),
+            mapping(
+                "map-global",
+                0b11 << 13,
+                0x28000,
+                7,
+                true,
+                0x30000,
+                0x40000,
+            ),
             0x40000,
             0x40000,
             false,
@@ -262,22 +329,58 @@ fn missing_ambiguous_or_foreign_in_window_reads_fail_closed() {
     let base_mapping = || mapping("map-a", 0, 0x4000, 7, false, 0x1000, 0x2000);
     let cases = [
         history(vec![
-            begin(1, 1, 0x4000, 7, base_mapping(), 0x1000, 0x1000, false),
+            begin(
+                1,
+                1,
+                0x4000,
+                7,
+                base_mapping(),
+                0x1000,
+                0x1000,
+                false,
+            ),
             end(2, 1, 1, 0x4000, 0x3409_1111),
         ]),
         history(vec![
-            begin(1, 1, 0x4000, 7, base_mapping(), 0x1000, 0x1000, false),
+            begin(
+                1,
+                1,
+                0x4000,
+                7,
+                base_mapping(),
+                0x1000,
+                0x1000,
+                false,
+            ),
             read(2, 0x1000, 0x3409_1111),
             read(3, 0x1000, 0x3409_1111),
             end(4, 1, 1, 0x4000, 0x3409_1111),
         ]),
         history(vec![
-            begin(1, 1, 0x4000, 7, base_mapping(), 0x1000, 0x1000, false),
+            begin(
+                1,
+                1,
+                0x4000,
+                7,
+                base_mapping(),
+                0x1000,
+                0x1000,
+                false,
+            ),
             read(2, 0x2000, 0x3409_1111),
             end(3, 1, 1, 0x4000, 0x3409_1111),
         ]),
         history(vec![
-            begin(1, 1, 0x4000, 7, base_mapping(), 0x1000, 0x1000, false),
+            begin(
+                1,
+                1,
+                0x4000,
+                7,
+                base_mapping(),
+                0x1000,
+                0x1000,
+                false,
+            ),
             read(2, 0x1000, 0x3409_1111),
             end(3, 1, 1, 0x4000, 0x3409_2222),
         ]),
@@ -295,7 +398,15 @@ fn unsupported_or_cacheable_mapping_stays_outside_certificate_scope() {
             1,
             0x41000,
             7,
-            mapping("map-256k", 0b111111 << 13, 0x0, 7, false, 0x1000, 0x2000),
+            mapping(
+                "map-256k",
+                0b111111 << 13,
+                0x0,
+                7,
+                false,
+                0x1000,
+                0x2000,
+            ),
             0x11000,
             0x11000,
             false,
@@ -308,7 +419,16 @@ fn unsupported_or_cacheable_mapping_stays_outside_certificate_scope() {
     let mut cacheable_mapping = mapping("map-cache", 0, 0x4000, 7, false, 0x1000, 0x2000);
     cacheable_mapping["lo0"]["cca"] = json!(3);
     let cacheable = history(vec![
-        begin(1, 1, 0x4000, 7, cacheable_mapping, 0x1000, 0x1000, false),
+        begin(
+            1,
+            1,
+            0x4000,
+            7,
+            cacheable_mapping,
+            0x1000,
+            0x1000,
+            false,
+        ),
         read(2, 0x1000, 1),
         end(3, 1, 1, 0x4000, 1),
     ]);
@@ -323,7 +443,15 @@ fn malformed_masks_normalize_only_within_execution_backed_scope() {
             1,
             0x21000,
             7,
-            mapping("map-normalized", 0b111 << 13, 0x20000, 7, false, 0x10000, 0x20000),
+            mapping(
+                "map-normalized",
+                0b111 << 13,
+                0x20000,
+                7,
+                false,
+                0x10000,
+                0x20000,
+            ),
             0x11000,
             0x11000,
             false,
@@ -343,7 +471,15 @@ fn source_order_and_report_rechecking_resist_deletion_and_forgery() {
             2,
             0x21000,
             7,
-            mapping("map-a", 0b11 << 13, 0x20000, 7, false, 0x10000, 0x20000),
+            mapping(
+                "map-a",
+                0b11 << 13,
+                0x20000,
+                7,
+                false,
+                0x10000,
+                0x20000,
+            ),
             0x11000,
             0x11000,
             false,
