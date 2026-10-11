@@ -19,7 +19,7 @@ jobs:
           ref: direct-integration/nmi-root-provenance-gpt56sol-b9
           fetch-depth: 0
       - name: Append canonical documentation once
-        shell: python
+        shell: python {0}
         run: |
           from pathlib import Path
 
