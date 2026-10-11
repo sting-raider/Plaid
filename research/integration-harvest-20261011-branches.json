@@ -458,8 +458,10 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096763334",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096787689"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "reviewed_model_only",
+      "integration_commit": null,
+      "primary_review": "research/decompression-compaction-primary-review.md",
+      "review_base": "55fdc15"
     },
     {
       "branch": "research/decompression-lineage-receipt-gpt56sol",
