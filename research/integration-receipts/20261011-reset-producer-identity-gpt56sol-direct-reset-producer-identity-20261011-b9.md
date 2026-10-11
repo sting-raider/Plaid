@@ -123,8 +123,16 @@ passed canonical workflow `38153705376`, job `114512210917`:
 Fresh exact-pinned reset-producer research rerun `38053001322` / job
 `114512249112`: PASS.
 
-The final tested integration head and canonical main CI are recorded by the issue
-#4 MAIN-INTEGRATION CLOSEOUT after any required main reconciliation.
+Documentation/receipt carrier run `38153958053`, job `114512965427`, also ran
+the full canonical Rust/synthetic suite to SUCCESS before appending the guarded
+canonical documentation and restoring `.github/workflows/rust.yml` exactly.
+
+After canonical `main` advanced through the source-bound RSP IMEM egress integration,
+the branch was explicitly reconciled onto `31c10020665e8386656fd943acab111b5c7e1671`.
+The reconciled net diff is exactly six paths: the reset producer module, one lib
+export, STATUS/NEXT/DECISIONS additions, and this durable receipt. A fresh CI run
+on the post-reconciliation head is required before the MAIN-WRITE lease and is
+recorded in the issue #4 closeout.
 
 ## Rejected / superseded approaches
 
