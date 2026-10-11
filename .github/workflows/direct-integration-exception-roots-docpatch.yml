@@ -1,0 +1,78 @@
+name: direct-integration-exception-roots-docpatch
+
+on:
+  push:
+    branches:
+      - direct-integration/exception-roots-gpt56sol-20261011
+
+permissions:
+  contents: write
+
+jobs:
+  patch-docs:
+    if: ${{ !contains(github.event.head_commit.message, '[exception-root-docs]') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: direct-integration/exception-roots-gpt56sol-20261011
+          fetch-depth: 0
+
+      - name: Append canonical integration documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >> docs/STATUS.md <<'EOF'
+
+- Production now exposes a bounded `exception_roots` primitive for R4300
+  general/TLB executable-root candidates. It keeps general, TLB-invalid and true
+  TLB-miss classification explicit, selects BEV base independently, and preserves
+  the 32-bit refill / 64-bit XTLB / nested-general distinction. Four Rust
+  regressions replay the validated 28-case root matrix, and the exact pinned ares
+  matrix was reproduced with its recorded result hash. This is not a root census,
+  reachability proof, handler-byte provenance/lifetime certificate, or waiver for
+  interrupt/NMI/reset/cache-error roots. The pinned Gopher64 XTLB disagreement
+  remains explicit.
+EOF
+          cat >> docs/NEXT.md <<'EOF'
+
+Production now has a bounded general/TLB exception-root selector (ADR-0101).
+Whole-ROM root work must next authenticate the exception classification plus
+BEV/EXL/address-mode chronology, compose each selected root with handler-byte
+provenance and cache/mapping lifetime, and independently justify interrupt,
+watch, reset/NMI and cache-error roots. Numeric vector derivation is neither
+reachability nor a complete execution-root certificate.
+EOF
+          cat >> docs/DECISIONS.md <<'EOF'
+
+## ADR-0101: Exception roots are mode-sensitive candidates, not reachability certificates
+
+Status: Accepted for bounded production root derivation, 2026-10-11.
+
+Promote the independently reproduced 28-case R4300 exception-vector matrix into
+an original typed resolver. General and TLB-invalid entries select base+0x180; a
+true TLB miss with EXL clear selects base+0x000 in 32-bit kernel context or
+base+0x080 in 64-bit kernel context; EXL set returns a miss to +0x180. BEV selects
+`ffffffff80000000` versus `ffffffffbfc00200`. Keep TLB invalid distinct from a
+true miss and retain vector class in the receipt.
+
+The receipt is only a numeric root derivation from already-classified state. It
+does not authenticate the exception classifier, BEV/EXL/address-mode writer
+history, reachability, handler bytes, cache/mapping lifetime, or completeness of
+execution roots. Delay-slot BD/EPC handling remains separate; interrupt/watch,
+reset/NMI, cache-error and broader privilege/TLB cases remain OPEN. Exact pinned
+ares re-ran byte-identically at integration; pinned n64-systemtest source
+corroborates +0/+0x80/+0x180, while pinned Gopher64 lacks +0x80 and remains an
+explicit disagreement. No reference code or runtime dependency enters production
+and no solver/native-complete gate is weakened.
+EOF
+
+      - name: Commit documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Plaid direct integration"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/STATUS.md docs/NEXT.md docs/DECISIONS.md
+          git commit -m "[exception-root-docs] Document bounded exception root integration"
+          git push origin HEAD:direct-integration/exception-roots-gpt56sol-20261011
