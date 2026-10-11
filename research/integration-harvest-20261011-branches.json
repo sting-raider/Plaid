@@ -337,8 +337,10 @@
       "closeouts": [
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069779097"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "already_in_main_history",
+      "integration_commit": null,
+      "ancestry_checked_against": "eea2e32fc5baf5905b9a27a8dbbdbdbb38b1bfd1",
+      "review_note": "research/integration-harvest-20261011.md"
     },
     {
       "branch": "research/cpu-sp-partial-word-gpt56sol",
@@ -992,8 +994,10 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078619080",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6098630634"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "already_in_main_history",
+      "integration_commit": null,
+      "ancestry_checked_against": "eea2e32fc5baf5905b9a27a8dbbdbdbb38b1bfd1",
+      "review_note": "research/integration-harvest-20261011.md"
     },
     {
       "branch": "research/pagemask-icache-remap-compose-gpt56sol",
