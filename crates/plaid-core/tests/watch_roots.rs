@@ -26,6 +26,7 @@ fn input(
         state,
         kind,
         physical_address,
+        higher_priority_exception: Some(false),
         exl,
         bev,
     }
@@ -116,6 +117,43 @@ fn physical_eight_byte_matching_and_access_enable_are_fail_closed() {
         WatchAssessment::NoImmediateWatch {
             reason: WatchNoImmediateReason::AccessDisabled,
             watch_generation: Some(2),
+        }
+    );
+}
+
+#[test]
+fn exception_priority_must_be_independently_established() {
+    let unknown_priority = assess_watch_access(WatchAccessInput {
+        state: known(3, 0x2000, true, false),
+        kind: WatchAccessKind::Load,
+        physical_address: Some(0x2000),
+        higher_priority_exception: None,
+        exl: Some(false),
+        bev: Some(false),
+    })
+    .unwrap();
+    assert_eq!(
+        unknown_priority,
+        WatchAssessment::Unresolved {
+            reason: WatchUnresolvedReason::UnknownExceptionPriority,
+            watch_generation: Some(3),
+        }
+    );
+
+    let preempted = assess_watch_access(WatchAccessInput {
+        state: known(3, 0x2000, true, false),
+        kind: WatchAccessKind::Load,
+        physical_address: Some(0x2004),
+        higher_priority_exception: Some(true),
+        exl: Some(false),
+        bev: Some(false),
+    })
+    .unwrap();
+    assert_eq!(
+        preempted,
+        WatchAssessment::NoImmediateWatch {
+            reason: WatchNoImmediateReason::HigherPriorityException,
+            watch_generation: Some(3),
         }
     );
 }
