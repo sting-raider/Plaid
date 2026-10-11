@@ -786,3 +786,18 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   full handler spans, mapping/cache lifetime, mutation census and whole-ROM/native
   completeness remain open.
 
+
+
+- Production now exposes bounded source-bound `rsp_dmem_dma_egress` replay for
+  completed DMEM-source reverse SP-DMA Word effects (ADR-0105). Each exported
+  byte is selected from the active completed descriptor fragment before payload
+  comparison, so equal values cannot borrow a different DMEM writer. Successful
+  same-value RSP/external writes mint fresh writer generations; concrete unknown
+  writes cut only touched byte ancestry; 4-KiB DMEM wrap is replayed per byte.
+  Unobserved initial DMEM remains `Unobserved` rather than acquiring invented
+  provenance, and complete-source SHA/report reconstruction reject forged source
+  or report identity. Fresh exact-pin ares reproduction retained the validated
+  42-event / 8-DMA-effect history and all nine forged-history rejections. Complete
+  mutation census, SP request lifecycle, hardware timing, downstream RDRAM and
+  executable lifetime, IMEM-source egress, whole-ROM closure and native completeness
+  remain OPEN.

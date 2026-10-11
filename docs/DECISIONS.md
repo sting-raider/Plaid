@@ -1649,3 +1649,28 @@ mappings, save/restore/reset behavior, the rest of the handler span, mutation or
 root census completeness, executable lifetime, hardware-wide semantics, whole-ROM
 closure or native completeness. Missing evidence keeps those obligations OPEN.
 
+
+
+## ADR-0105: Reverse SP-DMA lineage follows the completed DMEM fragment, not payload equality
+
+Status: Accepted for bounded compiler-time observed-history replay, 2026-10-11.
+
+Adopt a strict source-bound DMEM writer replay for completed reverse SP-DMA Word
+effects. Derive each four-byte source from the completed descriptor fragment and
+its current PBUS/DRAM offsets before checking the copied payload. Preserve byte
+ancestry separately across 4-KiB DMEM wrap. Every successful authenticated RSP
+or external write mints a new writer generation even when the bytes are unchanged;
+an observed unknown producer cuts only the lanes it writes. A separately supplied
+external-writer label is evidence identity, not proof of ultimate byte origin.
+Initial bytes without an authenticated writer remain `Unobserved`; equal payloads
+at another offset, bank or generation never select a source. Recheck the complete
+supplied history under an externally trusted SHA and reconstruct the full report.
+
+This consumer is intentionally narrower than the research fixture: it does not
+invent an initial writer generation, authenticate the sensor's mutation census,
+prove SP request lifecycle or hardware timing/atomicity, classify every CPU/SP
+writer, or establish downstream RDRAM/executable lifetime. IMEM-source egress is
+a separate bank-specific primitive. Save/restore/reset, aliases/cache visibility,
+whole-ROM closure and native completeness remain OPEN; no solver obligation is
+waived. The exact pinned ares reproduction supplies behavioral evidence, not an
+upstream production dependency.
