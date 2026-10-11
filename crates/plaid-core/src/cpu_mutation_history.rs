@@ -67,7 +67,7 @@ struct History {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum Event {
-    Begin(BeginEvent),
+    Begin(Box<BeginEvent>),
     Effect(EffectEvent),
     End(EndEvent),
 }
