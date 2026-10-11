@@ -1965,7 +1965,7 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091126619"
       ],
       "disposition": "source_contract_reconciled",
-      "integration_commit": null,
+      "integration_commit": "cc3cc92",
       "review_note": "research/sp-dma-dmem-ingress-primary.md",
       "primary_fixture": "spikes/051-ares-sp-dma-dmem-ingress",
       "review_base": "a4d7b99"
@@ -2018,8 +2018,10 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091106520",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091126619"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "reviewed_model_only",
+      "integration_commit": null,
+      "review_note": "research/spdma-rsp-cpu-imem-primary-review.md",
+      "review_base": "cc3cc92"
     },
     {
       "branch": "research/sw-interrupt-producer-gpt56sol",
@@ -2258,5 +2260,5 @@
       "integration_commit": "3ff5d3e"
     }
   ],
-  "canonical_source_reconciliation_head": "4c05752"
+  "canonical_source_reconciliation_head": "cc3cc92"
 }
