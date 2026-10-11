@@ -15,6 +15,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Focused production regressions
+        run: cargo test --locked -p plaid-core --test tlb_history --test tlbwr_history
+
       - name: Materialize exact validated research fixture
         shell: bash
         run: |
