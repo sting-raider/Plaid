@@ -395,3 +395,16 @@ DMEM sensing, respectively; branch names are not evidence that their namesake
 topics are complete. Record already_in_main_history without deleting branches
 or asserting a new research validation. Catalog: 55 reconciled/reviewed/ancestral
 dispositions and 103 indexed-only heads, total 158.
+
+Cached-copy/writeback/fetch abstract composition reproduces report
+`6c74ec8c9340b0f0e1b8414c6206b1e374fb0de39639368e81c28c60e02606b8` and exact prior
+note blobs. Retain source-residency, full clean-lane writeback and same-value
+mutation obligations; no combined actual reference run or decoded CPU operands
+are present. Six mutated histories plus one derived-chain assertion must not be
+reported as seven independently forged certificates. Primary note:
+`research/cached-copy-compose-primary-review.md`; disposition reviewed_model_only.
+Catalog now has 56 reconciled/reviewed/ancestral entries and 102 indexed-only
+heads, total 158.
+
+Canonical CI `38140216494` passes at `0f00cdc`, including all ten composition
+contracts and existing Rust/CLI/producer/model gates.
