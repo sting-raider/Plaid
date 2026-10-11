@@ -1,7 +1,6 @@
 use plaid_core::{
     dcache_writeback::{
-        DcacheByteOrigin, FORMAT, inspect_dcache_writeback_history,
-        verify_dcache_writeback_report,
+        DcacheByteOrigin, FORMAT, inspect_dcache_writeback_history, verify_dcache_writeback_report,
     },
     program::PhysicalAddr,
     rom::sha256,
@@ -48,7 +47,10 @@ fn exact_writeback_exports_resident_and_fill_origins() {
     let report = inspect_dcache_writeback_history(&bytes, &digest).unwrap();
     assert_eq!(report.successful_backing_writebacks, 1);
     let receipt = &report.receipts[0];
-    assert_eq!((receipt.resident_generation, receipt.resident_revision), (2, 3));
+    assert_eq!(
+        (receipt.resident_generation, receipt.resident_revision),
+        (2, 3)
+    );
     for (index, origin) in receipt.origins.iter().enumerate() {
         if index < 4 {
             assert_eq!(

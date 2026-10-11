@@ -224,7 +224,10 @@ pub fn inspect_dcache_writeback_history(
                 physical_line,
                 payload,
             } => {
-                require(slot < DCACHE_SLOTS, "D-cache fill slot outside bounded cache")?;
+                require(
+                    slot < DCACHE_SLOTS,
+                    "D-cache fill slot outside bounded cache",
+                )?;
                 require(pending.is_none(), "fill during active writeback")?;
                 validate_line_address(physical_line)?;
                 let (read_ordinal, read_line, read_payload) = pending_read
@@ -236,10 +239,7 @@ pub fn inspect_dcache_writeback_history(
                         && read_payload == payload,
                     "fill/backing-read identity mismatch",
                 )?;
-                if lines
-                    .get(&slot)
-                    .is_some_and(|line| line.unexported_dirty)
-                {
+                if lines.get(&slot).is_some_and(|line| line.unexported_dirty) {
                     return Err("dirty replacement without successful writeback".into());
                 }
                 let origins = std::array::from_fn(|index| DcacheByteOrigin::BackingFill {
@@ -266,7 +266,10 @@ pub fn inspect_dcache_writeback_history(
                 physical,
                 payload,
             } => {
-                require(slot < DCACHE_SLOTS, "D-cache mutation slot outside bounded cache")?;
+                require(
+                    slot < DCACHE_SLOTS,
+                    "D-cache mutation slot outside bounded cache",
+                )?;
                 require(
                     physical.0.is_multiple_of(4),
                     "resident word mutation is not 4-byte aligned",
@@ -299,7 +302,10 @@ pub fn inspect_dcache_writeback_history(
                 slot,
                 physical_line,
             } => {
-                require(slot < DCACHE_SLOTS, "D-cache writeback slot outside bounded cache")?;
+                require(
+                    slot < DCACHE_SLOTS,
+                    "D-cache writeback slot outside bounded cache",
+                )?;
                 require(pending.is_none(), "nested D-cache writeback")?;
                 validate_line_address(physical_line)?;
                 let line = lines
@@ -333,7 +339,10 @@ pub fn inspect_dcache_writeback_history(
                 let writeback = pending
                     .as_mut()
                     .ok_or("backing write without active D-cache writeback")?;
-                require(!writeback.exported, "duplicate backing write in one writeback")?;
+                require(
+                    !writeback.exported,
+                    "duplicate backing write in one writeback",
+                )?;
                 require(
                     writeback.physical_line == physical_line && writeback.payload == payload,
                     "backing write does not match the captured resident snapshot",
@@ -370,9 +379,14 @@ pub fn inspect_dcache_writeback_history(
                 )?;
             }
             Event::Invalidate { slot, .. } => {
-                require(slot < DCACHE_SLOTS, "D-cache invalidate slot outside bounded cache")?;
                 require(
-                    pending.as_ref().is_none_or(|writeback| writeback.slot != slot),
+                    slot < DCACHE_SLOTS,
+                    "D-cache invalidate slot outside bounded cache",
+                )?;
+                require(
+                    pending
+                        .as_ref()
+                        .is_none_or(|writeback| writeback.slot != slot),
                     "invalidate during active writeback",
                 )?;
                 if let Some(line) = lines.remove(&slot)
@@ -385,8 +399,14 @@ pub fn inspect_dcache_writeback_history(
         }
     }
 
-    require(pending_read.is_none(), "source ended after unmatched backing read")?;
-    require(pending.is_none(), "source ended during active D-cache writeback")?;
+    require(
+        pending_read.is_none(),
+        "source ended after unmatched backing read",
+    )?;
+    require(
+        pending.is_none(),
+        "source ended during active D-cache writeback",
+    )?;
 
     Ok(DcacheWritebackReport {
         format: REPORT_FORMAT.into(),
