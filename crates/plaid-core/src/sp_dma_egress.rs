@@ -119,7 +119,10 @@ pub fn inspect_sp_dma_egress_history(
         "RSP IMEM DMA egress source receipt mismatch",
     )?;
     let history: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    require(history.format == FORMAT, "unsupported RSP IMEM DMA egress format")?;
+    require(
+        history.format == FORMAT,
+        "unsupported RSP IMEM DMA egress format",
+    )?;
     require(
         !history.events.is_empty() && history.events.len() <= MAX_EVENTS,
         "invalid RSP IMEM DMA egress event count",
@@ -147,8 +150,7 @@ pub fn inspect_sp_dma_egress_history(
                 cpu,
             } => {
                 require(
-                    *cpu
-                        && *region == 1
+                    *cpu && *region == 1
                         && *bytes == 4
                         && *offset <= 0xffc
                         && offset.is_multiple_of(4),
