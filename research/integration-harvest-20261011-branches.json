@@ -1,0 +1,2210 @@
+{
+  "schema_version": 0,
+  "canonical_base": "211176e7a489fecf8331d02915ee982cd279cb62",
+  "inventory_date": "2026-10-11",
+  "scope": "Indexed-only entries have not been certified or merged; closeout labels are not production acceptance.",
+  "branches": [
+    {
+      "branch": "research/64bit-store-mutation-gpt56",
+      "head": "8b1e9d4ddefc1f650b27f8163ee2179b8e401366",
+      "notes": [
+        "research/ares-64bit-store-mutation.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6063448712"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/ares-cpu-copy-dataflow-gpt56sol",
+      "head": "7079fe6d46b6a7ec5a0bc34cf52049e1b5d7385c",
+      "notes": [
+        "research/ares-cpu-copy-dataflow.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078612451",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078907609",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079064206",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091204841"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/ares-fill-rdram-join-gpt56",
+      "head": "e8823d14e1d5e255906dd5ce39027d1b09634672",
+      "notes": [
+        "research/icache-rdram-chronology.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6062863393",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090856489",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090967325"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/ares-rdram-uncached-fetch-gpt56sol",
+      "head": "77a268281fa330e6d117523c2e342abbdad7639e",
+      "notes": [
+        "research/ares-cpu-copy-provenance.md",
+        "research/rdram-uncached-fetch-provenance.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6063471663",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090699507"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/asid-icache-lifetime-gpt56sol",
+      "head": "a23c432ebc11ad2efdda8a33db7b5af6b9401896",
+      "notes": [
+        "research/asid-icache-executable-lifetime.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086218208",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086337399",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086361454",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090262972",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090775976"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/bev1-exception-pif-root-gpt56sol",
+      "head": "a3a8c11a0119978300409917090cd9fe5b160c20",
+      "notes": [
+        "research/bev1-exception-pif-root.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090919434",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090971537",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091038503",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091150164",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091254165"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/bev1-tlbrefill-pif-root-gpt56sol",
+      "head": "28ecef7e8d03333ba89b9c3e6e13f8881a8ffdc4",
+      "notes": [
+        "research/bev1-tlbrefill-pif-root.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091150164",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091254165"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cache-error-root-sol",
+      "head": "c52bf1845d89629116ce36fc0023260fe0c7635a",
+      "notes": [
+        "research/cache-error-root-obligation.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078659793",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078802507"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cached-code-patch-visibility-sol",
+      "head": "ba6e1cc48ced261d04fde3da5bb0c9d745735e20",
+      "notes": [
+        "research/cached-code-patch-visibility.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078631352",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078811372",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091045419",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091158618"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cached-copy-writeback-fetch-compose-gpt56sol",
+      "head": "14f92e2be5b01837bc2abc326921aa3734e25bcd",
+      "notes": [
+        "research/cached-copy-writeback-fetch-composition.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090633300",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090699507"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cop1-load-store-lineage-gpt56sol",
+      "head": "a9e907d4b11b0b8478a2b1382779d04955c48d37",
+      "notes": [
+        "research/ares-cop1-load-store-lineage.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078711316",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078891467"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cop1-sp-sink-gpt56sol",
+      "head": "3ce28e8532d728ec6365c8d704c4d2e760ec95b6",
+      "notes": [
+        "research/cop1-sp-sink.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078631189",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078833403",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078962847",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078978907"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cop1-store-mutation-gpt56sol",
+      "head": "b95a51d4f5ec8fcba3b8ac85c222a11dafe05a49",
+      "notes": [
+        "research/ares-cop1-store-mutation.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069760858"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/copy-event-kind-exclusivity-gpt56sol",
+      "head": "4f6b5100ca18ccb1ec75882a713f6bbf615ea19f",
+      "notes": [
+        "research/copy-event-kind-exclusivity.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096710638",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096762032"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "3ff5d3e"
+    },
+    {
+      "branch": "research/count-compare-interrupt-producer-gpt56sol",
+      "head": "74fcfa7cf20314048e612b9685249fb738cfa7af",
+      "notes": [
+        "research/count-compare-interrupt-producer.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090233212",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090412660"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cpu-copy-provenance-g56",
+      "head": "294b6e1192e74c8b915f217b2c7c1f467c9475b8",
+      "notes": [
+        "research/cpu-copy-provenance.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6062959598"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cpu-copy-rdram-gpt56sol",
+      "head": "9760f94fbfb9389b107ae58239db6817f8a7a964",
+      "notes": [
+        "research/ares-cpu-copy-provenance.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6062953481",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6062994025",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069706901",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090633300",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090699507"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cpu-rsp-imem-subword-gpt56sol",
+      "head": "6f0791fc4d6e8b534a70d0f854361eafec8d63ff",
+      "notes": [
+        "research/cpu-rsp-imem-subword.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069922199"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cpu-sc-sp-sink-gpt56sol",
+      "head": "47db2b2baa9a640111085b68a722fe316ed5e43e",
+      "notes": [
+        "research/cpu-sc-sp-sink.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079181680",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079251476",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079252587",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079357267"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cpu-scd-sp-sink-gpt56sol",
+      "head": "ac7f66fb144837f8afb333fd86bed7165033d4cb",
+      "notes": [
+        "research/cpu-scd-sp-sink.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079251476",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079252587",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079369508",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079685983",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079699770"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cpu-sd-sp-sink-gpt56sol",
+      "head": "fed802b2df2d4421e870d00c4e9d1ae1a7c6ae72",
+      "notes": [
+        "research/cpu-sd-sp-sink.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079369508",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079589642"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cpu-sp-dmem-imem-copy-gpt56sol",
+      "head": "5c13859e536bf42fcfae9e56b9104f5ff6292590",
+      "notes": [
+        "research/cpu-sp-dmem-imem-copy.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078658099",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078800026",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078882544",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090420656",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090530221"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cpu-sp-imem-subword-gpt56sol",
+      "head": "a36e14b99601d790c794a67f18ef2ffaa90e9acd",
+      "notes": [],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069779097"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cpu-sp-partial-word-gpt56sol",
+      "head": "12fd37df808d3e95a4f7f7b51e773cad94c0a744",
+      "notes": [
+        "research/cpu-sp-partial-word-imem.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078668009",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078713770",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078729153",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078887302",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079067281",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079083512"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cpu-sp-producer-context-gpt56sol",
+      "head": "736f1406a729be51422f247260f47ef5412593e8",
+      "notes": [
+        "research/cpu-sp-producer-context.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078612080",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078889955"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cpu-sp-sdl-sdr-gpt56sol",
+      "head": "b2b86a479d7133a1fc16b7349b9cd8636f1f183a",
+      "notes": [
+        "research/cpu-sp-sdl-sdr-sinks.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079067281",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079251476",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079252587",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079262245",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079369508"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cpu-xori-transform-gpt56sol",
+      "head": "c37fc109074c5be63ccdfe5157175933be441586",
+      "notes": [
+        "research/cpu-xori-transform.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079064206",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079231552",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091045419",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091158618"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/cross-block-join-gpt56sol",
+      "head": "e423933af3189d2ad9e98779f71986aeb5df4cf1",
+      "notes": [
+        "research/cross-block-indirect-join.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090889311",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091013272",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091027078"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "f5f5b00"
+    },
+    {
+      "branch": "research/dcache-eviction-lineage-gpt56sol",
+      "head": "2f701615d77630f1b9407f2f1a2032894114a4e7",
+      "notes": [
+        "research/ares-dcache-eviction-lineage.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069886488",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090633300",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090699507"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/dcache-writeback-lineage-gpt56sol",
+      "head": "6cff6dc950c699abd7a5bfa8a56af9a65d789e43",
+      "notes": [
+        "research/ares-dcache-writeback-lineage.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6070029662"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/decompression-ancestry-compaction-gpt56sol",
+      "head": "7b7f2fb0e5faa802c38f403e559c4a87012cec5f",
+      "notes": [
+        "research/decompression-ancestry-compaction.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096716331",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096763334",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096787689"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/decompression-lineage-receipt-gpt56sol",
+      "head": "e3cf98a5414ba49afa695cbd890f98786d0ddc2c",
+      "notes": [
+        "research/decompression-lineage-receipt.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091038512",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091116524",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096716331"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/discovery-trace-source-recheck-gpt56sol",
+      "head": "ebe90c3a1fee758c9c71551ebdf68df8440a39da",
+      "notes": [
+        "research/discovery-trace-source-recheck.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6100502144",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6100572025",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6100650163"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "3ff5d3e"
+    },
+    {
+      "branch": "research/dma-event-uniqueness-gpt56sol",
+      "head": "d470eb374eed40e16bd550858ed9813782c18404",
+      "notes": [
+        "research/dma-event-uniqueness.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091091475",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091174182",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096700569",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096710638",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096762032"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "3ff5d3e"
+    },
+    {
+      "branch": "research/ebus-hidden-fetch-gpt56sol",
+      "head": "fe15ab69e250e3d2f2950d2e10a7cc0f52bf9992",
+      "notes": [
+        "research/ares-ebus-hidden-fetch-provenance.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069935644"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/entry-install-event-uniqueness-gpt56sol",
+      "head": "f300e1ca9cec944fb3a7e2c100240751cf7fa851",
+      "notes": [
+        "research/entry-install-event-uniqueness.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6100550732",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6100650163"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "3ff5d3e"
+    },
+    {
+      "branch": "research/entry-verification-event-uniqueness-gpt56sol",
+      "head": "c573037750f0f15dcd855a3ad6f03a953f452238",
+      "notes": [
+        "research/entry-verification-event-uniqueness.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097269206",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097329067"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "3ff5d3e"
+    },
+    {
+      "branch": "research/entry-verification-source-unit-binding-gpt56sol",
+      "head": "ec80a80858a88aaf8a238900e0c6879c60e9c504",
+      "notes": [
+        "research/entry-verification-source-unit-binding.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090922670",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091025336"
+      ],
+      "disposition": "membership_candidate_rejected_source_authentication_regression_retained",
+      "integration_commit": "64558d7"
+    },
+    {
+      "branch": "research/eret-errorepc-hardware-gpt56sol",
+      "head": "1293fa7bed468b306e9f6052c72e6565c0be3cf6",
+      "notes": [
+        "research/eret-errorepc-hardware.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090666540",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090788981"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/eret-target-provenance-gpt56sol",
+      "head": "381bb9f24aa277f516d8157dc71cc42362a27a7e",
+      "notes": [
+        "research/eret-target-provenance.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078824883",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078988767",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090666540",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090788981"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/evidence-manifest-composition-gpt56sol",
+      "head": "31ca1f778f3b0ac2161a676eb2944437fbc74757",
+      "notes": [
+        "research/evidence-manifest-composition.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097553957",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097622292"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/exception-handler-cache-compose-gpt56sol",
+      "head": "a88fd5d30d6bad854ed371b21576d09e4c382278",
+      "notes": [
+        "research/exception-handler-cache-composition.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097258128",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097352137"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/exception-root-generation-gpt56sol",
+      "head": "50c160680c936c1801fabe32907ca45304d3d313",
+      "notes": [
+        "research/exception-root-generation.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6081334653",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6081476990",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090919434",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091038503"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/exception-vector-roots-gpt56sol",
+      "head": "e58a31c88d42c3761844002f9c4e9042b427dd7a",
+      "notes": [
+        "research/ares-exception-vectors.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6062936102",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090728118",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090837749",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091150164",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091254165"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/fetch-summary-realizability-gpt56sol",
+      "head": "a4bf9fd0194026df38f1229423b195b05a734d74",
+      "notes": [
+        "research/fetch-summary-realizability.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097816739",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097922011",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6107329444"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "2c075fc"
+    },
+    {
+      "branch": "research/fetch-summary-sequence-coverage-gpt56sol",
+      "head": "1f5da1588df93c87f7e5106a81a377b8c91e26d6",
+      "notes": [
+        "research/fetch-summary-sequence-coverage.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097483039",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097571851",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097816739",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097922011",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6107329444"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "2c075fc"
+    },
+    {
+      "branch": "research/fpu-nan-exceptions-gpt56sol",
+      "head": "9e2ba9b58745e33f770c252f6ec16490860643cb",
+      "notes": [
+        "research/ares-fpu-adds-nan-subnormal.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078779252",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078864089"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/generic-trace-cross-kind-exclusivity-gpt56sol",
+      "head": "7306d86ce73b5da82b24d8cc0750e73f4d9d73ff",
+      "notes": [
+        "research/generic-trace-cross-kind-exclusivity.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6100458418",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6100512819"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "3ff5d3e"
+    },
+    {
+      "branch": "research/gopher-sdc1-sp-exec-gpt56sol",
+      "head": "ccb12edf638f932c56ce9d11568bc7fb008af801",
+      "notes": [
+        "research/gopher-sdc1-sp-exec.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078962847",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078978907",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079053553",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079259299"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/gopher-swr-sp-exec-gpt56sol-b",
+      "head": "23bf8cadbd2440f864fc2ad48d4efc6c23b586f9",
+      "notes": [
+        "research/gopher-swr-sp-exec.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079083512",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079357294"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/history-scalability-gpt56sol",
+      "head": "07655bd87142589e1186e87705e4ff67dcfe2a4d",
+      "notes": [
+        "research/history-scalability.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078677228",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078827805"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/icache-reset-restore-gpt56",
+      "head": "61170d0dabde0822f8b11a754a58ca38118c0fca",
+      "notes": [
+        "research/instruction-cache-reset-restore.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6062988015"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/import-dma-intervening-store-gpt56sol",
+      "head": "ca62dd02680aa638ac6b668a2e957929f27fee43",
+      "notes": [
+        "research/import-dma-intervening-store.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6100360176",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6100452542",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6107561101"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "3739d50"
+    },
+    {
+      "branch": "research/indirect-delay-slot-gpt56sol",
+      "head": "7fd4b084d7c6e79a0643b11d868b1f91481770b7",
+      "notes": [
+        "research/indirect-delay-slot-contract.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079528893",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079629358"
+      ],
+      "disposition": "regressions_reconciled_no_production_patch",
+      "integration_commit": "64558d7"
+    },
+    {
+      "branch": "research/indirect-event-uniqueness-gpt56sol",
+      "head": "4c02ff691fc68eee5db77b15b937f110daaa971d",
+      "notes": [
+        "research/indirect-event-uniqueness.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096835015",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096900223"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "3ff5d3e"
+    },
+    {
+      "branch": "research/indirect-source-unit-binding-gpt56sol",
+      "head": "fe42a5fe58944f5a132686c64a74ade87f36c81a",
+      "notes": [
+        "research/indirect-source-unit-binding.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097610766",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097657318"
+      ],
+      "disposition": "membership_candidate_rejected_source_authentication_regression_retained",
+      "integration_commit": "64558d7"
+    },
+    {
+      "branch": "research/interrupt-nmi-order-gpt56sol",
+      "head": "756bb9464bf02a2cac0728a1ef6dae36984804fe",
+      "notes": [
+        "research/interrupt-nmi-priority-disagreement.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090573000",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090727684"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/interrupt-roots-gpt56sol-20261009",
+      "head": "716b0dc18a8bd0427dfa7c629b1bd3d5952d0ad1",
+      "notes": [
+        "research/ares-maskable-interrupt-roots.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078750434",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090192579",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090233212",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090313065",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090573000",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090727684"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/ksu-exception-root-compose-gpt56sol",
+      "head": "2a578d29b22528a961bb80d97926e7414e4d66e2",
+      "notes": [
+        "research/ksu-exception-root-composition-gpt56sol.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090728118",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090837749"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/llsc-provenance-gpt56sol",
+      "head": "8abead9a26e5e086d54a395e060505a1002a1704",
+      "notes": [
+        "research/llsc-provenance.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6063275595",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069138085",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069200559"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/llsc-store-effects-gpt56sol",
+      "head": "cb037060c43c8bc4bace1b7db1fc8b607be3a8d3",
+      "notes": [
+        "research/llsc-store-effects.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078873201"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/load-region-binding-gpt56sol",
+      "head": "d575349365ac4569ebff83ed8be17a3b5333cb37",
+      "notes": [
+        "research/load-region-binding.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6103355737",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6103401405",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6107310091"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "0f7a59a"
+    },
+    {
+      "branch": "research/load-region-destination-binding-gpt56sol",
+      "head": "f7ea6185836bb4d9c15fb83d867f57df813043dc",
+      "notes": [
+        "research/load-region-destination-binding.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6100427844",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6100465494"
+      ],
+      "disposition": "regressions_reconciled_no_production_patch",
+      "integration_commit": "64558d7"
+    },
+    {
+      "branch": "research/mtc0-entryhi-asid-gpt56sol",
+      "head": "de423733beef0250d9966c1adaf0a32bc6166ddb",
+      "notes": [
+        "research/mtc0-entryhi-asid-context.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079511690",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079650195",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086218208"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/n64sym-signature-evidence-gpt56sol",
+      "head": "129b805e5ec6895c1f426bf610a8a776d8c7d991",
+      "notes": [
+        "research/n64sym-signature-evidence.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078702810",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078801594"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/nmi-root-fetch-provenance-gpt56sol",
+      "head": "6b22b7ebdf796f4032ca3c76534b868602f6917a",
+      "notes": [
+        "research/nmi-root-fetch-provenance.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086235643",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086322083",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086491654",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090573000",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090727684"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/nmi-root-gpt56sol",
+      "head": "e3816459edde22570849320b3dd9ad1081ed1c2d",
+      "notes": [
+        "research/nmi-root-contract.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078725380",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078846941",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086235643",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086491654",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090573000",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090727684"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/overlap-cpu-copy-lineage-gpt56sol",
+      "head": "30f79b201766356c65c37137b4b1ef964f265d0f",
+      "notes": [
+        "research/overlap-cpu-copy-lineage.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091108069",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091160396",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091204841"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/overlay-region-binding-gpt56sol",
+      "head": "a4121cf0cf55e3732da0614fe4f92604d81107a0",
+      "notes": [
+        "research/overlay-region-binding.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6098566178",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6098630634",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6107310091"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "0f7a59a"
+    },
+    {
+      "branch": "research/overlay-stale-icache-lifetime-sol",
+      "head": "ae41bdba82993ec8e77f47e5f9d3bb9af06f9256",
+      "notes": [],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078614857",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078619080",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6098630634"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/pagemask-icache-remap-compose-gpt56sol",
+      "head": "9679c4b9bd658d53e14932f62b6ffa6d78148f84",
+      "notes": [
+        "research/pagemask-icache-remap-compose.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090775976",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090876288"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/pi-causal-token-gpt56sol",
+      "head": "26e8360fd5b4b5adedc18cb492a6672c4353a78f",
+      "notes": [
+        "research/pi-request-queue-causal-token.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069346056"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/pi-dispatch-sidecar-20261008",
+      "head": "06c5243c53284edd53c2ab5b1053027dbb21cc54",
+      "notes": [
+        "research/ares-pi-dispatch-identity.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069348511",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069765222"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/pi-dma-icache-compose-gpt56sol",
+      "head": "b7d78e3372a1077f1cf75c0558a7b63a4222ed82",
+      "notes": [
+        "research/pi-dma-icache-compose.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090967325",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091072963",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091150954"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/pi-interrupt-root-compose-gpt56sol",
+      "head": "9843c85db8b3654cc01923cdcba7f52d7abf4056",
+      "notes": [
+        "research/pi-interrupt-root-composition.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091072963",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091150491"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/pi-queue-dispatch-gpt56sol",
+      "head": "ef26a901d6e2826269fe2d816a88b69a18c81c70",
+      "notes": [
+        "research/pi-request-queue-dispatch.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069155510",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069302480",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069314810",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069483386",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069766635",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090967325"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/pi-read-lifecycle-gpt56sol",
+      "head": "1f7eac1185827431f82e52bbf093bff76796c9b0",
+      "notes": [
+        "research/ares-pi-read-lifecycle.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069890522"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/pi-request-queue-dispatch-gpt56sol",
+      "head": "2e2bd82fa46986fbec2a0bd973cf0c38e0680761",
+      "notes": [
+        "research/pi-request-queue-dispatch-identity.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069313195"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/pif-rom-backing-ares-gpt56sol",
+      "head": "983b8f549505edcf65b18b94c868e528383f14f3",
+      "notes": [
+        "research/pif-rom-backing-ares.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069521326",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069650174",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090919434",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091038503",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091150164",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091254165"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/pif-rom-backing-gpt56sol",
+      "head": "3a9c5579849d98a4ab8ef5a430f200427596b912",
+      "notes": [
+        "research/pif-rom-backing.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6062967442"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/pointer-guard-predecessor-bypass-gpt56sol",
+      "head": "8791ac6ba73b69e61b57b73fff285f7ef6a849c7",
+      "notes": [
+        "research/pointer-guard-predecessor-bypass.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086320914",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086518607",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6107532920"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "2f8c556"
+    },
+    {
+      "branch": "research/pointer-guard-trap-gpt56sol",
+      "head": "f695e133f72ad00115cf88587ff6ced3c862f295",
+      "notes": [
+        "research/pointer-guard-delay-slot.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078647012",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078770206",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078950213",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086320914",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086518607",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6107532920"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "2f8c556"
+    },
+    {
+      "branch": "research/pointer-prefix-bypass-gpt56sol",
+      "head": "9527bf4d6ca680f78f7ca932574b3ca6425e795d",
+      "notes": [
+        "research/pointer-prefix-bypass.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078950213",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079172580",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086320914",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086518607",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6107532920"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "2f8c556"
+    },
+    {
+      "branch": "research/pointer-table-alias-gpt56",
+      "head": "ef31dc6066712c509fa7e7e33c1f7224b9a8dd9c",
+      "notes": [
+        "research/pointer-table-immutability-aliases.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6062769404",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069653955",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069707504"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/pointer-table-dcache-load-source-gpt56sol",
+      "head": "8da5cc98d03a522509c1f5c307de6552d08605f4",
+      "notes": [
+        "research/ares-pointer-table-dcache-load-source.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096691623",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096846814",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096882129"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/pointer-target-generation-gpt56sol",
+      "head": "84ab0c8056ae564387f0d0c58ff0109b936f0970",
+      "notes": [
+        "research/pointer-target-generation-lifetime.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090203878",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090267302",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6107532920"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "2f8c556"
+    },
+    {
+      "branch": "research/primitive-event-kind-exclusivity-gpt56sol",
+      "head": "1b3def335202de594106924e86179100741e559f",
+      "notes": [
+        "research/primitive-event-kind-exclusivity.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6101429322",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6101484585"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "3ff5d3e"
+    },
+    {
+      "branch": "research/programmap-merge-scalability-gpt56sol",
+      "head": "15e4946c014ead196aacc00fccc118fe2520522e",
+      "notes": [
+        "research/programmap-merge-scalability.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091115359",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091210462"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "c2fb1a7"
+    },
+    {
+      "branch": "research/rdram-translated-backing-gpt56sol",
+      "head": "c88977de2ccd0ae73d0cb73b5ab2d73606773506",
+      "notes": [
+        "research/rdram-translated-backing-provenance.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069930394"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/region-physical-alignment-gpt56sol",
+      "head": "f21a7de11694cb1a54f17d6b3f92e744d937e687",
+      "notes": [
+        "research/region-physical-alignment.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090973292",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091093150",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6107310091"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "0f7a59a"
+    },
+    {
+      "branch": "research/region-physical-span-overflow-gpt56sol",
+      "head": "92abae2ad80fc2070ceba44dc39f59b388ae76ca",
+      "notes": [
+        "research/region-physical-span-overflow.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090753706",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090807817",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090973292",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091093150",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6101403126",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6101408200",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6107310091"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "0f7a59a"
+    },
+    {
+      "branch": "research/reset-cache-lifetime-20261008",
+      "head": "bd5c9d60a5c7424f4fc8e0f55d9d542ef096ee13",
+      "notes": [
+        "research/reset-cache-lifetime.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6062905910"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/reset-hw2-nmi-producer-gpt56sol",
+      "head": "003fc98d51f8c20dcb92c2154d6f7f1ac1cf1cf9",
+      "notes": [
+        "research/reset-hw2-nmi-producer.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097561070",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097617732",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097625628"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/rsp-dmem-cpu-copy-imem-fetch-gpt56sol",
+      "head": "537f230bc85788c4ff573a716a42acb7809f4989",
+      "notes": [
+        "research/rsp-dmem-cpu-copy-imem-fetch.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090420656",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090530221",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091126619"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/rsp-dmem-cpu-refetch-gpt56sol",
+      "head": "cda3b458dc1ac77c639a1afc02a05daac642e861",
+      "notes": [
+        "research/rsp-dmem-cpu-refetch-lineage.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078572390",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078576734",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078601125",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078616868",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078651644",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078791499",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078902321",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090420656",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090530221"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/rsp-dmem-dma-egress-gpt56sol",
+      "head": "b02d281624e4b077709a6255c569bbb25f8ef486",
+      "notes": [
+        "research/rsp-dmem-dma-egress.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078588825",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079094179"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/rsp-dmem-spdma-rdram-fetch-gpt56sol",
+      "head": "95ce0cd1eb3c70d9d2e5b30cef1274f705bb84f6",
+      "notes": [
+        "research/rsp-dmem-spdma-rdram-fetch.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078975816",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090856489",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090940545"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/rsp-imem-dma-egress-gpt56sol",
+      "head": "5960b4d1dabdbdb60b66ec4066f792204f3e3bc8",
+      "notes": [
+        "research/rsp-imem-dma-egress.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079393116",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079601651"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/rsp-imem-install-lifetime-gpt56sol",
+      "head": "a162772fb561f54c2c854bba4fca8178bc09c1f3",
+      "notes": [
+        "research/rsp-imem-install-lifetime.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078629331",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078850756"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/rsp-imem-interleave-gpt56sol",
+      "head": "c7de6f53bf1893d9fab5b51546f45ac9220da903",
+      "notes": [
+        "research/rsp-imem-dma-direct-write-interleave.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078655697",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078757152"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/rsp-imem-provenance-20261008",
+      "head": "3b66722b6384d84adbc0cd16e5892b65bcfbb1ee",
+      "notes": [
+        "research/rsp-imem-provenance.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6063381908"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/rsp-microcode-lifetime-gpt56sol",
+      "head": "5ccc7afcf15b30f101e9d0d830d15c8744b3caad",
+      "notes": [
+        "research/rsp-microcode-installation-lifetime.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078652580",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078916629",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090906333"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/rsp-producer-cpu-imem-compose-gpt56sol",
+      "head": "5caaabd5b96e4240dbe33e7f897f24be7b9a30c0",
+      "notes": [
+        "research/rsp-producer-cpu-imem-compose.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079143589",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079548290",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091049299"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/rsp-reset-imem-lifetime-gpt56sol",
+      "head": "3a79443df3656cd3b0badb1a1eef8ba93d35f2d8",
+      "notes": [
+        "research/rsp-reset-imem-lifetime.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6100370565",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6100484884"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/rsp-savestate-microcode-epoch-gpt56sol",
+      "head": "84df7b9b2a386cab0c65916959b5c33121be5038",
+      "notes": [
+        "research/rsp-savestate-microcode-epoch.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090906333",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090974706",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091003878"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/rsp-scalar-load-store-lineage-gpt56sol",
+      "head": "3c89a579aef404dba01aab2353ac2f8723750907",
+      "notes": [
+        "research/rsp-scalar-load-store-lineage.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079402706",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079693307",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091126619"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/rsp-self-store-imem-gpt56sol",
+      "head": "761d1b53625bb78c6e0b0fa7fc93d076f4532516",
+      "notes": [
+        "research/ares-rsp-self-stores-imem-isolation.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069738005",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6070073590"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/rsp-spdma-icache-compose-gpt56sol",
+      "head": "823efc196f88d3dad0fb36815df65af12f61334b",
+      "notes": [
+        "research/rsp-spdma-icache-compose.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090856489",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090940545"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/rsp-vector-load-store-lineage-sol",
+      "head": "870633d8725ffb83d1e3e74a1e8acd627896ff54",
+      "notes": [
+        "research/rsp-vector-load-store-lineage.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079493122",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079714483"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/runtime-relocation-provenance-gpt56sol",
+      "head": "253acfae6542e8bb65a42ae041c1115c301f4dcf",
+      "notes": [
+        "research/runtime-relocation-provenance.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090915935",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090936104",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090962492",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096679172"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/savestate-tlb-cache-epoch-gpt56sol",
+      "head": "b502bc5f07dbdd88b8e8f521391dc13f90b98519",
+      "notes": [
+        "research/ares-savestate-tlb-cache-epoch.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6081125762",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6081322237",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090906333"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/sb-sh-mutation-gpt56",
+      "head": "6fd21074c70c81c04020fc612c464332f63f23ea",
+      "notes": [
+        "research/ares-sb-sh-executable-mutation.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069680457",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069694318",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069705821",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069762146",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069782176",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069791547"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/sb-sh-mutation-gpt56sol",
+      "head": "6b6adcfea284f3cfabc7a05a95c0c85127f6da60",
+      "notes": [
+        "research/ares-sb-sh-executable-mutation.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069680457",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069694318",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069705821",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069762146",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069791547"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/sd-sdl-sdr-mutation-gpt56",
+      "head": "34ee84915e90600ce366df10e7a7e3b47b8e8e81",
+      "notes": [
+        "research/ares-sd-sdl-sdr-executable-mutation.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6063391537",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079067281"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/si-interrupt-root-compose-gpt56sol",
+      "head": "a6edbc33e8798795d3895b9f10a96ef6a27b25ea",
+      "notes": [
+        "research/si-interrupt-root-compose.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6103716634",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6103749869",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6103815326"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/solver-codeimage-content-binding-gpt56sol",
+      "head": "e98f8e0670c8d01cbd0aa590410326d3930b5c63",
+      "notes": [
+        "research/solver-codeimage-content-binding.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090263062",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090372507",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097332935",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097405249",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6105208139"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "0e0d228"
+    },
+    {
+      "branch": "research/solver-conflicting-region-mapping-gpt56sol",
+      "head": "2b65dd27ec93ee86f759f1793c8b2c03fc25bf0b",
+      "notes": [
+        "research/solver-conflicting-region-mapping.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090217688",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090292333",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6105208139"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "0e0d228"
+    },
+    {
+      "branch": "research/solver-cross-fragment-edge-gpt56sol",
+      "head": "f4cc3068edd9325f1566c855cf50ac4c2422f02c",
+      "notes": [
+        "research/solver-cross-fragment-edge-deletion.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090869791",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090917221",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097332935",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097405249",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6105208139"
+      ],
+      "disposition": "regressions_reconciled_no_production_patch",
+      "integration_commit": "64558d7"
+    },
+    {
+      "branch": "research/solver-entry-verification-epoch-gpt56sol",
+      "head": "a62648aa9b358a55192287aaafbd8ec3bdddebb0",
+      "notes": [
+        "research/solver-entry-verification-epoch.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090870023",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090930725"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "5ce0453"
+    },
+    {
+      "branch": "research/solver-entry-verification-mask-gpt56sol",
+      "head": "a15cb2b2554e12f2324931185efa4b64c2d76175",
+      "notes": [
+        "research/solver-entry-verification-mask.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090868458",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090947143"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "5ce0453"
+    },
+    {
+      "branch": "research/solver-fetch-capture-count-laundering-gpt56sol",
+      "head": "99e4b5ae8f1754f96d53b340de6a45eac8b69299",
+      "notes": [
+        "research/solver-fetch-capture-count-laundering.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091003603",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091078085"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "5ce0453"
+    },
+    {
+      "branch": "research/solver-guest-overlap-closure-gpt56sol",
+      "head": "e0716177738d064f73db61afabdeea32c898b755",
+      "notes": [
+        "research/solver-guest-overlap-closure.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090194514",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090270677",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6105208139"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "0e0d228"
+    },
+    {
+      "branch": "research/solver-overlapping-codeimage-source-gpt56sol",
+      "head": "d2ec0168491baa203cced78496d25e1f51aea971",
+      "notes": [
+        "research/solver-overlapping-codeimage-source.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097332935",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097405249",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6105208139"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "0e0d228"
+    },
+    {
+      "branch": "research/solver-physical-alias-closure-gpt56sol",
+      "head": "c442525b0f8e934d84197678cd6f265ab56d3688",
+      "notes": [
+        "research/solver-physical-alias-closure.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086311285",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086429720",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090194514",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090217688",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090270677",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090292333",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090973292",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091093150",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6105208139"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "0e0d228"
+    },
+    {
+      "branch": "research/solver-raw-indirect-closure-gpt56sol",
+      "head": "f105f9fe0b36bb8f79a57157cc6fd3c8c808b750",
+      "notes": [
+        "research/solver-raw-indirect-closure.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086250215",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086256028",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086297587",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086427295"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "5ce0453"
+    },
+    {
+      "branch": "research/solver-raw-store-closure-gpt56sol",
+      "head": "59508158a5451d5df0bedfb687f06af22d05f953",
+      "notes": [
+        "research/solver-raw-store-closure.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6081358796",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6081508304",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086250215",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086311285",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090813124",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090887365"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "5ce0453"
+    },
+    {
+      "branch": "research/solver-raw-store-source-closure-gpt56sol",
+      "head": "80b5afad559ae1aedba2d4f30af9955a5f1b7058",
+      "notes": [
+        "research/solver-raw-store-source-closure.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090813124",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090887365"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "5ce0453"
+    },
+    {
+      "branch": "research/solver-region-provenance-consistency-gpt56sol",
+      "head": "eb6a334511e0fcda11ff0ccb203115baa6b73672",
+      "notes": [
+        "research/solver-region-provenance-consistency.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090232122",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090304039",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6105208139"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "0e0d228"
+    },
+    {
+      "branch": "research/solver-resource-limit-deletion-gpt56sol",
+      "head": "5281c0f8300423969d2d97c17ce5e47d7cdc6a9e",
+      "notes": [
+        "research/solver-resource-limit-deletion.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091083810",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091149147",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091223429"
+      ],
+      "disposition": "regressions_reconciled_no_production_patch",
+      "integration_commit": "64558d7"
+    },
+    {
+      "branch": "research/solver-rom-source-binding-gpt56sol",
+      "head": "ced56f0dfd7a8905d96de4014b5c98b4210b7a37",
+      "notes": [
+        "research/solver-rom-source-binding.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090787097",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090943096",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6105208139"
+      ],
+      "disposition": "regressions_reconciled_no_production_patch",
+      "integration_commit": "64558d7"
+    },
+    {
+      "branch": "research/solver-rsp-microcode-closure-gpt56sol",
+      "head": "848ec88b51140849972871aefe8934a606714302",
+      "notes": [
+        "research/solver-rsp-microcode-closure.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096691698",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096725125"
+      ],
+      "disposition": "regressions_reconciled_no_production_patch",
+      "integration_commit": "64558d7"
+    },
+    {
+      "branch": "research/solver-static-generation-lifetime-gpt56sol",
+      "head": "562c1883d7e73fece7554e4389edcb441b3c2831",
+      "notes": [
+        "research/solver-static-generation-lifetime.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090959798",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091000969",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6105208139"
+      ],
+      "disposition": "regressions_reconciled_no_production_patch",
+      "integration_commit": "64558d7"
+    },
+    {
+      "branch": "research/solver-supplied-image-provenance-gpt56sol",
+      "head": "75281aa809dd7a64767c78b05cfae545bc2522f8",
+      "notes": [
+        "research/solver-supplied-image-provenance.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090284007",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090352616",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090364739",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6105208139"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "0e0d228"
+    },
+    {
+      "branch": "research/solver-targetlookup-monotonicity-gpt56sol",
+      "head": "c1f7932dfda80fcd2524dcc55b50f439e2ed8e9c",
+      "notes": [
+        "research/solver-target-dispatch-monotonicity.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090221083",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090355426",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6107274633"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "57e4696"
+    },
+    {
+      "branch": "research/sp-cop1-producer-gpt56sol",
+      "head": "31eb300ff94ad7c08afe2cc87542765121aa93e6",
+      "notes": [
+        "research/sp-cop1-producer-lineage.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078613244",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078798756"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/sp-dma-dmem-egress-gpt56sol",
+      "head": "c8a35d641b760968af034f267f1010c3f0f08b80",
+      "notes": [
+        "research/sp-dma-dmem-egress.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079035891",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079178405"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/sp-dma-dmem-ingress-gpt56sol",
+      "head": "7041402beb2ce63a43336ae627372098af50ff0f",
+      "notes": [
+        "research/sp-dma-dmem-ingress.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078825158",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079016567",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079035891",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091049299",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091126619"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/sp-dma-lifecycle-gpt56sol",
+      "head": "ab98ecee3005ee26319d3d5146c9dca310f1fce6",
+      "notes": [
+        "research/sp-dma-lifecycle.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069446137"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/sp-fetch-backing-gpt56",
+      "head": "b211271d665bb5af9eb842c34d50b055d578f3fa",
+      "notes": [
+        "research/sp-fetch-backing.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6062944397"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/sp-interrupt-root-compose-gpt56sol",
+      "head": "636c1718891efeb9b0b818391942a9eef7c53846",
+      "notes": [
+        "research/sp-interrupt-root-compose.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096684873",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096738368"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/spdma-rsp-cpu-imem-chain-gpt56sol",
+      "head": "ef95b423647f3f03cee3026ea7f1d22815d80532",
+      "notes": [
+        "research/spdma-rsp-cpu-imem-chain.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091049299",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091106520",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091126619"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/sw-interrupt-producer-gpt56sol",
+      "head": "93483c33832069680d31f969cfb599d631e45dbf",
+      "notes": [
+        "research/sw-interrupt-producer.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090192579",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090313065"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/swl-swr-byte-mutations-gpt56",
+      "head": "f1a0b51325ae42d002510016bb7a52f11a797cfa",
+      "notes": [
+        "research/ares-swl-swr-executable-mutations.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6063135464"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/tlb-icache-synonyms-gpt56sol",
+      "head": "40d44a590e8c3c00d0b930e7603e2ff86b2a4178",
+      "notes": [
+        "research/ares-tlb-icache-synonyms.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078750467",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078921677",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086218208",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090775976",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090876288"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/tlb-pagemask-gpt56sol",
+      "head": "409017c6be4aff64b53f1d93161cc23d4696aee6",
+      "notes": [
+        "research/ares-tlb-pagemask-fetch-provenance.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078950602",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079133206",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090775976",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090876288"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/tlb-uncached-fetch-gpt56sol",
+      "head": "7ca433849844fb22a84106001a28e8be9a3002d9",
+      "notes": [
+        "research/ares-tlb-uncached-fetch-provenance.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069685910",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069864261",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069897221"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/tlbp-tlbr-effects-gpt56sol",
+      "head": "d972ccbb2393b1adeafdc98659c236c0ab468d72",
+      "notes": [
+        "research/ares-tlbp-tlbr-effects.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079188337",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079431803",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090262972"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/tlbr-icache-lifetime-gpt56sol",
+      "head": "a625e4ac88482b6947c018dabf464073e58187bc",
+      "notes": [
+        "research/tlbr-icache-executable-lifetime.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090262972",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090347415",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090775976"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/tlbwi-mapping-generation-gpt56sol",
+      "head": "62ff5f01639a2b088feb593c0add2523ddbc0bde",
+      "notes": [
+        "research/ares-tlbwi-mapping-generations.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079281489",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079389384",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090775976",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090876288"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/tlbwr-mapping-generation-gpt56sol",
+      "head": "62f722a0c4db72963f6c873ddd33b8df95ddbc7e",
+      "notes": [
+        "research/ares-tlbwr-mapping-generations.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078927565",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079024691",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079063268",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090775976"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/translated-fetch-join-gpt56sol",
+      "head": "f1a8963327ae1e37a8d9a92c669abc8700e88c02",
+      "notes": [
+        "research/rdram-translated-fetch-join.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078607633",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078831790",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6078846253"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/uncached-rdram-fetch-gpt56",
+      "head": "14276f77f0060fa2a7f57e4e5099cef2206d6246",
+      "notes": [
+        "research/uncached-rdram-fetch-backing.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6063148643"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/unified-cache-order-gpt56",
+      "head": "58fa6832d4fb77dfd337c54d713c896f4976f7c2",
+      "notes": [
+        "research/unified-cache-ordering.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6062836030"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/vi-interrupt-root-compose-gpt56sol",
+      "head": "db6c58777e4fee16fbb32fac28e6d0a1b3cfe9a5",
+      "notes": [
+        "research/vi-interrupt-root-compose.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6104464538",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6104491876",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6104527218"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/watch-exception-roots-gpt56sol",
+      "head": "c187ff70e4f0464a034198fd91e8cf131d9d86b7",
+      "notes": [
+        "research/watch-exception-roots-gpt56sol.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086252016",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6086489834"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    },
+    {
+      "branch": "research/word-store-event-uniqueness-gpt56sol",
+      "head": "760ccaabeafac54761a2bc665b01fa6278194641",
+      "notes": [
+        "research/word-store-event-uniqueness.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096700569",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096765688"
+      ],
+      "disposition": "production_candidate_superseded",
+      "integration_commit": "3ff5d3e"
+    },
+    {
+      "branch": "research/xori-cache-fetch-compose-gpt56sol",
+      "head": "20c342f6255ac93c7c0e04a066124313d4dfb42e",
+      "notes": [
+        "research/xori-cache-fetch-compose.md"
+      ],
+      "closeouts": [
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091045419",
+        "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091158618"
+      ],
+      "disposition": "indexed_only",
+      "integration_commit": null
+    }
+  ],
+  "canonical_harvest_head": "f5f5b00",
+  "integration_prep": [
+    {
+      "branch": "integration-prep/static-exec-identity-gpt56sol",
+      "head": "5d4eaa8309f1a92228414bd8779cfc3dd4e47ff8",
+      "disposition": "superseded",
+      "integration_commit": "0e0d228"
+    },
+    {
+      "branch": "integration-prep/trace-event-identity-gpt56sol",
+      "head": "defa8f1c70b0804d776b2e5ce81cf8a3806024e7",
+      "disposition": "superseded",
+      "integration_commit": "3ff5d3e"
+    }
+  ]
+}
