@@ -1,6 +1,9 @@
 name: Direct n64sym candidate validation
 
 on:
+  push:
+    branches:
+      - direct-integration/n64sym-candidates-gpt56sol-v2
   pull_request:
     paths:
       - 'crates/plaid-core/src/signature_evidence.rs'
