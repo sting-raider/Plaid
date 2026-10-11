@@ -1809,3 +1809,24 @@ without an independently complete mutation history. Source ancestry, mutation
 census, cached/TLB/device/RSP/DMA interleavings, executable lifetime and native
 completeness remain uncertified. Existing copy report formats/CLI and closed-world
 gates remain unchanged. No upstream implementation or solver waiver is added.
+
+## ADR-0111: Conditional SP writers require the completed sink and pre-store context
+
+Status: Accepted for bounded compiler-time effect normalization, 2026-10-12.
+
+Normalize a Word SC mutation only from an independently observed CPU-origin SP
+Word sink joined to the exact decoded pre-instruction context. Reuse the existing
+conditional-store decoder; retain pre-store GPRs because SC overwrites its source
+register with the result. Check architectural GPR zero, aligned PC, ordered
+context/effect identities, direct KSEG1 translation, SP bank/offset and payload.
+Successful same-value sinks are distinct writer occurrences. Absence yields no
+witness and never proves complete observation or why a reservation failed.
+
+Reconcile prepared SC/SP candidates at this sink boundary. Do not import the
+duplicate history model's reservation boolean as a reservation-policy proof.
+Exact pinned ares saved captures support four successful sinks, four no-sink
+attempts and an equal-value out-of-context decoy. Gopher source corroborates
+conditional storage but differs in reservation handling; no upstream code enters
+production. Source authentication/completeness, GPR ancestry, other mutation
+families/aliases, reservation and executable lifetime, whole-ROM closure and
+native completeness remain OPEN. No solver or progress milestone change.
