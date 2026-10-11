@@ -28,8 +28,9 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6079064206",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091204841"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "source_contract_reconciled",
+      "integration_commit": "607c88e",
+      "integration_note": "research/adjacent-cpu-copy-primary.md"
     },
     {
       "branch": "research/ares-fill-rdram-join-gpt56",
@@ -1325,8 +1326,9 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090420656",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090530221"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "source_contract_reconciled",
+      "integration_commit": "add1943",
+      "integration_note": "research/rsp-cpu-refetch-primary.md"
     },
     {
       "branch": "research/rsp-dmem-dma-egress-gpt56sol",
@@ -2206,5 +2208,6 @@
       "disposition": "superseded",
       "integration_commit": "3ff5d3e"
     }
-  ]
+  ],
+  "canonical_source_reconciliation_head": "607c88e"
 }

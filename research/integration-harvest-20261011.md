@@ -274,10 +274,33 @@ semantic gates were exercised locally on Windows during integration.
 heads, their note paths and matching CLOSEOUT links from the full issue ledger,
 plus both prep heads. All 45 core source/test candidate branches are reconciled
 by reviewed production fixes or retained/rejected regression proposals. The
-remaining 112 entries are explicitly indexed-only: their source contracts and
-experiments are not certified or automatically adopted. An index and a worker's
+112 research-only entries were initially indexed: their source contracts and
+experiments were not certified or automatically adopted. An index and a worker's
 VALIDATED label do not substitute for primary reproduction or production proof.
 
 The high-confidence core integration debt is substantially reduced. Continuing
 with the existing CPU/RSP refetch composition and relevant research-only source
 contracts; preserve unknown lineage and hardware/reference disagreements.
+
+## Source-contract follow-up: controlled refetch and adjacent CPU copy
+
+`add1943` reconciles the broader RSP/CPU refetch branch with the primary
+unchanged-reference checkpoint gate: nineteen phases, 78 records, fifteen RSP
+byte effects, two CPU Word effects, three foreign sinks and ten backing reads.
+Seventeen histories are rejected and three causal forgeries fool payload-only
+replay. Partial and unknown byte writers are preserved. The original seven-phase
+result remains exact. Full core, fmt and strict workspace Clippy pass.
+
+`607c88e` reconciles adjacent CPU-copy research after reproducing three new
+false certificates in its verifier. Strict architectural continuity/address/
+effect/type checks preserve the two intended LW/LWU-to-SW controls. Fourteen
+independent instruction checkpoints agree, twelve measured adversaries and
+seven separate synthetic regressions pass. Full locked workspace, fmt, strict
+workspace Clippy and synthetic CLI pass. The unmodified branch verifier is
+rejected and its bounded fixture is superseded.
+
+The inventory now distinguishes these two reconciled source contracts from the
+110 still indexed-only entries. No reference implementation, branch-specific
+workflow or manual build scaffolding is imported into production. These finite
+contracts establish neither complete sensing nor lifetime, general dataflow,
+hardware equivalence, whole-ROM or native closure. Milestone state is unchanged.
