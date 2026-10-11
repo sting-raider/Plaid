@@ -4,13 +4,14 @@ on:
   push:
     branches:
       - direct-integration/exception-roots-gpt56sol-20261011
+    paths:
+      - .github/workflows/direct-integration-exception-roots-docpatch.yml
 
 permissions:
   contents: write
 
 jobs:
   patch-docs:
-    if: ${{ !contains(github.event.head_commit.message, '[exception-root-docs]') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
