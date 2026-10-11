@@ -4,11 +4,11 @@
 //! event scheduler: successful Count/Compare writes are distinct operations,
 //! Compare writes acknowledge/clear the latched timer request even when the
 //! visible Compare value is unchanged, Count writes do not acknowledge it, and
-//! an observed timer assertion is a distinct causal transition.  Exact timing of
+//! an observed timer assertion is a distinct causal transition. Exact timing of
 //! Count rewrites relative to the next Compare match remains unresolved because
 //! the pinned references disagree.
 //!
-//! This module replays an externally authenticated finite source.  It does not
+//! This module replays an externally authenticated finite source. It does not
 //! prove that the source observed every architecturally relevant timer operation,
 //! derive assertions from register-value equality, establish interrupt eligibility,
 //! or certify handler provenance/lifetime.
@@ -123,7 +123,7 @@ fn require(ok: bool, message: &str) -> Result<(), String> {
 /// Replay one externally authenticated finite Count/Compare timer history.
 ///
 /// `expected_sha256` must come from a separately trusted complete-source receipt.
-/// A `timer_assert` record is an observed false-to-true producer transition.  It
+/// A `timer_assert` record is an observed false-to-true producer transition. It
 /// is intentionally not inferred from Count/Compare equality or from a scheduler
 /// deadline, because the validated references disagree on Count-rewrite timing.
 pub fn inspect_timer_interrupt_history(
@@ -315,7 +315,12 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn source(initial_count: u32, initial_compare: u32, initial_pending: bool, events: Vec<serde_json::Value>) -> Vec<u8> {
+    fn source(
+        initial_count: u32,
+        initial_compare: u32,
+        initial_pending: bool,
+        events: Vec<serde_json::Value>,
+    ) -> Vec<u8> {
         serde_json::to_vec(&json!({
             "format": FORMAT,
             "initial_count": initial_count,
@@ -373,7 +378,10 @@ mod tests {
         );
         let a = inspect(&untouched).unwrap();
         let b = inspect(&acknowledged).unwrap();
-        assert_eq!((a.final_count, a.final_compare), (b.final_count, b.final_compare));
+        assert_eq!(
+            (a.final_count, a.final_compare),
+            (b.final_count, b.final_compare)
+        );
         assert_ne!(a.final_pending, b.final_pending);
         assert_ne!(a.compare_generation, b.compare_generation);
     }
