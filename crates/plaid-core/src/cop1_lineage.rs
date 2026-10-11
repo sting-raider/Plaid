@@ -208,7 +208,7 @@ struct Cell {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ContextState {
     Read(u64),
-    Load(u64),
+    Load,
     Move,
     Store,
     FailedLoad,
@@ -355,7 +355,7 @@ pub fn inspect_cop1_lineage_history(
                         used_reads.insert(read_ordinal),
                         "COP1 source read reused by multiple FPR definitions",
                     )?;
-                    contexts.insert(write.context, ContextState::Load(read_ordinal));
+                    contexts.insert(write.context, ContextState::Load);
                     (0..width)
                         .map(|source_byte| FprByteOrigin::RdramRead {
                             read_ordinal,
