@@ -22,6 +22,7 @@ pub mod solver;
 pub mod sp_dma_egress;
 pub mod sp_history;
 mod tables;
+pub mod tlb_history;
 pub mod trace;
 pub mod trace_projection;
 
