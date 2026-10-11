@@ -46,6 +46,41 @@ fn finite_synthetic_cfg_can_close_only_under_explicit_scope() {
 }
 
 #[test]
+fn retained_relocation_cannot_close_after_importer_diagnostics_are_deleted() {
+    let i = image(vec![0x08000000, 0]);
+    let control = map(&i);
+    assert_eq!(
+        solve(
+            &control,
+            std::slice::from_ref(&i),
+            Scope::DeclaredStaticImages
+        )
+        .unwrap()
+        .status,
+        ClosureStatus::Closed
+    );
+    // Reusing valid CFG evidence does not certify the mutation that this fact
+    // describes. Even a same-site/same-target claim needs relocation ancestry.
+    for kind in ["R_MIPS_HI16", "R_MIPS_LO16", "unknown-relocation"] {
+        let mut retained = control.clone();
+        retained.relocations.insert(Relocation {
+            site: i.base.clone(),
+            kind: kind.into(),
+            target: i.base.pc,
+            evidence: retained.blocks.first().unwrap().evidence.clone(),
+        });
+        retained.unresolved.clear();
+        assert!(retained.executable_writes.is_empty());
+        for scope in [Scope::DeclaredStaticImages, Scope::WholeRom] {
+            let report = solve(&retained, std::slice::from_ref(&i), scope).unwrap();
+            assert_eq!(report.status, ClosureStatus::Open, "{kind}");
+            assert!(!report.native_complete);
+            assert!(has(&report, "unverified_relocation"), "{kind}");
+        }
+    }
+}
+
+#[test]
 fn finite_indirect_observations_and_missing_bytes_fail_closed() {
     let i = image(vec![0x03e00008, 0]);
     let mut m = map(&i);
