@@ -23,50 +23,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat >> docs/STATUS.md <<'EOF'
-
-- Production now exposes a bounded `exception_roots` primitive for R4300
-  general/TLB executable-root candidates. It keeps general, TLB-invalid and true
-  TLB-miss classification explicit, selects BEV base independently, and preserves
-  the 32-bit refill / 64-bit XTLB / nested-general distinction. Four Rust
-  regressions replay the validated 28-case root matrix, and the exact pinned ares
-  matrix was reproduced with its recorded result hash. This is not a root census,
-  reachability proof, handler-byte provenance/lifetime certificate, or waiver for
-  interrupt/NMI/reset/cache-error roots. The pinned Gopher64 XTLB disagreement
-  remains explicit.
-EOF
-          cat >> docs/NEXT.md <<'EOF'
-
-Production now has a bounded general/TLB exception-root selector (ADR-0101).
-Whole-ROM root work must next authenticate the exception classification plus
-BEV/EXL/address-mode chronology, compose each selected root with handler-byte
-provenance and cache/mapping lifetime, and independently justify interrupt,
-watch, reset/NMI and cache-error roots. Numeric vector derivation is neither
-reachability nor a complete execution-root certificate.
-EOF
-          cat >> docs/DECISIONS.md <<'EOF'
-
-## ADR-0101: Exception roots are mode-sensitive candidates, not reachability certificates
-
-Status: Accepted for bounded production root derivation, 2026-10-11.
-
-Promote the independently reproduced 28-case R4300 exception-vector matrix into
-an original typed resolver. General and TLB-invalid entries select base+0x180; a
-true TLB miss with EXL clear selects base+0x000 in 32-bit kernel context or
-base+0x080 in 64-bit kernel context; EXL set returns a miss to +0x180. BEV selects
-`ffffffff80000000` versus `ffffffffbfc00200`. Keep TLB invalid distinct from a
-true miss and retain vector class in the receipt.
-
-The receipt is only a numeric root derivation from already-classified state. It
-does not authenticate the exception classifier, BEV/EXL/address-mode writer
-history, reachability, handler bytes, cache/mapping lifetime, or completeness of
-execution roots. Delay-slot BD/EPC handling remains separate; interrupt/watch,
-reset/NMI, cache-error and broader privilege/TLB cases remain OPEN. Exact pinned
-ares re-ran byte-identically at integration; pinned n64-systemtest source
-corroborates +0/+0x80/+0x180, while pinned Gopher64 lacks +0x80 and remains an
-explicit disagreement. No reference code or runtime dependency enters production
-and no solver/native-complete gate is weakened.
-EOF
+          python3 -c "from pathlib import Path; import base64; p=Path('docs/STATUS.md'); p.write_bytes(p.read_bytes()+base64.b64decode('CgotIFByb2R1Y3Rpb24gbm93IGV4cG9zZXMgYSBib3VuZGVkIGBleGNlcHRpb25fcm9vdHNgIHByaW1pdGl2ZSBmb3IgUjQzMDAKICBnZW5lcmFsL1RMQiBleGVjdXRhYmxlLXJvb3QgY2FuZGlkYXRlcy4gSXQga2VlcHMgZ2VuZXJhbCwgVExCLWludmFsaWQgYW5kIHRydWUKICBUTEItbWlzcyBjbGFzc2lmaWNhdGlvbiBleHBsaWNpdCwgc2VsZWN0cyBCRVYgYmFzZSBpbmRlcGVuZGVudGx5LCBhbmQgcHJlc2VydmVzCiAgdGhlIDMyLWJpdCByZWZpbGwgLyA2NC1iaXQgWFRMQiAvIG5lc3RlZC1nZW5lcmFsIGRpc3RpbmN0aW9uLiBGb3VyIFJ1c3QKICByZWdyZXNzaW9ucyByZXBsYXkgdGhlIHZhbGlkYXRlZCAyOC1jYXNlIHJvb3QgbWF0cml4LCBhbmQgdGhlIGV4YWN0IHBpbm5lZCBhcmVzCiAgbWF0cml4IHdhcyByZXByb2R1Y2VkIHdpdGggaXRzIHJlY29yZGVkIHJlc3VsdCBoYXNoLiBUaGlzIGlzIG5vdCBhIHJvb3QgY2Vuc3VzLAogIHJlYWNoYWJpbGl0eSBwcm9vZiwgaGFuZGxlci1ieXRlIHByb3ZlbmFuY2UvbGlmZXRpbWUgY2VydGlmaWNhdGUsIG9yIHdhaXZlciBmb3IKICBpbnRlcnJ1cHQvTk1JL3Jlc2V0L2NhY2hlLWVycm9yIHJvb3RzLiBUaGUgcGlubmVkIEdvcGhlcjY0IFhUTEIgZGlzYWdyZWVtZW50CiAgcmVtYWlucyBleHBsaWNpdC4K'))"
+          python3 -c "from pathlib import Path; import base64; p=Path('docs/NEXT.md'); p.write_bytes(p.read_bytes()+base64.b64decode('CgpQcm9kdWN0aW9uIG5vdyBoYXMgYSBib3VuZGVkIGdlbmVyYWwvVExCIGV4Y2VwdGlvbi1yb290IHNlbGVjdG9yIChBRFItMDEwMSkuCldob2xlLVJPTSByb290IHdvcmsgbXVzdCBuZXh0IGF1dGhlbnRpY2F0ZSB0aGUgZXhjZXB0aW9uIGNsYXNzaWZpY2F0aW9uIHBsdXMKQkVWL0VYTC9hZGRyZXNzLW1vZGUgY2hyb25vbG9neSwgY29tcG9zZSBlYWNoIHNlbGVjdGVkIHJvb3Qgd2l0aCBoYW5kbGVyLWJ5dGUKcHJvdmVuYW5jZSBhbmQgY2FjaGUvbWFwcGluZyBsaWZldGltZSwgYW5kIGluZGVwZW5kZW50bHkganVzdGlmeSBpbnRlcnJ1cHQsCndhdGNoLCByZXNldC9OTUkgYW5kIGNhY2hlLWVycm9yIHJvb3RzLiBOdW1lcmljIHZlY3RvciBkZXJpdmF0aW9uIGlzIG5laXRoZXIKcmVhY2hhYmlsaXR5IG5vciBhIGNvbXBsZXRlIGV4ZWN1dGlvbi1yb290IGNlcnRpZmljYXRlLgo='))"
+          python3 -c "from pathlib import Path; import base64; p=Path('docs/DECISIONS.md'); p.write_bytes(p.read_bytes()+base64.b64decode('CgojIyBBRFItMDEwMTogRXhjZXB0aW9uIHJvb3RzIGFyZSBtb2RlLXNlbnNpdGl2ZSBjYW5kaWRhdGVzLCBub3QgcmVhY2hhYmlsaXR5IGNlcnRpZmljYXRlcwoKU3RhdHVzOiBBY2NlcHRlZCBmb3IgYm91bmRlZCBwcm9kdWN0aW9uIHJvb3QgZGVyaXZhdGlvbiwgMjAyNi0xMC0xMS4KClByb21vdGUgdGhlIGluZGVwZW5kZW50bHkgcmVwcm9kdWNlZCAyOC1jYXNlIFI0MzAwIGV4Y2VwdGlvbi12ZWN0b3IgbWF0cml4IGludG8KYW4gb3JpZ2luYWwgdHlwZWQgcmVzb2x2ZXIuIEdlbmVyYWwgYW5kIFRMQi1pbnZhbGlkIGVudHJpZXMgc2VsZWN0IGJhc2UrMHgxODA7IGEKdHJ1ZSBUTEIgbWlzcyB3aXRoIEVYTCBjbGVhciBzZWxlY3RzIGJhc2UrMHgwMDAgaW4gMzItYml0IGtlcm5lbCBjb250ZXh0IG9yCmJhc2UrMHgwODAgaW4gNjQtYml0IGtlcm5lbCBjb250ZXh0OyBFWEwgc2V0IHJldHVybnMgYSBtaXNzIHRvICsweDE4MC4gQkVWIHNlbGVjdHMKYGZmZmZmZmZmODAwMDAwMDBgIHZlcnN1cyBgZmZmZmZmZmZiZmMwMDIwMGAuIEtlZXAgVExCIGludmFsaWQgZGlzdGluY3QgZnJvbSBhCnRydWUgbWlzcyBhbmQgcmV0YWluIHZlY3RvciBjbGFzcyBpbiB0aGUgcmVjZWlwdC4KClRoZSByZWNlaXB0IGlzIG9ubHkgYSBudW1lcmljIHJvb3QgZGVyaXZhdGlvbiBmcm9tIGFscmVhZHktY2xhc3NpZmllZCBzdGF0ZS4gSXQKZG9lcyBub3QgYXV0aGVudGljYXRlIHRoZSBleGNlcHRpb24gY2xhc3NpZmllciwgQkVWL0VYTC9hZGRyZXNzLW1vZGUgd3JpdGVyCmhpc3RvcnksIHJlYWNoYWJpbGl0eSwgaGFuZGxlciBieXRlcywgY2FjaGUvbWFwcGluZyBsaWZldGltZSwgb3IgY29tcGxldGVuZXNzIG9mCmV4ZWN1dGlvbiByb290cy4gRGVsYXktc2xvdCBCRC9FUEMgaGFuZGxpbmcgcmVtYWlucyBzZXBhcmF0ZTsgaW50ZXJydXB0L3dhdGNoLApyZXNldC9OTUksIGNhY2hlLWVycm9yIGFuZCBicm9hZGVyIHByaXZpbGVnZS9UTEIgY2FzZXMgcmVtYWluIE9QRU4uIEV4YWN0IHBpbm5lZAphcmVzIHJlLXJhbiBieXRlLWlkZW50aWNhbGx5IGF0IGludGVncmF0aW9uOyBwaW5uZWQgbjY0LXN5c3RlbXRlc3Qgc291cmNlCmNvcnJvYm9yYXRlcyArMC8rMHg4MC8rMHgxODAsIHdoaWxlIHBpbm5lZCBHb3BoZXI2NCBsYWNrcyArMHg4MCBhbmQgcmVtYWlucyBhbgpleHBsaWNpdCBkaXNhZ3JlZW1lbnQuIE5vIHJlZmVyZW5jZSBjb2RlIG9yIHJ1bnRpbWUgZGVwZW5kZW5jeSBlbnRlcnMgcHJvZHVjdGlvbgphbmQgbm8gc29sdmVyL25hdGl2ZS1jb21wbGV0ZSBnYXRlIGlzIHdlYWtlbmVkLgo='))"
 
       - name: Commit documentation
         shell: bash
