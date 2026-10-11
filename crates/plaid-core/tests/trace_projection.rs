@@ -326,3 +326,75 @@ fn dispatch_identity_cannot_fork_or_cross_primitive_roles() {
     crossed.target_dispatch_observations.insert(dispatch);
     assert!(crossed.validate().is_err());
 }
+
+#[test]
+fn equal_identity_recompilation_cannot_substitute_exact_source_unit() {
+    let mut trace = trace();
+    trace.events.clear();
+    let pc = GuestAddr(0x8000_0000);
+    let words = vec![0x03e0_0008, 0];
+    let mut events = Vec::new();
+    for unit in [0, 1] {
+        events.extend([
+            TraceEvent::CompileBegin {
+                unit,
+                start: pc,
+                physical_start: None,
+                delay_slot_entry: false,
+            },
+            TraceEvent::EntryInstalled {
+                unit,
+                pc,
+                register_mask: 0,
+            },
+            TraceEvent::UnitCompiled {
+                unit,
+                start: pc,
+                words: words.clone(),
+            },
+        ]);
+    }
+    events.extend([
+        TraceEvent::EntryBytesVerified {
+            unit: 0,
+            pc,
+            register_mask: 0,
+            words,
+        },
+        TraceEvent::IndirectTargetObserved {
+            site: pc,
+            target: pc,
+            delay_slot_pc: Some(GuestAddr(pc.0 + 4)),
+            source_unit: Some(0),
+        },
+    ]);
+    trace.events = events
+        .into_iter()
+        .enumerate()
+        .map(|(seq, data)| EventRecord {
+            seq: seq as u64,
+            data,
+        })
+        .collect();
+    let map = imported(&trace);
+    verify_discovery_trace_projection(&map, &trace).unwrap();
+    let original_unit = event_id(&trace, 0);
+    let decoy_unit = event_id(&trace, 3);
+    let region = map.regions.first().unwrap();
+    assert!(region.evidence.contains(&original_unit));
+    assert!(region.evidence.contains(&decoy_unit));
+    // Region provenance membership accepts both equal-byte compilation units;
+    // complete source authentication must still preserve the actual event's unit.
+    let mut forged_entry = map.clone();
+    let mut entry = forged_entry.entry_verifications.pop_first().unwrap();
+    entry.source_unit = decoy_unit.clone();
+    forged_entry.entry_verifications.insert(entry);
+    forged_entry.validate().unwrap();
+    assert!(verify_discovery_trace_projection(&forged_entry, &trace).is_err());
+    let mut forged_indirect = map;
+    let mut observation = forged_indirect.indirect_observations.pop_first().unwrap();
+    observation.source_unit = Some(decoy_unit);
+    forged_indirect.indirect_observations.insert(observation);
+    forged_indirect.validate().unwrap();
+    assert!(verify_discovery_trace_projection(&forged_indirect, &trace).is_err());
+}

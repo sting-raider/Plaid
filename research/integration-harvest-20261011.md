@@ -181,3 +181,33 @@ and its limited successful cached-RDRAM SW contract. No sensor patch changed.
 No byte-equality origin inference, positive store/mixed-writer lineage, complete
 mutation coverage or native readiness is claimed. Writer scans remain bounded
 linear checks without a scalability claim.
+
+## Batch 9: retain negative controls and source-unit decoys
+
+Selectively retained regressions from `research/{indirect-delay-slot,
+load-region-destination-binding,solver-cross-fragment-edge,
+solver-static-generation-lifetime,solver-rsp-microcode-closure,
+solver-resource-limit-deletion,solver-rom-source-binding}-gpt56sol`.
+No production patch is warranted for these rejected/relative-scope hypotheses.
+Their regression deliverables are now reconciled into main. Canonical-ROM byte
+authentication remains outside the declared immutable-image solver contract;
+the strict source-binding prototype remains unadopted, and native completeness
+stays false in every source-binding control.
+
+One old generation control expected overlapping generations to close. ADR-0078
+supersedes that expectation: retained the overlap as OPEN with an explicit
+identity-selection blocker and added a disjoint-root CLOSED control. Generation
+numbers remain identity labels, not evidence of runtime transitions.
+
+Reconciled `research/{entry-verification-source-unit-binding,
+indirect-source-unit-binding}-gpt56sol` using one combined equal-byte/same-identity
+recompile adversary against the complete-source verifier. Both compile units
+occur on the unioned Region, yet substituting the wrong unit in either primitive
+is rejected. The failed Region-membership candidate remains rejected; its
+branch-local helper is not promoted into production or permanent tests.
+
+All 28 retained scope/deletion controls and the new source-unit adversary pass.
+The real 520-stage/512-pass frontier test takes about 127 seconds locally and is
+retained without shrinking its boundary or ignoring it. Full locked workspace,
+fmt, strict workspace Clippy and synthetic CLI checks pass. No production
+behavior, milestone state or closure scope is expanded by this test batch.
