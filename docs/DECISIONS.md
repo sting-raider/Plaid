@@ -1618,3 +1618,34 @@ does not prove exception occurrence/classification chronology, BEV/EXL/mode
 writer completeness, BEV=1 refill/XTLB behavior, PIF lifetime/authenticity,
 cache/mapping executable lifetime, root census, whole-ROM closure or native
 completeness. No upstream implementation or runtime dependency enters production.
+
+## ADR-0104: Cached exception roots require resident-generation evidence
+
+Status: Accepted for bounded compiler-time observed-history inspection, 2026-10-11.
+
+Compose ADR-0101's architectural root candidate with a separate source-bound finite
+chronology for the validated BEV=0 general exception word. In the accepted scope the
+root is `ffffffff80000180`, backed by identity RDRAM physical `0x180`, with EXL clear
+and 32-bit kernel context. Every observed successful backing write keeps its own
+ordinal identity even when the payload is unchanged. A captured fill binds its own
+resident identity to the then-observed backing writer. Later backing writes do not
+silently relabel that resident generation; only an observed invalidate/refill can
+establish a later resident source. A root fetch whose resident/fill chain is missing
+stays UNKNOWN even when current backing contains identical bits.
+
+This rule was reproduced against exact pinned ares by executing a real SYSCALL into
+the same numeric vector before and after a backing rewrite: stale resident handler A
+continued executing until guest I-cache invalidation, after which refill selected
+handler B. The production replay is original Plaid code and consumes only an
+externally hash-bound finite history; it does not import reference implementation
+code or infer occurrence from snapshots, numeric addresses or value equality.
+ADR-0103's BEV=1/PIF root provenance is complementary: it authenticates a supplied
+PIF-backed fetch, while this decision authenticates which captured resident/backing
+generation supplied one cached BEV=0 root word.
+
+The accepted primitive does not certify source-sensor completeness, exception
+reachability, ultimate storage ancestry, arbitrary cache operations, aliases/TLB
+mappings, save/restore/reset behavior, the rest of the handler span, mutation or
+root census completeness, executable lifetime, hardware-wide semantics, whole-ROM
+closure or native completeness. Missing evidence keeps those obligations OPEN.
+

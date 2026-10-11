@@ -45,6 +45,11 @@ After main advanced, the integration branch was explicitly reconciled with
 `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5` (ADR-0102 / source-bound TLBWI
 operation generations) before canonical documentation was updated.
 
+BEV1/PIF integration advanced canonical main to
+`9154b30b12026c8c122f654d7fe90f0f67968dce` and claimed ADR-0103. The cached-root
+integration was then rebuilt on that exact tree, preserving `exception_pif` and the
+BEV1 docs; this decision was renumbered ADR-0104.
+
 ## Adopted invariant
 
 For the validated bounded scope, architectural exception-root identity and the
@@ -98,7 +103,7 @@ completeness explicitly false.
 - `crates/plaid-core/src/lib.rs`
 - `docs/STATUS.md`
 - `docs/NEXT.md`
-- `docs/DECISIONS.md` (ADR-0103)
+- `docs/DECISIONS.md` (ADR-0104)
 - this receipt
 
 No `docs/progress.json` milestone changed.
