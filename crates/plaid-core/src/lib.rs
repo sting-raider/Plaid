@@ -3,6 +3,7 @@
 //! Keep this crate free of ROM assets and game-specific assumptions.
 
 pub mod cpu_copy;
+pub mod dcache_source;
 pub mod discovery;
 pub mod exception_roots;
 pub mod fetch;
