@@ -52,6 +52,7 @@ pub mod pi_queue_history;
 pub mod pif_history;
 pub mod pipeline;
 pub mod program;
+/// Policy-neutral reset/HW2/NMI producer and delivery generation replay.
 pub mod reset_producer;
 pub mod rom;
 pub mod solver;
