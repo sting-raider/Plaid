@@ -862,3 +862,11 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   authenticated saved reference cases pass. Reservation prediction/lifetime,
   observer completeness, operand ancestry, downstream IMEM execution and
   whole-ROM/native closure remain OPEN (ADR-0111).
+
+- Production timer_interrupt now replays observed Count/Compare writes and
+  explicit timer-pending transitions. Same-value Compare writes remain fresh
+  acknowledgements; Count writes preserve pending. Eight retained regressions
+  and an unsupported elapsed-Count adversary retain fail-closed scope. Saved
+  exact-reference facts cover timer producer/acknowledgement and boundary gates;
+  scheduling disagreement, primitive authentication/census, timer/root chronology,
+  handler lifetime and native completeness remain OPEN (ADR-0112).
