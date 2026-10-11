@@ -19,6 +19,7 @@ pub mod program;
 pub mod rom;
 pub mod solver;
 pub mod sp_history;
+pub mod store_mutation;
 mod tables;
 pub mod trace;
 pub mod trace_projection;
