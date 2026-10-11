@@ -55,6 +55,7 @@ pub mod pi_queue_history;
 pub mod pif_history;
 pub mod pipeline;
 pub mod program;
+pub mod reset_cache_lifetime;
 pub mod rom;
 pub mod root_provenance;
 pub mod solver;
