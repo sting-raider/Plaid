@@ -299,3 +299,9 @@ equal current bytes never recover a writer or fill generation.
 ## PI interrupt producer composition remains open
 
 Production can replay an authenticated bounded PI completion -> raw MI.PI -> MI mask/poll -> CPU RCP-pending chain without borrowing PI-copy equality or latest-request state. Next work must independently bind accepted request/queue dispatch to completion observations, compose with the generic CPU interrupt eligibility/root gate, account for other MI/timer/software producers plus reset/save/restore chronology, and prove source/sensor completeness for the declared scope. Unknown chronology remains OPEN; this is not a producer census or root-closure waiver.
+
+The bounded generic maskable gate now exists in `interrupt_roots` (ADR-0106).
+Join authenticated producer/status/BEV chronology to the same boundary before
+using its numeric candidate for executable-root evidence. Suppression at one
+boundary does not exclude that root from the execution model. Actual transfer,
+handler-source/lifetime and complete root census still require separate proof.
