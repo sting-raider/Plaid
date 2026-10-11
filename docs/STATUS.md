@@ -581,4 +581,7 @@ Whole-ROM/native completeness and general dataflow remain OPEN (ADR-0087).
 Canonical Rust CI now runs exact decoder-pin checks, formatting, strict workspace
 Clippy, the full workspace suite, synthetic CLI checks and the independent
 fetch-summary oracle on code pushes/PRs. The first main run passed at `d74b2a0`
-(Actions 38129473623); research-only emulator workflows are not promoted.
+(Actions 38129473623). The added seven synthetic CPU-copy contract regressions
+also pass in canonical CI at `72e557a` (Actions 38131501041). These are finite
+history checks; pinned emulator neutrality remains a separate reference gate.
+Research-only emulator workflows are not promoted.
