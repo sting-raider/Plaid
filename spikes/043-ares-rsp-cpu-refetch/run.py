@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 from verify import verify,reject_forgeries
+from extended import verify_extended,reject_extended_forgeries,demonstrate_value_only_failures
 
 ROOT=Path(__file__).resolve().parents[2]
 HERE=Path(__file__).resolve().parent
@@ -30,20 +31,26 @@ def main():
         options=dict(raw_fetch_access=True,physical_fetch_access=True,fetch_boundary_access=True,
             sp_backing_access=True,rsp_dmem_access=True) if enabled else {}
         binaries.append(builder.build(path,OUTPUT/('sensor' if enabled else 'baseline'),extra_sources=extras,**options))
-    results={}
-    for key,exe,arg in (('baseline',binaries[0],'plain'),('disabled',binaries[1],'plain'),
-            ('instrumented',binaries[1],'traced'),('repeat',binaries[1],'traced')):
-        raw=subprocess.check_output([str(exe),arg],text=True,timeout=30)
-        results[key]=json.loads(raw)
-    assert all(r['checkpoints']==results['baseline']['checkpoints'] for r in results.values())
-    assert results['baseline']['events']==results['disabled']['events']==[]
-    assert results['instrumented']==results['repeat']
-    summary=verify(results['instrumented']['events'])
-    summary['forgeries_rejected']=reject_forgeries(results['instrumented']['events'])
-    path=OUTPUT/'results.json';path.write_text(json.dumps(dict(summary=summary,runs=results),indent=2,sort_keys=True)+'\n',encoding='utf-8',newline='\n')
-    print(json.dumps(summary,sort_keys=True),flush=True)
-    print('RESULT_SHA256='+hashlib.sha256(path.read_bytes()).hexdigest(),flush=True)
-    print('PASS actual RSP/CPU refetch composition, same-value writers, overwrite and independent checkpoints',flush=True)
+    for extended in (False,True):
+        results={}
+        for key,exe,arg in (('baseline',binaries[0],'plain'),('disabled',binaries[1],'plain'),
+                ('instrumented',binaries[1],'traced'),('repeat',binaries[1],'traced')):
+            raw=subprocess.check_output([str(exe),arg]+(['extended'] if extended else []),text=True,timeout=30)
+            results[key]=json.loads(raw)
+        assert all(r['checkpoints']==results['baseline']['checkpoints'] for r in results.values())
+        assert len(results['baseline']['checkpoints'])==(19 if extended else 7)
+        assert results['baseline']['events']==results['disabled']['events']==[]
+        assert results['instrumented']==results['repeat']
+        check,reject=(verify_extended,reject_extended_forgeries) if extended else (verify,reject_forgeries)
+        summary=check(results['instrumented']['events'])
+        summary['forgeries_rejected']=reject(results['instrumented']['events'])
+        if extended:
+            summary['value_only_false_accepts']=demonstrate_value_only_failures(results['instrumented']['events'])
+        path=OUTPUT/('extended-results.json' if extended else 'results.json')
+        path.write_text(json.dumps(dict(summary=summary,runs=results),indent=2,sort_keys=True)+'\n',encoding='utf-8',newline='\n')
+        print(json.dumps(summary,sort_keys=True),flush=True)
+        print(path.name+'_SHA256='+hashlib.sha256(path.read_bytes()).hexdigest(),flush=True)
+    print('PASS original and extended RSP/CPU refetch, byte writers and independent checkpoints',flush=True)
 
 
 if __name__=='__main__':main()

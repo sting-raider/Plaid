@@ -25,7 +25,28 @@ foreign sinks. Its closeout records commit
 Its byte-history rule is useful, but its original-reference comparison covers
 less reported state than the primary gate. Do not transplant that weaker
 comparison. The seven-phase primary fixture also excludes foreign low-level
-sinks; these broader cases remain pending reconciliation and reproduction.
+sinks. The broader cases have now been reconciled and reproduced with the
+stronger primary checkpoint gate, rather than transplanting that comparison.
+
+The extended nineteen-phase fixture retains 78 records, fifteen scoped RSP
+primitive byte effects, two CPU Word effects, three foreign effects and ten
+CPU backing reads. Every reported checkpoint agrees in original/disabled/
+enabled/repeated runs. The original seven-phase result remains byte-exact.
+The neighboring same-value SW leaves prior origin untouched. Scalar SB and
+vector SBV create mixed per-byte writers. An unmatched same-value foreign sink
+cuts only the touched byte to unknown; a subsequent measured same-value SB
+establishes a new observed writer. A final same-value CPU SW replaces all four
+writers. Its lower-level foreign Word sink must precede and match the completed
+CPU SP Word callback in this controlled synchronous fixture.
+
+Seventeen adversarial histories fail the strict field/type/context/sequence/
+byte-history contract. A deliberately weaker payload-only replay accepts the
+deleted same-value sink, equal-valued neighboring-sink move and foreign-sink
+move: payload replay alone cannot authenticate causal history. Extended result
+SHA-256: `d7973dcd198a5b4e281f0c5719789e40863a905b0cce70e66c9d4a9b8af303e6`.
+Full locked plaid-core, fmt and strict workspace Clippy pass. The broader
+research branch's controlled fixture is superseded by this reconciliation;
+its broader unproved obligations remain open.
 
 This promotes only original fixture/observer composition, under ADR-0077.
 Pinned upstream source/license review remains the existing ares observer

@@ -18,8 +18,21 @@ Result SHA-256: `542e887cd45730ab019c790caeadaa6e4eb016deaaa26bb337178a9afc920ec
 
 The repeated same-value RSP store creates four new observed byte writers. A
 later CPU overwrite replaces them. An alternate SP aperture fetch reads the
-same DMEM backing; initial bytes have unknown writers. This fixture excludes
-unscoped low-level DMEM sinks and does not certify a complete mutation census.
-Partial/vector stores and foreign-sink boundaries from the broader swarm
-fixture still need reconciliation with this independent checkpoint gate.
-No ultimate ROM source, continuous lifetime or native closure is inferred.
+same DMEM backing; initial bytes have unknown writers. This original fixture
+still excludes unscoped low-level DMEM sinks and retains its exact result hash.
+
+The extended nineteen-phase fixture reconciles the broader swarm cases with
+the same independent checkpoint gate. It retains 78 records, fifteen scoped
+RSP byte effects, two CPU Word effects, three foreign sinks and ten CPU backing
+reads. Neighboring equal-valued writes cannot steal origin. Scalar SB and
+vector SBV change only their measured bytes. An unmatched same-value foreign
+sink makes its byte writer unknown; a later decoded same-value SB reestablishes
+an observed writer. A same-value CPU overwrite replaces all four writers.
+Seventeen forged histories fail; a deliberately weaker payload-only replay
+accepts three causal forgeries. Extended result SHA-256:
+`d7973dcd198a5b4e281f0c5719789e40863a905b0cce70e66c9d4a9b8af303e6`.
+
+Both fixtures run by default. Contracts validate exact fields/types, instruction
+contexts, ordered primitive effects and byte histories for these controlled
+sequences. No complete mutation census, ultimate ROM source, continuous
+lifetime, hardware equivalence or native closure is inferred.

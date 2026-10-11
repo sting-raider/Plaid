@@ -1135,7 +1135,16 @@ Record actual initial backing bytes: the reference fill helper uses a host byte
 pattern, so a guest-endian numeric-fill assumption failed. Primitive counts are
 not atomicity or complete mutation/lifetime proof. Generated ISC-reference
 shadows and required notices remain ignored; production gains no reference code
-or runtime dependency. Test CPU refetch composition before broader promotion.
+or runtime dependency.
+
+The controlled CPU refetch composition now passes independent reference/
+disabled/enabled/repeated checkpoints, including partial/vector and same-value
+effects. Preserve each measured byte writer; an unmatched foreign sink cuts
+only its touched bytes to unknown. In this synchronous fixture, a completed
+CPU SP Word callback supersedes the exact preceding matching low-level sink.
+This finite rule is not a general asynchronous producer correlation or census.
+Payload replay alone fails causal adversaries. Ultimate producer dataflow,
+complete-history integration and executable lifetime remain separate gates.
 
 ## ADR-0078: Static closure requires consistent executable identities
 
