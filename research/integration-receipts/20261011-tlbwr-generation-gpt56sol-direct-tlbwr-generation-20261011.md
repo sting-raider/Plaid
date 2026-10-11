@@ -4,10 +4,16 @@ Date: 2026-10-11
 Worker: `gpt56sol-direct-tlbwr-generation-20261011`
 Cluster: source-bound TLBWR random-selected mapping-operation generations
 Initial base: `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5`
-Final validated canonical parent: `24689113469e0a3325601d7b6fd41b4d06ecf761`
-Validated integration head before documentation: `03af6e53369d3710359ca35812fd52ce07eaad53`
-Final validation Actions run: `38154288333`
-Documentation finalizer Actions run: `38154502907`
+Final validated canonical parent: `60c5af29a9199ae207d487b4d791b13fb21ae708`
+Reconciled production/docs tree before temporary validation: `fcbb9ba1e37581ba8c321a7af47e41f712bd1314`
+Final validation Actions head: `87a3238551e4efc548cd1cc0852e5fb0e2ae2378`
+Final validation Actions run: `38154797218`
+Earlier documentation finalizer Actions run: `38154502907`
+
+The validation head differs from the reconciled production/docs tree only by the
+branch-only `direct-tlbwr-revalidate.yml` workflow used because this execution
+environment cannot clone GitHub over DNS. That workflow was deleted immediately
+after the green run and is not part of the production diff.
 
 ## Source research
 
@@ -32,14 +38,30 @@ passed the source guard and 10,000-history adversarial model, executed the real
 TLBWR matrix and required `results.json` SHA-256
 `405def4f3c1e33c9cd0a8dd331ee1d33d0e664d1c578692989623796d986c11c`.
 After the only initial validation failure, a rustfmt-only correction, Actions
-`38153779095` repeated the exact-pin reproduction successfully. The production PR
-Rust gate `38153782154` then passed the exact decoder pin, formatting, strict
-locked Clippy, full locked workspace tests, retained synthetic contracts and the
-independent fetch-summary oracle. Focused TLB plus exact-reference run
-`38153927826` also passed. The final validation run recorded above re-ran the
-current canonical Rust gate, focused TLB regressions, all retained synthetic and
-oracle checks, and the exact pinned ares reproduction after reconciliation onto
-canonical `24689113469e0a3325601d7b6fd41b4d06ecf761`.
+`38153779095` repeated the exact-pin reproduction successfully. Subsequent green
+runs covered the production Rust gate and focused TLB/reference checks while main
+continued to advance.
+
+After final reconciliation onto canonical NMI-root main
+`60c5af29a9199ae207d487b4d791b13fb21ae708`, Actions `38154797218` passed all of:
+
+- `cargo fmt --all -- --check`
+- `cargo clippy --locked --workspace --all-targets -- -D warnings`
+- `cargo test --locked --workspace`
+- focused `cargo test --locked -p plaid-core --test tlb_history --test tlbwr_history`
+- every synthetic/oracle check retained by canonical `.github/workflows/rust.yml`
+- exact fixture Git-blob guards
+- exact pinned ares `9408cb43d4948fc3ea6e152a307a34348df3fe04`
+- source guard plus 10,000-history adversarial model
+- real TLBWR exact-reference matrix
+- expected result SHA-256
+  `405def4f3c1e33c9cd0a8dd331ee1d33d0e664d1c578692989623796d986c11c`
+
+Direct local execution was attempted after canonical CI became manual-only, but
+this worker container has no GitHub DNS/network route. The limitation is recorded
+instead of claiming a local run that did not occur; the temporary branch-only
+validator ran the required commands on the exact reconciled production tree plus
+only its own non-production workflow file.
 
 The decisive reproduced counterexamples are:
 
@@ -73,8 +95,8 @@ snapshot diffs, equal values, later mappings or finite trace closure.
 - Do not treat the pinned ares random sequence/distribution as hardware truth.
 - Later duplicate TLBWR direct-integration claims on issue #4 were released after
   discovering the earlier live claim for this worker; no duplicate patch was used.
-- Temporary branch-only reproduction/finalization workflows are deleted before
-  landing and are not production dependencies.
+- Temporary branch-only reproduction/finalization/revalidation workflows were
+  deleted before landing and are not production dependencies.
 
 ## Production files
 
@@ -86,17 +108,12 @@ snapshot diffs, equal values, later mappings or finite trace closure.
 - `docs/DECISIONS.md` (ADR-0104)
 - this receipt
 
-## Tests and adversarial coverage
+The final net diff against validated canonical parent `60c5af29` is seven paths:
+one `lib.rs` export, the TLBWR implementation and tests, STATUS/NEXT/DECISIONS,
+and this receipt. The concurrently integrated `root_provenance` production module,
+tests and receipt remain untouched.
 
-The final validation run recorded above executes:
-
-- `cargo fmt --all -- --check`
-- `cargo clippy --locked --workspace --all-targets -- -D warnings`
-- `cargo test --locked --workspace`
-- focused `tlb_history` and `tlbwr_history` tests
-- every synthetic/oracle check retained by canonical `.github/workflows/rust.yml`
-- exact pinned ares TLBWR source guard, 10,000-history adversarial model and real
-  reference matrix with the expected result digest
+## Adversarial coverage
 
 The Rust regressions cover misleading CP0 Index, equal-value repeated writes,
 identical payload in distinct selected slots, out-of-range/no-write attempts,
