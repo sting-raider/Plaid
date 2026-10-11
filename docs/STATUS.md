@@ -4,6 +4,12 @@
 
 Implemented:
 
+- Decoded RSP DMEM writers now compose through actual CPU LW register definitions
+  into normalized IMEM SW installations in a source-bound Rust consumer. It
+  retains mixed/unknown byte parents and same-value generations, checks independent
+  CPU steps/final snapshots, and reproduces three retained single-clock chains.
+  Incoming RSP operand ancestry, IMEM execution and whole-ROM lifetime stay OPEN.
+
 - SP captured-writer/executable-read composition reuses complete v3 boot sources
   and exact in-context CPU backing reads. Byte candidates preserve actual Word/
   DMA sink occurrences, equal-value supersession and permanent contradiction

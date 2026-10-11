@@ -128,6 +128,22 @@ a new sink; later equal bits cannot heal them. Keep the external receipts outsid
 editable submissions. `python scripts/test_sp_writer_fetch.py` exercises this
 composition and its legacy/source/report/input boundaries with synthetic bytes.
 
+For the declared RSP/CPU IMEM source profile:
+
+```bash
+plaid inspect-rsp-cpu-imem <history.json> <expected-source-sha256> <report.json>
+plaid verify-rsp-cpu-imem <history.json> <expected-source-sha256> <report.json>
+python scripts/test_rsp_cpu_imem.py
+```
+
+`plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
+and final byte snapshots, and independent CPU step snapshots. Its explicit ares
+profile permits controlled RSP reentry seeds, CPU register/control continuity,
+scalar RSP stores and the observed SBV vector-register-2/element-0 input. Other
+vector sources, branches, cache/TLB/DMA/restore interleavings reject. The report
+connects observed writers to CPU register definitions and IMEM installs; it does
+not claim incoming operand ancestry, executable consumption or a complete census.
+
 Use `plaid --help` and the relevant subcommand `--help` for the exact current argument list.
 
 ## Source-bound history consumers

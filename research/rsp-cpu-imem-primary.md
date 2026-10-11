@@ -69,3 +69,15 @@ Complete execution attempts/mutation census, asynchronous interleavings,
 cache/TLB paths, DMA ancestry, IMEM executable consumption/lifetime and hardware
 equivalence remain OPEN. No ProgramMap/native certificate or progress milestone
 changes from this reference fixture.
+
+## Production composition (2026-10-12, ADR-0118)
+
+The validated unified source now has an original Rust compiler-time consumer in
+`rsp_cpu_imem`. Its generic typed protocol verifies actual decoded store operands,
+CPU register/control continuity, independent CPU step snapshots and final byte
+snapshots, without fixture phase/PC/payload/chain-count constants. All three
+retained chains and twenty measured forgeries reproduce. Unscoped writes and
+incoming operand/storage roots retain UNKNOWN; IMEM installation is not execution.
+See `research/integration-receipts/20261012-rsp-cpu-imem-primary-composition.md`.
+The rejected branch verifier remains superseded; broader PR #8/#37 scopes are not
+claimed integrated by this producer/copy path.
