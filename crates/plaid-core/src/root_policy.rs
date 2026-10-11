@@ -18,13 +18,8 @@ pub enum RootTarget {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CacheErrorRootDisposition {
-    ExcludedByTargetHardware {
-        authority: String,
-        section: String,
-    },
-    Unresolved {
-        reason: String,
-    },
+    ExcludedByTargetHardware { authority: String, section: String },
+    Unresolved { reason: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -107,10 +102,8 @@ mod tests {
         };
         assert!(verify_cache_error_root_report(&report).is_err());
 
-        let mut encoded = serde_json::to_value(cache_error_root_report(
-            RootTarget::Nintendo64Vr4300,
-        ))
-        .unwrap();
+        let mut encoded =
+            serde_json::to_value(cache_error_root_report(RootTarget::Nintendo64Vr4300)).unwrap();
         encoded["extra"] = serde_json::Value::Bool(true);
         assert!(serde_json::from_value::<CacheErrorRootReport>(encoded).is_err());
     }
