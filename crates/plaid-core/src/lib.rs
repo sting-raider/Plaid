@@ -53,6 +53,7 @@ pub mod pif_history;
 pub mod pipeline;
 pub mod program;
 pub mod rom;
+pub mod root_policy;
 pub mod solver;
 pub mod sp_dma_egress;
 pub mod sp_history;
