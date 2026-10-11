@@ -107,7 +107,10 @@ pub fn verify_sc_sp_effect(
     effect: Option<&CompletedCpuSpWordEffect>,
 ) -> Result<Option<ScSpMutationWitness>, String> {
     let decoded = decode_sc(context.instruction_word).ok_or("not a Word SC instruction")?;
-    require(context.context_id != 0, "invalid SC execution context identity")?;
+    require(
+        context.context_id != 0,
+        "invalid SC execution context identity",
+    )?;
 
     let Some(effect) = effect else {
         return Ok(None);
@@ -165,10 +168,7 @@ mod tests {
     use super::*;
 
     fn encode_sc(base: u8, rt: u8, immediate: i16) -> u32 {
-        (0x38 << 26)
-            | (u32::from(base) << 21)
-            | (u32::from(rt) << 16)
-            | u32::from(immediate as u16)
+        (0x38 << 26) | (u32::from(base) << 21) | (u32::from(rt) << 16) | u32::from(immediate as u16)
     }
 
     fn context(immediate: i16, source: u64) -> ScExecutionContext {
@@ -223,7 +223,11 @@ mod tests {
         // No prior-value comparison participates in writer creation. A lower
         // observer reported that the sink completed, so equal bytes do not erase it.
         let effect = effect(&context, 0xffff_ffff_a400_0000, 0x0400_0000, 0x1122_3344);
-        assert!(verify_sc_sp_effect(&context, Some(&effect)).unwrap().is_some());
+        assert!(
+            verify_sc_sp_effect(&context, Some(&effect))
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[test]
@@ -295,12 +299,8 @@ mod tests {
         );
 
         let misaligned = context(1, 0x1122_3344);
-        let misaligned_effect = effect(
-            &misaligned,
-            0xffff_ffff_a400_0001,
-            0x0400_0001,
-            0x1122_3344,
-        );
+        let misaligned_effect =
+            effect(&misaligned, 0xffff_ffff_a400_0001, 0x0400_0001, 0x1122_3344);
         assert_eq!(
             verify_sc_sp_effect(&misaligned, Some(&misaligned_effect)).unwrap_err(),
             "completed SC sink has a misaligned virtual destination"
