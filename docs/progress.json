@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-09",
+  "updated": "2026-10-11",
   "legend": {
     "verified": "Verified and integrated on main",
     "partial": "Implemented or evidenced, but proof/coverage is incomplete",
@@ -16,7 +16,7 @@
         {"name": "Direct CFG recovery", "state": "verified"},
         {"name": "Evidence merge & conflicts", "state": "verified"},
         {"name": "Local indirect certificates", "state": "verified"},
-        {"name": "Cross-block indirect proofs", "state": "partial"},
+        {"name": "Bounded cross-block indirect proofs", "state": "verified"},
         {"name": "Jump/pointer-table recovery", "state": "partial"},
         {"name": "Known-library/signature evidence", "state": "open"},
         {"name": "Commercial-ROM map validation", "state": "open"}
@@ -33,7 +33,7 @@
         {"name": "CPU copy/transform lineage", "state": "partial"},
         {"name": "RSP writer/dataflow lineage", "state": "partial"},
         {"name": "Cache writeback/restore lineage", "state": "partial"},
-        {"name": "Decompression/relocation lineage", "state": "open"},
+        {"name": "Decompression/relocation lineage", "state": "partial"},
         {"name": "Complete mutation census", "state": "open"}
       ]
     },
@@ -47,8 +47,8 @@
         {"name": "Execution-root completeness", "state": "partial"},
         {"name": "TLB/context/cache composition", "state": "partial"},
         {"name": "Pointer-table immutability proof", "state": "partial"},
-        {"name": "Overlay/executable lifetimes", "state": "open"},
-        {"name": "RSP executable-universe proof", "state": "open"},
+        {"name": "Overlay/executable lifetimes", "state": "partial"},
+        {"name": "RSP executable-universe proof", "state": "partial"},
         {"name": "First ROM reaches CLOSED", "state": "open"}
       ]
     },
