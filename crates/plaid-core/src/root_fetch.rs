@@ -3,7 +3,7 @@
 //! The architectural vector selected by [`crate::exception_roots`] is not the
 //! executable handler identity. This bounded verifier keeps backing generations,
 //! resident I-cache generations, root transfers, and actual root fetches separate.
-//! It intentionally creates no reachability, mutation-census, mapping-lifetime,
+//! It creates no reachability, mutation-census, mapping/cache-lifetime,
 //! whole-ROM closure, or native-completeness proof.
 use crate::{
     exception_roots::{resolve_exception_root, ExceptionRootReceipt},
@@ -26,15 +26,17 @@ struct History {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 enum Event {
     /// A newly authenticated storage generation at one physical word.
-    /// Repeated equal values remain distinct generations because the event is distinct.
+    /// Equal payloads remain distinct because the generation event is distinct.
     BackingGeneration {
         ordinal: u64,
         physical: PhysicalAddr,
         word: u32,
     },
     /// A completed fill tied to one exact prior backing-generation event.
+    /// The triggering virtual address identifies the direct-mapped I-cache slot.
     CacheFill {
         ordinal: u64,
+        vaddr: GuestVirtualAddr,
         physical: PhysicalAddr,
         word: u32,
         backing_ordinal: u64,
@@ -42,8 +44,14 @@ enum Event {
     /// A completed invalidation of the exact currently resident fill.
     CacheInvalidate {
         ordinal: u64,
-        physical: PhysicalAddr,
+        vaddr: GuestVirtualAddr,
         fill_ordinal: u64,
+    },
+    /// An observed residency-affecting boundary whose byte source is not proven.
+    /// It destroys the reusable resident witness for that slot.
+    ResidencyCut {
+        ordinal: u64,
+        vaddr: GuestVirtualAddr,
     },
     /// The already-classified architectural transfer to the selected root.
     RootTransfer {
@@ -66,6 +74,7 @@ impl Event {
             Self::BackingGeneration { ordinal, .. }
             | Self::CacheFill { ordinal, .. }
             | Self::CacheInvalidate { ordinal, .. }
+            | Self::ResidencyCut { ordinal, .. }
             | Self::RootTransfer { ordinal, .. }
             | Self::RootFetch { ordinal, .. } => ordinal,
         }
@@ -78,6 +87,7 @@ pub struct RootFetchWitness {
     pub root: GuestVirtualAddr,
     pub physical: PhysicalAddr,
     pub word: u32,
+    pub slot: u16,
     pub transfer_ordinal: u64,
     pub fetch_ordinal: u64,
     pub resident_generation: u64,
@@ -97,6 +107,7 @@ pub struct CachedExceptionRootReport {
     pub witnesses: Vec<RootFetchWitness>,
     pub reachability_certified: bool,
     pub mapping_lifetime_certified: bool,
+    pub cache_lifetime_certified: bool,
     pub mutation_coverage_certified: bool,
     pub executable_lifetime_certified: bool,
     pub native_complete: bool,
@@ -113,6 +124,7 @@ struct BackingState {
 struct ResidentState {
     generation: u64,
     fill_ordinal: u64,
+    physical: PhysicalAddr,
     backing_generation: u64,
     backing_ordinal: u64,
     word: u32,
@@ -124,6 +136,27 @@ fn require(ok: bool, message: &str) -> Result<(), String> {
     } else {
         Err(message.into())
     }
+}
+
+fn cache_slot(vaddr: GuestVirtualAddr) -> u16 {
+    ((vaddr.0 >> 5) & 0x1ff) as u16
+}
+
+fn validate_fill_address(
+    vaddr: GuestVirtualAddr,
+    physical: PhysicalAddr,
+) -> Result<u16, String> {
+    require(
+        vaddr.0.is_multiple_of(4) && physical.0.is_multiple_of(4),
+        "unaligned cache fill evidence",
+    )?;
+    let slot = cache_slot(vaddr);
+    let index = (u32::from(slot) << 5) & 0xfe0;
+    require(
+        index == (physical.0 & 0xfe0),
+        "cache fill virtual slot and physical index disagree",
+    )?;
+    Ok(slot)
 }
 
 fn cached_direct_physical(root: GuestVirtualAddr) -> Result<PhysicalAddr, String> {
@@ -139,9 +172,10 @@ fn cached_direct_physical(root: GuestVirtualAddr) -> Result<PhysicalAddr, String
 ///
 /// The source hash authenticates this supplied finite history; it does not prove
 /// the sensor was complete. Each fill must point to the exact live backing event,
-/// and each root fetch must point to the exact live fill. Consequently a later
-/// equal or changed backing generation cannot retroactively relabel resident code.
-/// Missing resident/fill evidence fails closed.
+/// and each root fetch must point to the exact live fill. A later equal or changed
+/// backing generation cannot retroactively relabel resident code. A fill into the
+/// same direct-mapped cache slot replaces the prior witness even when its physical
+/// address differs. Missing or explicitly unknown residency evidence fails closed.
 pub fn inspect_cached_exception_root_history(
     source: &[u8],
     expected_sha256: &str,
@@ -157,6 +191,8 @@ pub fn inspect_cached_exception_root_history(
         "forged exception-root receipt",
     )?;
     let root_physical = cached_direct_physical(root_receipt.root)?;
+    let root_slot = validate_fill_address(root_receipt.root, root_physical)?;
+
     let history: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
     require(
         history.format == FORMAT,
@@ -164,7 +200,7 @@ pub fn inspect_cached_exception_root_history(
     )?;
 
     let mut backing = BTreeMap::<PhysicalAddr, BackingState>::new();
-    let mut resident = BTreeMap::<PhysicalAddr, ResidentState>::new();
+    let mut resident = BTreeMap::<u16, ResidentState>::new();
     let mut next_backing_generation = 0u64;
     let mut next_resident_generation = 0u64;
     let mut pending_transfer: Option<u64> = None;
@@ -193,11 +229,13 @@ pub fn inspect_cached_exception_root_history(
                 );
             }
             Event::CacheFill {
+                vaddr,
                 physical,
                 word,
                 backing_ordinal,
                 ..
             } => {
+                let slot = validate_fill_address(vaddr, physical)?;
                 let source_state = backing
                     .get(&physical)
                     .ok_or("cache fill without backing generation")?;
@@ -209,10 +247,11 @@ pub fn inspect_cached_exception_root_history(
                     .checked_add(1)
                     .ok_or("resident generation overflow")?;
                 resident.insert(
-                    physical,
+                    slot,
                     ResidentState {
                         generation: next_resident_generation,
                         fill_ordinal: ordinal,
+                        physical,
                         backing_generation: source_state.generation,
                         backing_ordinal: source_state.ordinal,
                         word,
@@ -220,18 +259,22 @@ pub fn inspect_cached_exception_root_history(
                 );
             }
             Event::CacheInvalidate {
-                physical,
+                vaddr,
                 fill_ordinal,
                 ..
             } => {
+                let slot = cache_slot(vaddr);
                 let current = resident
-                    .get(&physical)
+                    .get(&slot)
                     .ok_or("cache invalidation without resident generation")?;
                 require(
                     current.fill_ordinal == fill_ordinal,
                     "cache invalidation targets the wrong resident generation",
                 )?;
-                resident.remove(&physical);
+                resident.remove(&slot);
+            }
+            Event::ResidencyCut { vaddr, .. } => {
+                resident.remove(&cache_slot(vaddr));
             }
             Event::RootTransfer { root, .. } => {
                 require(root == root_receipt.root, "root transfer address mismatch")?;
@@ -256,16 +299,19 @@ pub fn inspect_cached_exception_root_history(
                     "root fetch address does not match selected cached vector",
                 )?;
                 let current = resident
-                    .get(&physical)
+                    .get(&root_slot)
                     .ok_or("cached root fetch without resident provenance")?;
                 require(
-                    current.fill_ordinal == fill_ordinal && current.word == word,
+                    current.fill_ordinal == fill_ordinal
+                        && current.physical == physical
+                        && current.word == word,
                     "root fetch does not match the live resident generation",
                 )?;
                 witnesses.push(RootFetchWitness {
                     root,
                     physical,
                     word,
+                    slot: root_slot,
                     transfer_ordinal,
                     fetch_ordinal: ordinal,
                     resident_generation: current.generation,
@@ -295,6 +341,7 @@ pub fn inspect_cached_exception_root_history(
         witnesses,
         reachability_certified: false,
         mapping_lifetime_certified: false,
+        cache_lifetime_certified: false,
         mutation_coverage_certified: false,
         executable_lifetime_certified: false,
         native_complete: false,
@@ -307,6 +354,9 @@ mod tests {
     use crate::exception_roots::{ExceptionClass, ExceptionRootInput, KernelAddressMode};
     use serde_json::{json, Value};
 
+    const ROOT_PA: u32 = 0x180;
+    const ROOT_VA: u64 = 0xffff_ffff_8000_0180;
+
     fn root() -> ExceptionRootReceipt {
         resolve_exception_root(ExceptionRootInput {
             class: ExceptionClass::General,
@@ -317,37 +367,83 @@ mod tests {
     }
 
     fn inspect(events: Vec<Value>) -> Result<CachedExceptionRootReport, String> {
-        let bytes = serde_json::to_vec(&json!({ "format": FORMAT, "events": events })).unwrap();
+        let bytes = serde_json::to_vec(&json!({
+            "format": FORMAT,
+            "events": events
+        }))
+        .unwrap();
         let digest = sha256(&bytes);
         inspect_cached_exception_root_history(&bytes, &digest, root())
     }
 
     fn backing(ordinal: u64, physical: u32, word: u32) -> Value {
-        json!({"kind":"backing_generation","ordinal":ordinal,"physical":physical,"word":word})
+        json!({
+            "kind": "backing_generation",
+            "ordinal": ordinal,
+            "physical": physical,
+            "word": word
+        })
     }
 
-    fn fill(ordinal: u64, physical: u32, word: u32, backing_ordinal: u64) -> Value {
-        json!({"kind":"cache_fill","ordinal":ordinal,"physical":physical,"word":word,"backing_ordinal":backing_ordinal})
+    fn fill(
+        ordinal: u64,
+        vaddr: u64,
+        physical: u32,
+        word: u32,
+        backing_ordinal: u64,
+    ) -> Value {
+        json!({
+            "kind": "cache_fill",
+            "ordinal": ordinal,
+            "vaddr": vaddr,
+            "physical": physical,
+            "word": word,
+            "backing_ordinal": backing_ordinal
+        })
     }
 
-    fn invalidate(ordinal: u64, physical: u32, fill_ordinal: u64) -> Value {
-        json!({"kind":"cache_invalidate","ordinal":ordinal,"physical":physical,"fill_ordinal":fill_ordinal})
+    fn invalidate(ordinal: u64, vaddr: u64, fill_ordinal: u64) -> Value {
+        json!({
+            "kind": "cache_invalidate",
+            "ordinal": ordinal,
+            "vaddr": vaddr,
+            "fill_ordinal": fill_ordinal
+        })
+    }
+
+    fn cut(ordinal: u64, vaddr: u64) -> Value {
+        json!({
+            "kind": "residency_cut",
+            "ordinal": ordinal,
+            "vaddr": vaddr
+        })
     }
 
     fn transfer(ordinal: u64) -> Value {
-        json!({"kind":"root_transfer","ordinal":ordinal,"root":root().root.0})
+        json!({
+            "kind": "root_transfer",
+            "ordinal": ordinal,
+            "root": root().root.0
+        })
     }
 
     fn fetch(ordinal: u64, word: u32, fill_ordinal: u64) -> Value {
-        json!({"kind":"root_fetch","ordinal":ordinal,"root":root().root.0,"physical":0x180,"word":word,"fill_ordinal":fill_ordinal})
+        json!({
+            "kind": "root_fetch",
+            "ordinal": ordinal,
+            "root": root().root.0,
+            "physical": ROOT_PA,
+            "word": word,
+            "fill_ordinal": fill_ordinal
+        })
     }
 
     #[test]
     fn stale_resident_generation_survives_changed_backing() {
         let report = inspect(vec![
-            backing(1, 0x180, 0x2402_0001),
-            fill(2, 0x180, 0x2402_0001, 1),
-            backing(3, 0x180, 0x2402_0002),
+            backing(1, ROOT_PA, 0x2402_0001),
+            fill(2, ROOT_VA, ROOT_PA, 0x2402_0001, 1),
+            backing(3, ROOT_PA, 0x2402_0002),
             transfer(4),
             fetch(5, 0x2402_0001, 2),
         ])
@@ -365,12 +461,12 @@ mod tests {
     #[test]
     fn invalidate_then_refill_moves_to_new_backing_generation() {
         let report = inspect(vec![
-            backing(1, 0x180, 0x2402_0001),
-            fill(2, 0x180, 0x2402_0001, 1),
-            backing(3, 0x180, 0x2402_0002),
-            invalidate(4, 0x180, 2),
+            backing(1, ROOT_PA, 0x2402_0001),
+            fill(2, ROOT_VA, ROOT_PA, 0x2402_0001, 1),
+            backing(3, ROOT_PA, 0x2402_0002),
+            invalidate(4, ROOT_VA, 2),
             transfer(5),
-            fill(6, 0x180, 0x2402_0002, 3),
+            fill(6, ROOT_VA, ROOT_PA, 0x2402_0002, 3),
             fetch(7, 0x2402_0002, 6),
         ])
         .unwrap();
@@ -383,11 +479,11 @@ mod tests {
     #[test]
     fn refill_before_later_write_remains_stale() {
         let report = inspect(vec![
-            backing(1, 0x180, 0x2402_0001),
-            fill(2, 0x180, 0x2402_0001, 1),
-            invalidate(3, 0x180, 2),
-            fill(4, 0x180, 0x2402_0001, 1),
-            backing(5, 0x180, 0x2402_0002),
+            backing(1, ROOT_PA, 0x2402_0001),
+            fill(2, ROOT_VA, ROOT_PA, 0x2402_0001, 1),
+            invalidate(3, ROOT_VA, 2),
+            fill(4, ROOT_VA, ROOT_PA, 0x2402_0001, 1),
+            backing(5, ROOT_PA, 0x2402_0002),
             transfer(6),
             fetch(7, 0x2402_0001, 4),
         ])
@@ -401,9 +497,9 @@ mod tests {
     #[test]
     fn same_value_backing_replacement_does_not_relabel_resident_code() {
         let report = inspect(vec![
-            backing(1, 0x180, 0x2402_0001),
-            fill(2, 0x180, 0x2402_0001, 1),
-            backing(3, 0x180, 0x2402_0001),
+            backing(1, ROOT_PA, 0x2402_0001),
+            fill(2, ROOT_VA, ROOT_PA, 0x2402_0001, 1),
+            backing(3, ROOT_PA, 0x2402_0001),
             transfer(4),
             fetch(5, 0x2402_0001, 2),
         ])
@@ -414,11 +510,27 @@ mod tests {
     }
 
     #[test]
+    fn index_conflicting_fill_replaces_root_resident_identity() {
+        const OTHER_VA: u64 = ROOT_VA + 0x4000;
+        const OTHER_PA: u32 = ROOT_PA + 0x4000;
+        let error = inspect(vec![
+            backing(1, ROOT_PA, 0x2402_0001),
+            fill(2, ROOT_VA, ROOT_PA, 0x2402_0001, 1),
+            backing(3, OTHER_PA, 0x2402_0001),
+            fill(4, OTHER_VA, OTHER_PA, 0x2402_0001, 3),
+            transfer(5),
+            fetch(6, 0x2402_0001, 2),
+        ])
+        .unwrap_err();
+        assert!(error.contains("live resident generation"));
+    }
+
+    #[test]
     fn equal_value_foreign_backing_cannot_be_stolen_as_fill_source() {
         let error = inspect(vec![
-            backing(1, 0x180, 0x2402_0001),
-            backing(2, 0x1180, 0x2402_0001),
-            fill(3, 0x180, 0x2402_0001, 2),
+            backing(1, ROOT_PA, 0x2402_0001),
+            backing(2, ROOT_PA + 0x1000, 0x2402_0001),
+            fill(3, ROOT_VA, ROOT_PA, 0x2402_0001, 2),
             transfer(4),
             fetch(5, 0x2402_0001, 3),
         ])
@@ -427,23 +539,33 @@ mod tests {
     }
 
     #[test]
-    fn deleted_or_missing_resident_provenance_fails_closed() {
-        let error = inspect(vec![
-            backing(1, 0x180, 0x2402_0002),
+    fn deleted_missing_or_unknown_resident_provenance_fails_closed() {
+        let missing = inspect(vec![
+            backing(1, ROOT_PA, 0x2402_0002),
             transfer(2),
             fetch(3, 0x2402_0002, 1),
         ])
         .unwrap_err();
-        assert!(error.contains("resident provenance"));
+        assert!(missing.contains("resident provenance"));
+
+        let cut_history = inspect(vec![
+            backing(1, ROOT_PA, 0x2402_0001),
+            fill(2, ROOT_VA, ROOT_PA, 0x2402_0001, 1),
+            cut(3, ROOT_VA),
+            transfer(4),
+            fetch(5, 0x2402_0001, 2),
+        ])
+        .unwrap_err();
+        assert!(cut_history.contains("resident provenance"));
     }
 
     #[test]
     fn wrong_equal_value_resident_generation_is_rejected() {
         let error = inspect(vec![
-            backing(1, 0x180, 0x2402_0001),
-            fill(2, 0x180, 0x2402_0001, 1),
-            invalidate(3, 0x180, 2),
-            fill(4, 0x180, 0x2402_0001, 1),
+            backing(1, ROOT_PA, 0x2402_0001),
+            fill(2, ROOT_VA, ROOT_PA, 0x2402_0001, 1),
+            invalidate(3, ROOT_VA, 2),
+            fill(4, ROOT_VA, ROOT_PA, 0x2402_0001, 1),
             transfer(5),
             fetch(6, 0x2402_0001, 2),
         ])
@@ -454,48 +576,55 @@ mod tests {
     #[test]
     fn invalidation_must_name_exact_live_fill() {
         let error = inspect(vec![
-            backing(1, 0x180, 0x2402_0001),
-            fill(2, 0x180, 0x2402_0001, 1),
-            invalidate(3, 0x180, 1),
+            backing(1, ROOT_PA, 0x2402_0001),
+            fill(2, ROOT_VA, ROOT_PA, 0x2402_0001, 1),
+            invalidate(3, ROOT_VA, 1),
         ])
         .unwrap_err();
         assert!(error.contains("wrong resident generation"));
     }
 
     #[test]
-    fn reordered_history_and_source_tampering_are_rejected() {
+    fn malformed_slot_relationship_and_reordered_history_are_rejected() {
+        let slot_error = inspect(vec![
+            backing(1, ROOT_PA + 0x20, 0x2402_0001),
+            fill(2, ROOT_VA, ROOT_PA + 0x20, 0x2402_0001, 1),
+        ])
+        .unwrap_err();
+        assert!(slot_error.contains("physical index disagree"));
+
         let reordered = inspect(vec![
-            backing(1, 0x180, 0x2402_0001),
-            fill(3, 0x180, 0x2402_0001, 1),
+            backing(1, ROOT_PA, 0x2402_0001),
+            fill(3, ROOT_VA, ROOT_PA, 0x2402_0001, 1),
             transfer(2),
             fetch(4, 0x2402_0001, 3),
         ])
         .unwrap_err();
         assert!(reordered.contains("noncontiguous"));
+    }
 
+    #[test]
+    fn source_tampering_forged_root_and_bev_root_are_rejected() {
         let bytes = serde_json::to_vec(&json!({
             "format": FORMAT,
             "events": [
-                backing(1, 0x180, 0x2402_0001),
-                fill(2, 0x180, 0x2402_0001, 1),
+                backing(1, ROOT_PA, 0x2402_0001),
+                fill(2, ROOT_VA, ROOT_PA, 0x2402_0001, 1),
                 transfer(3),
                 fetch(4, 0x2402_0001, 2)
             ]
         }))
         .unwrap();
-        let error = inspect_cached_exception_root_history(&bytes, &"0".repeat(64), root())
-            .unwrap_err();
-        assert!(error.contains("source receipt mismatch"));
-    }
+        let hash_error =
+            inspect_cached_exception_root_history(&bytes, &"0".repeat(64), root()).unwrap_err();
+        assert!(hash_error.contains("source receipt mismatch"));
 
-    #[test]
-    fn forged_root_receipt_and_uncached_bev_root_are_rejected() {
         let mut forged = root();
         forged.root = GuestVirtualAddr(forged.root.0 + 4);
-        let bytes = serde_json::to_vec(&json!({"format":FORMAT,"events":[]})).unwrap();
         let digest = sha256(&bytes);
-        let error = inspect_cached_exception_root_history(&bytes, &digest, forged).unwrap_err();
-        assert!(error.contains("forged exception-root receipt"));
+        let forged_error =
+            inspect_cached_exception_root_history(&bytes, &digest, forged).unwrap_err();
+        assert!(forged_error.contains("forged exception-root receipt"));
 
         let bev = resolve_exception_root(ExceptionRootInput {
             class: ExceptionClass::General,
@@ -503,15 +632,16 @@ mod tests {
             exl: false,
             kernel_mode: KernelAddressMode::Bits32,
         });
-        let error = inspect_cached_exception_root_history(&bytes, &digest, bev).unwrap_err();
-        assert!(error.contains("cached direct segment"));
+        let bev_error =
+            inspect_cached_exception_root_history(&bytes, &digest, bev).unwrap_err();
+        assert!(bev_error.contains("cached direct segment"));
     }
 
     #[test]
     fn transfer_without_fetch_is_not_silently_certified() {
         let error = inspect(vec![
-            backing(1, 0x180, 0x2402_0001),
-            fill(2, 0x180, 0x2402_0001, 1),
+            backing(1, ROOT_PA, 0x2402_0001),
+            fill(2, ROOT_VA, ROOT_PA, 0x2402_0001, 1),
             transfer(3),
         ])
         .unwrap_err();
