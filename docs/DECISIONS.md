@@ -1332,3 +1332,23 @@ Eventual executable consumption, lifetime and complete source authentication
 remain required before production promotion. Original observer/shadow generation
 is shared; upstream implementations, branch workflows and custom compiler
 scaffolding are not imported into production. No native gate is weakened.
+
+## ADR-0090: CPU SP producers require decoded context and normalized backing
+
+Status: Accepted for controlled research verification, 2026-10-11.
+
+Observe actual CPU decoder boundaries and completed SP Word writes. Derive the
+operand selector and effective address from the captured instruction and full
+GPR/FPR snapshots, including FR/CU1 mode. Require exact physical bank/offset and
+guest-byte replay. An unscoped direct write cannot borrow a matching decoded
+source, and a denied COP1 store must produce no sink. The unmodified research
+verifier accepted selector/bank/bounds forgeries and is rejected.
+
+Normalize snapshots through pinned guest accessors: generic IMEM host storage
+and specialized RSP DMEM storage are different views. A primary host-order
+snapshot error failed the initial-state gate; fix capture rather than loosening
+verification. Preserve this pin's widened SB Word effects and FR-sensitive
+SWC1 source selection as finite reference facts, not N64-wide hardware truth.
+Independent unchanged-reference checkpoints include FPR bits. Ultimate register
+ancestry, complete attempts/census, asynchronous execution and lifetime remain
+separate obligations. No production/native producer gate is weakened.

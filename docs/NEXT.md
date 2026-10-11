@@ -185,3 +185,9 @@ The one-step adjacent XORI source contract is also reconciled, including explici
 zero-immediate transform identity. Preserve this exact def-use boundary when
 composing broader producer evidence; matching transformed values does not select
 a source generation. Decompression/relocation and general dataflow remain open.
+
+Actual decoded CPU SW/SB/SWC1-to-SP context now replaces caller-supplied operand
+metadata in the controlled fixture. Compose this precise GPR/FPR source witness
+with complete boot histories and earlier register lineage before production
+promotion. Keep unscoped writes unattributed; preserve guest-byte snapshot view
+and reference-specific full Word normalization without inferring hardware truth.
