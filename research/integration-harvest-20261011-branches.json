@@ -1525,8 +1525,11 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6069738005",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6070073590"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "source_contract_reconciled",
+      "integration_commit": null,
+      "review_note": "research/rsp-store-isolation-primary.md",
+      "primary_fixture": "spikes/052-ares-rsp-store-isolation",
+      "review_base": "10bb0ba"
     },
     {
       "branch": "research/rsp-spdma-icache-compose-gpt56sol",

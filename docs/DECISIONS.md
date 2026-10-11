@@ -1448,3 +1448,22 @@ executable lifetime/native gates open. Generate original observer shadows only
 under ignored output, preserve reference notices, and import no reference
 implementation or branch-only CI workflow. Gopher's different interleaving is
 source-only context; ares callback spacing is not a hardware invariant.
+
+## ADR-0096: RSP data-store isolation is a bounded reference classification
+
+Status: Accepted for controlled research verification, 2026-10-11.
+
+Retain the unmodified decoded scalar/vector store fixture and strict per-probe
+metadata/digest checks. All pinned interpreter store handlers target the
+separate 4-KiB DMEM object; bit 12 and boundary wrap do not select IMEM. Actual
+29-probe execution preserves each complete IMEM snapshot. Aligned SRV is a valid
+zero-byte operation; its added nonaligned probe exercises the write path.
+
+This classifies ordinary RSP data stores for the pinned interpreter/source
+contract, not all executable mutations or hardware/recompiler behavior. Keep
+CPU/SP-window writes, DMA, reset/restore/debugger/frontend changes and complete
+task/lifetime census independently open. The old runner's unchecked instruction,
+base and digest fields are superseded by strict typed report expectations.
+Share only original ISC fixtures/audits and synthetic metadata; reference code
+and notices remain ignored, with no branch workflow or upstream implementation
+entering production/native mode.
