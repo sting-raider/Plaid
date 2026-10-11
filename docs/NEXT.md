@@ -255,3 +255,13 @@ The separate captured-definition consumer now retains live read identity through
 unrelated register reads/NOP and one XORI, with phase/ORI/failed-read cuts. Compose
 these qualified read/write identities with storage and executable consumers;
 do not infer general source census from a contiguous captured sequence (ADR-0100).
+
+Production CPU-copy lineage now retains every captured successful uncached Word
+store as a fresh phase-scoped generation and joins copy/definition witnesses to
+the latest captured write at their source address plus their own destination
+generation (ADR-0101). Forward overlap therefore preserves self-feeding captured
+writer chronology even when payloads are equal; backward overlap stays distinct.
+This is not yet ultimate storage ancestry: complete writer sensing, device/DMA
+interleavings, cached residency and executable consumption/lifetime remain the
+next composition obligations. A present captured writer must not be treated as
+the actual parent until a complete mutation history independently justifies it.
