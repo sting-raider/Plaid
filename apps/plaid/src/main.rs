@@ -21,7 +21,11 @@ use plaid_core::{
     program::{GuestRange, ProgramMap, RomOffset},
     rom::CanonicalRom,
     solver::{DiscoverySourceInputs, Scope, solve, solve_with_discovery_sources},
-    sp_history::{SpHistoryReport, inspect_sp_boot_history, verify_sp_boot_history_report},
+    sp_history::{
+        SpHistoryReport, SpWriterFetchReport, inspect_sp_boot_history,
+        inspect_sp_writer_fetch_history, verify_sp_boot_history_report,
+        verify_sp_writer_fetch_report,
+    },
     trace::DiscoveryTrace,
 };
 use std::{
@@ -63,6 +67,63 @@ fn rom_images(rom: &CanonicalRom, map: &ProgramMap) -> Result<Vec<CodeImage>, St
 fn run() -> Result<(), String> {
     let args: Vec<_> = env::args().skip(1).collect();
     match args.as_slice() {
+        [
+            command,
+            rom_path,
+            firmware_path,
+            fetch_path,
+            history_path,
+            expected_history,
+            expected_fetch,
+            output,
+        ] if command == "inspect-sp-writer-fetch" || command == "verify-sp-writer-fetch" => {
+            let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
+            let firmware = fs::read(firmware_path).map_err(|e| e.to_string())?;
+            let fetched = BufReader::new(fs::File::open(fetch_path).map_err(|e| e.to_string())?);
+            let history = BufReader::new(fs::File::open(history_path).map_err(|e| e.to_string())?);
+            if command.starts_with("verify-") {
+                let report: SpWriterFetchReport =
+                    serde_json::from_slice(&fs::read(output).map_err(|e| e.to_string())?)
+                        .map_err(|e| e.to_string())?;
+                verify_sp_writer_fetch_report(
+                    &report,
+                    history,
+                    fetched,
+                    &rom,
+                    &firmware,
+                    expected_history,
+                    expected_fetch,
+                )?;
+                println!(
+                    "SP captured-writer/fetch report matches complete sources and independent receipts"
+                );
+            } else {
+                if let Ok(destination) = fs::canonicalize(output) {
+                    for source in [rom_path, firmware_path, fetch_path, history_path] {
+                        if destination == fs::canonicalize(source).map_err(|e| e.to_string())? {
+                            return Err("inspection output would overwrite an input".into());
+                        }
+                    }
+                }
+                let report = inspect_sp_writer_fetch_history(
+                    history,
+                    fetched,
+                    &rom,
+                    &firmware,
+                    expected_history,
+                    expected_fetch,
+                )?;
+                fs::write(
+                    output,
+                    serde_json::to_string_pretty(&report).map_err(|e| e.to_string())? + "\n",
+                )
+                .map_err(|e| e.to_string())?;
+                println!(
+                    "inspected {} SP executable backing reads; captured writers are candidates, ultimate ancestry remains uncertified",
+                    report.projection.sp_backed_fetches
+                );
+            }
+        }
         [command, output, sources @ ..]
             if command == "create-trace-expectations" && !sources.is_empty() =>
         {
@@ -531,7 +592,7 @@ fn run() -> Result<(), String> {
         }
         _ => {
             return Err(
-                "usage: plaid create-trace-expectations <new-expected.json> <trace.ndjson>... | solve-traces <rom> <map.json> <expected.json> <trace.ndjson>... | inspect-cpu-definitions <history.json> <external-source-sha256> <report.json> | verify-cpu-definitions <history.json> <external-source-sha256> <report.json> | inspect-cpu-copy-history <history.json> <external-source-sha256> <report.json> | verify-cpu-copy-history <history.json> <external-source-sha256> <report.json> | rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | verify-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | inspect-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | verify-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | merge <left.json> <right.json> <output.json>"
+                "usage: plaid inspect-sp-writer-fetch <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-writer-fetch <same-inputs> | create-trace-expectations <new-expected.json> <trace.ndjson>... | solve-traces <rom> <map.json> <expected.json> <trace.ndjson>... | inspect-cpu-definitions <history.json> <external-source-sha256> <report.json> | verify-cpu-definitions <history.json> <external-source-sha256> <report.json> | inspect-cpu-copy-history <history.json> <external-source-sha256> <report.json> | verify-cpu-copy-history <history.json> <external-source-sha256> <report.json> | rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | verify-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | inspect-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | verify-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | merge <left.json> <right.json> <output.json>"
                     .into(),
             );
         }

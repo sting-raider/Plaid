@@ -1933,3 +1933,37 @@ The competing PR #25 module is superseded, not merged wholesale. Captured backin
 writer compatibility is not ultimate byte origin. Actual event authentication,
 complete writers/cache/mapping/root census, restore epochs, exception-delivery
 composition, whole-ROM/native closure and progress milestones remain OPEN.
+
+## ADR-0116: Captured SP writers compose with actual executable reads without claiming a census
+
+Status: Accepted for source-bound finite writer/fetch composition, 2026-10-12.
+
+Extend the existing streaming SP replay with an opt-in writer/fetch report. Reuse
+its exact complete v3/v2/v1/v0/v5 validation and in-context CPU SP Word-read join;
+do not invent a new callback or independently supplied fetch event. Preserve the
+legacy report/output. New reports require independently retained expected history
+and fetch hashes and keep each captured byte writer in its actual bank/offset.
+
+Every normalized Word/DMA sink is a fresh occurrence, including unchanged bits.
+CPU sinks supersede only their full observed Word, retaining untouched DMA lanes.
+Preserve actual DMA backing-read ordinals when bound, without guessing missing
+request/lifecycle or source ancestry. Mirrored physical accesses retain their
+own fetch identities while selecting actual bank storage. An incompatible actual
+read cuts only affected byte candidates permanently; later equality cannot
+resurrect them. Each writer identity is scoped to the containing source digest.
+
+Compatible latest captured writers are not ultimate ancestry without complete
+mutation sensing. Missing ordinary RSP/out-of-band producers remain a census gap;
+all ultimate-ancestry/census/lifetime/native flags stay false. This composes real
+storage and consumption facts, not atomic IMEM installation or RSP-universe
+closure. PR #29's per-byte supersession invariant informed review; its promoted
+request/lifecycle candidate is still unconsumed. No solver waiver or milestone
+promotion. Four focused unit adversaries and complete-source CLI scenarios pass.
+Authenticated retained 10,000-call replay retains all 7,945 SP fetch candidates
+from 1,663 sink occurrences and preserves the entire prior report exactly.
+
+A separate ignored ROM diagnostic invokes exact pinned ares mia IPL2-checksum
+code under its ISC license, stored with the diagnostic, to identify the supplied
+ROM as CIC-6105 (seed 0x91 checksum 0x8618a45bc2d3). No upstream production code
+or game bytes enter Plaid/git. The existing 6102-only boot profile is not widened
+by this result; a correct game capture remains a separate declared-source task.

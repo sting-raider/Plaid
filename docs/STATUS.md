@@ -4,6 +4,12 @@
 
 Implemented:
 
+- SP captured-writer/executable-read composition reuses complete v3 boot sources
+  and exact in-context CPU backing reads. Byte candidates preserve actual Word/
+  DMA sink occurrences, equal-value supersession and permanent contradiction
+  cuts. The retained 10,000-call source joins all 7,945 SP reads while preserving
+  its old report; incomplete mutation sensing keeps ultimate ancestry uncertified.
+
 - Cached general-root replay v1 composes full 32-byte I-cache fills, direct slot
   replacement and per-word captured backing writers with canonical pinned
   NMI/reset/power effects. Equal-value conflicting fills end residency; NMI
