@@ -1,0 +1,43 @@
+name: direct-tlbwr-finalize-docs
+
+on:
+  push:
+    branches:
+      - direct-integration/tlbwr-generation-gpt56sol-direct-tlbwr-generation-20261011
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.event.head_commit.message == 'Trigger final TLBWR documentation commit'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate canonical documentation and durable receipt
+        run: python3 .github/tlbwr_finalize.py
+
+      - name: Reject whitespace damage
+        run: git diff --check
+
+      - name: Commit docs and remove branch-only integration machinery
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name "Plaid direct integration"
+          git config user.email "143122949+sting-raider@users.noreply.github.com"
+          git rm .github/tlbwr-finalize-trigger \
+                 .github/tlbwr_finalize.py \
+                 .github/workflows/direct-tlbwr-finalize.yml \
+                 .github/workflows/direct-tlbwr-reproduce.yml
+          git add docs/STATUS.md docs/NEXT.md docs/DECISIONS.md \
+                  research/integration-receipts/20261011-tlbwr-generation-gpt56sol-direct-tlbwr-generation-20261011.md
+          git commit -m "Document source-bound TLBWR generations"
+          git push origin HEAD:direct-integration/tlbwr-generation-gpt56sol-direct-tlbwr-generation-20261011
