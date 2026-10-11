@@ -647,3 +647,16 @@ historical evidence. Six strict contracts and full core/fmt/strict Clippy pass.
 The branch model accepts a fabricated miss fill and is not adopted as a verifier.
 Guest writer chronology, mapping/fill ancestry, census, hardware indexing and
 executable lifetime/native closure remain OPEN (ADR-0093).
+
+Canonical Actions `38141694889` passes at exact head
+`809637ff7dda6cd706e6958545a1ca7e28fd348d`, including all six PageMask/cache
+contracts and prior Rust/CLI/producer/model gates.
+
+Controlled PI/cache visibility now has a strict finite reference fixture in
+spike 050. Two 32-byte copies yield 117 fully checked records; completion leaves
+old cached code executable, while a queue-less copy executes after invalidate/
+refill. Eight selected checkpoints/final reported state agree across unmodified,
+disabled and enabled builds; repeated enabled trace matches its historical hash.
+Ten measured forgeries and eleven synthetic tests pass, along with full core,
+fmt and strict Clippy. Queue labels are not authenticated tokens; producer/census/
+lifetime/native certificates remain false (ADR-0094).
