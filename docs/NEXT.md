@@ -250,3 +250,8 @@ source-read and sink-write ordinals under an external complete-source receipt.
 Compose those witnesses with storage writer ancestry and eventual executable
 consumption next; a bounded copy witness is not a mutation census or solver
 certificate (ADR-0099).
+
+The separate captured-definition consumer now retains live read identity through
+unrelated register reads/NOP and one XORI, with phase/ORI/failed-read cuts. Compose
+these qualified read/write identities with storage and executable consumers;
+do not infer general source census from a contiguous captured sequence (ADR-0100).

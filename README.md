@@ -237,3 +237,11 @@ ordinals and XORI-zero operation identity. Equal values do not select a producer
 and the separately trusted source receipt. Recomputing a hash from an edited
 input does not authenticate that input. The aligned identity-KSEG1/RDRAM scope
 does not certify sensor completeness, ultimate origin, lifetime or native closure.
+
+`inspect-cpu-definitions` / `verify-cpu-definitions` use the same arguments with
+separate format `plaid-cpu-word-definitions-v0`. They follow captured register
+definitions through unrelated register reads and NOP, retaining at most one
+in-place XORI. Same-value loads remain fresh definitions; ORI and failed reads
+cut lineage. Complete source/GPR/control checks still apply. These commands and
+the adjacent-copy commands reject each other's protocols; general dataflow,
+storage ancestry and executable completeness remain uncertified.

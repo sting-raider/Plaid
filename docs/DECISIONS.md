@@ -1523,3 +1523,21 @@ chains; they do not imply a complete execution census. Keep all general origin,
 mutation/lifetime/native flags false and do not issue ProgramMap solver waivers.
 Existing authenticated captures provide behavioral comparison without repeating
 reference builds. No upstream implementation or native guest executor is added.
+
+## ADR-0100: Track captured definitions independently of equal payloads
+
+Status: Accepted for bounded compiler-time observed-history inspection, 2026-10-11.
+
+Add a separate captured-definition protocol over ADR-0099's validated instruction,
+GPR, control and Word-effect source. Preserve a loaded register's actual read
+identity through unrelated loads/NOP and at most one in-place XORI. Advance a
+definition on same-value reload; cut it on ORI, failed load and phase boundaries.
+Do not choose a nearest equal-valued read or infer a source from value equality.
+The original adjacent protocol and its inspection/rechecking behavior remain
+separate and reject the new format.
+
+This describes the supplied captured sequence, not every operation an executing
+machine might perform. Unknown/unsupported operations reject; no arbitrary
+dataflow, interrupt/capture completeness, ultimate storage ancestry, executable
+lifetime or native waiver follows. Compare existing authenticated captures rather
+than rerunning reference research. No upstream code or final guest executor added.

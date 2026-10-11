@@ -727,3 +727,14 @@ Canonical CPU-copy CLI Actions 38147498790 passes at exact
 big-endian source/destination/XOR byte expression, matching all four measured
 XORI cases. A sixth focused regression rechecks every lane and preserves
 XORI-zero context despite copy-equivalent byte mappings.
+
+Canonical byte-expression Actions 38147761501 passes at exact
+`7009c308b2d1bf4370b2a8097e8df4a3dbd7e0e8`.
+
+Separate Rust captured-definition inspection now follows source reads through
+unrelated-register loads/NOP and one in-place XORI. Retained actual capture
+supplies four copies versus two in the unchanged adjacent protocol; decoy source
+read 17 does not replace the t0 definition from read 14. Same-value reloads,
+equal-result ORI cuts, failed-load cuts and cross-protocol gates pass ten focused
+Rust tests plus CLI/fmt/strict Clippy. General producer/capture completeness,
+storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
