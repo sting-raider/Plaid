@@ -749,3 +749,15 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   reachability proof, handler-byte provenance/lifetime certificate, or waiver for
   interrupt/NMI/reset/cache-error roots. The pinned Gopher64 XTLB disagreement
   remains explicit.
+
+- Production now exposes bounded source-bound `tlb_history` replay for decoded
+  TLBWI operation generations. A successful selected-slot write mints a fresh
+  ordered generation even when before/after entry content is identical; equal
+  payload in another slot cannot identify that write. Out-of-range and exception
+  attempts mint no successful generation. Complete-source SHA binding, exact
+  report reconstruction and seven adversarial Rust regression groups preserve
+  fail-closed behavior. A fresh exact-pinned ares rerun reproduces result SHA-256
+  `6ef416a44a0fb533a1e291b8adab42b158f0eb581ec81a9174509b3d6ab606e0`.
+  Sensor completeness, mapping semantics, TLBWR/context chronology, cache
+  residency, executable lifetime and whole-ROM/native completeness remain OPEN
+  (ADR-0102).

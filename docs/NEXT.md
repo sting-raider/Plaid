@@ -263,3 +263,11 @@ BEV/EXL/address-mode chronology, compose each selected root with handler-byte
 provenance and cache/mapping lifetime, and independently justify interrupt,
 watch, reset/NMI and cache-error roots. Numeric vector derivation is neither
 reachability nor a complete execution-root certificate.
+
+Production now has source-bound TLBWI operation generations (ADR-0102). Compose
+them with authenticated mapping content, PageMask/ASID/global state, TLBWR and
+other mapping/context operations, actual fill/resident histories and save/restore/
+reset chronology before using them in executable-lifetime or translation proofs.
+A same-content legal TLBWI remains a distinct operation; snapshot inequality and
+equal payloads cannot recover occurrence or selected-slot identity. Complete
+sensor coverage and a full TLB mutation census remain OPEN.
