@@ -6,7 +6,9 @@ Worker: `gpt56sol-direct-rsp-imem-egress-20261011`
 
 Initial canonical base: `6b53a15c4c6eaadc8e0d002dd6818c600ebf2a7d`
 
-Reconciled canonical base during validation: `539ff0ce72a98b296a8a28135fda6eab90a2f6ac`
+First reconciled canonical base: `539ff0ce72a98b296a8a28135fda6eab90a2f6ac`
+
+Final tested canonical base before lease contention: `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5`
 
 Integration branch: `direct-integration/rsp-imem-egress-gpt56sol-direct-rsp-imem-egress-20261011`
 
@@ -55,7 +57,7 @@ The reproduced semantic outputs match the prior closeout exactly:
 
 The production implementation was independently exercised on current-main code
 through PR #15. Actions run `38151825940` checked the synthetic merge commit
-`8b4dcae4d1f0d1990e3c35e4367305b83141ca54`, which reconciles the integration
+`8b4dcae4d1f0d1990e3c35e4367305b83141ca54`, which reconciled the integration
 head with canonical `539ff0ce72a98b296a8a28135fda6eab90a2f6ac`. It passed:
 
 - `cargo fmt --all -- --check`;
@@ -69,6 +71,17 @@ head with canonical `539ff0ce72a98b296a8a28135fda6eab90a2f6ac`. It passed:
 The first PR run failed only the formatting gate; the exact formatter diff was
 applied before the successful run. No semantic test was waived or skipped in the
 successful run.
+
+Canonical main then advanced through the exception-root and TLBWI integrations.
+Rather than merge the stale PR view, the branch was reconciled onto canonical
+`bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5` with two-parent commit
+`835ace29cb77be76f692904003b5d7d47387035b`. Its tree is based on the canonical
+TLBWI main tree and changes exactly four paths relative to that base: the module
+export, the new egress module, its tests and this receipt. Post-reconciliation
+Actions run `38153104173`, job `114510442838`, completed successfully with the
+exact decoder pin, formatting, strict workspace Clippy, full locked workspace
+tests, every retained synthetic contract and the independent fetch-summary
+assignment oracle green.
 
 ## Adopted invariant
 
@@ -121,15 +134,16 @@ Production / tests:
 - `crates/plaid-core/src/lib.rs`;
 - `crates/plaid-core/tests/sp_dma_egress.rs`.
 
-Canonical documentation:
-
-- `docs/STATUS.md`;
-- `docs/NEXT.md`;
-- `docs/DECISIONS.md`.
-
 Receipt:
 
 - this file.
+
+`docs/STATUS.md`, `docs/NEXT.md`, `docs/DECISIONS.md` and `progress.json` are
+intentionally unchanged by this bounded integration. The production evidence
+surface grows, but no project milestone, closure obligation or architectural
+waiver changes: complete mutation coverage, executable lifetime, whole-ROM closure
+and native completeness all remain OPEN. This receipt records the narrower
+production contract without manufacturing a broader canonical-state transition.
 
 No solver, ProgramMap, progress-map, native backend, emulator runtime, or reference
 source file is changed.
