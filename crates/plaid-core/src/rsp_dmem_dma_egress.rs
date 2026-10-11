@@ -159,7 +159,10 @@ fn require(ok: bool, message: &str) -> Result<(), String> {
 }
 
 fn payload(value: u64, bytes: u8) -> Result<Vec<u8>, String> {
-    require(matches!(bytes, 1 | 2 | 4 | 8), "unsupported DMEM write width")?;
+    require(
+        matches!(bytes, 1 | 2 | 4 | 8),
+        "unsupported DMEM write width",
+    )?;
     if bytes < 8 {
         let limit = 1u64 << (u32::from(bytes) * 8);
         require(value < limit, "DMEM write value exceeds declared width")?;
@@ -180,7 +183,10 @@ fn validate_source_id(source_id: &str) -> Result<(), String> {
 }
 
 fn is_unknown(origin: &DmemByteOrigin) -> bool {
-    matches!(origin, DmemByteOrigin::Unobserved | DmemByteOrigin::Unknown { .. })
+    matches!(
+        origin,
+        DmemByteOrigin::Unobserved | DmemByteOrigin::Unknown { .. }
+    )
 }
 
 /// Replays a bounded, externally authenticated complete source. `expected_sha256`
@@ -191,10 +197,16 @@ pub fn inspect_rsp_dmem_dma_egress(
     expected_sha256: &str,
 ) -> Result<RspDmemDmaEgressReport, String> {
     let digest = sha256(source);
-    require(digest == expected_sha256, "RSP DMEM egress source receipt mismatch")?;
+    require(
+        digest == expected_sha256,
+        "RSP DMEM egress source receipt mismatch",
+    )?;
 
     let history: History = serde_json::from_slice(source).map_err(|error| error.to_string())?;
-    require(history.format == FORMAT, "unsupported RSP DMEM egress history format")?;
+    require(
+        history.format == FORMAT,
+        "unsupported RSP DMEM egress history format",
+    )?;
     require(
         history.events.len() <= history::MAX_RECORDS as usize,
         "too many RSP DMEM egress events",
@@ -238,7 +250,10 @@ pub fn inspect_rsp_dmem_dma_egress(
                 word,
             } => {
                 require(active.is_none(), "nested RSP instruction context")?;
-                require(context == ordinal && context != 0, "invalid RSP instruction context")?;
+                require(
+                    context == ordinal && context != 0,
+                    "invalid RSP instruction context",
+                )?;
                 require(pc.0.is_multiple_of(4), "unaligned RSP instruction PC")?;
                 active = Some(ActiveRsp { context, pc, word });
             }
@@ -259,7 +274,9 @@ pub fn inspect_rsp_dmem_dma_egress(
 
                 let origin = match producer {
                     Producer::Rsp => {
-                        let current = active.as_ref().ok_or("RSP DMEM write outside instruction")?;
+                        let current = active
+                            .as_ref()
+                            .ok_or("RSP DMEM write outside instruction")?;
                         require(
                             (context, pc) == (current.context, current.pc),
                             "RSP DMEM write context mismatch",
@@ -277,7 +294,10 @@ pub fn inspect_rsp_dmem_dma_egress(
                         }
                     }
                     Producer::External { source_id } => {
-                        require(active.is_none(), "external DMEM write inside RSP instruction")?;
+                        require(
+                            active.is_none(),
+                            "external DMEM write inside RSP instruction",
+                        )?;
                         require(context == 0, "external DMEM write has RSP context")?;
                         validate_source_id(&source_id)?;
                         writer_generation += 1;
@@ -300,7 +320,9 @@ pub fn inspect_rsp_dmem_dma_egress(
                             None => require(context == 0, "unknown DMEM write has stale context")?,
                         }
                         unknown_writes += 1;
-                        DmemByteOrigin::Unknown { cut_ordinal: ordinal }
+                        DmemByteOrigin::Unknown {
+                            cut_ordinal: ordinal,
+                        }
                     }
                 };
 
@@ -311,10 +333,7 @@ pub fn inspect_rsp_dmem_dma_egress(
                 }
             }
             Event::RspEnd {
-                context,
-                pc,
-                word,
-                ..
+                context, pc, word, ..
             } => {
                 let current = active.take().ok_or("RSP instruction end without begin")?;
                 require(
@@ -335,13 +354,14 @@ pub fn inspect_rsp_dmem_dma_egress(
                 bytes,
                 value,
             } => {
-                require(active.is_none(), "SP DMA effect inside RSP instruction context")?;
+                require(
+                    active.is_none(),
+                    "SP DMA effect inside RSP instruction context",
+                )?;
                 require(context == 0, "SP DMA effect has RSP instruction context")?;
                 require(bytes == 4, "SP DMA egress receipt is not a Word effect")?;
                 require(
-                    dma_pbus < 0x2000
-                        && dma_pbus & SP_BANK_BIT == 0
-                        && dma_pbus.is_multiple_of(8),
+                    dma_pbus < 0x2000 && dma_pbus & SP_BANK_BIT == 0 && dma_pbus.is_multiple_of(8),
                     "SP DMA egress does not identify an aligned DMEM fragment",
                 )?;
                 require(
@@ -355,7 +375,10 @@ pub fn inspect_rsp_dmem_dma_egress(
                     .0
                     .checked_sub(dma_dram.0)
                     .ok_or("SP DMA effect precedes current fragment")?;
-                require(matches!(delta, 0 | 4), "SP DMA effect is outside current 8-byte fragment")?;
+                require(
+                    matches!(delta, 0 | 4),
+                    "SP DMA effect is outside current 8-byte fragment",
+                )?;
                 let derived_source = (dma_pbus + delta) & 0xfff;
                 require(
                     source_offset == derived_source && source_offset < DMEM_BYTES,
@@ -633,11 +656,17 @@ mod tests {
         let report = inspect_rsp_dmem_dma_egress(&source, &digest).unwrap();
         assert!(matches!(
             report.receipts[0].bytes[0].origin,
-            DmemByteOrigin::Rsp { write_ordinal: 2, .. }
+            DmemByteOrigin::Rsp {
+                write_ordinal: 2,
+                ..
+            }
         ));
         assert!(matches!(
             report.receipts[0].bytes[1].origin,
-            DmemByteOrigin::Rsp { write_ordinal: 2, .. }
+            DmemByteOrigin::Rsp {
+                write_ordinal: 2,
+                ..
+            }
         ));
         assert!(matches!(
             report.receipts[0].bytes[2].origin,
@@ -692,10 +721,12 @@ mod tests {
         assert!(!report.receipts[0].payload_fully_replayed);
         assert!(!report.receipts[0].lineage_fully_known);
         assert_eq!(report.unknown_exported_bytes, 4);
-        assert!(report.receipts[0]
-            .bytes
-            .iter()
-            .all(|byte| byte.origin == DmemByteOrigin::Unobserved));
+        assert!(
+            report.receipts[0]
+                .bytes
+                .iter()
+                .all(|byte| byte.origin == DmemByteOrigin::Unobserved)
+        );
     }
 
     #[test]
