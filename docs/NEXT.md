@@ -255,3 +255,11 @@ The separate captured-definition consumer now retains live read identity through
 unrelated register reads/NOP and one XORI, with phase/ORI/failed-read cuts. Compose
 these qualified read/write identities with storage and executable consumers;
 do not infer general source census from a contiguous captured sequence (ADR-0100).
+
+
+Production now has a bounded general/TLB exception-root selector (ADR-0101).
+Whole-ROM root work must next authenticate the exception classification plus
+BEV/EXL/address-mode chronology, compose each selected root with handler-byte
+provenance and cache/mapping lifetime, and independently justify interrupt,
+watch, reset/NMI and cache-error roots. Numeric vector derivation is neither
+reachability nor a complete execution-root certificate.
