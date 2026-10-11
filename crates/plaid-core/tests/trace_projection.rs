@@ -166,7 +166,7 @@ fn wrong_source_event_kind_is_rejected() {
         .unwrap()
         .clone();
     map.word_store_observations.remove(&store);
-    store.evidence = [event_id(&trace, 5)].into();
+    store.evidence = [event_id(&trace, 2)].into();
     map.word_store_observations.insert(store);
 
     map.validate().unwrap();
@@ -268,7 +268,7 @@ fn entry_verification_context_is_source_bound() {
     let mut map = imported(&trace);
     let mut verification = map.entry_verifications.first().unwrap().clone();
     map.entry_verifications.remove(&verification);
-    verification.source_unit = event_id(&trace, 5);
+    verification.source_unit = event_id(&trace, 2);
     map.entry_verifications.insert(verification);
     map.validate().unwrap();
     assert!(verify_discovery_trace_projection(&map, &trace).is_err());
@@ -293,4 +293,36 @@ fn derived_facts_may_retain_primitive_provenance() {
     });
     map.validate().unwrap();
     verify_discovery_trace_projection(&map, &trace).unwrap();
+}
+
+#[test]
+fn dispatch_projection_requires_every_source_event_and_exact_semantics() {
+    let trace = trace();
+    let original = imported(&trace);
+    let mut deleted = original.clone();
+    deleted.target_dispatch_observations.clear();
+    deleted.validate().unwrap();
+    assert!(verify_discovery_trace_projection(&deleted, &trace).is_err());
+    let mut forged = original.clone();
+    let mut dispatch = forged.target_dispatch_observations.pop_first().unwrap();
+    dispatch.generation += 1;
+    forged.target_dispatch_observations.insert(dispatch);
+    forged.validate().unwrap();
+    assert!(verify_discovery_trace_projection(&forged, &trace).is_err());
+}
+
+#[test]
+fn dispatch_identity_cannot_fork_or_cross_primitive_roles() {
+    let trace = trace();
+    let original = imported(&trace);
+    let mut forked = original.clone();
+    let mut dispatch = forked.target_dispatch_observations.first().unwrap().clone();
+    dispatch.target = GuestAddr(0x8000_0004);
+    forked.target_dispatch_observations.insert(dispatch);
+    assert!(forked.validate().is_err());
+    let mut crossed = original;
+    let mut dispatch = crossed.target_dispatch_observations.pop_first().unwrap();
+    dispatch.evidence = [event_id(&trace, 6)].into();
+    crossed.target_dispatch_observations.insert(dispatch);
+    assert!(crossed.validate().is_err());
 }

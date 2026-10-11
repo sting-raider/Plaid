@@ -10,7 +10,7 @@ use crate::{
     merge::{import_trace, import_trace_with_rom},
     program::{
         CodeAddress, ObservedDma, ObservedEntryVerification, ObservedIndirect, ObservedWordStore,
-        PhysicalAddr, ProgramMap, RomOffset,
+        PhysicalAddr, ProgramMap, RomOffset, TargetDispatchKind,
     },
     rom::{CanonicalRom, sha256},
     trace::{DiscoveryTrace, TraceEvent},
@@ -19,6 +19,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum PrimitiveWitness {
+    TargetDispatch {
+        target: GuestAddr,
+        generation: u64,
+        kind: TargetDispatchKind,
+    },
     Dma {
         rom_offset: RomOffset,
         physical_destination: PhysicalAddr,
@@ -194,10 +199,32 @@ pub fn verify_discovery_trace_projection(
                     .checked_add(1)
                     .ok_or("trace generation overflow during source recheck")?;
             }
-            TraceEvent::UnitCompiled { .. }
-            | TraceEvent::EntryInstalled { .. }
-            | TraceEvent::TargetLookup { .. }
-            | TraceEvent::RuntimeLink { .. } => {}
+            TraceEvent::TargetLookup {
+                target,
+                delay_slot_entry,
+            } => {
+                expected.insert(
+                    id,
+                    PrimitiveWitness::TargetDispatch {
+                        target: *target,
+                        generation,
+                        kind: TargetDispatchKind::TargetLookup {
+                            delay_slot_entry: *delay_slot_entry,
+                        },
+                    },
+                );
+            }
+            TraceEvent::RuntimeLink { target } => {
+                expected.insert(
+                    id,
+                    PrimitiveWitness::TargetDispatch {
+                        target: *target,
+                        generation,
+                        kind: TargetDispatchKind::RuntimeLink,
+                    },
+                );
+            }
+            TraceEvent::UnitCompiled { .. } | TraceEvent::EntryInstalled { .. } => {}
         }
     }
 
@@ -218,6 +245,19 @@ pub fn verify_discovery_trace_projection(
     }
 
     let mut seen = BTreeMap::<String, usize>::new();
+    for dispatch in &map.target_dispatch_observations {
+        record_use(
+            &expected,
+            &mut seen,
+            &prefix,
+            dispatch.evidence.iter().cloned(),
+            PrimitiveWitness::TargetDispatch {
+                target: dispatch.target,
+                generation: dispatch.generation,
+                kind: dispatch.kind,
+            },
+        )?;
+    }
     for dma in &map.dma_observations {
         record_use(
             &expected,

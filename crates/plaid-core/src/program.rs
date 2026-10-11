@@ -205,6 +205,7 @@ enum PrimitiveTraceRole {
     WordStoreEvent,
     IndirectEvent,
     EntryVerificationEvent,
+    TargetDispatchEvent,
     SourceUnit,
 }
 
@@ -243,6 +244,20 @@ fn validate_trace_event_identities(map: &ProgramMap) -> Result<(), String> {
                 .is_some_and(|old| old != semantics)
             {
                 return Err("load copy event has conflicting observed DMA identity".into());
+            }
+        }
+    }
+
+    let mut dispatch_events = BTreeMap::<String, (GuestAddr, u64, TargetDispatchKind)>::new();
+    for dispatch in &map.target_dispatch_observations {
+        let semantics = (dispatch.target, dispatch.generation, dispatch.kind);
+        for id in &dispatch.evidence {
+            claim_role(id, PrimitiveTraceRole::TargetDispatchEvent)?;
+            if dispatch_events
+                .insert(id.clone(), semantics)
+                .is_some_and(|old| old != semantics)
+            {
+                return Err("target dispatch trace event has conflicting semantics".into());
             }
         }
     }
@@ -330,6 +345,24 @@ pub struct ObservedIndirect {
     /// This is compilation provenance, never a host pointer or a closure proof.
     #[serde(default)]
     pub source_unit: Option<String>,
+    pub evidence: EvidenceRefs,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetDispatchKind {
+    TargetLookup { delay_slot_entry: bool },
+    RuntimeLink,
+}
+
+/// Raw target-dispatch evidence without a source-site identity. A lookup or
+/// runtime link is not an executed indirect transfer and cannot borrow one.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ObservedTargetDispatch {
+    pub target: GuestAddr,
+    pub generation: u64,
+    pub kind: TargetDispatchKind,
     pub evidence: EvidenceRefs,
 }
 
@@ -546,6 +579,8 @@ pub struct ProgramMap {
     pub dma_observations: BTreeSet<ObservedDma>,
     #[serde(default)]
     pub indirect_observations: BTreeSet<ObservedIndirect>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub target_dispatch_observations: BTreeSet<ObservedTargetDispatch>,
     #[serde(default)]
     pub entry_verifications: BTreeSet<ObservedEntryVerification>,
     #[serde(default)]
@@ -575,6 +610,7 @@ impl ProgramMap {
             loads: BTreeSet::new(),
             dma_observations: BTreeSet::new(),
             indirect_observations: BTreeSet::new(),
+            target_dispatch_observations: BTreeSet::new(),
             entry_verifications: BTreeSet::new(),
             word_store_observations: BTreeSet::new(),
             fetch_captures: BTreeMap::new(),
@@ -738,6 +774,19 @@ impl ProgramMap {
                 return Err("missing indirect source-unit trace provenance".into());
             }
             refs(&o.evidence)?;
+        }
+        for dispatch in &self.target_dispatch_observations {
+            if !dispatch.target.0.is_multiple_of(4) {
+                return Err("unaligned target-dispatch observation".into());
+            }
+            refs(&dispatch.evidence)?;
+            if dispatch.evidence.iter().any(|id| {
+                self.evidence
+                    .get(id)
+                    .is_none_or(|e| e.kind != EvidenceKind::Trace)
+            }) {
+                return Err("target-dispatch observation lacks trace provenance".into());
+            }
         }
         for store in &self.word_store_observations {
             if !store.site.0.is_multiple_of(4)
