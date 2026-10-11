@@ -7,13 +7,12 @@
 //! Physical sink identity is supplied by observation and is never inferred from
 //! the guest virtual address, payload equality, or the decomposition below.
 
-use crate::{program::PhysicalAddr, GuestAddr};
+use crate::{GuestAddr, program::PhysicalAddr};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
 pub const ARES_REVISION: &str = "9408cb43d4948fc3ea6e152a307a34348df3fe04";
-pub const MODEL_SHA256: &str =
-    "768ff87e0f0690e427a5efad86af02dba7a0a4d56dabceff1adec66bdbfba03e";
+pub const MODEL_SHA256: &str = "768ff87e0f0690e427a5efad86af02dba7a0a4d56dabceff1adec66bdbfba03e";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -367,11 +366,11 @@ mod tests {
     fn same_value_subwrites_do_not_collapse_identity() {
         let mut r = receipt(Store64Kind::Sdl, StoreEndian::Big, 0x8000_2001, false);
         r.source_value = 0;
-        for (write, spec) in r.subwrites.iter_mut().zip(expected_subwrites(
-            r.kind,
-            r.endian,
-            r.address.0 & 7,
-        )) {
+        for (write, spec) in
+            r.subwrites
+                .iter_mut()
+                .zip(expected_subwrites(r.kind, r.endian, r.address.0 & 7))
+        {
             write.value = lane_value(0, spec);
         }
         r.validate().unwrap();
