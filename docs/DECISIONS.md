@@ -1618,3 +1618,31 @@ does not prove exception occurrence/classification chronology, BEV/EXL/mode
 writer completeness, BEV=1 refill/XTLB behavior, PIF lifetime/authenticity,
 cache/mapping executable lifetime, root census, whole-ROM closure or native
 completeness. No upstream implementation or runtime dependency enters production.
+
+
+## ADR-0104: PageMask geometry is separate from TLB selection and provenance
+
+Status: Accepted for bounded production geometry, 2026-10-11.
+
+After an entry has already been independently selected and authenticated, derive
+EntryLo half selection and in-page byte offset from the exact supported PageMask
+geometry rather than a permanent 4-KiB rule. The accepted v0 production scope is
+raw PageMask `0x0000` (4 KiB, selector `0x1000`), `0x6000` (16 KiB, selector
+`0x4000`) and `0x1e000` (64 KiB, selector `0x10000`). The retained 16-KiB
+`0x0009_1000` adversary has bit 12 set while bit 14 is clear; a fixed-bit-12
+reconstruction selects the planted odd-half decoy, while the validated geometry
+selects the even half. Equal payload cannot repair that causal mistake.
+
+Reject malformed PageMask values rather than importing one emulator's
+normalization as hardware truth, and keep larger page sizes source/model-only
+until equivalent executed evidence exists. A fresh current-main-derived run of
+unmodified pinned ares spike 049 reproduced the historical large-page evidence
+and result hashes. Its cache tags/misses are finite reference behavior, not a
+universal cache-index rule; the recorded ares/Gopher64 disagreement remains.
+
+This primitive neither chooses a TLB entry nor authenticates VPN2 matching,
+ASID/global state, EntryLo validity/dirty/CCA/PFN, PageMask or mapping-operation
+writer history, translation-context generations, cache residency, physical
+backing, privilege/region semantics, aliases, save/restore/reset chronology or
+executable lifetime. Those facts remain independent proof obligations. UNKNOWN
+stays UNKNOWN; geometry may refine a trusted mapping fact but cannot create one.

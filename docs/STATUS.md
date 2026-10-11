@@ -774,3 +774,18 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   origin. Exception causality/classification chronology, BEV=1 refill/XTLB source
   behavior, handler cache/mapping lifetime, remaining root classes, whole-ROM
   closure and native completeness remain OPEN.
+
+
+- Production now exposes a bounded `tlb_geometry` primitive for an already
+  independently selected TLB entry. Exact raw PageMask values for 4-KiB,
+  16-KiB and 64-KiB halves derive selector masks `0x1000`, `0x4000` and
+  `0x10000` plus the corresponding in-page offsets. Large pages therefore do
+  not use a permanent virtual-address bit 12. Malformed masks and larger
+  model/source-only page sizes fail closed. The fresh unmodified pinned-ares
+  spike-049 rerun reproduced evidence SHA-256
+  `4227e340a3000607b70cde96339a379737ea46167a7cf10573fe7aba093050fd`
+  and result SHA-256
+  `d884a8ce86b01192750afd9f7539e2a618f5a0dcb72c54f777134c9561fe8a35`.
+  Entry selection, ASID/global/valid/dirty/CCA/PFN identity, mapping/context
+  generations, cache/backing provenance, executable lifetime and whole-ROM/
+  native completeness remain OPEN (ADR-0104).

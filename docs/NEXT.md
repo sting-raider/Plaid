@@ -281,3 +281,12 @@ Reproduce BEV=1 refill/XTLB source behavior separately before extending the rule
 and independently discharge interrupt/watch/cache-error/reset/NMI roots. Repeated
 coalesced PIF observations, equal returned bits and matching mirrors stay OPEN
 without per-occurrence same-fetch backing identity.
+
+
+Production PageMask geometry is now bounded for exact 4-KiB/16-KiB/64-KiB
+encodings (ADR-0104). Compose it only after independently authenticating the
+selected mapping/EntryLo and its operation/context generation, then join the
+selected PFN with physical-backing and cache-residency history. Larger page sizes,
+malformed-mask hardware semantics, ASID/global/valid/dirty/CCA chronology,
+TLBWR/restore/reset and executable lifetime remain OPEN; geometry alone must not
+turn the retained spike-049 finite behavior into an executable-origin certificate.
