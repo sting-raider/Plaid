@@ -2032,3 +2032,40 @@ broader scalar-load and PR #37's DMEM-DMA consumers remain pending; no invented
 cross-clock bridge. Incoming scalar/vector operands, initial storage roots,
 mutation census, IMEM execution/lifetime and whole-ROM/native completeness remain
 uncertified. All corresponding flags stay false; no milestone or solver waiver.
+
+## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
+
+Status: Accepted for bounded source composition, 2026-10-12.
+
+Reconcile the prepared pointer D-cache candidate into the existing writeback
+engine rather than creating a second resident state machine. An explicit v1
+source adds normalized completed cached Word reads and backing Word mutations.
+Each read selects the exact direct-KSEG0 identity-RDRAM slot/line and returns its
+captured fill generation, latest revision and four byte origins. Successful
+full-line exports consume the same resident state. Equal payloads cannot borrow
+ancestry from another backing write, mutation or equal-index replacement.
+
+Captured backing words are separate diagnostic context. Uncached backing writes
+do not change residency, while resident-only stores do not change backing until
+an exact successful writeback. A later fill must agree with captured backing
+writes where known. Unknown initial backing writers stay absent. The old v0
+source/API/report serialization remain compatible; v1 has separate inspection
+and full-report rechecking. Unsupported aliases, missing residency, contradictory
+payloads, impossible indices and source/report forgeries reject.
+
+Reuse the retained actual five-case capture authenticated by its original causal
+replay receipt, exact pinned source inputs and canonical capture digest. All
+captured cached reads reproduce, including stale/current-backing disagreement,
+same-value backing generations, equal-value conflict/refill and resident-only
+mutation. Ten fresh Rust CLI forgeries and the original twelve independent
+forgeries reject. Three shared-state Rust regressions connect read ancestry to
+backing exports and retain the nine v0 writeback tests. Full required local gate
+passes without an emulator rebuild or Actions execution.
+
+This supersedes PR #5 and its recovered duplicate's standalone resident engine.
+No source instruction/register/dispatch definition proof is inferred from the
+normalized Word callback. Physical-immutability histories remain pending; a
+finite absence of observed writes cannot establish a complete mutation census.
+Table/target identity, cache/mapping/reset/restore lifetime, hardware semantics
+and whole-ROM/native closure remain OPEN. No solver or milestone promotion. No
+reference implementation was copied into production.
