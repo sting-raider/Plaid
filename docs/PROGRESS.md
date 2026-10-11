@@ -10,7 +10,7 @@ Legend:
 - 🟨 **Partial** — implemented or experimentally supported, but proof/coverage is incomplete.
 - ⬜ **Open** — not implemented or not yet demonstrated.
 
-Last progress-data update: **2026-10-09**.
+Last progress-data update: **2026-10-11**.
 
 ## Discovery & ProgramMap
 
@@ -22,7 +22,7 @@ Last progress-data update: **2026-10-09**.
 | Direct CFG recovery | ✅ verified |
 | Evidence merge & conflicts | ✅ verified |
 | Local indirect certificates | ✅ verified |
-| Cross-block indirect proofs | 🟨 partial |
+| Bounded cross-block indirect proofs | ✅ verified |
 | Jump/pointer-table recovery | 🟨 partial |
 | Known-library/signature evidence | ⬜ open |
 | Commercial-ROM map validation | ⬜ open |
@@ -39,7 +39,7 @@ Last progress-data update: **2026-10-09**.
 | CPU copy/transform lineage | 🟨 partial |
 | RSP writer/dataflow lineage | 🟨 partial |
 | Cache writeback/restore lineage | 🟨 partial |
-| Decompression/relocation lineage | ⬜ open |
+| Decompression/relocation lineage | 🟨 partial |
 | Complete mutation census | ⬜ open |
 
 ## Closed-World Proof
@@ -53,8 +53,8 @@ Last progress-data update: **2026-10-09**.
 | Execution-root completeness | 🟨 partial |
 | TLB/context/cache composition | 🟨 partial |
 | Pointer-table immutability proof | 🟨 partial |
-| Overlay/executable lifetimes | ⬜ open |
-| RSP executable-universe proof | ⬜ open |
+| Overlay/executable lifetimes | 🟨 partial |
+| RSP executable-universe proof | 🟨 partial |
 | First ROM reaches CLOSED | ⬜ open |
 
 ## Native AOT Compiler

@@ -3,7 +3,7 @@
 <desc id="desc">Verified, partial and open milestones for Plaid subsystems.</desc>
 <rect width="1100" height="570" rx="12" fill="#0d1117"/>
 <text x="24" y="34" fill="#f0f6fc" font-family="ui-sans-serif,system-ui,sans-serif" font-size="22" font-weight="700">Plaid progress map</text>
-<text x="24" y="57" fill="#8b949e" font-family="ui-sans-serif,system-ui,sans-serif" font-size="12">Auditable milestone counts · updated 2026-10-09</text>
+<text x="24" y="57" fill="#8b949e" font-family="ui-sans-serif,system-ui,sans-serif" font-size="12">Auditable milestone counts · updated 2026-10-11</text>
 <rect x="24" y="74" width="14" height="14" rx="3" fill="#2ea043"/>
 <text x="44" y="86" fill="#8b949e" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">verified / integrated</text>
 <rect x="212" y="74" width="14" height="14" rx="3" fill="#d29922"/>
@@ -11,32 +11,32 @@
 <rect x="366" y="74" width="14" height="14" rx="3" fill="#6e7681"/>
 <text x="386" y="86" fill="#8b949e" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">open</text>
 <text x="24" y="128" fill="#f0f6fc" font-family="ui-sans-serif,system-ui,sans-serif" font-size="14" font-weight="650">Discovery &amp; ProgramMap</text>
-<text x="24" y="148" fill="#8b949e" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">6 verified · 2 partial · 2 open</text>
+<text x="24" y="148" fill="#8b949e" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">7 verified · 1 partial · 2 open</text>
 <rect x="270" y="112" width="800" height="28" rx="5" fill="#161b22" stroke="#30363d"/>
-<rect x="270.00" y="112" width="480.00" height="28" fill="#2ea043"><title>Discovery &amp; ProgramMap: 6/10 verified</title></rect>
-<text x="510.00" y="131" fill="#f0f6fc" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="650">6/10</text>
-<rect x="750.00" y="112" width="160.00" height="28" fill="#d29922"><title>Discovery &amp; ProgramMap: 2/10 partial</title></rect>
-<text x="830.00" y="131" fill="#f0f6fc" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="650">2/10</text>
+<rect x="270.00" y="112" width="560.00" height="28" fill="#2ea043"><title>Discovery &amp; ProgramMap: 7/10 verified</title></rect>
+<text x="550.00" y="131" fill="#f0f6fc" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="650">7/10</text>
+<rect x="830.00" y="112" width="80.00" height="28" fill="#d29922"><title>Discovery &amp; ProgramMap: 1/10 partial</title></rect>
+<text x="870.00" y="131" fill="#f0f6fc" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="650">1/10</text>
 <rect x="910.00" y="112" width="160.00" height="28" fill="#6e7681"><title>Discovery &amp; ProgramMap: 2/10 open</title></rect>
 <text x="990.00" y="131" fill="#f0f6fc" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="650">2/10</text>
 <text x="24" y="198" fill="#f0f6fc" font-family="ui-sans-serif,system-ui,sans-serif" font-size="14" font-weight="650">Executable Provenance</text>
-<text x="24" y="218" fill="#8b949e" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">4 verified · 4 partial · 2 open</text>
+<text x="24" y="218" fill="#8b949e" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">4 verified · 5 partial · 1 open</text>
 <rect x="270" y="182" width="800" height="28" rx="5" fill="#161b22" stroke="#30363d"/>
 <rect x="270.00" y="182" width="320.00" height="28" fill="#2ea043"><title>Executable Provenance: 4/10 verified</title></rect>
 <text x="430.00" y="201" fill="#f0f6fc" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="650">4/10</text>
-<rect x="590.00" y="182" width="320.00" height="28" fill="#d29922"><title>Executable Provenance: 4/10 partial</title></rect>
-<text x="750.00" y="201" fill="#f0f6fc" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="650">4/10</text>
-<rect x="910.00" y="182" width="160.00" height="28" fill="#6e7681"><title>Executable Provenance: 2/10 open</title></rect>
-<text x="990.00" y="201" fill="#f0f6fc" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="650">2/10</text>
+<rect x="590.00" y="182" width="400.00" height="28" fill="#d29922"><title>Executable Provenance: 5/10 partial</title></rect>
+<text x="790.00" y="201" fill="#f0f6fc" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="650">5/10</text>
+<rect x="990.00" y="182" width="80.00" height="28" fill="#6e7681"><title>Executable Provenance: 1/10 open</title></rect>
+<text x="1030.00" y="201" fill="#f0f6fc" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="650">1/10</text>
 <text x="24" y="268" fill="#f0f6fc" font-family="ui-sans-serif,system-ui,sans-serif" font-size="14" font-weight="650">Closed-World Proof</text>
-<text x="24" y="288" fill="#8b949e" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">3 verified · 4 partial · 3 open</text>
+<text x="24" y="288" fill="#8b949e" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">3 verified · 6 partial · 1 open</text>
 <rect x="270" y="252" width="800" height="28" rx="5" fill="#161b22" stroke="#30363d"/>
 <rect x="270.00" y="252" width="240.00" height="28" fill="#2ea043"><title>Closed-World Proof: 3/10 verified</title></rect>
 <text x="390.00" y="271" fill="#f0f6fc" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="650">3/10</text>
-<rect x="510.00" y="252" width="320.00" height="28" fill="#d29922"><title>Closed-World Proof: 4/10 partial</title></rect>
-<text x="670.00" y="271" fill="#f0f6fc" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="650">4/10</text>
-<rect x="830.00" y="252" width="240.00" height="28" fill="#6e7681"><title>Closed-World Proof: 3/10 open</title></rect>
-<text x="950.00" y="271" fill="#f0f6fc" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="650">3/10</text>
+<rect x="510.00" y="252" width="480.00" height="28" fill="#d29922"><title>Closed-World Proof: 6/10 partial</title></rect>
+<text x="750.00" y="271" fill="#f0f6fc" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="650">6/10</text>
+<rect x="990.00" y="252" width="80.00" height="28" fill="#6e7681"><title>Closed-World Proof: 1/10 open</title></rect>
+<text x="1030.00" y="271" fill="#f0f6fc" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11" font-weight="650">1/10</text>
 <text x="24" y="338" fill="#f0f6fc" font-family="ui-sans-serif,system-ui,sans-serif" font-size="14" font-weight="650">Native AOT Compiler</text>
 <text x="24" y="358" fill="#8b949e" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">0 verified · 0 partial · 8 open</text>
 <rect x="270" y="322" width="800" height="28" rx="5" fill="#161b22" stroke="#30363d"/>
