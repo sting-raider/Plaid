@@ -37,6 +37,7 @@ pub mod cpu_mutation {
         )
     }
 }
+pub mod decompression;
 pub mod discovery;
 pub mod exception_pif;
 pub mod exception_root_generation;
