@@ -33,12 +33,7 @@ impl Builder {
         }
     }
 
-    fn instruction(
-        &mut self,
-        word: u32,
-        after: [u64; 32],
-        effect: Option<(bool, u32, u32)>,
-    ) {
+    fn instruction(&mut self, word: u32, after: [u64; 32], effect: Option<(bool, u32, u32)>) {
         let context = self.ordinal;
         self.instructions.push(json!({
             "begin": true,
@@ -98,10 +93,7 @@ impl Builder {
     }
 
     fn raw_store(&mut self, register: usize, offset: u16, value: u32) {
-        let word = 0xac00_0000
-            | (17u32 << 21)
-            | ((register as u32) << 16)
-            | u32::from(offset);
+        let word = 0xac00_0000 | (17u32 << 21) | ((register as u32) << 16) | u32::from(offset);
         self.instruction(
             word,
             self.regs,
@@ -181,10 +173,30 @@ fn forward_overlap_self_feeds_captured_generations_but_backward_copy_does_not() 
 fn equal_payload_histories_remain_causally_distinct() {
     let (_, _, forward) = inspect(&overlap(true, true));
     let (_, _, backward) = inspect(&overlap(false, true));
-    assert!(forward.word_lineage.iter().all(|e| e.witness.source_word == A));
-    assert!(backward.word_lineage.iter().all(|e| e.witness.source_word == A));
-    assert!(forward.word_lineage.iter().all(|e| e.witness.result_word == A));
-    assert!(backward.word_lineage.iter().all(|e| e.witness.result_word == A));
+    assert!(
+        forward
+            .word_lineage
+            .iter()
+            .all(|e| e.witness.source_word == A)
+    );
+    assert!(
+        backward
+            .word_lineage
+            .iter()
+            .all(|e| e.witness.source_word == A)
+    );
+    assert!(
+        forward
+            .word_lineage
+            .iter()
+            .all(|e| e.witness.result_word == A)
+    );
+    assert!(
+        backward
+            .word_lineage
+            .iter()
+            .all(|e| e.witness.result_word == A)
+    );
     assert_eq!(source_generations(&forward), vec![None, Some(1), Some(2)]);
     assert_eq!(source_generations(&backward), vec![None, None, None]);
 }
@@ -202,7 +214,10 @@ fn same_value_noncopy_store_mints_a_generation_consumed_by_later_load() {
     let edge = &report.word_lineage[0];
     let source = edge.captured_source_generation.unwrap();
     assert_eq!((source.phase, source.generation), (1, 1));
-    assert_eq!(source.write_ordinal, report.captured_word_writes[0].identity.write_ordinal);
+    assert_eq!(
+        source.write_ordinal,
+        report.captured_word_writes[0].identity.write_ordinal
+    );
     assert_eq!(edge.destination_generation.generation, 2);
 }
 
