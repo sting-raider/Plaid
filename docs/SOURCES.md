@@ -305,3 +305,11 @@ blob checks. Gopher cache and systemtest PageMask comparisons remain source-only
 no GPL implementation is copied or linked. Generated core ISC / SLJIT BSD builds
 stay ignored. Direct staging and selected cache facts are not guest writer
 provenance, complete lifetimes or hardware truth.
+
+`spikes/050-ares-pi-cache-visibility/` reconciles the original ISC PI/cache driver
+with shared optional PI/scalar/burst/fill/fetch observers. Exact source inspection
+covers PI MMIO/synchronous copy/status, queue rejection/dispatch and cache backing
+routing. Unmodified/disabled/enabled selected checkpoints agree. Core ISC /
+SLJIT BSD builds/notices remain ignored; no branch workflow, reference
+implementation, ROM or firmware enters production. Finite labels are not queue
+identity, general producer ancestry or hardware timing truth.

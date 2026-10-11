@@ -209,3 +209,9 @@ historical translation and mapping/context operations to measured fill/writer
 receipts before production promotion; a miss flag cannot authenticate new
 resident or backing generations. Preserve temporary-unreachability controls and
 the unresolved ares/Gopher index-source disagreement (ADR-0093).
+
+PI copy/cache visibility now retains complete finite source/sink/fill/fetch
+regressions under spike 050. Compose actual queue-container lifecycle identities
+only for completion claims; do not require completion to retain successful byte
+writes or use completion to refresh cached code. Extend general writer/census/
+lifetime evidence before production origin promotion (ADR-0094).

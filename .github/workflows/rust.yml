@@ -18,6 +18,7 @@ on:
       - "spikes/047-ares-rsp-cpu-imem-compose/**"
       - "spikes/048-ares-xori-cache-visibility/**"
       - "spikes/049-ares-pagemask-cache-remap/**"
+      - "spikes/050-ares-pi-cache-visibility/**"
       - ".github/workflows/rust.yml"
   pull_request:
     paths:
@@ -35,6 +36,7 @@ on:
       - "spikes/047-ares-rsp-cpu-imem-compose/**"
       - "spikes/048-ares-xori-cache-visibility/**"
       - "spikes/049-ares-pagemask-cache-remap/**"
+      - "spikes/050-ares-pi-cache-visibility/**"
       - ".github/workflows/rust.yml"
   workflow_dispatch:
 
@@ -87,5 +89,7 @@ jobs:
         run: python spikes/048-ares-xori-cache-visibility/test_verify.py
       - name: Synthetic PageMask cache remap contracts
         run: python spikes/049-ares-pagemask-cache-remap/test_verify.py
+      - name: Synthetic PI cache visibility contracts
+        run: python spikes/050-ares-pi-cache-visibility/test_verify.py
       - name: Independent fetch-summary assignment oracle
         run: python experiments/fetch-summary-realizability/model.py

@@ -1407,3 +1407,24 @@ mapping/fill generations. Source Gopher indexing disagreement stays unresolved;
 no universal ares cache-index rule is adopted. Share only the original ISC
 fixture/builder, keep upstream builds/notices ignored, and retain open census,
 producer, cache/mapping/lifetime and native obligations.
+
+## ADR-0094: PI completion cannot stand in for byte effects or cache visibility
+
+Status: Accepted for controlled research verification, 2026-10-11.
+
+Retain the actual two-transfer PI/cache fixture under strict complete finite
+record expectations. A queued completion leaves stale cached instructions
+executable; a synchronous copy can occur with a full queue and become executable
+only after a later witnessed refill, despite absent completion. Preserve all
+source halfwords, destination bytes, full backing/fill lines and fetch bindings.
+The branch runner accepted source-tail, sink-tail and fetch-address forgeries and
+is rejected as written. Baseline/disabled/enabled reported checkpoints precede
+acceptance of this finite behavior regression.
+
+Current Rust PI history already separates returned copies from observed status;
+no lifecycle core patch follows. The fixture's last-pending label is not a queue
+insertion token, and the reference model's extra same-value/restore cases are
+abstract evidence. Keep those boundaries separate from a general source-bound
+census, producer certificate or executable lifetime. Share original ISC fixture
+and existing observer/builder code, retain ignored upstream notices, and import
+no upstream implementation or branch-only CI/build scaffold into production.
