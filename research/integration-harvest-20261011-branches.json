@@ -472,8 +472,10 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091116524",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096716331"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "reviewed_model_only",
+      "integration_commit": null,
+      "review_note": "research/decompression-primary-review.md",
+      "review_base": "8bd0b70"
     },
     {
       "branch": "research/discovery-trace-source-recheck-gpt56sol",
