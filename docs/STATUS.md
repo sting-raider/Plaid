@@ -870,3 +870,11 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   exact-reference facts cover timer producer/acknowledgement and boundary gates;
   scheduling disagreement, primitive authentication/census, timer/root chronology,
   handler lifetime and native completeness remain OPEN (ADR-0112).
+
+- Production evidence_manifest now preserves external expectations for complete
+  canonical discovery-trace sources and rechecks their existing typed ProgramMap
+  primitive projections. Nine regressions cover session/fact deletion, equal-
+  count substitutions, deterministic merge, conflicts, repeated JSON session
+  keys and unexpected map sessions. This explicit API needs independently
+  preserved expectations; it is not automatic solver admission or a sensor/
+  whole-ROM/native completeness certificate (ADR-0113).

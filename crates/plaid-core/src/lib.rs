@@ -41,6 +41,7 @@ pub mod cpu_mutation {
     }
 }
 pub mod discovery;
+pub mod evidence_manifest;
 pub mod exception_pif;
 pub mod exception_root_generation;
 pub mod exception_roots;
