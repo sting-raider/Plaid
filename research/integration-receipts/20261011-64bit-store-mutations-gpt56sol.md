@@ -6,7 +6,7 @@ Worker: `gpt56sol-direct-64bit-store-20261011`
 
 Base main inspected: `6b53a15c4c6eaadc8e0d002dd6818c600ebf2a7d`
 
-Current reconciled main ancestor at this receipt revision: `9154b30b12026c8c122f654d7fe90f0f67968dce`
+Current reconciled main ancestor at this receipt revision: `31c10020665e8386656fd943acab111b5c7e1671`
 
 Integration branch: `direct-integration/64bit-store-mutations-gpt56sol`
 
@@ -68,9 +68,13 @@ explicitly reconciled, rather than mechanically merging stale research state:
   run `38153571031` / job `114511833977`;
 - BEV1 exact PIF-root backing-provenance main
   `9154b30b12026c8c122f654d7fe90f0f67968dce` via feature merge
-  `5663731c0937492940549f9aad0c390897881704`. This receipt revision is part of
-  that BEV1-reconciled candidate; the resulting receipt-bearing head must pass the
-  same complete canonical gate before any MAIN-WRITE lease or merge.
+  `5663731c0937492940549f9aad0c390897881704` and receipt-bearing follow-up
+  `b8ceb14488739b2fe7bcf1e37f74a6e8374c8495`;
+- source-bound RSP IMEM reverse-SP-DMA egress main
+  `31c10020665e8386656fd943acab111b5c7e1671` via feature merge
+  `f7cbaf9a1f6fe1f4bed7e271505c49367d42e187`. The receipt-bearing head produced by
+  this update must pass the complete canonical gate before any MAIN-WRITE lease or
+  merge.
 
 The validated reconciled code has passed all of:
 
@@ -86,7 +90,8 @@ The validated reconciled code has passed all of:
 
 At each reconciliation, the live comparison remained bounded to this integration's
 three paths: one `lib.rs` export, the new `store_mutation.rs`, and this receipt. The
-landed exception, PIF-root, TLBWI and COP1 production state is preserved.
+landed exception, PIF-root, TLBWI, COP1 and RSP IMEM-egress production state is
+preserved.
 
 One pre-green regression expectation was corrected during validation: the first
 little-endian `SDR` offset-1 Word subwrite for source `0x1122334455667788` is
@@ -154,7 +159,8 @@ covered mutation classes they did not observe.
 - `crates/plaid-core/src/store_mutation.rs` — bounded production receipt types,
   source-contract validation and adversarial tests;
 - `crates/plaid-core/src/lib.rs` — exports the production module while preserving
-  the landed exception-root, PIF-root, TLB-history and COP1-mutation APIs;
+  the landed exception-root, PIF-root, TLB-history, COP1-mutation and RSP
+  IMEM-egress APIs;
 - this receipt.
 
 No `progress.json` milestone changed. `docs/STATUS.md`, `docs/NEXT.md` and
@@ -169,8 +175,8 @@ certificate, backing-provenance proof, or executable-lifetime proof. In particul
 it does not close:
 
 - `SB`, `SH`, `SWL`, `SWR`, `SCD`, RSP or other remaining CPU/out-of-band mutation
-  classes; the separate landed COP1 SWC1/SDC1 normalizer is complementary and does
-  not make the global census complete;
+  classes; the separate landed COP1 SWC1/SDC1 normalizer and RSP reverse-DMA egress
+  lineage are complementary and do not make the global census complete;
 - completeness of the sensor that would produce these receipts;
 - source-byte ancestry of the stored payload;
 - arbitrary TLB histories, aliases, PageMask/ASID/context generations or legal
