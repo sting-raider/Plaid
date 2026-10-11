@@ -38,6 +38,7 @@ pub mod cpu_mutation {
     }
 }
 pub mod discovery;
+pub mod exception_pif;
 pub mod exception_root_history;
 pub mod exception_roots;
 pub mod fetch;
