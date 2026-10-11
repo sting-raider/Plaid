@@ -271,3 +271,13 @@ reset chronology before using them in executable-lifetime or translation proofs.
 A same-content legal TLBWI remains a distinct operation; snapshot inequality and
 equal payloads cannot recover occurrence or selected-slot identity. Complete
 sensor coverage and a full TLB mutation census remain OPEN.
+
+
+The bounded BEV=1 general-root PIF composition now authenticates one exact
+singleton observed handler fetch from complete PIF sources (ADR-0103). Next root
+work must bind that fetch to authenticated exception occurrence/classification and
+BEV/EXL/address-mode chronology, then compose cache/mapping executable lifetime.
+Reproduce BEV=1 refill/XTLB source behavior separately before extending the rule,
+and independently discharge interrupt/watch/cache-error/reset/NMI roots. Repeated
+coalesced PIF observations, equal returned bits and matching mirrors stay OPEN
+without per-occurrence same-fetch backing identity.
