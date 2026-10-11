@@ -2220,8 +2220,10 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091045419",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091158618"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "source_contract_reconciled",
+      "integration_commit": "b1d9d52",
+      "review_note": "research/xori-cache-primary.md",
+      "review_base": "795362f"
     }
   ],
   "canonical_harvest_head": "f5f5b00",
@@ -2239,5 +2241,5 @@
       "integration_commit": "3ff5d3e"
     }
   ],
-  "canonical_source_reconciliation_head": "71ccb10"
+  "canonical_source_reconciliation_head": "b1d9d52"
 }
