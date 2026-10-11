@@ -7,6 +7,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 pub const FORMAT: &str = "plaid-cpu-copy-history-v0";
+pub const DEFINITION_FORMAT: &str = "plaid-cpu-word-definitions-v0";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -125,6 +126,23 @@ pub fn inspect_cpu_copy_history(
     source: &[u8],
     expected_sha256: &str,
 ) -> Result<CpuCopyReport, String> {
+    inspect(source, expected_sha256, false)
+}
+
+/// Track captured register definitions across unrelated validated instructions.
+/// This separate protocol does not relax capture/lifetime completeness gates.
+pub fn inspect_cpu_definition_history(
+    source: &[u8],
+    expected_sha256: &str,
+) -> Result<CpuCopyReport, String> {
+    inspect(source, expected_sha256, true)
+}
+
+fn inspect(
+    source: &[u8],
+    expected_sha256: &str,
+    definitions: bool,
+) -> Result<CpuCopyReport, String> {
     let digest = sha256(source);
     require(
         digest == expected_sha256,
@@ -132,7 +150,12 @@ pub fn inspect_cpu_copy_history(
     )?;
     let history: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
     require(
-        history.format == FORMAT,
+        history.format
+            == if definitions {
+                DEFINITION_FORMAT
+            } else {
+                FORMAT
+            },
         "unsupported CPU copy history format",
     )?;
     let mut events: Vec<_> = history
@@ -260,8 +283,41 @@ pub fn inspect_cpu_copy_history(
         require(end.gpr == expected, "CPU instruction result mismatch")?;
     }
     let mut witnesses = Vec::new();
+    let mut registers: [Option<(usize, Option<usize>)>; 32] = [None; 32];
     for (index, store) in contexts.iter().enumerate() {
         let (op, _, sr, _) = decode(store.begin.word);
+        if definitions {
+            if index == 0 || contexts[index - 1].begin.phase != store.begin.phase {
+                registers = [None; 32];
+            }
+            let (_, rs, rt, _) = decode(store.begin.word);
+            match op {
+                0x23 | 0x27 if rt != 0 => {
+                    registers[rt] = store.effect.map(|_| (index, None));
+                }
+                0x0e if rt != 0 => {
+                    registers[rt] = if rs == rt {
+                        registers[rs].and_then(|(load, transform)| {
+                            transform.is_none().then_some((load, Some(index)))
+                        })
+                    } else {
+                        None
+                    };
+                }
+                0x0d if rt != 0 => registers[rt] = None,
+                0x2b => {
+                    if let Some((load, transform)) = registers[rt] {
+                        witnesses.push(word_witness(
+                            &contexts[load],
+                            transform.map(|i| &contexts[i]),
+                            store,
+                        )?);
+                    }
+                }
+                _ => {}
+            }
+            continue;
+        }
         if op != 0x2b || index == 0 {
             continue;
         }
@@ -280,42 +336,13 @@ pub fn inspect_cpu_copy_history(
         {
             continue;
         }
-        let Some(read) = load.effect else {
+        if load.effect.is_none() {
             continue;
-        };
-        let write = store.effect.expect("validated store effect");
-        let mask = transform.map(|t| t.begin.word as u16);
-        require(
-            write.value == read.value ^ u32::from(mask.unwrap_or(0)),
-            "CPU def-use payload mismatch",
-        )?;
-        witnesses.push(WordCopyWitness {
-            phase: store.begin.phase,
-            load_context: load.begin.context,
-            read_ordinal: read.ordinal,
-            transform_context: transform.map(|t| t.begin.context),
-            store_context: store.begin.context,
-            write_ordinal: write.ordinal,
-            source: read.address,
-            destination: write.address,
-            source_word: read.value,
-            result_word: write.value,
-            xor_imm: mask,
-            load_kind: if load_op == 0x23 {
-                LoadKind::Lw
-            } else {
-                LoadKind::Lwu
-            },
-            byte_expr: std::array::from_fn(|lane| ByteExpression {
-                // Both aligned Word spans were validated inside the 8-MiB bank.
-                source: PhysicalAddr(read.address.0 + lane as u32),
-                destination: PhysicalAddr(write.address.0 + lane as u32),
-                xor: (u32::from(mask.unwrap_or(0)) >> (8 * (3 - lane))) as u8,
-            }),
-        });
+        }
+        witnesses.push(word_witness(load, transform, store)?);
     }
     Ok(CpuCopyReport {
-        format: FORMAT.into(),
+        format: history.format,
         source_sha256: digest,
         instruction_contexts: contexts.len(),
         scalar_effects: history.scalar_events.len(),
@@ -327,6 +354,45 @@ pub fn inspect_cpu_copy_history(
     })
 }
 
+fn word_witness(
+    load: &Context<'_>,
+    transform: Option<&Context<'_>>,
+    store: &Context<'_>,
+) -> Result<WordCopyWitness, String> {
+    let load_op = decode(load.begin.word).0;
+    let read = load.effect.expect("validated load effect");
+    let write = store.effect.expect("validated store effect");
+    let mask = transform.map(|t| t.begin.word as u16);
+    require(
+        write.value == read.value ^ u32::from(mask.unwrap_or(0)),
+        "CPU def-use payload mismatch",
+    )?;
+    Ok(WordCopyWitness {
+        phase: store.begin.phase,
+        load_context: load.begin.context,
+        read_ordinal: read.ordinal,
+        transform_context: transform.map(|t| t.begin.context),
+        store_context: store.begin.context,
+        write_ordinal: write.ordinal,
+        source: read.address,
+        destination: write.address,
+        source_word: read.value,
+        result_word: write.value,
+        xor_imm: mask,
+        load_kind: if load_op == 0x23 {
+            LoadKind::Lw
+        } else {
+            LoadKind::Lwu
+        },
+        byte_expr: std::array::from_fn(|lane| ByteExpression {
+            // Both aligned Word spans were validated inside the 8-MiB bank.
+            source: PhysicalAddr(read.address.0 + lane as u32),
+            destination: PhysicalAddr(write.address.0 + lane as u32),
+            xor: (u32::from(mask.unwrap_or(0)) >> (8 * (3 - lane))) as u8,
+        }),
+    })
+}
+
 pub fn verify_cpu_copy_report(
     report: &CpuCopyReport,
     source: &[u8],
@@ -335,5 +401,16 @@ pub fn verify_cpu_copy_report(
     require(
         *report == inspect_cpu_copy_history(source, expected_sha256)?,
         "CPU copy report differs from complete source replay",
+    )
+}
+
+pub fn verify_cpu_definition_report(
+    report: &CpuCopyReport,
+    source: &[u8],
+    expected_sha256: &str,
+) -> Result<(), String> {
+    require(
+        *report == inspect_cpu_definition_history(source, expected_sha256)?,
+        "CPU definition report differs from complete source replay",
     )
 }
