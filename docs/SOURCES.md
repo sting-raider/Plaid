@@ -271,3 +271,9 @@ scalar observers with guarded pinned ares decoder boundaries. Core ISC / SLJIT
 BSD notices remain in generated ignored builds. Stronger reported-state checks
 and causal adversaries do not imply a complete execution census or hardware
 truth, and no upstream implementation is vendored or linked into native mode.
+
+`spikes/045-ares-cpu-xori-transform/` shares the original CPU instruction/scalar
+observers and guarded exact-ares shadows. Gopher64 XORI agreement is source-only
+corroboration; no GPL implementation is copied or linked. Generated ares core
+ISC / SLJIT BSD notices remain ignored. This controlled transformation contract
+does not establish hardware truth or a complete native producer model.

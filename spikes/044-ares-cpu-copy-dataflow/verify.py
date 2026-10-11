@@ -28,7 +28,7 @@ def uncached_address(register, immediate):
     return physical
 
 
-def replay(data):
+def replay(data, *, allow_xori=False):
     instructions, scalars = data['instruction_events'], data['scalar_events']
     assert type(instructions) is list and type(scalars) is list
     merged = []
@@ -121,6 +121,9 @@ def replay(data):
             if opcode == 0x0d:  # ORI
                 if register:
                     expected[register] = begin['gpr'][base] | (begin['word'] & 0xffff)
+            elif opcode == 0x0e and allow_xori:
+                if register:
+                    expected[register] = begin['gpr'][base] ^ (begin['word'] & 0xffff)
             else:
                 assert begin['word'] == 0  # NOP
             assert end['gpr'] == expected
