@@ -119,11 +119,7 @@ struct SavedSnapshot {
 }
 
 fn require(ok: bool, message: &str) -> Result<(), String> {
-    if ok {
-        Ok(())
-    } else {
-        Err(message.into())
-    }
+    if ok { Ok(()) } else { Err(message.into()) }
 }
 
 fn valid_digest(value: &str) -> bool {
@@ -181,12 +177,12 @@ pub fn inspect_restore_history(
     expected_sha256: &str,
 ) -> Result<RestoreEpochReport, String> {
     let digest = sha256(source);
-    require(
-        digest == expected_sha256,
-        "restore source receipt mismatch",
-    )?;
+    require(digest == expected_sha256, "restore source receipt mismatch")?;
     let history: History = serde_json::from_slice(source).map_err(|error| error.to_string())?;
-    require(history.format == FORMAT, "unsupported restore history format")?;
+    require(
+        history.format == FORMAT,
+        "unsupported restore history format",
+    )?;
 
     for (index, record) in history.records.iter().enumerate() {
         require(
@@ -261,10 +257,7 @@ pub fn inspect_restore_history(
                             && *component_epoch == *restore_epoch,
                         "restore component boundary identity mismatch",
                     )?;
-                    require(
-                        seen.insert(*component),
-                        "duplicate restore component root",
-                    )?;
+                    require(seen.insert(*component), "duplicate restore component root")?;
                     require(
                         valid_digest(state_sha256),
                         "invalid restored component digest",
@@ -362,7 +355,7 @@ pub fn compose_restored_execution_context(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     const TLB: &str = "1111111111111111111111111111111111111111111111111111111111111111";
     const CTX: &str = "2222222222222222222222222222222222222222222222222222222222222222";
@@ -380,7 +373,14 @@ mod tests {
         })
     }
 
-    fn load_records(start: u64, id: &str, epoch: u64, tlb: &str, ctx: &str, cache: &str) -> Vec<Value> {
+    fn load_records(
+        start: u64,
+        id: &str,
+        epoch: u64,
+        tlb: &str,
+        ctx: &str,
+        cache: &str,
+    ) -> Vec<Value> {
         vec![
             json!({"record":"snapshot_load","ordinal":start,"snapshot_id":id,"restore_epoch":epoch}),
             json!({"record":"component_restore","ordinal":start+1,"load_ordinal":start,"snapshot_id":id,"restore_epoch":epoch,"component":"installed_tlb","state_sha256":tlb}),
@@ -406,7 +406,10 @@ mod tests {
         records.extend(load_records(6, "S0", 2, TLB, CTX, CACHE));
         let report = inspect(records).unwrap();
         assert_eq!(report.loads.len(), 2);
-        assert_eq!(report.loads[0].roots[2].state_sha256, report.loads[1].roots[2].state_sha256);
+        assert_eq!(
+            report.loads[0].roots[2].state_sha256,
+            report.loads[1].roots[2].state_sha256
+        );
         assert_ne!(report.loads[0].roots[2], report.loads[1].roots[2]);
         assert_eq!(report.loads[0].restore_epoch, 1);
         assert_eq!(report.loads[1].restore_epoch, 2);
@@ -434,19 +437,24 @@ mod tests {
         let report = inspect(records).unwrap();
         let (old_tlb, _, _) = roots(&report.loads[0]);
         let (_, new_context, new_cache) = roots(&report.loads[1]);
-        let error = compose_restored_execution_context(old_tlb, new_context, new_cache).unwrap_err();
+        let error =
+            compose_restored_execution_context(old_tlb, new_context, new_cache).unwrap_err();
         assert!(error.contains("mixes restore epochs"));
     }
 
     #[test]
     fn equal_values_do_not_allow_cross_snapshot_composition() {
-        let mut records = vec![save(1, "S0", TLB, CTX, CACHE), save(2, "S1", TLB, CTX, CACHE)];
+        let mut records = vec![
+            save(1, "S0", TLB, CTX, CACHE),
+            save(2, "S1", TLB, CTX, CACHE),
+        ];
         records.extend(load_records(3, "S0", 1, TLB, CTX, CACHE));
         records.extend(load_records(7, "S1", 2, TLB, CTX, CACHE));
         let report = inspect(records).unwrap();
         let (first_tlb, _, _) = roots(&report.loads[0]);
         let (_, second_context, second_cache) = roots(&report.loads[1]);
-        let error = compose_restored_execution_context(first_tlb, second_context, second_cache).unwrap_err();
+        let error = compose_restored_execution_context(first_tlb, second_context, second_cache)
+            .unwrap_err();
         assert!(error.contains("mixes snapshot identities"));
     }
 
@@ -456,22 +464,32 @@ mod tests {
         let mut load = load_records(2, "S0", 1, TLB, CTX, CACHE);
         load.pop();
         missing.extend(load);
-        assert!(inspect(missing).unwrap_err().contains("missing component root"));
+        assert!(
+            inspect(missing)
+                .unwrap_err()
+                .contains("missing component root")
+        );
 
         let mut duplicate = vec![save(1, "S0", TLB, CTX, CACHE)];
         let mut load = load_records(2, "S0", 1, TLB, CTX, CACHE);
         load[3]["component"] = json!("translation_context");
         duplicate.extend(load);
-        assert!(inspect(duplicate).unwrap_err().contains("duplicate restore component"));
+        assert!(
+            inspect(duplicate)
+                .unwrap_err()
+                .contains("duplicate restore component")
+        );
     }
 
     #[test]
     fn restored_digest_must_match_saved_snapshot() {
         let mut records = vec![save(1, "S0", TLB, CTX, CACHE)];
         records.extend(load_records(2, "S0", 1, TLB, CTX, OTHER));
-        assert!(inspect(records)
-            .unwrap_err()
-            .contains("differs from saved snapshot"));
+        assert!(
+            inspect(records)
+                .unwrap_err()
+                .contains("differs from saved snapshot")
+        );
     }
 
     #[test]
@@ -482,7 +500,11 @@ mod tests {
         let mut records = vec![save(1, "S0", TLB, CTX, CACHE)];
         records.extend(load_records(2, "S0", 1, TLB, CTX, CACHE));
         records.extend(load_records(6, "S0", 1, TLB, CTX, CACHE));
-        assert!(inspect(records).unwrap_err().contains("reused or reordered"));
+        assert!(
+            inspect(records)
+                .unwrap_err()
+                .contains("reused or reordered")
+        );
     }
 
     #[test]
@@ -491,37 +513,49 @@ mod tests {
         let mut load = load_records(2, "S0", 1, TLB, CTX, CACHE);
         load[1]["load_ordinal"] = json!(99u64);
         records.extend(load);
-        assert!(inspect(records)
-            .unwrap_err()
-            .contains("boundary identity mismatch"));
+        assert!(
+            inspect(records)
+                .unwrap_err()
+                .contains("boundary identity mismatch")
+        );
     }
 
     #[test]
     fn source_receipt_and_order_are_bound() {
         let records = vec![save(1, "S0", TLB, CTX, CACHE)];
         let bytes = serde_json::to_vec(&json!({"format":FORMAT,"records":records})).unwrap();
-        assert!(inspect_restore_history(&bytes, &"0".repeat(64))
-            .unwrap_err()
-            .contains("source receipt mismatch"));
+        assert!(
+            inspect_restore_history(&bytes, &"0".repeat(64))
+                .unwrap_err()
+                .contains("source receipt mismatch")
+        );
 
         let records = vec![save(2, "S0", TLB, CTX, CACHE)];
-        assert!(inspect(records)
-            .unwrap_err()
-            .contains("noncontiguous restore source ordinals"));
+        assert!(
+            inspect(records)
+                .unwrap_err()
+                .contains("noncontiguous restore source ordinals")
+        );
     }
 
     #[test]
     fn invalid_snapshot_identity_and_orphan_component_reject() {
         let records = vec![save(1, "bad id", TLB, CTX, CACHE)];
-        assert!(inspect(records)
-            .unwrap_err()
-            .contains("invalid restore snapshot identity"));
+        assert!(
+            inspect(records)
+                .unwrap_err()
+                .contains("invalid restore snapshot identity")
+        );
 
         let records = vec![json!({
             "record":"component_restore","ordinal":1,"load_ordinal":1,
             "snapshot_id":"S0","restore_epoch":1,"component":"installed_tlb",
             "state_sha256":TLB
         })];
-        assert!(inspect(records).unwrap_err().contains("orphan restore component"));
+        assert!(
+            inspect(records)
+                .unwrap_err()
+                .contains("orphan restore component")
+        );
     }
 }
