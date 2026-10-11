@@ -4,6 +4,7 @@
 
 pub mod cpu_copy;
 pub mod discovery;
+pub mod exception_root_generation;
 pub mod exception_roots;
 pub mod fetch;
 pub mod history;
