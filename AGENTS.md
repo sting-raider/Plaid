@@ -42,28 +42,26 @@ The invariant is simple: **nothing may land on `main` unless the final validated
 
 Issue #4 claims coordinate semantic work ownership and prevent duplication. They do not reserve `main`.
 
-## Capability preflight for direct integration
+## Fresh-worker bootstrap
 
-A worker must prove it can perform the required local validation **before it claims a direct-integration lane or begins implementation**.
+A new worker chat should assume its execution environment may start empty. Missing tools at startup are **not** a reason to skip direct integration.
 
-At minimum verify:
+Before substantive work, bootstrap the environment as needed:
 
-```bash
-git rev-parse --show-toplevel
-git status --short
-cargo --version
-rustc --version
-rustfmt --version
-python --version
-```
+1. obtain a writable local Plaid checkout, cloning the repository if necessary;
+2. fetch the latest `main`;
+3. install the Rust toolchain required by `rust-toolchain.toml` if `cargo`, `rustc`, or `rustfmt` are absent;
+4. ensure Python and the local build dependencies needed by the selected cluster are available;
+5. fetch pinned references with the repository tooling, or fetch only the exact pinned reference needed by the cluster;
+6. verify the resulting checkout/toolchain works, then continue with normal claim, implementation, validation, and CAS.
 
-The checkout must be writable and must contain the current Plaid workspace. If the intended cluster depends on an exact pinned reference, the required revision must also be locally available or locally fetchable without relying on GitHub Actions.
+Workers should use the environment's normal package manager/toolchain bootstrap facilities and may download required open-source build dependencies. Do not use GitHub Actions as a substitute for setting up the local environment.
 
-If the worker lacks the basic local checkout/toolchain needed for the mandatory gates, it must **not** spend the session preparing a direct-integration candidate. It should return a short `CAPABILITY-SKIP` result and leave the lane unclaimed so an execution-capable worker can take it.
+A worker should only report an environment setup failure after making reasonable bootstrap attempts and establishing that the runtime genuinely prevents the required setup, such as having no usable shell/package installation path or no network/cached source path for a required dependency.
 
-If a missing task-specific capability is discovered only after useful candidate work already exists, preserve the work as a `VALIDATION-HANDOFF` rather than calling the integration semantically `BLOCKED`. See `ORCHESTRATION.md`.
+Historical `BLOCKED` results whose only blocker was an initially missing checkout, Rust toolchain, or pinned reference are **recoverable prepared candidates**. After bootstrapping, prefer validating and landing those useful candidates before opening duplicate work.
 
-`BLOCKED` is for a real technical/integration blocker, not simply "this chat has no cargo".
+If a task-specific environment failure appears only after useful work has been prepared, preserve the candidate as a `VALIDATION-HANDOFF` rather than discarding it. See `ORCHESTRATION.md`.
 
 ## Agent workflow
 
@@ -73,8 +71,8 @@ Read and maintain `docs/STATUS.md`, `docs/NEXT.md`, `docs/DECISIONS.md` and rele
 
 For each task:
 
-1. Read `README.md`, `docs/PLAN.md`, `docs/ARCHITECTURE.md`, `docs/SOURCES.md`, `ORCHESTRATION.md`, and this file.
-2. In direct-integration mode, run the capability preflight before claiming work.
+1. Bootstrap a usable local environment when needed.
+2. Read `README.md`, `docs/PLAN.md`, `docs/ARCHITECTURE.md`, `docs/SOURCES.md`, `ORCHESTRATION.md`, and this file.
 3. Read the relevant upstream/reference implementation at the pinned commit from `refs.lock.toml` when needed.
 4. State the hypothesis or integration claim in issue #4 / the experiment note.
 5. Make the smallest coherent change that proves, disproves, or productizes the intended invariant.
@@ -102,11 +100,11 @@ Historical CI can support a claim, but it does not replace validation of the exa
 
 ## Validation handoff
 
-Useful candidate work must not be thrown away merely because the producing session cannot execute the final local gate.
+Useful candidate work must not be thrown away merely because the producing session later encounters a task-specific execution failure.
 
-A worker with a prepared candidate but an unavailable validation capability should post a `VALIDATION-HANDOFF` containing the candidate branch/head, prepared base, cluster, changed paths, already-reproduced evidence, exact remaining local commands, and the missing capability.
+A worker with a prepared candidate but an unavailable final validation capability should post a `VALIDATION-HANDOFF` containing the candidate branch/head, prepared base, cluster, changed paths, already-reproduced evidence, exact remaining local commands, and the missing capability.
 
-An execution-capable worker may then claim `VALIDATION-TAKEOVER`, reconcile the semantic candidate onto current `main`, run the complete local gate on the exact tree, and CAS-land it normally. The takeover worker owns the final validation and canonical closeout.
+Another worker should bootstrap the required environment, reconcile the semantic candidate onto current `main`, run the complete local gate on the exact tree, and CAS-land it normally. The takeover worker owns the final validation and canonical closeout.
 
 Do not weaken the validation standard to avoid a handoff.
 

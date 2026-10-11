@@ -25,26 +25,30 @@ python scripts/fetch_refs.py
 
 Local ROMs belong in ignored `roms/`. Derived traces, maps, reports, and corpora belong in ignored `artifacts/`.
 
-## Direct-integration capability preflight
+## Fresh-worker environment bootstrap
 
-A direct-integration worker must verify its execution environment **before claiming a lane or doing repository archaeology**.
+A new direct-integration worker is expected to bootstrap its environment when it starts empty.
 
-Minimum preflight:
+Missing `cargo`, a missing Plaid checkout, or absent pinned references at startup are setup tasks, not reasons to skip the lane.
 
-```bash
-git rev-parse --show-toplevel
-git status --short
-cargo --version
-rustc --version
-rustfmt --version
-python --version
+Typical bootstrap flow:
+
+```text
+1. clone or obtain a writable Plaid checkout
+2. fetch latest main
+3. inspect rust-toolchain.toml
+4. install the required Rust toolchain if necessary
+5. ensure Python and required native build packages are available
+6. fetch refs with scripts/fetch_refs.py or fetch only the exact pinned ref needed
+7. verify the local commands work
+8. continue with integration work
 ```
 
-The checkout must be writable and contain the current Plaid workspace. If the planned cluster needs an exact pinned reference, confirm that revision is locally present or locally fetchable before choosing the cluster.
+Workers may use the environment's normal package manager, Rust bootstrap tooling, and network access to install open-source build dependencies. Do not use GitHub Actions merely because the fresh runtime starts without the toolchain.
 
-If the session has no local checkout or Rust toolchain, do not begin a direct-integration candidate. Return `CAPABILITY-SKIP` and leave the lane free. This avoids spending a worker session on a change that cannot pass the mandatory local gate.
+Only treat environment setup as genuinely unavailable after reasonable setup attempts show a hard runtime restriction, such as no usable shell/install path or no way to obtain a required dependency. If useful candidate work already exists by then, preserve it as a validation handoff.
 
-If useful work already exists before a missing capability is discovered, preserve it as a `VALIDATION-HANDOFF`; an execution-capable worker can take it over, reconcile it to current `main`, run the final gate, and CAS-land it. See [`../ORCHESTRATION.md`](../ORCHESTRATION.md).
+Historical direct-integration results marked `BLOCKED` only because a fresh session lacked `cargo`, a checkout, or a pinned reference should be treated as recoverable prepared candidates after bootstrap.
 
 ## Canonical local validation
 
@@ -203,9 +207,9 @@ Never force-push `main`. Never land a candidate validated only against an older 
 
 ### Validation handoffs
 
-Environment capability failures are not project blockers.
+Workers should bootstrap required tooling themselves. A handoff is for a genuine late task-specific setup failure after useful work exists, not for an initially empty fresh runtime.
 
-If preflight shows that the session cannot run the mandatory local gate, it should skip before claiming work. If useful candidate work already exists, record a `VALIDATION-HANDOFF` instead of a `BLOCKED` integration result. Another worker with a complete local toolchain may take the branch/commit, reconcile the semantic change to current `main`, rerun the full gate, and perform the CAS.
+When a handoff is necessary, record what setup was attempted, the exact candidate branch/head, the remaining commands, and the environment failure. Another worker should bootstrap the required environment, reconcile the semantic change to current `main`, rerun the full gate, and perform the CAS.
 
 Do not relax the local gate to avoid a handoff.
 
