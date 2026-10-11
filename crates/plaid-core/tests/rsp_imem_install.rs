@@ -71,7 +71,11 @@ fn groups_only_measured_dma_effects_and_preserves_latest_byte_writers() {
     let report = inspect(&fixture_value());
     assert_eq!(report.events, 23);
     assert_eq!(
-        report.requests.iter().map(|r| r.request).collect::<Vec<_>>(),
+        report
+            .requests
+            .iter()
+            .map(|r| r.request)
+            .collect::<Vec<_>>(),
         vec![1, 2, 3, 4, 5, 6]
     );
     assert_eq!(report.requests[0].effect_generations.len(), 2);
@@ -97,8 +101,8 @@ fn groups_only_measured_dma_effects_and_preserves_latest_byte_writers() {
         report.requests[2].effect_generations
     );
 
-    assert_eq!(report.writer_effects[6].offset, 0xff8);
-    assert_eq!(report.writer_effects[7].offset, 0x000);
+    assert_eq!(report.writer_effects[7].offset, 0xff8);
+    assert_eq!(report.writer_effects[8].offset, 0x000);
     for offset in 0xff8..0x1000 {
         assert_eq!(
             owner_kind(&report, offset),
@@ -127,8 +131,14 @@ fn same_value_writes_and_reload_payloads_do_not_collapse_writer_identity() {
     assert_eq!((first_dma.value >> 32) as u32, cpu.value as u32);
     assert_ne!(first_dma.generation, cpu.generation);
 
-    assert_eq!(report.writer_effects[3].value, report.writer_effects[5].value);
-    assert_eq!(report.writer_effects[4].value, report.writer_effects[6].value);
+    assert_eq!(
+        report.writer_effects[3].value,
+        report.writer_effects[5].value
+    );
+    assert_eq!(
+        report.writer_effects[4].value,
+        report.writer_effects[6].value
+    );
     assert_ne!(report.requests[1].request, report.requests[2].request);
     assert_ne!(
         report.requests[1].effect_generations,
@@ -151,7 +161,10 @@ fn rejects_request_identity_completion_order_and_schema_forgeries() {
     assert!(inspect_rsp_imem_install_history(&source, &sha256(&source)).is_err());
 
     let mut missing_completion = original.clone();
-    missing_completion["events"].as_array_mut().expect("events").pop();
+    missing_completion["events"]
+        .as_array_mut()
+        .expect("events")
+        .pop();
     let source = encode(&missing_completion);
     assert!(inspect_rsp_imem_install_history(&source, &sha256(&source)).is_err());
 
