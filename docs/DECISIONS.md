@@ -1593,30 +1593,28 @@ cache/mapping/lifetime composition and whole-ROM/native-complete proof remain
 OPEN. No reference implementation code or runtime dependency enters production,
 and no solver/native-complete gate is weakened.
 
-## ADR-0103: Cached exception roots require resident-generation evidence
 
-Status: Accepted for bounded compiler-time observed-history inspection, 2026-10-11.
+## ADR-0103: BEV=1 PIF root provenance requires same-fetch backing identity
 
-Compose ADR-0101's architectural root candidate with a separate source-bound finite
-chronology for the validated BEV=0 general exception word. In the accepted scope the
-root is `ffffffff80000180`, backed by identity RDRAM physical `0x180`, with EXL clear
-and 32-bit kernel context. Every observed successful backing write keeps its own
-ordinal identity even when the payload is unchanged. A captured fill binds its own
-resident identity to the then-observed backing writer. Later backing writes do not
-silently relabel that resident generation; only an observed invalidate/refill can
-establish a later resident source. A root fetch whose resident/fill chain is missing
-stays UNKNOWN even when current backing contains identical bits.
+Status: Accepted for bounded production source composition, 2026-10-11.
 
-This rule was reproduced against exact pinned ares by executing a real SYSCALL into
-the same numeric vector before and after a backing rewrite: stale resident handler A
-continued executing until guest I-cache invalidation, after which refill selected
-handler B. The production replay is original Plaid code and consumes only an
-externally hash-bound finite history; it does not import reference implementation
-code or infer occurrence from snapshots, numeric addresses or value equality.
+Compose the typed exception-root candidate with the existing strict PIF v4 source
+replayer only for the validated BEV=1, EXL-clear, 32-bit-kernel general vector at
+`ffffffffbfc00380`. A supplied-PIF source receipt requires one caller-selected
+fetch sequence that survives complete-source replay as exactly one singleton PIF
+backing observation at physical `1fc00380`, normalized PIF offset `0x380`, with
+the fetched Word matching the supplied firmware. Retain the exact fetch sequence,
+backing-read ordinal, complete history digest, ordered fetch/backing digest and
+supplied-firmware digest. Recompute the receipt from all original sources when
+verifying it.
 
-The accepted primitive does not certify source-sensor completeness, exception
-reachability, ultimate storage ancestry, arbitrary cache operations, aliases/TLB
-mappings, save/restore/reset behavior, the rest of the handler span, mutation or
-root census completeness, executable lifetime, hardware-wide semantics, whole-ROM
-closure or native completeness. Missing evidence keeps those obligations OPEN.
-
+Do not infer provenance from vector address, returned bits, a prior/latest equal
+PIF read, physical/masked-offset equality or a coalesced repeated sample. The
+validated SI-busy-latch case executes identical bits at the identical root with
+no PIF-ROM backing read, so missing same-fetch evidence remains UNKNOWN. Repeated
+identical backed observations are conservatively rejected until production keeps
+per-occurrence identity. This authenticates one observed handler fetch source; it
+does not prove exception occurrence/classification chronology, BEV/EXL/mode
+writer completeness, BEV=1 refill/XTLB behavior, PIF lifetime/authenticity,
+cache/mapping executable lifetime, root census, whole-ROM closure or native
+completeness. No upstream implementation or runtime dependency enters production.

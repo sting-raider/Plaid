@@ -762,13 +762,15 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   residency, executable lifetime and whole-ROM/native completeness remain OPEN
   (ADR-0102).
 
-- Cached BEV=0 general exception-root word provenance now has a bounded source-bound
-  replay (ADR-0103). Successful backing writes and I-cache fills retain separate
-  ordinal identities, so a backing rewrite does not relabel an older resident
-  handler and same-valued writes remain distinct generations. An invalidate/refill
-  can advance the supplying generation; a root fetch without captured resident/fill
-  evidence remains UNKNOWN even when current RDRAM has equal bytes. This is only the
-  validated 32-bit, EXL-clear, identity-RDRAM word at physical 0x180. Reachability,
-  source-sensor completeness, full handler spans, mapping/cache lifetime, mutation
-  census and whole-ROM/native completeness remain open.
 
+- Production now exposes bounded source-bound `exception_pif` composition for the
+  validated BEV=1 32-bit general exception root (ADR-0103). It replays the complete
+  strict PIF v4 source and certifies only a caller-selected singleton fetch at
+  `ffffffffbfc00380` / physical `1fc00380` / PIF offset `0x380` that actually
+  matches the supplied firmware. The receipt retains fetch identity, backing-read
+  ordinal and source/firmware digests; full source rechecking reconstructs it.
+  Current-production regressions preserve the SI-latch/equal-value ambiguity and
+  coalesced-repeat failure boundary. Address/value/mirror equality cannot supply
+  origin. Exception causality/classification chronology, BEV=1 refill/XTLB source
+  behavior, handler cache/mapping lifetime, remaining root classes, whole-ROM
+  closure and native completeness remain OPEN.
