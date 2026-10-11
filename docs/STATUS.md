@@ -831,3 +831,10 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   mapping labels/projection ordinals remain synthetic. Source-sensor coverage,
   mapping/context generations, cache residency, lifetime and closure/native
   completeness remain OPEN (ADR-0063).
+
+- Production tlbwr_history now preserves observed selection and exact matching
+  write separately from CP0 Index and mapping fingerprints. Successful unchanged
+  writes remain fresh operations. Eight regressions and authenticated saved
+  facts cover missing/forged selections, same-content generations and Wired
+  bounds. Mapping semantics, Random distribution, context/cache lifetime, sensor
+  census and whole-ROM/native completeness remain OPEN (ADR-0109).

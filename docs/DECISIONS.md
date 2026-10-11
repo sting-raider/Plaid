@@ -1746,3 +1746,29 @@ contract; no upstream implementation enters production. Raw operand ancestry,
 complete sensor coverage, hardware/timer producer semantics, interrupt chronology,
 handler source/lifetime, root census and whole-ROM/native completeness remain
 OPEN. All corresponding report flags remain false; no solver waiver.
+
+## ADR-0109: TLBWR identity follows observed selection and matching write
+
+Status: Accepted for bounded compiler-time observed-history inspection, 2026-10-11.
+
+Retain an explicit selection boundary and require a subsequent actual write to
+that exact selected slot in the same decoded TLBWR context. A successful write
+mints a fresh generation even when before/after content matches. CP0 Index,
+payload equality, snapshot differences and later translations cannot name the
+replacement slot. Faulting attempts mint no writer.
+
+Reconcile the two prepared candidates on their shared stronger contract: keep
+selection/write correlation and require validated Wired <32 with selected slot
+in [Wired,31]. Broad out-of-range model behavior stays unsupported. The primary
+regression reproduced acceptance of a slot below Wired in the selection candidate
+before adding the narrower candidate's guard. Complete source hashing and full
+report reconstruction remain mandatory; preserve opaque content fingerprints
+without claiming normalized mapping semantics.
+
+Saved ares state facts establish the equal-value/snapshot/Index counterexamples
+and the controlled range cases. Adapted protocol ordinals/fingerprints are
+synthetic, not sensed callbacks or mapping ancestry. Exact source ordering is
+supporting reference evidence, not hardware Random distribution. No upstream
+implementation enters production. Sensor completeness, CP0/TLB census, mapping
+semantics, context generation, cache residency, reset/restore lifetime,
+whole-ROM closure and native completeness remain OPEN; broader flags false.

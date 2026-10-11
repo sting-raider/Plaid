@@ -324,3 +324,8 @@ strict tlb_geometry. Compose its opaque mapping/context references with actual
 TLB-operation and CP0 writer history before claiming mapping ancestry/lifetime.
 Preserve virtual aliases and same-address remaps as independent fetches. Cached
 residency and unsupported region/endian geometry still need separate evidence.
+
+TLBWR operation replay now exists beside TLBWI/TLBR (ADR-0109). Compose explicit
+selection/write generations with authenticated normalized mapping content and
+the same fetch context; neither Index nor equal content supplies that ancestry.
+Keep the source/census, ASID/global/CP0, cache and reset/restore obligations OPEN.
