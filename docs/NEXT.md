@@ -281,3 +281,10 @@ Reproduce BEV=1 refill/XTLB source behavior separately before extending the rule
 and independently discharge interrupt/watch/cache-error/reset/NMI roots. Repeated
 coalesced PIF observations, equal returned bits and matching mirrors stay OPEN
 without per-occurrence same-fetch backing identity.
+
+The VR4300 cache-error class now has a target-scoped hardware exclusion
+(ADR-0104), so do not seed a fictitious cache-error handler and do not use
+emulator silence as a waiver. Root closure still must prove interrupt/watch/
+reset/NMI and existing exception reachability/classification chronology,
+handler-byte provenance, cache/mapping lifetimes and complete root census.
+Generic MIPS III cache-error remains unresolved.
