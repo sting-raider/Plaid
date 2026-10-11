@@ -263,3 +263,8 @@ BEV/EXL/address-mode chronology, compose each selected root with handler-byte
 provenance and cache/mapping lifetime, and independently justify interrupt,
 watch, reset/NMI and cache-error roots. Numeric vector derivation is neither
 reachability nor a complete execution-root certificate.
+
+
+### Production COP1 mutation evidence consumer (2026-10-11)
+
+A finite source-bound consumer now validates captured `SWC1`/`SDC1` mutation receipts with FR-normalized payloads and cache/backing separation. The next blocker is still the complete producer side: observe the general successful CPU concrete-mutation boundary below opcode-specific handlers, compose cached resident mutations with later verified dirty-line writeback/backing generations, extend FPR/storage ancestry, and join those generations to executable consumption/lifetimes. Opcode allowlists, equal values, callback counts and bounded captures remain insufficient for a mutation census or CLOSED result.
