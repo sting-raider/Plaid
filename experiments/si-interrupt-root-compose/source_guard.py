@@ -67,6 +67,7 @@ def main() -> int:
     require(si_dma, "mi.raise(MI::IRQ::SI);", "ares SI completion raises MI source")
     require(si_io, "cpu.queueInsert(Queue::SI_DMA_Read", "ares SI read request queues completion")
     require(si_io, "cpu.queueInsert(Queue::SI_DMA_Write", "ares SI write request queues completion")
+    require(si_io, "cpu.queueInsert(Queue::SI_BUS_Write", "ares direct PIF bus write queues distinct completion")
     require(si_io, "io.interrupt = 0;", "ares SI status acknowledgement clears latch")
     require(si_io, "mi.lower(MI::IRQ::SI);", "ares SI acknowledgement lowers MI source")
     require(si_io, "auto SI::writeFinished()", "ares separate direct PIF write completion producer")
@@ -87,7 +88,7 @@ def main() -> int:
     require(g_mi, "MI_INTR_SI", "gopher MI SI source")
     require(g_mi, "COP0_CAUSE_IP2", "gopher MI to CPU IP2")
 
-    print("PASS: exact pinned ares/Gopher64 SI request/dispatch/completion, acknowledgement, MI gate and CPU-root contracts present")
+    print("PASS: exact pinned ares/Gopher64 SI request/queue/dispatch/completion, acknowledgement, MI gate and CPU-root contracts present")
     return 0
 
 
