@@ -761,3 +761,17 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   Sensor completeness, mapping semantics, TLBWR/context chronology, cache
   residency, executable lifetime and whole-ROM/native completeness remain OPEN
   (ADR-0102).
+
+- Production now exposes bounded source-bound `root_execution` replay for the NMI
+  root composition boundary (ADR-0103). It keeps architectural transfer to
+  `ffffffffbfc00000`, observed progress to a root fetch, and executed-byte source
+  identity independent. Certification requires an observed deassertion plus one
+  unique uncached `1fc00000` fetch context with an in-context offset-zero PIF-ROM
+  read matching the completed word. Transfer-only/persistent-NMI histories,
+  equal-valued SI/foreign reads, wrong context/offset, ambiguous reads, ordinal
+  deletion/reordering and context reuse fail closed. Fresh exact-pinned ares
+  reproduction and the full canonical Rust workspace/synthetic suite pass.
+  NMI/reset producer completeness, hardware timing, interrupt priority,
+  save/restore, complete root-source census, executable lifetime, whole-ROM and
+  native completeness remain OPEN.
+

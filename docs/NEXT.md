@@ -271,3 +271,14 @@ reset chronology before using them in executable-lifetime or translation proofs.
 A same-content legal TLBWI remains a distinct operation; snapshot inequality and
 equal payloads cannot recover occurrence or selected-slot identity. Complete
 sensor coverage and a full TLB mutation census remain OPEN.
+
+Production now has bounded source-bound NMI root execution composition
+(ADR-0103). Compose it next with an authenticated NMI/reset producer and
+deassertion chronology, one-shot delivery identity, save/restore/reset epochs and
+complete root-source sensing. Keep architectural root transfer separate from
+progress to a fetch and from executed-byte provenance. A persistent pending level,
+root address, supplied firmware or equal word cannot manufacture a root execution
+certificate. Simultaneous interrupt/NMI ordering, physical reset semantics,
+complete PIF/HLE source coverage, executable lifetime and whole-ROM root census
+remain OPEN.
+

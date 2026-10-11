@@ -1592,3 +1592,34 @@ TLBWR, TLBP/TLBR, PageMask/ASID/global chronology, complete mutation census,
 cache/mapping/lifetime composition and whole-ROM/native-complete proof remain
 OPEN. No reference implementation code or runtime dependency enters production,
 and no solver/native-complete gate is weakened.
+
+## ADR-0103: NMI root transfer, fetch occurrence and byte provenance are separate evidence
+
+Status: Accepted for bounded compiler-time source-bound replay, 2026-10-11.
+
+Adopt an original ordered-history verifier for the validated NMI-root composition
+boundary. An architectural transfer to `ffffffffbfc00000` does not prove that the
+root instruction was fetched: a still-asserted NMI level can preempt the next
+instruction step and re-enter NMI with zero root fetches. A root fetch becomes
+eligible only after an observed post-transfer deassertion in the supplied bounded
+history. PIF-ROM provenance then requires the actual uncached root fetch at
+physical `1fc00000`, one unique same-context offset-zero PIF read and a matching
+completed fetch explicitly classified as PIF-ROM sourced.
+
+Keep transfer identity, fetch occurrence and executed-byte source identity as
+separate facts. Root address, current/supplied firmware, equal fetched words,
+foreign reads or finite trace membership cannot substitute for the causal chain.
+Contiguous source ordinals, unique fetch contexts and complete-capture hash
+binding reject deletion, reordering and context reuse; the capture hash names the
+source namespace but does not by itself certify producer completeness. Missing or
+ambiguous source evidence remains UNKNOWN.
+
+The fresh exact-pinned ares rerun at
+`9408cb43d4948fc3ea6e152a307a34348df3fe04` passed the source guards, exact
+reference fixture and seven-forgery chronology model. This is not a physical N64
+reset/NMI timing result and does not choose a repeated-reset policy, certify NMI
+producer/deassertion coverage, simultaneous interrupt priority, save/restore,
+complete PIF/HLE sources, executable lifetime, a complete root census or native
+completeness. No solver gate is weakened and no reference implementation code or
+runtime dependency enters production.
+
