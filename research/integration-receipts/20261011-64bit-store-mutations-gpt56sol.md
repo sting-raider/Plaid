@@ -6,6 +6,8 @@ Worker: `gpt56sol-direct-64bit-store-20261011`
 
 Base main inspected: `6b53a15c4c6eaadc8e0d002dd6818c600ebf2a7d`
 
+Current reconciled main ancestor at this receipt revision: `539ff0ce72a98b296a8a28135fda6eab90a2f6ac`
+
 Integration branch: `direct-integration/64bit-store-mutations-gpt56sol`
 
 Validation PR: #11
@@ -33,7 +35,7 @@ PASS: decomposition widths/lane uniqueness and unaligned SDL+SDR pairs
 sha256 768ff87e0f0690e427a5efad86af02dba7a0a4d56dabceff1adec66bdbfba03e
 ```
 
-The exact pinned-reference GitHub Actions job was then rerun on 2026-10-11
+The exact pinned-reference GitHub Actions job was rerun on 2026-10-11
 (run `37801439305`, attempt 2, job `114506561685`). It checked out ares at
 `9408cb43d4948fc3ea6e152a307a34348df3fe04` and reproduced:
 
@@ -42,9 +44,19 @@ PASS: 158 repeated pinned-ares SD/SDL/SDR cases
 results_sha256=cf8f82bde400e23c0f2225ee55baaf727b7f09b87c2ca2489c2e295aed6c5f1e
 ```
 
-The production branch was validated by Rust-checks run `38151850943`, job
-`114506753689`, at code head `eb91b8122988fec1408124b13a64edf302b11daa`.
-The following all passed:
+The production implementation first went fully green at code head
+`eb91b8122988fec1408124b13a64edf302b11daa` (Rust-checks run `38151850943`,
+job `114506753689`). A semantic naming audit then renamed the backing mutation layer
+from the potentially misleading `IdentityRdramBacking` to
+`ObservedRdramBacking`, keeping physical sink identity explicitly supplied rather
+than inferred. That code was fully green at `44201dcf444aa949835cd46b366d070df32ef167`
+(run `38152080386`, job `114507422712`).
+
+While validation was running, canonical main advanced with the independent
+exception-root integration to `539ff0ce72a98b296a8a28135fda6eab90a2f6ac`. The feature branch was therefore
+explicitly reconciled with that main as merge commit
+`585fbf8e6c32c92e8983b5664976efefc2c1ed00` and the complete canonical gate was
+rerun (run `38152284430`, job `114508021402`). The reconciled head passed:
 
 - `cargo fmt --all -- --check`;
 - `cargo clippy --locked --workspace --all-targets -- -D warnings`;
@@ -72,7 +84,7 @@ separate:
 3. the handler address/width/value of that concrete subwrite;
 4. the separately observed physical sink;
 5. the immediate mutation layer (`dcache_resident` versus
-   `identity_rdram_backing`).
+   `observed_rdram_backing`).
 
 For completed receipts, the rechecker requires the exact validated decomposition
 for operation, endian mode and low address bits. It requires exact subwrite values,
