@@ -598,8 +598,10 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097553957",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6097622292"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "reviewed_model_only",
+      "integration_commit": null,
+      "review_note": "research/evidence-manifest-primary-review.md",
+      "review_base": "0bf0a9c"
     },
     {
       "branch": "research/exception-handler-cache-compose-gpt56sol",
@@ -1526,7 +1528,7 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6070073590"
       ],
       "disposition": "source_contract_reconciled",
-      "integration_commit": null,
+      "integration_commit": "0bf0a9c",
       "review_note": "research/rsp-store-isolation-primary.md",
       "primary_fixture": "spikes/052-ares-rsp-store-isolation",
       "review_base": "10bb0ba"
@@ -2263,5 +2265,5 @@
       "integration_commit": "3ff5d3e"
     }
   ],
-  "canonical_source_reconciliation_head": "cc3cc92"
+  "canonical_source_reconciliation_head": "0bf0a9c"
 }
