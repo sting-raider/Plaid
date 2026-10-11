@@ -320,6 +320,14 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             map.fetch_captures.keys().cloned().collect(),
         );
     }
+    for dispatch in &map.target_dispatch_observations {
+        add(
+            "unresolved_raw_target_dispatch",
+            None,
+            "retained target lookup/runtime link lacks source-site execution correlation",
+            dispatch.evidence.clone(),
+        );
+    }
     for observation in &map.indirect_observations {
         let possible_sources: Vec<_> = map
             .indirect_sites

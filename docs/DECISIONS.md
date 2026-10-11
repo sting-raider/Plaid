@@ -1187,3 +1187,16 @@ structural consistency check, not source authentication. Verification epoch and
 code generation are separate clocks. Empty capture counts/prose supply no source
 verification receipt. Full source/expected-manifest and lifecycle completeness
 remain separate obligations. No upstream implementation is reused.
+
+## ADR-0081: Target dispatch is a retained primitive, not an executed edge
+
+Status: Accepted, 2026-10-11.
+
+Retain typed TargetLookup and RuntimeLink observations independently of removable
+diagnostics. Preserve kind, delay-slot-entry context, epoch and exact event
+provenance through merge. Block source-uncorrelated dispatch in the solver even
+when a static certificate names the same numeric target. Extend the common
+primitive role/source-projection checks to dispatch. Default/omit the additive
+empty collection for legacy serialization. These finite observations prove no
+source-site transfer, target lifetime or future execution completeness. No
+upstream implementation is copied or linked.

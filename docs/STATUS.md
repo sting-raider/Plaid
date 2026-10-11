@@ -514,3 +514,9 @@ captures. Removing derived diagnostics cannot erase these obligations. Store
 scope exclusion composes with explicit physical mutation checks; source-unit
 context alone cannot certify an indirect event. Six research candidates were
 reconciled with adversarial controls (ADR-0080).
+
+Typed target lookup/runtime-link facts now survive import, merge and JSON
+roundtrip independently of diagnostics. The solver blocks uncorrelated dispatch
+even at an already certified target PC. The shared role table/source rechecker
+also authenticates dispatch kinds and generations; empty legacy maps preserve
+their serialized shape (ADR-0081).

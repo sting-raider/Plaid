@@ -81,7 +81,7 @@ arbitrary lifecycle/copy/root completeness or native readiness.
 
 ## Batch 3: deletion-resistant primitive solver gates
 
-Reproduced all six research candidates against batch-2 main. Thirteen adversarial
+Reproduced all six research candidates against batch-2 main. Fourteen adversarial
 tests failed across raw stores, raw indirect execution, verification epochs,
 empty fetch captures and restricted masks (one epoch test already stayed OPEN
 for another reason but lacked its independent blocker).
@@ -98,3 +98,16 @@ authentication; ADR-0079's source rechecker remains independently necessary.
 
 Focused suites and full locked plaid-core, fmt and strict Clippy pass. No reference
 semantic change or native/whole-ROM completeness claim follows.
+
+## Batch 4: retain source-uncorrelated target dispatch
+
+Reproduced diagnostic deletion yielding CLOSED after merging a raw lookup into
+a static map. Adopted the typed lookup/runtime-link retention candidate from
+`research/solver-targetlookup-monotonicity-gpt56sol`, retaining both source event
+kinds, generation and provenance through import/merge/roundtrip. Empty additive
+fields are omitted to preserve legacy JSON. The solver independently blocks
+these source-uncorrelated facts; an equal-PC static certificate cannot lend them
+a source site. Extended ADR-0079's role table and complete-source projection to
+the new primitive rather than creating a disconnected validation path. Added
+fork/cross-role and deletion/generation-tamper controls. Focused/full locked
+core, fmt and strict Clippy pass. No native or whole-ROM proof is added.
