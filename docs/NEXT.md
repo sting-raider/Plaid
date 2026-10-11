@@ -281,3 +281,13 @@ Reproduce BEV=1 refill/XTLB source behavior separately before extending the rule
 and independently discharge interrupt/watch/cache-error/reset/NMI roots. Repeated
 coalesced PIF observations, equal returned bits and matching mirrors stay OPEN
 without per-occurrence same-fetch backing identity.
+
+
+Production now has bounded DMEM reverse-SP-DMA writer-lineage replay (ADR-0104).
+Compose it next with authenticated SP request/completion identity plus downstream
+RDRAM storage-writer and eventual executable-consumer chronology. Keep DMEM and
+IMEM bank evidence separate: the independently integrated IMEM egress primitive
+cannot be substituted for a DMEM source, and equal payloads cannot bridge them.
+Unobserved/unknown lanes stay OPEN. Complete mutation census, save/restore/reset
+chronology, aliases/cache visibility and executable lifetimes remain prerequisites
+for whole-ROM closure; this bounded replay issues no solver or native waiver.
