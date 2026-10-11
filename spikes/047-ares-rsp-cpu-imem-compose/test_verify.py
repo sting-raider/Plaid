@@ -82,6 +82,14 @@ class CompositionTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             verify(data)
 
+    def test_intervening_decoy_cannot_hide_register_discontinuity(self):
+        data=fixture()
+        for event in data['events']:
+            if event['phase']==12 and event['gpr']:
+                event['gpr'][8]^=1<<40
+        with self.assertRaises(AssertionError):
+            verify(data)
+
 
 if __name__=='__main__':
     unittest.main()
