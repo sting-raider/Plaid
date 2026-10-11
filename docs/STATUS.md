@@ -701,3 +701,12 @@ report mutations reject under exact typed facts, tags, counters and cache digest
 Four synthetic contracts, full core/fmt/strict Clippy pass. Context inactivity
 does not retire resident bytes; staged TLB/backing/reset operations do not close
 writer census, generation ancestry, hardware policy or native gates (ADR-0097).
+
+Canonical Actions 38146002739 passes at exact EntryHi integration head
+`c1d4e72524f287984f62f161818eeaad5f8f554b`.
+
+Spike 054 retains decoded TLBR stale reactivation with TLBP, same-value and
+out-of-range controls. Fresh/repeated/historical facts agree, 38 measured report
+mutations reject, and four synthetic contracts plus core/fmt/strict Clippy pass.
+Successful context loads differ from instruction occurrence; complete writer,
+mapping/resident ancestry and lifetime/native obligations remain OPEN (ADR-0098).
