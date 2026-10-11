@@ -26,8 +26,10 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6108883740",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6108958858"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "reviewed_reference_disagreement",
+      "integration_commit": null,
+      "review_note": "research/ai-interrupt-primary-review.md",
+      "review_base": "a6533a4"
     },
     {
       "branch": "research/ares-cpu-copy-dataflow-gpt56sol",

@@ -300,7 +300,7 @@ workspace Clippy and synthetic CLI pass. The unmodified branch verifier is
 rejected and its bounded fixture is superseded.
 
 The inventory now distinguishes five reconciled source contracts from the
-108 still indexed-only entries. No reference implementation, branch-specific
+107 still indexed-only entries plus one reviewed reference disagreement. No reference implementation, branch-specific
 workflow or manual build scaffolding is imported into production. These finite
 contracts establish neither complete sensing nor lifetime, general dataflow,
 hardware equivalence, whole-ROM or native closure. Milestone state is unchanged.
@@ -353,3 +353,15 @@ A refresh discovers research/ai-interrupt-root-compose-gpt56sol at
 The catalog now contains 158 research heads: 45 reconciled core candidates, five
 reconciled source contracts and 108 indexed-only entries. The new AI closeout
 reports a reference disagreement; no universal timing policy is adopted.
+
+Canonical Actions `38139630729` passes at exact feature head `71ccb10`, including
+all eight composition contracts and the existing Rust/CLI/producer/model gates.
+
+Primary AI review reproduces model receipt `80e140879adbb3b2fd5741d46fcbd0c7fc385623940541fc8549449404fad395`
+and checks all ten source files against immutable pinned Git blobs. Retain the
+start-vs-end assertion disagreement and full-FIFO abstraction limits, without
+transplanting the self-generated model as an external-history certificate.
+`research/ai-interrupt-primary-review.md` records the disposition. Counts are now
+45 reconciled core candidates, five source contracts, one reviewed reference
+disagreement and 107 indexed-only research heads; total 158. Production/native
+milestone state is unchanged.
