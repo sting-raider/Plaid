@@ -5,6 +5,7 @@
 pub mod cpu_copy;
 #[path = "cpu_mutation.rs"]
 mod cpu_mutation_impl;
+pub mod cpu_sp_conditional;
 pub mod cpu_sp_subword;
 pub mod dcache_writeback;
 pub mod cpu_mutation {

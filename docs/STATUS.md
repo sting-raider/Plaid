@@ -854,3 +854,11 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   bits match again. Existing ten copy/definition regressions pass. Ultimate
   source ancestry, full mutation census and executable/native closure remain
   OPEN (ADR-0110).
+
+- Production cpu_sp_conditional now normalizes completed Word SC sinks bound to
+  the captured pre-instruction context, direct KSEG1 mapping and SP bank/offset.
+  Same-value sinks remain writer occurrences; absent sinks create no witness.
+  Nine retained tests plus two architectural/order adversaries and all eight
+  authenticated saved reference cases pass. Reservation prediction/lifetime,
+  observer completeness, operand ancestry, downstream IMEM execution and
+  whole-ROM/native closure remain OPEN (ADR-0111).

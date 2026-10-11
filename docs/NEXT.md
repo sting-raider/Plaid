@@ -341,3 +341,9 @@ stores (ADR-0110). Complete writer coverage is still required before turning a
 compatible captured candidate into actual source ancestry. Compose external
 device/RSP/DMA and cache/epoch cuts explicitly; observed contradictory reads
 already revoke stale candidates and equal later values do not restore them.
+
+Completed Word SC -> SP normalization now exists in cpu_sp_conditional
+(ADR-0111). Compose its context/effect identities with an independently complete
+writer stream and actual IMEM execution before granting executable ancestry.
+Missing sinks are absence of evidence without source completeness. SCD, cached/
+mapped aliases and reservation lifetime remain separate unvalidated obligations.
