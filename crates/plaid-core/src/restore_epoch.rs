@@ -69,48 +69,155 @@ impl RestoreComponent {
     ];
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+/// One authenticated component root minted by a synchronized snapshot load.
+///
+/// Fields are intentionally private so callers cannot construct a root that did
+/// not pass [`inspect_restore_history`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RestoreRoot {
-    pub snapshot_id: String,
-    pub restore_epoch: u64,
-    pub load_ordinal: u64,
-    pub component: RestoreComponent,
-    pub state_sha256: String,
+    snapshot_id: String,
+    restore_epoch: u64,
+    load_ordinal: u64,
+    component: RestoreComponent,
+    state_sha256: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+impl RestoreRoot {
+    pub fn snapshot_id(&self) -> &str {
+        &self.snapshot_id
+    }
+
+    pub fn restore_epoch(&self) -> u64 {
+        self.restore_epoch
+    }
+
+    pub fn load_ordinal(&self) -> u64 {
+        self.load_ordinal
+    }
+
+    pub fn component(&self) -> RestoreComponent {
+        self.component
+    }
+
+    pub fn state_sha256(&self) -> &str {
+        &self.state_sha256
+    }
+}
+
+/// One authenticated synchronized-load boundary and its three validated roots.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RestoreEpoch {
-    pub snapshot_id: String,
-    pub restore_epoch: u64,
-    pub load_ordinal: u64,
-    pub roots: Vec<RestoreRoot>,
+    snapshot_id: String,
+    restore_epoch: u64,
+    load_ordinal: u64,
+    roots: Vec<RestoreRoot>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+impl RestoreEpoch {
+    pub fn snapshot_id(&self) -> &str {
+        &self.snapshot_id
+    }
+
+    pub fn restore_epoch(&self) -> u64 {
+        self.restore_epoch
+    }
+
+    pub fn load_ordinal(&self) -> u64 {
+        self.load_ordinal
+    }
+
+    pub fn roots(&self) -> &[RestoreRoot] {
+        &self.roots
+    }
+}
+
+/// Source-bound report produced only after strict restore-history replay.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RestoreEpochReport {
-    pub format: String,
-    pub source_sha256: String,
-    pub snapshots_saved: usize,
-    pub loads: Vec<RestoreEpoch>,
-    pub source_receipt_verified: bool,
-    pub declared_three_component_scope_complete: bool,
-    pub full_system_restore_coverage_certified: bool,
-    pub executable_lifetime_certified: bool,
-    pub native_complete: bool,
+    format: String,
+    source_sha256: String,
+    snapshots_saved: usize,
+    loads: Vec<RestoreEpoch>,
+    source_receipt_verified: bool,
+    declared_three_component_scope_complete: bool,
+    full_system_restore_coverage_certified: bool,
+    executable_lifetime_certified: bool,
+    native_complete: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+impl RestoreEpochReport {
+    pub fn format(&self) -> &str {
+        &self.format
+    }
+
+    pub fn source_sha256(&self) -> &str {
+        &self.source_sha256
+    }
+
+    pub fn snapshots_saved(&self) -> usize {
+        self.snapshots_saved
+    }
+
+    pub fn loads(&self) -> &[RestoreEpoch] {
+        &self.loads
+    }
+
+    pub fn source_receipt_verified(&self) -> bool {
+        self.source_receipt_verified
+    }
+
+    pub fn declared_three_component_scope_complete(&self) -> bool {
+        self.declared_three_component_scope_complete
+    }
+
+    pub fn full_system_restore_coverage_certified(&self) -> bool {
+        self.full_system_restore_coverage_certified
+    }
+
+    pub fn executable_lifetime_certified(&self) -> bool {
+        self.executable_lifetime_certified
+    }
+
+    pub fn native_complete(&self) -> bool {
+        self.native_complete
+    }
+}
+
+/// Authenticated three-axis restored execution context.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RestoredExecutionContext {
-    pub snapshot_id: String,
-    pub restore_epoch: u64,
-    pub load_ordinal: u64,
-    pub installed_tlb_sha256: String,
-    pub translation_context_sha256: String,
-    pub instruction_cache_sha256: String,
+    snapshot_id: String,
+    restore_epoch: u64,
+    load_ordinal: u64,
+    installed_tlb_sha256: String,
+    translation_context_sha256: String,
+    instruction_cache_sha256: String,
+}
+
+impl RestoredExecutionContext {
+    pub fn snapshot_id(&self) -> &str {
+        &self.snapshot_id
+    }
+
+    pub fn restore_epoch(&self) -> u64 {
+        self.restore_epoch
+    }
+
+    pub fn load_ordinal(&self) -> u64 {
+        self.load_ordinal
+    }
+
+    pub fn installed_tlb_sha256(&self) -> &str {
+        &self.installed_tlb_sha256
+    }
+
+    pub fn translation_context_sha256(&self) -> &str {
+        &self.translation_context_sha256
+    }
+
+    pub fn instruction_cache_sha256(&self) -> &str {
+        &self.instruction_cache_sha256
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -300,6 +407,11 @@ pub fn inspect_restore_history(
         }
     }
 
+    require(
+        !loads.is_empty(),
+        "restore history contains no synchronized load",
+    )?;
+
     Ok(RestoreEpochReport {
         format: REPORT_FORMAT.into(),
         source_sha256: digest,
@@ -316,6 +428,9 @@ pub fn inspect_restore_history(
 /// Compose the three bounded restored components for a later executable-context
 /// proof. All roots must come from the same snapshot load and restore epoch.
 /// Value equality never repairs a mixed-epoch or mixed-snapshot history.
+///
+/// Callers cannot construct or deserialize `RestoreRoot` values directly; roots
+/// originate only from a successful source-bound inspection in this module.
 pub fn compose_restored_execution_context(
     installed_tlb: &RestoreRoot,
     translation_context: &RestoreRoot,
@@ -535,6 +650,20 @@ mod tests {
             inspect(records)
                 .unwrap_err()
                 .contains("noncontiguous restore source ordinals")
+        );
+    }
+
+    #[test]
+    fn history_without_a_load_cannot_issue_restore_roots() {
+        assert!(
+            inspect(vec![save(1, "S0", TLB, CTX, CACHE)])
+                .unwrap_err()
+                .contains("no synchronized load")
+        );
+        assert!(
+            inspect(Vec::new())
+                .unwrap_err()
+                .contains("no synchronized load")
         );
     }
 
