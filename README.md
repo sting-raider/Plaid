@@ -226,3 +226,14 @@ ambiguous, latch-only, locked, RAM and cached paths stay unknown. Attempts do no
 certify mutation or executable lifetime; native completion remains false.
 `python scripts/test_pif_history.py` tests canonical ROM byte orders, full source/
 report tampering, version separation and protection of all supplied inputs.
+
+`inspect-cpu-copy-history <history.json> <external-source-sha256> <report.json>`
+replays the validated bounded CPU-copy protocol in Rust. The input has format
+`plaid-cpu-copy-history-v0` and the complete `instruction_events`/`scalar_events`
+arrays from the controlled copy capture. It follows decoded LW/LWU -> optional
+in-place XORI -> SW through full GPR/control continuity, preserving read/write
+ordinals and XORI-zero operation identity. Equal values do not select a producer.
+`verify-cpu-copy-history` reconstructs every report field from the complete input
+and the separately trusted source receipt. Recomputing a hash from an edited
+input does not authenticate that input. The aligned identity-KSEG1/RDRAM scope
+does not certify sensor completeness, ultimate origin, lifetime or native closure.

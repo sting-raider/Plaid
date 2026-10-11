@@ -710,3 +710,14 @@ out-of-range controls. Fresh/repeated/historical facts agree, 38 measured report
 mutations reject, and four synthetic contracts plus core/fmt/strict Clippy pass.
 Successful context loads differ from instruction occurrence; complete writer,
 mapping/resident ancestry and lifetime/native obligations remain OPEN (ADR-0098).
+
+Canonical TLBR Actions 38146610641 passes at exact
+`3a4ddabbdcd4cee2488936e0d1d9f211c263bc80`.
+
+Validated CPU-copy/XORI findings now have an original reusable Rust consumer and
+inspect/verify CLI, rather than only Python fixture checking. It retains exact
+instruction/register continuity, source-read/sink-write ordinals and explicit
+XORI-zero identity, with complete-source receipt/report rechecking. Saved actual
+captures reproduce the independent two copy and four transform witnesses without
+new reference builds. General producer ancestry, census, executable lifetime and
+whole-ROM/native closure remain OPEN (ADR-0099).
