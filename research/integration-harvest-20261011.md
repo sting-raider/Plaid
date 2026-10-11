@@ -300,7 +300,7 @@ workspace Clippy and synthetic CLI pass. The unmodified branch verifier is
 rejected and its bounded fixture is superseded.
 
 The inventory now distinguishes these two reconciled source contracts from the
-110 still indexed-only entries. No reference implementation, branch-specific
+109 still indexed-only entries after the XORI follow-up below. No reference implementation, branch-specific
 workflow or manual build scaffolding is imported into production. These finite
 contracts establish neither complete sensing nor lifetime, general dataflow,
 hardware equivalence, whole-ROM or native closure. Milestone state is unchanged.
@@ -309,3 +309,13 @@ Canonical Actions run `38131501041` passes at `72e557a`, including the added
 seven synthetic CPU-copy history regressions alongside the existing Rust/CLI/
 model gates. This CI step checks the finite history contract; it does not run
 the separate pinned ares neutrality fixture or certify sensor completeness.
+
+`05ed9cd` reconciles the tested one-step XORI branch after reproducing the same
+three continuity/address gaps in its verifier. Reuse the strict instruction/
+scalar history validator under an explicit transform mode; keep copy mode
+separate. Twenty independent instruction checkpoints agree; forty boundaries
+and thirteen scalar effects yield the four intended transform certificates.
+Thirteen measured forgeries and six synthetic regressions pass. XORI zero
+preserves explicit transform identity; wrong-source equal bits do not certify.
+Full core, fmt and strict workspace Clippy pass. The branch's bounded fixture/
+verifier is superseded, with no broader producer/native milestone change.

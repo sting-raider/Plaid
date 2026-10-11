@@ -380,8 +380,9 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091045419",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6091158618"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "source_contract_reconciled",
+      "integration_commit": "05ed9cd",
+      "integration_note": "research/xori-transform-primary.md"
     },
     {
       "branch": "research/cross-block-join-gpt56sol",
@@ -2209,5 +2210,5 @@
       "integration_commit": "3ff5d3e"
     }
   ],
-  "canonical_source_reconciliation_head": "607c88e"
+  "canonical_source_reconciliation_head": "05ed9cd"
 }
