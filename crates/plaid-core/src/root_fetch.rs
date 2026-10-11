@@ -6,7 +6,7 @@
 //! It creates no reachability, mutation-census, mapping/cache-lifetime,
 //! whole-ROM closure, or native-completeness proof.
 use crate::{
-    exception_roots::{resolve_exception_root, ExceptionRootReceipt},
+    exception_roots::{ExceptionRootReceipt, resolve_exception_root},
     program::{GuestVirtualAddr, PhysicalAddr},
     rom::sha256,
 };
@@ -131,21 +131,14 @@ struct ResidentState {
 }
 
 fn require(ok: bool, message: &str) -> Result<(), String> {
-    if ok {
-        Ok(())
-    } else {
-        Err(message.into())
-    }
+    if ok { Ok(()) } else { Err(message.into()) }
 }
 
 fn cache_slot(vaddr: GuestVirtualAddr) -> u16 {
     ((vaddr.0 >> 5) & 0x1ff) as u16
 }
 
-fn validate_fill_address(
-    vaddr: GuestVirtualAddr,
-    physical: PhysicalAddr,
-) -> Result<u16, String> {
+fn validate_fill_address(vaddr: GuestVirtualAddr, physical: PhysicalAddr) -> Result<u16, String> {
     require(
         vaddr.0.is_multiple_of(4) && physical.0.is_multiple_of(4),
         "unaligned cache fill evidence",
@@ -213,9 +206,7 @@ pub fn inspect_cached_exception_root_history(
             "noncontiguous cached exception-root ordinals",
         )?;
         match event {
-            Event::BackingGeneration {
-                physical, word, ..
-            } => {
+            Event::BackingGeneration { physical, word, .. } => {
                 next_backing_generation = next_backing_generation
                     .checked_add(1)
                     .ok_or("backing generation overflow")?;
@@ -352,7 +343,7 @@ pub fn inspect_cached_exception_root_history(
 mod tests {
     use super::*;
     use crate::exception_roots::{ExceptionClass, ExceptionRootInput, KernelAddressMode};
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     const ROOT_PA: u32 = 0x180;
     const ROOT_VA: u64 = 0xffff_ffff_8000_0180;
@@ -385,13 +376,7 @@ mod tests {
         })
     }
 
-    fn fill(
-        ordinal: u64,
-        vaddr: u64,
-        physical: u32,
-        word: u32,
-        backing_ordinal: u64,
-    ) -> Value {
+    fn fill(ordinal: u64, vaddr: u64, physical: u32, word: u32, backing_ordinal: u64) -> Value {
         json!({
             "kind": "cache_fill",
             "ordinal": ordinal,
@@ -632,8 +617,7 @@ mod tests {
             exl: false,
             kernel_mode: KernelAddressMode::Bits32,
         });
-        let bev_error =
-            inspect_cached_exception_root_history(&bytes, &digest, bev).unwrap_err();
+        let bev_error = inspect_cached_exception_root_history(&bytes, &digest, bev).unwrap_err();
         assert!(bev_error.contains("cached direct segment"));
     }
 
