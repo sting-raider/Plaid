@@ -1467,3 +1467,23 @@ base and digest fields are superseded by strict typed report expectations.
 Share only original ISC fixtures/audits and synthetic metadata; reference code
 and notices remain ignored, with no branch workflow or upstream implementation
 entering production/native mode.
+
+## ADR-0097: Temporary ASID inactivity does not retire resident code
+
+Status: Accepted for controlled research verification, 2026-10-11.
+
+Retain the unmodified guest MTC0 EntryHi/cache fixture with complete typed finite
+report expectations. At the pinned interpreter, context switches leave installed
+entries and resident cache lines intact; a return can execute stale bytes after
+backing changes. An unmatched-ASID fault does not fill or retire that line. Equal
+payload at a different physical tag replaces it, allowing a later fresh refill.
+Context reachability, mapping storage, backing and resident bytes therefore need
+separate evidence; temporary inactivity alone is not a retirement boundary.
+
+Do not turn selected facts, internal snapshot equality or miss counters into a
+generation certificate. Direct setup/backing/reset operations do not establish
+guest writer census. Preserve exact tags, counters and digest checks against the
+old runner's accepted mutations. Keep Gopher's different cache-index policy
+explicit and hardware/lifetime/native obligations open. Share original ISC
+fixture/guards only; generated upstream code/notices remain ignored and no
+reference implementation or branch workflow is imported into native mode.
