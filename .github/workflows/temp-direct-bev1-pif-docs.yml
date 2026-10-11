@@ -1,0 +1,62 @@
+name: Temporary direct-integration reconciliation
+
+on:
+  push:
+    branches:
+      - direct-integration/bev1-pif-root-gpt56sol-direct-bev1-pif-root-20261011
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: direct-integration/bev1-pif-root-gpt56sol-direct-bev1-pif-root-20261011
+          fetch-depth: 0
+      - name: Reconcile latest main and append canonical docs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git merge --no-edit origin/main
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          decisions = Path('docs/DECISIONS.md')
+          status = Path('docs/STATUS.md')
+          nxt = Path('docs/NEXT.md')
+
+          d = decisions.read_text()
+          marker = 'BEV=1 PIF root provenance requires same-fetch backing identity'
+          nums = [int(x) for x in re.findall(r'ADR-(\d{4})', d)]
+          adr = max(nums) + 1
+          adr_id = f'ADR-{adr:04d}'
+
+          if marker not in d:
+              d += f'''\n\n## {adr_id}: {marker}\n\nStatus: Accepted for bounded production source composition, 2026-10-11.\n\nCompose the typed exception-root candidate with the existing strict PIF v4 source\nreplayer only for the validated BEV=1, EXL-clear, 32-bit-kernel general vector at\n`ffffffffbfc00380`. A supplied-PIF source receipt requires one caller-selected\nfetch sequence that survives complete-source replay as exactly one singleton PIF\nbacking observation at physical `1fc00380`, normalized PIF offset `0x380`, with\nthe fetched Word matching the supplied firmware. Retain the exact fetch sequence,\nbacking-read ordinal, complete history digest, ordered fetch/backing digest and\nsupplied-firmware digest. Recompute the receipt from all original sources when\nverifying it.\n\nDo not infer provenance from vector address, returned bits, a prior/latest equal\nPIF read, physical/masked-offset equality or a coalesced repeated sample. The\nvalidated SI-busy-latch case executes identical bits at the identical root with\nno PIF-ROM backing read, so missing same-fetch evidence remains UNKNOWN. Repeated\nidentical backed observations are conservatively rejected until production keeps\nper-occurrence identity. This authenticates one observed handler fetch source; it\ndoes not prove exception occurrence/classification chronology, BEV/EXL/mode\nwriter completeness, BEV=1 refill/XTLB behavior, PIF lifetime/authenticity,\ncache/mapping executable lifetime, root census, whole-ROM closure or native\ncompleteness. No upstream implementation or runtime dependency enters production.\n'''
+              decisions.write_text(d)
+
+          s = status.read_text()
+          status_marker = 'source-bound `exception_pif` composition'
+          if status_marker not in s:
+              s += f'''\n\n- Production now exposes bounded source-bound `exception_pif` composition for the\n  validated BEV=1 32-bit general exception root ({adr_id}). It replays the complete\n  strict PIF v4 source and certifies only a caller-selected singleton fetch at\n  `ffffffffbfc00380` / physical `1fc00380` / PIF offset `0x380` that actually\n  matches the supplied firmware. The receipt retains fetch identity, backing-read\n  ordinal and source/firmware digests; full source rechecking reconstructs it.\n  Current-production regressions preserve the SI-latch/equal-value ambiguity and\n  coalesced-repeat failure boundary. Address/value/mirror equality cannot supply\n  origin. Exception causality/classification chronology, BEV=1 refill/XTLB source\n  behavior, handler cache/mapping lifetime, remaining root classes, whole-ROM\n  closure and native completeness remain OPEN.\n'''
+              status.write_text(s)
+
+          n = nxt.read_text()
+          next_marker = 'The bounded BEV=1 general-root PIF composition'
+          if next_marker not in n:
+              n += f'''\n\nThe bounded BEV=1 general-root PIF composition now authenticates one exact\nsingleton observed handler fetch from complete PIF sources ({adr_id}). Next root\nwork must bind that fetch to authenticated exception occurrence/classification and\nBEV/EXL/address-mode chronology, then compose cache/mapping executable lifetime.\nReproduce BEV=1 refill/XTLB source behavior separately before extending the rule,\nand independently discharge interrupt/watch/cache-error/reset/NMI roots. Repeated\ncoalesced PIF observations, equal returned bits and matching mirrors stay OPEN\nwithout per-occurrence same-fetch backing identity.\n'''
+              nxt.write_text(n)
+          PY
+          git config user.name 'Plaid direct integration'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/DECISIONS.md docs/STATUS.md docs/NEXT.md
+          if ! git diff --cached --quiet; then
+            git commit -m 'Document BEV1 PIF root provenance composition'
+          fi
+          git push origin HEAD:direct-integration/bev1-pif-root-gpt56sol-direct-bev1-pif-root-20261011
