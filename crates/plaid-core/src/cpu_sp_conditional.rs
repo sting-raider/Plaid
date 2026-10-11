@@ -273,12 +273,7 @@ mod tests {
     #[test]
     fn forged_address_mapping_and_sp_bank_are_rejected() {
         let sc_context = context(0, 0x1122_3344);
-        let wrong_physical = effect(
-            &sc_context,
-            0xffff_ffff_a400_0000,
-            0x0400_1000,
-            0x1122_3344,
-        );
+        let wrong_physical = effect(&sc_context, 0xffff_ffff_a400_0000, 0x0400_1000, 0x1122_3344);
         assert_eq!(
             verify_sc_sp_effect(&sc_context, Some(&wrong_physical)).unwrap_err(),
             "SC physical destination does not match direct mapping"
@@ -347,12 +342,7 @@ mod tests {
         );
 
         let sc_context = context(0, 0x1122_3344);
-        let mut sink = effect(
-            &sc_context,
-            0xffff_ffff_a400_0000,
-            0x0400_0000,
-            0x1122_3344,
-        );
+        let mut sink = effect(&sc_context, 0xffff_ffff_a400_0000, 0x0400_0000, 0x1122_3344);
         sink.pc = GuestVirtualAddr(sink.pc.0 + 4);
         assert_eq!(
             verify_sc_sp_effect(&sc_context, Some(&sink)).unwrap_err(),
