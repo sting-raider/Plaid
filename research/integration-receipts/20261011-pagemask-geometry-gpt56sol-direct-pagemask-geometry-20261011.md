@@ -2,10 +2,10 @@
 
 - Worker: `gpt56sol-direct-pagemask-geometry-20261011`
 - Initial canonical base: `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5`
-- First reconciled base: `dd3f627d2c27f84611439ec1888ec4e3015e6bd2`
-- Intermediate reconciliation base: `9154b30b12026c8c122f654d7fe90f0f67968dce`
-- Final canonical validation base: `24689113469e0a3325601d7b6fd41b4d06ecf761`
-- Final tested production/docs tree: `648cc318880e373bffcdcfccdc66f5330cb2effd`
+- Prior reconciled bases: `dd3f627d2c27f84611439ec1888ec4e3015e6bd2`, `9154b30b12026c8c122f654d7fe90f0f67968dce`, `24689113469e0a3325601d7b6fd41b4d06ecf761`, `60c5af29a9199ae207d487b4d791b13fb21ae708`
+- Final canonical validation base: `0e0e999b626dbda3f47cfd6aa89673618ae20350`
+- Final clean tested integration head: `b3867bda4c200c19ef8e961cdb960446176ce3d0`
+- Validation-only child: `4c00ccec1b75ce237e51893a2807aa0d4f3fa45c`
 - Integration branch: `direct-integration/pagemask-geometry-gpt56sol-direct-pagemask-geometry-20261011`
 - Validation PR: #32
 
@@ -34,9 +34,9 @@ A fresh disposable validation branch derived from the integration tree ran the c
 
 The disposable evidence-only branch/workflow is validation scaffolding and is not part of the production integration.
 
-An earlier PR #32 Actions run `38153565891`, job `114511818906`, passed the exact decoder pin guard, `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, `cargo test --locked --workspace`, synthetic CLI checks, every retained synthetic contract including PageMask/EntryHi/TLBR cache regressions, and the independent fetch-summary oracle.
+Earlier complete gates remained green while canonical `main` advanced through BEV1 PIF-root provenance, RSP IMEM egress, the manual-only CI policy, NMI-root provenance and cached exception-root generation. After the last of those landed at `0e0e999b626dbda3f47cfd6aa89673618ae20350`, this integration was rebuilt from that exact canonical tree, preserving all landed modules and canonical docs. ADR numbering was reconciled so PageMask geometry is ADR-0105 after cached exception-root generation ADR-0104.
 
-Canonical `main` subsequently advanced through the BEV1 PIF-root integration, RSP IMEM egress integration, and finally the infrastructure commit `24689113469e0a3325601d7b6fd41b4d06ecf761`, which deliberately changed the canonical Rust workflow to manual-only. The integration was reconciled onto that exact head. Because the connector cannot dispatch the manual workflow directly, a disposable validation-only branch added only a push-trigger copy of the canonical gate. Actions run `38154323446`, job `114514041487`, succeeded on the exact production/docs tree `648cc318880e373bffcdcfccdc66f5330cb2effd`: exact decoder pin, formatting, strict workspace Clippy, full locked workspace tests, CLI, all retained synthetic contracts, and the independent fetch-summary oracle all passed. The validation-only workflow is not part of the integration diff.
+Because the canonical Rust workflow is deliberately `workflow_dispatch`-only, an isolated validation child added only a branch-scoped push trigger. Actions run `38155294921`, job `114516913833`, succeeded on clean integration head `b3867bda4c200c19ef8e961cdb960446176ce3d0`: exact decoder dependency pin, `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, `cargo test --locked --workspace`, synthetic CLI checks, every retained synthetic contract from spikes 044 through 054, and the independent fetch-summary oracle all passed. The validation workflow exists only on the disposable validation branch and is not part of the integration diff. This receipt-only finalization followed that green gate and does not alter tested code or canonical documentation.
 
 ## Adopted invariant
 
