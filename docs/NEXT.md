@@ -3,7 +3,8 @@
 Primary integration harvest (2026-10-11): static executable-identity hardening is
 integrated, along with trace/event integrity, retained raw-fact solver gates and
 Region/load/overlay validation, fetch-summary realizability and pointer guards.
-Next reconcile intervening-writer provenance and the remaining validated findings.
+Intervening-writer provenance is integrated. Reconcile remaining research results,
+including negative controls and measured scalability, before new architecture work.
 Keep TLB/cache/lifetime, producer and execution-root research separate until its
 source contracts compose; do not resume a new architecture lane ahead of this
 harvest. See `research/integration-harvest-20261011.md`.

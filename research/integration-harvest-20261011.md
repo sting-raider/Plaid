@@ -161,3 +161,23 @@ for that candidate. Seventeen focused tests, full locked core, fmt and strict
 Clippy pass. Removed an unused research-test import and a redundant closure
 found by strict Clippy. The exact pinned Rabbitizer trap/opcode metadata and
 existing discovery unsupported policy agree. No upstream code is reused.
+
+## Batch 8: intervening executable writers
+
+Four research adversaries reproduced on batch-7 main; three controls passed.
+Reviewed/adopted `research/import-dma-intervening-store-gpt56sol`, superseding its
+production candidate. Primary review additionally reproduced stale attribution
+after an equal-byte partial DMA following an older covering copy. Extended the
+same causal rule to retained DMA writers rather than allowing a second primitive
+kind to evade it. Added a later complete-copy control and an exact store-event
+evidence assertion plus complete-source/installed-entry recheck.
+
+Nine focused cases, shared source-projection suites, full locked core, fmt and
+strict Clippy pass. `scripts/test_mupen_hooks.py` reproduces 38 events/four units,
+clipped DMA, links, epoch separation, Rust import and OPEN solving. Reviewed the
+original cartridge copy implementation via `git show` at exact Mupen revision
+`ba95bab92a76744753bfe61470823a4937850ab0`, separately from the applied sensor patch
+and its limited successful cached-RDRAM SW contract. No sensor patch changed.
+No byte-equality origin inference, positive store/mixed-writer lineage, complete
+mutation coverage or native readiness is claimed. Writer scans remain bounded
+linear checks without a scalability claim.

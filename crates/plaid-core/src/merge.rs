@@ -247,6 +247,9 @@ fn import(
     let mut recent = Vec::<CodeImage>::new();
     let mut observations = Vec::<PendingIndirect>::new();
     let mut transfers = Vec::<(u64, RomOffset, PhysicalAddr, u32)>::new();
+    // Successful stores are causal writers even when they leave equal bytes.
+    // Keep their trace order so a later store can revoke an older DMA origin.
+    let mut word_stores = Vec::<(u64, PhysicalAddr, EvidenceRefs)>::new();
     for event in &trace.events {
         let id = format!("trace:{session}:{}", event.seq);
         let evidence: EvidenceRefs = [id.clone()].into();
@@ -273,6 +276,7 @@ fn import(
                     evidence: evidence.clone(),
                 });
                 let physical = destination.0 & 0x1fffffff;
+                word_stores.push((event.seq, PhysicalAddr(physical), evidence.clone()));
                 if out.regions.iter().any(|r| {
                     r.physical_start.is_some_and(|p| {
                         u64::from(p.0) < u64::from(physical) + 4
@@ -346,19 +350,50 @@ fn import(
                 for w in words {
                     bytes.extend(w.to_be_bytes());
                 }
-                let transfer = state.1.and_then(|physical| {
-                    transfers
-                        .iter()
-                        .rev()
-                        .find(|(_, _, dest, size)| {
-                            dest.0 <= physical.0
-                                && u64::from(dest.0) + u64::from(*size)
-                                    >= u64::from(physical.0) + words.len() as u64 * 4
-                        })
-                        .map(|(seq, offset, dest, _)| {
-                            (*seq, RomOffset(offset.0 + u64::from(physical.0 - dest.0)))
-                        })
-                });
+                let (transfer, intervening_store_evidence, intervening_dma_evidence) =
+                    if let Some(physical) = state.1 {
+                        let compiled_end = u64::from(physical.0) + words.len() as u64 * 4;
+                        if let Some((seq, offset, dest, _)) =
+                            transfers.iter().rev().find(|(_, _, dest, size)| {
+                                dest.0 <= physical.0
+                                    && u64::from(dest.0) + u64::from(*size) >= compiled_end
+                            })
+                        {
+                            let store_evidence: EvidenceRefs = word_stores
+                                .iter()
+                                .filter(|(store_seq, store, _)| {
+                                    *store_seq > *seq
+                                        && u64::from(store.0) < compiled_end
+                                        && u64::from(physical.0) < u64::from(store.0) + 4
+                                })
+                                .flat_map(|(_, _, refs)| refs.iter().cloned())
+                                .collect();
+                            // A later partial DMA is also a writer. Selecting only
+                            // covering transfers must not hide changes to a subset
+                            // of the compiled span, even when payloads are equal.
+                            let dma_evidence: EvidenceRefs = transfers
+                                .iter()
+                                .filter(|(later, _, destination, size)| {
+                                    *later > *seq
+                                        && u64::from(destination.0) < compiled_end
+                                        && u64::from(physical.0)
+                                            < u64::from(destination.0) + u64::from(*size)
+                                })
+                                .map(|(later, _, _, _)| format!("trace:{session}:{later}"))
+                                .collect();
+                            let transfer = (store_evidence.is_empty() && dma_evidence.is_empty())
+                                .then(|| {
+                                    (*seq, RomOffset(offset.0 + u64::from(physical.0 - dest.0)))
+                                });
+                            (transfer, store_evidence, dma_evidence)
+                        } else {
+                            (None, EvidenceRefs::new(), EvidenceRefs::new())
+                        }
+                    } else {
+                        (None, EvidenceRefs::new(), EvidenceRefs::new())
+                    };
+                let source_tainted =
+                    !intervening_store_evidence.is_empty() || !intervening_dma_evidence.is_empty();
                 let dma_image = match (rom, transfer) {
                     (Some(rom), Some((dma_seq, offset))) => {
                         let mut mapped = CodeImage::from_rom(
@@ -398,7 +433,7 @@ fn import(
                 };
                 let base = if let Some(mapped) = &dma_image {
                     mapped.base.clone()
-                } else if state.3 == 0 && matching.len() == 1 {
+                } else if !source_tainted && state.3 == 0 && matching.len() == 1 {
                     matching[0].address(*start)
                 } else {
                     CodeAddress {
@@ -412,7 +447,7 @@ fn import(
                     words: words.clone(),
                     rom_offset: if let Some(mapped) = &dma_image {
                         mapped.rom_offset
-                    } else if matching.len() == 1 {
+                    } else if !source_tainted && matching.len() == 1 {
                         matching[0]
                             .rom_offset
                             .map(|o| RomOffset(o.0 + u64::from(start.0 - matching[0].base.pc.0)))
@@ -424,6 +459,22 @@ fn import(
                 let refs: EvidenceRefs = evidence.union(&state.5).cloned().collect();
                 let mut imported = ProgramMap::new(out.rom.clone());
                 imported.evidence = out.evidence.clone();
+                if !intervening_store_evidence.is_empty() {
+                    imported.unresolved.insert(Unresolved {
+                        kind: "intervening_executable_store".into(),
+                        site: Some(base.clone()),
+                        detail: "successful CPU store after candidate DMA overlaps compiled physical bytes; equal content cannot restore superseded copy provenance".into(),
+                        evidence: intervening_store_evidence.clone(),
+                    });
+                }
+                if !intervening_dma_evidence.is_empty() {
+                    imported.unresolved.insert(Unresolved {
+                        kind: "intervening_executable_dma".into(),
+                        site: Some(base.clone()),
+                        detail: "later partial DMA overlaps compiled physical bytes; an older covering copy cannot explain the current complete span".into(),
+                        evidence: intervening_dma_evidence,
+                    });
+                }
                 imported.regions.insert(Region {
                     image: base.image.clone(),
                     generation: base.generation,
