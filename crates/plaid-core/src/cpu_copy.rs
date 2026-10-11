@@ -5,9 +5,11 @@ use crate::{
     rom::sha256,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 pub const FORMAT: &str = "plaid-cpu-copy-history-v0";
 pub const DEFINITION_FORMAT: &str = "plaid-cpu-word-definitions-v0";
+pub const LINEAGE_FORMAT: &str = "plaid-cpu-copy-lineage-v0";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -88,6 +90,51 @@ pub struct CpuCopyReport {
     pub native_complete: bool,
 }
 
+/// A local storage generation minted by one captured successful aligned SW.
+/// `generation` is scoped by `phase`; it is intentionally distinct from the
+/// source event ordinal. Neither identity implies complete mutation coverage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CapturedStorageGeneration {
+    pub phase: u32,
+    pub generation: u64,
+    pub write_ordinal: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CapturedWordWrite {
+    pub identity: CapturedStorageGeneration,
+    pub context: u64,
+    pub destination: PhysicalAddr,
+    pub value: u32,
+}
+
+/// A copy witness joined only to storage writers visible in the same authenticated
+/// source and phase. `captured_source_generation=None` means UNKNOWN, not initial
+/// or immutable storage.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CapturedWordLineage {
+    pub witness: WordCopyWitness,
+    pub captured_source_generation: Option<CapturedStorageGeneration>,
+    pub destination_generation: CapturedStorageGeneration,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CpuCopyLineageReport {
+    pub format: String,
+    pub source_format: String,
+    pub source_sha256: String,
+    pub captured_word_writes: Vec<CapturedWordWrite>,
+    pub word_lineage: Vec<CapturedWordLineage>,
+    pub source_storage_ancestry_certified: bool,
+    pub mutation_coverage_certified: bool,
+    pub executable_lifetime_certified: bool,
+    pub native_complete: bool,
+}
+
 struct Context<'a> {
     begin: &'a Instruction,
     end: Option<&'a Instruction>,
@@ -136,6 +183,26 @@ pub fn inspect_cpu_definition_history(
     expected_sha256: &str,
 ) -> Result<CpuCopyReport, String> {
     inspect(source, expected_sha256, true)
+}
+
+/// Reuse the strict adjacent-copy replay, then retain every captured successful
+/// Word store so overlapping copies can name the exact earlier captured storage
+/// generation visible at a later load. Missing captured writers remain UNKNOWN.
+pub fn inspect_cpu_copy_lineage(
+    source: &[u8],
+    expected_sha256: &str,
+) -> Result<CpuCopyLineageReport, String> {
+    let report = inspect_cpu_copy_history(source, expected_sha256)?;
+    lineage(source, report)
+}
+
+/// Definition-tracking counterpart of [`inspect_cpu_copy_lineage`].
+pub fn inspect_cpu_definition_lineage(
+    source: &[u8],
+    expected_sha256: &str,
+) -> Result<CpuCopyLineageReport, String> {
+    let report = inspect_cpu_definition_history(source, expected_sha256)?;
+    lineage(source, report)
 }
 
 fn inspect(
@@ -354,6 +421,93 @@ fn inspect(
     })
 }
 
+fn lineage(source: &[u8], report: CpuCopyReport) -> Result<CpuCopyLineageReport, String> {
+    let history: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
+    require(
+        history.format == report.format && sha256(source) == report.source_sha256,
+        "CPU lineage source differs from validated copy report",
+    )?;
+    let mut effects: Vec<_> = history.scalar_events.iter().collect();
+    effects.sort_by_key(|e| e.ordinal);
+    let mut phase = None;
+    let mut generation = 0u64;
+    let mut latest = BTreeMap::<PhysicalAddr, CapturedStorageGeneration>::new();
+    let mut read_generations = BTreeMap::<u64, Option<CapturedStorageGeneration>>::new();
+    let mut write_generations = BTreeMap::<u64, CapturedStorageGeneration>::new();
+    let mut captured_word_writes = Vec::new();
+    for effect in effects {
+        if phase != Some(effect.phase) {
+            require(
+                phase.is_none_or(|previous| effect.phase > previous),
+                "CPU lineage phase reused or reordered",
+            )?;
+            phase = Some(effect.phase);
+            generation = 0;
+            latest.clear();
+        }
+        if effect.write {
+            generation = generation
+                .checked_add(1)
+                .ok_or("CPU lineage generation overflow")?;
+            let identity = CapturedStorageGeneration {
+                phase: effect.phase,
+                generation,
+                write_ordinal: effect.ordinal,
+            };
+            require(
+                write_generations.insert(effect.ordinal, identity).is_none(),
+                "duplicate CPU lineage write ordinal",
+            )?;
+            latest.insert(effect.address, identity);
+            captured_word_writes.push(CapturedWordWrite {
+                identity,
+                context: effect.context,
+                destination: effect.address,
+                value: effect.value,
+            });
+        } else {
+            require(
+                read_generations
+                    .insert(effect.ordinal, latest.get(&effect.address).copied())
+                    .is_none(),
+                "duplicate CPU lineage read ordinal",
+            )?;
+        }
+    }
+    let mut word_lineage = Vec::with_capacity(report.witnesses.len());
+    for witness in report.witnesses {
+        let captured_source_generation = read_generations
+            .get(&witness.read_ordinal)
+            .copied()
+            .ok_or("copy witness read missing captured lineage state")?;
+        let destination_generation = write_generations
+            .get(&witness.write_ordinal)
+            .copied()
+            .ok_or("copy witness write missing captured lineage generation")?;
+        require(
+            destination_generation.phase == witness.phase
+                && captured_source_generation.is_none_or(|source| source.phase == witness.phase),
+            "copy witness crossed captured storage phase",
+        )?;
+        word_lineage.push(CapturedWordLineage {
+            witness,
+            captured_source_generation,
+            destination_generation,
+        });
+    }
+    Ok(CpuCopyLineageReport {
+        format: LINEAGE_FORMAT.into(),
+        source_format: report.format,
+        source_sha256: report.source_sha256,
+        captured_word_writes,
+        word_lineage,
+        source_storage_ancestry_certified: false,
+        mutation_coverage_certified: false,
+        executable_lifetime_certified: false,
+        native_complete: false,
+    })
+}
+
 fn word_witness(
     load: &Context<'_>,
     transform: Option<&Context<'_>>,
@@ -412,5 +566,27 @@ pub fn verify_cpu_definition_report(
     require(
         *report == inspect_cpu_definition_history(source, expected_sha256)?,
         "CPU definition report differs from complete source replay",
+    )
+}
+
+pub fn verify_cpu_copy_lineage_report(
+    report: &CpuCopyLineageReport,
+    source: &[u8],
+    expected_sha256: &str,
+) -> Result<(), String> {
+    require(
+        *report == inspect_cpu_copy_lineage(source, expected_sha256)?,
+        "CPU copy lineage report differs from complete source replay",
+    )
+}
+
+pub fn verify_cpu_definition_lineage_report(
+    report: &CpuCopyLineageReport,
+    source: &[u8],
+    expected_sha256: &str,
+) -> Result<(), String> {
+    require(
+        *report == inspect_cpu_definition_lineage(source, expected_sha256)?,
+        "CPU definition lineage report differs from complete source replay",
     )
 }
