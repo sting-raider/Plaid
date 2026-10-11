@@ -460,8 +460,8 @@
       ],
       "disposition": "reviewed_model_only",
       "integration_commit": null,
-      "primary_review": "research/decompression-compaction-primary-review.md",
-      "review_base": "55fdc15"
+      "review_base": "55fdc15",
+      "review_note": "research/decompression-compaction-primary-review.md"
     },
     {
       "branch": "research/decompression-lineage-receipt-gpt56sol",
@@ -1569,8 +1569,10 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090962492",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6096679172"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "reviewed_model_only",
+      "integration_commit": null,
+      "review_note": "research/relocation-primary-review.md",
+      "review_base": "76d5770"
     },
     {
       "branch": "research/savestate-tlb-cache-epoch-gpt56sol",
