@@ -3,6 +3,7 @@
 //! Keep this crate free of ROM assets and game-specific assumptions.
 
 pub mod cpu_copy;
+pub mod cpu_mutation;
 pub mod discovery;
 pub mod fetch;
 pub mod history;
