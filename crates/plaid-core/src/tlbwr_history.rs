@@ -19,10 +19,7 @@ const CAPTURED_RANDOM_VALUES: u8 = 64;
 #[serde(rename_all = "snake_case")]
 pub enum TlbwrNoWriteKind {
     OutOfRangeSelection { selected_slot: u8 },
-    Exception {
-        code: u8,
-        selected_slot: Option<u8>,
-    },
+    Exception { code: u8, selected_slot: Option<u8> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -242,9 +239,18 @@ pub fn inspect_tlbwr_history(
                 let current = active
                     .as_mut()
                     .ok_or("TLBWR selection without active instruction")?;
-                require(context == current.context, "TLBWR selection context mismatch")?;
-                require(current.selection.is_none(), "duplicate TLBWR selection boundary")?;
-                require(current.write.is_none(), "TLBWR selection after write boundary")?;
+                require(
+                    context == current.context,
+                    "TLBWR selection context mismatch",
+                )?;
+                require(
+                    current.selection.is_none(),
+                    "duplicate TLBWR selection boundary",
+                )?;
+                require(
+                    current.write.is_none(),
+                    "TLBWR selection after write boundary",
+                )?;
                 require(
                     slot < CAPTURED_RANDOM_VALUES,
                     "TLBWR selection outside captured random field",
@@ -344,9 +350,8 @@ pub fn inspect_tlbwr_history(
                             selected_slot: selection.map(|observed| observed.slot),
                         }
                     } else {
-                        let selection = selection.ok_or(
-                            "successful TLBWR lacks observed random selection boundary",
-                        )?;
+                        let selection = selection
+                            .ok_or("successful TLBWR lacks observed random selection boundary")?;
                         require(
                             selection.slot >= TLB_ENTRIES,
                             "in-range successful TLBWR lacks an observed write boundary",
