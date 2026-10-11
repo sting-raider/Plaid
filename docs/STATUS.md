@@ -761,3 +761,16 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   Sensor completeness, mapping semantics, TLBWR/context chronology, cache
   residency, executable lifetime and whole-ROM/native completeness remain OPEN
   (ADR-0102).
+
+
+- Production now exposes bounded source-bound `exception_pif` composition for the
+  validated BEV=1 32-bit general exception root (ADR-0103). It replays the complete
+  strict PIF v4 source and certifies only a caller-selected singleton fetch at
+  `ffffffffbfc00380` / physical `1fc00380` / PIF offset `0x380` that actually
+  matches the supplied firmware. The receipt retains fetch identity, backing-read
+  ordinal and source/firmware digests; full source rechecking reconstructs it.
+  Current-production regressions preserve the SI-latch/equal-value ambiguity and
+  coalesced-repeat failure boundary. Address/value/mirror equality cannot supply
+  origin. Exception causality/classification chronology, BEV=1 refill/XTLB source
+  behavior, handler cache/mapping lifetime, remaining root classes, whole-ROM
+  closure and native completeness remain OPEN.
