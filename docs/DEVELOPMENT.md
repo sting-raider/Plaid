@@ -154,7 +154,7 @@ python tools/progress.py --check
 
 Do not mark a milestone verified merely because a research branch exists. The progress map describes canonical `main`.
 
-## Swarm development
+## Swarm development and canonical writes
 
 Automated workers should read:
 
@@ -164,9 +164,21 @@ Automated workers should read:
 - [`NEXT.md`](NEXT.md)
 - [`DECISIONS.md`](DECISIONS.md)
 
-Research/integration workers coordinate through issue #4.
+Research/integration workers coordinate semantic ownership through issue #4.
 
-During direct-integration periods, canonical writes must follow the active main-write lease protocol. Do not race `main`, force-push, or substitute historical CI for required current-tree validation.
+Plaid supports normal primary-integrator mode and explicit user-authorized direct-integration mode. During direct integration, there is **no main-write lease**. Workers may prepare and validate in parallel, but a canonical write must use exact-head compare-and-swap:
+
+1. fetch `main` and record exact SHA `A`;
+2. reconcile the candidate onto `A`;
+3. run all required local validation on that exact tree;
+4. refetch `main` immediately before the write;
+5. if it moved, reconcile and rerun validation;
+6. if it is still `A`, update `main` atomically with `expected_sha=A`;
+7. if the CAS loses a race, fetch the winner, reconcile, retest, and retry.
+
+Never force-push `main`. Never land a candidate validated only against an older parent. A claim in issue #4 prevents duplicated semantic work; it does not reserve the canonical branch.
+
+GitHub Actions remains manual-only. Historical CI can be supporting evidence but does not substitute for required validation of the exact candidate tree.
 
 ## Scope discipline
 

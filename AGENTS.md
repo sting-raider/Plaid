@@ -17,9 +17,32 @@ Build an automatic N64 ROM-to-native recompilation system. The final native game
 
 ## Agent workflow
 
-Use one continuing **primary implementation/integration session** for canonical Plaid changes. Parallel experimental research workers are explicitly allowed under `ORCHESTRATION.md`: they may patch, compile, instrument, fuzz, benchmark, and test in isolated branches/worktrees, but the primary integrator owns reconciliation into the active integration branch.
+Plaid supports two integration modes.
 
-`SWARM_BACKLOG.md` remains a legacy/high-level task ledger rather than an instruction to duplicate work. All workers must read `ORCHESTRATION.md`; parallel workers must inspect and use the shared claim ledger in GitHub issue #4 before starting overlapping work.
+### Normal mode
+
+A continuing primary implementation/integration session owns canonical integration. Parallel research workers operate in isolated branches/worktrees, publish evidence, and hand integration-ready work to the primary integrator.
+
+### User-authorized direct-integration mode
+
+When the user explicitly authorizes direct integration, multiple workers may prepare and validate independent production changes in parallel. Canonical writes are serialized by **exact-head compare-and-swap (CAS)**, not by a main-write lease.
+
+A direct-integration worker must:
+
+1. fetch current `main` and record its exact SHA `A`;
+2. reconcile the candidate onto `A`;
+3. run the required local validation on that exact resulting tree;
+4. refetch `main` immediately before the canonical write;
+5. if `main != A`, do **not** push the previously tested candidate: reconcile onto the new head and rerun validation;
+6. if `main == A`, create a commit whose parent is exactly `A` and atomically update `main` with `expected_sha=A`;
+7. if the CAS is rejected, treat that as normal main drift and return to step 1;
+8. never force-push or bypass the expected-head check.
+
+The invariant is simple: **nothing may land on `main` unless the final validated commit is a direct child of the exact canonical head against which that final validation was performed.**
+
+Issue #4 claims coordinate semantic work ownership and prevent duplication. They do not reserve `main` and are not a substitute for exact-head CAS.
+
+`SWARM_BACKLOG.md` remains a legacy/high-level task ledger rather than an instruction to duplicate work. All workers must read `ORCHESTRATION.md`; parallel workers must inspect and use the shared coordination ledger in GitHub issue #4 before starting overlapping work.
 
 Read and maintain `docs/STATUS.md`, `docs/NEXT.md`, `docs/DECISIONS.md` and relevant research notes. Commit coherent, tested milestones and continue through routine steps without waiting for approval. Executable discovery precedes serious native lowering.
 
@@ -27,12 +50,29 @@ For each task:
 
 1. Read `README.md`, `docs/PLAN.md`, `docs/ARCHITECTURE.md`, `docs/SOURCES.md`, `ORCHESTRATION.md`, and this file.
 2. Read the relevant upstream/reference implementation at the pinned commit from `refs.lock.toml`.
-3. State the hypothesis in the issue/experiment note.
-4. Make the smallest change that can prove or disprove it.
+3. State the hypothesis or integration claim in issue #4 / the experiment note.
+4. Make the smallest coherent change that proves, disproves, or productizes the intended invariant.
 5. Add deterministic tests before claiming success.
-6. Run the applicable test suite.
+6. Run the applicable local test suite.
 7. Record measurements or behavioral diffs in `research/` or `experiments/` when the result affects architecture.
 8. Update `SWARM_BACKLOG.md` only for task status/ownership, not as a substitute for technical documentation.
+
+## Local validation
+
+GitHub Actions is manual-only and is not the canonical gate for ordinary integrations.
+
+When production Rust changes are involved, run locally at minimum:
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked --workspace
+python scripts/test_cli.py
+```
+
+Also run focused regressions, relevant retained synthetic contracts, `python tools/progress.py --check` when progress data changes, and exact pinned-reference checks when semantics depend on a reference implementation.
+
+Historical CI can support a claim, but it does not replace validation of the exact tree being proposed for `main`.
 
 ## Native-mode acceptance
 
