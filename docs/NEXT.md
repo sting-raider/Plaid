@@ -335,3 +335,9 @@ Compose actual CPU copy/transform/store ancestry with its mutation ordinal and
 byte lanes, then bind exported bytes to subsequent executable fills/fetches.
 Cached mutation alone cannot refresh instruction residency; TLB/alias and epoch
 transitions require independent authenticated context and lifetime evidence.
+
+CPU copy's captured-writer chronology now records phase-scoped successful Word
+stores (ADR-0110). Complete writer coverage is still required before turning a
+compatible captured candidate into actual source ancestry. Compose external
+device/RSP/DMA and cache/epoch cuts explicitly; observed contradictory reads
+already revoke stale candidates and equal later values do not restore them.
