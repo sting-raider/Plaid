@@ -143,12 +143,8 @@ mod tests {
                         (ExceptionVectorClass::General, 0x180)
                     } else {
                         match kernel_mode {
-                            KernelAddressMode::Bits32 => {
-                                (ExceptionVectorClass::TlbRefill, 0x000)
-                            }
-                            KernelAddressMode::Bits64 => {
-                                (ExceptionVectorClass::XtlbRefill, 0x080)
-                            }
+                            KernelAddressMode::Bits32 => (ExceptionVectorClass::TlbRefill, 0x000),
+                            KernelAddressMode::Bits64 => (ExceptionVectorClass::XtlbRefill, 0x080),
                         }
                     };
                     assert_eq!(receipt.vector_class, class);
