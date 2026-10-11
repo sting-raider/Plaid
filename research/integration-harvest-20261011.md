@@ -211,3 +211,30 @@ The real 520-stage/512-pass frontier test takes about 127 seconds locally and is
 retained without shrinking its boundary or ignoring it. Full locked workspace,
 fmt, strict workspace Clippy and synthetic CLI checks pass. No production
 behavior, milestone state or closure scope is expanded by this test batch.
+
+## Batch 10: measured merge conflict indexing
+
+Reviewed the exact-source transformer and equivalence argument from
+`research/programmap-merge-scalability-gpt56sol`; its production candidate is
+superseded. Reproduced release baseline on batch-9 main before modifying source.
+Retained four research equivalence cases and an explicitly invoked ignored
+release benchmark; added a 256-subset independent old-pairwise oracle covering
+generation separation, edge-kind groups, canonical diagnostic collisions and
+merge reversal. No semantic winner or provenance reference is discarded.
+
+Local release medians (three samples each), in milliseconds:
+
+| Facts | Blocks before | Blocks indexed | Edges before | Edges indexed |
+| ---: | ---: | ---: | ---: | ---: |
+| 500 | 1.230 | 0.628 | 1.012 | 0.645 |
+| 1,000 | 3.893 | 1.170 | 3.061 | 1.407 |
+| 2,000 | 14.738 | 2.745 | 10.710 | 2.954 |
+| 4,000 | 55.622 | 4.910 | 39.558 | 6.997 |
+| 8,000 | 224.453 | 11.273 | 154.773 | 14.700 |
+
+At 8,000 facts, measured speedups are about 19.9x and 10.5x on this host.
+Five focused equivalence tests, the 14-test existing merge suite, full locked
+core (including the real 512-pass exhaustion case), fmt and strict Clippy pass.
+Exact Rabbitizer pin remains unchanged. These synthetic measurements claim no
+general solver/ProgramMap scaling, hardware behavior, memory improvement or
+whole-ROM closure. The branch-only transformer/workflow is not included.

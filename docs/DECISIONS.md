@@ -1255,3 +1255,16 @@ an old origin. This composes retained primitive facts with import-time provenanc
 without inventing positive CPU-store or mixed-writer lineage. Sensor completeness,
 cache residency and arbitrary executable lifetime remain independent obligations.
 The bounded writer scan is unoptimized; no performance claim or upstream reuse.
+
+## ADR-0086: Index merge contradictions by their existing exact identity keys
+
+Status: Accepted, 2026-10-11.
+
+Replace all-pairs block/edge conflict scans with groups keyed by block start or
+(edge site, kind), preserving complete CodeAddress identity. A group with more
+than one semantic signature retains all participating evidence in the same
+canonical diagnostic. Preserve contradictory facts, not a selected winner.
+The former pairwise rule is an independent test oracle; local release A/B
+measurement reproduces the bottleneck and improvement. This optimizes only that
+merge phase, not solver identity scans or complete-history processing. No proof
+obligation, serialization contract or upstream implementation is changed.
