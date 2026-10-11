@@ -761,3 +761,17 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   Sensor completeness, mapping semantics, TLBWR/context chronology, cache
   residency, executable lifetime and whole-ROM/native completeness remain OPEN
   (ADR-0102).
+
+- Production now exposes bounded source-bound `restore_epoch` replay for
+  synchronized compiler-time savestate loads. One saved snapshot binds opaque
+  installed-TLB, translation-context and resident-I-cache digests; every accepted
+  load mints a fresh ordered restore epoch and exactly one authenticated root for
+  each component. Equal component bytes cannot bridge snapshot identities,
+  restore epochs or load boundaries. Changed/missing/duplicate roots, unsaved
+  snapshots, reordered/reused epochs, source tampering and save-only histories
+  fail closed. Public result fields are private and not deserializable, preventing
+  callers from fabricating roots around source replay. The exact pinned ares
+  savestate fixture and adversarial model remain green. This bounded compiler-time
+  contract does not certify all serialized emulator state, sensor completeness,
+  hardware reset behavior, byte-level resident ancestry, executable lifetime,
+  whole-ROM closure or native completeness (ADR-0103).
