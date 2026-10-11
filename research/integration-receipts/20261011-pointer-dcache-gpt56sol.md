@@ -7,7 +7,8 @@ Worker: `gpt56sol-direct-pointer-dcache-20261011`
 ## Base and source research
 
 - Initial canonical `main`: `6b53a15c4c6eaadc8e0d002dd6818c600ebf2a7d`.
-- After the serialized exception-root integration advanced canonical main, this batch was semantically rebased onto `539ff0ce72a98b296a8a28135fda6eab90a2f6ac` before its own main-write lease.
+- After the serialized exception-root integration advanced canonical main, this batch was semantically rebased onto `539ff0ce72a98b296a8a28135fda6eab90a2f6ac`.
+- After the serialized TLBWI-generation integration advanced canonical main again, this batch was semantically rebased onto `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5`, preserving both concurrent production modules and all canonical TLBWI documentation.
 - Pointer alias / immutability evidence: `research/pointer-table-alias-gpt56` at `ef31dc6066712c509fa7e7e33c1f7224b9a8dd9c` and `research/pointer-table-immutability-aliases.md`.
 - D-cache load-source evidence: `research/pointer-table-dcache-load-source-gpt56sol` at `8da5cc98d03a522509c1f5c307de6552d08605f4` and `research/ares-pointer-table-dcache-load-source.md`.
 - Issue #4 research closeout used: comment `6096882129`.
@@ -63,19 +64,19 @@ The research branch remains evidence. Its production-shaped patch history is sup
 - `crates/plaid-core/tests/dcache_source_order.rs`
 - `research/integration-receipts/20261011-pointer-dcache-gpt56sol.md`
 
-The post-lease rebase preserved concurrent `exception_roots` integration in `lib.rs` and retained canonical documentation from `539ff0ce72a98b296a8a28135fda6eab90a2f6ac`. No ProgramMap schema, solver rule, pointer-table blocker or progress milestone changes. `docs/STATUS.md`, `docs/NEXT.md`, `docs/DECISIONS.md` and `docs/progress.json` are deliberately unchanged by this batch: the high-level pointer-table milestone remains partial, the existing NEXT obligation to prove pointer-table immutability/guard coverage remains accurate, and no architectural policy changed. The implementation-specific state and validation record therefore live in this durable receipt rather than rewriting canonical status documents merely to announce activity.
+The serialized rebases preserve concurrent `exception_roots` and `tlb_history` integration in `lib.rs` and retain canonical documentation from `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5`. No ProgramMap schema, solver rule, pointer-table blocker or progress milestone changes. `docs/STATUS.md`, `docs/NEXT.md`, `docs/DECISIONS.md` and `docs/progress.json` are deliberately unchanged by this batch: the high-level pointer-table milestone remains partial, the existing NEXT obligation to prove pointer-table immutability/guard coverage remains accurate, and no architectural policy changed. The implementation-specific state and validation record therefore live in this durable receipt rather than rewriting canonical status documents merely to announce activity.
 
 ## Validation
 
-Canonical pull-request workflow run `38151729633` passed completely on frozen pre-rebase head `fdda961884072505128d293517a38f2740025f2e`, including the final immediate burst-pairing hardening and ordering regression. Because canonical main advanced under another worker's valid main-write lease, this exact production tree was then semantically rebased onto `539ff0ce72a98b296a8a28135fda6eab90a2f6ac`; the rebased frozen head is required to pass the full canonical workflow again before this worker acquires its own lease, and that post-rebase run is recorded in the issue #4 integration closeout.
+Canonical pull-request workflow run `38151729633` passed completely on frozen pre-rebase head `fdda961884072505128d293517a38f2740025f2e`, including the final immediate burst-pairing hardening and ordering regression. After the exception-root integration, post-rebase workflow run `38152247176` passed completely on `945bd883140df145582b96c46dcbe8a2da516228`. Canonical main then advanced again under the valid TLBWI-generation main-write lease; this exact production tree was semantically rebased onto `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5`. The final receipt-bearing head is required to pass the full canonical workflow again before this worker acquires its own lease; that final run is recorded in the issue #4 integration closeout.
 
-Focused regression results on the fully green pre-rebase head:
+Focused regression results on the fully green earlier heads:
 
 - `tests/dcache_source.rs`: 5 passed, 0 failed.
 - `tests/dcache_source_order.rs`: 1 passed, 0 failed.
 - The five semantic reference shapes and all integration adversaries described above passed.
 
-Full canonical gates passed on that frozen production tree:
+Full canonical gates passed on those frozen production trees:
 
 - exact pinned Rabbitizer dependency check: PASS;
 - `cargo fmt --all -- --check`: PASS;
@@ -85,7 +86,7 @@ Full canonical gates passed on that frozen production tree:
 - canonical synthetic CPU-copy, XORI, CPU-SP, RSP/CPU-IMEM, XORI-cache, PageMask-cache, PI-cache, SP-DMA-DMEM, RSP-store, EntryHi-cache and TLBR-cache contracts: PASS;
 - independent fetch-summary realizability oracle: PASS with 21,845 exhaustive histories and 20,000 random oracle comparisons.
 
-The first development CI attempts exposed only formatting and one Clippy warning in a test fixture helper. Both were corrected before the fully green frozen run; no production semantic relaxation was used.
+The first development CI attempts exposed only formatting and one Clippy warning in a test fixture helper. Both were corrected before the fully green frozen runs; no production semantic relaxation was used.
 
 ## Pinned-reference check
 
@@ -99,7 +100,7 @@ Open obligations remain:
 
 - complete cache-operation/invalidation/writeback chronology beyond the represented subset;
 - dirty eviction/writeback provenance;
-- mapping/TLB/PageMask/ASID/context history and aliases;
+- composition with the now-canonical `tlb_history` operation generations, plus PageMask/ASID/context/alias history; the existence of that separate primitive does not identify the mapping context of these D-cache reads;
 - reset, NMI, save/restore and other resident-lifetime boundaries;
 - complete CPU/RSP/DMA/debugger/frontend mutation census;
 - ultimate provenance of the supplied initial backing state;
