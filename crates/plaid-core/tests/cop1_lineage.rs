@@ -361,7 +361,7 @@ fn lane_shape_payload_read_reuse_and_ordinal_forgeries_reject() {
     value["events"].as_array_mut().unwrap().remove(0);
     cases.push(value);
     let mut value = original.clone();
-    value["events"].insert(
+    value["events"].as_array_mut().unwrap().insert(
         2,
         fpr_write(
             3,
