@@ -1787,3 +1787,25 @@ supporting reference evidence, not hardware Random distribution. No upstream
 implementation enters production. Sensor completeness, CP0/TLB census, mapping
 semantics, context generation, cache residency, reset/restore lifetime,
 whole-ROM closure and native completeness remain OPEN; broader flags false.
+
+## ADR-0110: Captured CPU-copy writers are chronology candidates, not ultimate ancestry
+
+Status: Accepted for bounded compiler-time observed-history inspection, 2026-10-12.
+
+Reuse the strict adjacent-copy and live-definition source verifiers, then version
+each captured successful Word store, including same-value and non-copy stores.
+Retain a phase-scoped writer identity at later source reads and the copy's own
+destination generation. Forward overlap can consume prior captured destination
+writes; backward and equal-payload histories retain different chronology.
+
+A read that contradicts a captured writer's value cuts that candidate to UNKNOWN.
+Later equal bits cannot resurrect it; a fresh captured write is required.
+This guard was reproduced against the prepared code before integration.
+Clear captured writer state at phase boundaries and reconstruct every report
+field from externally authenticated source bytes.
+
+Even a compatible last captured writer does not prove ultimate read ancestry
+without an independently complete mutation history. Source ancestry, mutation
+census, cached/TLB/device/RSP/DMA interleavings, executable lifetime and native
+completeness remain uncertified. Existing copy report formats/CLI and closed-world
+gates remain unchanged. No upstream implementation or solver waiver is added.

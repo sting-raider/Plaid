@@ -846,3 +846,11 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   export none. A consistent forged slot/physical line rejects in the direct
   identity scope. Cacheability/alias/context, operand ancestry, complete census,
   executable lifetime and whole-ROM/native completeness remain OPEN (ADR-0067).
+
+- Production cpu_copy now exposes separate captured-writer chronology reports for
+  adjacent and live-definition copies. Six lineage tests preserve forward/
+  backward overlap, equal-value differences, same-value non-copy writers and
+  phase cuts. Contradictory reads cut stale writer candidates even when later
+  bits match again. Existing ten copy/definition regressions pass. Ultimate
+  source ancestry, full mutation census and executable/native closure remain
+  OPEN (ADR-0110).
