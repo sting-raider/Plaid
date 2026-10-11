@@ -291,3 +291,10 @@ RSP SW/SB/SBV, SP routing and interpreter boundaries were inspected. Generated
 ignored builds preserve core ISC / SLJIT BSD notices. No upstream implementation
 is vendored; byte writer/copy identity does not establish hardware truth or
 ultimate register-input ancestry.
+
+`spikes/048-ares-xori-cache-visibility/` retains the project-owned ISC four-scenario
+fixture using the shared unmodified exact-ares builder. CPU cache operations,
+resident instruction fetch/fill, D-cache backing transitions and XORI source
+contracts were inspected. Generated core ISC / SLJIT BSD builds remain ignored;
+no reference implementation, branch workflow or ROM is vendored. Selected
+behavioral facts are not measured ancestry or an N64 hardware certificate.

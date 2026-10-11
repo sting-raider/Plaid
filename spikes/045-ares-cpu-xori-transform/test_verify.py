@@ -64,6 +64,12 @@ class TransformContract(unittest.TestCase):
         with self.assertRaises(AssertionError):
             replay(data)
 
+    def test_abstract_low_word_xor_cannot_supply_an_oversized_instruction(self):
+        # The harvested cache model accepts imm += 2**32 after truncation.
+        # Actual captured XORI evidence must be a decoded 32-bit word/u16 operand.
+        with self.assertRaises(AssertionError):
+            replay(triple(0xff | 1 << 32))
+
 
 if __name__ == '__main__':
     unittest.main()

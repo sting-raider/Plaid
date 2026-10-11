@@ -1371,3 +1371,22 @@ observers/fixture are shared; no upstream implementation or branch-only build
 scaffolding is imported into production. A storage writer is not ultimate
 register-input ancestry. Complete attempts/census, executable consumption and
 lifetime remain prerequisites to production promotion; native gates stay open.
+
+## ADR-0092: Cache visibility facts cannot substitute for measured ancestry
+
+Status: Accepted for controlled research verification, 2026-10-11.
+
+Retain the unmodified pinned-reference XORI/cached-store/writeback/refill fixture
+with strict finite behavioral expectations. A completed backing write cannot
+refresh a resident instruction line, and a refill made before writeback keeps
+its earlier bits. A subsequent same-value writer cannot be identified from final
+payload equality. Preserve identity-valued transforms as distinct instructions.
+
+Review abstract generation replay separately from executed facts. Its accepted
+oversized-immediate counterexample cannot satisfy main's actual decoded XORI
+contract. Until one source-bound measured history connects register definitions,
+cache residents/revisions, completed backing transactions and executable fetches,
+leave ancestry, mutation coverage and lifetime uncertified. Reuse only the
+project-owned ISC driver/shared builder; no upstream implementation or branch
+workflow enters production. This finite reference fact does not establish
+hardware truth or alter native/whole-ROM closure gates.

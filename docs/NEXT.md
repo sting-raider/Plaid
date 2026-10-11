@@ -197,3 +197,9 @@ composition contract with mixed/unknown source bytes separate from sink
 generations (ADR-0091). Before promotion, compose actual executable consumption
 and complete lifetime/attempt histories. The reference fixture's source register
 operands are measured; their ultimate ROM/DMA ancestry remains unresolved.
+
+The XORI/cache branch's unmodified four-scenario behavior probe is now retained.
+Compose actual captured transform definitions with cache resident/revision,
+completed writeback and fill/fetch events before issuing ancestry certificates.
+Abstract generation chains and identical final payloads cannot fill missing
+measured edges; preserve stale and early-refill controls (ADR-0092).
