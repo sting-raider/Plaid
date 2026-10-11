@@ -1428,3 +1428,23 @@ abstract evidence. Keep those boundaries separate from a general source-bound
 census, producer certificate or executable lifetime. Share original ISC fixture
 and existing observer/builder code, retain ignored upstream notices, and import
 no upstream implementation or branch-only CI/build scaffold into production.
+
+## ADR-0095: Completed DMEM sink lanes require exact successful source identity
+
+Status: Accepted for controlled research verification, 2026-10-11.
+
+Retain the original ISC forward-DMA fixture with a strict typed finite census.
+Pinned ares reads both source Words before either DMEM sink; nearest equal value
+can therefore select the wrong lane. Keep each successful source transaction
+and sink generation distinct, advance same-value reload writers and preserve
+OOB unknown source identities. Count/skip and wrap follow completed fragments.
+The original reducer's unchecked second-row payload/type/schema cases reject in
+the reconciled verifier. Reported-state comparisons precede finite acceptance.
+
+Successful source reads are not ultimate RDRAM storage ancestry. Direct component
+DMA stepping and a staged CPU-visible Word write do not authenticate request
+lifecycle or decoded CPU producers. Keep general census, RSP/CPU composition and
+executable lifetime/native gates open. Generate original observer shadows only
+under ignored output, preserve reference notices, and import no reference
+implementation or branch-only CI workflow. Gopher's different interleaving is
+source-only context; ares callback spacing is not a hardware invariant.

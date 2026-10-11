@@ -215,3 +215,10 @@ regressions under spike 050. Compose actual queue-container lifecycle identities
 only for completion claims; do not require completion to retain successful byte
 writes or use completion to refresh cached code. Extend general writer/census/
 lifetime evidence before production origin promotion (ADR-0094).
+
+Forward DMEM ingress now retains strict paired Word lane/source-read contracts
+under spike 051. Compose actual request identities, RDRAM storage ancestry and
+RSP consumer definitions before issuing executable provenance certificates.
+Missing successful source reads remain unknown; nearest equal-valued reads
+cannot identify a lane. Directly staged component calls do not close scheduler,
+writer-census or executable-lifetime obligations (ADR-0095).

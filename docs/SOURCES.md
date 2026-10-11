@@ -313,3 +313,11 @@ routing. Unmodified/disabled/enabled selected checkpoints agree. Core ISC /
 SLJIT BSD builds/notices remain ignored; no branch workflow, reference
 implementation, ROM or firmware enters production. Finite labels are not queue
 identity, general producer ancestry or hardware timing truth.
+
+`spikes/051-ares-sp-dma-dmem-ingress/` reconciles the original ISC driver and
+project-owned completed-source/sink observer recipe. Exact ares RDRAM/SP routing,
+paired transfer statements and bank/count/skip source objects were inspected.
+Gopher's independent four-byte DMA source remains source-only corroboration;
+no GPL implementation is imported. Generated ares ISC/SLJIT BSD code/notices
+remain ignored. Selected neutrality and finite lane identities establish neither
+hardware timing, earlier RDRAM ancestry nor a native lifetime/census certificate.
