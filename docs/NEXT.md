@@ -271,3 +271,13 @@ reset chronology before using them in executable-lifetime or translation proofs.
 A same-content legal TLBWI remains a distinct operation; snapshot inequality and
 equal payloads cannot recover occurrence or selected-slot identity. Complete
 sensor coverage and a full TLB mutation census remain OPEN.
+
+Production CPU-copy lineage now retains every captured successful uncached Word
+store as a fresh phase-scoped generation and joins copy/definition witnesses to
+the latest captured write at their source address plus their own destination
+generation (ADR-0103). Forward overlap therefore preserves self-feeding captured
+writer chronology even when payloads are equal; backward overlap stays distinct.
+This is not yet ultimate storage ancestry: complete writer sensing, device/DMA/
+RSP interleavings, cached residency and executable consumption/lifetime remain
+the next composition obligations. A present captured writer must not be treated
+as the actual parent until a complete mutation history independently justifies it.
