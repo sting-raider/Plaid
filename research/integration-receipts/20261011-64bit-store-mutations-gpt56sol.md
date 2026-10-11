@@ -6,7 +6,7 @@ Worker: `gpt56sol-direct-64bit-store-20261011`
 
 Base main inspected: `6b53a15c4c6eaadc8e0d002dd6818c600ebf2a7d`
 
-Current reconciled main ancestor at this receipt revision: `539ff0ce72a98b296a8a28135fda6eab90a2f6ac`
+Current reconciled main ancestor at this receipt revision: `dd3f627d2c27f84611439ec1888ec4e3015e6bd2`
 
 Integration branch: `direct-integration/64bit-store-mutations-gpt56sol`
 
@@ -52,11 +52,20 @@ from the potentially misleading `IdentityRdramBacking` to
 than inferred. That code was fully green at `44201dcf444aa949835cd46b366d070df32ef167`
 (run `38152080386`, job `114507422712`).
 
-While validation was running, canonical main advanced with the independent
-exception-root integration to `539ff0ce72a98b296a8a28135fda6eab90a2f6ac`. The feature branch was therefore
-explicitly reconciled with that main as merge commit
-`585fbf8e6c32c92e8983b5664976efefc2c1ed00` and the complete canonical gate was
-rerun (run `38152284430`, job `114508021402`). The reconciled head passed:
+Canonical main advanced repeatedly during serialized integration. This branch was
+explicitly reconciled, rather than mechanically merging stale research state:
+
+- exception-root main `539ff0ce72a98b296a8a28135fda6eab90a2f6ac` via feature merge
+  `585fbf8e6c32c92e8983b5664976efefc2c1ed00`, with full canonical run
+  `38152284430` / job `114508021402` passing;
+- source-bound TLBWI-generation main `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5`
+  via feature merge `dadd67c25a3a18e7fd9f24c53bd22411da182d9f`, with full canonical run
+  `38153237293` / job `114510836908` passing;
+- bounded COP1 store-normalization main `dd3f627d2c27f84611439ec1888ec4e3015e6bd2`
+  via feature merge `8c040b6ce60f00d6a60fc4f725bd137b5b503e85`, with full canonical run
+  `38153419139` / job `114511381400` passing.
+
+The final COP1-reconciled code validation passed all of:
 
 - `cargo fmt --all -- --check`;
 - `cargo clippy --locked --workspace --all-targets -- -D warnings`;
@@ -67,6 +76,10 @@ rerun (run `38152284430`, job `114508021402`). The reconciled head passed:
   RSP-store-isolation, EntryHi cache-reactivation and TLBR cache-reactivation
   synthetic contracts;
 - the independent fetch-summary assignment oracle.
+
+A live comparison of the reconciled candidate against `dd3f627d2c27f84611439ec1888ec4e3015e6bd2`
+contains exactly three paths: one `lib.rs` export, the new `store_mutation.rs`, and
+this receipt. The landed exception, TLBWI and COP1 production state is preserved.
 
 One pre-green regression expectation was corrected during validation: the first
 little-endian `SDR` offset-1 Word subwrite for source `0x1122334455667788` is
@@ -133,7 +146,8 @@ covered mutation classes they did not observe.
 
 - `crates/plaid-core/src/store_mutation.rs` — bounded production receipt types,
   source-contract validation and adversarial tests;
-- `crates/plaid-core/src/lib.rs` — exports the production module;
+- `crates/plaid-core/src/lib.rs` — exports the production module while preserving
+  the landed exception-root, TLB-history and COP1-mutation APIs;
 - this receipt.
 
 No `progress.json` milestone changed. `docs/STATUS.md`, `docs/NEXT.md` and
@@ -147,7 +161,9 @@ This integration is **not** a whole-ROM mutation census, hardware equivalence
 certificate, backing-provenance proof, or executable-lifetime proof. In particular,
 it does not close:
 
-- `SB`, `SH`, `SWL`, `SWR`, `SCD`, COP1 or RSP store mutation classes;
+- `SB`, `SH`, `SWL`, `SWR`, `SCD`, RSP or other remaining CPU/out-of-band mutation
+  classes; the separate landed COP1 SWC1/SDC1 normalizer is complementary and does
+  not make the global census complete;
 - completeness of the sensor that would produce these receipts;
 - source-byte ancestry of the stored payload;
 - arbitrary TLB histories, aliases, PageMask/ASID/context generations or legal
