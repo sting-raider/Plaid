@@ -682,3 +682,15 @@ twelve measured forgeries and six synthetic tests reject the old runner's
 unchecked payload/type/schema cases. Full core/fmt/strict Clippy pass. Ultimate
 RDRAM ancestry, request lifecycle, census and executable/native closure remain
 OPEN (ADR-0095).
+
+Canonical Actions `38144459838` passes at exact head
+`cc3cc925faf0871161e9cfe6a19e5bfbef33326d`, including the six strict DMEM
+ingress contracts and all prior gates.
+
+Unmodified pinned ares now reproduces 29 decoded RSP store-isolation probes in
+spike 052, checking all IMEM bytes before/after every probe. Historical report,
+all three source audits and repeated output agree. Four synthetic contracts and
+122 measured report forgeries pass under strict typed expectations, along with
+full core/fmt/strict Clippy. DMEM-only interpreter stores do not discharge CPU,
+DMA, reset/restore/debugger, recompiler/hardware or complete lifetime/native
+obligations (ADR-0096).

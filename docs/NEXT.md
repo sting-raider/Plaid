@@ -222,3 +222,10 @@ RSP consumer definitions before issuing executable provenance certificates.
 Missing successful source reads remain unknown; nearest equal-valued reads
 cannot identify a lane. Directly staged component calls do not close scheduler,
 writer-census or executable-lifetime obligations (ADR-0095).
+
+RSP store-domain behavior now retains all scalar/vector store families in the
+finite spike 052 matrix, including aligned SRV's zero-byte control. Preserve the
+pinned interpreter/source DMEM-only classification when composing RSP writers,
+while retaining CPU-window, DMA and out-of-band IMEM mutations independently.
+Hardware/recompiler, task activation/retirement and lifetime completeness remain
+separate obligations (ADR-0096).

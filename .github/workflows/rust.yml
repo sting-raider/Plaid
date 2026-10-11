@@ -20,6 +20,7 @@ on:
       - "spikes/049-ares-pagemask-cache-remap/**"
       - "spikes/050-ares-pi-cache-visibility/**"
       - "spikes/051-ares-sp-dma-dmem-ingress/**"
+      - "spikes/052-ares-rsp-store-isolation/**"
       - ".github/workflows/rust.yml"
   pull_request:
     paths:
@@ -39,6 +40,7 @@ on:
       - "spikes/049-ares-pagemask-cache-remap/**"
       - "spikes/050-ares-pi-cache-visibility/**"
       - "spikes/051-ares-sp-dma-dmem-ingress/**"
+      - "spikes/052-ares-rsp-store-isolation/**"
       - ".github/workflows/rust.yml"
   workflow_dispatch:
 
@@ -95,5 +97,7 @@ jobs:
         run: python spikes/050-ares-pi-cache-visibility/test_verify.py
       - name: Synthetic SP DMA DMEM ingress contracts
         run: python spikes/051-ares-sp-dma-dmem-ingress/test_verify.py
+      - name: Synthetic RSP store isolation contracts
+        run: python spikes/052-ares-rsp-store-isolation/test_verify.py
       - name: Independent fetch-summary assignment oracle
         run: python experiments/fetch-summary-realizability/model.py

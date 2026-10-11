@@ -321,3 +321,11 @@ Gopher's independent four-byte DMA source remains source-only corroboration;
 no GPL implementation is imported. Generated ares ISC/SLJIT BSD code/notices
 remain ignored. Selected neutrality and finite lane identities establish neither
 hardware timing, earlier RDRAM ancestry nor a native lifetime/census certificate.
+
+`spikes/052-ares-rsp-store-isolation/` retains the original ISC decoded store
+fixture and source auditor, with strict synthetic report metadata/hashes. Exact
+ares scalar/vector handlers and DMEM masking were inspected. Gopher64 and
+n64-systemtest are source comparisons, not executed behavioral/hardware oracles;
+no reference implementation is copied or linked into native mode. Generated
+ares ISC/SLJIT BSD code/notices remain ignored. Interpreter IMEM preservation
+does not discharge other mutation classes or complete lifetime/native gates.
