@@ -7,7 +7,7 @@
 //! census, executable-lifetime proof, root-set proof, or native-complete claim.
 use crate::{
     exception_roots::{
-        resolve_exception_root, ExceptionClass, ExceptionRootReceipt, ExceptionVectorClass,
+        ExceptionClass, ExceptionRootReceipt, ExceptionVectorClass, resolve_exception_root,
     },
     program::{GuestVirtualAddr, PhysicalAddr},
     rom::sha256,
@@ -135,11 +135,7 @@ pub struct ExceptionRootHistoryReport {
 }
 
 fn require(ok: bool, message: &str) -> Result<(), String> {
-    if ok {
-        Ok(())
-    } else {
-        Err(message.into())
-    }
+    if ok { Ok(()) } else { Err(message.into()) }
 }
 
 fn valid_identity_rdram_word(physical: PhysicalAddr) -> bool {
@@ -218,9 +214,7 @@ pub fn inspect_cached_general_exception_root_history(
             "event appears after exception-root fetch",
         )?;
         match *event {
-            Event::BackingWrite {
-                physical, word, ..
-            } => {
+            Event::BackingWrite { physical, word, .. } => {
                 require(
                     valid_identity_rdram_word(physical),
                     "invalid identity-RDRAM backing write",
@@ -235,9 +229,7 @@ pub fn inspect_cached_general_exception_root_history(
                     },
                 );
             }
-            Event::Fill {
-                physical, word, ..
-            } => {
+            Event::Fill { physical, word, .. } => {
                 require(
                     valid_identity_rdram_word(physical),
                     "invalid identity-RDRAM cache fill",
@@ -304,8 +296,7 @@ pub fn inspect_cached_general_exception_root_history(
                                 physical,
                                 word,
                                 current_backing_generation: current.map(|b| b.generation),
-                                current_backing_write_ordinal: current
-                                    .map(|b| b.write_ordinal),
+                                current_backing_write_ordinal: current.map(|b| b.write_ordinal),
                             },
                             Some(source) => ExceptionRootFetchResolution::Bound {
                                 binding: CachedExceptionRootBinding {
@@ -317,10 +308,8 @@ pub fn inspect_cached_general_exception_root_history(
                                     fill_ordinal: line.fill_ordinal,
                                     backing_generation_at_fill: source.generation,
                                     backing_write_ordinal_at_fill: source.write_ordinal,
-                                    current_backing_generation: current
-                                        .map(|b| b.generation),
-                                    current_backing_write_ordinal: current
-                                        .map(|b| b.write_ordinal),
+                                    current_backing_generation: current.map(|b| b.generation),
+                                    current_backing_write_ordinal: current.map(|b| b.write_ordinal),
                                 },
                             },
                         }
@@ -351,9 +340,7 @@ pub fn inspect_cached_general_exception_root_history(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exception_roots::{
-        ExceptionClass, ExceptionRootInput, KernelAddressMode,
-    };
+    use crate::exception_roots::{ExceptionClass, ExceptionRootInput, KernelAddressMode};
 
     const ROOT: GuestVirtualAddr = GuestVirtualAddr(0xffff_ffff_8000_0180);
     const PHYS: PhysicalAddr = PhysicalAddr(0x180);
@@ -690,12 +677,16 @@ mod tests {
         })
         .unwrap();
         let digest = sha256(&source);
-        assert!(inspect_cached_general_exception_root_history(&source, &digest, root())
-            .unwrap_err()
-            .contains("ordinals"));
-        assert!(inspect_cached_general_exception_root_history(&source, &"0".repeat(64), root())
-            .unwrap_err()
-            .contains("receipt mismatch"));
+        assert!(
+            inspect_cached_general_exception_root_history(&source, &digest, root())
+                .unwrap_err()
+                .contains("ordinals")
+        );
+        assert!(
+            inspect_cached_general_exception_root_history(&source, &"0".repeat(64), root())
+                .unwrap_err()
+                .contains("receipt mismatch")
+        );
     }
 
     #[test]
@@ -766,17 +757,21 @@ mod tests {
             exl: false,
             kernel_mode: KernelAddressMode::Bits32,
         });
-        assert!(inspect_cached_general_exception_root_history(&source, &digest, bev)
-            .unwrap_err()
-            .contains("unsupported"));
+        assert!(
+            inspect_cached_general_exception_root_history(&source, &digest, bev)
+                .unwrap_err()
+                .contains("unsupported")
+        );
         let refill = resolve_exception_root(ExceptionRootInput {
             class: ExceptionClass::TlbMiss,
             bev: false,
             exl: false,
             kernel_mode: KernelAddressMode::Bits32,
         });
-        assert!(inspect_cached_general_exception_root_history(&source, &digest, refill)
-            .unwrap_err()
-            .contains("unsupported"));
+        assert!(
+            inspect_cached_general_exception_root_history(&source, &digest, refill)
+                .unwrap_err()
+                .contains("unsupported")
+        );
     }
 }
