@@ -25,6 +25,27 @@ python scripts/fetch_refs.py
 
 Local ROMs belong in ignored `roms/`. Derived traces, maps, reports, and corpora belong in ignored `artifacts/`.
 
+## Direct-integration capability preflight
+
+A direct-integration worker must verify its execution environment **before claiming a lane or doing repository archaeology**.
+
+Minimum preflight:
+
+```bash
+git rev-parse --show-toplevel
+git status --short
+cargo --version
+rustc --version
+rustfmt --version
+python --version
+```
+
+The checkout must be writable and contain the current Plaid workspace. If the planned cluster needs an exact pinned reference, confirm that revision is locally present or locally fetchable before choosing the cluster.
+
+If the session has no local checkout or Rust toolchain, do not begin a direct-integration candidate. Return `CAPABILITY-SKIP` and leave the lane free. This avoids spending a worker session on a change that cannot pass the mandatory local gate.
+
+If useful work already exists before a missing capability is discovered, preserve it as a `VALIDATION-HANDOFF`; an execution-capable worker can take it over, reconcile it to current `main`, run the final gate, and CAS-land it. See [`../ORCHESTRATION.md`](../ORCHESTRATION.md).
+
 ## Canonical local validation
 
 GitHub Actions is manual-only. Integrations should be validated locally.
@@ -42,6 +63,8 @@ python tools/progress.py --check
 When a change touches a retained synthetic contract, run the relevant `spikes/*/test_verify.py` checks as well.
 
 When reference semantics matter, reproduce against the exact revision in `refs.lock.toml` rather than an arbitrary upstream checkout.
+
+Historical CI is supporting evidence only. It is not a substitute for validation of the exact candidate tree being proposed for `main`.
 
 ## Main CLI
 
@@ -166,7 +189,7 @@ Automated workers should read:
 
 Research/integration workers coordinate semantic ownership through issue #4.
 
-Plaid supports normal primary-integrator mode and explicit user-authorized direct-integration mode. During direct integration, there is **no main-write lease**. Workers may prepare and validate in parallel, but a canonical write must use exact-head compare-and-swap:
+In user-authorized direct-integration mode there is **no main-write lease**. Workers may prepare and validate in parallel, but a canonical write must use exact-head compare-and-swap:
 
 1. fetch `main` and record exact SHA `A`;
 2. reconcile the candidate onto `A`;
@@ -178,7 +201,13 @@ Plaid supports normal primary-integrator mode and explicit user-authorized direc
 
 Never force-push `main`. Never land a candidate validated only against an older parent. A claim in issue #4 prevents duplicated semantic work; it does not reserve the canonical branch.
 
-GitHub Actions remains manual-only. Historical CI can be supporting evidence but does not substitute for required validation of the exact candidate tree.
+### Validation handoffs
+
+Environment capability failures are not project blockers.
+
+If preflight shows that the session cannot run the mandatory local gate, it should skip before claiming work. If useful candidate work already exists, record a `VALIDATION-HANDOFF` instead of a `BLOCKED` integration result. Another worker with a complete local toolchain may take the branch/commit, reconcile the semantic change to current `main`, rerun the full gate, and perform the CAS.
+
+Do not relax the local gate to avoid a handoff.
 
 ## Scope discipline
 
