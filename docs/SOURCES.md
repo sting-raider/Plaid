@@ -329,3 +329,11 @@ n64-systemtest are source comparisons, not executed behavioral/hardware oracles;
 no reference implementation is copied or linked into native mode. Generated
 ares ISC/SLJIT BSD code/notices remain ignored. Interpreter IMEM preservation
 does not discharge other mutation classes or complete lifetime/native gates.
+
+`spikes/053-ares-asid-cache-lifetime/` retains the original ISC guest EntryHi
+fixture with its shared include adapted and source guard corrected to isolate
+the setter. Exact MTC0/TLB/cache paths and five Git objects at two clean pins are
+checked. Gopher supplies source-only cache-index disagreement; no GPL code is
+imported. Generated ares ISC/SLJIT BSD code/notices remain ignored. Finite stale
+reactivation and selected snapshots do not establish hardware or complete writer,
+mapping-generation, backing ancestry, lifetime/native certificates.

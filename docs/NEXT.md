@@ -229,3 +229,9 @@ pinned interpreter/source DMEM-only classification when composing RSP writers,
 while retaining CPU-window, DMA and out-of-band IMEM mutations independently.
 Hardware/recompiler, task activation/retirement and lifetime completeness remain
 separate obligations (ADR-0096).
+
+Guest EntryHi/cache reactivation now retains the finite spike 053 controls.
+Compose measured context writers with installed mapping, backing and resident
+histories before issuing certificates; internal snapshot equality and miss counts
+are insufficient. Preserve inactive residents until a verified replacement or
+invalidation boundary, and retain the ares/Gopher index disagreement (ADR-0097).

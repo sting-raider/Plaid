@@ -694,3 +694,10 @@ all three source audits and repeated output agree. Four synthetic contracts and
 full core/fmt/strict Clippy. DMEM-only interpreter stores do not discharge CPU,
 DMA, reset/restore/debugger, recompiler/hardware or complete lifetime/native
 obligations (ADR-0096).
+
+Spike 053 now retains actual guest MTC0 EntryHi stale-cache reactivation at the
+unmodified pin. Historical measured facts and repeated output agree; all 36
+report mutations reject under exact typed facts, tags, counters and cache digest.
+Four synthetic contracts, full core/fmt/strict Clippy pass. Context inactivity
+does not retire resident bytes; staged TLB/backing/reset operations do not close
+writer census, generation ancestry, hardware policy or native gates (ADR-0097).

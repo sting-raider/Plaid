@@ -21,6 +21,7 @@ on:
       - "spikes/050-ares-pi-cache-visibility/**"
       - "spikes/051-ares-sp-dma-dmem-ingress/**"
       - "spikes/052-ares-rsp-store-isolation/**"
+      - "spikes/053-ares-asid-cache-lifetime/**"
       - ".github/workflows/rust.yml"
   pull_request:
     paths:
@@ -41,6 +42,7 @@ on:
       - "spikes/050-ares-pi-cache-visibility/**"
       - "spikes/051-ares-sp-dma-dmem-ingress/**"
       - "spikes/052-ares-rsp-store-isolation/**"
+      - "spikes/053-ares-asid-cache-lifetime/**"
       - ".github/workflows/rust.yml"
   workflow_dispatch:
 
@@ -99,5 +101,7 @@ jobs:
         run: python spikes/051-ares-sp-dma-dmem-ingress/test_verify.py
       - name: Synthetic RSP store isolation contracts
         run: python spikes/052-ares-rsp-store-isolation/test_verify.py
+      - name: Synthetic guest EntryHi cache reactivation contracts
+        run: python spikes/053-ares-asid-cache-lifetime/test_verify.py
       - name: Independent fetch-summary assignment oracle
         run: python experiments/fetch-summary-realizability/model.py
