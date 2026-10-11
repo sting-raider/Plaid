@@ -1,6 +1,9 @@
 name: Direct Watch validation
 
 on:
+  push:
+    branches:
+      - "direct-integration/watch-obligation-gpt56sol-direct-watch-obligation-20261011-a7"
   pull_request:
     paths:
       - "crates/**"
