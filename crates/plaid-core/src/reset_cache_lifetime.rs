@@ -11,8 +11,7 @@ use crate::rom::sha256;
 use serde::{Deserialize, Serialize};
 
 pub const FORMAT: &str = "plaid-reset-cache-lifetime-v0";
-pub const PROFILE: &str =
-    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-reset-cache-v0";
+pub const PROFILE: &str = "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-reset-cache-v0";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -191,10 +190,7 @@ mod tests {
     use super::*;
 
     fn source(events: &str) -> Vec<u8> {
-        format!(
-            r#"{{"format":"{FORMAT}","profile":"{PROFILE}","events":[{events}]}}"#
-        )
-        .into_bytes()
+        format!(r#"{{"format":"{FORMAT}","profile":"{PROFILE}","events":[{events}]}}"#).into_bytes()
     }
 
     fn inspect(source: &[u8]) -> Result<ResetCacheLifetimeReport, String> {
@@ -312,10 +308,8 @@ mod tests {
         );
         assert!(inspect_reset_cache_lifetime(&source, &"0".repeat(64)).is_err());
 
-        let wrong_profile = format!(
-            r#"{{"format":"{FORMAT}","profile":"other","events":[]}}"#
-        )
-        .into_bytes();
+        let wrong_profile =
+            format!(r#"{{"format":"{FORMAT}","profile":"other","events":[]}}"#).into_bytes();
         assert!(inspect(&wrong_profile).is_err());
     }
 
