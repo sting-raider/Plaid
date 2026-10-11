@@ -223,8 +223,12 @@ fn same_value_configuration_rewrite_keeps_distinct_generation_identity() {
     ))
     .unwrap();
     assert_ne!(first, second);
-    let WatchAssessment::ImmediateWatch(first) = first else { unreachable!() };
-    let WatchAssessment::ImmediateWatch(second) = second else { unreachable!() };
+    let WatchAssessment::ImmediateWatch(first) = first else {
+        unreachable!()
+    };
+    let WatchAssessment::ImmediateWatch(second) = second else {
+        unreachable!()
+    };
     assert_eq!((first.watch_generation, second.watch_generation), (8, 9));
 }
 
