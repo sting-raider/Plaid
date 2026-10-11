@@ -158,8 +158,10 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090633300",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090699507"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "reviewed_model_only",
+      "integration_commit": null,
+      "review_note": "research/cached-copy-compose-primary-review.md",
+      "review_base": "250a376"
     },
     {
       "branch": "research/cop1-load-store-lineage-gpt56sol",
