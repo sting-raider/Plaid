@@ -17,5 +17,23 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Verify pinned Rabbitizer revision
         run: grep -F '724a49a5b4dbfb99f1a9e6992e63964fd29c90c8' refs.lock.toml Cargo.lock
-      - name: Reproduce trace-event identity regressions
-        run: cargo test --locked -p plaid-core --test trace_event_identity -- --nocapture
+      - name: Compile focused regression
+        run: cargo test --locked -p plaid-core --test trace_event_identity --no-run
+      - name: Reproduce copy-event DMA fork
+        run: '! cargo test --locked -p plaid-core --test trace_event_identity one_copy_event_cannot_name_two_dma_transactions -- --exact --nocapture'
+      - name: Reproduce word-store event fork
+        run: '! cargo test --locked -p plaid-core --test trace_event_identity one_store_event_cannot_fork_semantics -- --exact --nocapture'
+      - name: Reproduce indirect event fork
+        run: '! cargo test --locked -p plaid-core --test trace_event_identity one_indirect_event_cannot_fork_semantics -- --exact --nocapture'
+      - name: Reproduce entry-verification event fork
+        run: '! cargo test --locked -p plaid-core --test trace_event_identity one_entry_verification_event_cannot_fork_semantics -- --exact --nocapture'
+      - name: Reproduce primitive cross-role collision
+        run: '! cargo test --locked -p plaid-core --test trace_event_identity one_event_cannot_cross_primitive_roles -- --exact --nocapture'
+      - name: Reproduce copy/store cross-role collision
+        run: '! cargo test --locked -p plaid-core --test trace_event_identity copy_event_cannot_masquerade_as_store_event -- --exact --nocapture'
+      - name: Reproduce copy/source-unit cross-role collision
+        run: '! cargo test --locked -p plaid-core --test trace_event_identity copy_event_cannot_masquerade_as_source_unit -- --exact --nocapture'
+      - name: Reproduce merge laundering
+        run: '! cargo test --locked -p plaid-core --test trace_event_identity merge_cannot_launder_cross_role_event_identity -- --exact --nocapture'
+      - name: Preserve legitimate source-unit sharing control
+        run: cargo test --locked -p plaid-core --test trace_event_identity source_unit_context_may_be_shared_and_carried_as_provenance -- --exact --nocapture
