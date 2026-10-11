@@ -774,3 +774,15 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   origin. Exception causality/classification chronology, BEV=1 refill/XTLB source
   behavior, handler cache/mapping lifetime, remaining root classes, whole-ROM
   closure and native completeness remain OPEN.
+
+- Cached BEV=0 general exception-root word provenance now has a bounded source-bound
+  replay (ADR-0104). Successful backing writes and I-cache fills retain separate
+  ordinal identities, so a backing rewrite does not relabel an older resident
+  handler and same-valued writes remain distinct generations. An invalidate/refill
+  can advance the supplying generation; a root fetch without captured resident/fill
+  evidence remains UNKNOWN even when current RDRAM has equal bytes. This is only the
+  validated 32-bit, EXL-clear, identity-RDRAM word at physical 0x180 and is separate
+  from ADR-0103's BEV=1/PIF root provenance. Reachability, source-sensor completeness,
+  full handler spans, mapping/cache lifetime, mutation census and whole-ROM/native
+  completeness remain open.
+
