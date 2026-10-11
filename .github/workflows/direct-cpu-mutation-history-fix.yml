@@ -1,0 +1,34 @@
+name: Direct CPU mutation history clippy fix
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/direct-cpu-mutation-history-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Box the large begin-event enum variant
+        shell: bash
+        run: |
+          sed -i 's/Begin(BeginEvent)/Begin(Box<BeginEvent>)/' crates/plaid-core/src/cpu_mutation_history.rs
+          cargo fmt --all
+      - name: Commit fix
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/plaid-core/src/cpu_mutation_history.rs
+          git commit -m "Box CPU mutation history begin events"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
