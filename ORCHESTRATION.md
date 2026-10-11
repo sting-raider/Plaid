@@ -14,69 +14,47 @@ One continuing primary implementation/integration session owns canonical integra
 
 When the user explicitly authorizes direct integration, multiple workers may prepare and validate production changes in parallel and may attempt to land them directly on `main`.
 
-Canonical writes in this mode are serialized by **exact-head compare-and-swap (CAS)**. There is no main-write lease.
+Canonical writes are serialized by **exact-head compare-and-swap (CAS)**. There is no main-write lease.
 
-A worker may only land a commit whose parent is the exact `main` SHA against which that worker's final validation was run. If `main` moves before the update, the validation is stale for canonical integration even if the worker's own patch did not change.
+A worker may only land a commit whose parent is the exact `main` SHA against which that worker's final validation was run. If `main` moves before the update, the validation is stale for canonical integration even if the worker's patch itself did not change.
 
 ## 2. Roles
 
 ### Primary integrator
 
-The primary integrator owns canonical reconciliation in normal mode and resumes ownership when a temporary direct-integration period ends. It reviews evidence, resolves overlapping designs, reruns important tests, and keeps `docs/STATUS.md`, `docs/NEXT.md`, and `docs/DECISIONS.md` coherent.
+The primary integrator owns canonical reconciliation in normal mode and resumes ownership when a temporary direct-integration period ends. It reviews evidence, resolves overlapping designs, reruns important tests, and keeps canonical docs coherent.
 
 ### Research worker
 
 A research worker owns one bounded hypothesis or experimental slice. It may clone/fetch Plaid and pinned references, create isolated branches/worktrees, patch legal reference code for experiments, compile/run software, instrument, fuzz, benchmark, trace, disassemble, differential-test, and produce candidate patches or durable evidence.
 
-A research worker does not write `main` unless the user explicitly enables direct-integration mode for that worker/session.
-
 ### Direct-integration worker
 
-A direct-integration worker starts from completed research or an already-validated invariant and turns one bounded cluster into production code/tests/docs. It must reproduce the important result against current `main`, validate the exact candidate tree locally, and use exact-head CAS for the canonical update.
+A direct-integration worker starts from completed research or an already-validated invariant and turns one bounded cluster into production code/tests/docs. It must bootstrap its local environment as needed, reproduce the important result against current `main`, validate the exact candidate tree locally, and use exact-head CAS for the canonical update.
 
 ### Validation-takeover worker
 
-A validation-takeover worker finishes useful candidate work prepared by another session that lacked the execution environment for the final gate. It does not trust the prepared branch as canonical-ready. It independently reconciles the semantic diff onto current `main`, runs all required local validation, and becomes responsible for the final CAS and closeout.
+A validation-takeover worker finishes useful candidate work prepared by another session that could not complete a task-specific final gate. It independently reconciles the semantic diff onto current `main`, runs all required local validation, and owns the final CAS and closeout.
 
-## 3. Capability preflight comes first
+## 3. Fresh-worker bootstrap
 
-**Before a direct-integration worker claims a lane, reads a large amount of branch archaeology, or begins implementation, it must verify that this session can actually perform the mandatory local gate.**
+A fresh worker environment may begin with no checkout, no Rust toolchain, and no pinned references. That is expected and is **not** grounds to skip the task.
 
-Minimum preflight:
+Before substantive integration work, set up what is needed:
 
-```bash
-git rev-parse --show-toplevel
-git status --short
-cargo --version
-rustc --version
-rustfmt --version
-python --version
-```
+1. create or obtain a writable local checkout of `sting-raider/Plaid`;
+2. fetch the latest `main` and record its exact SHA;
+3. inspect `rust-toolchain.toml` and install the required Rust toolchain when needed;
+4. ensure Python and any compiler/build packages needed by the selected cluster are available;
+5. fetch pinned references with `python scripts/fetch_refs.py` or obtain only the exact pinned revision needed by the cluster;
+6. verify `git`, `cargo`, `rustc`, `rustfmt`, and Python work in the checkout;
+7. continue into normal repository inspection and integration work.
 
-The local checkout must be writable and contain the Plaid workspace. The worker must also be able to fetch/refetch canonical `main` locally or otherwise materialize the exact current tree it will test.
+Use the environment's ordinary package manager, Rust bootstrap tooling, and network access to obtain required open-source dependencies. Do not use GitHub Actions merely because the fresh runtime started empty.
 
-For a cluster that depends on pinned emulator/reference semantics, verify the necessary pinned revision is locally present or locally fetchable before committing to that cluster.
+A worker should only stop for environment setup after reasonable bootstrap attempts show a genuine runtime restriction, for example no usable shell/install path or no way to obtain required source/dependencies. Missing tools before bootstrap are not a blocker.
 
-### If generic capabilities are missing
-
-Do **not** post a direct-integration claim. Do **not** spend the session implementing a candidate that cannot be validated.
-
-Return promptly with:
-
-```text
-CAPABILITY-SKIP
-worker: <id>
-missing: <checkout/toolchain/reference capability>
-reason: direct integration requires local validation of the exact candidate tree
-```
-
-The lane remains free for a capable worker.
-
-A capability skip is not a project blocker and should consume almost no project work.
-
-### If a task-specific capability is missing
-
-Prefer another high-value cluster that can be fully validated in the current environment. Do not select a reference-dependent lane and discover at the end that the reference cannot run.
+Historical integration results marked `BLOCKED` solely because their fresh session initially lacked a checkout, Rust toolchain, or pinned reference should be treated as **recoverable prepared candidates**. After bootstrap, inspect and validate those candidates before duplicating their work.
 
 ## 4. Canonical state and read order
 
@@ -84,7 +62,7 @@ Repository: `sting-raider/Plaid`
 
 Canonical branch: `main`
 
-After capability preflight succeeds, read in this order:
+After bootstrap, read in this order:
 
 1. `AGENTS.md`
 2. `ORCHESTRATION.md`
@@ -104,7 +82,7 @@ Current `main` and canonical documentation are authoritative. Old summaries, old
 
 Live coordination ledger: `https://github.com/sting-raider/Plaid/issues/4`
 
-Every parallel worker must inspect it before substantive work.
+Every parallel worker must inspect it before substantive overlapping work.
 
 Research claim:
 
@@ -178,11 +156,9 @@ Also run:
 
 Historical CI may be cited as supporting evidence, but it does not replace current validation of the exact candidate tree.
 
-If a worker cannot run a required gate, it must not claim the integration is fully green and must not land it solely on old CI.
+## 8. Validation handoff for genuine late setup failures
 
-## 8. Validation handoff instead of environment BLOCKED
-
-A worker should normally catch missing capabilities during preflight. If useful candidate work already exists before a missing capability becomes known, preserve it with a handoff rather than throwing it away.
+Workers should normally bootstrap everything they need themselves. If a task-specific environment failure becomes apparent only after useful candidate work exists, preserve it rather than throwing it away.
 
 Post:
 
@@ -196,34 +172,16 @@ prepared_base_main: <sha>
 changed_paths: <paths>
 reproduced_evidence: <what was already established>
 remaining_validation: <exact commands/checks still required>
-missing_capability: <why this session cannot run them>
+setup_attempts: <what was installed/fetched/tried>
+remaining_environment_failure: <why this session still cannot run them>
 notes: <known limitations / semantic cautions>
 ```
 
-The result is `PREPARED_FOR_VALIDATION`, not `BLOCKED`, unless there is also a genuine technical blocker.
-
-An execution-capable worker may take it with:
-
-```text
-VALIDATION-TAKEOVER
-worker: <id>
-source_handoff: <comment/worker>
-candidate_branch: <branch>
-candidate_head: <sha>
-```
-
-The takeover worker must:
-
-1. inspect the handoff and original evidence;
-2. fetch current `main`;
-3. transplant/reconcile the useful semantic change onto current `main` rather than blindly trusting stale branch state;
-4. run the complete local gate on the exact resulting tree;
-5. use normal exact-head CAS;
-6. post the final `MAIN-INTEGRATION CLOSEOUT`.
+Another worker should bootstrap the required environment, reconcile the useful semantic change onto current `main`, run the full local gate, and use normal exact-head CAS.
 
 Do not weaken validation requirements merely to avoid a handoff.
 
-`BLOCKED` should mean a real semantic/technical integration blocker: unresolved evidence, failing tests, conflicting invariants, unavailable required source data with no safe alternative, etc. A chat runtime simply lacking `cargo` is a capability mismatch, not a Plaid blocker.
+`BLOCKED` should mean a real semantic/technical integration blocker such as unresolved evidence, failing tests, conflicting invariants, or genuinely unobtainable required source data. "The fresh chat did not already have cargo installed" is not a blocker.
 
 ## 9. Isolation and conflict rules
 
@@ -236,21 +194,20 @@ Parallel work is aggressive; canonical state remains conservative.
 - Keep reference modifications separated from project-owned production code and preserve license boundaries.
 - No ROMs, firmware, copyrighted game assets, redistributed copyrighted traces, secrets, or credentials in git.
 
-Integration-sensitive paths include `crates/plaid-core/src/program.rs`, `fetch.rs`, `solver.rs`, `merge.rs`, `lib.rs`, canonical docs/progress files, README, and reference instrumentation patches.
-
 Multiple workers may study the same file, but they should not duplicate the same semantic integration cluster.
 
 ## 10. Work selection
 
 Choose work in this order:
 
-1. verify capability preflight;
+1. bootstrap a usable local environment;
 2. inspect what current `main` already consumes;
-3. recover useful validation handoffs or expired integration work;
-4. take a high-value unclaimed blocker or validated research cluster from `docs/NEXT.md` / integration-harvest notes;
-5. prefer production consumers of already-validated evidence over opening another ordinary research lane during an integration-harvest phase;
-6. run a narrowly bounded experiment only when needed to resolve a concrete integration ambiguity;
-7. stop rather than invent work when no high-confidence candidate remains.
+3. recover useful prior candidates that were blocked only by missing local setup;
+4. recover useful validation handoffs or expired integration work;
+5. take a high-value unclaimed blocker or validated research cluster from `docs/NEXT.md` / integration-harvest notes;
+6. prefer production consumers of already-validated evidence over opening another ordinary research lane during an integration-harvest phase;
+7. run a narrowly bounded experiment only when needed to resolve a concrete integration ambiguity;
+8. stop rather than invent work when no high-confidence candidate remains.
 
 Do not infer that a research branch needs integration merely because it exists. Classify it as already integrated, superseded, regression-only, research-only, partial, prepared-for-validation, blocked, or genuinely useful.
 
