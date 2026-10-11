@@ -541,3 +541,10 @@ and unrelated image/generation facts remain valid controls. Eight adversarial
 tests reproduced on prior main; 17 focused tests pass, including a primary remote
 taken-branch control. Numeric candidates retain distinct content-immutability
 and target-identity obligations; full core, fmt and strict Clippy pass (ADR-0084).
+
+Discovery import now revokes an older covering DMA after a later overlapping
+observed CPU store or partial DMA, including equal-value writes before first
+compilation. Matching supplied bytes cannot restore that copy identity. Exact
+writer evidence remains unresolved; a later full copy is a valid control. Five
+adversaries reproduced on prior main, and nine focused cases pass. Complete-source
+entry rechecking and the exact pinned Mupen hook/import fixture pass (ADR-0085).

@@ -1241,3 +1241,17 @@ and existing CFG policy; preserve branch-likely annulment. Keep conservative CFG
 edges. Table-content immutability and target executable identity/lifetime remain
 separate unresolved obligations, even with a complete numeric snapshot. No
 upstream implementation is reused and no exhaustive closure proof is added.
+
+## ADR-0085: Later observed writers revoke an older executable DMA origin
+
+Status: Accepted, 2026-10-11.
+
+At first compilation, reject a covering DMA origin if a later successful observed
+CPU word store or partial DMA overlaps the compiled physical span. Retain exact
+writer evidence, with unknown executable source; equal snapshot bytes or a
+matching supplied image cannot repair superseded provenance. A later complete
+covering DMA supersedes earlier writers normally. Invalidation does not restore
+an old origin. This composes retained primitive facts with import-time provenance
+without inventing positive CPU-store or mixed-writer lineage. Sensor completeness,
+cache residency and arbitrary executable lifetime remain independent obligations.
+The bounded writer scan is unoptimized; no performance claim or upstream reuse.
