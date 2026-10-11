@@ -52,6 +52,7 @@ pub mod pi_queue_history;
 pub mod pif_history;
 pub mod pipeline;
 pub mod program;
+pub mod relocation_history;
 pub mod rom;
 pub mod root_provenance;
 pub mod solver;
