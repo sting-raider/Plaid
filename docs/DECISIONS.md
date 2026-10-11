@@ -1390,3 +1390,20 @@ leave ancestry, mutation coverage and lifetime uncertified. Reuse only the
 project-owned ISC driver/shared builder; no upstream implementation or branch
 workflow enters production. This finite reference fact does not establish
 hardware truth or alter native/whole-ROM closure gates.
+
+## ADR-0093: Preserve exact large-page remap behavior without certifying fills
+
+Status: Accepted for controlled research verification, 2026-10-11.
+
+Retain the unmodified 16-KiB/64-KiB PageMask/cache-remap fixture with strict
+nested behavioral expectations. Fixed 4-KiB reconstruction cannot select backing
+from equal payloads; temporary mapping/context unreachability is not resident
+retirement. Preserve physical-tag/miss transitions apart from returned values.
+
+The abstract branch hit verifier omits fill/writer/word checks on misses and is
+rejected for production use. Actual fixture TLBWI calls and ASID/debugger writes
+are staged directly, so they do not authenticate guest writer instructions or
+mapping/fill generations. Source Gopher indexing disagreement stays unresolved;
+no universal ares cache-index rule is adopted. Share only the original ISC
+fixture/builder, keep upstream builds/notices ignored, and retain open census,
+producer, cache/mapping/lifetime and native obligations.
