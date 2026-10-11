@@ -942,7 +942,7 @@ full lineage verification, arbitrary stores/epochs and closure remain open.
 
 ## ADR-0066: Executable mutation width follows the concrete device sink
 
-Status: Accepted for research, 2026-10-09.
+Status: Accepted for research, 2026-10-09; bounded production verifier, 2026-10-11.
 
 The reproduced CPU-to-SP-IMEM fixture proves that successful SB/SH can overwrite
 four bytes with shifted unmasked rt.u32; nominal opcode width/payload truncation
@@ -953,6 +953,16 @@ source disagrees, so preserve the oracle conflict. Forced endian/component tests
 and source expectations do not replace physical hardware evidence or prove other
 sinks/lifetimes. Original fixture builds ignored licensed ares separately; no
 reference code or assets enter production.
+
+Production `cpu_sp_subword` now verifies one independently authenticated
+decoded SB/SH context against a completed SP Word effect. Preserve exact
+context/effect ordinals, architectural GPR0, aligned instruction PC, signed
+effective address, separately supplied translation, endian lanes, bank/offset
+and unmasked low32 payload. No observed effect supplies no writer. This bounded
+8-KiB-aperture primitive does not authenticate the caller's history/mapping,
+infer ultimate register ancestry or prove writer uniqueness/completeness,
+executable lifetime or native closure. Broader mirrored/device paths remain
+unsupported. See the primary takeover receipt for source and local validation.
 
 ## ADR-0067: D-cache lineage needs resident mutation revisions and exact scope
 
