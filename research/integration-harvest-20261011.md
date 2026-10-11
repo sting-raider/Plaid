@@ -334,3 +334,8 @@ agree; 21 records retain six attributed effects, one unscoped effect and one
 CU1-denied/no-sink case. Sixteen measured forgeries and eight synthetic contracts
 pass, as do full core, fmt and strict workspace Clippy. No ultimate ancestry,
 census, hardware truth, lifetime or native milestone is inferred.
+
+Exact-head canonical Actions `38134178095` passes at `a990cfa`, including eight
+CPU SP producer synthetic contracts alongside the existing copy/transform and
+Rust/CLI/model gates. The separate corrected pinned ares neutrality run remains
+the reference-execution receipt; canonical CI checks the finite history contract.
