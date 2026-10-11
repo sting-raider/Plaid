@@ -1,11 +1,6 @@
 name: Rust checks
 
 on:
-  push:
-    branches:
-      - direct-integration/exception-root-generation-gpt56sol-direct-exception-generation-20261011
-    paths:
-      - ".github/workflows/rust.yml"
   workflow_dispatch:
 
 permissions:
@@ -17,8 +12,6 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: c4f502356cdd22d71629d6f44100c52253aa473e
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
