@@ -110,6 +110,22 @@ must supply their original import context separately from solver image witnesses
 This does not authenticate every derived fact, prove complete sensors, or replace
 fetch/cache/mutation/lifetime verification for other evidence domains.
 
+Compose SP captured writers with executable backing reads using independently
+preserved source receipts:
+
+```bash
+plaid inspect-sp-writer-fetch <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json>
+plaid verify-sp-writer-fetch <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json>
+```
+
+These commands retain the complete existing SP/PI/access/fetch projection and
+add compatible per-byte captured writer candidates. Unknown ordinary RSP or
+out-of-band writers prevent ultimate-ancestry claims even when all fetched bytes
+match recorded sinks. A contradictory actual read cuts affected candidates until
+a new sink; later equal bits cannot heal them. Keep the external receipts outside
+editable submissions. `python scripts/test_sp_writer_fetch.py` exercises this
+composition and its legacy/source/report/input boundaries with synthetic bytes.
+
 Use `plaid --help` and the relevant subcommand `--help` for the exact current argument list.
 
 ## Source-bound history consumers

@@ -116,6 +116,18 @@ Use it to prioritize real executable discovery; keep game bytes/maps/traces loca
 
 Keep user ROMs in ignored `roms/` and derived maps/traces in ignored `artifacts/`.
 
+SP writer/fetch composition now joins normalized captured sinks to actual CPU
+executable bank reads with externally retained complete-source receipts. Same-
+value writers replace candidates and contradictory bytes cannot revive from
+later equality. Compose decoded CPU/RSP producers, PIF initialization, complete
+lower-sink census and lifecycle/request identity before claiming ultimate origin
+or RSP closure. Existing v3 reports/CLI remain unchanged (ADR-0116).
+
+The supplied game's IPL3 matches the pinned reference CIC-6105 checksum. Existing
+6102-only boot capture/import profiles must be extended explicitly before using
+them for this game; do not relabel a 6102 run or the conditional static map as
+authenticated game boot evidence.
+
 EBus hidden fetches require a separate derived-bits source witness or Unknown; retain actual read context and hidden-storage lifecycle before any origin promotion (ADR-0062).
 
 Successful TLB-mapped uncached fetches now have finite source evidence; retain current translated/post-endian addresses in each access context and add mapping-generation/lifecycle evidence before proving alias history (ADR-0063).
