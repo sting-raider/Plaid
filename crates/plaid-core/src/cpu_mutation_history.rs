@@ -288,7 +288,10 @@ pub fn inspect_cpu_mutation_history(
         }
     }
 
-    require(active.is_none(), "truncated CPU mutation instruction context")?;
+    require(
+        active.is_none(),
+        "truncated CPU mutation instruction context",
+    )?;
 
     Ok(CpuMutationHistoryReport {
         format: FORMAT.into(),
@@ -448,10 +451,22 @@ mod tests {
         ]);
         let single = inspect(&single).unwrap();
         let split = inspect(&split).unwrap();
-        assert_eq!(single.witnesses[0].mutation.kind, split.witnesses[0].mutation.kind);
-        assert_eq!(single.witnesses[0].mutation.source, split.witnesses[0].mutation.source);
-        assert_eq!(single.witnesses[0].mutation.domain, split.witnesses[0].mutation.domain);
-        assert_eq!(single.witnesses[0].mutation.payload, split.witnesses[0].mutation.payload);
+        assert_eq!(
+            single.witnesses[0].mutation.kind,
+            split.witnesses[0].mutation.kind
+        );
+        assert_eq!(
+            single.witnesses[0].mutation.source,
+            split.witnesses[0].mutation.source
+        );
+        assert_eq!(
+            single.witnesses[0].mutation.domain,
+            split.witnesses[0].mutation.domain
+        );
+        assert_eq!(
+            single.witnesses[0].mutation.payload,
+            split.witnesses[0].mutation.payload
+        );
         assert_ne!(
             single.witnesses[0].fragment_ordinals,
             split.witnesses[0].fragment_ordinals
