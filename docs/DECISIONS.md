@@ -1687,3 +1687,21 @@ proof. No upstream implementation enters production. This primitive does not
 prove producer/status writer chronology, actual transfer, root reachability or
 exclusion, handler byte provenance/lifetime, asynchronous priority, complete root
 census or native closure. Compose those obligations explicitly; no solver waiver.
+
+## ADR-0107: Selected-mapping geometry must retain the validated PageMask
+
+Status: Accepted for bounded production derivation, 2026-10-11.
+
+For an independently selected mapping, exact raw masks `0`, `6000`, `1e000`
+select 4-/16-/64-KiB halves and corresponding offsets. A fixed virtual bit12 or
+low12 offset rule can choose a valid equal-valued decoy when the actual large-page
+half is invalid. Preserve the PageMask-specific geometry and reconstruct every
+receipt field from independently supplied mask/address before accepting it.
+Malformed masks and larger model-only page sizes stay unsupported in this version.
+
+The saved actual mapped-fetch and cache-remap captures support this bounded
+derivation without repeated reference builds. Keep actual translated/bus addresses
+in access provenance rather than replacing them with geometry guesses. Geometry
+does not select/authenticate an entry, mint mapping generations or prove ASID,
+global/region/valid/dirty/CCA, backing bytes, cache residency, lifetime or complete
+executable coverage. No upstream implementation or solver/native waiver is added.

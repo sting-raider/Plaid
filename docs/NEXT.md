@@ -305,3 +305,9 @@ Join authenticated producer/status/BEV chronology to the same boundary before
 using its numeric candidate for executable-root evidence. Suppression at one
 boundary does not exclude that root from the execution model. Actual transfer,
 handler-source/lifetime and complete root census still require separate proof.
+
+Bounded PageMask half/offset geometry now exists in `tlb_geometry` (ADR-0107).
+Compose it only with an independently selected/authenticated mapping and retain
+the actual translated transaction address. Geometry alone does not establish
+ASID/global/valid/dirty/CCA, overlapping-entry selection, operation generations,
+resident/backing lineage or executable lifetime; larger unvalidated masks reject.
