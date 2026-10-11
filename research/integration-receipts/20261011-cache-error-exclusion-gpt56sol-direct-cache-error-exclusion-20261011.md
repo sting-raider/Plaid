@@ -2,7 +2,7 @@
 
 Date: 2026-10-11
 Worker: `gpt56sol-direct-cache-error-exclusion-20261011`
-Result at receipt creation: integration-ready, pending serialized main write
+Result: integration-ready after reconciliation with current canonical main; final main SHA is recorded in the issue #4 closeout after serialized landing
 
 ## Source research
 
@@ -31,7 +31,11 @@ First integration reproduction at head `909d51595a290bf6a815c1e20afc3a08aa10e8bf
 
 Current-main reconciliation added canonical exception-root work without importing it into this proof. Reconciled head `8ab2584eeade32a78b0915e017600708b599ddf5` was built from main `539ff0ce72a98b296a8a28135fda6eab90a2f6ac` plus this candidate. Exact-pin Actions run `38152189643`, job `114507747976`, PASS with the same model and result hashes; artifact `11706997061`.
 
-Canonical Rust merge-context validation for the reconciled head used Actions run `38152192817`, job `114507758323`, PASS. It completed formatting, strict workspace Clippy, full workspace tests, CLI checks and every canonical synthetic evidence contract.
+Canonical Rust merge-context validation for that reconciliation used Actions run `38152192817`, job `114507758323`, PASS. It completed formatting, strict workspace Clippy, full workspace tests, CLI checks and every canonical synthetic evidence contract.
+
+After source-bound TLBWI operation generations landed on main at `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5`, this candidate was reconciled again. The production-only candidate head `de2e07e8223eaf6a7947accc1715e9dc67a9abe4` was validated by GitHub PR merge commit `06a7bd06a1ccba277b3a2e1fc30189fc1b1b0183`, which explicitly merges `de2e07e8223eaf6a7947accc1715e9dc67a9abe4` into `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5`. Actions run `38153040426`, job `114510257128`, PASS completed the exact decoder pin check, formatting, strict workspace Clippy, `cargo test --locked --workspace`, CLI checks, every canonical synthetic evidence contract and the independent fetch-summary oracle.
+
+The intervening canonical change was separately validated TLBWI history and did not alter the target-hardware fact. The full Plaid suite was nevertheless rerun against the composed current-main tree instead of assuming independence.
 
 ## Adopted invariant
 
@@ -57,13 +61,18 @@ The research model's field named `closed=true` is scoped only to the single cach
 - Rejected: weakening `WholeRom` solver blockers or treating this exclusion as exception-root census/reachability.
 - Rejected: mechanically merging the research branch or shipping its exact-pin harness as production code. Temporary integration validation copies were removed after their Actions receipts were captured.
 - Preserved separately: `plaid_core::exception_roots` resolves already-classified general/TLB root candidates; this cache-error exclusion neither supplies nor authenticates its exception classification/BEV/EXL/address-mode chronology.
+- Preserved separately: `plaid_core::tlb_history` records bounded TLBWI operation generations; neither TLB operation identity nor mapping content proves this target-level cache-error exclusion.
 
 ## Production files
 
 - `crates/plaid-core/src/root_policy.rs`
 - `crates/plaid-core/src/lib.rs`
+- `docs/DECISIONS.md`
+- `docs/STATUS.md`
+- `docs/NEXT.md`
 - `research/integration-receipts/20261011-cache-error-exclusion-gpt56sol-direct-cache-error-exclusion-20261011.md`
-- canonical status/next/decision documentation if updated at final landing
+
+No temporary exact-pin fixture or integration workflow remains in the production diff.
 
 ## Tests / adversarial cases
 
@@ -76,12 +85,14 @@ Production unit tests cover:
 
 Exact-pin integration validation additionally covers both BEV settings, sentinel exception state, deterministic repeated execution, exact source revisions and independent source guards.
 
-Required canonical gates passed on reconciled head `8ab2584eeade32a78b0915e017600708b599ddf5` via run `38152192817`:
+Required canonical gates passed against current main `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5` on candidate head `de2e07e8223eaf6a7947accc1715e9dc67a9abe4` via Actions run `38153040426`, job `114510257128`:
 
 - `cargo fmt --all -- --check`
 - `cargo clippy --locked --workspace --all-targets -- -D warnings`
 - `cargo test --locked --workspace`
+- exact decoder dependency pin check
 - canonical CLI and synthetic evidence checks in `.github/workflows/rust.yml`
+- independent fetch-summary assignment oracle
 
 ## Limitations / remaining proof obligations
 
@@ -96,6 +107,8 @@ This integration excludes one nonexistent target-specific root class. It does **
 
 Those obligations remain fail-closed and OPEN. No solver/native-complete gate is weakened and `progress.json` is intentionally unchanged.
 
-## Final landing
+## Final pre-landing state
 
-This section is updated after the serialized MAIN-WRITE lease and canonical merge. At receipt creation the latest reconciled tested base was `539ff0ce72a98b296a8a28135fda6eab90a2f6ac`; a later main advance requires reconciliation plus repeated focused/full validation before landing.
+The last canonical base used for validation is `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5`. The production-only candidate before this receipt update was `de2e07e8223eaf6a7947accc1715e9dc67a9abe4`, and its current-main merge-context run `38153040426` / job `114510257128` passed every required canonical gate. This receipt-only update does not alter code or policy semantics; the resulting final branch head is rerun through the canonical workflow before acquiring the MAIN-WRITE lease.
+
+The final canonical main SHA and main-branch CI result are recorded in issue #4 by the `MAIN-INTEGRATION CLOSEOUT` and `MAIN-WRITE RELEASE`. If main advances before this worker acquires its lease, the candidate must be reconciled and revalidated again rather than treating this receipt as a waiver.
