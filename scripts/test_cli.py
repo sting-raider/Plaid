@@ -49,6 +49,17 @@ def main():
         report=json.loads(copy_report.read_bytes())
         assert len(report['witnesses'])==1 and report['witnesses'][0]['read_ordinal']==2
         assert report['native_complete'] is False
+        run('inspect-cpu-definitions',source,receipt,copy_report,ok=False)
+        definition_source=directory/'definitions.json'
+        copy_history['format']='plaid-cpu-word-definitions-v0'
+        definition_source.write_bytes(json.dumps(copy_history).encode())
+        definition_receipt=hashlib.sha256(definition_source.read_bytes()).hexdigest()
+        definition_report=directory/'definitions-report.json'
+        run('inspect-cpu-definitions',definition_source,definition_receipt,definition_report)
+        run('verify-cpu-definitions',definition_source,definition_receipt,definition_report)
+        run('inspect-cpu-copy-history',definition_source,definition_receipt,copy_report,ok=False)
+        run('verify-cpu-copy-history',definition_source,definition_receipt,definition_report,ok=False)
+        run('verify-cpu-definitions',source,receipt,copy_report,ok=False)
         run('inspect-cpu-copy-history',source,'f'*64,copy_report,ok=False)
         run('inspect-cpu-copy-history',source,receipt,source,ok=False)
         assert source.read_bytes()==source_bytes
