@@ -147,11 +147,7 @@ struct ActiveDma {
 }
 
 fn require(ok: bool, message: &str) -> Result<(), String> {
-    if ok {
-        Ok(())
-    } else {
-        Err(message.into())
-    }
+    if ok { Ok(()) } else { Err(message.into()) }
 }
 
 fn checked_dmem_index(start: u16, lane: usize) -> usize {
@@ -184,7 +180,10 @@ fn expected_fragment(active: &ActiveDma) -> Result<(u16, PhysicalAddr), String> 
     let rdram = u64::from(active.rdram_start.0)
         .checked_add(rdram_delta)
         .ok_or("SP DMA RDRAM address overflow")?;
-    require(rdram <= u64::from(u32::MAX), "SP DMA RDRAM address overflow")?;
+    require(
+        rdram <= u64::from(u32::MAX),
+        "SP DMA RDRAM address overflow",
+    )?;
 
     Ok((dmem, PhysicalAddr(rdram as u32)))
 }
@@ -241,7 +240,10 @@ pub fn inspect_rsp_dmem_dma_egress(
             Event::DmemSnapshot { ordinal, bytes } => {
                 require(active.is_none(), "DMEM snapshot during active SP DMA")?;
                 require(dmem.is_none(), "duplicate DMEM snapshot")?;
-                require(bytes.len() == DMEM_BYTES, "DMEM snapshot must contain 4096 bytes")?;
+                require(
+                    bytes.len() == DMEM_BYTES,
+                    "DMEM snapshot must contain 4096 bytes",
+                )?;
                 dmem = Some(
                     bytes
                         .into_iter()
@@ -260,9 +262,15 @@ pub fn inspect_rsp_dmem_dma_egress(
                 bytes,
                 source,
             } => {
-                require(active.is_none(), "DMEM mutation interleaved with active SP DMA")?;
+                require(
+                    active.is_none(),
+                    "DMEM mutation interleaved with active SP DMA",
+                )?;
                 let state = dmem.as_mut().ok_or("DMEM write before initial snapshot")?;
-                require(usize::from(start) < DMEM_BYTES, "DMEM write start out of range")?;
+                require(
+                    usize::from(start) < DMEM_BYTES,
+                    "DMEM write start out of range",
+                )?;
                 require(
                     !bytes.is_empty() && bytes.len() <= DMEM_BYTES,
                     "invalid DMEM write size",
@@ -284,11 +292,17 @@ pub fn inspect_rsp_dmem_dma_egress(
                 start,
                 size,
             } => {
-                require(active.is_none(), "unknown DMEM mutation interleaved with active SP DMA")?;
+                require(
+                    active.is_none(),
+                    "unknown DMEM mutation interleaved with active SP DMA",
+                )?;
                 let state = dmem
                     .as_mut()
                     .ok_or("unknown DMEM write before initial snapshot")?;
-                require(usize::from(start) < DMEM_BYTES, "unknown DMEM write start out of range")?;
+                require(
+                    usize::from(start) < DMEM_BYTES,
+                    "unknown DMEM write start out of range",
+                )?;
                 require(
                     size != 0 && usize::from(size) <= DMEM_BYTES,
                     "invalid unknown DMEM write size",
@@ -329,7 +343,10 @@ pub fn inspect_rsp_dmem_dma_egress(
                         && row_bytes.is_multiple_of(DMA_FRAGMENT_BYTES as u16),
                     "unsupported SP DMA row size",
                 )?;
-                require(rows != 0 && rows <= MAX_DMA_ROWS, "unsupported SP DMA row count")?;
+                require(
+                    rows != 0 && rows <= MAX_DMA_ROWS,
+                    "unsupported SP DMA row count",
+                )?;
                 require(
                     skip.is_multiple_of(DMA_FRAGMENT_BYTES as u16),
                     "unsupported unaligned SP DMA skip",
@@ -353,7 +370,9 @@ pub fn inspect_rsp_dmem_dma_egress(
                 current_rdram,
                 bytes,
             } => {
-                let state = dmem.as_ref().ok_or("SP DMA fragment before DMEM snapshot")?;
+                let state = dmem
+                    .as_ref()
+                    .ok_or("SP DMA fragment before DMEM snapshot")?;
                 let current = active
                     .as_mut()
                     .ok_or("SP DMA fragment without active transfer")?;
@@ -407,7 +426,10 @@ pub fn inspect_rsp_dmem_dma_egress(
             }
             Event::DmaEnd { context, .. } => {
                 let current = active.take().ok_or("SP DMA end without active transfer")?;
-                require(context == current.begin_ordinal, "SP DMA end context mismatch")?;
+                require(
+                    context == current.begin_ordinal,
+                    "SP DMA end context mismatch",
+                )?;
                 require(
                     current.next_fragment == expected_fragment_count(&current),
                     "SP DMA ended before all descriptor fragments completed",
@@ -499,8 +521,8 @@ mod tests {
         state[0xfff] = wrap[1];
         state[0x000] = wrap[2];
         state[0x001] = wrap[3];
-        let mut wrap_first = state[0xff8..0x1000].to_vec();
-        let mut wrap_second = state[0x000..0x008].to_vec();
+        let wrap_first = state[0xff8..0x1000].to_vec();
+        let wrap_second = state[0x000..0x008].to_vec();
         debug_assert_eq!(wrap_first.len(), DMA_FRAGMENT_BYTES);
         debug_assert_eq!(wrap_second.len(), DMA_FRAGMENT_BYTES);
 
@@ -578,14 +600,14 @@ mod tests {
                 context: 11,
                 current_dmem: 0xff8,
                 current_rdram: PhysicalAddr(0x2000),
-                bytes: std::mem::take(&mut wrap_first),
+                bytes: wrap_first,
             },
             Event::DmaFragment {
                 ordinal: 13,
                 context: 11,
                 current_dmem: 0x000,
                 current_rdram: PhysicalAddr(0x2008),
-                bytes: std::mem::take(&mut wrap_second),
+                bytes: wrap_second,
             },
             Event::DmaEnd {
                 ordinal: 14,
@@ -618,7 +640,11 @@ mod tests {
         let mut cpu = 0usize;
         let mut initial = 0usize;
         let mut unknown = 0usize;
-        for export in report.fragments.iter().flat_map(|fragment| &fragment.exports) {
+        for export in report
+            .fragments
+            .iter()
+            .flat_map(|fragment| &fragment.exports)
+        {
             match &export.origin {
                 DmemByteOrigin::MeasuredWrite {
                     source: DmemWriterSource::RspSink { .. },
@@ -692,7 +718,9 @@ mod tests {
         ));
         assert!(matches!(
             report.fragments[0].exports[1].origin,
-            DmemByteOrigin::InitialSnapshot { snapshot_ordinal: 1 }
+            DmemByteOrigin::InitialSnapshot {
+                snapshot_ordinal: 1
+            }
         ));
     }
 
