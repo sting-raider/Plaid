@@ -51,13 +51,16 @@ pub enum WatchState {
 ///
 /// Missing values are preserved explicitly instead of guessed. `physical_address`
 /// must come from a trustworthy translation/backing proof; a virtual address is not
-/// an acceptable substitute.
+/// an acceptable substitute. `higher_priority_exception` must come from an
+/// independently trustworthy exception-classification history; `Some(false)` is
+/// required before this helper can emit an immediate Watch root.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WatchAccessInput {
     pub state: WatchState,
     pub kind: WatchAccessKind,
     pub physical_address: Option<u32>,
+    pub higher_priority_exception: Option<bool>,
     pub exl: Option<bool>,
     pub bev: Option<bool>,
 }
@@ -68,6 +71,7 @@ pub enum WatchNoImmediateReason {
     CacheExcluded,
     AccessDisabled,
     PhysicalBlockMismatch,
+    HigherPriorityException,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -75,6 +79,7 @@ pub enum WatchNoImmediateReason {
 pub enum WatchUnresolvedReason {
     UnknownWatchState,
     MissingPhysicalAddress,
+    UnknownExceptionPriority,
     UnknownExl,
     PostponedWhileExl,
     UnknownBev,
@@ -121,10 +126,11 @@ fn validate_state(state: WatchState) -> Result<Option<WatchConfig>, String> {
 
 /// Assess only the validated immediate Watch/root subset.
 ///
-/// A matching enabled load/store with known EXL=false and known BEV yields an
-/// immediate Watch receipt at the common general exception vector. CACHE is never
-/// a Watch trigger. Matching accesses while EXL is set remain unresolved because
-/// the exact postponed-entry timing is outside this validated scope.
+/// A matching enabled load/store with independently established absence of a
+/// higher-priority exception, known EXL=false and known BEV yields an immediate
+/// Watch receipt at the common general exception vector. CACHE is never a Watch
+/// trigger. Matching accesses while EXL is set remain unresolved because the
+/// exact postponed-entry timing is outside this validated scope.
 ///
 /// This function is not a closure certificate. It neither proves that its inputs
 /// are complete nor that the selected handler bytes have known provenance/lifetime.
@@ -168,6 +174,22 @@ pub fn assess_watch_access(input: WatchAccessInput) -> Result<WatchAssessment, S
             reason: WatchNoImmediateReason::PhysicalBlockMismatch,
             watch_generation: Some(config.generation),
         });
+    }
+
+    match input.higher_priority_exception {
+        None => {
+            return Ok(WatchAssessment::Unresolved {
+                reason: WatchUnresolvedReason::UnknownExceptionPriority,
+                watch_generation: Some(config.generation),
+            });
+        }
+        Some(true) => {
+            return Ok(WatchAssessment::NoImmediateWatch {
+                reason: WatchNoImmediateReason::HigherPriorityException,
+                watch_generation: Some(config.generation),
+            });
+        }
+        Some(false) => {}
     }
 
     match input.exl {
