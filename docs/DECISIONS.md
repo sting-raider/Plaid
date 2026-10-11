@@ -1292,3 +1292,24 @@ unsupported effects and unknown or divergent targets. A target certificate
 cannot waive separate effect, final-delay-slot, source or lifetime obligations.
 This expands only the declared immutable-image target analysis; whole-ROM and
 native completeness remain unproved. No upstream implementation is reused.
+
+## ADR-0088: Adjacent CPU-copy evidence requires architectural continuity
+
+Status: Accepted for controlled research verification, 2026-10-11.
+
+For the finite interpreted identity-RDRAM LW/LWU-to-SW contract, require exact
+typed instruction/GPR/scalar histories, canonical aligned KSEG1 Word effects,
+architectural load extension, full GPR continuity and sequential adjacent
+captured PCs. Equal stored low bits cannot hide a changed register generation,
+PC gap or cached address. Preserve failed-load, competing-source, same-value
+clobber and NOP-gap negatives. A zero-register load is not a causal GPR writer.
+Per-instruction reported-state checkpoints must agree with unchanged pinned
+reference, disabled and repeated enabled runs.
+
+The branch verifier accepted three new causal forgeries and is rejected as
+written. Its reconciled original fixture uses optional shared-builder shadows;
+upstream notices remain ignored and no reference implementation enters production.
+This accepts only a controlled evidence primitive. Instruction callbacks miss
+some early-return attempts, so complete source/attempt authentication and
+executable consumption/lifetime must precede any production copy certificate.
+No general dataflow or native closure gate is weakened.

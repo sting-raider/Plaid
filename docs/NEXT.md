@@ -174,3 +174,9 @@ foreign-sink cuts under independent checkpoint checks. Extend actual producer
 instruction/dataflow evidence and complete-history source rechecking before
 any broader promotion. Keep initial byte snapshots explicit; neither matching
 values nor instruction PCs prove ultimate producer dataflow/lifetime.
+
+Adjacent uncached LW/LWU-to-SW source evidence is now reconciled with full captured
+GPR continuity, sequential PCs and independent instruction checkpoints. Before
+production copy promotion, compose complete execution-attempt/source histories
+and eventual executable consumption. Keep cached, transformed, non-adjacent,
+interrupt and lifetime cases unknown; the callback alone is not a census.
