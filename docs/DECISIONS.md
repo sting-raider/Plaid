@@ -1200,3 +1200,16 @@ primitive role/source-projection checks to dispatch. Default/omit the additive
 empty collection for legacy serialization. These finite observations prove no
 source-site transfer, target lifetime or future execution completeness. No
 upstream implementation is copied or linked.
+
+## ADR-0082: Load and overlay provenance must agree with executable Regions
+
+Status: Accepted, 2026-10-11.
+
+Validate explicit physical Region alignment and span arithmetic independently
+of guest spans. Require each load's exact image, generation, guest range and
+known ROM offset to match an executable Region even without a copy event.
+Require an overlay descriptor's referenced Region to match image, guest range
+and ROM offset. Overlay generation remains a separate load/execution identity;
+unknown physical backing is not inferred. Existing DMA/copy-event checks remain
+additional obligations. This rejects contradictory metadata without proving
+executable lifetime or source completeness. No upstream code is reused.

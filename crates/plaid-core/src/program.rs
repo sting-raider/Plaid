@@ -663,6 +663,14 @@ impl ProgramMap {
         for r in &self.regions {
             r.range.validate(true)?;
             refs(&r.evidence)?;
+            if let Some(physical) = r.physical_start {
+                if !physical.0.is_multiple_of(4) {
+                    return Err("unaligned executable physical mapping".into());
+                }
+                if u64::from(physical.0) + u64::from(r.range.size) > 1u64 << 32 {
+                    return Err("region physical span overflow".into());
+                }
+            }
             if r.image.is_empty() {
                 return Err("region has no image identity".into());
             }
@@ -670,7 +678,12 @@ impl ProgramMap {
                 rom_range(o, r.range.size)?;
             }
             if let Some(o) = &r.overlay
-                && self.overlays.get(o).is_none_or(|x| x.image != r.image)
+                && self.overlays.get(o).is_none_or(|x| {
+                    x.image != r.image
+                        || r.rom_offset != Some(x.rom_offset)
+                        || r.range.start != x.load_address
+                        || r.range.size != x.size
+                })
             {
                 return Err("unknown or mismatched overlay".into());
             }
@@ -723,6 +736,14 @@ impl ProgramMap {
             l.destination.validate(true)?;
             rom_range(l.rom_offset, l.destination.size)?;
             refs(&l.evidence)?;
+            if !self.regions.iter().any(|r| {
+                r.image == l.image
+                    && r.generation == l.generation
+                    && r.range == l.destination
+                    && r.rom_offset == Some(l.rom_offset)
+            }) {
+                return Err("load has no matching executable region".into());
+            }
             if let Some(copy) = &l.copy_event
                 && (!l.evidence.contains(copy)
                     || self

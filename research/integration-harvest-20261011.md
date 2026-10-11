@@ -111,3 +111,15 @@ a source site. Extended ADR-0079's role table and complete-source projection to
 the new primitive rather than creating a disconnected validation path. Added
 fork/cross-role and deletion/generation-tamper controls. Focused/full locked
 core, fmt and strict Clippy pass. No native or whole-ROM proof is added.
+
+## Batch 5: executable Region and producer binding
+
+Reviewed production producers and independently reproduced ten failures across
+`research/{region-physical-span-overflow,region-physical-alignment,
+load-region-binding,overlay-region-binding}-gpt56sol` on batch-4 main. All four
+candidates are superseded by this integration. Retained their 19 adversarial and
+positive controls: exactly ending physical spans remain valid, absent physical
+metadata is not guessed, and overlay descriptors may serve separate generations.
+Load binding is independent of copy-event presence; producer tuples and existing
+DMA coverage obligations agree. Focused tests, full locked plaid-core, fmt and
+strict Clippy pass. No branch workflow or upstream implementation is included.

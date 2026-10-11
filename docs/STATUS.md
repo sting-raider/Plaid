@@ -520,3 +520,10 @@ roundtrip independently of diagnostics. The solver blocks uncorrelated dispatch
 even at an already certified target PC. The shared role table/source rechecker
 also authenticates dispatch kinds and generations; empty legacy maps preserve
 their serialized shape (ADR-0081).
+
+Executable Regions now reject unaligned or overflowing explicit physical spans.
+Every load, including loads without a copy event, must match its declared
+image/generation, guest range and ROM source Region. Overlay descriptors must
+match their referenced Region's image, range and ROM source; a descriptor does
+not invent generation or physical backing. Ten adversaries reproduced on prior
+main; all 19 focused controls and the full locked core suite pass (ADR-0082).
