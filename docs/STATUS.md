@@ -602,3 +602,8 @@ also pass in canonical CI at `72e557a` (Actions 38131501041). These are finite
 history checks; pinned emulator neutrality remains a separate reference gate.
 The six XORI contract regressions also pass at `05ed9cd` (Actions 38132454063).
 Research-only emulator workflows are not promoted.
+
+Canonical Actions run `38134178095` passes at exact head
+`a990cfaa4ab4357579e43c01dac71a7a360eb88e`, including eight synthetic CPU SP
+producer contracts and the existing Rust/CLI/copy/transform/model gates. The
+separate pinned ares run supplies unchanged-reference neutrality evidence.
