@@ -534,3 +534,10 @@ or equal payloads. Four adversaries reproduced on prior main. Seven focused
 tests, including a bounded exhaustive concrete-history oracle against the Rust
 validator, pass; the independent 20,000-case model reproduces its exact research
 hash. Source authenticity and capture completeness remain separate (ADR-0083).
+
+Pointer-table recognition now rejects alternate reachability that bypasses its
+compare or dispatch prefix, and exceptional executed guard slots. Annulled slots
+and unrelated image/generation facts remain valid controls. Eight adversarial
+tests reproduced on prior main; 17 focused tests pass, including a primary remote
+taken-branch control. Numeric candidates retain distinct content-immutability
+and target-identity obligations; full core, fmt and strict Clippy pass (ADR-0084).
