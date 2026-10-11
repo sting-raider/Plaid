@@ -548,3 +548,9 @@ compilation. Matching supplied bytes cannot restore that copy identity. Exact
 writer evidence remains unresolved; a later full copy is a valid control. Five
 adversaries reproduced on prior main, and nine focused cases pass. Complete-source
 entry rechecking and the exact pinned Mupen hook/import fixture pass (ADR-0085).
+
+Block/direct-edge merge contradictions now use exact identity indexes while
+retaining every semantic variant and evidence reference. Four research cases
+and a primary 256-subset pairwise-oracle comparison pass. Local release medians
+at 8,000 facts improve from 224.453 to 11.273 ms for blocks and 154.773 to
+14.700 ms for edges. This measures the synthetic merge phase only (ADR-0086).
