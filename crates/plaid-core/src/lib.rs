@@ -63,6 +63,7 @@ pub mod tlb_geometry;
 pub mod tlb_history;
 pub mod trace;
 pub mod trace_projection;
+pub mod watch_roots;
 
 use serde::{Deserialize, Serialize};
 
