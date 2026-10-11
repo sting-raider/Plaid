@@ -1,0 +1,102 @@
+name: Direct D-cache writeback validation
+
+on:
+  push:
+    branches:
+      - direct-integration/dcache-writeback-gpt56sol-direct-dcache-writeback-20261011
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the repository toolchain
+        run: rustup show
+      - name: Check exact decoder dependency pin
+        shell: python {0}
+        run: |
+          from pathlib import Path
+          import tomllib
+          refs = tomllib.loads(Path("refs.lock.toml").read_text())
+          reference = next(r for r in refs["repo"] if r["name"] == "rabbitizer")
+          manifest = tomllib.loads(Path("crates/plaid-core/Cargo.toml").read_text())
+          dependency = manifest["dependencies"]["rabbitizer"]
+          assert dependency["git"] == reference["url"]
+          assert dependency["rev"] == reference["rev"]
+          lock = tomllib.loads(Path("Cargo.lock").read_text())
+          package = next(p for p in lock["package"] if p["name"] == "rabbitizer")
+          expected = f'git+{reference["url"]}?rev={reference["rev"]}#{reference["rev"]}'
+          assert package["source"] == expected
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Strict workspace Clippy
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Focused D-cache writeback tests
+        run: cargo test --locked -p plaid-core --test dcache_writeback
+      - name: Full workspace tests
+        run: cargo test --locked --workspace
+      - name: Synthetic CLI checks
+        run: python scripts/test_cli.py
+      - name: Synthetic CPU-copy history contracts
+        run: python spikes/044-ares-cpu-copy-dataflow/test_verify.py
+      - name: Synthetic XORI history contracts
+        run: python spikes/045-ares-cpu-xori-transform/test_verify.py
+      - name: Synthetic CPU SP producer contracts
+        run: python spikes/046-ares-cpu-sp-producer-context/test_verify.py
+      - name: Synthetic RSP CPU IMEM composition contracts
+        run: python spikes/047-ares-rsp-cpu-imem-compose/test_verify.py
+      - name: Synthetic XORI cache visibility contracts
+        run: python spikes/048-ares-xori-cache-visibility/test_verify.py
+      - name: Synthetic PageMask cache remap contracts
+        run: python spikes/049-ares-pagemask-cache-remap/test_verify.py
+      - name: Synthetic PI cache visibility contracts
+        run: python spikes/050-ares-pi-cache-visibility/test_verify.py
+      - name: Synthetic SP DMA DMEM ingress contracts
+        run: python spikes/051-ares-sp-dma-dmem-ingress/test_verify.py
+      - name: Synthetic RSP store isolation contracts
+        run: python spikes/052-ares-rsp-store-isolation/test_verify.py
+      - name: Synthetic guest EntryHi cache reactivation contracts
+        run: python spikes/053-ares-asid-cache-lifetime/test_verify.py
+      - name: Synthetic guest TLBR cache reactivation contracts
+        run: python spikes/054-ares-tlbr-cache-lifetime/test_verify.py
+      - name: Independent fetch-summary assignment oracle
+        run: python experiments/fetch-summary-realizability/model.py
+
+  exact-research:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Materialize exact validated research head
+        run: |
+          git cat-file -e 6cff6dc950c699abd7a5bfa8a56af9a65d789e43^{commit}
+          git worktree add --detach /tmp/dcache-research 6cff6dc950c699abd7a5bfa8a56af9a65d789e43
+      - name: Checkout pinned ares
+        working-directory: /tmp/dcache-research
+        run: |
+          mkdir -p .refs
+          git clone https://github.com/ares-emulator/ares.git .refs/ares
+          git -C .refs/ares checkout 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          test "$(git -C .refs/ares rev-parse HEAD)" = 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          git -C .refs/ares diff --quiet HEAD
+      - name: Reproduce deterministic model receipt twice
+        working-directory: /tmp/dcache-research
+        run: |
+          python3 -m py_compile spikes/034-ares-dcache-writeback-lineage/model.py spikes/034-ares-dcache-writeback-lineage/run.py
+          python3 spikes/034-ares-dcache-writeback-lineage/model.py | tee /tmp/model-a.txt
+          python3 spikes/034-ares-dcache-writeback-lineage/model.py > /tmp/model-b.txt
+          cmp /tmp/model-a.txt /tmp/model-b.txt
+          grep -F 'REPORT_SHA256=02bbfbfd58817fcdd10d21523018be2b69dba1cf8b2e2b9c9c6afcc4dd98a9eb' /tmp/model-a.txt
+      - name: Build and execute exact pinned ares fixture
+        working-directory: /tmp/dcache-research
+        run: python3 spikes/034-ares-dcache-writeback-lineage/run.py
