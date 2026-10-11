@@ -36,13 +36,28 @@ fn inspect(value: &Value) -> Result<SpDmaEgressReport, String> {
 fn same_value_writer_and_equal_payload_decoy_keep_causal_identity() {
     let report = inspect(&fixture()).unwrap();
     assert_eq!((report.imem_word_sinks, report.dma_rdram_writes), (9, 3));
-    assert_eq!((report.fully_attributed_bytes, report.unknown_source_bytes), (24, 0));
+    assert_eq!(
+        (report.fully_attributed_bytes, report.unknown_source_bytes),
+        (24, 0)
+    );
     let first = &report.receipts[0];
     assert_eq!((first.source_region, first.source_offset), (1, 0x040));
     assert_eq!((first.descriptor_count, first.descriptor_skip), (1, 8));
     assert_eq!(
-        first.source_bytes.each_ref().map(|byte| byte.writer_ordinal),
-        [Some(2), Some(2), Some(2), Some(2), Some(3), Some(3), Some(3), Some(3)]
+        first
+            .source_bytes
+            .each_ref()
+            .map(|byte| byte.writer_ordinal),
+        [
+            Some(2),
+            Some(2),
+            Some(2),
+            Some(2),
+            Some(3),
+            Some(3),
+            Some(3),
+            Some(3)
+        ]
     );
     assert_eq!(
         first.source_bytes.each_ref().map(|byte| byte.source_offset),
@@ -62,18 +77,40 @@ fn wrapped_offset_does_not_change_the_captured_imem_bank() {
     let report = inspect(&fixture()).unwrap();
     let before_wrap = &report.receipts[1];
     let after_wrap = &report.receipts[2];
-    assert_eq!((before_wrap.source_region, before_wrap.source_offset), (1, 0xff8));
-    assert_eq!((after_wrap.source_region, after_wrap.source_offset), (1, 0x000));
     assert_eq!(
-        before_wrap.source_bytes.each_ref().map(|byte| byte.source_offset),
+        (before_wrap.source_region, before_wrap.source_offset),
+        (1, 0xff8)
+    );
+    assert_eq!(
+        (after_wrap.source_region, after_wrap.source_offset),
+        (1, 0x000)
+    );
+    assert_eq!(
+        before_wrap
+            .source_bytes
+            .each_ref()
+            .map(|byte| byte.source_offset),
         [0xff8, 0xff9, 0xffa, 0xffb, 0xffc, 0xffd, 0xffe, 0xfff]
     );
     assert_eq!(
-        after_wrap.source_bytes.each_ref().map(|byte| byte.source_offset),
+        after_wrap
+            .source_bytes
+            .each_ref()
+            .map(|byte| byte.source_offset),
         [0, 1, 2, 3, 4, 5, 6, 7]
     );
-    assert!(before_wrap.source_bytes.iter().all(|byte| byte.writer_ordinal.is_some()));
-    assert!(after_wrap.source_bytes.iter().all(|byte| byte.writer_ordinal.is_some()));
+    assert!(
+        before_wrap
+            .source_bytes
+            .iter()
+            .all(|byte| byte.writer_ordinal.is_some())
+    );
+    assert!(
+        after_wrap
+            .source_bytes
+            .iter()
+            .all(|byte| byte.writer_ordinal.is_some())
+    );
 }
 
 #[test]
@@ -87,7 +124,10 @@ fn uncaptured_source_bytes_stay_unknown_instead_of_being_value_inferred() {
         ]
     });
     let report = inspect(&value).unwrap();
-    assert_eq!((report.fully_attributed_bytes, report.unknown_source_bytes), (4, 4));
+    assert_eq!(
+        (report.fully_attributed_bytes, report.unknown_source_bytes),
+        (4, 4)
+    );
     assert_eq!(
         report.receipts[0]
             .source_bytes
@@ -98,7 +138,10 @@ fn uncaptured_source_bytes_stay_unknown_instead_of_being_value_inferred() {
 
     let mut forged = value;
     forged["events"][1]["value"] = json!(0x00020304deadbeefu64);
-    assert!(inspect(&forged).is_err(), "known source-lane payload forgery accepted");
+    assert!(
+        inspect(&forged).is_err(),
+        "known source-lane payload forgery accepted"
+    );
 }
 
 #[test]
@@ -149,7 +192,12 @@ fn trusted_source_receipt_and_replayed_report_are_deletion_resistant() {
 
     let mut deleted = value.clone();
     deleted["events"].as_array_mut().unwrap().remove(1);
-    for (index, event) in deleted["events"].as_array_mut().unwrap().iter_mut().enumerate() {
+    for (index, event) in deleted["events"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .enumerate()
+    {
         event["ordinal"] = json!(index as u64 + 1);
     }
     let shortened = serde_json::to_vec(&deleted).unwrap();
