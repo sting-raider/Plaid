@@ -43,8 +43,9 @@ Overlap checks remain pairwise; there is no scalability claim.
 
 ## Remaining harvest
 
-First land the consolidated structural event-role/source-projection cluster.
-Then reconcile small fail-closed solver, Region/load/overlay and table fixes.
+Both prep clusters and all 45 core source/test candidate branches have been
+reconciled through the batches below. Indexed research-only branches are not
+certified or automatically integrated.
 Research-only TLB/cache, copy/transform, RSP and execution-root findings need
 selective source-contract composition, not wholesale branch merges. Negative
 results and cross-reference disagreements remain explicit obligations. The
@@ -238,3 +239,25 @@ core (including the real 512-pass exhaustion case), fmt and strict Clippy pass.
 Exact Rabbitizer pin remains unchanged. These synthetic measurements claim no
 general solver/ProgramMap scaling, hardware behavior, memory improvement or
 whole-ROM closure. The branch-only transformer/workflow is not included.
+
+## Batch 11: bounded two-path indirect join
+
+Reviewed `research/cross-block-join-gpt56sol` and reproduced its conservative
+baseline on batch-10 main: five desired completeness cases failed while six
+negative controls passed. Its production candidate is now superseded. Adopted
+the exactly-two-path certificate and independent reconstruction, sharing scalar
+path simulation with the existing chain rather than duplicating transfer logic.
+The existing whitelist, unknown-state initialization, final-slot separation and
+bounded root/path policies remain intact; no pseudo-op widening or runtime guest
+execution is added.
+
+Retained all eleven research regressions and added excess-path, unsupported-arm
+effect and tampered-digest controls. An initial overbroad effect assertion was
+corrected: SYSCALL terminates one CFG arm, allowing the older single-path prover
+to certify the other target, while the independent unsupported-scope effect
+still keeps the solver OPEN. No exceptional arm is admitted to the join proof.
+
+Fourteen focused join cases, existing ten indirect/four delay-slot cases, full
+locked workspace (including the real 512-pass frontier), fmt, strict workspace
+Clippy and synthetic CLI checks pass. Exact pinned Rabbitizer and existing
+transfer semantics remain unchanged. No whole-ROM or native scope is expanded.

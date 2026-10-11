@@ -154,10 +154,16 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
                 proof.target.clone(),
                 serde_json::to_string(&proof),
             ))
+        } else if let Some(proof) = crate::indirect_chain::certificate(map, image, &old.site) {
+            Some((
+                "plaid-cross-block-constant/v0",
+                proof.target.clone(),
+                serde_json::to_string(&proof),
+            ))
         } else {
-            crate::indirect_chain::certificate(map, image, &old.site).map(|proof| {
+            crate::indirect_chain::join_certificate(map, image, &old.site).map(|proof| {
                 (
-                    "plaid-cross-block-constant/v0",
+                    "plaid-cross-block-join/v0",
                     proof.target.clone(),
                     serde_json::to_string(&proof),
                 )
@@ -248,6 +254,19 @@ pub fn verify_constant(map: &ProgramMap, image: &CodeImage, site: &IndirectSite)
                 return false;
             };
             if crate::indirect_chain::certificate(map, image, &site.site).as_ref() != Some(&proof) {
+                return false;
+            }
+            proof.target
+        }
+        "plaid-cross-block-join/v0" => {
+            let Ok(proof) =
+                serde_json::from_str::<crate::indirect_chain::JoinCertificate>(&e.detail)
+            else {
+                return false;
+            };
+            if crate::indirect_chain::join_certificate(map, image, &site.site).as_ref()
+                != Some(&proof)
+            {
                 return false;
             }
             proof.target

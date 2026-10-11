@@ -554,3 +554,10 @@ retaining every semantic variant and evidence reference. Four research cases
 and a primary 256-subset pairwise-oracle comparison pass. Local release medians
 at 8,000 facts improve from 224.453 to 11.273 ms for blocks and 154.773 to
 14.700 ms for edges. This measures the synthetic merge phase only (ADR-0086).
+
+Bounded indirect analysis now rechecks exactly two acyclic scalar paths that
+independently derive the same JR/JALR target, retaining both path identities.
+Five completeness regressions reproduced on prior main; all 14 join cases,
+existing chain/slot tests and full locked workspace checks pass. Unsupported
+effects and the final transfer slot remain independent closure blockers.
+Whole-ROM/native completeness and general dataflow remain OPEN (ADR-0087).

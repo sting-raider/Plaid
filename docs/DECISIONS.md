@@ -1268,3 +1268,18 @@ The former pairwise rule is an independent test oracle; local release A/B
 measurement reproduces the bottleneck and improvement. This optimizes only that
 merge phase, not solver identity scans or complete-history processing. No proof
 obligation, serialization contract or upstream implementation is changed.
+
+## ADR-0087: Recheck bounded two-path indirect target certificates
+
+Status: Accepted, 2026-10-11.
+
+After local and single-chain analysis, allow exactly two acyclic root-to-site
+paths whose independent scalar analyses derive the same canonical aligned
+JR/JALR target. Rebuild CFG from current bytes and roots, require all path facts,
+retain both path identities and digests, and reconstruct the certificate during
+verification. Share path simulation with the existing chain prover without
+widening its scalar/control whitelist. Reject excess paths, cycles, calls,
+unsupported effects and unknown or divergent targets. A target certificate
+cannot waive separate effect, final-delay-slot, source or lifetime obligations.
+This expands only the declared immutable-image target analysis; whole-ROM and
+native completeness remain unproved. No upstream implementation is reused.
