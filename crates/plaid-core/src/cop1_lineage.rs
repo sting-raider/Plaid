@@ -222,7 +222,10 @@ fn payload_bytes(value: u64, width: u32) -> Result<Vec<u8>, String> {
     let bytes = value.to_be_bytes();
     match width {
         4 => {
-            require(u32::try_from(value).is_ok(), "COP1 Word value exceeds 32 bits")?;
+            require(
+                u32::try_from(value).is_ok(),
+                "COP1 Word value exceeds 32 bits",
+            )?;
             Ok(bytes[4..].to_vec())
         }
         8 => Ok(bytes.to_vec()),
@@ -271,9 +274,15 @@ pub fn inspect_cop1_lineage_history(
     expected_sha256: &str,
 ) -> Result<Cop1LineageReport, String> {
     let digest = sha256(source);
-    require(digest == expected_sha256, "COP1 lineage source receipt mismatch")?;
+    require(
+        digest == expected_sha256,
+        "COP1 lineage source receipt mismatch",
+    )?;
     let history: History = serde_json::from_slice(source).map_err(|error| error.to_string())?;
-    require(history.format == FORMAT, "unsupported COP1 lineage history format")?;
+    require(
+        history.format == FORMAT,
+        "unsupported COP1 lineage history format",
+    )?;
 
     for (index, event) in history.events.iter().enumerate() {
         require(
@@ -315,7 +324,10 @@ pub fn inspect_cop1_lineage_history(
                         .is_none(),
                     "reused COP1 context identity",
                 )?;
-                require(reads.insert(read.ordinal, read).is_none(), "duplicate COP1 read ordinal")?;
+                require(
+                    reads.insert(read.ordinal, read).is_none(),
+                    "duplicate COP1 read ordinal",
+                )?;
                 completed_reads += 1;
             }
             Event::FprWrite(write) => {
@@ -369,9 +381,7 @@ pub fn inspect_cop1_lineage_history(
                         "non-load COP1 writer carries a memory source read",
                     )?;
                     require(
-                        contexts
-                            .insert(write.context, ContextState::Move)
-                            .is_none(),
+                        contexts.insert(write.context, ContextState::Move).is_none(),
                         "reused COP1 context identity",
                     )?;
                     (0..width)
@@ -439,9 +449,7 @@ pub fn inspect_cop1_lineage_history(
             }
             Event::FailedLoad(failed) => {
                 require(
-                    failed.context != 0
-                        && failed.phase != 0
-                        && failed.architectural_fpr < 32,
+                    failed.context != 0 && failed.phase != 0 && failed.architectural_fpr < 32,
                     "invalid failed COP1 load context",
                 )?;
                 require(
