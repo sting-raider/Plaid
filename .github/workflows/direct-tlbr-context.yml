@@ -1,0 +1,48 @@
+name: Direct TLBR context integration checks
+
+on:
+  push:
+    branches:
+      - direct-integration/tlbr-context-gpt56sol-direct-tlbr-context-20261011
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the repository toolchain
+        run: rustup show
+      - name: Check exact decoder dependency pin
+        shell: python {0}
+        run: |
+          from pathlib import Path
+          import tomllib
+          refs = tomllib.loads(Path("refs.lock.toml").read_text())
+          reference = next(r for r in refs["repo"] if r["name"] == "rabbitizer")
+          manifest = tomllib.loads(Path("crates/plaid-core/Cargo.toml").read_text())
+          dependency = manifest["dependencies"]["rabbitizer"]
+          assert dependency["git"] == reference["url"]
+          assert dependency["rev"] == reference["rev"]
+          lock = tomllib.loads(Path("Cargo.lock").read_text())
+          package = next(p for p in lock["package"] if p["name"] == "rabbitizer")
+          expected = f'git+{reference["url"]}?rev={reference["rev"]}#{reference["rev"]}'
+          assert package["source"] == expected
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Strict workspace Clippy
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Full workspace tests
+        run: cargo test --locked --workspace
+      - name: Focused TLBR history regressions
+        run: cargo test --locked -p plaid-core --test tlbr_history
+      - name: Synthetic guest TLBR cache reactivation contracts
+        run: python spikes/054-ares-tlbr-cache-lifetime/test_verify.py
+      - name: Independent fetch-summary assignment oracle
+        run: python experiments/fetch-summary-realizability/model.py
