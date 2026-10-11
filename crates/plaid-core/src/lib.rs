@@ -65,6 +65,7 @@ pub mod solver;
 pub mod sp_dma_egress;
 pub mod sp_history;
 mod tables;
+pub mod tlb_fetch;
 pub mod tlb_geometry;
 pub mod tlb_history;
 pub mod tlbr_history;

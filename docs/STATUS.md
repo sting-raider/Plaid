@@ -822,3 +822,12 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   All 21 saved state rows agree with the producer relation and next boundary gate.
   Synthetic protocol adapters do not certify sensed chronology, producer census,
   handler ancestry/lifetime or whole-ROM/native closure (ADR-0108).
+
+- Production tlb_fetch now joins one mapped CCA=2 fetch to its exact completed
+  in-window ordinary-RDRAM Word read, retaining separate virtual, mapping/context,
+  translated and bus identities. It reuses strict tlb_geometry, rejects impossible
+  low PFN bits, and retains alias/remap/endian/invalid-half/equal-value-decoy
+  adversaries. Thirteen saved actual fetches agree with locally adapted fixtures;
+  mapping labels/projection ordinals remain synthetic. Source-sensor coverage,
+  mapping/context generations, cache residency, lifetime and closure/native
+  completeness remain OPEN (ADR-0063).
