@@ -1487,3 +1487,20 @@ old runner's accepted mutations. Keep Gopher's different cache-index policy
 explicit and hardware/lifetime/native obligations open. Share original ISC
 fixture/guards only; generated upstream code/notices remain ignored and no
 reference implementation or branch workflow is imported into native mode.
+
+## ADR-0098: Successful TLBR context loads differ from instruction occurrence
+
+Status: Accepted for controlled research verification, 2026-10-11.
+
+Extend ADR-0097's finite context/cache controls with actual decoded TLBR. At the
+pin, successful TLBR loads staged EntryHi and can reactivate stale resident code
+without replacing installed entries or cache contents. Same-value TLBR executes
+despite snapshot equality. Out-of-range TLBR executes without a successful
+context load; TLBP changes probe state without loading EntryHi. Preserve these
+separate facts before designing a measured context-writer certificate.
+
+Retain the original ISC fixture with strict typed report tags/counters/digest.
+Internal installed/cache snapshots prove finite behavior rather than complete
+state or history. Index/setup/reset/backing operations are staged, leaving
+writer census and executable lifetimes open. Preserve independent reference
+disagreements and import neither upstream implementation nor branch-only CI.

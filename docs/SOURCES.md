@@ -337,3 +337,10 @@ checked. Gopher supplies source-only cache-index disagreement; no GPL code is
 imported. Generated ares ISC/SLJIT BSD code/notices remain ignored. Finite stale
 reactivation and selected snapshots do not establish hardware or complete writer,
 mapping-generation, backing ancestry, lifetime/native certificates.
+
+`spikes/054-ares-tlbr-cache-lifetime/` retains the original ISC TLBR fixture and
+source guard with selected-file cleanliness for the existing Mupen instrument.
+Exact decoder/TLBR/TLBP/TLB/cache objects, source-only Gopher/Mupen disagreement
+and systemtest expectations are checked. All reference implementation/notices
+remain ignored; finite context snapshots and fetch behavior do not establish a
+complete writer/lifetime certificate or hardware semantics.

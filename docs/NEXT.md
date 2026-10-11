@@ -235,3 +235,9 @@ Compose measured context writers with installed mapping, backing and resident
 histories before issuing certificates; internal snapshot equality and miss counts
 are insufficient. Preserve inactive residents until a verified replacement or
 invalidation boundary, and retain the ares/Gopher index disagreement (ADR-0097).
+
+The finite TLBR/cache controls now share that obligation under spike 054.
+Keep successful context loading distinct from operation occurrence: TLBP and
+out-of-range TLBR do not supply a successful EntryHi load at the pin. Compose
+actual histories before production promotion; repeated snapshots do not recover
+same-value writer identity (ADR-0098).
