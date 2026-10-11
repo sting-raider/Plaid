@@ -1563,3 +1563,32 @@ ares re-ran byte-identically at integration; pinned n64-systemtest source
 corroborates +0/+0x80/+0x180, while pinned Gopher64 lacks +0x80 and remains an
 explicit disagreement. No reference code or runtime dependency enters production
 and no solver/native-complete gate is weakened.
+
+## ADR-0102: TLBWI operation generations follow observed write boundaries, not mapping inequality
+
+Status: Accepted for bounded compiler-time observed-history replay, 2026-10-11.
+
+Adopt a strict source-bound TLBWI begin/write/end replay. A successful in-range
+decoded TLBWI boundary mints a fresh ordered operation generation even when the
+before/after entry fingerprints are identical. Require the actual selected write
+slot to equal the captured CP0 Index. Equal payload in another slot cannot select
+or authenticate that operation. Out-of-range and exception attempts without an
+observed successful write retain no-write receipts but mint no write generation.
+An in-range successful end without a write, duplicate/fabricated writes, reordered
+ordinals/epochs, mismatched contexts, wrong opcodes and malformed fingerprints or
+schema fail closed. Bind the complete supplied source to an externally trusted
+SHA-256 and reconstruct the entire report during verification.
+
+Operation generation, selected-slot identity, mapping-content identity,
+translation-context generation, cache residency and executable lifetime remain
+separate facts. A content fingerprint is not a semantic mapping certificate, and
+the finite supplied source does not certify sensor completeness. The fresh exact
+pinned ares rerun at `9408cb43d4948fc3ea6e152a307a34348df3fe04`
+reproduced result SHA-256
+`6ef416a44a0fb533a1e291b8adab42b158f0eb581ec81a9174509b3d6ab606e0`
+and the independent 20,000-case model SHA-256
+`8c0350d8f1604b6935fcf68b0a148bb7688aaf1629355490b56816a7e7dee868`.
+TLBWR, TLBP/TLBR, PageMask/ASID/global chronology, complete mutation census,
+cache/mapping/lifetime composition and whole-ROM/native-complete proof remain
+OPEN. No reference implementation code or runtime dependency enters production,
+and no solver/native-complete gate is weakened.
