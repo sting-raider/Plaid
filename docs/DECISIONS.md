@@ -536,7 +536,7 @@ Broader capture and production lifetime handling remain separate decisions.
 
 ## ADR-0040: Separate current cache tags from resident-byte origins
 
-Status: Accepted for research, 2026-10-08.
+Status: Accepted, 2026-10-08.
 
 Guest CACHE index-store-tag can change the effective hit page without refilling
 or altering resident words. A seven-instruction controlled fixture retags page
