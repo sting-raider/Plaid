@@ -157,12 +157,15 @@ pub enum FprByteOrigin {
     },
     RdramRead {
         read_ordinal: u64,
+        fpr_write_ordinal: u64,
+        fr: bool,
         source: PhysicalAddr,
         source_byte: u8,
     },
     CapturedWriter {
         writer_ordinal: u64,
         operation: FprWriteKind,
+        fr: bool,
         source_byte: u8,
     },
 }
@@ -371,6 +374,8 @@ pub fn inspect_cop1_lineage_history(
                     (0..width)
                         .map(|source_byte| FprByteOrigin::RdramRead {
                             read_ordinal,
+                            fpr_write_ordinal: write.ordinal,
+                            fr: write.fr,
                             source: PhysicalAddr(read.address.0 + source_byte),
                             source_byte: source_byte as u8,
                         })
@@ -388,6 +393,7 @@ pub fn inspect_cop1_lineage_history(
                         .map(|source_byte| FprByteOrigin::CapturedWriter {
                             writer_ordinal: write.ordinal,
                             operation: write.operation,
+                            fr: write.fr,
                             source_byte: source_byte as u8,
                         })
                         .collect::<Vec<_>>()
