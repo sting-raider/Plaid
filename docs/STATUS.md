@@ -627,3 +627,11 @@ negative control and all existing gates.
 Canonical Actions `38140216494` passes at exact head
 `0f00cdc2cde81811442a9d169a27504b0c1e769a`, including all ten composition
 contracts and the existing Rust/CLI/producer/model gates.
+
+Unmodified pinned ares now reproduces four XORI/cache visibility controls under
+spike 048, with repeated identical selected facts and the historical evidence
+hash. Writeback does not refresh resident instructions; early refill remains
+stale. Four strict behavioral tests and an additional actual-XORI decoded-word
+negative pass, along with full core, fmt and strict workspace Clippy. Abstract
+generation replay is reviewed separately; measured ancestry, mutation census,
+executable lifetime and native completeness remain OPEN (ADR-0092).
