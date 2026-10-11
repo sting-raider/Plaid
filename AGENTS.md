@@ -15,9 +15,9 @@ Build an automatic N64 ROM-to-native recompilation system. The final native game
 7. **Every compiler transformation needs a verifier.** At minimum test register state, PC/control flow, memory writes, exceptions, and relevant timing/event effects.
 8. **No performance work without a baseline.** Correctness before speed.
 
-## Agent workflow
+## Integration modes
 
-Plaid supports two integration modes.
+Plaid supports two modes.
 
 ### Normal mode
 
@@ -29,33 +29,59 @@ When the user explicitly authorizes direct integration, multiple workers may pre
 
 A direct-integration worker must:
 
-1. fetch current `main` and record its exact SHA `A`;
-2. reconcile the candidate onto `A`;
+1. fetch current `main` and record exact SHA `A`;
+2. reconcile its candidate onto `A`;
 3. run the required local validation on that exact resulting tree;
 4. refetch `main` immediately before the canonical write;
-5. if `main != A`, do **not** push the previously tested candidate: reconcile onto the new head and rerun validation;
+5. if `main != A`, reconcile onto the new head and rerun validation;
 6. if `main == A`, create a commit whose parent is exactly `A` and atomically update `main` with `expected_sha=A`;
-7. if the CAS is rejected, treat that as normal main drift and return to step 1;
+7. if the CAS is rejected, treat it as normal main drift, fetch the winner, reconcile, retest, and retry;
 8. never force-push or bypass the expected-head check.
 
 The invariant is simple: **nothing may land on `main` unless the final validated commit is a direct child of the exact canonical head against which that final validation was performed.**
 
-Issue #4 claims coordinate semantic work ownership and prevent duplication. They do not reserve `main` and are not a substitute for exact-head CAS.
+Issue #4 claims coordinate semantic work ownership and prevent duplication. They do not reserve `main`.
 
-`SWARM_BACKLOG.md` remains a legacy/high-level task ledger rather than an instruction to duplicate work. All workers must read `ORCHESTRATION.md`; parallel workers must inspect and use the shared coordination ledger in GitHub issue #4 before starting overlapping work.
+## Capability preflight for direct integration
+
+A worker must prove it can perform the required local validation **before it claims a direct-integration lane or begins implementation**.
+
+At minimum verify:
+
+```bash
+git rev-parse --show-toplevel
+git status --short
+cargo --version
+rustc --version
+rustfmt --version
+python --version
+```
+
+The checkout must be writable and must contain the current Plaid workspace. If the intended cluster depends on an exact pinned reference, the required revision must also be locally available or locally fetchable without relying on GitHub Actions.
+
+If the worker lacks the basic local checkout/toolchain needed for the mandatory gates, it must **not** spend the session preparing a direct-integration candidate. It should return a short `CAPABILITY-SKIP` result and leave the lane unclaimed so an execution-capable worker can take it.
+
+If a missing task-specific capability is discovered only after useful candidate work already exists, preserve the work as a `VALIDATION-HANDOFF` rather than calling the integration semantically `BLOCKED`. See `ORCHESTRATION.md`.
+
+`BLOCKED` is for a real technical/integration blocker, not simply "this chat has no cargo".
+
+## Agent workflow
+
+`SWARM_BACKLOG.md` is a high-level/legacy task ledger rather than an instruction to duplicate work. All workers must read `ORCHESTRATION.md`; parallel workers must inspect issue #4 before starting overlapping work.
 
 Read and maintain `docs/STATUS.md`, `docs/NEXT.md`, `docs/DECISIONS.md` and relevant research notes. Commit coherent, tested milestones and continue through routine steps without waiting for approval. Executable discovery precedes serious native lowering.
 
 For each task:
 
 1. Read `README.md`, `docs/PLAN.md`, `docs/ARCHITECTURE.md`, `docs/SOURCES.md`, `ORCHESTRATION.md`, and this file.
-2. Read the relevant upstream/reference implementation at the pinned commit from `refs.lock.toml`.
-3. State the hypothesis or integration claim in issue #4 / the experiment note.
-4. Make the smallest coherent change that proves, disproves, or productizes the intended invariant.
-5. Add deterministic tests before claiming success.
-6. Run the applicable local test suite.
-7. Record measurements or behavioral diffs in `research/` or `experiments/` when the result affects architecture.
-8. Update `SWARM_BACKLOG.md` only for task status/ownership, not as a substitute for technical documentation.
+2. In direct-integration mode, run the capability preflight before claiming work.
+3. Read the relevant upstream/reference implementation at the pinned commit from `refs.lock.toml` when needed.
+4. State the hypothesis or integration claim in issue #4 / the experiment note.
+5. Make the smallest coherent change that proves, disproves, or productizes the intended invariant.
+6. Add deterministic tests before claiming success.
+7. Run the applicable local test suite.
+8. Record measurements or behavioral diffs in `research/` or `experiments/` when the result affects architecture.
+9. Update `SWARM_BACKLOG.md` only for task status/ownership, not as a substitute for technical documentation.
 
 ## Local validation
 
@@ -74,6 +100,16 @@ Also run focused regressions, relevant retained synthetic contracts, `python too
 
 Historical CI can support a claim, but it does not replace validation of the exact tree being proposed for `main`.
 
+## Validation handoff
+
+Useful candidate work must not be thrown away merely because the producing session cannot execute the final local gate.
+
+A worker with a prepared candidate but an unavailable validation capability should post a `VALIDATION-HANDOFF` containing the candidate branch/head, prepared base, cluster, changed paths, already-reproduced evidence, exact remaining local commands, and the missing capability.
+
+An execution-capable worker may then claim `VALIDATION-TAKEOVER`, reconcile the semantic candidate onto current `main`, run the complete local gate on the exact tree, and CAS-land it normally. The takeover worker owns the final validation and canonical closeout.
+
+Do not weaken the validation standard to avoid a handoff.
+
 ## Native-mode acceptance
 
 A native build is accepted only when:
@@ -89,16 +125,7 @@ A native build is accepted only when:
 
 Use the repositories pinned in `refs.lock.toml`. They are references, test oracles, and research sources. They are not automatically dependencies.
 
-Priority references:
-
-- N64Recomp: static-recompilation architecture and live recompiler.
-- Mupen64Plus core: runtime dynarec discovery and mature compatibility behavior.
-- ares: accuracy-oriented N64 behavior.
-- Gopher64: readable Rust N64 implementation and behavioral reference.
-- N64ModernRuntime: native runtime boundary design.
-- RT64: modern native N64 rendering path.
-- spimdisasm/Rabbitizer/n64sym: static analysis, instruction decoding, and known-symbol discovery.
-- n64-systemtest: correctness corpus.
+Priority references include N64Recomp, Mupen64Plus core, ares, Gopher64, N64ModernRuntime, RT64, spimdisasm/Rabbitizer/n64sym, and n64-systemtest.
 
 ## Coding rules
 
