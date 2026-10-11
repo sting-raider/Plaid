@@ -1,0 +1,34 @@
+name: Integration prep static executable identity
+
+on:
+  push:
+    branches:
+      - integration-prep/static-exec-identity-gpt56sol
+  workflow_dispatch:
+
+# Branch-only integration-prep evidence. Primary integrator decides what lands.
+permissions:
+  contents: read
+
+jobs:
+  plaid-core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain and exact decoder pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup show
+          rustup component add rustfmt clippy
+          grep -F 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' crates/plaid-core/Cargo.toml
+          grep -F 'rev = "724a49a5b4dbfb99f1a9e6992e63964fd29c90c8"' refs.lock.toml
+      - name: Static identity adversarial matrix
+        run: cargo test -p plaid-core --test solver_static_identity -- --nocapture
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Full plaid-core tests
+        run: cargo test -p plaid-core
+      - name: Strict Clippy
+        run: cargo clippy -p plaid-core --all-targets -- -D warnings
