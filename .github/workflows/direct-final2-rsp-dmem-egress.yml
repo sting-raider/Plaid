@@ -1,0 +1,69 @@
+name: Direct final ADR-0105 RSP DMEM egress
+
+on:
+  push:
+    branches:
+      - direct-integration/rsp-dmem-egress-gpt56sol-direct-rsp-dmem-egress-20261011-c3
+    paths:
+      - '.github/workflows/direct-final2-rsp-dmem-egress.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: direct-integration/rsp-dmem-egress-gpt56sol-direct-rsp-dmem-egress-20261011-c3
+      - name: Focused DMEM egress regressions
+        run: cargo test --locked -p plaid-core rsp_dmem_dma_egress
+      - name: Check exact decoder dependency pin
+        shell: python {0}
+        run: |
+          from pathlib import Path
+          import tomllib
+          refs = tomllib.loads(Path('refs.lock.toml').read_text())
+          reference = next(r for r in refs['repo'] if r['name'] == 'rabbitizer')
+          manifest = tomllib.loads(Path('crates/plaid-core/Cargo.toml').read_text())
+          dependency = manifest['dependencies']['rabbitizer']
+          assert dependency['git'] == reference['url']
+          assert dependency['rev'] == reference['rev']
+          lock = tomllib.loads(Path('Cargo.lock').read_text())
+          package = next(p for p in lock['package'] if p['name'] == 'rabbitizer')
+          expected = f"git+{reference['url']}?rev={reference['rev']}#{reference['rev']}"
+          assert package['source'] == expected
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Strict workspace Clippy
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Full workspace tests
+        run: cargo test --locked --workspace
+      - name: Synthetic CLI checks
+        run: python scripts/test_cli.py
+      - name: Synthetic CPU-copy history contracts
+        run: python spikes/044-ares-cpu-copy-dataflow/test_verify.py
+      - name: Synthetic XORI history contracts
+        run: python spikes/045-ares-cpu-xori-transform/test_verify.py
+      - name: Synthetic CPU SP producer contracts
+        run: python spikes/046-ares-cpu-sp-producer-context/test_verify.py
+      - name: Synthetic RSP CPU IMEM composition contracts
+        run: python spikes/047-ares-rsp-cpu-imem-compose/test_verify.py
+      - name: Synthetic XORI cache visibility contracts
+        run: python spikes/048-ares-xori-cache-visibility/test_verify.py
+      - name: Synthetic PageMask cache remap contracts
+        run: python spikes/049-ares-pagemask-cache-remap/test_verify.py
+      - name: Synthetic PI cache visibility contracts
+        run: python spikes/050-ares-pi-cache-visibility/test_verify.py
+      - name: Synthetic SP DMA DMEM ingress contracts
+        run: python spikes/051-ares-sp-dma-dmem-ingress/test_verify.py
+      - name: Synthetic RSP store isolation contracts
+        run: python spikes/052-ares-rsp-store-isolation/test_verify.py
+      - name: Synthetic guest EntryHi cache reactivation contracts
+        run: python spikes/053-ares-asid-cache-lifetime/test_verify.py
+      - name: Synthetic guest TLBR cache reactivation contracts
+        run: python spikes/054-ares-tlbr-cache-lifetime/test_verify.py
+      - name: Independent fetch-summary assignment oracle
+        run: python experiments/fetch-summary-realizability/model.py
