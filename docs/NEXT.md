@@ -354,3 +354,11 @@ BEV at the same interrupt boundary and the actual handler source. The v0 schema
 has no elapsed-time event: unrepresented Count progression rejects. Resolve
 reference scheduling disagreements with stronger evidence before extending it;
 finite replay does not authenticate decoded guest writes or complete the census.
+
+Source-available discovery-trace manifests now exist in evidence_manifest
+(ADR-0113). Preserve the expected exact source set at the trusted import/build
+boundary before edits; do not regenerate it from an edited map or trace. The
+explicit primitive verifier rejects missing/unexpected sessions and reuses full
+source projection checks. Integrate that preserved input at future certificate
+boundaries and retain stronger entry/ROM checks plus typed adapters for other
+domains; a manifest over an incomplete sensor does not establish closure.

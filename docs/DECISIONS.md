@@ -1851,3 +1851,28 @@ hardware-wide timing. No upstream code enters production. Primitive capture
 authentication/completeness, timer epochs, interrupt-gate chronology, handler
 source/lifetime and whole-ROM/native completeness stay uncertified; no solver
 waiver or milestone promotion.
+
+## ADR-0113: Expected source sets must survive outside editable discovery artifacts
+
+Status: Accepted for explicit source-available primitive verification, 2026-10-12.
+
+Keep a versioned exact set of expected discovery-trace manifests independently
+of the editable ProgramMap/source artifacts. Commit to canonical complete typed
+NDJSON, ROM/producer and event count. Authenticate each supplied source against
+that expectation, then reuse the canonical primitive projection rechecker.
+Keyed union preserves independent commitments; a conflicting same-session
+manifest rejects. Repeated JSON keys cannot choose a winner, and every retained
+discovery-trace evidence identity must belong to an expected session/event.
+
+Choose prepared source-available option B over a generic second semantic-root
+schema without typed ProgramMap adapters. Primary regressions reproduced conflict
+erasure by duplicate JSON keys and an unexpected map session bypass in the
+prepared candidate before adding guards. Valid two-source map/manifest merges
+continue to pass. Recomputing the expected set after an edit destroys the trust
+boundary and provides no deletion resistance.
+
+The API verifies currently modeled raw primitives. It does not replace stronger
+entry/ROM-aware recheckers, authenticate other source domains, automatically
+gate solver outputs, prove sensor coverage or determine the complete expected
+set for a ROM execution model. Certificate-boundary wiring and those proof
+obligations remain OPEN; no whole-ROM/native or progress milestone promotion.
