@@ -384,3 +384,14 @@ fifteen-phase fixture is not claimed freshly run or wholly ported. Ten current
 composition regressions pass. Canonical CI `38140046718` passes the preceding
 nine-case regression head `4fed4b1`. The catalog now records 105 indexed-only
 heads plus 53 reconciled/reviewed dispositions, total 158.
+
+An exact Git ancestry audit against `eea2e32` finds two indexed branch heads
+already in canonical history: research/cpu-sp-imem-subword-gpt56sol at
+`a36e14b99601d790c794a67f18ef2ffaa90e9acd` and
+research/overlay-stale-icache-lifetime-sol at
+`ae41bdba82993ec8e77f47e5f9d3bb9af06f9256`. Their current heads contain no novel
+commits to integrate. The commit subjects concern queue-save identity and RSP
+DMEM sensing, respectively; branch names are not evidence that their namesake
+topics are complete. Record already_in_main_history without deleting branches
+or asserting a new research validation. Catalog: 55 reconciled/reviewed/ancestral
+dispositions and 103 indexed-only heads, total 158.
