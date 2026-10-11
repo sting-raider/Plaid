@@ -1227,3 +1227,17 @@ raw capture; source rechecking remains independent. Prefer this stronger check
 over the interval-union-only candidate. Independent assignment-oracle research
 and an exhaustive bounded concrete-history test of the Rust validator agree.
 No upstream implementation is reused; no lifecycle or closure proof follows.
+
+## ADR-0084: Table candidates require the complete recognized guard path
+
+Status: Accepted, 2026-10-11.
+
+Withhold bounded table evidence when same-image/generation entry, direct or
+indirect reachability bypasses the selected compare or dispatch prefix. A
+standalone delay-slot entry bypasses the compare only when its sequential path
+reaches the dispatch; a remote taken target is a separate case. Reject traps,
+SYSCALL, BREAK and ERET in executed selected-edge slots using the pinned decoder
+and existing CFG policy; preserve branch-likely annulment. Keep conservative CFG
+edges. Table-content immutability and target executable identity/lifetime remain
+separate unresolved obligations, even with a complete numeric snapshot. No
+upstream implementation is reused and no exhaustive closure proof is added.

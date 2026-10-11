@@ -143,3 +143,21 @@ payloads. All seven focused tests, full locked core, fmt and strict Clippy pass.
 The exact Rabbitizer checkout/manifest/lock/reference revision remains
 `724a49a5b4dbfb99f1a9e6992e63964fd29c90c8`. Realizability supplies no original
 source authentication, mutation census, executable lifetime or closure receipt.
+
+## Batch 7: guarded pointer-table composition
+
+Eight regression failures reproduced on batch-6 main across predecessor bypass,
+dispatch-prefix bypass and exceptional executed guard slots; five original
+controls passed. Reconciled `research/{pointer-prefix-bypass,
+pointer-guard-predecessor-bypass,pointer-guard-trap,pointer-target-generation}
+-gpt56sol`; all four production candidates are superseded. No CFG edge suppression
+or raw branch merge. Kept exact image/generation checks and selected-edge annulment.
+
+Added a primary remote taken-branch fixture: standalone slot entry reaches an
+exit, not the dispatch, while branch entry skips the compare and must reject.
+The target-generation candidate supplies an independent unresolved obligation;
+current solver behavior was already OPEN, so no false-CLOSED repair is claimed
+for that candidate. Seventeen focused tests, full locked core, fmt and strict
+Clippy pass. Removed an unused research-test import and a redundant closure
+found by strict Clippy. The exact pinned Rabbitizer trap/opcode metadata and
+existing discovery unsupported policy agree. No upstream code is reused.
