@@ -1,0 +1,28 @@
+name: Direct integration exception root generation reproduction
+
+on:
+  push:
+    branches:
+      - direct-integration/exception-root-generation-gpt56sol-direct-exception-generation-20261011
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ares-emulator/ares
+          ref: 9408cb43d4948fc3ea6e152a307a34348df3fe04
+          path: .refs/ares
+      - name: Reproduce adversarial generation model
+        run: |
+          python3 -m py_compile experiments/exception_root_generation_repro.py spikes/055-ares-exception-root-generation-repro/run.py
+          python3 experiments/exception_root_generation_repro.py
+          python3 experiments/exception_root_generation_repro.py
+      - name: Reproduce exact pinned ares stale-handler behavior
+        run: python3 spikes/055-ares-exception-root-generation-repro/run.py
