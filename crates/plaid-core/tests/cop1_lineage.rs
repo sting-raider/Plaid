@@ -130,10 +130,14 @@ fn mixed_width_store_preserves_loaded_and_initial_byte_generations() {
         match origin {
             FprByteOrigin::RdramRead {
                 read_ordinal,
+                fpr_write_ordinal,
+                fr,
                 source,
                 source_byte,
             } => {
                 assert_eq!(*read_ordinal, 1);
+                assert_eq!(*fpr_write_ordinal, 2);
+                assert!(!fr);
                 assert_eq!(source.0, 0x4000 + lane as u32);
                 assert_eq!(usize::from(*source_byte), lane);
             }
@@ -171,6 +175,7 @@ fn same_value_mtc1_overwrite_replaces_load_origin() {
         FprByteOrigin::CapturedWriter {
             writer_ordinal: 3,
             operation: FprWriteKind::Mtc1,
+            fr: false,
             ..
         }
     )));
