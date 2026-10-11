@@ -749,3 +749,15 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   reachability proof, handler-byte provenance/lifetime certificate, or waiver for
   interrupt/NMI/reset/cache-error roots. The pinned Gopher64 XTLB disagreement
   remains explicit.
+
+- Production CPU-copy lineage now retains every captured successful aligned
+  uncached Word SW as a fresh phase-scoped storage generation and composes accepted
+  copy/definition witnesses with captured writer chronology at their source address
+  and their own destination generation. Forward overlap therefore retains prior
+  captured destination generations at later source reads; backward overlap does not.
+  Equal-payload histories and same-value rewrites remain causally distinct, and
+  phase boundaries cut local writer state. Complete-source rechecking rejects forged
+  or deleted lineage. This is deliberately not an ultimate storage-parent claim:
+  writer-census completeness, DMA/device/RSP interleavings, cached residency,
+  executable consumption/lifetime and whole-ROM/native closure remain OPEN
+  (ADR-0102).
