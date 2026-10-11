@@ -284,3 +284,10 @@ Pinned source/license inspection includes FR selection, COP1 denial, RCP subword
 normalization and generic IMEM storage layout. Generated ignored builds retain
 core ISC / SLJIT BSD notices; no reference implementation is vendored or linked
 into native mode and no hardware/complete-producer claim follows from the probe.
+
+`spikes/047-ares-rsp-cpu-imem-compose/` reconciles the project-owned ISC composed
+fixture with shared actual CPU/RSP and SP backing observers. Pinned LW/SW/ADDU,
+RSP SW/SB/SBV, SP routing and interpreter boundaries were inspected. Generated
+ignored builds preserve core ISC / SLJIT BSD notices. No upstream implementation
+is vendored; byte writer/copy identity does not establish hardware truth or
+ultimate register-input ancestry.

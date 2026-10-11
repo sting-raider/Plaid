@@ -1352,3 +1352,22 @@ SWC1 source selection as finite reference facts, not N64-wide hardware truth.
 Independent unchanged-reference checkpoints include FPR bits. Ultimate register
 ancestry, complete attempts/census, asynchronous execution and lifetime remain
 separate obligations. No production/native producer gate is weakened.
+
+## ADR-0091: Preserve source-byte and sink generations across CPU SP copies
+
+Status: Accepted for controlled research verification, 2026-10-11.
+
+Compose actual RSP DMEM effects with actual CPU LW/GPR/SW and completed IMEM
+sinks under one chronology. Require full register continuity and decoded exact
+virtual/physical bank bindings. Carry four source-byte writer identities apart
+from the destination storage generation; mixed or unknown bytes stay mixed or
+unknown. Equal-valued decoy loads cannot select a different source, and a
+same-valued register definition cuts the old copy lineage.
+
+The unmodified composition verifier accepted three additional high-GPR/address
+forgeries and is rejected. The reconciled finite census retains adversarial
+controls and independent unchanged-reference checkpoints. Original project
+observers/fixture are shared; no upstream implementation or branch-only build
+scaffolding is imported into production. A storage writer is not ultimate
+register-input ancestry. Complete attempts/census, executable consumption and
+lifetime remain prerequisites to production promotion; native gates stay open.

@@ -607,3 +607,11 @@ Canonical Actions run `38134178095` passes at exact head
 `a990cfaa4ab4357579e43c01dac71a7a360eb88e`, including eight synthetic CPU SP
 producer contracts and the existing Rust/CLI/copy/transform/model gates. The
 separate pinned ares run supplies unchanged-reference neutrality evidence.
+
+Controlled RSP DMEM -> actual CPU LW/GPR/SW -> IMEM composition now preserves
+four source-byte generations separately from the sink. Sixteen unchanged-
+reference checkpoints agree; 58 records yield three intended copy chains with
+mixed/unknown bytes, decoy/clobber and unscoped controls retained. Twenty measured
+forgeries and eight synthetic contracts pass, as do full core, fmt and strict
+workspace Clippy. Ultimate input ancestry, census, executable consumption/
+lifetime and native closure remain OPEN (ADR-0091).

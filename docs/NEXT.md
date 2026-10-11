@@ -191,3 +191,9 @@ metadata in the controlled fixture. Compose this precise GPR/FPR source witness
 with complete boot histories and earlier register lineage before production
 promotion. Keep unscoped writes unattributed; preserve guest-byte snapshot view
 and reference-specific full Word normalization without inferring hardware truth.
+
+RSP DMEM through actual CPU LW/GPR/SW to IMEM now has a reconciled finite
+composition contract with mixed/unknown source bytes separate from sink
+generations (ADR-0091). Before promotion, compose actual executable consumption
+and complete lifetime/attempt histories. The reference fixture's source register
+operands are measured; their ultimate ROM/DMA ancestry remains unresolved.

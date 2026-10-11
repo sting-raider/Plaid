@@ -15,6 +15,7 @@ on:
       - "spikes/044-ares-cpu-copy-dataflow/**"
       - "spikes/045-ares-cpu-xori-transform/**"
       - "spikes/046-ares-cpu-sp-producer-context/**"
+      - "spikes/047-ares-rsp-cpu-imem-compose/**"
       - ".github/workflows/rust.yml"
   pull_request:
     paths:
@@ -29,6 +30,7 @@ on:
       - "spikes/044-ares-cpu-copy-dataflow/**"
       - "spikes/045-ares-cpu-xori-transform/**"
       - "spikes/046-ares-cpu-sp-producer-context/**"
+      - "spikes/047-ares-rsp-cpu-imem-compose/**"
       - ".github/workflows/rust.yml"
   workflow_dispatch:
 
@@ -75,5 +77,7 @@ jobs:
         run: python spikes/045-ares-cpu-xori-transform/test_verify.py
       - name: Synthetic CPU SP producer contracts
         run: python spikes/046-ares-cpu-sp-producer-context/test_verify.py
+      - name: Synthetic RSP CPU IMEM composition contracts
+        run: python spikes/047-ares-rsp-cpu-imem-compose/test_verify.py
       - name: Independent fetch-summary assignment oracle
         run: python experiments/fetch-summary-realizability/model.py
