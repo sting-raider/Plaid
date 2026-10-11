@@ -25,8 +25,10 @@ fn base_map() -> ProgramMap {
         sha256: "a".repeat(64),
         size: 256,
     });
-    map.evidence.insert(EVENT.into(), trace("one concrete trace event"));
-    map.evidence.insert(UNIT.into(), trace("one concrete CompileBegin event"));
+    map.evidence
+        .insert(EVENT.into(), trace("one concrete trace event"));
+    map.evidence
+        .insert(UNIT.into(), trace("one concrete CompileBegin event"));
     map
 }
 
