@@ -615,3 +615,7 @@ mixed/unknown bytes, decoy/clobber and unscoped controls retained. Twenty measur
 forgeries and eight synthetic contracts pass, as do full core, fmt and strict
 workspace Clippy. Ultimate input ancestry, census, executable consumption/
 lifetime and native closure remain OPEN (ADR-0091).
+
+Canonical Actions `38139630729` passes at exact head
+`71ccb10b94a8c617250e4ec38984d4f686de4f96`, including the eight composition
+contracts and all existing Rust/CLI/copy/transform/producer/model gates.
