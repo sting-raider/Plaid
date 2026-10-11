@@ -1618,3 +1618,29 @@ does not prove exception occurrence/classification chronology, BEV/EXL/mode
 writer completeness, BEV=1 refill/XTLB behavior, PIF lifetime/authenticity,
 cache/mapping executable lifetime, root census, whole-ROM closure or native
 completeness. No upstream implementation or runtime dependency enters production.
+
+## ADR-0104: Relocation mutations are storage-generation edges, not postimage identities
+
+Status: Accepted for bounded compiler-time observed-history replay, 2026-10-11.
+
+Adopt an original SHA-bound replay for supplied runtime MIPS HI16/LO16 load and
+mutation events. Mint load, storage and relocation-operation generations from
+contiguous ordered events; never accept those identities from equal values or
+caller labels. A relocation must consume the exact current captured site
+generation and one concrete matching write. Equal-payload reloads and same-value
+relocations still mint fresh generations. The bounded transform preserves the
+upper instruction half and replaces the immediate with the independently
+reproduced HI16 sign-adjusted high half or LO16 low half. R_MIPS_26 is outside
+this contract.
+
+A same-target ordered HI16/LO16 check additionally requires one load generation,
+but this is only a necessary chronology check and does not authenticate symbolic
+pairing or addend semantics. The prior research reducer's caller-supplied event
+IDs/output labels and Python boolean-sequence ambiguity are explicitly rejected
+by internally assigned numeric generations and typed contiguous ordinals.
+
+This finite source replay does not discover relocators, certify sensor or mutation
+coverage, establish ultimate source ancestry, cache-visible executable identity,
+lifetime or reachability, and it does not discharge existing ProgramMap
+`unverified_relocation` blockers. Whole-ROM/native-complete remains OPEN. No
+reference implementation or runtime MIPS execution dependency enters production.

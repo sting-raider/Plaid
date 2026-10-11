@@ -774,3 +774,15 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   origin. Exception causality/classification chronology, BEV=1 refill/XTLB source
   behavior, handler cache/mapping lifetime, remaining root classes, whole-ROM
   closure and native completeness remain OPEN.
+
+## Source-bound runtime relocation replay
+
+Production core now exposes `plaid-runtime-relocation-history-v0`, a SHA-bound
+finite replay for captured MIPS HI16/LO16 relocation mutations. Load, storage and
+relocation-operation generations are minted from the ordered source rather than
+accepted as caller labels. Equal-payload reloads and same-value relocation writes
+advance generations; erased-preimage and cross-load-pair adversaries remain
+distinct or reject. The replay reconstructs reports exactly and keeps relocation
+discovery, mutation-census, pair-semantics, cache-visibility, executable-lifetime
+and native-complete flags false. Descriptive `ProgramMap::Relocation` facts still
+produce `unverified_relocation`; no solver waiver was added.
