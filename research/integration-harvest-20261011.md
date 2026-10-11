@@ -78,3 +78,23 @@ Global Trace uniqueness and evidence-detail parsing remain rejected.
 The solver has no positive verified-source receipt boundary yet. These APIs
 authenticate supplied finite projections and cannot establish sensor coverage,
 arbitrary lifecycle/copy/root completeness or native readiness.
+
+## Batch 3: deletion-resistant primitive solver gates
+
+Reproduced all six research candidates against batch-2 main. Thirteen adversarial
+tests failed across raw stores, raw indirect execution, verification epochs,
+empty fetch captures and restricted masks (one epoch test already stayed OPEN
+for another reason but lacked its independent blocker).
+
+Adopted/reconciled `research/{solver-raw-store-closure,
+solver-raw-store-source-closure,solver-raw-indirect-closure,
+solver-entry-verification-epoch,solver-entry-verification-mask,
+solver-fetch-capture-count-laundering}-gpt56sol`; no branch workflows landed.
+The older store controls now stay OPEN for the broader successful-store scope
+exclusion while retaining absence of an unproved executable-write diagnostic.
+Added a context-only indirect laundering regression and shared-context control.
+Unit membership supplies a correlation consistency check, not exact source-unit
+authentication; ADR-0079's source rechecker remains independently necessary.
+
+Focused suites and full locked plaid-core, fmt and strict Clippy pass. No reference
+semantic change or native/whole-ROM completeness claim follows.

@@ -1171,3 +1171,19 @@ both layers, with independent source-unit metadata checks. Global uniqueness
 and Region-membership source binding are rejected. No upstream code is reused.
 Source authentication proves neither sensor completeness nor whole-ROM closure;
 future positive certificates must require an appropriate verified-source input.
+
+## ADR-0080: Primitive facts survive deletion of derived diagnostics
+
+Status: Accepted, 2026-10-11.
+
+Re-derive closure blockers from retained successful stores, unresolved executed
+indirect transfers, restricted verified entries, post-invalidation verification
+epochs and raw fetch captures. The immutable integer scope excludes successful
+memory effects even when the destination is nonexecutable or unknown. Physical
+write overlap needs explicit Region backing; missing mappings are not guessed.
+Indirect correlation needs one event-linked source/target identity; shared typed
+unit context is separate and cannot replace the event. Correlation remains a
+structural consistency check, not source authentication. Verification epoch and
+code generation are separate clocks. Empty capture counts/prose supply no source
+verification receipt. Full source/expected-manifest and lifecycle completeness
+remain separate obligations. No upstream implementation is reused.

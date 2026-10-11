@@ -312,6 +312,87 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 .collect(),
         );
     }
+    if map.fetch_observations.is_empty() && !map.fetch_captures.is_empty() {
+        add(
+            "unverified_fetch_capture",
+            None,
+            "retained raw fetch capture metadata cannot prove zero observed execution without complete raw-source verification",
+            map.fetch_captures.keys().cloned().collect(),
+        );
+    }
+    for observation in &map.indirect_observations {
+        let possible_sources: Vec<_> = map
+            .indirect_sites
+            .iter()
+            .filter(|site| {
+                site.site.pc == observation.site
+                    && match &observation.source_unit {
+                        Some(unit) => site.evidence.contains(unit),
+                        None => site.site.generation == observation.generation,
+                    }
+            })
+            .collect();
+        let event_refs: EvidenceRefs = observation
+            .evidence
+            .iter()
+            // Explicit reusable source-unit context is not a transfer event.
+            .filter(|id| observation.source_unit.as_ref() != Some(*id))
+            .cloned()
+            .collect();
+        let mut unresolved_evidence: EvidenceRefs = event_refs
+            .iter()
+            .filter(|raw_ref| {
+                possible_sources
+                    .iter()
+                    .flat_map(|site| site.observed.iter())
+                    .filter(|(target, refs)| {
+                        target.pc == observation.target && refs.contains(*raw_ref)
+                    })
+                    .count()
+                    != 1
+            })
+            .cloned()
+            .collect();
+        if event_refs.is_empty() {
+            // Context alone cannot witness that a concrete transfer occurred.
+            unresolved_evidence = observation.evidence.clone();
+        }
+        if !unresolved_evidence.is_empty() {
+            add(
+                "unresolved_raw_indirect_execution",
+                if possible_sources.len() == 1 {
+                    Some(possible_sources[0].site.clone())
+                } else {
+                    None
+                },
+                "raw executed indirect transfer lacks exactly one provenance-linked declared source/target identity",
+                unresolved_evidence,
+            );
+        }
+    }
+    for verification in &map.entry_verifications {
+        if verification.register_mask != 0 {
+            let mut evidence = verification.evidence.clone();
+            evidence.insert(verification.source_unit.clone());
+            add(
+                "restricted_entry",
+                Some(verification.entry.clone()),
+                &format!(
+                    "retained entry verification records unsupported register-state mask {:08x}",
+                    verification.register_mask
+                ),
+                evidence,
+            );
+        }
+        if scope == Scope::DeclaredStaticImages && verification.generation != 0 {
+            add(
+                "entry_verification_after_invalidation",
+                Some(verification.entry.clone()),
+                "entry bytes were verified after an observed invalidation; executable lifetime is not closed for immutable static scope",
+                verification.evidence.clone(),
+            );
+        }
+    }
     if map.entries.is_empty() {
         add(
             "missing_entry_universe",
@@ -618,6 +699,41 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 w.kind
             ),
             w.evidence.clone(),
+        );
+    }
+    // These successful cached-RDRAM word effects have an explicit direct-segment
+    // sink contract. Equal payloads still mutate; missing Region backing is not
+    // inferred from the executable virtual address.
+    for store in &map.word_store_observations {
+        let physical = store.destination.0 & 0x1fff_ffff;
+        let overlaps = map.regions.iter().any(|region| {
+            region.physical_start.is_some_and(|start| {
+                u64::from(start.0) < u64::from(physical) + 4
+                    && u64::from(physical) < u64::from(start.0) + u64::from(region.range.size)
+            })
+        });
+        let represented = map
+            .executable_writes
+            .iter()
+            .any(|write| write.evidence == store.evidence);
+        if overlaps && !represented {
+            add(
+                "unresolved_executable_write",
+                None,
+                "retained successful cached-RDRAM store overlaps explicit executable backing but its derived executable-write fact is absent",
+                store.evidence.clone(),
+            );
+        }
+    }
+    if scope == Scope::DeclaredStaticImages && !map.word_store_observations.is_empty() {
+        add(
+            "dynamic_effect_outside_scope",
+            None,
+            "declared static scope cannot include successful word-store execution",
+            map.word_store_observations
+                .iter()
+                .flat_map(|store| store.evidence.clone())
+                .collect(),
         );
     }
     if scope == Scope::DeclaredStaticImages

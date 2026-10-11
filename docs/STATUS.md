@@ -507,3 +507,10 @@ projections and optional exact installed entries. Explicit compilation-unit
 context may be shared in provenance, with source metadata independently checked.
 All 25 focused regressions pass. This authenticates supplied finite evidence,
 not sensor completeness or executable lifetime (ADR-0079).
+
+The solver now independently checks retained raw stores/transfers, restricted
+entry masks, post-invalidation verification epochs and otherwise-empty fetch
+captures. Removing derived diagnostics cannot erase these obligations. Store
+scope exclusion composes with explicit physical mutation checks; source-unit
+context alone cannot certify an indirect event. Six research candidates were
+reconciled with adversarial controls (ADR-0080).
