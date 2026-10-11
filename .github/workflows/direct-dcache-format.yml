@@ -1,0 +1,31 @@
+name: Direct D-cache formatter
+
+on:
+  push:
+    branches:
+      - direct-integration/dcache-writeback-gpt56sol-direct-dcache-writeback-20261011
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: direct-integration/dcache-writeback-gpt56sol-direct-dcache-writeback-20261011
+      - name: Format integration Rust
+        run: cargo fmt --all
+      - name: Commit formatting only when needed
+        run: |
+          if git diff --quiet; then
+            echo "already formatted"
+            exit 0
+          fi
+          git diff -- crates/plaid-core/src/dcache_writeback.rs crates/plaid-core/tests/dcache_writeback.rs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/plaid-core/src/dcache_writeback.rs crates/plaid-core/tests/dcache_writeback.rs
+          git commit -m "Format D-cache writeback integration"
+          git push origin HEAD:direct-integration/dcache-writeback-gpt56sol-direct-dcache-writeback-20261011
