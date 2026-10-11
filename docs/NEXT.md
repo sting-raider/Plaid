@@ -271,3 +271,12 @@ reset chronology before using them in executable-lifetime or translation proofs.
 A same-content legal TLBWI remains a distinct operation; snapshot inequality and
 equal payloads cannot recover occurrence or selected-slot identity. Complete
 sensor coverage and a full TLB mutation census remain OPEN.
+
+Production now also has a bounded source-bound cached BEV=0 general-root Word replay
+(ADR-0103). Compose it with authenticated exception classification and BEV/EXL/mode
+chronology, complete backing/cache/mapping mutation histories and full handler spans
+before treating a selected root as executable provenance. Extend separately to TLB
+refill/XTLB roots, BEV=1/PIF-backed roots, interrupts, reset/NMI and other execution
+roots. Missing residency stays UNKNOWN; equal current bytes never recover a writer or
+fill generation.
+
