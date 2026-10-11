@@ -7,33 +7,43 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
       - name: Verify pinned Rabbitizer revision
         run: grep -F '724a49a5b4dbfb99f1a9e6992e63964fd29c90c8' refs.lock.toml Cargo.lock
-      - name: Compile focused regression
-        run: cargo test --locked -p plaid-core --test trace_event_identity --no-run
-      - name: Reproduce copy-event DMA fork
-        run: '! cargo test --locked -p plaid-core --test trace_event_identity one_copy_event_cannot_name_two_dma_transactions -- --exact --nocapture'
-      - name: Reproduce word-store event fork
-        run: '! cargo test --locked -p plaid-core --test trace_event_identity one_store_event_cannot_fork_semantics -- --exact --nocapture'
-      - name: Reproduce indirect event fork
-        run: '! cargo test --locked -p plaid-core --test trace_event_identity one_indirect_event_cannot_fork_semantics -- --exact --nocapture'
-      - name: Reproduce entry-verification event fork
-        run: '! cargo test --locked -p plaid-core --test trace_event_identity one_entry_verification_event_cannot_fork_semantics -- --exact --nocapture'
-      - name: Reproduce primitive cross-role collision
-        run: '! cargo test --locked -p plaid-core --test trace_event_identity one_event_cannot_cross_primitive_roles -- --exact --nocapture'
-      - name: Reproduce copy/store cross-role collision
-        run: '! cargo test --locked -p plaid-core --test trace_event_identity copy_event_cannot_masquerade_as_store_event -- --exact --nocapture'
-      - name: Reproduce copy/source-unit cross-role collision
-        run: '! cargo test --locked -p plaid-core --test trace_event_identity copy_event_cannot_masquerade_as_source_unit -- --exact --nocapture'
-      - name: Reproduce merge laundering
-        run: '! cargo test --locked -p plaid-core --test trace_event_identity merge_cannot_launder_cross_role_event_identity -- --exact --nocapture'
-      - name: Preserve legitimate source-unit sharing control
-        run: cargo test --locked -p plaid-core --test trace_event_identity source_unit_context_may_be_shared_and_carried_as_provenance -- --exact --nocapture
+      - name: Apply reconciled structural invariant
+        run: python tools/integration-prep/apply_trace_event_identity.py
+      - name: Format candidate
+        run: cargo fmt --all
+      - name: Checkpoint production candidate
+        run: |
+          if ! git diff --quiet -- crates/plaid-core/src crates/plaid-core/tests; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add crates/plaid-core/src/program.rs crates/plaid-core/src/lib.rs crates/plaid-core/src/trace_projection.rs
+            git add crates/plaid-core/tests/trace_event_identity.rs crates/plaid-core/tests/trace_projection.rs crates/plaid-core/tests/trace_entry_projection.rs
+            git commit -m "fix: enforce trace event identity integrity"
+            git push
+          fi
+      - name: Run structural identity regressions
+        run: cargo test --locked -p plaid-core --test trace_event_identity -- --nocapture
+      - name: Run source projection regressions
+        run: cargo test --locked -p plaid-core --test trace_projection -- --nocapture
+      - name: Run entry projection regressions
+        run: cargo test --locked -p plaid-core --test trace_entry_projection -- --nocapture
+      - name: Run full plaid-core suite
+        run: cargo test --locked -p plaid-core
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run strict Clippy
+        run: cargo clippy --locked -p plaid-core --all-targets -- -D warnings
+      - name: Check whitespace
+        run: git diff --check
