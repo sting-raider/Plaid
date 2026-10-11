@@ -982,7 +982,7 @@ unsupported. See the primary takeover receipt for source and local validation.
 
 ## ADR-0067: D-cache lineage needs resident mutation revisions and exact scope
 
-Status: Accepted for research, 2026-10-09.
+Status: Accepted for bounded production replay, 2026-10-12.
 
 The recovered previously PARTIAL fixture now executes locally: actual explicit
 writeback/dirty eviction export two full-line resident certificates; clean
@@ -995,6 +995,21 @@ dirty alone cannot establish transfer. Original generated shadow sources remain
 ignored/licensed separately. The finite aligned-store fixture does not establish
 all store families, restore epochs, full provenance completeness or ProgramMap
 closure, and is not transplanted into the production solver.
+
+Production dcache_writeback now reconstructs fill generation, every resident
+Word mutation revision and per-byte origins from externally authenticated finite
+history. Only an exact successful 16-byte backing write nested in the same
+writeback snapshot exports those origins. Dirty invalidation/drop retires
+unexported resident origins; a clean equal-payload replacement exports nothing.
+Same-value intervening mutations still change revision and invalidate an old
+pending snapshot.
+
+Within this declared direct-KSEG0 identity scope, require the supplied slot to
+match the low physical line-index bits. This does not authenticate an arbitrary
+virtual index or justify TLB/alias extrapolation. Original cached-store operand
+ancestry, collection completeness, cacheability, other store families, restore/
+reset epochs, executable lifetime and whole-ROM/native closure remain separate.
+The report reconstructs all fields and retains broader flags false.
 
 ## ADR-0068: RSP data-store addresses do not use the CPU SP bank selector
 

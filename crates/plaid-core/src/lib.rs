@@ -6,6 +6,7 @@ pub mod cpu_copy;
 #[path = "cpu_mutation.rs"]
 mod cpu_mutation_impl;
 pub mod cpu_sp_subword;
+pub mod dcache_writeback;
 pub mod cpu_mutation {
     pub use super::cpu_mutation_impl::{
         CompletedCop1StoreEffect, Cop1MutationWitness, Cop1SourceLane, Cop1StoreKind,

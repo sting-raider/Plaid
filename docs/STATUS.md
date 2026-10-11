@@ -838,3 +838,11 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   facts cover missing/forged selections, same-content generations and Wired
   bounds. Mapping semantics, Random distribution, context/cache lifetime, sensor
   census and whole-ROM/native completeness remain OPEN (ADR-0109).
+
+- Production dcache_writeback now preserves resident fill/mutation revisions and
+  all byte origins through an exact successful backing writeback. Nine focused
+  tests and the authenticated four-phase saved capture agree: explicit writeback
+  and dirty eviction export two receipts; clean replacement and dirty drop
+  export none. A consistent forged slot/physical line rejects in the direct
+  identity scope. Cacheability/alias/context, operand ancestry, complete census,
+  executable lifetime and whole-ROM/native completeness remain OPEN (ADR-0067).
