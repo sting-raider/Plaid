@@ -3,9 +3,10 @@ use crate::{
     discovery::{CodeImage, decode, direct_cfg},
     indirect::verify_constant,
     program::*,
+    rom::sha256,
 };
 use serde::Serialize;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -54,6 +55,209 @@ fn source<'a>(images: &'a [CodeImage], address: &CodeAddress) -> Option<&'a Code
     Some(first)
 }
 
+fn content_digest_claim(image: &str) -> Option<&str> {
+    let digest = image.strip_prefix("trace-").unwrap_or(image);
+    (digest.len() == 64
+        && digest
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+    .then_some(digest)
+}
+
+fn content_digest(image: &CodeImage) -> String {
+    let mut bytes = Vec::with_capacity(image.words.len() * 4);
+    for word in &image.words {
+        bytes.extend(word.to_be_bytes());
+    }
+    sha256(&bytes)
+}
+
+fn conflicting_region_provenance(a: &Region, b: &Region) -> Option<CodeAddress> {
+    if a.image != b.image || a.generation != b.generation {
+        return None;
+    }
+    let overlap_start = u64::from(a.range.start.0).max(u64::from(b.range.start.0));
+    let overlap_end = a.range.end().min(b.range.end());
+    if overlap_start >= overlap_end {
+        return None;
+    }
+    let a_delta = overlap_start - u64::from(a.range.start.0);
+    let b_delta = overlap_start - u64::from(b.range.start.0);
+    let rom_conflict = match (a.rom_offset, b.rom_offset) {
+        (Some(a_offset), Some(b_offset)) => a_offset.0 + a_delta != b_offset.0 + b_delta,
+        _ => false,
+    };
+    let physical_conflict = match (a.physical_start, b.physical_start) {
+        (Some(a_start), Some(b_start)) => {
+            u64::from(a_start.0) + a_delta != u64::from(b_start.0) + b_delta
+        }
+        _ => false,
+    };
+    (rom_conflict || physical_conflict).then_some(CodeAddress {
+        pc: crate::GuestAddr(overlap_start as u32),
+        image: a.image.clone(),
+        generation: a.generation,
+    })
+}
+
+fn supplied_region_provenance_conflict(
+    image: &CodeImage,
+    region: &Region,
+    pc: crate::GuestAddr,
+) -> bool {
+    let Some(image_delta) = pc.0.checked_sub(image.base.pc.0) else {
+        return false;
+    };
+    let Some(region_delta) = pc.0.checked_sub(region.range.start.0) else {
+        return false;
+    };
+    let rom_conflict = match (image.rom_offset, region.rom_offset) {
+        (Some(image_offset), Some(region_offset)) => {
+            image_offset.0.checked_add(u64::from(image_delta))
+                != region_offset.0.checked_add(u64::from(region_delta))
+        }
+        _ => false,
+    };
+    let physical_conflict = match (image.physical_start, region.physical_start) {
+        (Some(image_start), Some(region_start)) => {
+            u64::from(image_start.0) + u64::from(image_delta)
+                != u64::from(region_start.0) + u64::from(region_delta)
+        }
+        _ => false,
+    };
+    rom_conflict || physical_conflict
+}
+
+fn static_identity_blockers(
+    map: &ProgramMap,
+    images: &[CodeImage],
+    scope: Scope,
+) -> BTreeSet<Blocker> {
+    let mut blockers = BTreeSet::new();
+
+    // Production image constructors currently use raw SHA-256 identities for
+    // ROM/load images and `trace-<SHA-256>` for trace-only images. Opaque v0
+    // labels remain compatible until CodeImage grows a mandatory content digest.
+    for image in images {
+        if let Some(claimed) = content_digest_claim(&image.base.image)
+            && content_digest(image) != claimed
+        {
+            blockers.insert(Blocker {
+                kind: "instruction_source_identity_mismatch".into(),
+                site: Some(image.base.clone()),
+                detail:
+                    "supplied instruction bytes do not match their content-derived image identity"
+                        .into(),
+                evidence: EvidenceRefs::new(),
+            });
+        }
+    }
+
+    // Fragment boundaries cannot hide two values for one exact execution
+    // identity and guest PC. Check supplied words before selecting block roots.
+    let mut words: BTreeMap<(&str, u64, u32), u32> = BTreeMap::new();
+    for image in images {
+        for (index, word) in image.words.iter().copied().enumerate() {
+            let pc = crate::GuestAddr(image.base.pc.0 + (index as u32) * 4);
+            let key = (image.base.image.as_str(), image.base.generation, pc.0);
+            if let Some(previous) = words.get(&key) {
+                if *previous != word {
+                    let site = image.address(pc);
+                    let evidence = map
+                        .regions
+                        .iter()
+                        .filter(|region| {
+                            region.image == site.image
+                                && region.generation == site.generation
+                                && region.range.contains(site.pc)
+                        })
+                        .flat_map(|region| region.evidence.iter().cloned())
+                        .collect();
+                    blockers.insert(Blocker {
+                        kind: "conflicting_instruction_sources".into(),
+                        site: Some(site),
+                        detail: "supplied CodeImage fragments disagree on bytes for one execution identity"
+                            .into(),
+                        evidence,
+                    });
+                }
+            } else {
+                words.insert(key, word);
+            }
+        }
+    }
+
+    if scope != Scope::DeclaredStaticImages {
+        return blockers;
+    }
+
+    // Two distinct immutable identities cannot simultaneously own the same
+    // decoded guest instruction bytes without a mapping/lifetime selector.
+    let blocks: Vec<_> = map.blocks.iter().collect();
+    for (index, a) in blocks.iter().enumerate() {
+        for b in &blocks[index + 1..] {
+            if a.start.image == b.start.image && a.start.generation == b.start.generation {
+                continue;
+            }
+            let a_start = u64::from(a.start.pc.0);
+            let a_end = a_start + u64::from(a.size);
+            let b_start = u64::from(b.start.pc.0);
+            let b_end = b_start + u64::from(b.size);
+            if a_start < b_end && b_start < a_end {
+                blockers.insert(Blocker {
+                    kind: "ambiguous_guest_executable_identity".into(),
+                    site: None,
+                    detail: "distinct decoded executable image/generation identities overlap guest address space; mapping/lifetime selection is unproven"
+                        .into(),
+                    evidence: a.evidence.union(&b.evidence).cloned().collect(),
+                });
+            }
+        }
+    }
+
+    // Region rows are independent observations. For one identity, all
+    // simultaneously-known affine backing facts must agree over their guest
+    // intersection. Across identities, overlapping known physical backing needs
+    // an alias/lifetime relation; absent backing remains unknown rather than
+    // being inferred from virtual address shape or equal payloads.
+    let regions: Vec<_> = map.regions.iter().collect();
+    for (index, a) in regions.iter().enumerate() {
+        for b in &regions[index + 1..] {
+            if a.image == b.image && a.generation == b.generation {
+                if let Some(site) = conflicting_region_provenance(a, b) {
+                    blockers.insert(Blocker {
+                        kind: "conflicting_region_provenance".into(),
+                        site: Some(site),
+                        detail: "overlapping regions for one executable identity assert incompatible ROM or physical backing"
+                            .into(),
+                        evidence: a.evidence.union(&b.evidence).cloned().collect(),
+                    });
+                }
+                continue;
+            }
+
+            let (Some(a_physical), Some(b_physical)) = (a.physical_start, b.physical_start) else {
+                continue;
+            };
+            let a_start = u64::from(a_physical.0);
+            let a_end = a_start + u64::from(a.range.size);
+            let b_start = u64::from(b_physical.0);
+            let b_end = b_start + u64::from(b.range.size);
+            if a_start < b_end && b_start < a_end {
+                blockers.insert(Blocker {
+                    kind: "ambiguous_physical_executable_identity".into(),
+                    site: None,
+                    detail: "distinct executable image/generation identities overlap explicit physical backing; alias/lifetime equivalence is unproven"
+                        .into(),
+                    evidence: a.evidence.union(&b.evidence).cloned().collect(),
+                });
+            }
+        }
+    }
+
+    blockers
+}
+
 fn allowed_static_effect(word: u32, pc: crate::GuestAddr) -> bool {
     let i = decode(word, pc);
     if !i.is_valid() || i.is_trap() || i.is_float() {
@@ -81,7 +285,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         }
         .validate(true)?;
     }
-    let mut blockers = BTreeSet::new();
+    let mut blockers = static_identity_blockers(map, images, scope);
     let mut discharged = BTreeSet::new();
     let mut add = |kind: &str, site: Option<CodeAddress>, detail: &str, evidence: EvidenceRefs| {
         blockers.insert(Blocker {
@@ -168,18 +372,34 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 );
             }
         }
-        if !map.regions.iter().any(|r| {
-            r.image == b.start.image
-                && r.generation == b.start.generation
-                && r.range.start.0 <= b.start.pc.0
-                && r.range.end() >= range.end()
-        }) {
+        let covering_regions: Vec<_> = map
+            .regions
+            .iter()
+            .filter(|r| {
+                r.image == b.start.image
+                    && r.generation == b.start.generation
+                    && r.range.start.0 <= b.start.pc.0
+                    && r.range.end() >= range.end()
+            })
+            .collect();
+        if covering_regions.is_empty() {
             add(
                 "unknown_executable_region",
                 Some(b.start.clone()),
                 "block is not contained by a matching executable region",
                 b.evidence.clone(),
             );
+        } else {
+            for region in covering_regions {
+                if supplied_region_provenance_conflict(image, region, b.start.pc) {
+                    add(
+                        "supplied_image_provenance_conflict",
+                        Some(b.start.clone()),
+                        "supplied instruction image contradicts explicit executable Region provenance",
+                        region.evidence.clone(),
+                    );
+                }
+            }
         }
     }
     for edge in &map.direct_edges {
@@ -444,10 +664,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     }
     let assumptions = if scope == Scope::DeclaredStaticImages {
         vec![
-        "Only explicitly declared image entries execute; code bytes stay immutable.".into(),
-        "Interrupts, exceptions, DMA, MMIO, overlays, RSP and external entry sources are excluded.".into(),
-        "32-bit guest address compatibility model and the supported integer/control-flow subset only.".into(),
-    ]
+            "Only explicitly declared image entries execute; code bytes stay immutable.".into(),
+            "Interrupts, exceptions, DMA, MMIO, overlays, RSP and external entry sources are excluded."
+                .into(),
+            "32-bit guest address compatibility model and the supported integer/control-flow subset only."
+                .into(),
+        ]
     } else {
         Vec::new()
     };
