@@ -1,0 +1,51 @@
+name: Direct CPU mutation docs updater
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/direct-cpu-mutation-docs.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  update-docs:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Append bounded canonical state
+        shell: bash
+        run: |
+          if ! grep -q 'Production CPU mutation replay (2026-10-11)' docs/STATUS.md; then
+            cat >> docs/STATUS.md <<'EOF'
+
+
+### Production CPU mutation replay (2026-10-11)
+
+- Production now exposes a bounded source-bound `cpu_mutation` consumer for authenticated finite `SWC1`/`SDC1` histories. It rechecks complete-source SHA-256, contiguous scoped chronology, decoded COP1 cause, FR-sensitive FPR lane selection and semantic payload bytes. Cached success remains `cache_resident`; uncached success is `backing`; faulted attempts may emit no byte effect. Callback fragmentation is accepted only when non-overlapping fragments exactly cover the semantic store bytes, so emulator callback count is not promoted into a hardware atomicity claim. Focused adversarial Rust tests and the exact pinned-ares 192-case matrix reproduce. Mutation-census completeness, ultimate FPR ancestry, dirty-line writeback ancestry, executable lifetime, hardware transaction topology, solver closure and native completeness remain OPEN.
+EOF
+          fi
+
+          if ! grep -q 'Production COP1 mutation evidence consumer (2026-10-11)' docs/NEXT.md; then
+            cat >> docs/NEXT.md <<'EOF'
+
+
+### Production COP1 mutation evidence consumer (2026-10-11)
+
+A finite source-bound consumer now validates captured `SWC1`/`SDC1` mutation receipts with FR-normalized payloads and cache/backing separation. The next blocker is still the complete producer side: observe the general successful CPU concrete-mutation boundary below opcode-specific handlers, compose cached resident mutations with later verified dirty-line writeback/backing generations, extend FPR/storage ancestry, and join those generations to executable consumption/lifetimes. Opcode allowlists, equal values, callback counts and bounded captures remain insufficient for a mutation census or CLOSED result.
+EOF
+          fi
+      - name: Commit documentation
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/STATUS.md docs/NEXT.md
+          git commit -m "Document CPU mutation evidence consumer"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
