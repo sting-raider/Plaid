@@ -3,7 +3,9 @@
 - Worker: `gpt56sol-direct-pagemask-geometry-20261011`
 - Initial canonical base: `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5`
 - First reconciled base: `dd3f627d2c27f84611439ec1888ec4e3015e6bd2`
-- Final pre-document reconciliation base: `9154b30b12026c8c122f654d7fe90f0f67968dce`
+- Intermediate reconciliation base: `9154b30b12026c8c122f654d7fe90f0f67968dce`
+- Final canonical validation base: `24689113469e0a3325601d7b6fd41b4d06ecf761`
+- Final tested production/docs tree: `648cc318880e373bffcdcfccdc66f5330cb2effd`
 - Integration branch: `direct-integration/pagemask-geometry-gpt56sol-direct-pagemask-geometry-20261011`
 - Validation PR: #32
 
@@ -32,7 +34,9 @@ A fresh disposable validation branch derived from the integration tree ran the c
 
 The disposable evidence-only branch/workflow is validation scaffolding and is not part of the production integration.
 
-Before the later canonical-main reconciliation, PR #32 Actions run `38153565891`, job `114511818906`, passed the exact decoder pin guard, `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, `cargo test --locked --workspace`, synthetic CLI checks, every retained synthetic contract including PageMask/EntryHi/TLBR cache regressions, and the independent fetch-summary oracle. After `main` advanced to `9154b30b12026c8c122f654d7fe90f0f67968dce`, the branch was reconciled again and the same canonical gate was rerun before any main-write lease.
+An earlier PR #32 Actions run `38153565891`, job `114511818906`, passed the exact decoder pin guard, `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, `cargo test --locked --workspace`, synthetic CLI checks, every retained synthetic contract including PageMask/EntryHi/TLBR cache regressions, and the independent fetch-summary oracle.
+
+Canonical `main` subsequently advanced through the BEV1 PIF-root integration, RSP IMEM egress integration, and finally the infrastructure commit `24689113469e0a3325601d7b6fd41b4d06ecf761`, which deliberately changed the canonical Rust workflow to manual-only. The integration was reconciled onto that exact head. Because the connector cannot dispatch the manual workflow directly, a disposable validation-only branch added only a push-trigger copy of the canonical gate. Actions run `38154323446`, job `114514041487`, succeeded on the exact production/docs tree `648cc318880e373bffcdcfccdc66f5330cb2effd`: exact decoder pin, formatting, strict workspace Clippy, full locked workspace tests, CLI, all retained synthetic contracts, and the independent fetch-summary oracle all passed. The validation-only workflow is not part of the integration diff.
 
 ## Adopted invariant
 
