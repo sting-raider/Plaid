@@ -46,6 +46,16 @@ pub enum LoadKind {
     Lwu,
 }
 
+/// Big-endian lane expression, anchored to the parent witness's actual read.
+/// The source address is a read location, not an ultimate ROM/backing ancestor.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ByteExpression {
+    pub source: PhysicalAddr,
+    pub destination: PhysicalAddr,
+    pub xor: u8,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WordCopyWitness {
@@ -61,6 +71,7 @@ pub struct WordCopyWitness {
     pub result_word: u32,
     pub xor_imm: Option<u16>,
     pub load_kind: LoadKind,
+    pub byte_expr: [ByteExpression; 4],
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -295,6 +306,12 @@ pub fn inspect_cpu_copy_history(
             } else {
                 LoadKind::Lwu
             },
+            byte_expr: std::array::from_fn(|lane| ByteExpression {
+                // Both aligned Word spans were validated inside the 8-MiB bank.
+                source: PhysicalAddr(read.address.0 + lane as u32),
+                destination: PhysicalAddr(write.address.0 + lane as u32),
+                xor: (u32::from(mask.unwrap_or(0)) >> (8 * (3 - lane))) as u8,
+            }),
         });
     }
     Ok(CpuCopyReport {
