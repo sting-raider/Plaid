@@ -501,6 +501,14 @@ seventeen forgeries fail, while three fool payload-only replay. Unknown sinks
 cut only touched byte lineage. Complete mutation/lifetime/native coverage
 stays uncertified (ADR-0077).
 
+Controlled adjacent interpreted CPU-copy evidence now passes strict instruction/
+GPR continuity and uncached-address checks. Exact pinned ares original/disabled/
+enabled/repeated runs agree at fourteen reported instruction checkpoints. Two
+LW/LWU-to-SW certificates survive, twelve forged histories fail and seven
+synthetic contract tests pass. Equal-value decoys, ORI clobbers and NOP gaps do
+not certify. This remains a research contract; production copy/lifetime/native
+certificates are not installed (ADR-0088).
+
 2026-10-11 integration harvest: finite-static closure now rejects contradictory
 guest/physical executable ownership, overlapping instruction values, stale
 content-derived image IDs and incompatible known Region/CodeImage provenance.

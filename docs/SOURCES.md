@@ -265,3 +265,9 @@ Before introducing code copied or linked from an upstream project:
 controlled byte-history fixtures. Exact ares core ISC / SLJIT BSD notices remain
 in generated ignored shadows; original/disabled/enabled/repeated reported-state
 checks precede provenance claims. No upstream implementation enters production.
+
+`spikes/044-ares-cpu-copy-dataflow/` reconciles project-owned ISC instruction/
+scalar observers with guarded pinned ares decoder boundaries. Core ISC / SLJIT
+BSD notices remain in generated ignored builds. Stronger reported-state checks
+and causal adversaries do not imply a complete execution census or hardware
+truth, and no upstream implementation is vendored or linked into native mode.
