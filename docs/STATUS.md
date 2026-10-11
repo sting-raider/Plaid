@@ -761,8 +761,3 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   Sensor completeness, mapping semantics, TLBWR/context chronology, cache
   residency, executable lifetime and whole-ROM/native completeness remain OPEN
   (ADR-0102).
-
-
-### Production CPU mutation replay (2026-10-11)
-
-- Production now exposes a bounded source-bound `cpu_mutation` consumer for authenticated finite `SWC1`/`SDC1` histories. It rechecks complete-source SHA-256, contiguous scoped chronology, decoded COP1 cause, FR-sensitive FPR lane selection and semantic payload bytes. Cached success remains `cache_resident`; uncached success is `backing`; faulted attempts may emit no byte effect. Callback fragmentation is accepted only when non-overlapping fragments exactly cover the semantic store bytes, so emulator callback count is not promoted into a hardware atomicity claim. Focused adversarial Rust tests and the exact pinned-ares 192-case matrix reproduce. Mutation-census completeness, ultimate FPR ancestry, dirty-line writeback ancestry, executable lifetime, hardware transaction topology, solver closure and native completeness remain OPEN.
