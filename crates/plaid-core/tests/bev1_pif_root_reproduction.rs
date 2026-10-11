@@ -1,6 +1,6 @@
 use plaid_core::{
     exception_roots::{
-        resolve_exception_root, ExceptionClass, ExceptionRootInput, KernelAddressMode,
+        ExceptionClass, ExceptionRootInput, KernelAddressMode, resolve_exception_root,
     },
     pif_history::PifBackingFetchSample,
     program::{GuestVirtualAddr, PhysicalAddr},
