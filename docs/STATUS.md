@@ -804,3 +804,12 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   receipts/suppressed boundaries/type aliases. Producer and Status/BEV chronology,
   actual root transfer, handler byte lifetime and whole-ROM/native closure remain
   OPEN (ADR-0106).
+
+- Production `tlb_geometry` now derives validated 4-/16-/64-KiB half selection
+  and in-page offsets for an independently selected mapping, with complete
+  receipt rechecking against external mask/address. Six retained regressions
+  preserve the bit12 decoy counterexample; three added groups reject field edits,
+  equal-offset substitutions, malformed/unvalidated masks and extra claims.
+  Saved actual-source fetches and canonical cache geometry agree without new
+  reference builds. Mapping selection/generation/authentication, cache/backing
+  ancestry and executable lifetime/native closure remain OPEN (ADR-0107).
