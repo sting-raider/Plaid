@@ -536,7 +536,7 @@ Broader capture and production lifetime handling remain separate decisions.
 
 ## ADR-0040: Separate current cache tags from resident-byte origins
 
-Status: Accepted, 2026-10-08.
+Status: Accepted for research, 2026-10-08.
 
 Guest CACHE index-store-tag can change the effective hit page without refilling
 or altering resident words. A seven-instruction controlled fixture retags page
@@ -1541,3 +1541,27 @@ machine might perform. Unknown/unsupported operations reject; no arbitrary
 dataflow, interrupt/capture completeness, ultimate storage ancestry, executable
 lifetime or native waiver follows. Compare existing authenticated captures rather
 than rerunning reference research. No upstream code or final guest executor added.
+
+## ADR-0101: Captured CPU-copy writer chronology is not storage ancestry
+
+Status: Accepted for bounded compiler-time observed-history inspection, 2026-10-11.
+
+Reuse ADR-0099/0100's strict source-bound CPU copy/definition replay before
+deriving any storage chronology. Mint a fresh phase-scoped
+`CapturedStorageGeneration` for every captured successful aligned uncached Word
+SW, including same-value rewrites, and join each accepted copy witness to the
+latest captured write at its exact source address plus its own destination
+generation. Clear local writer state across source phases and rederive the whole
+report during verification. This preserves the validated forward-overlap/self-
+feeding chronology and distinguishes equal-byte backward histories without
+inferring memcpy from payloads.
+
+A complete-source receipt authenticates the supplied capture, not the
+completeness of all CPU/device/RSP/DMA writers. Therefore a present captured
+writer is bounded chronological evidence, not certified ultimate source storage
+ancestry; absence remains UNKNOWN. Keep source-storage ancestry, mutation
+coverage, executable lifetime and native-complete certificates false. Cached
+residency, complete writer sensing, device/DMA interleavings, transformed/
+subword/general dataflow and executable consumption/lifetime require separate
+composition before ProgramMap or closure promotion. No upstream implementation
+is reused and no progress milestone moves.
