@@ -1541,3 +1541,25 @@ machine might perform. Unknown/unsupported operations reject; no arbitrary
 dataflow, interrupt/capture completeness, ultimate storage ancestry, executable
 lifetime or native waiver follows. Compare existing authenticated captures rather
 than rerunning reference research. No upstream code or final guest executor added.
+
+
+## ADR-0101: Exception roots are mode-sensitive candidates, not reachability certificates
+
+Status: Accepted for bounded production root derivation, 2026-10-11.
+
+Promote the independently reproduced 28-case R4300 exception-vector matrix into
+an original typed resolver. General and TLB-invalid entries select base+0x180; a
+true TLB miss with EXL clear selects base+0x000 in 32-bit kernel context or
+base+0x080 in 64-bit kernel context; EXL set returns a miss to +0x180. BEV selects
+`ffffffff80000000` versus `ffffffffbfc00200`. Keep TLB invalid distinct from a
+true miss and retain vector class in the receipt.
+
+The receipt is only a numeric root derivation from already-classified state. It
+does not authenticate the exception classifier, BEV/EXL/address-mode writer
+history, reachability, handler bytes, cache/mapping lifetime, or completeness of
+execution roots. Delay-slot BD/EPC handling remains separate; interrupt/watch,
+reset/NMI, cache-error and broader privilege/TLB cases remain OPEN. Exact pinned
+ares re-ran byte-identically at integration; pinned n64-systemtest source
+corroborates +0/+0x80/+0x180, while pinned Gopher64 lacks +0x80 and remains an
+explicit disagreement. No reference code or runtime dependency enters production
+and no solver/native-complete gate is weakened.
