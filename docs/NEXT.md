@@ -291,3 +291,11 @@ reachability or census completeness. Extend separately to TLB refill/XTLB roots,
 interrupts, reset/NMI and other execution roots. Missing residency stays UNKNOWN;
 equal current bytes never recover a writer or fill generation.
 
+
+Production PageMask geometry is now bounded for exact 4-KiB/16-KiB/64-KiB
+encodings (ADR-0105). Compose it only after independently authenticating the
+selected mapping/EntryLo and its operation/context generation, then join the
+selected PFN with physical-backing and cache-residency history. Larger page sizes,
+malformed-mask hardware semantics, ASID/global/valid/dirty/CCA chronology,
+TLBWR/restore/reset and executable lifetime remain OPEN; geometry alone must not
+turn retained spike-049 finite behavior into an executable-origin certificate.
