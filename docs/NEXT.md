@@ -263,3 +263,13 @@ BEV/EXL/address-mode chronology, compose each selected root with handler-byte
 provenance and cache/mapping lifetime, and independently justify interrupt,
 watch, reset/NMI and cache-error roots. Numeric vector derivation is neither
 reachability nor a complete execution-root certificate.
+
+Production CPU-copy lineage now retains every captured successful uncached Word
+store as a fresh phase-scoped generation and joins copy/definition witnesses to
+the latest captured write at their source address plus their own destination
+generation (ADR-0102). Forward overlap therefore preserves self-feeding captured
+writer chronology even when payloads are equal; backward overlap stays distinct.
+This is not yet ultimate storage ancestry: complete writer sensing, device/DMA
+interleavings, cached residency and executable consumption/lifetime remain the
+next composition obligations. A present captured writer must not be treated as
+the actual parent until a complete mutation history independently justifies it.
