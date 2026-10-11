@@ -101,18 +101,7 @@ fn inspect(value: &Value) -> Result<Cop1LineageReport, String> {
 fn mixed_width_store_preserves_loaded_and_initial_byte_generations() {
     let value = history(vec![
         read(1, 1, 1, 0x4000, 4, WORD),
-        fpr_write(
-            2,
-            1,
-            1,
-            "lwc1",
-            1,
-            false,
-            0,
-            &[0, 1, 2, 3],
-            WORD,
-            Some(1),
-        ),
+        fpr_write(2, 1, 1, "lwc1", 1, false, 0, &[0, 1, 2, 3], WORD, Some(1)),
         store(
             3,
             3,
@@ -128,7 +117,14 @@ fn mixed_width_store_preserves_loaded_and_initial_byte_generations() {
         ),
     ]);
     let report = inspect(&value).unwrap();
-    assert_eq!((report.completed_reads, report.fpr_writes, report.stores.len()), (1, 1, 1));
+    assert_eq!(
+        (
+            report.completed_reads,
+            report.fpr_writes,
+            report.stores.len()
+        ),
+        (1, 1, 1)
+    );
     let origins = &report.stores[0].byte_origins;
     for (lane, origin) in origins[..4].iter().enumerate() {
         match origin {
@@ -165,43 +161,9 @@ fn mixed_width_store_preserves_loaded_and_initial_byte_generations() {
 fn same_value_mtc1_overwrite_replaces_load_origin() {
     let value = history(vec![
         read(1, 1, 1, 0x4000, 4, WORD),
-        fpr_write(
-            2,
-            1,
-            1,
-            "lwc1",
-            1,
-            false,
-            0,
-            &[0, 1, 2, 3],
-            WORD,
-            Some(1),
-        ),
-        fpr_write(
-            3,
-            2,
-            2,
-            "mtc1",
-            1,
-            false,
-            0,
-            &[0, 1, 2, 3],
-            WORD,
-            None,
-        ),
-        store(
-            4,
-            3,
-            3,
-            "swc1",
-            1,
-            false,
-            0,
-            &[0, 1, 2, 3],
-            0x5000,
-            4,
-            WORD,
-        ),
+        fpr_write(2, 1, 1, "lwc1", 1, false, 0, &[0, 1, 2, 3], WORD, Some(1)),
+        fpr_write(3, 2, 2, "mtc1", 1, false, 0, &[0, 1, 2, 3], WORD, None),
+        store(4, 3, 3, "swc1", 1, false, 0, &[0, 1, 2, 3], 0x5000, 4, WORD),
     ]);
     let report = inspect(&value).unwrap();
     assert!(report.stores[0].byte_origins.iter().all(|origin| matches!(
@@ -218,31 +180,8 @@ fn same_value_mtc1_overwrite_replaces_load_origin() {
 fn equal_payload_and_fr_metadata_cannot_select_a_different_physical_lane() {
     let value = history(vec![
         read(1, 1, 1, 0x4000, 4, WORD),
-        fpr_write(
-            2,
-            1,
-            1,
-            "lwc1",
-            1,
-            false,
-            0,
-            &[0, 1, 2, 3],
-            WORD,
-            Some(1),
-        ),
-        store(
-            3,
-            3,
-            3,
-            "swc1",
-            1,
-            true,
-            1,
-            &[4, 5, 6, 7],
-            0x5000,
-            4,
-            WORD,
-        ),
+        fpr_write(2, 1, 1, "lwc1", 1, false, 0, &[0, 1, 2, 3], WORD, Some(1)),
+        store(3, 3, 3, "swc1", 1, true, 1, &[4, 5, 6, 7], 0x5000, 4, WORD),
     ]);
     let report = inspect(&value).unwrap();
     assert!(report.stores[0].byte_origins.iter().all(|origin| matches!(
@@ -258,26 +197,23 @@ fn equal_payload_and_fr_metadata_cannot_select_a_different_physical_lane() {
 fn failed_load_is_recorded_but_mints_no_fpr_generation() {
     let value = history(vec![
         failed_load(1, 1),
-        store(
-            2,
-            2,
-            2,
-            "swc1",
-            1,
-            true,
-            1,
-            &[4, 5, 6, 7],
-            0x5000,
-            4,
-            WORD,
-        ),
+        store(2, 2, 2, "swc1", 1, true, 1, &[4, 5, 6, 7], 0x5000, 4, WORD),
     ]);
     let report = inspect(&value).unwrap();
-    assert_eq!((report.failed_loads, report.completed_reads, report.fpr_writes), (1, 0, 0));
-    assert!(report.stores[0].byte_origins.iter().all(|origin| matches!(
-        origin,
-        FprByteOrigin::Initial { .. }
-    )));
+    assert_eq!(
+        (
+            report.failed_loads,
+            report.completed_reads,
+            report.fpr_writes
+        ),
+        (1, 0, 0)
+    );
+    assert!(
+        report.stores[0]
+            .byte_origins
+            .iter()
+            .all(|origin| matches!(origin, FprByteOrigin::Initial { .. }))
+    );
 }
 
 #[test]
@@ -298,18 +234,7 @@ fn load_requires_its_exact_completed_read_context() {
 
     missing = history(vec![
         read(1, 1, 1, 0x4000, 4, WORD),
-        fpr_write(
-            2,
-            2,
-            1,
-            "lwc1",
-            0,
-            true,
-            0,
-            &[4, 5, 6, 7],
-            WORD,
-            Some(1),
-        ),
+        fpr_write(2, 2, 1, "lwc1", 0, true, 0, &[4, 5, 6, 7], WORD, Some(1)),
     ]);
     assert!(inspect(&missing).is_err());
 }
@@ -318,31 +243,8 @@ fn load_requires_its_exact_completed_read_context() {
 fn lane_shape_payload_read_reuse_and_ordinal_forgeries_reject() {
     let original = history(vec![
         read(1, 1, 1, 0x4000, 4, WORD),
-        fpr_write(
-            2,
-            1,
-            1,
-            "lwc1",
-            0,
-            true,
-            0,
-            &[4, 5, 6, 7],
-            WORD,
-            Some(1),
-        ),
-        store(
-            3,
-            3,
-            3,
-            "swc1",
-            0,
-            true,
-            0,
-            &[4, 5, 6, 7],
-            0x5000,
-            4,
-            WORD,
-        ),
+        fpr_write(2, 1, 1, "lwc1", 0, true, 0, &[4, 5, 6, 7], WORD, Some(1)),
+        store(3, 3, 3, "swc1", 0, true, 0, &[4, 5, 6, 7], 0x5000, 4, WORD),
     ]);
     let mut cases = Vec::new();
     let mut value = original.clone();
@@ -363,18 +265,7 @@ fn lane_shape_payload_read_reuse_and_ordinal_forgeries_reject() {
     let mut value = original.clone();
     value["events"].as_array_mut().unwrap().insert(
         2,
-        fpr_write(
-            3,
-            1,
-            1,
-            "lwc1",
-            0,
-            true,
-            0,
-            &[4, 5, 6, 7],
-            WORD,
-            Some(1),
-        ),
+        fpr_write(3, 1, 1, "lwc1", 0, true, 0, &[4, 5, 6, 7], WORD, Some(1)),
     );
     value["events"][3]["event"]["ordinal"] = json!(4);
     cases.push(value);
@@ -387,31 +278,8 @@ fn lane_shape_payload_read_reuse_and_ordinal_forgeries_reject() {
 fn complete_source_receipt_and_report_recheck_resist_deletion_and_forgery() {
     let value = history(vec![
         read(1, 1, 1, 0x4000, 4, WORD),
-        fpr_write(
-            2,
-            1,
-            1,
-            "lwc1",
-            0,
-            true,
-            0,
-            &[4, 5, 6, 7],
-            WORD,
-            Some(1),
-        ),
-        store(
-            3,
-            3,
-            3,
-            "swc1",
-            0,
-            true,
-            0,
-            &[4, 5, 6, 7],
-            0x5000,
-            4,
-            WORD,
-        ),
+        fpr_write(2, 1, 1, "lwc1", 0, true, 0, &[4, 5, 6, 7], WORD, Some(1)),
+        store(3, 3, 3, "swc1", 0, true, 0, &[4, 5, 6, 7], 0x5000, 4, WORD),
     ]);
     let bytes = serde_json::to_vec(&value).unwrap();
     let digest = sha256(&bytes);
@@ -421,9 +289,7 @@ fn complete_source_receipt_and_report_recheck_resist_deletion_and_forgery() {
     let mut deleted = value;
     deleted["events"].as_array_mut().unwrap().remove(0);
     let deleted_bytes = serde_json::to_vec(&deleted).unwrap();
-    assert!(
-        cop1_lineage::inspect_cop1_lineage_history(&deleted_bytes, &digest).is_err()
-    );
+    assert!(cop1_lineage::inspect_cop1_lineage_history(&deleted_bytes, &digest).is_err());
 
     let mut forged = report.clone();
     forged.stores[0].byte_origins[0] = FprByteOrigin::Initial {
