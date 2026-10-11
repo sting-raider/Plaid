@@ -1830,3 +1830,24 @@ conditional storage but differs in reservation handling; no upstream code enters
 production. Source authentication/completeness, GPR ancestry, other mutation
 families/aliases, reservation and executable lifetime, whole-ROM closure and
 native completeness remain OPEN. No solver or progress milestone change.
+
+## ADR-0112: Timer acknowledgement is an operation, including same-value Compare writes
+
+Status: Accepted for bounded compiler-time observed-history replay, 2026-10-12.
+
+Preserve every supplied successful Count/Compare operation as a fresh global
+and per-register generation. Compare writes clear latched timer pending even
+when the value is unchanged; Count writes cannot acknowledge it. Require an
+explicit observed false-to-true assertion and exact before-state continuity.
+Authenticate all source bytes externally and reconstruct every report field.
+
+The schema consumes already observed primitive operations, not decoded guest
+contexts or an event scheduler. It has no elapsed-time event; unexplained Count
+progression rejects. Count-write generations do not count free-running ticks.
+Pinned ares/Gopher/Mupen sources differ on Count rewrite scheduling, so that
+timing remains unresolved. Saved exact-ares checkpoint facts support the bounded
+operation contract and canonical boundary gate, not sensed event chronology or
+hardware-wide timing. No upstream code enters production. Primitive capture
+authentication/completeness, timer epochs, interrupt-gate chronology, handler
+source/lifetime and whole-ROM/native completeness stay uncertified; no solver
+waiver or milestone promotion.

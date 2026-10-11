@@ -347,3 +347,10 @@ Completed Word SC -> SP normalization now exists in cpu_sp_conditional
 writer stream and actual IMEM execution before granting executable ancestry.
 Missing sinks are absence of evidence without source completeness. SCD, cached/
 mapped aliases and reservation lifetime remain separate unvalidated obligations.
+
+Bounded observed Count/Compare operation replay now exists in timer_interrupt
+(ADR-0112). Compose independently authenticated timer transitions with Status/
+BEV at the same interrupt boundary and the actual handler source. The v0 schema
+has no elapsed-time event: unrepresented Count progression rejects. Resolve
+reference scheduling disagreements with stronger evidence before extending it;
+finite replay does not authenticate decoded guest writes or complete the census.
