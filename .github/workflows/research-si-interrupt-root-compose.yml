@@ -34,10 +34,16 @@ jobs:
         run: python3 -m py_compile experiments/si-interrupt-root-compose/model.py experiments/si-interrupt-root-compose/run.py
 
       - name: Run adversarial causal replay
-        run: python3 experiments/si-interrupt-root-compose/model.py | tee target-si-model.log
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 experiments/si-interrupt-root-compose/model.py | tee target-si-model.log
 
       - name: Build and execute exact-reference matrix
-        run: python3 experiments/si-interrupt-root-compose/run.py | tee target-si-run.log
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 experiments/si-interrupt-root-compose/run.py | tee target-si-run.log
 
       - name: Hash durable evidence
         run: |
