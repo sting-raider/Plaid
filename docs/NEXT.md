@@ -203,3 +203,9 @@ Compose actual captured transform definitions with cache resident/revision,
 completed writeback and fill/fetch events before issuing ancestry certificates.
 Abstract generation chains and identical final payloads cannot fill missing
 measured edges; preserve stale and early-refill controls (ADR-0092).
+
+Large-PageMask/cache-remap behavior is now retained under spike 049. Bind actual
+historical translation and mapping/context operations to measured fill/writer
+receipts before production promotion; a miss flag cannot authenticate new
+resident or backing generations. Preserve temporary-unreachability controls and
+the unresolved ares/Gopher index-source disagreement (ADR-0093).

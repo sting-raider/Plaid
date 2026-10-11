@@ -635,3 +635,15 @@ stale. Four strict behavioral tests and an additional actual-XORI decoded-word
 negative pass, along with full core, fmt and strict workspace Clippy. Abstract
 generation replay is reviewed separately; measured ancestry, mutation census,
 executable lifetime and native completeness remain OPEN (ADR-0092).
+
+Canonical Actions `38141298481` passes at exact head
+`b1d9d52a31ec48e5971237424181e2c3e59a8980`, including the four cache visibility
+contracts, seventh actual-XORI negative and existing Rust/CLI/producer/model gates.
+
+Unmodified pinned ares now reproduces the large-PageMask/cache-remap composition
+in spike 049: selected 16-KiB/64-KiB tags, equal-payload remap misses, stale hits,
+and resident preservation across same-value TLBWI/direct ASID staging agree with
+historical evidence. Six strict contracts and full core/fmt/strict Clippy pass.
+The branch model accepts a fabricated miss fill and is not adopted as a verifier.
+Guest writer chronology, mapping/fill ancestry, census, hardware indexing and
+executable lifetime/native closure remain OPEN (ADR-0093).

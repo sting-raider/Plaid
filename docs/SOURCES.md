@@ -298,3 +298,10 @@ resident instruction fetch/fill, D-cache backing transitions and XORI source
 contracts were inspected. Generated core ISC / SLJIT BSD builds remain ignored;
 no reference implementation, branch workflow or ROM is vendored. Selected
 behavioral facts are not measured ancestry or an N64 hardware certificate.
+
+`spikes/049-ares-pagemask-cache-remap/` retains the project-owned ISC unmodified
+reference fixture with exact TLB/PageMask, TLBWI, cache/fetch and backing source
+blob checks. Gopher cache and systemtest PageMask comparisons remain source-only;
+no GPL implementation is copied or linked. Generated core ISC / SLJIT BSD builds
+stay ignored. Direct staging and selected cache facts are not guest writer
+provenance, complete lifetimes or hardware truth.
