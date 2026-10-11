@@ -213,7 +213,6 @@ pub fn inspect_rsp_dmem_dma_egress(
     )?;
 
     let event_count = history.events.len();
-    let mut next_ordinal = 1u64;
     let mut active: Option<ActiveRsp> = None;
     let mut writer_generation = 0u64;
     let mut rsp_writes = 0usize;
@@ -229,7 +228,7 @@ pub fn inspect_rsp_dmem_dma_egress(
     ];
     let mut receipts = Vec::new();
 
-    for event in history.events {
+    for (next_ordinal, event) in (1u64..).zip(history.events) {
         let ordinal = match &event {
             Event::RspBegin { ordinal, .. }
             | Event::DmemWrite { ordinal, .. }
@@ -240,7 +239,6 @@ pub fn inspect_rsp_dmem_dma_egress(
             ordinal == next_ordinal,
             "noncontiguous RSP DMEM egress event ordinals",
         )?;
-        next_ordinal += 1;
 
         match event {
             Event::RspBegin {
