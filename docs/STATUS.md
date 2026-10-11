@@ -492,3 +492,10 @@ reference/disabled/repeated checkpoints agree; byte replay and ten measured
 forgeries pass. Same-value stores remain distinct, foreign sinks are excluded,
 and all prior 29 self-store results remain exact. CPU refetch composition is
 continuing; mutation/lifetime/native coverage stays uncertified (ADR-0077).
+
+2026-10-11 integration harvest: finite-static closure now rejects contradictory
+guest/physical executable ownership, overlapping instruction values, stale
+content-derived image IDs and incompatible known Region/CodeImage provenance.
+The primary reproduced seven false-CLOSED families on `211176e`, then retained
+all nine consolidated regressions. Unknown metadata and generation labels do
+not invent provenance or chronology. Whole-ROM closure remains OPEN (ADR-0078).

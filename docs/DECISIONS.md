@@ -1136,3 +1136,20 @@ pattern, so a guest-endian numeric-fill assumption failed. Primitive counts are
 not atomicity or complete mutation/lifetime proof. Generated ISC-reference
 shadows and required notices remain ignored; production gains no reference code
 or runtime dependency. Test CPU refetch composition before broader promotion.
+
+## ADR-0078: Static closure requires consistent executable identities
+
+Status: Accepted, 2026-10-11.
+
+Reproduced the static integration-prep cluster against current `main`: seven
+adversarial families falsely closed. Before finite-static closure, authenticate
+content-derived image IDs, require single-valued words at each execution identity,
+reject distinct decoded guest/known physical ownership without a selector proof,
+and recheck simultaneously-known affine Region and selected CodeImage provenance.
+Equal bytes establish neither common provenance nor lifetime. Unknown metadata
+stays unknown; generation labels alone create no lifecycle chronology. Opaque
+legacy image labels and canonical-ROM source authentication remain separate API
+obligations. Preserve the nine consolidated tests and reject the superseded
+physical-only, generation-order and cross-fragment proposals. No upstream code
+is reused; the existing exact MIT Rabbitizer dependency is unchanged. Whole-ROM
+closure and native completeness remain unproved.
