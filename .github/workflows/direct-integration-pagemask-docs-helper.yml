@@ -1,0 +1,90 @@
+name: Stage PageMask integration docs
+
+on:
+  push:
+    branches:
+      - direct-integration/pagemask-geometry-gpt56sol-direct-pagemask-geometry-20261011
+
+permissions:
+  contents: write
+
+jobs:
+  append-docs:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: direct-integration/pagemask-geometry-gpt56sol-direct-pagemask-geometry-20261011
+      - name: Append canonical state
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! grep -q 'bounded `tlb_geometry` primitive' docs/STATUS.md; then
+            cat >> docs/STATUS.md <<'EOF'
+
+- Production now exposes a bounded `tlb_geometry` primitive for an already
+  independently selected TLB entry. Exact raw PageMask values for 4-KiB,
+  16-KiB and 64-KiB halves derive selector masks `0x1000`, `0x4000` and
+  `0x10000` plus the corresponding in-page offsets. Large pages therefore do
+  not use a permanent virtual-address bit 12. Malformed masks and larger
+  model/source-only page sizes fail closed. The fresh unmodified pinned-ares
+  spike-049 rerun reproduced evidence SHA-256
+  `4227e340a3000607b70cde96339a379737ea46167a7cf10573fe7aba093050fd`
+  and result SHA-256
+  `d884a8ce86b01192750afd9f7539e2a618f5a0dcb72c54f777134c9561fe8a35`.
+  Entry selection, ASID/global/valid/dirty/CCA/PFN identity, mapping/context
+  generations, cache/backing provenance, executable lifetime and whole-ROM/
+  native completeness remain OPEN (ADR-0104).
+EOF
+          fi
+          if ! grep -q 'Production PageMask geometry is now bounded' docs/NEXT.md; then
+            cat >> docs/NEXT.md <<'EOF'
+
+Production PageMask geometry is now bounded for exact 4-KiB/16-KiB/64-KiB
+encodings (ADR-0104). Compose it only after independently authenticating the
+selected mapping/EntryLo and its operation/context generation, then join the
+selected PFN with physical-backing and cache-residency history. Larger page sizes,
+malformed-mask hardware semantics, ASID/global/valid/dirty/CCA chronology,
+TLBWR/restore/reset and executable lifetime remain OPEN; geometry alone must not
+turn the retained spike-049 finite behavior into an executable-origin certificate.
+EOF
+          fi
+          if ! grep -q '^## ADR-0104: PageMask geometry' docs/DECISIONS.md; then
+            cat >> docs/DECISIONS.md <<'EOF'
+
+## ADR-0104: PageMask geometry is separate from TLB selection and provenance
+
+Status: Accepted for bounded production geometry, 2026-10-11.
+
+After an entry has already been independently selected and authenticated, derive
+EntryLo half selection and in-page byte offset from the exact supported PageMask
+geometry rather than a permanent 4-KiB rule. The accepted v0 production scope is
+raw PageMask `0x0000` (4 KiB, selector `0x1000`), `0x6000` (16 KiB, selector
+`0x4000`) and `0x1e000` (64 KiB, selector `0x10000`). The retained 16-KiB
+`0x0009_1000` adversary has bit 12 set while bit 14 is clear; a fixed-bit-12
+reconstruction selects the planted odd-half decoy, while the validated geometry
+selects the even half. Equal payload cannot repair that causal mistake.
+
+Reject malformed PageMask values rather than importing one emulator's
+normalization as hardware truth, and keep larger page sizes source/model-only
+until equivalent executed evidence exists. A fresh current-main-derived run of
+unmodified pinned ares spike 049 reproduced the historical large-page evidence
+and result hashes. Its cache tags/misses are finite reference behavior, not a
+universal cache-index rule; the recorded ares/Gopher64 disagreement remains.
+
+This primitive neither chooses a TLB entry nor authenticates VPN2 matching,
+ASID/global state, EntryLo validity/dirty/CCA/PFN, PageMask or mapping-operation
+writer history, translation-context generations, cache residency, physical
+backing, privilege/region semantics, aliases, save/restore/reset chronology or
+executable lifetime. Those facts remain independent proof obligations. UNKNOWN
+stays UNKNOWN; geometry may refine a trusted mapping fact but cannot create one.
+EOF
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add docs/STATUS.md docs/NEXT.md docs/DECISIONS.md
+          if ! git diff --cached --quiet; then
+            git commit -m 'Document bounded PageMask geometry'
+            git push origin HEAD:direct-integration/pagemask-geometry-gpt56sol-direct-pagemask-geometry-20261011
+          fi
