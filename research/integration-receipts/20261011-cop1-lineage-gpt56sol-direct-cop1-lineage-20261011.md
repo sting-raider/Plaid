@@ -141,3 +141,21 @@ The following remain OPEN and must fail closed in broader certificates:
 - whole-ROM source/census/root/indirect-target closure and any native-complete claim.
 
 Milestone change: none. Solver/native-complete behavior is unchanged and remains fail-closed.
+
+## Post-claim canonical reconciliation
+
+While this integration waited behind the serialized main-write lease, canonical
+main advanced again to `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5` with the
+independent source-bound TLBWI operation-generation integration. The COP1 branch
+was explicitly reconciled onto that commit before attempting its own lease.
+`plaid_core::tlb_history`, its tests and its canonical documentation were kept;
+`plaid_core::cop1_lineage` was added alongside it. Because the TLBWI integration
+canonically occupied ADR-0102, the COP1 decision is renumbered ADR-0103 rather
+than manufacturing a duplicate decision identity. The prior COP1 documentation
+was not blindly merged over the new canonical ledgers.
+
+The reconciled branch is re-run through the complete canonical Rust workflow
+before main landing. The exact tested head/run and post-merge canonical CI are
+recorded in the issue #4 main-integration closeout; no pre-reconciliation green
+result is treated as permission to write the newer main.
+

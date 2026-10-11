@@ -1592,3 +1592,32 @@ TLBWR, TLBP/TLBR, PageMask/ASID/global chronology, complete mutation census,
 cache/mapping/lifetime composition and whole-ROM/native-complete proof remain
 OPEN. No reference implementation code or runtime dependency enters production,
 and no solver/native-complete gate is weakened.
+
+## ADR-0103: COP1 lineage follows captured physical byte generations, not equal payloads
+
+Status: Accepted for bounded compiler-time observed-history inspection, 2026-10-11.
+
+Add an original source-bound replay for the validated uncached identity-RDRAM
+COP1 load/store contract. A successful LWC1/LDC1 definition must cite its exact
+completed read under the same context, phase, width and payload. Retain the read
+ordinal, FPR-write ordinal and captured FR context on every affected physical FPR
+byte. MTC1/DMTC1 create new byte generations even when values are unchanged;
+failed CU1/alignment/TLB loads create none. SWC1/SDC1 ancestry comes from the
+actual captured physical register and byte lanes selected at store time, so
+mixed-width stores may legitimately retain mixed origins.
+
+Do not infer the physical FPR from architectural ft/FR or matching payloads. The
+capture supplies physical register/lane identity explicitly, avoiding promotion
+of pinned ares odd-FR=0 behavior into an N64 hardware rule. Require an externally
+trusted complete-source SHA and reconstruct every report field during verification.
+The admitted memory path is deliberately limited to aligned uncached identity
+RDRAM Word/Doubleword effects; unsupported paths reject rather than guessing.
+
+This replay authenticates only its supplied finite history. It does not prove the
+ultimate RDRAM writer, a complete FPR-writer or mutation census, cached/TLB/endian
+behavior, executable consumption, cache-visible executable state, executable
+lifetime, hardware FPR mapping, whole-ROM closure or native completeness. Keep
+those obligations OPEN and compose the separate COP1 mutation-domain evidence
+without collapsing source ancestry into mutation occurrence. No reference
+implementation or runtime dependency enters production.
+

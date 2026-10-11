@@ -761,3 +761,17 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   Sensor completeness, mapping semantics, TLBWR/context chronology, cache
   residency, executable lifetime and whole-ROM/native completeness remain OPEN
   (ADR-0102).
+
+- Production now exposes bounded source-bound COP1 FPR byte-lineage replay.
+  Successful aligned uncached identity-RDRAM LWC1/LDC1 definitions retain their
+  exact completed source-read ordinal, FPR-write generation and captured FR
+  context per physical FPR byte. MTC1/DMTC1 advance those byte generations even
+  for equal payloads; failed loads mint none. SWC1/SDC1 ancestry is selected from
+  the captured physical register and byte lanes at store time, preserving mixed
+  origins. Complete-source SHA and full report replay reject deletion/forgery.
+  The consumer intentionally does not derive physical storage from architectural
+  ft/FR, so pinned ares odd-FR behavior is not promoted as hardware truth.
+  Source-storage ancestry, complete FPR-writer/mutation census, cached/TLB/endian
+  paths, executable consumption/lifetime and native completeness remain OPEN
+  (ADR-0103).
+

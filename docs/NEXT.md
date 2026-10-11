@@ -271,3 +271,14 @@ reset chronology before using them in executable-lifetime or translation proofs.
 A same-content legal TLBWI remains a distinct operation; snapshot inequality and
 equal payloads cannot recover occurrence or selected-slot identity. Complete
 sensor coverage and a full TLB mutation census remain OPEN.
+
+Bounded COP1 source lineage now has a production replay consumer (ADR-0103):
+explicit completed reads feed per-byte physical FPR generations, same-value
+MTC1/DMTC1 definitions replace older origins, failed loads mint none, and stores
+select ancestry from captured store-time physical lanes. Compose this with the
+separate SWC1/SDC1 mutation-domain normalizer, actual RDRAM writer ancestry,
+D-cache residency/writeback, successful TLB contexts, reverse-endian handling,
+general FPR writers and eventual executable consumption/lifetimes. Do not derive
+physical FPR identity from equal values or architectural ft/FR; the pinned ares
+odd-FR behavior remains reference evidence rather than hardware truth.
+
