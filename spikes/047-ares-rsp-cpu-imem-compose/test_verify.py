@@ -74,6 +74,14 @@ class CompositionTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             verify(data)
 
+    def test_break_context_cannot_authenticate_producing_stores(self):
+        data=fixture()
+        for event in data['events']:
+            if event['kind'] in ('rsp_begin','rsp_sink','rsp_end'):
+                event['word']=13
+        with self.assertRaises(AssertionError):
+            verify(data)
+
 
 if __name__=='__main__':
     unittest.main()
