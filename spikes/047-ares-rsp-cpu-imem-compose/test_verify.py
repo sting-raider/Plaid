@@ -90,6 +90,14 @@ class CompositionTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             verify(data)
 
+    def test_same_value_rsp_rewrite_cannot_reuse_old_context_identity(self):
+        data=fixture()
+        for event in data['events']:
+            if event['phase']==4 and event['kind'] in ('rsp_begin','rsp_sink','rsp_end'):
+                event['context']=1
+        with self.assertRaises(AssertionError):
+            verify(data)
+
 
 if __name__=='__main__':
     unittest.main()
