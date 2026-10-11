@@ -21,6 +21,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git config user.name 'Plaid direct integration'
+          git config user.email 'actions@users.noreply.github.com'
           git fetch origin main
           git merge --no-edit origin/main
           python3 - <<'PY'
@@ -53,8 +55,6 @@ jobs:
               n += f'''\n\nThe bounded BEV=1 general-root PIF composition now authenticates one exact\nsingleton observed handler fetch from complete PIF sources ({adr_id}). Next root\nwork must bind that fetch to authenticated exception occurrence/classification and\nBEV/EXL/address-mode chronology, then compose cache/mapping executable lifetime.\nReproduce BEV=1 refill/XTLB source behavior separately before extending the rule,\nand independently discharge interrupt/watch/cache-error/reset/NMI roots. Repeated\ncoalesced PIF observations, equal returned bits and matching mirrors stay OPEN\nwithout per-occurrence same-fetch backing identity.\n'''
               nxt.write_text(n)
           PY
-          git config user.name 'Plaid direct integration'
-          git config user.email 'actions@users.noreply.github.com'
           git add docs/DECISIONS.md docs/STATUS.md docs/NEXT.md
           if ! git diff --cached --quiet; then
             git commit -m 'Document BEV1 PIF root provenance composition'
