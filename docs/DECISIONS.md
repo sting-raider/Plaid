@@ -1619,30 +1619,33 @@ writer completeness, BEV=1 refill/XTLB behavior, PIF lifetime/authenticity,
 cache/mapping executable lifetime, root census, whole-ROM closure or native
 completeness. No upstream implementation or runtime dependency enters production.
 
+## ADR-0104: Cached exception roots require resident-generation evidence
 
-## ADR-0104: PageMask geometry is separate from TLB selection and provenance
+Status: Accepted for bounded compiler-time observed-history inspection, 2026-10-11.
 
-Status: Accepted for bounded production geometry, 2026-10-11.
+Compose ADR-0101's architectural root candidate with a separate source-bound finite
+chronology for the validated BEV=0 general exception word. In the accepted scope the
+root is `ffffffff80000180`, backed by identity RDRAM physical `0x180`, with EXL clear
+and 32-bit kernel context. Every observed successful backing write keeps its own
+ordinal identity even when the payload is unchanged. A captured fill binds its own
+resident identity to the then-observed backing writer. Later backing writes do not
+silently relabel that resident generation; only an observed invalidate/refill can
+establish a later resident source. A root fetch whose resident/fill chain is missing
+stays UNKNOWN even when current backing contains identical bits.
 
-After an entry has already been independently selected and authenticated, derive
-EntryLo half selection and in-page byte offset from the exact supported PageMask
-geometry rather than a permanent 4-KiB rule. The accepted v0 production scope is
-raw PageMask `0x0000` (4 KiB, selector `0x1000`), `0x6000` (16 KiB, selector
-`0x4000`) and `0x1e000` (64 KiB, selector `0x10000`). The retained 16-KiB
-`0x0009_1000` adversary has bit 12 set while bit 14 is clear; a fixed-bit-12
-reconstruction selects the planted odd-half decoy, while the validated geometry
-selects the even half. Equal payload cannot repair that causal mistake.
+This rule was reproduced against exact pinned ares by executing a real SYSCALL into
+the same numeric vector before and after a backing rewrite: stale resident handler A
+continued executing until guest I-cache invalidation, after which refill selected
+handler B. The production replay is original Plaid code and consumes only an
+externally hash-bound finite history; it does not import reference implementation
+code or infer occurrence from snapshots, numeric addresses or value equality.
+ADR-0103's BEV=1/PIF root provenance is complementary: it authenticates a supplied
+PIF-backed fetch, while this decision authenticates which captured resident/backing
+generation supplied one cached BEV=0 root word.
 
-Reject malformed PageMask values rather than importing one emulator's
-normalization as hardware truth, and keep larger page sizes source/model-only
-until equivalent executed evidence exists. A fresh current-main-derived run of
-unmodified pinned ares spike 049 reproduced the historical large-page evidence
-and result hashes. Its cache tags/misses are finite reference behavior, not a
-universal cache-index rule; the recorded ares/Gopher64 disagreement remains.
+The accepted primitive does not certify source-sensor completeness, exception
+reachability, ultimate storage ancestry, arbitrary cache operations, aliases/TLB
+mappings, save/restore/reset behavior, the rest of the handler span, mutation or
+root census completeness, executable lifetime, hardware-wide semantics, whole-ROM
+closure or native completeness. Missing evidence keeps those obligations OPEN.
 
-This primitive neither chooses a TLB entry nor authenticates VPN2 matching,
-ASID/global state, EntryLo validity/dirty/CCA/PFN, PageMask or mapping-operation
-writer history, translation-context generations, cache residency, physical
-backing, privilege/region semantics, aliases, save/restore/reset chronology or
-executable lifetime. Those facts remain independent proof obligations. UNKNOWN
-stays UNKNOWN; geometry may refine a trusted mapping fact but cannot create one.

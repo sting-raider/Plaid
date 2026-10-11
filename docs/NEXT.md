@@ -282,11 +282,12 @@ and independently discharge interrupt/watch/cache-error/reset/NMI roots. Repeate
 coalesced PIF observations, equal returned bits and matching mirrors stay OPEN
 without per-occurrence same-fetch backing identity.
 
+Production now also has a bounded source-bound cached BEV=0 general-root Word replay
+(ADR-0104). Compose it with authenticated exception classification and BEV/EXL/mode
+chronology, complete backing/cache/mapping mutation histories and full handler spans
+before treating a selected root as executable provenance. ADR-0103 separately binds
+one BEV=1 root occurrence to exact PIF backing; neither decision proves root
+reachability or census completeness. Extend separately to TLB refill/XTLB roots,
+interrupts, reset/NMI and other execution roots. Missing residency stays UNKNOWN;
+equal current bytes never recover a writer or fill generation.
 
-Production PageMask geometry is now bounded for exact 4-KiB/16-KiB/64-KiB
-encodings (ADR-0104). Compose it only after independently authenticating the
-selected mapping/EntryLo and its operation/context generation, then join the
-selected PFN with physical-backing and cache-residency history. Larger page sizes,
-malformed-mask hardware semantics, ASID/global/valid/dirty/CCA chronology,
-TLBWR/restore/reset and executable lifetime remain OPEN; geometry alone must not
-turn the retained spike-049 finite behavior into an executable-origin certificate.
