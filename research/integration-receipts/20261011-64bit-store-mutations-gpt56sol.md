@@ -6,7 +6,7 @@ Worker: `gpt56sol-direct-64bit-store-20261011`
 
 Base main inspected: `6b53a15c4c6eaadc8e0d002dd6818c600ebf2a7d`
 
-Current reconciled main ancestor at this receipt revision: `dd3f627d2c27f84611439ec1888ec4e3015e6bd2`
+Current reconciled main ancestor at this receipt revision: `9154b30b12026c8c122f654d7fe90f0f67968dce`
 
 Integration branch: `direct-integration/64bit-store-mutations-gpt56sol`
 
@@ -63,9 +63,16 @@ explicitly reconciled, rather than mechanically merging stale research state:
   `38153237293` / job `114510836908` passing;
 - bounded COP1 store-normalization main `dd3f627d2c27f84611439ec1888ec4e3015e6bd2`
   via feature merge `8c040b6ce60f00d6a60fc4f725bd137b5b503e85`, with full canonical run
-  `38153419139` / job `114511381400` passing.
+  `38153419139` / job `114511381400` passing; the receipt-bearing follow-up head
+  `3af37a3012d30a47c26be9f93607b1743e1be1b1` also passed the complete gate in
+  run `38153571031` / job `114511833977`;
+- BEV1 exact PIF-root backing-provenance main
+  `9154b30b12026c8c122f654d7fe90f0f67968dce` via feature merge
+  `5663731c0937492940549f9aad0c390897881704`. This receipt revision is part of
+  that BEV1-reconciled candidate; the resulting receipt-bearing head must pass the
+  same complete canonical gate before any MAIN-WRITE lease or merge.
 
-The final COP1-reconciled code validation passed all of:
+The validated reconciled code has passed all of:
 
 - `cargo fmt --all -- --check`;
 - `cargo clippy --locked --workspace --all-targets -- -D warnings`;
@@ -77,9 +84,9 @@ The final COP1-reconciled code validation passed all of:
   synthetic contracts;
 - the independent fetch-summary assignment oracle.
 
-A live comparison of the reconciled candidate against `dd3f627d2c27f84611439ec1888ec4e3015e6bd2`
-contains exactly three paths: one `lib.rs` export, the new `store_mutation.rs`, and
-this receipt. The landed exception, TLBWI and COP1 production state is preserved.
+At each reconciliation, the live comparison remained bounded to this integration's
+three paths: one `lib.rs` export, the new `store_mutation.rs`, and this receipt. The
+landed exception, PIF-root, TLBWI and COP1 production state is preserved.
 
 One pre-green regression expectation was corrected during validation: the first
 little-endian `SDR` offset-1 Word subwrite for source `0x1122334455667788` is
@@ -147,7 +154,7 @@ covered mutation classes they did not observe.
 - `crates/plaid-core/src/store_mutation.rs` — bounded production receipt types,
   source-contract validation and adversarial tests;
 - `crates/plaid-core/src/lib.rs` — exports the production module while preserving
-  the landed exception-root, TLB-history and COP1-mutation APIs;
+  the landed exception-root, PIF-root, TLB-history and COP1-mutation APIs;
 - this receipt.
 
 No `progress.json` milestone changed. `docs/STATUS.md`, `docs/NEXT.md` and
