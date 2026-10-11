@@ -1,110 +1,100 @@
-# Direct integration receipt: source-bound CPU COP1 mutation replay
+# Direct integration receipt: source-bound COP1 mutation history replay
 
 Date: 2026-10-11
 Worker: `gpt56sol-direct-cpu-mutation-20261011`
-Result at receipt update: integration-ready after current-main reconciliation; pending serialized main-write lease
 
-## Base and source research
+## Source research and canonical predecessor
 
-- Original base main: `6b53a15c4c6eaadc8e0d002dd6818c600ebf2a7d`.
-- First reconciled main: `539ff0ce72a98b296a8a28135fda6eab90a2f6ac` after exception-root integration.
-- Second reconciled main: `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5` after TLBWI operation-generation integration.
-- Source research branch: `research/cop1-store-mutation-gpt56sol` at `b95a51d4f5ec8fcba3b8ac85c222a11dafe05a49`.
-- Durable research note: `research/ares-cop1-store-mutation.md`.
-- Executable research fixture: `spikes/035-ares-cop1-stores/`.
-- Pinned behavioral oracle: ares `9408cb43d4948fc3ea6e152a307a34348df3fe04` from `refs.lock.toml`.
-- The source branch was treated as evidence only. No research branch was mechanically merged.
+- Original claim base: `6b53a15c4c6eaadc8e0d002dd6818c600ebf2a7d`.
+- Research branch: `research/cop1-store-mutation-gpt56sol` at `b95a51d4f5ec8fcba3b8ac85c222a11dafe05a49`.
+- Durable note: `research/ares-cop1-store-mutation.md`.
+- Executable fixture: `spikes/035-ares-cop1-stores/`.
+- Exact pinned ares: `9408cb43d4948fc3ea6e152a307a34348df3fe04`.
 
-## Reproduced evidence against current main
+While this integration was being prepared, direct worker `gpt56sol-direct-cop1-mutation-20261011` landed canonical main `dd3f627d2c27f84611439ec1888ec4e3015e6bd2`. That commit provides the lower-level `cpu_mutation::verify_cop1_store_effect` completed-effect normalizer, including CU1-aware FR source selection, semantic payload checks, bounded destination checks and cache-resident/backing domain preservation.
 
-The integration branch was first reconciled with canonical main `539ff0ce72a98b296a8a28135fda6eab90a2f6ac` in merge commit `d845871d0a3ad2b2367c7d537a99304974503459` and validated there.
+The earlier version of this branch reimplemented that normalization inside a source-history replay. That duplicate implementation is **superseded and rejected**. The production candidate recorded here keeps canonical `cpu_mutation.rs` and its public tests untouched and adds only the missing source-authentication/chronology layer in `cpu_mutation_history.rs`.
 
-Canonical main then advanced through the independent TLBWI operation-generation integration to `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5`. This branch was rebuilt from that canonical tree in merge commit `f25828da05e651a1d5073c90a82a6079c252d6b3`, preserving `tlb_history`, ADR-0102 and the current canonical documentation rather than overlaying stale files.
+## Reproduced evidence
 
-Fresh exact-reference Actions run `38153016217`, job `114510186430`, checked out exact pinned ares and reproduced on the post-TLBWI combined tree:
+The same immutable COP1 evidence was reproduced repeatedly while canonical main advanced through exception-root and TLBWI integrations. The post-TLBWI exact-reference run `38153016217`, job `114510186430`, checked out exact pinned ares and reproduced:
 
 - `PASS: COP1 FR payload-selection model and 100000 adversarial register cases`
-- `model_sha256=3c5075ecc450af75d167dd3a225943c410e6dcc1e0f4c4877604f08f353aa285`
+- model SHA-256 `3c5075ecc450af75d167dd3a225943c410e6dcc1e0f4c4877604f08f353aa285`
 - `PASS: 192 repeated pinned-ares SWC1/SDC1 cases`
-- `results_sha256=f85760603c11f51ede16e4a9d4b4965703c6a635e5b925401d8014494ab68e05`
+- result SHA-256 `f85760603c11f51ede16e4a9d4b4965703c6a635e5b925401d8014494ab68e05`
 
-The reproduced bounded facts are the research closeout facts, not broader hardware claims: FR=0 odd `SWC1` selects the high 32-bit lane of the paired even FPR, FR=0 odd `SDC1` aliases the paired even 64-bit value, FR=1 uses the named FPR, successful uncached stores mutate RDRAM backing immediately, successful cached stores mutate resident D-cache state at the immediate checkpoint, and the tested TLB/alignment/CU1 fault cases emit no concrete mutation.
+The validated facts remain bounded: FR=0 odd `SWC1` selects the high lane of the paired even FPR; FR=0 odd `SDC1` aliases the paired even 64-bit value; FR=1 uses the named FPR; successful uncached stores can produce backing effects; successful cached stores can produce resident D-cache effects; the tested fault cases produce no completed mutation. Emulator callback grouping is not promoted into a hardware transaction-count or atomicity claim.
 
-## Adopted production invariant
+## Adopted invariant
 
-`crates/plaid-core/src/cpu_mutation.rs` adds a bounded finite-history consumer with these fail-closed rules:
+`crates/plaid-core/src/cpu_mutation_history.rs` consumes an externally complete finite JSON source with format `plaid-cpu-mutation-history-v1` and requires:
 
-1. The complete source byte stream is authenticated by a caller-supplied SHA-256 receipt before replay.
-2. Source ordinals are contiguous and instruction begin/effect/end events remain in one explicit scoped context; missing, duplicated, reordered or cross-context events reject.
-3. The initial accepted architectural cause surface is decoded `SWC1`/`SDC1`. This verifies cause inside a captured history; it is not an opcode allowlist claimed to be a complete mutation census.
-4. Raw FPR state plus FR mode are normalized to the actual semantic source lane/value. Equal values in another FPR do not change source identity.
-5. Semantic payload bytes are derived from the selected FPR value and captured endian context.
-6. Cached success must be represented as `cache_resident`; uncached success must be represented as `backing`.
-7. Observer callback topology is not architectural truth. A semantic store may be represented by one effect or multiple nonempty fragments only when those fragments are non-overlapping, stay inside the store range, exactly cover every semantic byte once and match the normalized payload.
-8. Faulted attempts must emit no byte effects and carry no successful destination/cache metadata.
-9. Successful replay explicitly leaves mutation-census completeness, ultimate FPR ancestry, executable lifetime, hardware atomicity and native completeness false.
+1. a caller-supplied SHA-256 receipt matching the complete source bytes;
+2. one ordered event stream with contiguous ordinals beginning at 1;
+3. non-nested instruction contexts whose identity is the begin ordinal;
+4. a supported decoded `SWC1`/`SDC1` cause and aligned instruction PC;
+5. fragment/end context identity matching the active begin;
+6. fault outcomes with no concrete effect fragments;
+7. successful outcomes with at least one non-empty concrete fragment;
+8. one mutation domain across all fragments of a semantic effect;
+9. virtual and physical fragment addresses contiguous in source order, rejecting gaps, overlap and reordered fragments;
+10. semantic completed-effect identity derived from the source `end` ordinal, not callback count or a caller-chosen generation label;
+11. final source/destination/CU1/FR/payload/alignment/RDRAM verification delegated to canonical `cpu_mutation::verify_cop1_store_effect`.
 
-This is intentionally a consumer of authenticated finite evidence, not a producer, runtime fallback or CLOSED waiver.
+This intentionally permits either one 8-byte callback or multiple ordered fragments to describe one semantic `SDC1` effect without asserting hardware atomicity. Fragment ordinals are retained separately from the derived semantic completion ordinal.
 
-## Adversarial regressions
+## Adversarial tests
 
-The module includes focused regressions for:
+Focused Rust tests cover:
 
-- FR=0 odd-`SWC1` paired high-lane selection;
-- fragmented `SDC1` callback topology;
-- little-endian semantic payload normalization;
-- equal-valued wrong-register decoys;
-- wrong equal-length payloads;
-- overlapping or missing byte fragments;
-- backing effects incorrectly attributed to cached stores;
-- mutation effects emitted by faulted attempts;
-- clean fault attempts that certify nothing broader;
-- deleted/reordered ordinals and forged complete-source hashes.
+- fragmented `SDC1` normalization into one canonical semantic effect;
+- one-fragment versus two-fragment callback topologies producing the same semantic mutation while retaining different fragment histories;
+- equal-value wrong-FR-source rejection by the canonical primitive;
+- missing, overlapping or reordered fragments;
+- cross-domain fragment joins;
+- fault attempts with forged effects;
+- CU1-disabled successful-effect forgery;
+- deleted/gapped ordinals;
+- cross-context fragments;
+- forged complete-source hashes.
 
-## Canonical validation
+All report-level proof flags for capture completeness, physical mapping, FPR ancestry, dirty writeback, hardware atomicity, executable lifetime and native completeness remain `false`.
 
-Post-TLBWI combined-tree Rust workflow run `38153016223`, job `114510186793`, passed:
+## Validation history
 
-- exact decoder dependency pin;
+Before the canonical lower-level normalizer landed, the source-history prototype passed full workspace validation multiple times, including post-TLBWI run `38153016223` / job `114510186793`, and the exact pinned reproduction above. Those runs are evidence for the history contract but are not sufficient for the final additive candidate because canonical code changed afterward.
+
+The additive candidate is therefore rebuilt from canonical `dd3f627d2c27f84611439ec1888ec4e3015e6bd2` with canonical `cpu_mutation.rs` untouched and is rerun through:
+
 - `cargo fmt --all -- --check`;
 - `cargo clippy --locked --workspace --all-targets -- -D warnings`;
 - `cargo test --locked --workspace`;
-- synthetic CLI checks;
-- every retained CPU-copy, XORI, CPU-SP, RSP, cache/PageMask, PI, SP-DMA, RSP-store, EntryHi/TLBR source-contract check;
-- the independent fetch-summary assignment oracle.
+- all retained synthetic/oracle checks in `.github/workflows/rust.yml`;
+- the exact pinned COP1 reproduction when relevant.
 
-Earlier current-main validation also passed on the exception-root main (`38151993516` / `114507167774`) and on a production-only pre-TLBWI head (`38152352014` / `114508219806`). The final production-only post-TLBWI head is rerun through the canonical Rust gate after temporary validation workflows are removed; that exact run is recorded in issue #4 closeout.
+The exact final tested head/run is recorded in issue #4 closeout after temporary validation helpers are removed.
 
-## Rejected / superseded approaches
+## Files changed by the additive candidate
 
-- Do not merge `research/cop1-store-mutation-gpt56sol` wholesale.
-- Do not conclude mutation coverage from integer store opcodes or any finite opcode allowlist.
-- Do not infer FPR source identity from payload equality.
-- Do not infer a hardware transaction count or atomicity property from emulator callback count. Pinned ares exposes `SDC1` through one `Dual` backing call while pinned Mupen64Plus/Gopher64 research exposes two 32-bit implementation writes.
-- Do not treat a cached architectural store as immediate RDRAM backing provenance; later dirty-line writeback is a separate causal event.
-- Do not turn successful finite replay into a sensor-completeness, executable-lifetime or native-completeness certificate.
-
-## Files changed by the production integration
-
-- `crates/plaid-core/src/cpu_mutation.rs` — finite source-bound CPU mutation replay and focused tests.
-- `crates/plaid-core/src/lib.rs` — exports the production module while preserving concurrent canonical modules including `exception_roots` and `tlb_history`.
-- `docs/STATUS.md` — bounded canonical-state note.
-- `docs/NEXT.md` — producer-side mutation and writeback/lifetime obligations remain explicit.
+- `crates/plaid-core/src/cpu_mutation_history.rs` — authenticated finite history replay and adversarial tests.
+- `crates/plaid-core/src/lib.rs` — one public module export while preserving canonical `cpu_mutation`, `exception_roots` and `tlb_history` state.
+- `docs/STATUS.md` / `docs/NEXT.md` — bounded note about the new source-bound layer and still-open producer/composition obligations.
 - this receipt.
 
-Temporary exact-reference/documentation workflows used only to validate the isolated branch are removed before main integration.
+Canonical `crates/plaid-core/src/cpu_mutation.rs` and `crates/plaid-core/tests/cpu_mutation.rs` are deliberately not modified.
 
-## Limitations and remaining proof obligations
+## Remaining proof obligations
 
-This integration does **not** prove or provide:
+This integration does **not** prove:
 
-- a complete CPU/RSP/DMA executable-mutation census or the actual general mutation sensor below all opcode handlers;
-- ultimate FPR dataflow ancestry (`LWC1`/`LDC1`, arithmetic, conversions, copies or prior producers);
-- integer unaligned/conditional/vector/RSP/DMA/decompression mutation completeness;
-- cached dirty-line writeback ancestry from resident mutation to later backing generation;
-- general virtual/physical alias, TLB-generation or reverse-endian hardware completeness beyond the captured finite evidence;
-- executable visibility through I-cache residency, stale state, lifetime boundaries or later consumption;
-- real VR4300/RDRAM transaction atomicity or physical write topology;
+- that the supplied finite history is a complete mutation census;
+- completeness of CPU/RSP/DMA/decompression/relocation mutation sensing;
+- physical mapping or alias truth beyond the supplied completed effect;
+- ultimate FPR ancestry or storage-generation provenance;
+- dirty resident-line writeback ancestry to later backing generations;
+- I-cache visibility, stale-state composition or executable lifetimes;
+- hardware write transaction topology or atomicity;
 - whole-ROM mutation closure, solver CLOSED status or native completeness.
 
-Those obligations remain OPEN. Equal values, final memory state, matching addresses, cache tags, finite traces and compilation remain insufficient provenance evidence.
+UNKNOWN remains UNKNOWN. Equal values, final memory equality, matching addresses, callback count, finite traces and successful compilation remain insufficient provenance evidence.

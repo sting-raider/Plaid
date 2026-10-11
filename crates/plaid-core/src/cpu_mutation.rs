@@ -1,39 +1,11 @@
-//! Source-bound replay for finite CPU executable-mutation histories.
+//! Bounded normalization of completed VR4300 COP1 store mutations.
 //!
-//! This module deliberately separates semantic byte effects from observer callback
-//! topology. The initial verified cause surface is COP1 `SWC1`/`SDC1`; capture
-//! completeness, ultimate FPR ancestry, later cache writeback, executable lifetime,
-//! and hardware transaction atomicity remain independent proof obligations.
-
-use crate::{
-    program::{GuestVirtualAddr, PhysicalAddr},
-    rom::sha256,
-};
+//! This module turns an independently observed, completed SWC1/SDC1 effect into
+//! a source-normalized mutation witness. It deliberately does not infer that an
+//! instruction mutated storage merely because it executed, and it does not turn
+//! cache-resident mutation into a backing write.
+use crate::program::{GuestVirtualAddr, PhysicalAddr};
 use serde::{Deserialize, Serialize};
-
-pub const FORMAT: &str = "plaid-cpu-mutation-history-v0";
-const RDRAM_SIZE: u32 = 8 * 1024 * 1024;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CpuEndian {
-    Big,
-    Little,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CachePolicy {
-    Cached,
-    Uncached,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MutationLocation {
-    CacheResident,
-    Backing,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -42,616 +14,438 @@ pub enum Cop1StoreKind {
     Sdc1,
 }
 
+impl Cop1StoreKind {
+    fn width(self) -> usize {
+        match self {
+            Self::Swc1 => 4,
+            Self::Sdc1 => 8,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DecodedCop1Store {
+    pub kind: Cop1StoreKind,
+    pub base_register: u8,
+    pub requested_ft: u8,
+    pub immediate: i16,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum FprLane {
+pub enum Cop1SourceLane {
     Low32,
     High32,
-    Full64,
+    Whole64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CpuMutationDomain {
+    CacheResident,
+    Backing,
+}
+
+/// A completed concrete effect supplied by a lower storage/cache observer.
+///
+/// `payload` is the semantic guest-order store payload. `physical_destination`
+/// is retained as observed identity; this verifier does not reconstruct a TLB,
+/// alias, or endian mapping from the virtual address.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompletedCop1StoreEffect {
+    pub effect_ordinal: u64,
+    pub virtual_destination: GuestVirtualAddr,
+    pub physical_destination: PhysicalAddr,
+    pub domain: CpuMutationDomain,
+    pub payload: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct FprSelection {
-    pub register: u8,
-    pub lane: FprLane,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct CpuMutationWitness {
-    pub context: u64,
-    pub pc: GuestVirtualAddr,
-    pub store: Cop1StoreKind,
-    pub endian: CpuEndian,
+pub struct Cop1StoreSource {
     pub fr: bool,
-    pub ft: u8,
-    pub source: FprSelection,
-    pub destination: PhysicalAddr,
-    pub location: MutationLocation,
-    pub bytes: Vec<u8>,
-    pub effect_ordinals: Vec<u64>,
+    pub requested_ft: u8,
+    /// Named raw FPR storage selected after FR-mode aliasing.
+    pub storage_fpr: u8,
+    pub lane: Cop1SourceLane,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct CpuMutationReport {
-    pub format: String,
-    pub source_sha256: String,
-    pub instruction_contexts: usize,
-    pub successful_mutations: usize,
-    pub faulted_contexts: usize,
-    pub witnesses: Vec<CpuMutationWitness>,
-    pub mutation_coverage_certified: bool,
-    pub fpr_ancestry_certified: bool,
-    pub executable_lifetime_certified: bool,
-    pub hardware_atomicity_certified: bool,
-    pub native_complete: bool,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct History {
-    format: String,
-    begins: Vec<Begin>,
-    effects: Vec<Effect>,
-    ends: Vec<End>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Begin {
-    ordinal: u64,
-    context: u64,
-    pc: GuestVirtualAddr,
-    word: u32,
-    endian: CpuEndian,
-    fr: bool,
-    fpr: [u64; 32],
-    destination: Option<PhysicalAddr>,
-    cache: Option<CachePolicy>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Effect {
-    ordinal: u64,
-    context: u64,
-    location: MutationLocation,
-    address: PhysicalAddr,
-    bytes: Vec<u8>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum Outcome {
-    Success,
-    Fault,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct End {
-    ordinal: u64,
-    context: u64,
-    outcome: Outcome,
-}
-
-struct Active<'a> {
-    begin: &'a Begin,
-    effects: Vec<&'a Effect>,
-}
-
-enum Event<'a> {
-    Begin(&'a Begin),
-    Effect(&'a Effect),
-    End(&'a End),
+pub struct Cop1MutationWitness {
+    pub effect_ordinal: u64,
+    pub kind: Cop1StoreKind,
+    pub source: Cop1StoreSource,
+    pub virtual_destination: GuestVirtualAddr,
+    pub physical_destination: PhysicalAddr,
+    pub domain: CpuMutationDomain,
+    pub payload: Vec<u8>,
 }
 
 fn require(ok: bool, message: &str) -> Result<(), String> {
     if ok { Ok(()) } else { Err(message.into()) }
 }
 
-fn decode_cop1_store(word: u32) -> Result<(Cop1StoreKind, usize), String> {
-    let store = match word >> 26 {
+/// Decode only the two COP1 store families covered by the validated contract.
+pub fn decode_cop1_store(word: u32) -> Option<DecodedCop1Store> {
+    let kind = match word >> 26 {
         0x39 => Cop1StoreKind::Swc1,
         0x3d => Cop1StoreKind::Sdc1,
-        _ => return Err("unsupported CPU mutation cause".into()),
+        _ => return None,
     };
-    Ok((store, ((word >> 16) & 31) as usize))
-}
-
-fn payload_and_source(begin: &Begin) -> Result<(Cop1StoreKind, u8, FprSelection, Vec<u8>), String> {
-    let (store, ft) = decode_cop1_store(begin.word)?;
-    let (selection, bytes) = match store {
-        Cop1StoreKind::Swc1 => {
-            let (register, lane, value) = if begin.fr {
-                (ft, FprLane::Low32, begin.fpr[ft] as u32)
-            } else {
-                let register = ft & !1;
-                if ft & 1 == 0 {
-                    (register, FprLane::Low32, begin.fpr[register] as u32)
-                } else {
-                    (
-                        register,
-                        FprLane::High32,
-                        (begin.fpr[register] >> 32) as u32,
-                    )
-                }
-            };
-            let bytes = match begin.endian {
-                CpuEndian::Big => value.to_be_bytes(),
-                CpuEndian::Little => value.to_le_bytes(),
-            };
-            (
-                FprSelection {
-                    register: register as u8,
-                    lane,
-                },
-                bytes.to_vec(),
-            )
-        }
-        Cop1StoreKind::Sdc1 => {
-            let register = if begin.fr { ft } else { ft & !1 };
-            let value = begin.fpr[register];
-            let bytes = match begin.endian {
-                CpuEndian::Big => value.to_be_bytes(),
-                CpuEndian::Little => value.to_le_bytes(),
-            };
-            (
-                FprSelection {
-                    register: register as u8,
-                    lane: FprLane::Full64,
-                },
-                bytes.to_vec(),
-            )
-        }
-    };
-    Ok((store, ft as u8, selection, bytes))
-}
-
-fn expected_location(cache: CachePolicy) -> MutationLocation {
-    match cache {
-        CachePolicy::Cached => MutationLocation::CacheResident,
-        CachePolicy::Uncached => MutationLocation::Backing,
-    }
-}
-
-fn replay_success(active: &Active<'_>) -> Result<CpuMutationWitness, String> {
-    let begin = active.begin;
-    let destination = begin
-        .destination
-        .ok_or("successful CPU mutation missing destination")?;
-    let cache = begin
-        .cache
-        .ok_or("successful CPU mutation missing cache policy")?;
-    let (store, ft, source, payload) = payload_and_source(begin)?;
-    let end = destination
-        .0
-        .checked_add(payload.len() as u32)
-        .ok_or("CPU mutation destination overflow")?;
-    require(
-        end <= RDRAM_SIZE,
-        "CPU mutation outside bounded RDRAM scope",
-    )?;
-
-    let location = expected_location(cache);
-    let mut covered = vec![false; payload.len()];
-    let mut effect_ordinals = Vec::with_capacity(active.effects.len());
-    for effect in &active.effects {
-        require(
-            effect.location == location,
-            "CPU mutation location disagrees with cache policy",
-        )?;
-        require(!effect.bytes.is_empty(), "empty CPU mutation effect")?;
-        let start = effect
-            .address
-            .0
-            .checked_sub(destination.0)
-            .ok_or("CPU mutation effect precedes destination")? as usize;
-        let stop = start
-            .checked_add(effect.bytes.len())
-            .ok_or("CPU mutation effect range overflow")?;
-        require(
-            stop <= payload.len(),
-            "CPU mutation effect exceeds semantic store range",
-        )?;
-        for (index, byte) in effect.bytes.iter().enumerate() {
-            let offset = start + index;
-            require(!covered[offset], "overlapping CPU mutation effects")?;
-            require(*byte == payload[offset], "CPU mutation payload mismatch")?;
-            covered[offset] = true;
-        }
-        effect_ordinals.push(effect.ordinal);
-    }
-    require(
-        covered.into_iter().all(|covered| covered),
-        "incomplete CPU mutation byte effects",
-    )?;
-
-    Ok(CpuMutationWitness {
-        context: begin.context,
-        pc: begin.pc,
-        store,
-        endian: begin.endian,
-        fr: begin.fr,
-        ft,
-        source,
-        destination,
-        location,
-        bytes: payload,
-        effect_ordinals,
+    Some(DecodedCop1Store {
+        kind,
+        base_register: ((word >> 21) & 31) as u8,
+        requested_ft: ((word >> 16) & 31) as u8,
+        immediate: word as i16,
     })
 }
 
-/// Replay a complete, externally authenticated finite CPU mutation capture.
+fn select_source(
+    kind: Cop1StoreKind,
+    requested_ft: u8,
+    fr: bool,
+    raw_fprs: &[u64; 32],
+) -> (Cop1StoreSource, Vec<u8>) {
+    let (storage_fpr, lane) = match (kind, fr, requested_ft & 1) {
+        (Cop1StoreKind::Swc1, false, 0) => (requested_ft & !1u8, Cop1SourceLane::Low32),
+        (Cop1StoreKind::Swc1, false, _) => (requested_ft & !1u8, Cop1SourceLane::High32),
+        (Cop1StoreKind::Swc1, true, _) => (requested_ft, Cop1SourceLane::Low32),
+        (Cop1StoreKind::Sdc1, false, _) => (requested_ft & !1u8, Cop1SourceLane::Whole64),
+        (Cop1StoreKind::Sdc1, true, _) => (requested_ft, Cop1SourceLane::Whole64),
+    };
+    let raw = raw_fprs[usize::from(storage_fpr)];
+    let payload = match lane {
+        Cop1SourceLane::Low32 => (raw as u32).to_be_bytes().to_vec(),
+        Cop1SourceLane::High32 => ((raw >> 32) as u32).to_be_bytes().to_vec(),
+        Cop1SourceLane::Whole64 => raw.to_be_bytes().to_vec(),
+    };
+    (
+        Cop1StoreSource {
+            fr,
+            requested_ft,
+            storage_fpr,
+            lane,
+        },
+        payload,
+    )
+}
+
+/// Verify one completed SWC1/SDC1 effect against captured architectural state.
 ///
-/// The expected digest must come from a separately trusted complete-source receipt.
-/// Successful replay proves only that this captured history is internally consistent.
-/// It does not prove that every CPU/RSP/DMA mutation was sensed.
-pub fn inspect_cpu_mutation_history(
-    source: &[u8],
-    expected_sha256: &str,
-) -> Result<CpuMutationReport, String> {
-    let digest = sha256(source);
+/// `None` means no successful concrete effect was observed and therefore no
+/// mutation witness is created. This is the required outcome for faulting or
+/// otherwise failed stores. The caller must independently authenticate capture
+/// completeness, physical mapping identity, effect ordering, and FPR ancestry.
+pub fn verify_cop1_store_effect(
+    instruction_word: u32,
+    gpr: &[u64; 32],
+    raw_fprs: &[u64; 32],
+    fr: bool,
+    effect: Option<&CompletedCop1StoreEffect>,
+) -> Result<Option<Cop1MutationWitness>, String> {
+    let decoded = decode_cop1_store(instruction_word).ok_or("not a supported COP1 store")?;
+    let Some(effect) = effect else {
+        return Ok(None);
+    };
+
+    require(effect.effect_ordinal != 0, "invalid COP1 effect ordinal")?;
+    let expected_virtual = GuestVirtualAddr(
+        gpr[usize::from(decoded.base_register)].wrapping_add_signed(i64::from(decoded.immediate)),
+    );
     require(
-        digest == expected_sha256,
-        "CPU mutation source receipt mismatch",
+        effect.virtual_destination == expected_virtual,
+        "COP1 store virtual destination mismatch",
     )?;
-    let history: History = serde_json::from_slice(source).map_err(|error| error.to_string())?;
+
+    let width = decoded.kind.width();
     require(
-        history.format == FORMAT,
-        "unsupported CPU mutation history format",
+        effect.virtual_destination.0.is_multiple_of(width as u64),
+        "completed COP1 effect is misaligned",
+    )?;
+    require(
+        effect.physical_destination.0.is_multiple_of(width as u32),
+        "completed COP1 physical effect is misaligned",
+    )?;
+    require(
+        u64::from(effect.physical_destination.0) + width as u64 <= 0x0080_0000,
+        "COP1 effect outside bounded RDRAM",
     )?;
 
-    let mut events: Vec<_> = history
-        .begins
-        .iter()
-        .map(|event| (event.ordinal, Event::Begin(event)))
-        .chain(
-            history
-                .effects
-                .iter()
-                .map(|event| (event.ordinal, Event::Effect(event))),
-        )
-        .chain(
-            history
-                .ends
-                .iter()
-                .map(|event| (event.ordinal, Event::End(event))),
-        )
-        .collect();
-    events.sort_by_key(|event| event.0);
+    let (source, payload) = select_source(decoded.kind, decoded.requested_ft, fr, raw_fprs);
+    require(effect.payload.len() == width, "COP1 effect width mismatch")?;
+    require(
+        effect.payload == payload,
+        "COP1 store payload/source mismatch",
+    )?;
 
-    let mut active: Option<Active<'_>> = None;
-    let mut contexts = 0usize;
-    let mut faults = 0usize;
-    let mut witnesses = Vec::new();
-    for (index, (ordinal, event)) in events.into_iter().enumerate() {
-        require(
-            ordinal == index as u64 + 1,
-            "noncontiguous CPU mutation source ordinals",
-        )?;
-        match event {
-            Event::Begin(begin) => {
-                require(active.is_none(), "nested CPU mutation context")?;
-                require(
-                    begin.context == begin.ordinal && begin.pc.0.is_multiple_of(4),
-                    "invalid CPU mutation begin context",
-                )?;
-                decode_cop1_store(begin.word)?;
-                active = Some(Active {
-                    begin,
-                    effects: Vec::new(),
-                });
-            }
-            Event::Effect(effect) => {
-                let context = active.as_mut().ok_or("unscoped CPU mutation effect")?;
-                require(
-                    effect.context == context.begin.context,
-                    "CPU mutation effect context mismatch",
-                )?;
-                context.effects.push(effect);
-            }
-            Event::End(end) => {
-                let context = active.take().ok_or("CPU mutation end without begin")?;
-                require(
-                    end.context == context.begin.context,
-                    "CPU mutation end context mismatch",
-                )?;
-                contexts += 1;
-                match end.outcome {
-                    Outcome::Success => witnesses.push(replay_success(&context)?),
-                    Outcome::Fault => {
-                        require(
-                            context.effects.is_empty(),
-                            "faulted CPU mutation emitted a byte effect",
-                        )?;
-                        require(
-                            context.begin.destination.is_none() && context.begin.cache.is_none(),
-                            "faulted CPU mutation retained successful destination metadata",
-                        )?;
-                        faults += 1;
-                    }
-                }
-            }
-        }
-    }
-    require(active.is_none(), "truncated CPU mutation context")?;
-
-    Ok(CpuMutationReport {
-        format: FORMAT.into(),
-        source_sha256: digest,
-        instruction_contexts: contexts,
-        successful_mutations: witnesses.len(),
-        faulted_contexts: faults,
-        witnesses,
-        mutation_coverage_certified: false,
-        fpr_ancestry_certified: false,
-        executable_lifetime_certified: false,
-        hardware_atomicity_certified: false,
-        native_complete: false,
-    })
+    Ok(Some(Cop1MutationWitness {
+        effect_ordinal: effect.effect_ordinal,
+        kind: decoded.kind,
+        source,
+        virtual_destination: effect.virtual_destination,
+        physical_destination: effect.physical_destination,
+        domain: effect.domain,
+        payload,
+    }))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{Value, json};
 
-    const F0: u64 = 0x1122_3344_5566_7788;
-    const F1: u64 = 0x99aa_bbcc_ddee_ff00;
-
-    fn fprs() -> Vec<u64> {
-        let mut fpr = vec![0; 32];
-        fpr[0] = F0;
-        fpr[1] = F1;
-        fpr
+    fn encode(kind: Cop1StoreKind, base: u8, ft: u8, immediate: i16) -> u32 {
+        let opcode = match kind {
+            Cop1StoreKind::Swc1 => 0x39,
+            Cop1StoreKind::Sdc1 => 0x3d,
+        };
+        (opcode << 26)
+            | (u32::from(base) << 21)
+            | (u32::from(ft) << 16)
+            | u32::from(immediate as u16)
     }
 
-    fn word(op: u32, ft: u32) -> u32 {
-        (op << 26) | (ft << 16)
+    fn state() -> ([u64; 32], [u64; 32]) {
+        let mut gpr = [0; 32];
+        gpr[1] = 0xffff_ffff_a000_2000;
+        let mut fpr = [0; 32];
+        fpr[0] = 0x1122_3344_5566_7788;
+        fpr[1] = 0x99aa_bbcc_ddee_ff00;
+        fpr[2] = 0x0123_4567_89ab_cdef;
+        fpr[3] = 0xfedc_ba98_7654_3210;
+        (gpr, fpr)
     }
 
-    fn history(begin: Value, effects: Vec<Value>, end: Value) -> Vec<u8> {
-        serde_json::to_vec(&json!({
-            "format": FORMAT,
-            "begins": [begin],
-            "effects": effects,
-            "ends": [end]
-        }))
+    fn effect(domain: CpuMutationDomain, payload: &[u8]) -> CompletedCop1StoreEffect {
+        CompletedCop1StoreEffect {
+            effect_ordinal: 7,
+            virtual_destination: GuestVirtualAddr(0xffff_ffff_a000_2000),
+            physical_destination: PhysicalAddr(0x2000),
+            domain,
+            payload: payload.to_vec(),
+        }
+    }
+
+    #[test]
+    fn fr0_swc1_odd_selects_high_lane_of_even_pair() {
+        let (gpr, fpr) = state();
+        let witness = verify_cop1_store_effect(
+            encode(Cop1StoreKind::Swc1, 1, 1, 0),
+            &gpr,
+            &fpr,
+            false,
+            Some(&effect(
+                CpuMutationDomain::Backing,
+                &[0x11, 0x22, 0x33, 0x44],
+            )),
+        )
         .unwrap()
-    }
-
-    fn inspect(source: &[u8]) -> Result<CpuMutationReport, String> {
-        inspect_cpu_mutation_history(source, &sha256(source))
-    }
-
-    fn begin(
-        word: u32,
-        endian: &str,
-        fr: bool,
-        destination: Option<u32>,
-        cache: Option<&str>,
-    ) -> Value {
-        json!({
-            "ordinal": 1,
-            "context": 1,
-            "pc": 0x80001000u64,
-            "word": word,
-            "endian": endian,
-            "fr": fr,
-            "fpr": fprs(),
-            "destination": destination,
-            "cache": cache
-        })
-    }
-
-    fn success_end(ordinal: u64) -> Value {
-        json!({"ordinal": ordinal, "context": 1, "outcome": "success"})
+        .unwrap();
+        assert_eq!(witness.source.storage_fpr, 0);
+        assert_eq!(witness.source.lane, Cop1SourceLane::High32);
+        assert_eq!(witness.payload, [0x11, 0x22, 0x33, 0x44]);
     }
 
     #[test]
-    fn fr0_odd_swc1_selects_paired_high_lane() {
-        let source = history(
-            begin(word(0x39, 1), "big", false, Some(0x1000), Some("uncached")),
-            vec![json!({
-                "ordinal": 2,
-                "context": 1,
-                "location": "backing",
-                "address": 0x1000,
-                "bytes": [0x11, 0x22, 0x33, 0x44]
-            })],
-            success_end(3),
-        );
-        let report = inspect(&source).unwrap();
-        assert_eq!(report.successful_mutations, 1);
-        let witness = &report.witnesses[0];
-        assert_eq!(witness.store, Cop1StoreKind::Swc1);
-        assert_eq!(witness.source.register, 0);
-        assert_eq!(witness.source.lane, FprLane::High32);
-        assert_eq!(witness.bytes, vec![0x11, 0x22, 0x33, 0x44]);
-        assert!(!report.mutation_coverage_certified);
-        assert!(!report.native_complete);
+    fn fr0_swc1_even_selects_low_lane_of_even_pair() {
+        let (gpr, fpr) = state();
+        let witness = verify_cop1_store_effect(
+            encode(Cop1StoreKind::Swc1, 1, 0, 0),
+            &gpr,
+            &fpr,
+            false,
+            Some(&effect(
+                CpuMutationDomain::Backing,
+                &[0x55, 0x66, 0x77, 0x88],
+            )),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(witness.source.storage_fpr, 0);
+        assert_eq!(witness.source.lane, Cop1SourceLane::Low32);
     }
 
     #[test]
-    fn sdc1_accepts_fragmented_callback_topology() {
-        let source = history(
-            begin(word(0x3d, 1), "big", false, Some(0x2000), Some("uncached")),
-            vec![
-                json!({
-                    "ordinal": 2,
-                    "context": 1,
-                    "location": "backing",
-                    "address": 0x2000,
-                    "bytes": [0x11, 0x22, 0x33, 0x44]
-                }),
-                json!({
-                    "ordinal": 3,
-                    "context": 1,
-                    "location": "backing",
-                    "address": 0x2004,
-                    "bytes": [0x55, 0x66, 0x77, 0x88]
-                }),
-            ],
-            success_end(4),
-        );
-        let report = inspect(&source).unwrap();
-        assert_eq!(report.witnesses[0].effect_ordinals, vec![2, 3]);
-        assert_eq!(report.witnesses[0].source.register, 0);
-        assert_eq!(report.witnesses[0].source.lane, FprLane::Full64);
+    fn fr1_swc1_uses_named_register() {
+        let (gpr, fpr) = state();
+        let witness = verify_cop1_store_effect(
+            encode(Cop1StoreKind::Swc1, 1, 1, 0),
+            &gpr,
+            &fpr,
+            true,
+            Some(&effect(
+                CpuMutationDomain::Backing,
+                &[0xdd, 0xee, 0xff, 0x00],
+            )),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(witness.source.storage_fpr, 1);
+        assert_eq!(witness.source.lane, Cop1SourceLane::Low32);
     }
 
     #[test]
-    fn little_endian_payload_is_normalized_from_selected_bits() {
-        let source = history(
-            begin(word(0x39, 1), "little", true, Some(0x3000), Some("cached")),
-            vec![json!({
-                "ordinal": 2,
-                "context": 1,
-                "location": "cache_resident",
-                "address": 0x3000,
-                "bytes": [0x00, 0xff, 0xee, 0xdd]
-            })],
-            success_end(3),
-        );
-        let report = inspect(&source).unwrap();
-        assert_eq!(report.witnesses[0].source.register, 1);
-        assert_eq!(report.witnesses[0].bytes, vec![0x00, 0xff, 0xee, 0xdd]);
+    fn fr0_sdc1_odd_aliases_even_pair() {
+        let (gpr, fpr) = state();
+        let witness = verify_cop1_store_effect(
+            encode(Cop1StoreKind::Sdc1, 1, 1, 0),
+            &gpr,
+            &fpr,
+            false,
+            Some(&effect(
+                CpuMutationDomain::Backing,
+                &[0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88],
+            )),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(witness.source.storage_fpr, 0);
+        assert_eq!(witness.source.lane, Cop1SourceLane::Whole64);
     }
 
     #[test]
-    fn equal_value_wrong_generation_does_not_select_a_source() {
-        let mut begin = begin(word(0x39, 1), "big", false, Some(0x1000), Some("uncached"));
-        begin["fpr"][1] = json!(0x0000_0000_1122_3344u64);
-        let source = history(
-            begin,
-            vec![json!({
-                "ordinal": 2,
-                "context": 1,
-                "location": "backing",
-                "address": 0x1000,
-                "bytes": [0x11, 0x22, 0x33, 0x44]
-            })],
-            success_end(3),
-        );
-        let report = inspect(&source).unwrap();
-        assert_eq!(report.witnesses[0].source.register, 0);
-        assert_eq!(report.witnesses[0].source.lane, FprLane::High32);
+    fn fr1_sdc1_uses_named_register() {
+        let (gpr, fpr) = state();
+        let witness = verify_cop1_store_effect(
+            encode(Cop1StoreKind::Sdc1, 1, 1, 0),
+            &gpr,
+            &fpr,
+            true,
+            Some(&effect(
+                CpuMutationDomain::Backing,
+                &[0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00],
+            )),
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(witness.source.storage_fpr, 1);
     }
 
     #[test]
-    fn rejects_wrong_equal_length_payload() {
-        let source = history(
-            begin(word(0x39, 1), "big", false, Some(0x1000), Some("uncached")),
-            vec![json!({
-                "ordinal": 2,
-                "context": 1,
-                "location": "backing",
-                "address": 0x1000,
-                "bytes": [0x55, 0x66, 0x77, 0x88]
-            })],
-            success_end(3),
+    fn absent_completed_effect_creates_no_writer() {
+        let (gpr, fpr) = state();
+        assert_eq!(
+            verify_cop1_store_effect(
+                encode(Cop1StoreKind::Swc1, 1, 0, 1),
+                &gpr,
+                &fpr,
+                false,
+                None,
+            )
+            .unwrap(),
+            None
         );
-        assert!(inspect(&source).is_err());
     }
 
     #[test]
-    fn rejects_overlap_or_missing_byte_effects() {
-        let overlap = history(
-            begin(word(0x39, 0), "big", false, Some(0x1000), Some("uncached")),
-            vec![
-                json!({"ordinal": 2, "context": 1, "location": "backing", "address": 0x1000, "bytes": [0x55, 0x66]}),
-                json!({"ordinal": 3, "context": 1, "location": "backing", "address": 0x1001, "bytes": [0x66, 0x77, 0x88]}),
-            ],
-            success_end(4),
+    fn equal_payload_from_wrong_fr_source_is_rejected() {
+        let (gpr, fpr) = state();
+        let wrong = effect(CpuMutationDomain::Backing, &[0x11, 0x22, 0x33, 0x44]);
+        assert_eq!(
+            verify_cop1_store_effect(
+                encode(Cop1StoreKind::Swc1, 1, 1, 0),
+                &gpr,
+                &fpr,
+                true,
+                Some(&wrong),
+            )
+            .unwrap_err(),
+            "COP1 store payload/source mismatch"
         );
-        assert!(inspect(&overlap).is_err());
-
-        let missing = history(
-            begin(word(0x39, 0), "big", false, Some(0x1000), Some("uncached")),
-            vec![
-                json!({"ordinal": 2, "context": 1, "location": "backing", "address": 0x1000, "bytes": [0x55, 0x66, 0x77]}),
-            ],
-            success_end(3),
-        );
-        assert!(inspect(&missing).is_err());
     }
 
     #[test]
-    fn rejects_backing_effect_for_cached_store() {
-        let source = history(
-            begin(word(0x39, 0), "big", false, Some(0x1000), Some("cached")),
-            vec![json!({
-                "ordinal": 2,
-                "context": 1,
-                "location": "backing",
-                "address": 0x1000,
-                "bytes": [0x55, 0x66, 0x77, 0x88]
-            })],
-            success_end(3),
-        );
-        assert!(inspect(&source).is_err());
+    fn resident_and_backing_effects_remain_distinct() {
+        let (gpr, fpr) = state();
+        let resident_effect = effect(CpuMutationDomain::CacheResident, &[0x55, 0x66, 0x77, 0x88]);
+        let backing_effect = effect(CpuMutationDomain::Backing, &[0x55, 0x66, 0x77, 0x88]);
+        let resident = verify_cop1_store_effect(
+            encode(Cop1StoreKind::Swc1, 1, 0, 0),
+            &gpr,
+            &fpr,
+            false,
+            Some(&resident_effect),
+        )
+        .unwrap()
+        .unwrap();
+        let backing = verify_cop1_store_effect(
+            encode(Cop1StoreKind::Swc1, 1, 0, 0),
+            &gpr,
+            &fpr,
+            false,
+            Some(&backing_effect),
+        )
+        .unwrap()
+        .unwrap();
+        assert_ne!(resident.domain, backing.domain);
+        assert_eq!(resident.payload, backing.payload);
     }
 
     #[test]
-    fn rejects_effect_from_faulted_attempt() {
-        let source = history(
-            begin(word(0x39, 0), "big", false, None, None),
-            vec![json!({
-                "ordinal": 2,
-                "context": 1,
-                "location": "backing",
-                "address": 0x1000,
-                "bytes": [0x55, 0x66, 0x77, 0x88]
-            })],
-            json!({"ordinal": 3, "context": 1, "outcome": "fault"}),
+    fn destination_forgery_is_rejected() {
+        let (gpr, fpr) = state();
+        let mut forged = effect(CpuMutationDomain::Backing, &[0x55, 0x66, 0x77, 0x88]);
+        forged.virtual_destination = GuestVirtualAddr(0xffff_ffff_a000_3000);
+        assert_eq!(
+            verify_cop1_store_effect(
+                encode(Cop1StoreKind::Swc1, 1, 0, 0),
+                &gpr,
+                &fpr,
+                false,
+                Some(&forged),
+            )
+            .unwrap_err(),
+            "COP1 store virtual destination mismatch"
         );
-        assert!(inspect(&source).is_err());
     }
 
     #[test]
-    fn accepts_fault_without_mutation_but_certifies_nothing_broader() {
-        let source = history(
-            begin(word(0x3d, 1), "big", false, None, None),
-            vec![],
-            json!({"ordinal": 2, "context": 1, "outcome": "fault"}),
+    fn completed_misaligned_effect_is_rejected() {
+        let (gpr, fpr) = state();
+        let mut gpr = gpr;
+        gpr[1] += 1;
+        let mut forged = effect(CpuMutationDomain::Backing, &[0x55, 0x66, 0x77, 0x88]);
+        forged.virtual_destination = GuestVirtualAddr(0xffff_ffff_a000_2001);
+        forged.physical_destination = PhysicalAddr(0x2001);
+        assert_eq!(
+            verify_cop1_store_effect(
+                encode(Cop1StoreKind::Swc1, 1, 0, 0),
+                &gpr,
+                &fpr,
+                false,
+                Some(&forged),
+            )
+            .unwrap_err(),
+            "completed COP1 effect is misaligned"
         );
-        let report = inspect(&source).unwrap();
-        assert_eq!(report.faulted_contexts, 1);
-        assert!(report.witnesses.is_empty());
-        assert!(!report.fpr_ancestry_certified);
-        assert!(!report.hardware_atomicity_certified);
-        assert!(!report.executable_lifetime_certified);
     }
 
     #[test]
-    fn rejects_deleted_or_forged_source_history() {
-        let source = history(
-            begin(word(0x39, 0), "big", false, Some(0x1000), Some("uncached")),
-            vec![json!({
-                "ordinal": 3,
-                "context": 1,
-                "location": "backing",
-                "address": 0x1000,
-                "bytes": [0x55, 0x66, 0x77, 0x88]
-            })],
-            success_end(4),
+    fn out_of_rdram_effect_is_rejected() {
+        let (gpr, fpr) = state();
+        let mut forged = effect(CpuMutationDomain::Backing, &[0x55, 0x66, 0x77, 0x88]);
+        forged.physical_destination = PhysicalAddr(0x0080_0000);
+        assert_eq!(
+            verify_cop1_store_effect(
+                encode(Cop1StoreKind::Swc1, 1, 0, 0),
+                &gpr,
+                &fpr,
+                false,
+                Some(&forged),
+            )
+            .unwrap_err(),
+            "COP1 effect outside bounded RDRAM"
         );
-        assert!(inspect(&source).is_err());
+    }
 
-        let valid = history(
-            begin(word(0x39, 0), "big", false, Some(0x1000), Some("uncached")),
-            vec![json!({
-                "ordinal": 2,
-                "context": 1,
-                "location": "backing",
-                "address": 0x1000,
-                "bytes": [0x55, 0x66, 0x77, 0x88]
-            })],
-            success_end(3),
+    #[test]
+    fn integer_store_is_outside_this_contract() {
+        let (gpr, fpr) = state();
+        assert_eq!(
+            verify_cop1_store_effect(0xac22_0000, &gpr, &fpr, false, None).unwrap_err(),
+            "not a supported COP1 store"
         );
-        assert!(inspect_cpu_mutation_history(&valid, &"0".repeat(64)).is_err());
     }
 }
