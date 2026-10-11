@@ -194,7 +194,10 @@ fn validate_mapping(
         mapping.region == 0 && vaddr.0 <= MASK40,
         "mapped fetch is outside execution-backed low-region address scope",
     )?;
-    require(mapping.lo0.cca <= 7 && mapping.lo1.cca <= 7, "invalid TLB CCA")?;
+    require(
+        mapping.lo0.cca <= 7 && mapping.lo1.cca <= 7,
+        "invalid TLB CCA",
+    )?;
 
     let geometry = geometry(mapping.raw_page_mask)?;
     require(
@@ -230,7 +233,10 @@ fn validate_mapping(
     require(half.cca == 2, "selected TLB mapping is not CCA=2 uncached")?;
 
     let translated = u64::from(half.physical_base.0) + (v40 & geometry.address_mask_lo);
-    require(translated <= u64::from(u32::MAX), "translated TLB address overflow")?;
+    require(
+        translated <= u64::from(u32::MAX),
+        "translated TLB address overflow",
+    )?;
     require(
         translated_paddr.0 == translated as u32,
         "captured translated physical address contradicts PageMask mapping",
@@ -266,10 +272,16 @@ pub fn inspect_tlb_fetch_history(
     expected_sha256: &str,
 ) -> Result<TlbFetchReport, String> {
     let digest = sha256(source);
-    require(digest == expected_sha256, "TLB fetch source receipt mismatch")?;
+    require(
+        digest == expected_sha256,
+        "TLB fetch source receipt mismatch",
+    )?;
 
     let history: History = serde_json::from_slice(source).map_err(|error| error.to_string())?;
-    require(history.format == FORMAT, "unsupported TLB fetch history format")?;
+    require(
+        history.format == FORMAT,
+        "unsupported TLB fetch history format",
+    )?;
 
     let mut next_ordinal = 1u64;
     let mut last_epoch = 0u64;
@@ -291,12 +303,24 @@ pub fn inspect_tlb_fetch_history(
                 bus_paddr,
                 reverse_endian,
             } => {
-                require(ordinal == next_ordinal, "noncontiguous TLB fetch event ordinals")?;
+                require(
+                    ordinal == next_ordinal,
+                    "noncontiguous TLB fetch event ordinals",
+                )?;
                 next_ordinal += 1;
                 require(active.is_none(), "nested TLB fetch begin")?;
-                require(context == ordinal, "TLB fetch context must equal begin ordinal")?;
-                require(epoch != 0 && epoch >= last_epoch, "invalid or reordered TLB fetch epoch")?;
-                require(vaddr.0.is_multiple_of(4), "unaligned mapped instruction vaddr")?;
+                require(
+                    context == ordinal,
+                    "TLB fetch context must equal begin ordinal",
+                )?;
+                require(
+                    epoch != 0 && epoch >= last_epoch,
+                    "invalid or reordered TLB fetch epoch",
+                )?;
+                require(
+                    vaddr.0.is_multiple_of(4),
+                    "unaligned mapped instruction vaddr",
+                )?;
                 validate_ref(
                     &translation_context_ref,
                     "invalid translation context reference",
@@ -332,9 +356,15 @@ pub fn inspect_tlb_fetch_history(
                 requestor,
                 value,
             } => {
-                require(ordinal == next_ordinal, "noncontiguous TLB fetch event ordinals")?;
+                require(
+                    ordinal == next_ordinal,
+                    "noncontiguous TLB fetch event ordinals",
+                )?;
                 next_ordinal += 1;
-                require(bytes == WORD_BYTES, "TLB fetch backing read is not one Word")?;
+                require(
+                    bytes == WORD_BYTES,
+                    "TLB fetch backing read is not one Word",
+                )?;
                 require(
                     requestor == RdramReadRequestor::Vr4300Uncached,
                     "TLB fetch backing read has wrong requestor",
@@ -344,7 +374,10 @@ pub fn inspect_tlb_fetch_history(
                     "backing read is outside ordinary aligned RDRAM Word scope",
                 )?;
                 if let Some(current) = active.as_mut() {
-                    require(current.read.is_none(), "multiple backing reads inside one fetch")?;
+                    require(
+                        current.read.is_none(),
+                        "multiple backing reads inside one fetch",
+                    )?;
                     current.read = Some(ObservedRead {
                         ordinal,
                         address,
@@ -361,19 +394,27 @@ pub fn inspect_tlb_fetch_history(
                 vaddr,
                 word,
             } => {
-                require(ordinal == next_ordinal, "noncontiguous TLB fetch event ordinals")?;
+                require(
+                    ordinal == next_ordinal,
+                    "noncontiguous TLB fetch event ordinals",
+                )?;
                 next_ordinal += 1;
                 let current = active.take().ok_or("TLB fetch end without active begin")?;
                 require(
                     (context, epoch, vaddr) == (current.context, current.epoch, current.vaddr),
                     "TLB fetch end context mismatch",
                 )?;
-                let read = current.read.ok_or("mapped uncached fetch lacks backing Word read")?;
+                let read = current
+                    .read
+                    .ok_or("mapped uncached fetch lacks backing Word read")?;
                 require(
                     read.address == current.bus_paddr,
                     "mapped uncached fetch backing address mismatch",
                 )?;
-                require(read.value == word, "mapped uncached fetch backing value mismatch")?;
+                require(
+                    read.value == word,
+                    "mapped uncached fetch backing value mismatch",
+                )?;
                 witnesses.push(TlbFetchWitness {
                     epoch: current.epoch,
                     context: current.context,
