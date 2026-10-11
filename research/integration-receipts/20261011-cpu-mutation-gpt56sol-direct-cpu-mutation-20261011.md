@@ -2,12 +2,13 @@
 
 Date: 2026-10-11
 Worker: `gpt56sol-direct-cpu-mutation-20261011`
-Result at receipt creation: integration-ready pending the serialized main-write lease
+Result at receipt update: integration-ready after current-main reconciliation; pending serialized main-write lease
 
 ## Base and source research
 
 - Original base main: `6b53a15c4c6eaadc8e0d002dd6818c600ebf2a7d`.
-- Reconciled canonical main before this receipt: `539ff0ce72a98b296a8a28135fda6eab90a2f6ac`.
+- First reconciled main: `539ff0ce72a98b296a8a28135fda6eab90a2f6ac` after exception-root integration.
+- Second reconciled main: `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5` after TLBWI operation-generation integration.
 - Source research branch: `research/cop1-store-mutation-gpt56sol` at `b95a51d4f5ec8fcba3b8ac85c222a11dafe05a49`.
 - Durable research note: `research/ares-cop1-store-mutation.md`.
 - Executable research fixture: `spikes/035-ares-cop1-stores/`.
@@ -16,9 +17,11 @@ Result at receipt creation: integration-ready pending the serialized main-write 
 
 ## Reproduced evidence against current main
 
-The integration branch was explicitly reconciled with canonical main `539ff0ce72a98b296a8a28135fda6eab90a2f6ac` in merge commit `d845871d0a3ad2b2367c7d537a99304974503459` before rerunning validation.
+The integration branch was first reconciled with canonical main `539ff0ce72a98b296a8a28135fda6eab90a2f6ac` in merge commit `d845871d0a3ad2b2367c7d537a99304974503459` and validated there.
 
-Exact-reference Actions run `38151993531`, job `114507167720`, checked out exact pinned ares and reproduced:
+Canonical main then advanced through the independent TLBWI operation-generation integration to `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5`. This branch was rebuilt from that canonical tree in merge commit `f25828da05e651a1d5073c90a82a6079c252d6b3`, preserving `tlb_history`, ADR-0102 and the current canonical documentation rather than overlaying stale files.
+
+Fresh exact-reference Actions run `38153016217`, job `114510186430`, checked out exact pinned ares and reproduced on the post-TLBWI combined tree:
 
 - `PASS: COP1 FR payload-selection model and 100000 adversarial register cases`
 - `model_sha256=3c5075ecc450af75d167dd3a225943c410e6dcc1e0f4c4877604f08f353aa285`
@@ -60,16 +63,17 @@ The module includes focused regressions for:
 
 ## Canonical validation
 
-Reconciled integration head `d845871d0a3ad2b2367c7d537a99304974503459` passed Rust workflow run `38151993516`, job `114507167774`:
+Post-TLBWI combined-tree Rust workflow run `38153016223`, job `114510186793`, passed:
 
-- exact decoder dependency pin: PASS;
-- `cargo fmt --all -- --check`: PASS;
-- `cargo clippy --locked --workspace --all-targets -- -D warnings`: PASS;
-- `cargo test --locked --workspace`: PASS;
-- synthetic CLI checks: PASS;
-- all retained CPU-copy, transform, SP/RSP, cache/TLB and fetch-summary source-contract/model checks in the canonical workflow: PASS.
+- exact decoder dependency pin;
+- `cargo fmt --all -- --check`;
+- `cargo clippy --locked --workspace --all-targets -- -D warnings`;
+- `cargo test --locked --workspace`;
+- synthetic CLI checks;
+- every retained CPU-copy, XORI, CPU-SP, RSP, cache/PageMask, PI, SP-DMA, RSP-store, EntryHi/TLBR source-contract check;
+- the independent fetch-summary assignment oracle.
 
-A production-only final head is rerun through the same canonical Rust gates after temporary validation workflows are removed. Its final run is recorded in the issue #4 integration closeout so this receipt does not need a post-validation content-only rewrite.
+Earlier current-main validation also passed on the exception-root main (`38151993516` / `114507167774`) and on a production-only pre-TLBWI head (`38152352014` / `114508219806`). The final production-only post-TLBWI head is rerun through the canonical Rust gate after temporary validation workflows are removed; that exact run is recorded in issue #4 closeout.
 
 ## Rejected / superseded approaches
 
@@ -82,12 +86,13 @@ A production-only final head is rerun through the same canonical Rust gates afte
 
 ## Files changed by the production integration
 
-- `crates/plaid-core/src/cpu_mutation.rs` — new finite source-bound CPU mutation replay and focused tests.
-- `crates/plaid-core/src/lib.rs` — exports the production module while preserving concurrently integrated modules.
-- `docs/STATUS.md` / `docs/NEXT.md` — bounded canonical-state note and remaining obligation, if still applicable after final main reconciliation.
+- `crates/plaid-core/src/cpu_mutation.rs` — finite source-bound CPU mutation replay and focused tests.
+- `crates/plaid-core/src/lib.rs` — exports the production module while preserving concurrent canonical modules including `exception_roots` and `tlb_history`.
+- `docs/STATUS.md` — bounded canonical-state note.
+- `docs/NEXT.md` — producer-side mutation and writeback/lifetime obligations remain explicit.
 - this receipt.
 
-Temporary exact-reference/formatting/documentation workflows used only to validate or edit the isolated branch are removed before main integration.
+Temporary exact-reference/documentation workflows used only to validate the isolated branch are removed before main integration.
 
 ## Limitations and remaining proof obligations
 
