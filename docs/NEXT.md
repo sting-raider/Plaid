@@ -98,10 +98,12 @@ need. No new research lane. See `research/integration-harvest-20261011.md`.
 Native lowering remains deferred until discovery is demonstrably useful.
 
 Source-preserving discovery solve admission now rechecks external expectations,
-raw primitives and ROM-aware installed entries before emitting a closure report.
+raw primitives, ROM-aware installed entries and compiled roots before emitting a
+closure report. Supplied instruction words must match captured compiled snapshots,
+including legacy opaque identities (ADR-0117).
 Preserve expected sets independently at trusted capture/import boundaries; do not
-recreate them from edited submissions. Compose other source domains, compiled
-image projections and complete sensor/lifetime obligations next (ADR-0114).
+recreate them from edited submissions. Compose other source domains, remaining
+derived projections and complete sensor/lifetime obligations next (ADR-0114).
 
 Cached general-root v1 now composes full-line slot replacement and the canonical
 pinned NMI/reset/power profile with word-specific captured backing ancestry.

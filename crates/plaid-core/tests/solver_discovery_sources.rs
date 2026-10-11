@@ -97,6 +97,16 @@ fn source_bound_declared_closure_preserves_exact_expectations_and_map_commitment
             .iter()
             .any(|b| b.kind == "unproven_executable_universe")
     );
+    let missing =
+        solve_with_discovery_sources(&map, &[], Scope::DeclaredStaticImages, &sources).unwrap();
+    assert_eq!(missing.closure.status, ClosureStatus::Open);
+    assert!(
+        missing
+            .closure
+            .blockers
+            .iter()
+            .any(|b| b.kind == "missing_instruction_source")
+    );
 }
 
 #[test]
@@ -247,5 +257,224 @@ fn wrong_rom_and_unexpected_map_session_fail_before_closure() {
     };
     assert!(
         solve_with_discovery_sources(&combined, &known, Scope::WholeRom, &added_sources).is_err()
+    );
+}
+
+#[test]
+fn compiled_unit_cannot_disappear_without_an_install_event() {
+    let (old_rom, positive, _, _) = fixture(false);
+    let mut bytes = old_rom.bytes().to_vec();
+    bytes[72..76].copy_from_slice(&0x03e00008u32.to_be_bytes());
+    let rom = CanonicalRom::from_bytes(&bytes).unwrap();
+    let negative = CodeImage::from_rom(
+        &rom,
+        RomOffset(72),
+        GuestRange {
+            start: GuestAddr(0x80001000),
+            size: 8,
+        },
+    )
+    .unwrap();
+    let events = vec![
+        TraceEvent::CompileBegin {
+            unit: 1,
+            start: positive.base.pc,
+            physical_start: None,
+            delay_slot_entry: false,
+        },
+        TraceEvent::UnitCompiled {
+            unit: 1,
+            start: positive.base.pc,
+            words: positive.words.clone(),
+        },
+        TraceEvent::CompileBegin {
+            unit: 2,
+            start: negative.base.pc,
+            physical_start: None,
+            delay_slot_entry: false,
+        },
+        TraceEvent::UnitCompiled {
+            unit: 2,
+            start: negative.base.pc,
+            words: negative.words.clone(),
+        },
+    ];
+    let trace = DiscoveryTrace {
+        header: TraceHeader {
+            schema_version: 0,
+            rom: rom.identity.clone(),
+            engine: "source-admission-test".into(),
+            revision: "r1".into(),
+            capabilities: Default::default(),
+        },
+        events: events
+            .into_iter()
+            .enumerate()
+            .map(|(seq, data)| EventRecord {
+                seq: seq as u64,
+                data,
+            })
+            .collect(),
+    };
+    let known = [positive, negative];
+    let mut map = import_trace_with_rom(&trace, &known, &rom, 100).unwrap();
+    let traces = [trace];
+    let expected = DiscoveryTraceManifestSet::from_traces(&traces).unwrap();
+    let sources = DiscoverySourceInputs {
+        expected: &expected,
+        traces: &traces,
+        rom: &rom,
+        known_images: &known,
+        import_budget: 100,
+    };
+    assert_eq!(
+        solve_with_discovery_sources(&map, &known, Scope::DeclaredStaticImages, &sources)
+            .unwrap()
+            .closure
+            .status,
+        ClosureStatus::Open
+    );
+    map.entries
+        .retain(|entry, _| entry.image == known[0].base.image);
+    map.blocks
+        .retain(|block| block.start.image == known[0].base.image);
+    map.direct_edges
+        .retain(|edge| edge.site.image == known[0].base.image);
+    map.regions
+        .retain(|region| region.image == known[0].base.image);
+    map.indirect_sites.clear();
+    map.unresolved.clear();
+    map.validate().unwrap();
+    assert_eq!(
+        solve(&map, &known, Scope::DeclaredStaticImages)
+            .unwrap()
+            .status,
+        ClosureStatus::Closed
+    );
+    assert!(
+        solve_with_discovery_sources(&map, &known, Scope::DeclaredStaticImages, &sources).is_err(),
+        "a negative compiled source unit disappeared behind retained metadata"
+    );
+}
+
+#[test]
+fn compiled_roots_keep_source_bindings_while_allowing_extra_merged_roots() {
+    let (rom, image, trace, map) = fixture(false);
+    let traces = [trace];
+    let expected = DiscoveryTraceManifestSet::from_traces(&traces).unwrap();
+    let known = [image];
+    let sources = DiscoverySourceInputs {
+        expected: &expected,
+        traces: &traces,
+        rom: &rom,
+        known_images: &known,
+        import_budget: 100,
+    };
+    let begin = map
+        .evidence
+        .keys()
+        .find(|id| id.ends_with(":0"))
+        .unwrap()
+        .clone();
+    let compiled = map
+        .evidence
+        .keys()
+        .find(|id| id.ends_with(":2"))
+        .unwrap()
+        .clone();
+    let mut extra = map.clone();
+    extra.entries.insert(
+        known[0].address(GuestAddr(0x80000004)),
+        [begin.clone()].into(),
+    );
+    // Admission allows composed declarations; the solver independently judges
+    // the additional root's CFG rather than the projection checker erasing it.
+    solve_with_discovery_sources(&extra, &known, Scope::DeclaredStaticImages, &sources).unwrap();
+    for id in [&begin, &compiled] {
+        let mut forged = map.clone();
+        forged
+            .evidence
+            .get_mut(id)
+            .unwrap()
+            .detail
+            .push_str(" edited");
+        assert!(
+            solve_with_discovery_sources(&forged, &known, Scope::DeclaredStaticImages, &sources)
+                .is_err()
+        );
+    }
+    let mut detached = map.clone();
+    for refs in detached.entries.values_mut() {
+        refs.remove(&begin);
+    }
+    // Install bindings and all primitive facts remain; only the compilation's
+    // root provenance was detached.
+    assert!(
+        solve_with_discovery_sources(&detached, &known, Scope::DeclaredStaticImages, &sources)
+            .is_err()
+    );
+}
+
+#[test]
+fn opaque_solver_image_cannot_replace_authenticated_compiled_instructions() {
+    let (old_rom, _, mut trace, _) = fixture(false);
+    let mut bytes = old_rom.bytes().to_vec();
+    bytes[64..68].copy_from_slice(&0x03e00008u32.to_be_bytes());
+    let rom = CanonicalRom::from_bytes(&bytes).unwrap();
+    let mut imported = CodeImage::from_rom(
+        &rom,
+        RomOffset(64),
+        GuestRange {
+            start: GuestAddr(0x80000000),
+            size: 8,
+        },
+    )
+    .unwrap();
+    imported.base.image = "opaque-legacy".into();
+    trace.header.rom = rom.identity.clone();
+    let TraceEvent::UnitCompiled { words, .. } = &mut trace.events[2].data else {
+        unreachable!()
+    };
+    *words = imported.words.clone();
+    let known = [imported];
+    let original = import_trace_with_rom(&trace, &known, &rom, 100).unwrap();
+    let traces = [trace];
+    let expected = DiscoveryTraceManifestSet::from_traces(&traces).unwrap();
+    let sources = DiscoverySourceInputs {
+        expected: &expected,
+        traces: &traces,
+        rom: &rom,
+        known_images: &known,
+        import_budget: 100,
+    };
+    let mut forged_image = known[0].clone();
+    forged_image.words[0] = 0x08000000;
+    let mut substituted = plaid_core::discovery::direct_cfg(
+        rom.identity.clone(),
+        &forged_image,
+        &[forged_image.base.pc],
+        100,
+    )
+    .unwrap()
+    .map;
+    substituted.evidence.extend(original.evidence.clone());
+    substituted.entries = original.entries.clone();
+    substituted.validate().unwrap();
+    let supplied = [forged_image];
+    assert_eq!(
+        solve(&substituted, &supplied, Scope::DeclaredStaticImages)
+            .unwrap()
+            .status,
+        ClosureStatus::Closed
+    );
+    assert!(
+        solve_with_discovery_sources(
+            &substituted,
+            &supplied,
+            Scope::DeclaredStaticImages,
+            &sources
+        )
+        .unwrap_err()
+        .contains("captured compilation")
     );
 }

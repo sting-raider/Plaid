@@ -133,6 +133,18 @@ def main():
         unexpected=directory/'unexpected.ndjson'; save_trace(unexpected,trace_events[:-1])
         run('solve-traces',rom,trace_map,expectations,traced,unexpected,ok=False)
         assert expectations.read_bytes()==preserved
+        no_install=directory/'no-install.ndjson'
+        save_trace(no_install,[trace_events[0],trace_events[2]])
+        compile_expected=directory/'compiled-expected.json'
+        compile_map=directory/'compiled-map.json'
+        run('create-trace-expectations',compile_expected,no_install)
+        run('import-trace',rom,no_install,compile_map)
+        run('solve-traces',rom,compile_map,compile_expected,no_install)
+        deleted=json.loads(compile_map.read_bytes())
+        for field in ('entries','blocks','regions','direct_edges','indirect_sites','unresolved'):
+            deleted[field]=[]
+        compile_map.write_text(json.dumps(deleted),encoding='utf-8')
+        run('solve-traces',rom,compile_map,compile_expected,no_install,ok=False)
         merged=directory / "merged.json"
         run("merge",directory/"z64.json",directory/"v64.json",merged)
         assert merged.read_bytes() == maps[0]

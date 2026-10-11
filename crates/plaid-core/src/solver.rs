@@ -6,7 +6,7 @@ use crate::{
     program::*,
     rom::{CanonicalRom, sha256},
     trace::DiscoveryTrace,
-    trace_projection::verify_discovery_trace_projection_with_entries_and_rom,
+    trace_projection::verify_discovery_trace_execution_projection_with_rom,
 };
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
@@ -46,8 +46,9 @@ pub struct SolveReport {
 }
 
 /// Closure admission with independently preserved discovery-source expectations.
-/// This authenticates raw trace primitives and installed-entry projections, not
-/// sensor completeness or every derived fact in the map. Other source domains
+/// This authenticates raw primitives, installed entries, compiled roots and
+/// supplied instruction snapshots, not sensor completeness or every derived
+/// fact in the map. Other source domains
 /// and all existing closure obligations still require their own verification.
 #[derive(Debug, Clone, Serialize)]
 pub struct DiscoverySourceSolveReport {
@@ -68,7 +69,7 @@ pub struct DiscoverySourceInputs<'a> {
     pub import_budget: usize,
 }
 
-/// Authenticate the external source set and its primitive/installed-entry
+/// Authenticate the external source set and its primitive/entry/compilation
 /// projections before solving. Preserve `expected` outside editable artifacts;
 /// constructing it from the submitted sources here would defeat deletion
 /// resistance. Re-import uses the same known images and budget as the original
@@ -86,11 +87,12 @@ pub fn solve_with_discovery_sources(
         .expected
         .verify_primitive_projections(map, sources.traces)?;
     for trace in sources.traces {
-        verify_discovery_trace_projection_with_entries_and_rom(
+        verify_discovery_trace_execution_projection_with_rom(
             trace,
             sources.known_images,
             sources.rom,
             map,
+            images,
             sources.import_budget,
         )?;
     }
