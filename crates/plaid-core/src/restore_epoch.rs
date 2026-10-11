@@ -80,7 +80,9 @@ struct History {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ComponentOrigin {
-    LiveGeneration { generation: u64 },
+    LiveGeneration {
+        generation: u64,
+    },
     RestoreRoot {
         restore_epoch: u64,
         snapshot_id: String,
@@ -141,11 +143,7 @@ struct Snapshot {
 }
 
 fn require(ok: bool, message: &str) -> Result<(), String> {
-    if ok {
-        Ok(())
-    } else {
-        Err(message.into())
-    }
+    if ok { Ok(()) } else { Err(message.into()) }
 }
 
 fn valid_digest(value: &str) -> bool {
@@ -394,7 +392,13 @@ mod tests {
         assert_eq!(epoch.snapshot_id, "S0");
         assert_eq!(epoch.roots.len(), 3);
         assert!(epoch.roots.iter().all(|root| root.restore_epoch == 1));
-        assert!(report.current_components.iter().all(|state| matches!(state.origin, ComponentOrigin::RestoreRoot { restore_epoch: 1, .. })));
+        assert!(report.current_components.iter().all(|state| matches!(
+            state.origin,
+            ComponentOrigin::RestoreRoot {
+                restore_epoch: 1,
+                ..
+            }
+        )));
         assert!(!report.executable_lifetime_certified);
         assert!(!report.native_complete);
     }
@@ -412,7 +416,13 @@ mod tests {
             {"kind":"snapshot_load","ordinal":8,"snapshot_id":"S0","components":states(TLB_A,CTX_A,CACHE_A)}
         ])).unwrap();
         for state in &report.current_components {
-            assert!(matches!(state.origin, ComponentOrigin::RestoreRoot { restore_epoch: 1, .. }));
+            assert!(matches!(
+                state.origin,
+                ComponentOrigin::RestoreRoot {
+                    restore_epoch: 1,
+                    ..
+                }
+            ));
         }
     }
 
@@ -426,8 +436,14 @@ mod tests {
         assert_eq!(report.restores.len(), 2);
         assert_eq!(report.restores[0].restore_epoch, 1);
         assert_eq!(report.restores[1].restore_epoch, 2);
-        assert_eq!(report.restores[0].roots[0].state_digest, report.restores[1].roots[0].state_digest);
-        assert_ne!(report.restores[0].roots[0].restore_epoch, report.restores[1].roots[0].restore_epoch);
+        assert_eq!(
+            report.restores[0].roots[0].state_digest,
+            report.restores[1].roots[0].state_digest
+        );
+        assert_ne!(
+            report.restores[0].roots[0].restore_epoch,
+            report.restores[1].roots[0].restore_epoch
+        );
     }
 
     #[test]
@@ -438,9 +454,16 @@ mod tests {
             {"kind":"snapshot_load","ordinal":3,"snapshot_id":"S0","components":states(TLB_A,CTX_A,CACHE_A)},
             {"kind":"live_generation","ordinal":4,"component":"installed_tlb","generation":8,"state_digest":TLB_B}
         ])).unwrap();
-        let tlb = report.current_components.iter().find(|state| state.component == RestoreComponent::InstalledTlb).unwrap();
+        let tlb = report
+            .current_components
+            .iter()
+            .find(|state| state.component == RestoreComponent::InstalledTlb)
+            .unwrap();
         assert_eq!(tlb.state_digest, TLB_B);
-        assert_eq!(tlb.origin, ComponentOrigin::LiveGeneration { generation: 8 });
+        assert_eq!(
+            tlb.origin,
+            ComponentOrigin::LiveGeneration { generation: 8 }
+        );
     }
 
     #[test]
@@ -491,7 +514,8 @@ mod tests {
                 {"component":"installed_tlb","state_digest":TLB_A},
                 {"component":"translation_context","state_digest":CTX_A}
             ]}
-        ])).unwrap_err();
+        ]))
+        .unwrap_err();
         assert!(missing.contains("exactly three"));
 
         let duplicate = inspect(json!([
@@ -500,7 +524,8 @@ mod tests {
                 {"component":"translation_context","state_digest":CTX_A},
                 {"component":"translation_context","state_digest":CTX_A}
             ]}
-        ])).unwrap_err();
+        ]))
+        .unwrap_err();
         assert!(duplicate.contains("duplicate restore component"));
     }
 
