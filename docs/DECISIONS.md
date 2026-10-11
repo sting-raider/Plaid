@@ -1213,3 +1213,17 @@ and ROM offset. Overlay generation remains a separate load/execution identity;
 unknown physical backing is not inferred. Existing DMA/copy-event checks remain
 additional obligations. This rejects contradictory metadata without proving
 executable lifetime or source completeness. No upstream code is reused.
+
+## ADR-0083: Fetch summaries must admit a concrete finite history
+
+Status: Accepted, 2026-10-11.
+
+Per-summary bounds, exact aggregate counts and interval coverage do not establish
+joint consistency. Reserve each summary's first/last positions and schedule its
+remaining quota strictly inside that interval using earliest deadlines over
+endpoint gaps. Preserve existing value, endpoint and provenance checks. This
+establishes existence of a consistent history, not agreement with a particular
+raw capture; source rechecking remains independent. Prefer this stronger check
+over the interval-union-only candidate. Independent assignment-oracle research
+and an exhaustive bounded concrete-history test of the Rust validator agree.
+No upstream implementation is reused; no lifecycle or closure proof follows.

@@ -123,3 +123,23 @@ metadata is not guessed, and overlay descriptors may serve separate generations.
 Load binding is independent of copy-event presence; producer tuples and existing
 DMA coverage obligations agree. Focused tests, full locked plaid-core, fmt and
 strict Clippy pass. No branch workflow or upstream implementation is included.
+
+## Batch 6: global fetch-summary realizability
+
+Four adversaries reproduced on batch-5 main; two original controls passed.
+Reviewed/adopted the quota scheduling validator and six regressions from
+`research/fetch-summary-realizability-gpt56sol`, superseding both that candidate
+and `research/fetch-summary-sequence-coverage-gpt56sol`. Interval union alone
+misses endpoint/quota collisions. The endpoint-gap sweep retains separate
+per-summary and provenance checks and does not expand every sequence position.
+
+Retained the independent Python exact-assignment experiment: 21,845 concrete
+histories, 949 unique genuine sets, 20,000 oracle comparisons (9,184 feasible,
+10,816 impossible), zero disagreements and a million-event sparse probe reproduce
+SHA-256 `7c7e9a402accdcb8e7d9288a946fdc5cb15d106f483fac61042f9ffc20ad5f2a`.
+Added a primary bounded exhaustive concrete-history oracle against actual Rust
+validation for up to six events and three distinct summaries, including equal
+payloads. All seven focused tests, full locked core, fmt and strict Clippy pass.
+The exact Rabbitizer checkout/manifest/lock/reference revision remains
+`724a49a5b4dbfb99f1a9e6992e63964fd29c90c8`. Realizability supplies no original
+source authentication, mutation census, executable lifetime or closure receipt.
