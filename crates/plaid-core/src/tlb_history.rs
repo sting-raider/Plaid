@@ -126,11 +126,7 @@ struct ObservedWrite {
 }
 
 fn require(ok: bool, message: &str) -> Result<(), String> {
-    if ok {
-        Ok(())
-    } else {
-        Err(message.into())
-    }
+    if ok { Ok(()) } else { Err(message.into()) }
 }
 
 fn validate_fingerprint(value: &TlbEntryFingerprint) -> Result<(), String> {
@@ -175,7 +171,10 @@ pub fn inspect_tlbwi_history(
                 cp0_index,
                 staged_entry,
             } => {
-                require(ordinal == next_ordinal, "noncontiguous TLBWI event ordinals")?;
+                require(
+                    ordinal == next_ordinal,
+                    "noncontiguous TLBWI event ordinals",
+                )?;
                 next_ordinal += 1;
                 require(active.is_none(), "nested TLBWI begin")?;
                 require(context == ordinal, "TLBWI context must equal begin ordinal")?;
@@ -206,9 +205,14 @@ pub fn inspect_tlbwi_history(
                 before_entry,
                 after_entry,
             } => {
-                require(ordinal == next_ordinal, "noncontiguous TLBWI event ordinals")?;
+                require(
+                    ordinal == next_ordinal,
+                    "noncontiguous TLBWI event ordinals",
+                )?;
                 next_ordinal += 1;
-                let current = active.as_mut().ok_or("TLBWI write without active instruction")?;
+                let current = active
+                    .as_mut()
+                    .ok_or("TLBWI write without active instruction")?;
                 require(context == current.context, "TLBWI write context mismatch")?;
                 require(current.write.is_none(), "duplicate TLBWI write boundary")?;
                 require(
@@ -233,9 +237,14 @@ pub fn inspect_tlbwi_history(
                 pc,
                 exception_code,
             } => {
-                require(ordinal == next_ordinal, "noncontiguous TLBWI event ordinals")?;
+                require(
+                    ordinal == next_ordinal,
+                    "noncontiguous TLBWI event ordinals",
+                )?;
                 next_ordinal += 1;
-                let current = active.take().ok_or("TLBWI end without active instruction")?;
+                let current = active
+                    .take()
+                    .ok_or("TLBWI end without active instruction")?;
                 require(
                     (context, epoch, pc) == (current.context, current.epoch, current.pc),
                     "TLBWI end context mismatch",
