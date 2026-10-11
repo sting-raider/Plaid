@@ -70,6 +70,7 @@ struct Backing {
 
 #[derive(Debug, Clone, Copy)]
 struct Resident {
+    physical: PhysicalAddr,
     generation: u64,
     fill_ordinal: u64,
     word: u32,
@@ -142,6 +143,13 @@ fn valid_identity_rdram_word(physical: PhysicalAddr) -> bool {
     physical.0 <= 0x007f_fffc && physical.0.is_multiple_of(4)
 }
 
+// The VR4300 instruction cache is 16 KiB, direct-mapped, with 32-byte lines.
+// Within this bounded identity-RDRAM scope, these nine index bits determine the
+// resident slot. Physical identity remains separate and is checked at fetch.
+fn icache_slot(physical: PhysicalAddr) -> u16 {
+    ((physical.0 >> 5) & 0x01ff) as u16
+}
+
 fn direct_physical(root: GuestVirtualAddr) -> PhysicalAddr {
     PhysicalAddr((root.0 & 0x1fff_ffff) as u32)
 }
@@ -198,7 +206,7 @@ pub fn inspect_cached_general_exception_root_history(
     )?;
 
     let mut backing = BTreeMap::<PhysicalAddr, Backing>::new();
-    let mut resident = BTreeMap::<PhysicalAddr, Resident>::new();
+    let mut resident = BTreeMap::<u16, Resident>::new();
     let mut backing_generation = 0u64;
     let mut resident_generation = 0u64;
     let mut resolution = None;
@@ -243,8 +251,9 @@ pub fn inspect_cached_general_exception_root_history(
                 }
                 resident_generation += 1;
                 resident.insert(
-                    physical,
+                    icache_slot(physical),
                     Resident {
+                        physical,
                         generation: resident_generation,
                         fill_ordinal: ordinal,
                         word,
@@ -257,7 +266,7 @@ pub fn inspect_cached_general_exception_root_history(
                     valid_identity_rdram_word(physical),
                     "invalid identity-RDRAM cache invalidation",
                 )?;
-                resident.remove(&physical);
+                resident.remove(&icache_slot(physical));
             }
             Event::RootFetch {
                 pc,
@@ -274,7 +283,11 @@ pub fn inspect_cached_general_exception_root_history(
                     "root fetch does not match bounded cached exception root",
                 )?;
                 let current = backing.get(&physical).copied();
-                resolution = Some(match resident.get(&physical).copied() {
+                let resident_line = resident
+                    .get(&icache_slot(physical))
+                    .copied()
+                    .filter(|line| line.physical == physical);
+                resolution = Some(match resident_line {
                     None => ExceptionRootFetchResolution::Unknown {
                         reason: RootHistoryUnknownReason::MissingResidentGeneration,
                         fetch_ordinal: ordinal,
@@ -653,6 +666,49 @@ mod tests {
         assert_eq!(binding.backing_generation_at_fill, 1);
         assert_eq!(binding.current_backing_generation, Some(1));
         assert_eq!(report.backing_generations, 2);
+    }
+
+    #[test]
+    fn conflicting_direct_mapped_fill_evicts_equal_value_root_residency() {
+        let alias = PhysicalAddr(0x4180);
+        assert_eq!(icache_slot(PHYS), icache_slot(alias));
+        let report = inspect(vec![
+            Event::BackingWrite {
+                ordinal: 1,
+                physical: PHYS,
+                word: OLD,
+            },
+            Event::Fill {
+                ordinal: 2,
+                physical: PHYS,
+                word: OLD,
+            },
+            Event::BackingWrite {
+                ordinal: 3,
+                physical: alias,
+                word: OLD,
+            },
+            Event::Fill {
+                ordinal: 4,
+                physical: alias,
+                word: OLD,
+            },
+            Event::RootFetch {
+                ordinal: 5,
+                pc: ROOT,
+                physical: PHYS,
+                cached: true,
+                word: OLD,
+            },
+        ])
+        .unwrap();
+        assert!(matches!(
+            report.resolution,
+            ExceptionRootFetchResolution::Unknown {
+                reason: RootHistoryUnknownReason::MissingResidentGeneration,
+                ..
+            }
+        ));
     }
 
     #[test]

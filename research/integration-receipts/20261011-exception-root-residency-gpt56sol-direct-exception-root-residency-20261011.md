@@ -65,6 +65,11 @@ Module tests cover:
 9. source-hash tampering and reordered ordinals are rejected;
 10. wrong root PC or resident payload is rejected;
 11. BEV=1 and TLB-refill scopes remain unsupported instead of being generalized from this fixture.
+12. equal-value fill at physical `0x4180` evicts the prior `0x180` resident because both occupy the same direct-mapped I-cache slot; the later root fetch remains `UNKNOWN`.
+
+## Review hardening
+
+A withdrawn overlapping integration worker identified a pre-merge adversary in the first draft: residency was keyed by full physical address, which could preserve two impossible simultaneous residents in one direct-mapped cache slot. The production replay now keys resident state by the VR4300 16 KiB / 32-byte-line cache slot while retaining exact physical identity in the resident witness. Every fill replaces the slot, invalidation conservatively cuts the slot, and a fetch can reuse a resident only when that slot's exact physical identity matches. Equal-value alias fills do not rescue the evicted witness. This finding blocked main integration until the revised branch passed the full canonical gates.
 
 ## Canonical validation
 
