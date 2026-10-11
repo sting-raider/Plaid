@@ -5,8 +5,9 @@ Worker: `gpt56sol-direct-tlbwr-generation-20261011`
 Cluster: source-bound TLBWR random-selected mapping-operation generations
 Initial base: `bbfafdee69f1d641c6325b5fc3fecb5b22bcedc5`
 Final validated canonical parent: `24689113469e0a3325601d7b6fd41b4d06ecf761`
-Validated integration head before documentation: `c9d378e171409e02a522be397b5d028c75e7ef71`
-Final validation Actions run: `38154502907`
+Validated integration head before documentation: `03af6e53369d3710359ca35812fd52ce07eaad53`
+Final validation Actions run: `38154288333`
+Documentation finalizer Actions run: `38154502907`
 
 ## Source research
 
