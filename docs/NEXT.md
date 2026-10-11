@@ -168,6 +168,9 @@ DMEM sinks and then compose actual instruction/dataflow evidence; same-PC/value
 matching alone is not ultimate source provenance.
 
 Controlled RSP DMEM sink replay now passes actual scalar/vector/wrap/same-value
-cases. Compose it with actual CPU SP refetch to retain distinct writer contexts
-and CPU-overwrite boundaries. Keep initial byte snapshots explicit; neither
-matching values nor instruction PCs prove ultimate producer dataflow/lifetime.
+cases. Controlled CPU SP refetch composition now also preserves scalar/vector
+partial writers, neighboring writes, same-value CPU overwrite and unknown
+foreign-sink cuts under independent checkpoint checks. Extend actual producer
+instruction/dataflow evidence and complete-history source rechecking before
+any broader promotion. Keep initial byte snapshots explicit; neither matching
+values nor instruction PCs prove ultimate producer dataflow/lifetime.

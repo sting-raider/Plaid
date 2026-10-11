@@ -493,9 +493,13 @@ forgeries pass. Same-value stores remain distinct, foreign sinks are excluded,
 and all prior 29 self-store results remain exact. The controlled CPU refetch
 composition now passes 31 records, eight RSP byte writes, one CPU Word write,
 four backing-read samples and ten forged histories. Every reported independent
-reference/disabled/enabled/repeated checkpoint agrees. Partial/vector stores
-and foreign-sink boundaries remain separate integration work; complete
-mutation/lifetime/native coverage stays uncertified (ADR-0077).
+reference/disabled/enabled/repeated checkpoint agrees. The reconciled extended
+fixture adds scalar/vector partial stores, neighboring writes and foreign-sink
+boundaries: 78 records, fifteen RSP byte effects, two CPU Word effects, three
+foreign effects and ten backing reads. Nineteen independent checkpoints agree;
+seventeen forgeries fail, while three fool payload-only replay. Unknown sinks
+cut only touched byte lineage. Complete mutation/lifetime/native coverage
+stays uncertified (ADR-0077).
 
 2026-10-11 integration harvest: finite-static closure now rejects contradictory
 guest/physical executable ownership, overlapping instruction values, stale

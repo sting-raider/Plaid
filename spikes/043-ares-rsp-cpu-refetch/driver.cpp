@@ -19,7 +19,7 @@ struct CombinedEvent {
 };
 static std::vector<CombinedEvent> combined;
 static u32 phase=0,cpuContext=0,activeRsp=0,activePc=0,activeWord=0;
-static bool observing=false;
+static bool observing=false,retainForeign=false;
 static void add(u32 kind,u32 address=0,u32 bank=0,u32 offset=0,u32 bytes=0,u64 value=0,bool write=false) {
   if(!observing) return;
   combined.push_back({kind,u32(combined.size()+1),phase,cpuContext,activeRsp,activePc,activeWord,address,bank,offset,bytes,cpu.ipu.pc,value,write});
@@ -38,11 +38,14 @@ static void rspBoundary(bool begin,u32 pc,u32 word,u32 next,bool halted) {
   else { if(!activeRsp || pc!=activePc || word!=activeWord) std::abort();add(5,next,0,0,0,halted);activeRsp=activePc=activeWord=0; }
 }
 static void dmemSink(u32 offset,u32 bytes,u64 value) {
-  if(!activeRsp) return;add(4,0,0,offset,bytes,value,true);
+  if(!activeRsp && !retainForeign) return;
+  add(activeRsp ? 4 : 6,0,0,offset,bytes,value,true);
 }
 #endif
 int main(int argc,char** argv) {
-  if(argc!=2) return 2;
+  if(argc<2 || argc>3 || (strcmp(argv[1],"plain") && strcmp(argv[1],"traced"))) return 2;
+  bool extended=argc==3;
+  if(extended && strcmp(argv[2],"extended")) return 2;
   Headless frontend;platform=&frontend;
   frontend.cartPak->setAttribute("title","Plaid RSP CPU refetch fixture");
   frontend.cartPak->setAttribute("region","NTSC");frontend.cartPak->setAttribute("cic","CIC-NUS-6102");
@@ -57,9 +60,10 @@ int main(int argc,char** argv) {
   std::vector<u8> hidden(rdram.ram.size/2);rdram.hidden.data=hidden.data();
   rsp.dmem.fill();rsp.imem.fill();
   rsp.dmem.write<Word>(0,0x34081111);
+  if(extended) rsp.dmem.write<Word>(4,0x34083333);
   rsp.imem.write<Word>(0,0xac220000);rsp.imem.write<Word>(4,13);
   rdram.ram.write<Word>(0x6000,0xae090000,RBusDevice::ARES_DEBUGGER);
-  bool traced=!strcmp(argv[1],"traced");observing=traced;
+  bool traced=!strcmp(argv[1],"traced");observing=traced;retainForeign=extended;
   #if PLAID_COMPOSED_SENSOR
   if(traced) {
     plaidSpWordObserver=bankWord;plaidCpuFetchObserver=boundary;
@@ -76,8 +80,9 @@ int main(int argc,char** argv) {
     if(cpu.scc.cause.exceptionCode || cpu.ipu.r[8].u32!=expected) std::abort();
     checkpoints.push_back(checkpoint());
   };
-  auto rspStep=[&](u32 p) {
-    phase=p;rsp.ipu.r[1].u32=0x1000;rsp.ipu.r[2].u32=0x34082222;
+  auto rspStep=[&](u32 p,u32 instruction=0xac220000,u32 base=0x1000,u32 value=0x34082222,u8 vectorByte=0) {
+    phase=p;rsp.ipu.r[1].u32=base;rsp.ipu.r[2].u32=value;
+    rsp.vpu.r[2].byte(0)=vectorByte;rsp.imem.write<Word>(0,instruction);
     rsp.pipeline={};rsp.branch.setPc(0);rsp.ipu.pc=0;rsp.status.halted=0;
     for(u32 guard=0;guard<8 && !rsp.status.halted;guard++) rsp.instruction();
     if(!rsp.status.halted) std::abort();checkpoints.push_back(checkpoint());
@@ -87,6 +92,16 @@ int main(int argc,char** argv) {
   rspStep(4);cpuStep(5,0xffffffffa4020000ull,0x2222);
   cpu.ipu.r[16].u64=0xffffffffa4000000ull;cpu.ipu.r[9].u64=0x34083333;
   cpuStep(6,0xffffffffa0006000ull,0x2222);cpuStep(7,0xffffffffa4000000ull,0x3333);
+  if(extended) {
+    rspStep(8,0xac220000,4,0x34083333);cpuStep(9,0xffffffffa4000000ull,0x3333);
+    rspStep(10,0xa0220000,3,0x44);cpuStep(11,0xffffffffa4000000ull,0x3344);
+    rspStep(12,(58u<<26)|(1u<<21)|(2u<<16),2,0,0x77);cpuStep(13,0xffffffffa4000000ull,0x7744);
+    phase=14;rsp.dmem.write<Byte>(3,0x44);checkpoints.push_back(checkpoint());
+    cpuStep(15,0xffffffffa4000000ull,0x7744);
+    rspStep(16,0xa0220000,3,0x44);cpuStep(17,0xffffffffa4000000ull,0x7744);
+    cpu.ipu.r[9].u64=0x34087744;
+    cpuStep(18,0xffffffffa0006000ull,0x7744);cpuStep(19,0xffffffffa4020000ull,0x7744);
+  }
   observing=false;
   if(cpuContext || activeRsp) std::abort();
   std::printf("{\"checkpoints\":[");
