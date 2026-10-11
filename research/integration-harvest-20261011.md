@@ -261,3 +261,23 @@ Fourteen focused join cases, existing ten indirect/four delay-slot cases, full
 locked workspace (including the real 512-pass frontier), fmt, strict workspace
 Clippy and synthetic CLI checks pass. Exact pinned Rabbitizer and existing
 transfer semantics remain unchanged. No whole-ROM or native scope is expanded.
+
+## Canonical CI and harvest inventory
+
+Added a production Rust workflow rather than preserving worker-specific patching
+or emulator-build scaffolding. Actions run `38129473623` at `d74b2a0` passes the
+exact decoder-pin guard, fmt, strict workspace Clippy, full workspace suite,
+synthetic CLI checks and independent fetch-summary model on Linux. The same
+semantic gates were exercised locally on Windows during integration.
+
+`integration-harvest-20261011-branches.json` retains all 157 discovered research
+heads, their note paths and matching CLOSEOUT links from the full issue ledger,
+plus both prep heads. All 45 core source/test candidate branches are reconciled
+by reviewed production fixes or retained/rejected regression proposals. The
+remaining 112 entries are explicitly indexed-only: their source contracts and
+experiments are not certified or automatically adopted. An index and a worker's
+VALIDATED label do not substitute for primary reproduction or production proof.
+
+The high-confidence core integration debt is substantially reduced. Continuing
+with the existing CPU/RSP refetch composition and relevant research-only source
+contracts; preserve unknown lineage and hardware/reference disagreements.

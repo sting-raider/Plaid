@@ -561,3 +561,8 @@ Five completeness regressions reproduced on prior main; all 14 join cases,
 existing chain/slot tests and full locked workspace checks pass. Unsupported
 effects and the final transfer slot remain independent closure blockers.
 Whole-ROM/native completeness and general dataflow remain OPEN (ADR-0087).
+
+Canonical Rust CI now runs exact decoder-pin checks, formatting, strict workspace
+Clippy, the full workspace suite, synthetic CLI checks and the independent
+fetch-summary oracle on code pushes/PRs. The first main run passed at `d74b2a0`
+(Actions 38129473623); research-only emulator workflows are not promoted.
