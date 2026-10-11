@@ -1,10 +1,10 @@
 //! Source-bound replay for bounded TLB-mapped uncached instruction fetches.
 //!
 //! This module certifies only a finite fetch-to-backing join for execution-backed
-//! 4 KiB, 16 KiB, and 64 KiB PageMask geometry. It does not mint TLB mapping or
-//! translation-context generations, prove sensor completeness, model cached
-//! I-cache residency, establish executable lifetime, or discharge closed-world
-//! obligations.
+//! low-region 4 KiB, 16 KiB, and 64 KiB PageMask geometry. It does not mint TLB
+//! mapping or translation-context generations, prove sensor completeness, model
+//! cached I-cache residency, establish executable lifetime, or discharge
+//! closed-world obligations.
 
 use crate::{
     program::{GuestVirtualAddr, PhysicalAddr},
@@ -190,10 +190,17 @@ fn validate_mapping(
     reverse_endian: bool,
 ) -> Result<(u32, u8), String> {
     validate_ref(&mapping.mapping_ref, "invalid mapping reference")?;
-    require(mapping.region <= 3, "invalid TLB region")?;
+    require(
+        mapping.region == 0 && vaddr.0 <= MASK40,
+        "mapped fetch is outside execution-backed low-region address scope",
+    )?;
     require(mapping.lo0.cca <= 7 && mapping.lo1.cca <= 7, "invalid TLB CCA")?;
 
     let geometry = geometry(mapping.raw_page_mask)?;
+    require(
+        !reverse_endian || geometry.normalized_page_mask == 0,
+        "reverse-endian large-PageMask composition is outside execution-backed scope",
+    )?;
     require(
         mapping.virtual_address <= MASK40
             && mapping.virtual_address == (mapping.virtual_address & geometry.address_mask_hi),
@@ -208,10 +215,6 @@ fn validate_mapping(
     require(
         (v40 & geometry.address_mask_hi) == mapping.virtual_address,
         "virtual address does not match supplied TLB mapping",
-    )?;
-    require(
-        ((vaddr.0 >> 62) & 3) == u64::from(mapping.region),
-        "virtual address region does not match supplied TLB mapping",
     )?;
     if !mapping.global0 {
         require(mapping.asid == current_asid, "non-global TLB ASID mismatch")?;
