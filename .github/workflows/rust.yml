@@ -12,6 +12,7 @@ on:
       - "refs.lock.toml"
       - "scripts/test_cli.py"
       - "experiments/fetch-summary-realizability/model.py"
+      - "spikes/044-ares-cpu-copy-dataflow/**"
       - ".github/workflows/rust.yml"
   pull_request:
     paths:
@@ -23,6 +24,7 @@ on:
       - "refs.lock.toml"
       - "scripts/test_cli.py"
       - "experiments/fetch-summary-realizability/model.py"
+      - "spikes/044-ares-cpu-copy-dataflow/**"
       - ".github/workflows/rust.yml"
   workflow_dispatch:
 
@@ -63,5 +65,7 @@ jobs:
         run: cargo test --locked --workspace
       - name: Synthetic CLI checks
         run: python scripts/test_cli.py
+      - name: Synthetic CPU-copy history contracts
+        run: python spikes/044-ares-cpu-copy-dataflow/test_verify.py
       - name: Independent fetch-summary assignment oracle
         run: python experiments/fetch-summary-realizability/model.py
