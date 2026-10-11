@@ -6,8 +6,8 @@
 //! does not claim mutation-census, reachability, lifetime, or whole-ROM closure.
 use crate::{
     exception_roots::{
-        resolve_exception_root, ExceptionClass, ExceptionRootInput, ExceptionRootReceipt,
-        ExceptionVectorClass, KernelAddressMode,
+        ExceptionClass, ExceptionRootInput, ExceptionRootReceipt, ExceptionVectorClass,
+        KernelAddressMode, resolve_exception_root,
     },
     program::PhysicalAddr,
     rom::sha256,
@@ -122,11 +122,7 @@ struct ResidentGeneration {
 }
 
 fn require(ok: bool, message: &str) -> Result<(), String> {
-    if ok {
-        Ok(())
-    } else {
-        Err(message.into())
-    }
+    if ok { Ok(()) } else { Err(message.into()) }
 }
 
 fn require_validated_root(input: ExceptionRootInput) -> Result<ExceptionRootReceipt, String> {
@@ -269,7 +265,7 @@ pub fn verify_exception_root_generation_report(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     fn input() -> Value {
         json!({
@@ -453,8 +449,7 @@ mod tests {
 
     #[test]
     fn rejects_wrong_physical_or_root_scope() {
-        let wrong_physical =
-            json!({"kind":"backing_write","ordinal":1,"physical":388,"word":1});
+        let wrong_physical = json!({"kind":"backing_write","ordinal":1,"physical":388,"word":1});
         assert!(inspect(vec![wrong_physical]).is_err());
 
         let mut wrong_root = root(2, 1);
