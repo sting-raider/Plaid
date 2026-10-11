@@ -1705,3 +1705,28 @@ in access provenance rather than replacing them with geometry guesses. Geometry
 does not select/authenticate an entry, mint mapping generations or prove ASID,
 global/region/valid/dirty/CCA, backing bytes, cache residency, lifetime or complete
 executable coverage. No upstream implementation or solver/native waiver is added.
+
+## ADR-0108: Guest Cause writes produce only software pending generations
+
+Status: Accepted for bounded compiler-time observed-history inspection, 2026-10-11.
+
+An observed successful guest MTC0 Cause write replaces IP0/IP1 and preserves
+IP2..IP7 as separately produced state. Mint a fresh operation generation for
+every successful write, including unchanged pending bits; a faulting attempt
+has no successful effect. Require decoded instruction context, matching raw
+operand/pre-state, one actual effect boundary and completed instruction identity.
+Architectural source register zero must supply zero.
+
+Authenticate all typed source bytes against an externally trusted digest and
+reconstruct every report field during verification. Reject omissions, reordered
+or duplicate boundaries, operand/context decoys and edited certification flags.
+Hardware changes between independent attempts do not imply guest Cause ownership.
+
+The saved 21 actual ares state rows support the producer relation and independently
+evaluated next-boundary gate. Their adapted protocol ordinals are synthetic, and
+the reference driver stages Status.IM between boundaries: neither proves sensed
+guest writer chronology. Exact pinned Gopher/Mupen sources support the ownership
+contract; no upstream implementation enters production. Raw operand ancestry,
+complete sensor coverage, hardware/timer producer semantics, interrupt chronology,
+handler source/lifetime, root census and whole-ROM/native completeness remain
+OPEN. All corresponding report flags remain false; no solver waiver.

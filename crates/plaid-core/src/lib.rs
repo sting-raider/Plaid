@@ -60,6 +60,7 @@ pub mod program;
 pub mod reset_cache_lifetime;
 pub mod rom;
 pub mod root_provenance;
+pub mod software_interrupt;
 pub mod solver;
 pub mod sp_dma_egress;
 pub mod sp_history;
