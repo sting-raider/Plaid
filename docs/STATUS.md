@@ -509,6 +509,13 @@ synthetic contract tests pass. Equal-value decoys, ORI clobbers and NOP gaps do
 not certify. This remains a research contract; production copy/lifetime/native
 certificates are not installed (ADR-0088).
 
+The bounded adjacent LW/LWU-XORI-SW contract now also passes twenty independent
+reported instruction checkpoints, four intended transform certificates, thirteen
+measured forgeries and six synthetic regressions. Wrong-source equal-bit XORI
+does not certify; XORI zero retains a distinct observed transform context. Copy
+mode is unchanged and excludes transforms. General transformation, executable
+consumption/lifetime and production/native certificates remain OPEN (ADR-0089).
+
 2026-10-11 integration harvest: finite-static closure now rejects contradictory
 guest/physical executable ownership, overlapping instruction values, stale
 content-derived image IDs and incompatible known Region/CodeImage provenance.

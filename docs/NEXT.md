@@ -180,3 +180,8 @@ GPR continuity, sequential PCs and independent instruction checkpoints. Before
 production copy promotion, compose complete execution-attempt/source histories
 and eventual executable consumption. Keep cached, transformed, non-adjacent,
 interrupt and lifetime cases unknown; the callback alone is not a census.
+
+The one-step adjacent XORI source contract is also reconciled, including explicit
+zero-immediate transform identity. Preserve this exact def-use boundary when
+composing broader producer evidence; matching transformed values does not select
+a source generation. Decompression/relocation and general dataflow remain open.

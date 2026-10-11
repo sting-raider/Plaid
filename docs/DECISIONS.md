@@ -1313,3 +1313,22 @@ This accepts only a controlled evidence primitive. Instruction callbacks miss
 some early-return attempts, so complete source/attempt authentication and
 executable consumption/lifetime must precede any production copy certificate.
 No general dataflow or native closure gate is weakened.
+
+## ADR-0089: Preserve explicit identity for bounded XORI transformations
+
+Status: Accepted for controlled research verification, 2026-10-11.
+
+Reuse the strict adjacent-copy instruction/scalar verifier under an explicit
+XORI mode, requiring contiguous captured load/XORI/store contexts and exact
+register def-use. Preserve source, transform and sink identities separately,
+including XORI zero. Retain full architectural continuity, canonical uncached
+Word effects and big-endian per-byte masks; ordinary copy mode excludes XORI.
+The unmodified research verifier accepted three additional continuity/address
+forgeries and is rejected. Per-instruction independent-reference checkpoints
+and adversarial/equal-value controls precede acceptance of the bounded contract.
+
+This is not a general transform algebra or complete execution/producer census.
+Eventual executable consumption, lifetime and complete source authentication
+remain required before production promotion. Original observer/shadow generation
+is shared; upstream implementations, branch workflows and custom compiler
+scaffolding are not imported into production. No native gate is weakened.
