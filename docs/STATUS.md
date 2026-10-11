@@ -738,3 +738,14 @@ read 17 does not replace the t0 definition from read 14. Same-value reloads,
 equal-result ORI cuts, failed-load cuts and cross-protocol gates pass ten focused
 Rust tests plus CLI/fmt/strict Clippy. General producer/capture completeness,
 storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
+
+
+- Production now exposes a bounded `exception_roots` primitive for R4300
+  general/TLB executable-root candidates. It keeps general, TLB-invalid and true
+  TLB-miss classification explicit, selects BEV base independently, and preserves
+  the 32-bit refill / 64-bit XTLB / nested-general distinction. Four Rust
+  regressions replay the validated 28-case root matrix, and the exact pinned ares
+  matrix was reproduced with its recorded result hash. This is not a root census,
+  reachability proof, handler-byte provenance/lifetime certificate, or waiver for
+  interrupt/NMI/reset/cache-error roots. The pinned Gopher64 XTLB disagreement
+  remains explicit.
