@@ -271,3 +271,14 @@ reset chronology before using them in executable-lifetime or translation proofs.
 A same-content legal TLBWI remains a distinct operation; snapshot inequality and
 equal payloads cannot recover occurrence or selected-slot identity. Complete
 sensor coverage and a full TLB mutation census remain OPEN.
+
+Production now has bounded snapshot-qualified restore epochs for the validated
+installed-TLB / translation-context / resident-I-cache tuple (ADR-0103). Compose
+canonical TLBWI operation generations and measured EntryHi/TLBR context writers
+with those roots next, then bind each restored resident line to byte-level writer/
+fill ancestry and later invalidation or replacement. Extend equivalent snapshot-
+qualified treatment to every executable-relevant serialized subsystem required
+by a declared exploration scope. A savestate load is not guest reset/NMI, and no
+pre-load equal-valued or merely latest generation may survive across a load by
+value matching. Full-system restore coverage, sensor completeness, executable
+lifetime, whole-ROM closure and native completeness remain OPEN.
