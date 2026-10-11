@@ -750,7 +750,14 @@ storage ancestry and executable lifetime/native closure remain OPEN (ADR-0100).
   interrupt/NMI/reset/cache-error roots. The pinned Gopher64 XTLB disagreement
   remains explicit.
 
-
-### Production CPU mutation replay (2026-10-11)
-
-- Production now exposes a bounded source-bound `cpu_mutation` consumer for authenticated finite `SWC1`/`SDC1` histories. It rechecks complete-source SHA-256, contiguous scoped chronology, decoded COP1 cause, FR-sensitive FPR lane selection and semantic payload bytes. Cached success remains `cache_resident`; uncached success is `backing`; faulted attempts may emit no byte effect. Callback fragmentation is accepted only when non-overlapping fragments exactly cover the semantic store bytes, so emulator callback count is not promoted into a hardware atomicity claim. Focused adversarial Rust tests and the exact pinned-ares 192-case matrix reproduce. Mutation-census completeness, ultimate FPR ancestry, dirty-line writeback ancestry, executable lifetime, hardware transaction topology, solver closure and native completeness remain OPEN.
+- Production now exposes bounded source-bound `tlb_history` replay for decoded
+  TLBWI operation generations. A successful selected-slot write mints a fresh
+  ordered generation even when before/after entry content is identical; equal
+  payload in another slot cannot identify that write. Out-of-range and exception
+  attempts mint no successful generation. Complete-source SHA binding, exact
+  report reconstruction and seven adversarial Rust regression groups preserve
+  fail-closed behavior. A fresh exact-pinned ares rerun reproduces result SHA-256
+  `6ef416a44a0fb533a1e291b8adab42b158f0eb581ec81a9174509b3d6ab606e0`.
+  Sensor completeness, mapping semantics, TLBWR/context chronology, cache
+  residency, executable lifetime and whole-ROM/native completeness remain OPEN
+  (ADR-0102).
