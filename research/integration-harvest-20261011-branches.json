@@ -1534,8 +1534,11 @@
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090856489",
         "https://github.com/sting-raider/Plaid/issues/4#issuecomment-6090940545"
       ],
-      "disposition": "indexed_only",
-      "integration_commit": null
+      "disposition": "reviewed_model_only",
+      "integration_commit": null,
+      "review_note": "research/rsp-cache-compose-primary-review.md",
+      "review_base": "9232983",
+      "regression_commit": "bff5bd8"
     },
     {
       "branch": "research/rsp-vector-load-store-lineage-sol",
