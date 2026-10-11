@@ -263,3 +263,14 @@ BEV/EXL/address-mode chronology, compose each selected root with handler-byte
 provenance and cache/mapping lifetime, and independently justify interrupt,
 watch, reset/NMI and cache-error roots. Numeric vector derivation is neither
 reachability nor a complete execution-root certificate.
+
+Bounded COP1 source lineage now has a production replay consumer (ADR-0102):
+explicit completed reads feed per-byte physical FPR generations, same-value
+MTC1/DMTC1 definitions replace older origins, failed loads mint none, and stores
+select ancestry from captured store-time physical lanes. Compose this with the
+separate SWC1/SDC1 mutation-domain normalizer, actual RDRAM writer ancestry,
+D-cache residency/writeback, successful TLB contexts, reverse-endian handling,
+general FPR writers and eventual executable consumption/lifetimes. Do not derive
+physical FPR identity from equal values or architectural ft/FR; the pinned ares
+odd-FR behavior remains reference evidence rather than hardware truth.
+
