@@ -166,26 +166,14 @@ mod tests {
         // PageMask fixture. Several deliberately make bit 12 disagree with the
         // actual large-page half selector.
         assert_eq!(derived(0x0000, 0x0000_4000), (TlbEntryHalf::Even, 0));
-        assert_eq!(
-            derived(0x6000, 0x0002_1000),
-            (TlbEntryHalf::Even, 0x1000)
-        );
-        assert_eq!(
-            derived(0x6000, 0x0002_c000),
-            (TlbEntryHalf::Odd, 0)
-        );
+        assert_eq!(derived(0x6000, 0x0002_1000), (TlbEntryHalf::Even, 0x1000));
+        assert_eq!(derived(0x6000, 0x0002_c000), (TlbEntryHalf::Odd, 0));
         assert_eq!(
             derived(0x1e000, 0x0004_5000),
             (TlbEntryHalf::Even, 0x5000)
         );
-        assert_eq!(
-            derived(0x1e000, 0x0007_0000),
-            (TlbEntryHalf::Odd, 0)
-        );
-        assert_eq!(
-            derived(0x6000, 0x0008_4000),
-            (TlbEntryHalf::Odd, 0)
-        );
+        assert_eq!(derived(0x1e000, 0x0007_0000), (TlbEntryHalf::Odd, 0));
+        assert_eq!(derived(0x6000, 0x0008_4000), (TlbEntryHalf::Odd, 0));
     }
 
     #[test]
@@ -193,10 +181,7 @@ mod tests {
         // In the reference fixture bit 12 is set here, but 16 KiB geometry selects
         // the even half with bit 14. Treating bit 12 as the selector would choose a
         // valid equal-valued decoy EntryLo and fabricate a fetch source.
-        assert_eq!(
-            derived(0x6000, 0x0009_1000),
-            (TlbEntryHalf::Even, 0x1000)
-        );
+        assert_eq!(derived(0x6000, 0x0009_1000), (TlbEntryHalf::Even, 0x1000));
     }
 
     #[test]
@@ -212,12 +197,7 @@ mod tests {
 
     #[test]
     fn malformed_masks_are_not_normalized_into_supported_geometry() {
-        for mask in [
-            0b1 << 13,
-            0b111 << 13,
-            0b10 << 13,
-            0b1000 << 13,
-        ] {
+        for mask in [0b1 << 13, 0b111 << 13, 0b10 << 13, 0b1000 << 13] {
             assert_eq!(
                 validated_tlb_page_geometry(mask),
                 Err(UnsupportedTlbPageMask { page_mask: mask })
