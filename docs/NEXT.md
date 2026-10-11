@@ -103,6 +103,12 @@ Preserve expected sets independently at trusted capture/import boundaries; do no
 recreate them from edited submissions. Compose other source domains, compiled
 image projections and complete sensor/lifetime obligations next (ADR-0114).
 
+Cached general-root v1 now composes full-line slot replacement and the canonical
+pinned NMI/reset/power profile with word-specific captured backing ancestry.
+Retain v0's restricted word contract. Connect actual root-entry/fetch chronology,
+complete writers/cache/mapping census and explicit restore epochs before using
+these finite receipts as lifetime or whole-ROM proof (ADR-0115).
+
 The user-supplied Ocarina of Time US revision-2 ROM has an ignored local conditional
 entry-window baseline: 293 blocks, 45 indirect sites and an OPEN whole-ROM report.
 The explicit initial mapping is a hypothesis, not authenticated boot evidence.
