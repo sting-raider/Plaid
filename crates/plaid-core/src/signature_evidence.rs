@@ -4,10 +4,7 @@
 //! establish unique symbol identity, reachability, byte provenance, immutability,
 //! executable lifetime, exhaustive indirect targets, or closed-world readiness.
 
-use crate::{
-    program::CodeAddress,
-    rom::sha256,
-};
+use crate::{program::CodeAddress, rom::sha256};
 use serde::Serialize;
 
 pub const FORMAT: &str = "plaid-n64sym-candidate-v0";
@@ -158,11 +155,7 @@ struct SignatureDefinition {
 }
 
 fn require(ok: bool, message: &str) -> Result<(), String> {
-    if ok {
-        Ok(())
-    } else {
-        Err(message.into())
-    }
+    if ok { Ok(()) } else { Err(message.into()) }
 }
 
 fn valid_sha256(value: &str) -> bool {
@@ -196,7 +189,9 @@ fn parse_kind(token: &str) -> Result<N64SymRelocationKind, String> {
 
 fn validate_definition(definition: &mut SignatureDefinition) -> Result<(), String> {
     require(definition.key.size != 0, "zero-sized n64sym signature")?;
-    definition.relocations.sort_by_key(|relocation| relocation.offset);
+    definition
+        .relocations
+        .sort_by_key(|relocation| relocation.offset);
     require(
         definition.relocations.len() <= MAX_RELOCATIONS_PER_SIGNATURE,
         "too many n64sym relocations",
@@ -285,7 +280,10 @@ fn parse_signature_source(source: &[u8]) -> Result<Vec<SignatureDefinition>, Str
         )?;
     }
 
-    require(!definitions.is_empty(), "n64sym source contains no signatures")?;
+    require(
+        !definitions.is_empty(),
+        "n64sym source contains no signatures",
+    )?;
     for definition in &mut definitions {
         validate_definition(definition)?;
     }
@@ -307,16 +305,15 @@ fn crc32(bytes: &[u8]) -> u32 {
     !crc
 }
 
-fn normalized_bytes(
-    bytes: &[u8],
-    relocations: &[N64SymRelocation],
-) -> Result<Vec<u8>, String> {
+fn normalized_bytes(bytes: &[u8], relocations: &[N64SymRelocation]) -> Result<Vec<u8>, String> {
     let mut normalized = bytes.to_vec();
     for relocation in relocations {
         let offset = usize::try_from(relocation.offset)
             .map_err(|_| "n64sym relocation offset does not fit host usize")?;
         require(
-            offset.checked_add(4).is_some_and(|end| end <= normalized.len()),
+            offset
+                .checked_add(4)
+                .is_some_and(|end| end <= normalized.len()),
             "n64sym relocation exceeds matched bytes",
         )?;
         match relocation.kind {
@@ -457,8 +454,8 @@ mod tests {
         0x24, 0x02, 0x00, 0x01, 0x03, 0xe0, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00,
     ];
     const GAMMA: &[u8] = &[
-        0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xe0, 0x00, 0x08, 0x00, 0x00,
-        0x00, 0x00,
+        0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xe0, 0x00, 0x08, 0x00, 0x00, 0x00,
+        0x00,
     ];
 
     fn address() -> CodeAddress {
@@ -511,19 +508,26 @@ mod tests {
 
     #[test]
     fn exact_pinned_target26_normalization_matches_byte_distinct_variants() {
-        let source = b"# sig_v1\ngamma 0x0010 0x328DCA26 0xF6C672A8\n .targ26 external_target 0x000\n";
+        let source =
+            b"# sig_v1\ngamma 0x0010 0x328DCA26 0xF6C672A8\n .targ26 external_target 0x000\n";
         let mut relocated = GAMMA.to_vec();
         relocated[..4].copy_from_slice(&0x0c12_3456u32.to_be_bytes());
 
         let original = inspect(source, 0, GAMMA).unwrap();
         let variant = inspect(source, 0, &relocated).unwrap();
-        assert_ne!(original.matched_bytes_sha256(), variant.matched_bytes_sha256());
+        assert_ne!(
+            original.matched_bytes_sha256(),
+            variant.matched_bytes_sha256()
+        );
         assert_eq!(
             original.normalized_bytes_sha256(),
             variant.normalized_bytes_sha256()
         );
         assert!(original.relocation_normalized());
-        assert_eq!(original.relocations()[0].kind(), N64SymRelocationKind::Target26);
+        assert_eq!(
+            original.relocations()[0].kind(),
+            N64SymRelocationKind::Target26
+        );
         assert_eq!(original.relocations()[0].offset(), 0);
         assert_eq!(original.relocations()[0].symbol(), "external_target");
 
@@ -547,24 +551,28 @@ mod tests {
     #[test]
     fn source_receipt_revision_span_and_relocations_fail_closed() {
         let source = b"alpha 0x000C 0x076D7C20 0x92AA615F\n";
-        assert!(inspect_n64sym_candidate(
-            source,
-            &"0".repeat(64),
-            N64SYM_REVISION,
-            0,
-            address(),
-            ALPHA,
-        )
-        .is_err());
-        assert!(inspect_n64sym_candidate(
-            source,
-            &sha256(source),
-            "different-revision",
-            0,
-            address(),
-            ALPHA,
-        )
-        .is_err());
+        assert!(
+            inspect_n64sym_candidate(
+                source,
+                &"0".repeat(64),
+                N64SYM_REVISION,
+                0,
+                address(),
+                ALPHA,
+            )
+            .is_err()
+        );
+        assert!(
+            inspect_n64sym_candidate(
+                source,
+                &sha256(source),
+                "different-revision",
+                0,
+                address(),
+                ALPHA,
+            )
+            .is_err()
+        );
         assert!(inspect(source, 1, ALPHA).is_err());
         assert!(inspect(source, 0, &ALPHA[..8]).is_err());
 
@@ -593,16 +601,18 @@ mod tests {
 
         let mut forged = report.clone();
         forged.reported_name = "beta".into();
-        assert!(verify_n64sym_candidate(
-            &forged,
-            source,
-            &sha256(source),
-            N64SYM_REVISION,
-            0,
-            address(),
-            ALPHA,
-        )
-        .is_err());
+        assert!(
+            verify_n64sym_candidate(
+                &forged,
+                source,
+                &sha256(source),
+                N64SYM_REVISION,
+                0,
+                address(),
+                ALPHA,
+            )
+            .is_err()
+        );
 
         let deleted = b"# sig_v1\n";
         assert!(inspect(deleted, 0, ALPHA).is_err());
