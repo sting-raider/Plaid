@@ -7,11 +7,15 @@
 //! never substitute for that chronology. Sensor completeness, TLB/cacheability
 //! semantics, executable lifetime, and native readiness remain separate.
 
-use crate::{program::PhysicalAddr, rom::sha256};
+use crate::{
+    program::{GuestVirtualAddr, PhysicalAddr},
+    rom::sha256,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub const FORMAT: &str = "plaid-dcache-writeback-history-v0";
+pub const READ_FORMAT: &str = "plaid-dcache-resident-read-history-v1";
 const REPORT_FORMAT: &str = "plaid-dcache-writeback-report-v0";
 const SCOPE: &str = "finite_direct_kseg0_identity_rdram_aligned_word_writeback";
 const LINE_BYTES: usize = 16;
@@ -67,6 +71,42 @@ pub struct DcacheWritebackReport {
     pub native_complete: bool,
 }
 
+/// A captured backing write is diagnostic context, never the resident source.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DcacheBackingWord {
+    pub write_ordinal: u64,
+    pub from_writeback: bool,
+    pub payload: [u8; 4],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DcacheResidentReadReceipt {
+    pub read_ordinal: u64,
+    pub pc: GuestVirtualAddr,
+    pub effective_virtual: GuestVirtualAddr,
+    pub physical: PhysicalAddr,
+    pub slot: u16,
+    pub payload: [u8; 4],
+    pub resident_generation: u64,
+    pub resident_revision: u64,
+    pub origins: [DcacheByteOrigin; 4],
+    pub current_captured_backing: Option<DcacheBackingWord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DcacheResidentReadReport {
+    pub format: String,
+    pub writeback: DcacheWritebackReport,
+    pub observed_backing_word_mutations: usize,
+    pub reads: Vec<DcacheResidentReadReceipt>,
+    pub cpu_operand_dataflow_certified: bool,
+    pub pointer_table_immutability_certified: bool,
+    pub executable_target_identity_certified: bool,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct History {
@@ -77,6 +117,19 @@ struct History {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
 enum Event {
+    BackingWordMutation {
+        ordinal: u64,
+        physical: PhysicalAddr,
+        payload: [u8; 4],
+    },
+    CachedWordRead {
+        ordinal: u64,
+        pc: GuestVirtualAddr,
+        effective_virtual: GuestVirtualAddr,
+        physical: PhysicalAddr,
+        slot: u16,
+        payload: [u8; 4],
+    },
     BackingRead {
         ordinal: u64,
         physical_line: PhysicalAddr,
@@ -117,7 +170,9 @@ enum Event {
 impl Event {
     fn ordinal(&self) -> u64 {
         match self {
-            Self::BackingRead { ordinal, .. }
+            Self::BackingWordMutation { ordinal, .. }
+            | Self::CachedWordRead { ordinal, .. }
+            | Self::BackingRead { ordinal, .. }
             | Self::Fill { ordinal, .. }
             | Self::ResidentWordMutation { ordinal, .. }
             | Self::WritebackBegin { ordinal, .. }
@@ -174,6 +229,34 @@ pub fn inspect_dcache_writeback_history(
     source: &[u8],
     expected_sha256: &str,
 ) -> Result<DcacheWritebackReport, String> {
+    Ok(replay(source, expected_sha256, false)?.writeback)
+}
+
+/// Normalized completed Word operations, not a decoded LW/register/dispatch proof.
+/// Reads and exports consume the same resident generations and byte origins.
+pub fn inspect_dcache_resident_read_history(
+    source: &[u8],
+    expected_sha256: &str,
+) -> Result<DcacheResidentReadReport, String> {
+    replay(source, expected_sha256, true)
+}
+
+pub fn verify_dcache_resident_read_report(
+    report: &DcacheResidentReadReport,
+    source: &[u8],
+    expected_sha256: &str,
+) -> Result<(), String> {
+    require(
+        *report == inspect_dcache_resident_read_history(source, expected_sha256)?,
+        "D-cache resident read report does not match complete source/receipt",
+    )
+}
+
+fn replay(
+    source: &[u8],
+    expected_sha256: &str,
+    with_reads: bool,
+) -> Result<DcacheResidentReadReport, String> {
     let digest = sha256(source);
     require(
         digest == expected_sha256,
@@ -181,7 +264,7 @@ pub fn inspect_dcache_writeback_history(
     )?;
     let history: History = serde_json::from_slice(source).map_err(|error| error.to_string())?;
     require(
-        history.format == FORMAT,
+        history.format == if with_reads { READ_FORMAT } else { FORMAT },
         "unsupported D-cache writeback history format",
     )?;
 
@@ -195,6 +278,9 @@ pub fn inspect_dcache_writeback_history(
     let mut mutations = 0usize;
     let mut invalidations = 0usize;
     let mut retired_unexported = 0usize;
+    let mut backing_words = BTreeMap::<PhysicalAddr, DcacheBackingWord>::new();
+    let mut backing_mutations = 0usize;
+    let mut reads = Vec::new();
 
     for event in history.events {
         let ordinal = event.ordinal();
@@ -208,6 +294,84 @@ pub fn inspect_dcache_writeback_history(
         }
 
         match event {
+            Event::BackingWordMutation {
+                ordinal,
+                physical,
+                payload,
+            } => {
+                require(with_reads, "resident-read event in v0 writeback history")?;
+                require(
+                    pending.is_none(),
+                    "external backing mutation during active writeback",
+                )?;
+                require(
+                    physical.0.is_multiple_of(4) && physical.0 < RDRAM_BYTES,
+                    "backing word mutation outside aligned RDRAM",
+                )?;
+                backing_words.insert(
+                    physical,
+                    DcacheBackingWord {
+                        write_ordinal: ordinal,
+                        from_writeback: false,
+                        payload,
+                    },
+                );
+                backing_mutations += 1;
+            }
+            Event::CachedWordRead {
+                ordinal,
+                pc,
+                effective_virtual,
+                physical,
+                slot,
+                payload,
+            } => {
+                require(with_reads, "resident-read event in v0 writeback history")?;
+                require(pending.is_none(), "cached read during active writeback")?;
+                require(pc.0.is_multiple_of(4), "unaligned cached read PC")?;
+                let low = effective_virtual.0 as u32;
+                require(
+                    (effective_virtual.0 == u64::from(low)
+                        || effective_virtual.0 == (low as i32 as i64) as u64)
+                        && (0x8000_0000..0xa000_0000).contains(&low)
+                        && low & 0x1fff_ffff == physical.0
+                        && physical.0.is_multiple_of(4)
+                        && physical.0 < RDRAM_BYTES,
+                    "cached read outside direct KSEG0 identity aligned RDRAM",
+                )?;
+                require(
+                    u32::from(slot) == (physical.0 >> 4) & 0x1ff,
+                    "cached read slot contradicts direct identity address",
+                )?;
+                let line = lines
+                    .get(&slot)
+                    .ok_or("cached read without captured resident line")?;
+                let offset = physical
+                    .0
+                    .checked_sub(line.physical_line.0)
+                    .ok_or("cached read precedes resident line")?
+                    as usize;
+                require(
+                    offset <= LINE_BYTES - 4,
+                    "cached read selects a different resident line",
+                )?;
+                require(
+                    line.payload[offset..offset + 4] == payload,
+                    "cached read differs from captured resident bytes",
+                )?;
+                reads.push(DcacheResidentReadReceipt {
+                    read_ordinal: ordinal,
+                    pc,
+                    effective_virtual,
+                    physical,
+                    slot,
+                    payload,
+                    resident_generation: line.generation,
+                    resident_revision: line.revision,
+                    origins: line.origins[offset..offset + 4].try_into().unwrap(),
+                    current_captured_backing: backing_words.get(&physical).cloned(),
+                });
+            }
             Event::BackingRead {
                 ordinal,
                 physical_line,
@@ -246,6 +410,16 @@ pub fn inspect_dcache_writeback_history(
                         && read_payload == payload,
                     "fill/backing-read identity mismatch",
                 )?;
+                for lane in 0..if with_reads { 4 } else { 0 } {
+                    if let Some(word) = backing_words.get(&PhysicalAddr(physical_line.0 + lane * 4))
+                    {
+                        let start = lane as usize * 4;
+                        require(
+                            payload[start..start + 4] == word.payload,
+                            "fill contradicts captured backing word mutation",
+                        )?;
+                    }
+                }
                 if lines.get(&slot).is_some_and(|line| line.unexported_dirty) {
                     return Err("dirty replacement without successful writeback".into());
                 }
@@ -373,6 +547,17 @@ pub fn inspect_dcache_writeback_history(
                     origins: writeback.origins,
                 });
                 line.unexported_dirty = false;
+                for lane in 0..if with_reads { 4 } else { 0 } {
+                    let start = lane as usize * 4;
+                    backing_words.insert(
+                        PhysicalAddr(physical_line.0 + lane * 4),
+                        DcacheBackingWord {
+                            write_ordinal: ordinal,
+                            from_writeback: true,
+                            payload: payload[start..start + 4].try_into().unwrap(),
+                        },
+                    );
+                }
                 writeback.exported = true;
             }
             Event::WritebackEnd { slot, .. } => {
@@ -415,23 +600,31 @@ pub fn inspect_dcache_writeback_history(
         "source ended during active D-cache writeback",
     )?;
 
-    Ok(DcacheWritebackReport {
-        format: REPORT_FORMAT.into(),
-        scope: SCOPE.into(),
-        source_sha256: digest,
-        events: (next_ordinal - 1) as usize,
-        backing_reads,
-        fills,
-        resident_word_mutations: mutations,
-        invalidations,
-        retired_unexported_mutations: retired_unexported,
-        successful_backing_writebacks: receipts.len(),
-        receipts,
-        sensor_coverage_certified: false,
-        cache_semantics_complete: false,
-        tlb_cacheability_certified: false,
-        executable_lifetime_certified: false,
-        native_complete: false,
+    Ok(DcacheResidentReadReport {
+        format: "plaid-dcache-resident-read-report-v1".into(),
+        observed_backing_word_mutations: backing_mutations,
+        reads,
+        cpu_operand_dataflow_certified: false,
+        pointer_table_immutability_certified: false,
+        executable_target_identity_certified: false,
+        writeback: DcacheWritebackReport {
+            format: REPORT_FORMAT.into(),
+            scope: SCOPE.into(),
+            source_sha256: digest,
+            events: (next_ordinal - 1) as usize,
+            backing_reads,
+            fills,
+            resident_word_mutations: mutations,
+            invalidations,
+            retired_unexported_mutations: retired_unexported,
+            successful_backing_writebacks: receipts.len(),
+            receipts,
+            sensor_coverage_certified: false,
+            cache_semantics_complete: false,
+            tlb_cacheability_certified: false,
+            executable_lifetime_certified: false,
+            native_complete: false,
+        },
     })
 }
 

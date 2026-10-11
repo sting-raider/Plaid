@@ -4,6 +4,12 @@
 
 Implemented:
 
+- Cached Word reads now compose with the canonical D-cache writeback engine,
+  sharing resident generation/revision and per-byte origins. Captured backing
+  writes stay distinct from resident source; equal-value fills and mutations
+  preserve new identities. All five authenticated pointer cases reproduce.
+  Decoded CPU dataflow, table immutability, target lifetime and census stay OPEN.
+
 - Decoded RSP DMEM writers now compose through actual CPU LW register definitions
   into normalized IMEM SW installations in a source-bound Rust consumer. It
   retains mixed/unknown byte parents and same-value generations, checks independent

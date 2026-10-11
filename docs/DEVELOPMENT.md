@@ -146,6 +146,24 @@ not claim incoming operand ancestry, executable consumption or a complete census
 
 Use `plaid --help` and the relevant subcommand `--help` for the exact current argument list.
 
+For composed D-cache resident reads and writebacks:
+
+```bash
+plaid inspect-dcache-resident-reads <history-v1.json> <expected-source-sha256> <report.json>
+plaid verify-dcache-resident-reads <history-v1.json> <expected-source-sha256> <report.json>
+python scripts/test_dcache_resident_reads.py [retained-pointer-evidence.json]
+```
+
+The explicit `plaid-dcache-resident-read-history-v1` source extends the v0
+writeback events with completed backing Word mutations and cached Word reads.
+Direct KSEG0 identity RDRAM geometry, captured resident bytes and slot continuity
+are checked. Reads and exports share generations/revisions/byte origins; the
+nested writeback projection's source digest and event count cover the entire v1
+clock. V0 inspection/report bytes keep their previous contract and reject v1.
+Backing context records only captured writes, never invented initial writers.
+This normalized access protocol does not authenticate decoded LW operands or a
+subsequent JR, physical table immutability, complete sensing or target closure.
+
 ## Source-bound history consumers
 
 Plaid also contains strict consumers for bounded research histories. These are deliberately separate from claims of whole-ROM completeness.

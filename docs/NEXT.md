@@ -138,6 +138,15 @@ The supplied game's IPL3 matches the pinned reference CIC-6105 checksum. Existin
 them for this game; do not relabel a 6102 run or the conditional static map as
 authenticated game boot evidence.
 
+Cached Word reads now share dcache_writeback's resident state and full-line
+export ancestry (ADR-0119). Compose actual decoded CPU load/register/dispatch
+definitions and backing-writer roots with this normalized operation stream.
+Current backing content cannot replace the source of a cached pointer. Keep
+physical immutability and complete writer/guard/target/cache-lifetime coverage
+separate; the finite read/writeback report grants no table certificate. The
+physical-immutability prepared histories remain pending composition with an
+authenticated snapshot and complete mutation census.
+
 EBus hidden fetches require a separate derived-bits source witness or Unknown; retain actual read context and hidden-storage lifecycle before any origin promotion (ADR-0062).
 
 Successful TLB-mapped uncached fetches now have finite source evidence; retain current translated/post-endian addresses in each access context and add mapping-generation/lifecycle evidence before proving alias history (ADR-0063).
