@@ -304,3 +304,8 @@ The inventory now distinguishes these two reconciled source contracts from the
 workflow or manual build scaffolding is imported into production. These finite
 contracts establish neither complete sensing nor lifetime, general dataflow,
 hardware equivalence, whole-ROM or native closure. Milestone state is unchanged.
+
+Canonical Actions run `38131501041` passes at `72e557a`, including the added
+seven synthetic CPU-copy history regressions alongside the existing Rust/CLI/
+model gates. This CI step checks the finite history contract; it does not run
+the separate pinned ares neutrality fixture or certify sensor completeness.
