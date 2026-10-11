@@ -281,3 +281,10 @@ Reproduce BEV=1 refill/XTLB source behavior separately before extending the rule
 and independently discharge interrupt/watch/cache-error/reset/NMI roots. Repeated
 coalesced PIF observations, equal returned bits and matching mirrors stay OPEN
 without per-occurrence same-fetch backing identity.
+
+Runtime relocation now has a source-bound compiler-time history replay for the
+bounded HI16/LO16 transform contract. Next, join that replay to an authenticated
+guest relocation producer/mutation census and causal load ancestry, then compose
+its storage generations with mapping aliases, cache-resident generations and
+executable lifetimes. Do not clear `unverified_relocation` from a descriptive
+site/kind/target tuple or from finite transform replay alone.
