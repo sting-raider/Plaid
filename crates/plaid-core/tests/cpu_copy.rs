@@ -250,3 +250,96 @@ fn big_endian_byte_expressions_preserve_zero_transform_and_recheck_every_lane() 
         plain.witnesses[0].transform_context
     );
 }
+
+fn inspect_definitions(value: &Value) -> Result<CpuCopyReport, String> {
+    let mut input = value.clone();
+    input["format"] = json!(cpu_copy::DEFINITION_FORMAT);
+    let bytes = serde_json::to_vec(&input).unwrap();
+    cpu_copy::inspect_cpu_definition_history(&bytes, &sha256(&bytes))
+}
+
+#[test]
+fn captured_definitions_survive_other_register_reads_without_value_matching() {
+    for mask in [None, Some(0), Some(0xff)] {
+        let report = inspect_definitions(&fixture(mask, false, true)).unwrap();
+        assert_eq!(report.witnesses.len(), 1);
+        let witness = &report.witnesses[0];
+        assert_eq!(
+            (witness.source.0, witness.load_context, witness.read_ordinal),
+            (0x1000, 1, 2)
+        );
+        assert_eq!(witness.xor_imm, mask);
+    }
+}
+
+#[test]
+fn same_value_load_advances_definition_but_equal_value_ori_cuts_it() {
+    let mut same_register = fixture(None, false, true);
+    for event in same_register["instruction_events"].as_array_mut().unwrap() {
+        event["gpr"][9] = json!(0);
+        if event["context"] == 4 {
+            event["word"] = json!(0x8e080100u32);
+        }
+    }
+    let report = inspect_definitions(&same_register).unwrap();
+    let witness = &report.witnesses[0];
+    assert_eq!(
+        (witness.source.0, witness.load_context, witness.read_ordinal),
+        (0x1100, 4, 5)
+    );
+
+    let mut equal_ori = fixture(Some(0), false, false);
+    for event in equal_ori["instruction_events"].as_array_mut().unwrap() {
+        if event["context"] == 4 {
+            event["word"] = json!(0x35080000u32);
+        }
+    }
+    assert!(
+        inspect_definitions(&equal_ori)
+            .unwrap()
+            .witnesses
+            .is_empty()
+    );
+}
+
+#[test]
+fn definition_protocol_is_source_bound_and_does_not_change_adjacent_policy() {
+    let original = fixture(None, false, true);
+    let bytes = serde_json::to_vec(&original).unwrap();
+    assert!(cpu_copy::inspect_cpu_definition_history(&bytes, &sha256(&bytes)).is_err());
+    assert!(inspect(&original).unwrap().witnesses.is_empty());
+    let mut definition_input = original;
+    definition_input["format"] = json!(cpu_copy::DEFINITION_FORMAT);
+    let bytes = serde_json::to_vec(&definition_input).unwrap();
+    let digest = sha256(&bytes);
+    assert!(cpu_copy::inspect_cpu_copy_history(&bytes, &digest).is_err());
+    let report = cpu_copy::inspect_cpu_definition_history(&bytes, &digest).unwrap();
+    cpu_copy::verify_cpu_definition_report(&report, &bytes, &digest).unwrap();
+    assert!(cpu_copy::verify_cpu_copy_report(&report, &bytes, &digest).is_err());
+    let mut forged = report;
+    forged.witnesses[0].read_ordinal = 5;
+    assert!(cpu_copy::verify_cpu_definition_report(&forged, &bytes, &digest).is_err());
+}
+
+#[test]
+fn failed_reload_cuts_an_older_live_definition_despite_equal_register_state() {
+    let mut value = fixture(None, false, true);
+    for event in value["instruction_events"].as_array_mut().unwrap() {
+        event["gpr"][9] = json!(0);
+        if event["context"] == 4 {
+            event["word"] = json!(0x8e080100u32);
+        }
+    }
+    value["scalar_events"].as_array_mut().unwrap().remove(1);
+    for field in ["instruction_events", "scalar_events"] {
+        for event in value[field].as_array_mut().unwrap() {
+            if event["ordinal"].as_u64().unwrap() > 5 {
+                event["ordinal"] = json!(event["ordinal"].as_u64().unwrap() - 1);
+            }
+            if event["context"].as_u64().unwrap() > 5 {
+                event["context"] = json!(event["context"].as_u64().unwrap() - 1);
+            }
+        }
+    }
+    assert!(inspect_definitions(&value).unwrap().witnesses.is_empty());
+}
