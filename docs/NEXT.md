@@ -8,8 +8,10 @@ reconciled, along with the bounded two-path join candidate. The 45 branches with
 core source/test candidates have been reconciled; remaining research-only evidence
 needs source-contract review and composition, not automatic production promotion.
 Keep TLB/cache/lifetime, producer and execution-root research separate until its
-source contracts compose; do not resume a new architecture lane ahead of this
-harvest. See `research/integration-harvest-20261011.md`.
+source contracts compose. Following user steering, prioritize production
+consumers of validated findings using authenticated swarm receipts and focused
+integration regressions; avoid repeating reference builds without a concrete
+need. No new research lane. See `research/integration-harvest-20261011.md`.
 
 1. Observe actual backing read/write transactions and unify fill/cache-operation/
    fetch/copy ordering before constructing contextual executable identities.
@@ -241,3 +243,10 @@ Keep successful context loading distinct from operation occurrence: TLBP and
 out-of-range TLBR do not supply a successful EntryHi load at the pin. Compose
 actual histories before production promotion; repeated snapshots do not recover
 same-value writer identity (ADR-0098).
+
+Original Rust CPU-copy replay now consumes the validated adjacent LW/LWU and
+one-step XORI history protocol through inspect/verify CLI commands. It preserves
+source-read and sink-write ordinals under an external complete-source receipt.
+Compose those witnesses with storage writer ancestry and eventual executable
+consumption next; a bounded copy witness is not a mutation census or solver
+certificate (ADR-0099).

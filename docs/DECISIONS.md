@@ -1504,3 +1504,22 @@ Internal installed/cache snapshots prove finite behavior rather than complete
 state or history. Index/setup/reset/backing operations are staged, leaving
 writer census and executable lifetimes open. Preserve independent reference
 disagreements and import neither upstream implementation nor branch-only CI.
+
+## ADR-0099: Consume validated CPU definitions through bounded Rust replay
+
+Status: Accepted for compiler-time observed-history inspection, 2026-10-11.
+
+Implement an original Rust consumer of the spike 044/045 CPU instruction/scalar
+protocol. Bound successful producer witnesses to decoded LW/LWU, optional one
+in-place XORI, and SW, with full GPR state and contiguous control/ordinal checks.
+Retain actual read/write ordinals and distinguish XORI zero from no transform.
+ORI/NOP cut the chain; failed loads and register zero supply no definition.
+Reject unsupported operations/domains instead of guessing value-based lineage.
+
+Require an externally trusted complete-source SHA and reconstruct every report
+field when verifying it. This binds supplied records rather than authenticating
+sensor completeness or source storage ancestry. Phase/segment boundaries cut
+chains; they do not imply a complete execution census. Keep all general origin,
+mutation/lifetime/native flags false and do not issue ProgramMap solver waivers.
+Existing authenticated captures provide behavioral comparison without repeating
+reference builds. No upstream implementation or native guest executor is added.
