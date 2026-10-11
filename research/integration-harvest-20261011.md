@@ -365,3 +365,13 @@ transplanting the self-generated model as an external-history certificate.
 45 reconciled core candidates, five source contracts, one reviewed reference
 disagreement and 107 indexed-only research heads; total 158. Production/native
 milestone state is unchanged.
+
+`4fed4b1` retains a BREAK-context negative control after reviewing
+research/rsp-dmem-cpu-copy-imem-fetch-gpt56sol. Exact input guards, the 26-event
+model and all ten adversaries reproduce `af306594330d7ec3124bb9030e8ba1f0407573a11a3c24f4dd971dbd57b6de4c`.
+The abstract verifier still accepts all producing RSP words relabelled BREAK.
+Retain its projection-loss counterexample; reject promotion into an actual
+source/fetch verifier. Nine primary finite composition contracts now pass.
+No new reference sensing or executable lifetime is claimed. Catalog counts:
+45 core, five source contracts, one reference disagreement, one model-only
+review and 106 indexed-only heads; total 158.
