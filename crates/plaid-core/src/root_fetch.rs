@@ -22,20 +22,17 @@ struct History {
     events: Vec<Event>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 enum Event {
     /// A newly authenticated storage generation at one physical word.
-    ///
-    /// This does not identify the writer that produced it. Repeated equal values
-    /// remain distinct storage generations because the event itself is distinct.
+    /// Repeated equal values remain distinct generations because the event is distinct.
     BackingGeneration {
         ordinal: u64,
         physical: PhysicalAddr,
         word: u32,
     },
-    /// A completed cache fill whose source is an exact prior backing-generation
-    /// event, not merely a word with matching contents.
+    /// A completed fill tied to one exact prior backing-generation event.
     CacheFill {
         ordinal: u64,
         physical: PhysicalAddr,
@@ -53,8 +50,7 @@ enum Event {
         ordinal: u64,
         root: GuestVirtualAddr,
     },
-    /// The actual cached handler fetch. The fill ordinal names the resident
-    /// generation that supplied the word.
+    /// The actual cached handler fetch from one exact resident fill.
     RootFetch {
         ordinal: u64,
         root: GuestVirtualAddr,
@@ -65,13 +61,13 @@ enum Event {
 }
 
 impl Event {
-    fn ordinal(&self) -> u64 {
+    fn ordinal(self) -> u64 {
         match self {
             Self::BackingGeneration { ordinal, .. }
             | Self::CacheFill { ordinal, .. }
             | Self::CacheInvalidate { ordinal, .. }
             | Self::RootTransfer { ordinal, .. }
-            | Self::RootFetch { ordinal, .. } => *ordinal,
+            | Self::RootFetch { ordinal, .. } => ordinal,
         }
     }
 }
@@ -161,7 +157,6 @@ pub fn inspect_cached_exception_root_history(
         "forged exception-root receipt",
     )?;
     let root_physical = cached_direct_physical(root_receipt.root)?;
-
     let history: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
     require(
         history.format == FORMAT,
@@ -175,13 +170,13 @@ pub fn inspect_cached_exception_root_history(
     let mut pending_transfer: Option<u64> = None;
     let mut witnesses = Vec::new();
 
-    for (index, event) in history.events.iter().enumerate() {
+    for (index, event) in history.events.iter().copied().enumerate() {
         let ordinal = event.ordinal();
         require(
             ordinal == index as u64 + 1,
             "noncontiguous cached exception-root ordinals",
         )?;
-        match *event {
+        match event {
             Event::BackingGeneration {
                 physical, word, ..
             } => {
@@ -309,9 +304,7 @@ pub fn inspect_cached_exception_root_history(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exception_roots::{
-        ExceptionClass, ExceptionRootInput, KernelAddressMode,
-    };
+    use crate::exception_roots::{ExceptionClass, ExceptionRootInput, KernelAddressMode};
     use serde_json::{json, Value};
 
     fn root() -> ExceptionRootReceipt {
