@@ -272,10 +272,15 @@ mod tests {
 
     #[test]
     fn forged_address_mapping_and_sp_bank_are_rejected() {
-        let context = context(0, 0x1122_3344);
-        let wrong_physical = effect(&context, 0xffff_ffff_a400_0000, 0x0400_1000, 0x1122_3344);
+        let sc_context = context(0, 0x1122_3344);
+        let wrong_physical = effect(
+            &sc_context,
+            0xffff_ffff_a400_0000,
+            0x0400_1000,
+            0x1122_3344,
+        );
         assert_eq!(
-            verify_sc_sp_effect(&context, Some(&wrong_physical)).unwrap_err(),
+            verify_sc_sp_effect(&sc_context, Some(&wrong_physical)).unwrap_err(),
             "SC physical destination does not match direct mapping"
         );
 
@@ -334,18 +339,23 @@ mod tests {
 
     #[test]
     fn zero_identities_and_wrong_pc_are_rejected() {
-        let mut context = context(0, 0x1122_3344);
-        context.context_id = 0;
+        let mut zero_id_context = context(0, 0x1122_3344);
+        zero_id_context.context_id = 0;
         assert_eq!(
-            verify_sc_sp_effect(&context, None).unwrap_err(),
+            verify_sc_sp_effect(&zero_id_context, None).unwrap_err(),
             "invalid SC execution context identity"
         );
 
-        let context = context(0, 0x1122_3344);
-        let mut sink = effect(&context, 0xffff_ffff_a400_0000, 0x0400_0000, 0x1122_3344);
+        let sc_context = context(0, 0x1122_3344);
+        let mut sink = effect(
+            &sc_context,
+            0xffff_ffff_a400_0000,
+            0x0400_0000,
+            0x1122_3344,
+        );
         sink.pc = GuestVirtualAddr(sink.pc.0 + 4);
         assert_eq!(
-            verify_sc_sp_effect(&context, Some(&sink)).unwrap_err(),
+            verify_sc_sp_effect(&sc_context, Some(&sink)).unwrap_err(),
             "completed SP sink is not bound to this SC execution context"
         );
     }
