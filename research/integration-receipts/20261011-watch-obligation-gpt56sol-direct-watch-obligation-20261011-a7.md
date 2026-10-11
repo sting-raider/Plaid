@@ -21,6 +21,9 @@ physical-address block through PAddr0 bits 31:3; R/W enable load/store trapping;
 CACHE is excluded; a matching enabled access raises ExcCode 23; Watch uses the
 BEV-sensitive common `+0x180` exception vector; EXL postpones Watch; and Watch
 register state is undefined after reset rather than architecturally disabled.
+The research model also keeps higher-priority exception classification separate:
+a matching Watch candidate is not admitted as an immediate Watch when a known
+higher-priority exception preempts it.
 
 Exact pinned sources used by the research are ares
 `9408cb43d4948fc3ea6e152a307a34348df3fe04`, Gopher64
@@ -38,9 +41,9 @@ but no audited load/store call site invoking it, so emulator non-observation
 cannot discharge the architectural Watch obligation.
 
 The source research remains **PARTIAL** overall. It does not validate exact
-postponed-entry timing after EXL clears, all exception-priority interactions,
-branch-delay behavior on hardware, the full privilege/ERL matrix, or a physical
-N64 system-test receipt. Those facts are not invented below.
+postponed-entry timing after EXL clears, the complete hardware exception-priority
+order, branch-delay behavior on hardware, the full privilege/ERL matrix, or a
+physical N64 system-test receipt. Those facts are not invented below.
 
 ## Reproduced current-production gap
 
@@ -65,6 +68,39 @@ decoder dependency pin, `cargo fmt --all -- --check`,
 cache/RSP/TLB contract, and the independent fetch-summary assignment oracle all
 passed.
 
+After canonical `main` advanced through RSP IMEM egress and then infrastructure
+commit `24689113469e0a3325601d7b6fd41b4d06ecf761` made the canonical Rust
+workflow manual-only, the production candidate was reconciled onto that exact
+main state. During final review the source model's explicit
+`higher_priority_exception` input exposed a missing fail-closed boundary in the
+first Rust helper. Production was hardened so an immediate Watch root now
+requires independently established `higher_priority_exception = Some(false)`;
+unknown priority remains unresolved and known preemption yields no immediate
+Watch.
+
+Because this connector-only worker had no checked-out local repository while the
+canonical workflow had intentionally stopped automatic PR runs, a temporary
+**branch-only** workflow duplicated the canonical commands for one exact
+post-drift validation. It is validation scaffolding only and is excluded from
+the production tree. Run `38154501397`, job `114514570117`, checked PR merge SHA
+`436bc6ba045e8fcf88babe702c547378ee20d6dd`, which merges hardened production
+head `b19b089b20c3f5d0c2af8c2723b1a1e23db849da` into exact main
+`24689113469e0a3325601d7b6fd41b4d06ecf761`. It passed:
+
+- exact Rabbitizer dependency pin check;
+- `cargo fmt --all -- --check`;
+- `cargo clippy --locked --workspace --all-targets -- -D warnings`;
+- `cargo test --locked --workspace`;
+- synthetic CLI checks;
+- every retained CPU-copy/XORI/CPU-SP/RSP/cache/PageMask/PI/SP-DMA/RSP-store/
+  EntryHi/TLBR synthetic contract; and
+- the independent fetch-summary assignment oracle.
+
+The same full-workspace log explicitly ran `tests/watch_roots.rs`: **7/7 passed**,
+including the new independent-priority regression, reset-unknown/CACHE behavior,
+8-byte physical matching, missing/postponed context, BEV root selection,
+same-value distinct generations, and malformed-state rejection.
+
 ## Adopted invariant
 
 Production now has a deliberately small `watch_roots` assessment primitive.
@@ -84,12 +120,17 @@ that context itself.
   produce a bounded no-immediate-Watch result.
 - CACHE is explicitly outside the Watch trigger set and is classified without
   inventing Watch register state.
-- An enabled physical match with known `EXL=false` and known BEV produces a typed
-  ExcCode-23 receipt at the existing common general `+0x180` root.
-- Missing physical address, unknown Watch state, unknown EXL/BEV, or a matching
-  access while EXL is set remains unresolved. In particular, the verifier does
-  not approximate postponed Watch as either an ordinary access or an immediate
-  exception.
+- An otherwise matching access cannot become an immediate Watch merely because
+  priority evidence is absent. Unknown higher-priority status remains unresolved;
+  a known higher-priority exception yields no immediate Watch; only independently
+  established absence of such preemption permits the bounded Watch-root result.
+- An enabled physical match with known non-preemption, `EXL=false`, and known BEV
+  produces a typed ExcCode-23 receipt at the existing common general `+0x180`
+  root.
+- Missing physical address, unknown Watch state, unknown priority/EXL/BEV, or a
+  matching access while EXL is set remains unresolved. In particular, the
+  verifier does not approximate postponed Watch as either an ordinary access or
+  an immediate exception.
 - Malformed claimed known state, including generation zero or a non-8-byte-aligned
   physical block, is rejected.
 
@@ -103,6 +144,8 @@ Focused Rust regressions cover:
 - reset-unknown versus explicit CACHE exclusion;
 - `+0` and `+4` addresses matching one 8-byte physical block while `+8` does not;
 - R/W access-class separation;
+- unknown priority remaining unresolved and known higher-priority preemption not
+  becoming an immediate Watch;
 - missing physical-address evidence;
 - unknown EXL and BEV;
 - EXL-postponed matching accesses remaining unresolved;
@@ -113,8 +156,8 @@ Focused Rust regressions cover:
 The exact research workflow additionally reran its deterministic 100,000-history
 adversarial model and exact pinned ares matrix. The research model preserves
 same-value register rewrites as separate history events and rejects forged claims
-that collapse reset-unknown, physical aliases, postponed state, BEV roots, or
-same-value generations.
+that collapse reset-unknown, physical aliases, priority preemption, postponed
+state, BEV roots, or same-value generations.
 
 ## Rejected / superseded approaches
 
@@ -127,12 +170,17 @@ are satisfied.
 
 No STATUS/NEXT/DECISIONS/progress change is made by this integration. Canonical
 NEXT/ADR state already keeps Watch as a separate OPEN whole-ROM root obligation;
-this bounded helper does not authenticate the required CP0/translation chronology,
-handler bytes, executable lifetime, root-set completeness, or any milestone.
-Changing those documents to imply otherwise would be a larger claim than the
-evidence supports.
+this bounded helper does not authenticate the required CP0/translation/priority
+chronology, handler bytes, executable lifetime, root-set completeness, or any
+milestone. Changing those documents to imply otherwise would be a larger claim
+than the evidence supports.
 
-## Files changed
+The temporary `.github/workflows/direct-watch-validation.yml` exists only on the
+integration branch to obtain the post-drift validation above. It is deliberately
+excluded from the clean production commit and does not revert or bypass the
+canonical manual-only CI policy.
+
+## Files changed in the production integration
 
 - `crates/plaid-core/src/watch_roots.rs`
 - `crates/plaid-core/src/lib.rs` (module export only)
@@ -144,10 +192,11 @@ evidence supports.
 Still OPEN:
 
 - complete/authenticated WatchLo write census and register-generation chronology;
-- BEV, EXL, ERL and privilege-mode writer chronology;
+- BEV, EXL, ERL, privilege-mode and complete exception-priority writer chronology;
 - trustworthy virtual-to-physical translation/mapping identity for every relevant
   reachable load/store, including aliases and TLB remaps;
-- exact hardware timing for EXL-postponed Watch and all exception-priority cases;
+- exact hardware timing for EXL-postponed Watch and the complete hardware
+  exception-priority matrix;
 - branch-delay Watch behavior and a physical N64/system-test receipt;
 - handler-byte provenance, mapping/cache residency and executable lifetime at the
   selected common root;
