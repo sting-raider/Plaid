@@ -204,6 +204,13 @@ nonempty sink set cannot acquire completion. Use spike062's authenticated reused
 baseline controls and `python scripts/test_rsp_definitions.py --promoted`.
 V0-v4 reports remain exact; pending/FIFO/hardware/general-lifetime flags stay open.
 
+Controlled v6 additionally requires actual Dual RAM read/IMEM install pairs and
+retains each current RAM byte writer through actual RSP fetched-word consumption.
+IMEM ingress completion counts one Dual install per block; DMEM egress counts
+two Word writes. Use spike063 controls and
+`python scripts/test_rsp_definitions.py --roundtrip`; v0-v5 reports remain exact.
+Unknown parents and equal-value overwrite cuts remain explicit; closure stays open.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,
