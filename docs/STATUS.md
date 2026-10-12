@@ -1,5 +1,13 @@
 # Status
 
+The local CIC6105 recipe now joins the existing PI/queue/SP v3 source clock to
+paired v5 capture/rechecking, with exact baseline equality. Its million-call
+source has 8,168,531 records and 1,048,576 successful canonical-ROM-origin RAM
+bytes, while request 1 still lacks completion status. All 841,500 SP fetches have
+compatible captured-writer candidates; ultimate ancestry/census/lifetime remain
+uncertified. The ten-million-call basic source also rechecks and stays OPEN,
+without observing the ROM entry. No milestone or native-readiness promotion.
+
 The retained local 6105 prefix now reaches actual RAM execution at call 843,555
 (PC ffffffff80000004, physical 4, cached, source unknown). Its million-call
 capture has 156,445 RAM fetches/41 unique RAM PCs, imports 989 summaries and

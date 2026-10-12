@@ -2236,3 +2236,11 @@ the recipe budget ceiling with the existing driver's ten-million limit and strea
 trace hashing. Actual digest replay, bounded-memory measurement and over-budget
 rejection pass; no sensor, guest semantic, closure or milestone change. The larger
 ongoing prefix is not a completion claim. See the local RAM-boundary receipt.
+
+ADR-0123 follow-up: optional PI/queue/SP capture reuses canonical spike-040 and
+source rechecking, with paired digests and independently retained baseline byte
+equality. Actual 6105 data proves a returned 1 MiB ROM-to-RAM copy while leaving
+request completion and ultimate SP ancestry uncertified. Debug/release reports
+are byte-identical; use the optimized project reader for large streams without
+rebuilding references. All census/lifetime/native flags and milestones remain
+unchanged. See the local PI/SP clock integration receipt.

@@ -33,4 +33,20 @@ receipt when selecting a configuration. No game hashes or compatibility hacks
 are embedded in the recipe. The finite prefix does not prove boot completion,
 mutation census, executable lifetime, whole-ROM closure or native completeness.
 SP/RAM fetch sources can remain unknown; the observer does not supply their
-ultimate writer ancestry. This recipe has no complete PI/SP/PIF history sidecar.
+ultimate writer ancestry.
+
+Add `--history sp` to use the existing spike-040 PI/queue/SP observer. This emits
+the original v3 history sidecar on the same source clock as the paired v5 fetch
+capture, retaining disabled/repeated controls and both source digests. Add
+`--baseline target/path/to/prior/capture` to require byte equality with an
+independently retained v5 trace, full existing checkpoint and messages. Use a
+separate build directory for this sensor; later captures reuse it when inputs
+match. Recheck the complete paired sources with canonical
+`plaid inspect-sp-writer-fetch` / `plaid verify-sp-writer-fetch`, supplying the
+independently preserved history/fetch SHA256 receipts. The recipe's header and
+footer checks do not replace that typed primitive replay.
+
+This mode preserves the existing v3 scope and has no PIF-history sidecar or
+complete mutation census. It adds no producer inference from equal values,
+queue deadlines, or raw RAM fetches. Configuration declarations, finite candidate
+writers and pending requests retain their separate proof obligations.
