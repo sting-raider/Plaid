@@ -143,6 +143,24 @@ a new sink; later equal bits cannot heal them. Keep the external receipts outsid
 editable submissions. `python scripts/test_sp_writer_fetch.py` exercises this
 composition and its legacy/source/report/input boundaries with synthetic bytes.
 
+Compose recorded PI ROM-byte writers through RAM backing, full I-cache fills and
+discrete executable consumption on the same complete v3 clock:
+
+```bash
+plaid inspect-sp-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json>
+plaid verify-sp-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json>
+```
+
+These reuse the existing finite PI byte-chain engine, retain all nested SP/queue/
+PI/access/fetch reports and bind original raw v3 writer/fill/read ordinals. Equal
+scalar/burst writes cut old backing candidates; resident cache bytes retain their
+captured parents until a witnessed replacement/invalidating transition. Unsupported
+or contradictory observations stay unknown. Sample endpoints are discrete fetches,
+not lifetime intervals; same-value unsensed writes prevent a mutation census.
+No ProgramMap identity or whole-ROM/native certificate follows from this report.
+Legacy v2 commands remain compatible. The independent spike038 replay accepts
+both formats; raw SP rows remain hashed without supplying RAM origin claims.
+
 For the declared RSP/CPU IMEM source profile:
 
 ```bash

@@ -1,7 +1,10 @@
 # Next
 
 Compose the authenticated complete twenty-million-call CIC6105 v3/v5 pair into
-RAM writer/fill/executable-consumption candidates. Canonical reconstruction now
+RAM writer/fill/executable-consumption candidates using the canonical
+`inspect-sp-pi-fetch-lineage` / `verify-sp-pi-fetch-lineage` boundary. Its full
+larger-source chain replay is ongoing; do not infer its outcome from admission
+or small-prefix controls. Canonical primitive reconstruction already
 joins request1/token6 to dispatch event1 and one status transition; its pending
 list is empty. The declared ROM entry is observed at seq17527797, cached physical
 0x400, with source unknown. Do not infer executable lifetime, mutation coverage

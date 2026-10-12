@@ -6,6 +6,12 @@ checks exact source digests, every sample/count and the ordered fetch-chain dige
 Inputs and generated outputs remain ignored. This adds no reference CPU reads,
 clock steps or runtime code and does not distribute ROM/firmware assets.
 
+The checker also accepts canonical v3 SP/PI sources and their typed
+`inspect-sp-pi-fetch-lineage` report. Keep original raw ordinals and digest all
+SP rows; they supply no RAM byte origins. The retained100k v3 prefix independently
+agrees with Rust on every count/sample/digest, including zero PI chains. V2
+remains compatible. A larger ongoing replay is not an outcome claim.
+
 Known records describe observed successful writers and witnessed fill/read paths.
 Ordinary scalar and burst writes remove prior PI chains even for equal payloads;
 cached residency survives backing changes until a witnessed cache transition
