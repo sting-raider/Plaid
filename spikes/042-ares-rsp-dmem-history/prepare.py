@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 
 
-def generate(ref,out,sp_backing=False,word_reads=False):
+def generate(ref,out,sp_backing=False,word_reads=False,dma_lifecycle=False):
     ref,out=Path(ref),Path(out)
     destination=out/'include/n64/rsp/rsp.hpp'
     header=(destination if destination.exists() else ref/'ares/n64/rsp/rsp.hpp').read_text(encoding='utf-8')
@@ -16,6 +16,10 @@ inline PlaidRspDmemObserver plaidRspDmemObserver = nullptr;
     if word_reads:
         declarations += '''using PlaidRspWordReadObserver = void (*)(u32,u32);
 inline PlaidRspWordReadObserver plaidRspWordReadObserver = nullptr;
+'''
+    if dma_lifecycle:
+        declarations += '''using PlaidRspDmaLifecycleObserver = void (*)(bool,u32,bool,u32,u32,u32,u32,u32);
+inline PlaidRspDmaLifecycleObserver plaidRspDmaLifecycleObserver = nullptr;
 '''
     marker='      if constexpr(Size == Dual) *(u64*)&data[address & maskDual] = bswap64(value);'
     assert header.count(marker)==1
@@ -56,6 +60,28 @@ inline PlaidRspWordReadObserver plaidRspWordReadObserver = nullptr;
         patched=out/'rsp-interpreter-ipu.cpp'
         patched.write_text(ipu,encoding='utf-8',newline='\n')
         marker=f'#include "{ref/"ares/n64/rsp/interpreter-ipu.cpp"}"'
+        assert rsp.count(marker)==1
+        rsp=rsp.replace(marker,f'#include "{patched}"')
+    if dma_lifecycle:
+        dma_input=out/'rsp_dma.cpp' if sp_backing else ref/'ares/n64/rsp/dma.cpp'
+        dma=dma_input.read_text(encoding='utf-8')
+        promote='''    dma.current = dma.pending;
+    dma.busy    = dma.full;
+    dma.full    = {0,0};'''
+        assert dma.count(promote)==1
+        args='dma.current.pbusRegion,dma.busy.write,dma.current.pbusAddress,dma.current.dramAddress,dma.current.length,dma.current.count,dma.current.skip'
+        dma=dma.replace(promote,promote+f'\n    if(plaidRspDmaLifecycleObserver) plaidRspDmaLifecycleObserver(true,{args});')
+        complete='''  } else {
+    dma.busy = {0,0};
+    dma.current.length = 0xFF8;'''
+        assert dma.count(complete)==1
+        dma=dma.replace(complete,f'''  }} else {{
+    if(plaidRspDmaLifecycleObserver) plaidRspDmaLifecycleObserver(false,{args});
+    dma.busy = {{0,0}};
+    dma.current.length = 0xFF8;''')
+        patched=out/'rsp-dma-lifecycle.cpp'
+        patched.write_text(dma,encoding='utf-8',newline='\n')
+        marker=f'#include "{dma_input}"'
         assert rsp.count(marker)==1
         rsp=rsp.replace(marker,f'#include "{patched}"')
     source.write_text(rsp,encoding='utf-8',newline='\n')

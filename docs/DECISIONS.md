@@ -2104,6 +2104,19 @@ remain exact. No atomic DMA generation, accepted-request/completion lifetime,
 general mutation census, cached/mapped/reset/restore or whole-ROM/native closure
 is inferred. See the RSP DMEM DMA/CPU consumption integration receipt.
 
+ADR-0118 promoted-DMA follow-up (2026-10-12): reconcile PR29's actual promotion/
+completion hooks with complete descriptor progression on the existing DMEM/RAM/
+CPU execution graph. Reject its looser grouping verifier: locally compiled
+preparation accepts a24-byte request as complete after one8-byte sink. Controlled
+v5 requires raw promotion identity, every expected Word/lane/row under length/
+count/skip/PBUS wrapping and the exact completed endpoint. Individual latest-byte
+writers remain distinct. Identity starts at actual pending->current promotion;
+mutable pending commits and sampled BUSY edges are insufficient. The136-event
+source agrees with all19 authenticated unchanged v4 controls; only the new sensor
+was built. V0-v4 reports remain exact. No general FIFO/hardware rule, accepted
+pending provenance, ingress/reset/restore/census/lifetime or whole-ROM/native
+certificate follows. See the promoted-DMA/CPU integration receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

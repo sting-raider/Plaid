@@ -1,5 +1,14 @@
 # Status
 
+Promoted-current DMA identity now composes with the RSP DMEM -> RAM -> CPU
+execution graph under controlled v5. Complete descriptor-derived Word/lane/row
+progression and endpoints are required before recording completion. A prepared
+early-completion counterexample rejects; count/skip/wrap and immediate handoff
+keep distinct request/writer IDs. The136-event pinned source matches all19
+authenticated v4 controls without rebuilding the reference baseline. V0-v4
+reports stay exact. Mutable pending/FIFO policy, ingress, general census/lifetime
+and whole-ROM/native remain OPEN; no flag promotion.
+
 RSP definitions now also reach actual CPU execution through reverse SP-DMA
 under controlled v4. Descriptor-selected DMEM byte parents survive two separate
 completed Word writes, then an actual uncached backing read/fetch and decoder

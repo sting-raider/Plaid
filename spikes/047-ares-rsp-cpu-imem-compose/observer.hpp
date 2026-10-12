@@ -17,6 +17,7 @@ static u32 composeCpuContext=0,composeCpuWord=0;
 static u64 composeCpuPc=0;
 static bool composeEnabled=false;
 static u64 composeFetchContext=0,composeFetchPc=0;
+static u64 composeDmaContext=0;
 
 static void compose_push(const char* kind,u64 context,u64 pc,u32 word,
     u32 address=0,u32 bank=0,u32 offset=0,u32 bytes=0,u64 value=0,bool cpuOrigin=false,
@@ -73,6 +74,20 @@ static void compose_sp_word(bool write,u32 address,u32 bank,u32 offset,u32 value
     composeCpuContext?composeCpuPc:cpu.ipu.pc,composeCpuWord,address,bank,offset,4,value,originCpu);
 }
 #if PLAID_RSP_DEFINITIONS_FIXTURE >= 4
+#if PLAID_RSP_DEFINITIONS_FIXTURE >= 5
+static void compose_dma_lifecycle(bool begin,u32 bank,bool write,u32 pbus,u32 dram,u32 length,u32 count,u32 skip) {
+  if(bank || !write || composeCpuContext || composeRspContext || composeFetchContext) std::abort();
+  if(begin) {
+    if(composeDmaContext) std::abort();
+    composeDmaContext=composeEvents.size()+1;
+  } else if(!composeDmaContext) std::abort();
+  compose_push(begin?"dma_promote":"dma_complete",composeDmaContext,cpu.ipu.pc,0,dram,0,pbus);
+  if(begin) {
+    auto& event=composeEvents.back();event.dmaValid=true;
+    event.dmaPbus=pbus;event.dmaDram=dram;event.dmaLength=length;event.dmaCount=count;event.dmaSkip=skip;
+  } else composeDmaContext=0;
+}
+#endif
 static void compose_ram_fetch(bool begin,u64 pc,u32 physical,u32 busAddress,bool cached,u32 value) {
   if(composeCpuContext || composeRspContext || cached || physical!=busAddress) std::abort();
   if(begin) {
@@ -93,7 +108,10 @@ static void compose_ram_scalar(bool write,u32 address,u32 bytes,u32 device,u64 v
       if(rsp.dma.current.pbusRegion || !rsp.dma.busy.write) std::abort();
       source=(rsp.dma.current.pbusAddress+(address-(u32)rsp.dma.current.dramAddress))&4095;
     }
-    compose_push("ram_write",0,cpu.ipu.pc,0,address,0,source,bytes,value);
+    #if PLAID_RSP_DEFINITIONS_FIXTURE >= 5
+    if(dma && !composeDmaContext) std::abort();
+    #endif
+    compose_push("ram_write",dma?composeDmaContext:0,cpu.ipu.pc,0,address,0,source,bytes,value);
     if(dma) {
       auto& event=composeEvents.back();auto& current=rsp.dma.current;
       event.dmaValid=true;event.dmaPbus=current.pbusAddress;event.dmaDram=current.dramAddress;
