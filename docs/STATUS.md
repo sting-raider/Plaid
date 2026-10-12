@@ -1,5 +1,13 @@
 # Status
 
+Actual RSP consumption now joins the producer/read/CPU IMEM installation graph
+under controlled v3. A full4096-byte image replay checks each fetched word and
+retains its current four byte writers; explicit opaque host seeds cut ancestry.
+The97-event pinned fixture/17 matched checkpoints independently reproduces six
+definitions, three copies and seventeen fetches, including one installed NOP.
+V0/v1/v2 reports stay byte-identical. General mutation census, executable lifetime,
+hardware consensus and whole-ROM/native closure remain OPEN; no flag promotion.
+
 Actual RSP DMEM word reads now compose with register definitions and later
 DMEM -> CPU -> IMEM copies under v2. The source reuses the original unaligned
 read result; no extra guest access. A79-event pinned source/16 matched

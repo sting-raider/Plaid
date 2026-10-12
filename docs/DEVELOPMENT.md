@@ -184,6 +184,13 @@ equal-valued decoy reads reject; zero destinations still require the read.
 Use spike059 controls and `python scripts/test_rsp_definitions.py --word-reads`.
 V0/v1 inputs/reports remain compatible; no mutation/lifetime/closure flag changes.
 
+The controlled v3 profile additionally requires complete initial/final IMEM
+images, records opaque host code seeds and checks each actually decoded RSP word
+against current modeled bytes. Discrete fetches retain four current writer IDs,
+connecting a CPU install to the existing RSP definition/copy graph. Use spike060
+controls and `python scripts/test_rsp_definitions.py --execution`. Retained
+v0/v1/v2 reports remain exact; general mutation/lifetime/closure stays uncertified.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,
