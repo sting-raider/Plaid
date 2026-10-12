@@ -1,5 +1,12 @@
 # Status
 
+The retained local 6105 prefix now reaches actual RAM execution at call 843,555
+(PC ffffffff80000004, physical 4, cached, source unknown). Its million-call
+capture has 156,445 RAM fetches/41 unique RAM PCs, imports 989 summaries and
+rechecks successfully; disabled/repeated controls agree. The ROM entry is not
+yet observed in this prefix. Larger capture uses the existing driver ceiling
+and bounded trace hashing; this changes no executable-identity/closure gate.
+
 Explicit NTSC/6105 reference boot profiles now compose with canonical boot-fetch
 import/rechecking. A user-supplied local ROM prefix passes disabled/repeated
 controls and imports 305 finite summaries from 10,000 actual PIF/SP fetches.

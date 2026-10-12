@@ -2229,3 +2229,10 @@ adversaries and the full local gate pass. No Actions execution.
 Extend actual writer/PI/SP/RAM chronology before granting executable source or
 lifetime. Boot completion, mutation census, hardware consensus, whole-ROM and
 native closure remain OPEN. No milestone promotion or game-specific hash rule.
+
+ADR-0123 follow-up (2026-10-12): the retained million-call prefix reaches low RAM
+at seq843555/PC ffffffff80000004 and preserves unknown executable identity. Align
+the recipe budget ceiling with the existing driver's ten-million limit and stream
+trace hashing. Actual digest replay, bounded-memory measurement and over-budget
+rejection pass; no sensor, guest semantic, closure or milestone change. The larger
+ongoing prefix is not a completion claim. See the local RAM-boundary receipt.
