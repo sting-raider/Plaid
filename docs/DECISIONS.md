@@ -2054,6 +2054,18 @@ cross-clock bridge. Incoming scalar/vector operands, initial storage roots,
 mutation census, IMEM execution/lifetime and whole-ROM/native completeness remain
 uncertified. All corresponding flags stay false; no milestone or solver waiver.
 
+ADR-0118 definition follow-up (2026-10-12): compose the prepared ORI/ADDU
+primitive rules with the existing full RSP snapshot/DMEM/CPU/IMEM source clock,
+not a selected-register schema or cross-clock value join. Explicit v1 admission
+checks full after-state/control, mints raw-context parent nodes, associates
+scalar sinks and clears tags at reentry. Equal definitions stay distinct;
+opaque incoming and instruction roots remain uncertified. A68-event pinned
+component/16 matched checkpoints independently reproduces four nodes/three
+copies; retained v0 report bytes stay identical. Seven focused tests, source/
+report/phase/input adversaries and full local gate pass. PR8 broader load/store
+work remains pending. No census/execution/lifetime/native or milestone promotion.
+See the RSP definition/IMEM integration receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

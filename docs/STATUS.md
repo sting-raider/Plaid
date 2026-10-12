@@ -1,5 +1,13 @@
 # Status
 
+RSP ORI/ADDU definitions now compose on the existing full-snapshot DMEM -> CPU
+LW -> IMEM SW clock under an explicit v1 profile. Fresh raw-context nodes retain
+parents and reach scalar sinks; repeated equal definitions remain distinct and
+reentry clears tags. A68-event pinned fixture/16 matched checkpoints reproduces
+four definitions and three copies; old source/report bytes remain unchanged.
+Full local gate passes. Incoming inputs/instruction ancestry, general mutation
+coverage, IMEM execution/lifetime and whole-ROM/native remain uncertified.
+
 The existing finite PI writer/fill/fetch consumer now accepts the complete v3
 SP/PI source clock with independently expected raw history/fetch digests. Raw
 writer/fill/read ordinals stay distinct from renumbered legacy projections;

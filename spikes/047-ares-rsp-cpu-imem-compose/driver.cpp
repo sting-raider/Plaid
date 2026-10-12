@@ -4,6 +4,9 @@
 #ifndef PLAID_RSP_CPU_IMEM_SENSOR
 #define PLAID_RSP_CPU_IMEM_SENSOR 1
 #endif
+#ifndef PLAID_RSP_DEFINITIONS_FIXTURE
+#define PLAID_RSP_DEFINITIONS_FIXTURE 0
+#endif
 #define main capability_fixture_main
 #include "../003-ares-oracle/driver.cpp"
 #undef main
@@ -34,7 +37,7 @@ int main(int argc,char** argv) {
   for(auto& r:rsp.ipu.r) r.u32=0;
   cpu.scc.status.exceptionLevel=cpu.scc.status.errorLevel=0;cpu.context.setMode();cpu.context.endian=CPU::Context::Endian::Big;cpu.icache.power(false);cpu.dcache.power(false);
 
-  constexpr u32 pure=0x11223344u, cpuBase=0xaabbccddu, mixed=0xaaee7722u;
+  constexpr u32 pure=PLAID_RSP_DEFINITIONS_FIXTURE?0x3344u:0x11223344u, cpuBase=0xaabbccddu, mixed=0xaaee7722u;
   rsp.dmem.write<Word>(0,0x340800aau);rsp.dmem.write<Word>(4,mixed);
   for(u32 off: {0u,4u,8u,12u,16u}) rsp.imem.write<Word>(off,0xdeadbeefu);
   const u32 words[]={insn_lw(8,16,0),insn_sw(8,16,0x1000),insn_lw(8,16,0),insn_sw(8,16,0x1004),insn_sw(9,16,0),insn_lw(8,16,0),insn_lw(9,16,4),insn_sw(8,16,0x1008),0x01404021u,insn_sw(8,16,0x100c)};
@@ -71,7 +74,14 @@ int main(int argc,char** argv) {
   };
   auto rspInstruction=[&](u32 p,u32 instruction,u32 base,u32 scalar,u8 vectorByte,u32 expected){
     phase(p);rsp.ipu.r[1].u32=base;rsp.ipu.r[2].u32=scalar;rsp.vpu.r[2].byte(0)=vectorByte;
-    rsp.imem.write<Word>(0x100,instruction);rsp.imem.write<Word>(0x104,0x0000000du);
+    u32 code=0x100;
+    if(PLAID_RSP_DEFINITIONS_FIXTURE && p==1) {
+      rsp.ipu.r[2].u32=0x13579bdfu;
+      for(u32 word:{0x3400ffffu,0x34023344u,0x34023344u,0x00401821u,0x00601021u}) {
+        rsp.imem.write<Word>(code,word);code+=4;
+      }
+    }
+    rsp.imem.write<Word>(code,instruction);rsp.imem.write<Word>(code+4,0x0000000du);
     rsp.pipeline={};rsp.branch.setPc(0x100);rsp.ipu.pc=0x100;rsp.status.halted=0;rsp.status.broken=0;
     for(u32 guard=0;guard<8&&!rsp.status.halted;guard++)rsp.instruction();
     if(!rsp.status.halted||(u32)rsp.dmem.read<Word>(0)!=expected){std::fprintf(stderr,"rsp phase=%u halted=%u expected=%08x got=%08x\n",p,(u32)rsp.status.halted,expected,(u32)rsp.dmem.read<Word>(0));std::abort();}
