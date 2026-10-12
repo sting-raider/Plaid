@@ -8,12 +8,15 @@ struct ComposeEvent {
   bool cpu,halted;
   std::vector<u64> gpr;
   std::vector<u32> rgpr;
+  bool dmaValid=false,fetchValid=false,fetchCached=false;
+  u32 dmaPbus=0,dmaDram=0,dmaLength=0,dmaCount=0,dmaSkip=0,fetchPhysical=0;
 };
 static std::vector<ComposeEvent> composeEvents;
 static u32 composePhase=0,composeRspContext=0,composeRspPc=0,composeRspWord=0;
 static u32 composeCpuContext=0,composeCpuWord=0;
 static u64 composeCpuPc=0;
 static bool composeEnabled=false;
+static u64 composeFetchContext=0,composeFetchPc=0;
 
 static void compose_push(const char* kind,u64 context,u64 pc,u32 word,
     u32 address=0,u32 bank=0,u32 offset=0,u32 bytes=0,u64 value=0,bool cpuOrigin=false,
@@ -69,6 +72,39 @@ static void compose_sp_word(bool write,u32 address,u32 bank,u32 offset,u32 value
   compose_push(write?"sp_write":"sp_read",composeCpuContext,
     composeCpuContext?composeCpuPc:cpu.ipu.pc,composeCpuWord,address,bank,offset,4,value,originCpu);
 }
+#if PLAID_RSP_DEFINITIONS_FIXTURE >= 4
+static void compose_ram_fetch(bool begin,u64 pc,u32 physical,u32 busAddress,bool cached,u32 value) {
+  if(composeCpuContext || composeRspContext || cached || physical!=busAddress) std::abort();
+  if(begin) {
+    if(composeFetchContext) std::abort();
+    composeFetchContext=composeEvents.size()+1;composeFetchPc=pc;
+  } else if(!composeFetchContext || composeFetchPc!=pc) std::abort();
+  compose_push(begin?"ram_fetch_begin":"ram_fetch_end",composeFetchContext,pc,0,busAddress,0,0,0,value,true);
+  auto& event=composeEvents.back();event.fetchValid=true;event.fetchPhysical=physical;event.fetchCached=cached;
+  if(!begin) composeFetchContext=composeFetchPc=0;
+}
+static void compose_ram_scalar(bool write,u32 address,u32 bytes,u32 device,u64 value) {
+  if(address<0x6000 || address>=0x6030) return; // Explicit declared RAM snapshot.
+  if(write) {
+    if(composeCpuContext || composeRspContext || composeFetchContext || bytes!=4) std::abort();
+    u32 source=0;
+    bool dma=device==(u32)RBusDevice::SP_DMA;
+    if(dma) {
+      if(rsp.dma.current.pbusRegion || !rsp.dma.busy.write) std::abort();
+      source=(rsp.dma.current.pbusAddress+(address-(u32)rsp.dma.current.dramAddress))&4095;
+    }
+    compose_push("ram_write",0,cpu.ipu.pc,0,address,0,source,bytes,value);
+    if(dma) {
+      auto& event=composeEvents.back();auto& current=rsp.dma.current;
+      event.dmaValid=true;event.dmaPbus=current.pbusAddress;event.dmaDram=current.dramAddress;
+      event.dmaLength=current.length;event.dmaCount=current.count;event.dmaSkip=current.skip;
+    }
+  } else if(composeFetchContext) {
+    if(device!=(u32)RBusDevice::VR4300_UNCACHED || bytes!=4) std::abort();
+    compose_push("ram_read",composeFetchContext,composeFetchPc,0,address,0,0,bytes,value,true);
+  }
+}
+#endif
 #endif
 
 static void compose_print() {
@@ -82,7 +118,10 @@ static void compose_print() {
     for(size_t i=0;i<e.gpr.size();i++) std::printf("%s%llu",i?",":"",(unsigned long long)e.gpr[i]);
     std::printf("],\"rgpr\":[");
     for(size_t i=0;i<e.rgpr.size();i++) std::printf("%s%u",i?",":"",e.rgpr[i]);
-    std::printf("]}");
+    std::printf("]");
+    if(e.dmaValid) std::printf(",\"dma\":{\"pbus\":%u,\"dram\":%u,\"length\":%u,\"count\":%u,\"skip\":%u}",e.dmaPbus,e.dmaDram,e.dmaLength,e.dmaCount,e.dmaSkip);
+    if(e.fetchValid) std::printf(",\"fetch\":{\"physical\":%u,\"cached\":%s}",e.fetchPhysical,e.fetchCached?"true":"false");
+    std::printf("}");
   }
   std::printf("]");
 }

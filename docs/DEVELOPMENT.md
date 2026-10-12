@@ -191,6 +191,13 @@ connecting a CPU install to the existing RSP definition/copy graph. Use spike060
 controls and `python scripts/test_rsp_definitions.py --execution`. Retained
 v0/v1/v2 reports remain exact; general mutation/lifetime/closure stays uncertified.
 
+Controlled v4 additionally declares a bounded identity-RAM snapshot, retains
+actual descriptor-selected DMEM reverse-DMA Word effects and requires each CPU
+decoder context to consume the exact completed uncached fetch/read. Byte parents
+stay separate from request lifetime and DMA atomicity. Use spike061 controls and
+`python scripts/test_rsp_definitions.py --dma`; v0-v3 reports remain exact.
+General mutation/cached/mapped/lifecycle/closure obligations stay open.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

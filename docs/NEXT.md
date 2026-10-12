@@ -1,13 +1,14 @@
 # Next
 
 Continue the existing RSP producer path from original-clock register definitions
-through actual installed-code consumption. Controlled v3 now joins ORI/ADDU,
-actual DMEM LW, scalar writers and CPU IMEM installs to discrete fetched words
-with a full bank image and opaque host seed cuts. Broader scalar loads/stores,
-vector inputs, DMA producers and complete mutation/lifetime coverage still need
-compatible sensing/composition. Reuse retained97-event/17-checkpoint v3 and
-v0/v1/v2 compatibility sources; no repeat reference build is needed for compatible
-consumers. A fetched word or matching final image cannot exclude unsensed writes.
+through actual installed-code consumption. Controlled v3 joins CPU IMEM installs
+to RSP fetched words; v4 additionally joins original-clock RSP definition/DMEM
+parents through separate reverse-DMA RAM writes to actual CPU fetch/decoder
+contexts. Next compose accepted request/completion lifetime, broader scalar/vector
+inputs, DMA ingress and complete mutation/cache/mapping/root lifetime coverage.
+Reuse retained134-event/19-checkpoint v4,97-event/17-checkpoint v3 and all earlier
+compatibility sources; no repeat reference build is needed for compatible consumers.
+A fetched word or matching final image cannot exclude unsensed writes.
 
 Continue from the complete twenty-million-call CIC6105 PI/fill/consumption join.
 Canonical and independent replay agree on2472203 full candidate fetches,
@@ -174,13 +175,15 @@ Rust consumer for the authenticated unified source (ADR-0118). Preserve the
 actual source clock, mixed/unknown byte parents and whole-register definition
 cuts. Extend incoming register/initialization ancestry and unify this producer
 context with boot mutation/executable-fetch sources before claiming RSP identity,
-complete mutation coverage or executable consumption/lifetime. Separate RSP
+complete mutation coverage or general executable consumption/lifetime. Controlled
+v3/v4 now establish discrete RSP and CPU consumption on their own source clock;
+they do not grant whole-ROM execution coverage. Separate RSP
 scalar/DMEM-DMA candidate histories cannot be joined by equal labels or payloads.
 
-The supplied game's IPL3 matches the pinned reference CIC-6105 checksum. Existing
-6102-only boot capture/import profiles must be extended explicitly before using
-them for this game; do not relabel a 6102 run or the conditional static map as
-authenticated game boot evidence.
+The supplied game's IPL3 matches the pinned reference CIC-6105 checksum. Explicit
+6105 capture/import support and the retained twenty-million-call prefix are now
+available. Reuse those authenticated sources; do not relabel a 6102 run or the
+conditional static map as game boot evidence.
 
 Cached Word reads now share dcache_writeback's resident state and full-line
 export ancestry (ADR-0119). Compose actual decoded CPU load/register/dispatch

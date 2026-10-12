@@ -42,12 +42,20 @@ int main(int argc,char** argv) {
   for(u32 off: {0u,4u,8u,12u,16u}) rsp.imem.write<Word>(off,0xdeadbeefu);
   const u32 words[]={insn_lw(8,16,0),insn_sw(8,16,0x1000),insn_lw(8,16,0),insn_sw(8,16,0x1004),insn_sw(9,16,0),insn_lw(8,16,0),insn_lw(9,16,4),insn_sw(8,16,0x1008),0x01404021u,insn_sw(8,16,0x100c)};
   for(u32 i=0;i<sizeof(words)/sizeof(words[0]);i++) rdram.ram.write<Word>(0x6000+i*4,words[i],RBusDevice::ARES_DEBUGGER);
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=4) {
+    rdram.ram.write<Word>(0x6028,0,RBusDevice::ARES_DEBUGGER);
+    rdram.ram.write<Word>(0x602c,0,RBusDevice::ARES_DEBUGGER);
+  }
   cpu.ipu.r[16].u64=0xffffffffa4000000ull;cpu.ipu.r[9].u64=cpuBase;cpu.ipu.r[10].u64=mixed;
 
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=traced;plaidCpuInstructionObserver=traced?compose_cpu_instruction:nullptr;plaidSpWordObserver=traced?compose_sp_word:nullptr;plaidRspInstructionObserver=traced?compose_rsp_instruction:nullptr;plaidRspDmemObserver=traced?compose_rsp_dmem:nullptr;
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 2
   plaidRspWordReadObserver=traced?compose_rsp_word_read:nullptr;
+  #endif
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 4
+  plaidRdramScalarObserver=traced?compose_ram_scalar:nullptr;
+  plaidCpuFetchObserver=traced?compose_ram_fetch:nullptr;
   #endif
   #endif
   auto phase=[](u32 n){
@@ -66,10 +74,16 @@ int main(int argc,char** argv) {
     for(u32 i=0;i<length;i++) std::printf("%s%u",i?",":"",u32(imem?rsp.imem.read<Byte>(i):rsp.dmem.read<Byte>(i)));
     std::printf("]");
   };
-  std::printf("{\"initial_dmem\":");printBytes(false,8);
+  auto printRam=[] {
+    std::printf("[");
+    for(u32 address=0x6000;address<0x6030;address++) std::printf("%s%u",address==0x6000?"":",",u32(rdram.ram.read<Byte>(address,RBusDevice::ARES_DEBUGGER)));
+    std::printf("]");
+  };
+  std::printf("{\"initial_dmem\":");printBytes(false,PLAID_RSP_DEFINITIONS_FIXTURE>=4?4096:8);
   std::printf(",\"initial_imem\":");printBytes(true,PLAID_RSP_DEFINITIONS_FIXTURE>=3?4096:20);
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=4) { std::printf(",\"initial_ram\":");printRam(); }
   auto cpuStep=[&](u32 p,u32 index){
-    phase(p);CpuStep s{};s.phase=p;s.index=index;s.word=words[index];s.pc=0xffffffffa0006000ull+index*4;
+    phase(p);CpuStep s{};s.phase=p;s.index=index;s.word=index==10?0:words[index];s.pc=0xffffffffa0006000ull+index*4;
     for(u32 n=0;n<32;n++)s.before[n]=cpu.ipu.r[n].u64;
     cpu.pipeline.setPc(s.pc);if(cpu.instruction())cpu.synchronize();
     if(cpu.scc.cause.exceptionCode||cpu.scc.sysadFrozen){std::fprintf(stderr,"cpu phase=%u exception=%u frozen=%u\n",p,(u32)cpu.scc.cause.exceptionCode,(u32)cpu.scc.sysadFrozen);std::abort();}
@@ -108,12 +122,19 @@ int main(int argc,char** argv) {
     rsp.status.halted=0;rsp.status.broken=0;rsp.instruction();rsp.status.halted=1;
     checkpoint();
   }
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=4) {
+    rsp.writeWord(0x04040000,0,cpu);rsp.writeWord(0x04040004,0x6028,cpu);
+    rsp.writeWord(0x0404000c,0,cpu);
+    if(!rsp.dma.busy.write || rsp.dma.current.pbusRegion) std::abort();
+    rsp.dmaTransferStep();checkpoint();
+  }
   rspInstruction(4,rspSw,0,pure,0,pure);cpuStep(5,2);cpuStep(6,3);
   cpu.ipu.r[9].u64=cpuBase;cpuStep(7,4);
   phase(8);rsp.dmem.write<Byte>(1,0xee);checkpoint();
   rspInstruction(9,rspSbv,2,0,0x77,0xaaee77ddu);rspInstruction(10,rspSb,3,0x22,0,0xaaee7722u);
   cpuStep(11,5);cpuStep(12,6);cpuStep(13,7);cpuStep(14,8);cpuStep(15,9);
   phase(16);rsp.writeWord(0x04001010,mixed,cpu);checkpoint();
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=4) cpuStep(17,10);
   if((u32)rsp.dmem.read<Word>(0)!=mixed || (u32)rsp.dmem.read<Word>(4)!=mixed || (u32)rsp.imem.read<Word>(0)!=pure || (u32)rsp.imem.read<Word>(4)!=pure || (u32)rsp.imem.read<Word>(8)!=mixed || (u32)rsp.imem.read<Word>(12)!=mixed || (u32)rsp.imem.read<Word>(16)!=mixed) std::abort();
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=false;
@@ -129,7 +150,8 @@ int main(int argc,char** argv) {
   std::printf("],\"state\":{\"pc\":%llu,\"count\":%llu,\"exception\":%u,\"frozen\":%s,\"rdram\":\"%s\",\"dmem\":\"%s\",\"imem\":\"%s\",\"dmem0\":%u,\"dmem4\":%u,\"imem0\":%u,\"imem4\":%u,\"imem8\":%u,\"imem12\":%u,\"imem16\":%u,\"regs\":[",(unsigned long long)cpu.ipu.pc,(unsigned long long)cpu.effectiveCount(),(u32)cpu.scc.cause.exceptionCode,cpu.scc.sysadFrozen?"true":"false",memhash(rdram.ram.data,rdram.ram.size).c_str(),memhash(rsp.dmem.data,rsp.dmem.size).c_str(),memhash(rsp.imem.data,rsp.imem.size).c_str(),(u32)rsp.dmem.read<Word>(0),(u32)rsp.dmem.read<Word>(4),(u32)rsp.imem.read<Word>(0),(u32)rsp.imem.read<Word>(4),(u32)rsp.imem.read<Word>(8),(u32)rsp.imem.read<Word>(12),(u32)rsp.imem.read<Word>(16));
   for(u32 n=0;n<32;n++)std::printf("%s%llu",n?",":"",(unsigned long long)cpu.ipu.r[n].u64);std::printf("]},\"checkpoints\":[");
   for(size_t i=0;i<checkpoints.size();i++) std::printf("%s\"%s\"",i?",":"",checkpoints[i].data());
-  std::printf("],\"final_dmem\":");printBytes(false,8);
+  std::printf("],\"final_dmem\":");printBytes(false,PLAID_RSP_DEFINITIONS_FIXTURE>=4?4096:8);
   std::printf(",\"final_imem\":");printBytes(true,PLAID_RSP_DEFINITIONS_FIXTURE>=3?4096:20);
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=4) { std::printf(",\"final_ram\":");printRam(); }
   std::printf("}\n");ares::Nintendo64::system.unload();return 0;
 }

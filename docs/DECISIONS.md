@@ -2090,6 +2090,20 @@ V0/v1/v2 reports remain exact. This proves discrete consumption; complete mutati
 census, continuous executable lifetime, hardware consensus and whole-ROM/native
 closure remain OPEN. See the installed-IMEM-fetch integration receipt.
 
+ADR-0118 DMA-consumption follow-up (2026-10-12): reconcile PR37's completed
+descriptor-selected DMEM byte-parent invariant onto the original full-snapshot
+definition/consumption clock. Controlled v4 keeps each actual successful RAM Word
+write separately, selects DMEM lanes from the current descriptor before comparing
+payload and retains RSP definition/writer or unknown parents. Require a bounded
+RAM snapshot, actual uncached fetch begin/read/end and immediate matching CPU
+decoder context. Equal initial/final values do not replace writer identity.
+A134-event exact pinned fixture/19 matched checkpoints independently reproduces
+six definitions, two DMA writes, eleven CPU fetch/decoder pairs and seventeen RSP
+fetches. The exported NOP executes at the next sequential CPU PC. V0-v3 reports
+remain exact. No atomic DMA generation, accepted-request/completion lifetime,
+general mutation census, cached/mapped/reset/restore or whole-ROM/native closure
+is inferred. See the RSP DMEM DMA/CPU consumption integration receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.
