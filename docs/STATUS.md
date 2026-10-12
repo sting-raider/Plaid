@@ -1,5 +1,13 @@
 # Status
 
+Actual DMEM DMA ingress now feeds RSP load definitions on the same graph under
+controlled v7. Both returned Word reads precede the two exact lower stores;
+each latest byte retains its read/store/request and prior RAM writer separately.
+The152-event pinned source/23 matched checkpoints independently reproduces seven
+definitions and all three DMA directions; the final RSP LW retains ingress parents.
+V0-v6 reports stay exact. General pending/FIFO/census/hardware/cache/mapping/reset/
+restore/lifetime and whole-ROM/native remain OPEN; no certification promotion.
+
 The original RSP graph now composes through reverse-DMA RAM writers and actual
 IMEM DMA ingress back to RSP consumption under controlled v6. Every installed
 byte keeps its actual Dual read/install/promotion and current RAM writer parents;

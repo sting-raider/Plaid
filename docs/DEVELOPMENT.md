@@ -211,6 +211,13 @@ two Word writes. Use spike063 controls and
 `python scripts/test_rsp_definitions.py --roundtrip`; v0-v5 reports remain exact.
 Unknown parents and equal-value overwrite cuts remain explicit; closure stays open.
 
+Controlled v7 distinguishes all three represented DMA directions and requires
+both actual Word source reads before either lower DMEM store. Each store retains
+its own exact read and prior RAM byte parents; subsequent RSP LW definitions
+consume them. Use spike064 controls and
+`python scripts/test_rsp_definitions.py --dmem-ingress`. V0-v6 reports remain exact;
+unsupported failed/OOB sources and general completeness obligations stay open.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,
