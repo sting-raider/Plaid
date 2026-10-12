@@ -1,5 +1,9 @@
 # Next
 
+COP1 context consumers must preserve the canonical architectural register-zero
+check. Frame callback clocks still need an authenticated join to FPR ancestry
+and resident/backing lifetime; equal values or ordinals alone do not supply it.
+
 Primary integration harvest (2026-10-11): static executable-identity hardening is
 integrated, along with trace/event integrity, retained raw-fact solver gates and
 Region/load/overlay validation, fetch-summary realizability and pointer guards.

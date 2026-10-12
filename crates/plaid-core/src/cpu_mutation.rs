@@ -147,6 +147,7 @@ pub fn verify_cop1_store_effect(
     effect: Option<&CompletedCop1StoreEffect>,
 ) -> Result<Option<Cop1MutationWitness>, String> {
     let decoded = decode_cop1_store(instruction_word).ok_or("not a supported COP1 store")?;
+    require(gpr[0] == 0, "nonzero architectural zero register")?;
     let Some(effect) = effect else {
         return Ok(None);
     };
