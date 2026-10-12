@@ -13,7 +13,11 @@ FIRMWARE = ROOT / '.refs/ares/ares/System/Nintendo 64/pif.ntsc.rom'
 
 
 def digest(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    checksum = hashlib.sha256()
+    with path.open('rb') as source:
+        while chunk := source.read(1024 * 1024):
+            checksum.update(chunk)
+    return checksum.hexdigest()
 
 
 def main():
@@ -38,7 +42,7 @@ def main():
             command.extend(['--build', linux_path(args.build)])
         subprocess.run(command, check=True)
         return
-    assert 0 < args.budget <= 1000000
+    assert 0 < args.budget <= 10000000
     if str(ROOT).startswith('/mnt/'):
         # Keep the complete Git source check, using serial index reads on DrvFS.
         # Threaded preloading can delay this scan for minutes on a cold tree.
