@@ -22,7 +22,7 @@ Use `--verify-existing` to recheck retained inputs without a reference rebuild.
 Use `--build target/path/to/existing/build` to reuse a compatible build for
 another ROM/profile; the builder rechecks every recorded input before reuse.
 DrvFS runs retain the complete Git clean-source check with serial index reads.
-The call budget is bounded by the existing driver's ten-million-call ceiling.
+The call budget is bounded by the shared driver's twenty-million-call ceiling.
 Hashing uses bounded chunks for retained traces; a larger budget still proves
 only the supplied finite prefix. Budget exhaustion does not establish completion.
 

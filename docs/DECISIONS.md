@@ -2244,3 +2244,10 @@ request completion and ultimate SP ancestry uncertified. Debug/release reports
 are byte-identical; use the optimized project reader for large streams without
 rebuilding references. All census/lifetime/native flags and milestones remain
 unchanged. See the local PI/SP clock integration receipt.
+
+ADR-0123 capacity follow-up: explicitly bound driver/importer/map/recipe capture
+at twenty million calls and reject malformed numeric arguments before narrowing.
+Retained source/report compatibility and full local gate pass. A larger plain run
+progresses beyond pending PI, but instrumented logging times out; partial streams
+remain excluded. Measure and validate capture overhead without changing guest
+semantics or source obligations before retrying. No native/closure milestone.

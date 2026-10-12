@@ -19,7 +19,7 @@ pub const BOOT_INITIAL_STATE: &str = "cpu_power_pif_entry";
 pub const SOURCE_POLICY: &str = "delegated_rom_halves_before_prologue";
 pub const REVISION: &str = "9408cb43d4948fc3ea6e152a307a34348df3fe04";
 pub const INITIAL_STATE: &str = "declared_post_ipl2_sp_entry";
-pub const MAX_BUDGET: u64 = 10_000_000;
+pub const MAX_BUDGET: u64 = 20_000_000;
 
 // Missing optional version fields default to None; explicit null is invalid.
 fn present<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(

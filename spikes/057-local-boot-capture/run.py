@@ -48,7 +48,7 @@ def main():
             command.extend(['--baseline', linux_path(args.baseline)])
         subprocess.run(command, check=True)
         return
-    assert 0 < args.budget <= 10000000
+    assert 0 < args.budget <= 20000000
     if str(ROOT).startswith('/mnt/'):
         # Keep the complete Git source check, using serial index reads on DrvFS.
         # Threaded preloading can delay this scan for minutes on a cold tree.

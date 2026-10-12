@@ -1,5 +1,11 @@
 # Next
 
+The bounded capture ceiling is now 20 million calls. Address measured logging
+overhead before repeating the larger PI/SP source: the plain reference reached
+higher RAM/cleared PI busy, while the instrumented attempt timed out and has no
+valid footer/checkpoint. Retain the authenticated million-call pair; partial
+timed-out sources do not establish completion, entry or executable ancestry.
+
 Continue from actual pending PI completion, using the retained CIC6105 v3/v5
 source pair and generic `--history sp` recipe. The million-call capture already
 joins accepted request 1/token 6 to a returned 1 MiB ROM-to-RAM copy, with zero
