@@ -98,6 +98,12 @@ Reuse a compatible build with `--build`, or replay sources with
 `--verify-existing`. Preserve an independent CIC diagnostic; the selected
 profile is a reference configuration declaration. Import and recheck with the
 boot-fetch commands above; finite raw fetches retain unknown execution identity.
+The recipe's optional `--history sp` mode selects the existing actual PI/queue/SP
+observer. `--baseline` requires exact prior v5 trace/checkpoint/message equality;
+canonical `inspect-sp-writer-fetch` / `verify-sp-writer-fetch` provide complete
+typed primitive rechecking under independently retained paired source digests.
+For multi-million-record sources, build the project CLI with
+`cargo build --locked --release -p plaid`; this does not rebuild the reference.
 
 `discover` requires an explicit load mapping. Trace import compares captured DMA-backed code against canonical ROM bytes. Supplying a ROM to `solve` enables source-witness rechecking. The CLI whole-ROM solve path remains fail-closed; producing a report is not the same as reaching `CLOSED`.
 

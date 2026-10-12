@@ -1,5 +1,13 @@
 # Next
 
+Continue from actual pending PI completion, using the retained CIC6105 v3/v5
+source pair and generic `--history sp` recipe. The million-call capture already
+joins accepted request 1/token 6 to a returned 1 MiB ROM-to-RAM copy, with zero
+completion-status transitions. Queue insertion clock and CPU Count have separate
+bases; do not infer completion or a stall from either alone. Observe the actual
+status/dispatch and first installed-code consumption before executable ancestry.
+Use the release CLI for large source replay; its report matches debug bytes.
+
 Use explicit verified CIC selection for local ROM capture (ADR-0123). The shared
 profiled driver and import gate now admit NTSC/6102 and NTSC/6105; existing
 homebrew captures retain their original 6102 scope. Reuse the compatible build

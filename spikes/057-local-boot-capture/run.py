@@ -26,6 +26,8 @@ def main():
     parser.add_argument('--cic', choices=('CIC-NUS-6102', 'CIC-NUS-6105'), required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--build', type=Path)
+    parser.add_argument('--history', choices=('sp',))
+    parser.add_argument('--baseline', type=Path)
     parser.add_argument('--budget', type=int, default=10000)
     parser.add_argument('--verify-existing', action='store_true')
     args = parser.parse_args()
@@ -40,6 +42,10 @@ def main():
             command.append('--verify-existing')
         if args.build:
             command.extend(['--build', linux_path(args.build)])
+        if args.history:
+            command.extend(['--history', args.history])
+        if args.baseline:
+            command.extend(['--baseline', linux_path(args.baseline)])
         subprocess.run(command, check=True)
         return
     assert 0 < args.budget <= 10000000
@@ -67,9 +73,18 @@ def main():
     sources = [ROOT / 'spikes' / p for p in ('006-ares-rom-source/driver.cpp',
         '004-ares-fetch/driver.cpp', '004-ares-fetch/boot_cic.hpp')]
     driver = ROOT / 'spikes/011-ares-cache-fetch/driver.cpp'
+    options = dict(raw_fetch_access=True, physical_fetch_access=True)
+    if args.history:
+        driver = ROOT / 'spikes/040-ares-boot-sp-history/driver.cpp'
+        sources.extend(ROOT / 'spikes' / p for p in (
+            '011-ares-cache-fetch/driver.cpp', '040-ares-boot-sp-history/observer.hpp',
+            '037-ares-boot-pi-queue-history/observer.hpp', '030-ares-boot-pi-history/observer.hpp',
+            '027-ares-boot-history/observer.hpp', '032-ares-queue-identity/observer.hpp'))
+        options.update(cache_fill_access=True, cache_operation_access=True, rdram_burst_access=True,
+            rdram_scalar_access=True, fetch_boundary_access=True, pi_dma_access=True,
+            queue_access=True, sp_backing_access=True)
     if not args.verify_existing:
-        exe = builder.build(driver, build, raw_fetch_access=True,
-            physical_fetch_access=True, extra_sources=sources)
+        exe = builder.build(driver, build, extra_sources=sources, **options)
         for mode in ('plain', 'traced', 'repeat'):
             subprocess.run([str(exe), 'plain' if mode == 'plain' else 'traced', str(args.rom),
                 str(output / f'{mode}.ndjson'), str(output / f'{mode}.json'),
@@ -90,6 +105,9 @@ def main():
     assert not (output / 'plain.ndjson').exists()
     assert digest(output / 'traced.ndjson') == digest(output / 'repeat.ndjson')
     assert len({digest(output / f'{mode}.messages') for mode in ('plain', 'traced', 'repeat')}) == 1
+    if args.baseline:
+        for suffix in ('ndjson', 'json', 'messages'):
+            assert digest(output / f'traced.{suffix}') == digest(args.baseline / f'traced.{suffix}'), suffix
     count = 0
     domains = dict(pif=0, sp=0, ram=0, cartridge=0, other=0)
     with (output / 'traced.ndjson').open() as stream:
@@ -129,6 +147,23 @@ def main():
         driver_sha256=digest(driver), sources={str(p.relative_to(ROOT)): digest(p) for p in sources},
         cic_identity_certified=False, hardware_boot_certified=False, mutation_census_certified=False,
         guest_completion_claimed=False, native_complete=False)
+    if args.history:
+        history = output / 'traced.ndjson.history.ndjson'
+        assert not (output / 'plain.ndjson.history.ndjson').exists()
+        assert digest(history) == digest(output / 'repeat.ndjson.history.ndjson')
+        with history.open('rb') as source:
+            first = json.loads(source.readline())
+            source.seek(max(0, history.stat().st_size - 512))
+            last = json.loads(source.read().splitlines()[-1])
+        assert first == dict(record='header', format='plaid-ares-access-history-v3',
+            revision=builder.REV, rom_sha256=digest(args.rom), budget=args.budget,
+            mapped_cartridge_size=len(data) & ~7, firmware_sha256=digest(FIRMWARE),
+            policy='identity_ram_pi_queue_and_observed_sp_backing',
+            lifecycle_policy='single_run_no_host_restore', paired_fetch_format=header['format'])
+        assert last['record'] == 'end' and last['fetch_count'] == count
+        assert last['reason'] == 'instruction_call_budget'
+        receipt.update(history_format=first['format'], history_sha256=digest(history),
+            history_records=last['record_count'])
     (output / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
     print(json.dumps(receipt, sort_keys=True), flush=True)
 
