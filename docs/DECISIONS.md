@@ -2251,3 +2251,10 @@ Retained source/report compatibility and full local gate pass. A larger plain ru
 progresses beyond pending PI, but instrumented logging times out; partial streams
 remain excluded. Measure and validate capture overhead without changing guest
 semantics or source obligations before retrying. No native/closure milestone.
+
+ADR-0123 buffering follow-up: explicit live 1 MiB stdio buffers preserve every
+record/format/tracer/getter/guest effect. Matched100k capture29.827 ->5.837 seconds,
+with exact source and checkpoint bytes. Close streams before freeing owned storage
+even on flush errors. /dev/full failure and full local gate pass. Rejected raw-
+disassembly bypass: no useful speedup and Random getter side effects require a
+separate contract. No guest optimization, source waiver or milestone promotion.

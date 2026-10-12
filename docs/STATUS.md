@@ -1,5 +1,12 @@
 # Status
 
+Machine-readable fetch/history output now uses explicit live 1 MiB stdio buffers.
+The matched 100,000-call capture improves from 29.827 to 5.837 seconds with exact
+source/checkpoint/message equality; flush failures return an error without a
+checkpoint. Full source rechecking/local gate pass. Guest semantics, formatting,
+RNG behavior, record order and closure flags are unchanged. The rejected raw-
+disassembly bypass is excluded from production.
+
 Capture capacity is explicitly bounded at 20 million calls across importer,
 map validation and the shared driver. Strict driver parsing rejects overflow,
 trailing junk and over-capacity values. The retained million-call source report
