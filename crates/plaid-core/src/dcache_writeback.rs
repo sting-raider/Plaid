@@ -10,12 +10,14 @@
 use crate::{
     program::{GuestVirtualAddr, PhysicalAddr},
     rom::sha256,
+    store_mutation::{AresStore64Receipt, Store64Kind, StoreEndian, StoreOutcome},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub const FORMAT: &str = "plaid-dcache-writeback-history-v0";
 pub const READ_FORMAT: &str = "plaid-dcache-resident-read-history-v1";
+pub const STORE64_FORMAT: &str = "plaid-dcache-store64-writeback-history-v2";
 const REPORT_FORMAT: &str = "plaid-dcache-writeback-report-v0";
 const SCOPE: &str = "finite_direct_kseg0_identity_rdram_aligned_word_writeback";
 const LINE_BYTES: usize = 16;
@@ -32,6 +34,12 @@ pub enum DcacheByteOrigin {
     },
     ResidentWordMutation {
         mutation_ordinal: u64,
+        byte_index: u8,
+    },
+    Store64Subwrite {
+        operation_ordinal: u64,
+        subwrite_ordinal: u64,
+        sequence: u8,
         byte_index: u8,
     },
 }
@@ -105,6 +113,30 @@ pub struct DcacheResidentReadReport {
     pub cpu_operand_dataflow_certified: bool,
     pub pointer_table_immutability_certified: bool,
     pub executable_target_identity_certified: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub store64_operations: Option<Vec<DcacheStore64Operation>>,
+}
+
+/// Already observed decoded context in the bounded kernel32/BEV1 fixture scope.
+/// Register snapshots bind operands, not the ancestry of their definitions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DcacheStore64Context {
+    pub pc: GuestVirtualAddr,
+    pub word: u32,
+    pub gpr: [u64; 32],
+    pub after_gpr: [u64; 32],
+    pub after_pc: GuestVirtualAddr,
+    pub little: bool,
+    pub exception: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DcacheStore64Operation {
+    pub ordinal: u64,
+    pub context: DcacheStore64Context,
+    pub receipt: AresStore64Receipt,
 }
 
 #[derive(Debug, Deserialize)]
@@ -117,6 +149,20 @@ struct History {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
 enum Event {
+    Store64 {
+        ordinal: u64,
+        context: Box<DcacheStore64Context>,
+        receipt: AresStore64Receipt,
+    },
+    Store64Subwrite {
+        ordinal: u64,
+        sequence: u8,
+        event: String,
+        physical: PhysicalAddr,
+        slot: u16,
+        payload: Vec<u8>,
+        resident_after: [u8; LINE_BYTES],
+    },
     BackingWordMutation {
         ordinal: u64,
         physical: PhysicalAddr,
@@ -170,7 +216,9 @@ enum Event {
 impl Event {
     fn ordinal(&self) -> u64 {
         match self {
-            Self::BackingWordMutation { ordinal, .. }
+            Self::Store64 { ordinal, .. }
+            | Self::Store64Subwrite { ordinal, .. }
+            | Self::BackingWordMutation { ordinal, .. }
             | Self::CachedWordRead { ordinal, .. }
             | Self::BackingRead { ordinal, .. }
             | Self::Fill { ordinal, .. }
@@ -220,6 +268,81 @@ fn validate_line_address(address: PhysicalAddr) -> Result<(), String> {
     )
 }
 
+fn canonical32(value: u64) -> bool {
+    let low = value as u32;
+    value == u64::from(low) || value == (low as i32 as i64) as u64
+}
+
+fn validate_store64_context(
+    context: &DcacheStore64Context,
+    receipt: &AresStore64Receipt,
+) -> Result<(), String> {
+    receipt.validate()?;
+    let kind = match context.word >> 26 {
+        0x3f => Store64Kind::Sd,
+        0x2c => Store64Kind::Sdl,
+        0x2d => Store64Kind::Sdr,
+        _ => return Err("store64 context contains an unsupported decoded instruction".into()),
+    };
+    let base = ((context.word >> 21) & 31) as usize;
+    let source = ((context.word >> 16) & 31) as usize;
+    let address = context.gpr[base].wrapping_add((context.word as i16 as i64) as u64);
+    let low = address as u32;
+    require(
+        canonical32(context.pc.0)
+            && canonical32(context.after_pc.0)
+            && context.pc.0.is_multiple_of(4)
+            && context.gpr[0] == 0
+            && context.gpr == context.after_gpr,
+        "store64 context has invalid PC/register boundaries",
+    )?;
+    require(
+        canonical32(address)
+            && (0x8000_0000..0xa000_0000).contains(&low)
+            && (low & 0x1fff_fff8)
+                .checked_add(8)
+                .is_some_and(|end| end <= RDRAM_BYTES)
+            && receipt.cached
+            && receipt.site.0 == context.pc.0 as u32
+            && receipt.address.0 == low
+            && receipt.source_value == context.gpr[source]
+            && receipt.kind == kind
+            && receipt.endian
+                == if context.little {
+                    StoreEndian::Little
+                } else {
+                    StoreEndian::Big
+                },
+        "store64 receipt disagrees with decoded direct cached operand context",
+    )?;
+    if kind == Store64Kind::Sd && low & 7 != 0 {
+        use crate::exception_roots::{
+            ExceptionClass, ExceptionRootInput, KernelAddressMode, resolve_exception_root,
+        };
+        let root = resolve_exception_root(ExceptionRootInput {
+            class: ExceptionClass::General,
+            bev: true,
+            exl: false,
+            kernel_mode: KernelAddressMode::Bits32,
+        })
+        .root;
+        require(
+            receipt.outcome == StoreOutcome::RejectedBeforeMutation
+                && context.exception == 5
+                && context.after_pc.0 as u32 == root.0 as u32,
+            "store64 alignment failure contradicts bounded BEV1 exception result",
+        )?;
+    } else {
+        require(
+            receipt.outcome == StoreOutcome::Completed
+                && context.exception == 0
+                && context.after_pc.0 as u32 == (context.pc.0 as u32).wrapping_add(4),
+            "store64 completion contradicts instruction/control result",
+        )?;
+    }
+    Ok(())
+}
+
 /// Replays a separately authenticated finite source.
 ///
 /// `expected_sha256` is an external trust input, not a digest copied from the
@@ -229,7 +352,7 @@ pub fn inspect_dcache_writeback_history(
     source: &[u8],
     expected_sha256: &str,
 ) -> Result<DcacheWritebackReport, String> {
-    Ok(replay(source, expected_sha256, false)?.writeback)
+    Ok(replay(source, expected_sha256, false, false)?.writeback)
 }
 
 /// Normalized completed Word operations, not a decoded LW/register/dispatch proof.
@@ -238,7 +361,25 @@ pub fn inspect_dcache_resident_read_history(
     source: &[u8],
     expected_sha256: &str,
 ) -> Result<DcacheResidentReadReport, String> {
-    replay(source, expected_sha256, true)
+    replay(source, expected_sha256, true, false)
+}
+
+pub fn inspect_dcache_store64_history(
+    source: &[u8],
+    expected_sha256: &str,
+) -> Result<DcacheResidentReadReport, String> {
+    replay(source, expected_sha256, true, true)
+}
+
+pub fn verify_dcache_store64_report(
+    report: &DcacheResidentReadReport,
+    source: &[u8],
+    expected_sha256: &str,
+) -> Result<(), String> {
+    require(
+        *report == inspect_dcache_store64_history(source, expected_sha256)?,
+        "D-cache store64 report does not match complete source/receipt",
+    )
 }
 
 pub fn verify_dcache_resident_read_report(
@@ -256,6 +397,7 @@ fn replay(
     source: &[u8],
     expected_sha256: &str,
     with_reads: bool,
+    with_store64: bool,
 ) -> Result<DcacheResidentReadReport, String> {
     let digest = sha256(source);
     require(
@@ -264,7 +406,14 @@ fn replay(
     )?;
     let history: History = serde_json::from_slice(source).map_err(|error| error.to_string())?;
     require(
-        history.format == if with_reads { READ_FORMAT } else { FORMAT },
+        history.format
+            == if with_store64 {
+                STORE64_FORMAT
+            } else if with_reads {
+                READ_FORMAT
+            } else {
+                FORMAT
+            },
         "unsupported D-cache writeback history format",
     )?;
 
@@ -281,6 +430,9 @@ fn replay(
     let mut backing_words = BTreeMap::<PhysicalAddr, DcacheBackingWord>::new();
     let mut backing_mutations = 0usize;
     let mut reads = Vec::new();
+    let mut store64_operations = Vec::new();
+    let mut pending_store: Option<(u64, AresStore64Receipt, usize)> = None;
+    let mut store_ids = std::collections::BTreeSet::new();
 
     for event in history.events {
         let ordinal = event.ordinal();
@@ -292,8 +444,111 @@ fn replay(
         if pending_read.is_some() && !matches!(&event, Event::Fill { .. }) {
             return Err("backing read was not immediately consumed by a fill".into());
         }
+        require(
+            pending_store.is_none() || matches!(&event, Event::Store64Subwrite { .. }),
+            "store64 operation missing its next ordered subwrite",
+        )?;
 
         match event {
+            Event::Store64 {
+                ordinal,
+                context,
+                receipt,
+            } => {
+                require(with_store64, "store64 event outside explicit v2 scope")?;
+                require(
+                    pending.is_none(),
+                    "store64 operation during active writeback",
+                )?;
+                validate_store64_context(&context, &receipt)?;
+                require(
+                    store_ids.insert(receipt.operation_event.clone()),
+                    "reused store64 operation identity",
+                )?;
+                for write in &receipt.subwrites {
+                    require(
+                        store_ids.insert(write.event.clone()),
+                        "reused store64 subwrite identity",
+                    )?;
+                }
+                if !receipt.subwrites.is_empty() {
+                    pending_store = Some((ordinal, receipt.clone(), 0));
+                }
+                store64_operations.push(DcacheStore64Operation {
+                    ordinal,
+                    context: *context,
+                    receipt,
+                });
+            }
+            Event::Store64Subwrite {
+                ordinal,
+                sequence,
+                event,
+                physical,
+                slot,
+                payload,
+                resident_after,
+            } => {
+                require(with_store64, "store64 subwrite outside explicit v2 scope")?;
+                let (operation_ordinal, receipt, next) = pending_store
+                    .as_mut()
+                    .ok_or("store64 subwrite without an active operation")?;
+                let expected = &receipt.subwrites[*next];
+                let raw = expected.value.to_be_bytes();
+                let width = usize::from(expected.bytes);
+                require(
+                    sequence == expected.sequence
+                        && event == expected.event
+                        && physical == expected.sink_physical
+                        && payload == raw[8 - width..],
+                    "store64 subwrite differs from its exact ordered effect",
+                )?;
+                let handler = expected.handler_address.0;
+                let selected = (handler & 0x1fff_ffff)
+                    ^ if receipt.endian == StoreEndian::Little {
+                        8 - u32::from(expected.bytes)
+                    } else {
+                        0
+                    };
+                require(
+                    physical.0 == selected
+                        && physical.0.is_multiple_of(u32::from(expected.bytes))
+                        && physical.0 < RDRAM_BYTES
+                        && u32::from(slot) == (physical.0 >> 4) & 0x1ff,
+                    "store64 subwrite violates direct/endian/index sink identity",
+                )?;
+                let line = lines
+                    .get_mut(&slot)
+                    .ok_or("store64 subwrite lacks prefetched resident line")?;
+                let offset = physical
+                    .0
+                    .checked_sub(line.physical_line.0)
+                    .ok_or("store64 subwrite precedes resident line")?
+                    as usize;
+                require(
+                    offset + width <= LINE_BYTES,
+                    "store64 subwrite crosses resident line",
+                )?;
+                line.payload[offset..offset + width].copy_from_slice(&payload);
+                require(
+                    line.payload == resident_after,
+                    "store64 subwrite/full resident snapshot mismatch",
+                )?;
+                for index in 0..width {
+                    line.origins[offset + index] = DcacheByteOrigin::Store64Subwrite {
+                        operation_ordinal: *operation_ordinal,
+                        subwrite_ordinal: ordinal,
+                        sequence,
+                        byte_index: index as u8,
+                    };
+                }
+                line.revision = ordinal;
+                line.unexported_dirty = true;
+                *next += 1;
+                if *next == receipt.subwrites.len() {
+                    pending_store = None;
+                }
+            }
             Event::BackingWordMutation {
                 ordinal,
                 physical,
@@ -599,17 +854,32 @@ fn replay(
         pending.is_none(),
         "source ended during active D-cache writeback",
     )?;
+    require(
+        pending_store.is_none(),
+        "source ended during an incomplete store64 operation",
+    )?;
 
     Ok(DcacheResidentReadReport {
-        format: "plaid-dcache-resident-read-report-v1".into(),
+        format: if with_store64 {
+            "plaid-dcache-store64-writeback-report-v2"
+        } else {
+            "plaid-dcache-resident-read-report-v1"
+        }
+        .into(),
         observed_backing_word_mutations: backing_mutations,
         reads,
         cpu_operand_dataflow_certified: false,
         pointer_table_immutability_certified: false,
         executable_target_identity_certified: false,
+        store64_operations: with_store64.then_some(store64_operations),
         writeback: DcacheWritebackReport {
             format: REPORT_FORMAT.into(),
-            scope: SCOPE.into(),
+            scope: if with_store64 {
+                "finite_prefilled_direct_kseg0_kernel32_bev1_store64_writeback"
+            } else {
+                SCOPE
+            }
+            .into(),
             source_sha256: digest,
             events: (next_ordinal - 1) as usize,
             backing_reads,

@@ -181,6 +181,23 @@ normalization inputs. External digests must be retained independently of editabl
 submissions. This checks the represented facts, without proving the ancestry or
 complete capture of those architectural contexts or backing memory producers.
 
+For decoded cached store64-to-backing composition:
+
+```bash
+plaid inspect-dcache-store64 <history-v2.json> <expected-source-sha256> <report.json>
+plaid verify-dcache-store64 <same-inputs>
+python scripts/test_store64_writeback.py [retained-reference-results.json]
+```
+
+V2 retains decoded operand/register/control snapshots and ordered concrete
+subwrites. Each effect must match the pinned decomposition, actual direct/endian
+physical sink, selected resident line and complete after-snapshot. Source
+generations flow through exact successful backing exports. This bounded profile
+requires prefilled identity-RDRAM, kernel32 and BEV1; unsupported contexts reject.
+V0/v1 source/report contracts remain compatible, including the exact retained
+v1 pointer report digest. Reports certify neither upstream register definitions,
+hardware atomicity, complete source coverage nor executable/native lifetime.
+
 ## Source-bound history consumers
 
 Plaid also contains strict consumers for bounded research histories. These are deliberately separate from claims of whole-ROM completeness.

@@ -156,6 +156,14 @@ writers, producer census and context/lifetime still need source evidence. The
 are checked against actual selected-register snapshots and backing effects;
 they are not a complete guest instruction/writer capture for arbitrary ROMs.
 
+Ordered cached SD/SDL/SDR subwrites now compose with resident-to-backing ancestry
+under the explicit v2 kernel32/BEV1/prefilled direct scope (ADR-0121). Preserve
+actual primitive callbacks rather than deriving their clock from final snapshots
+or splitting a Double store into invented Word writes. Bind upstream GPR writer
+ancestry and subsequent executable fills/fetches to these byte occurrences next.
+Uncached/TLB/degraded/cache-miss paths, other actors, lifecycle and complete
+mutation coverage remain separate obligations; no whole-ROM gate is promoted.
+
 EBus hidden fetches require a separate derived-bits source witness or Unknown; retain actual read context and hidden-storage lifecycle before any origin promotion (ADR-0062).
 
 Successful TLB-mapped uncached fetches now have finite source evidence; retain current translated/post-endian addresses in each access context and add mapping-generation/lifecycle evidence before proving alias history (ADR-0063).

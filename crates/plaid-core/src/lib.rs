@@ -69,6 +69,7 @@ pub mod software_interrupt;
 pub mod solver;
 pub mod sp_dma_egress;
 pub mod sp_history;
+pub mod store_mutation;
 mod tables;
 pub mod timer_interrupt;
 pub mod tlb_fetch;

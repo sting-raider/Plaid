@@ -10,7 +10,8 @@ use plaid_core::{
     },
     dcache_writeback::{
         DcacheResidentReadReport, inspect_dcache_resident_read_history,
-        verify_dcache_resident_read_report,
+        inspect_dcache_store64_history, verify_dcache_resident_read_report,
+        verify_dcache_store64_report,
     },
     discovery::CodeImage,
     evidence_manifest::DiscoveryTraceManifestSet,
@@ -121,14 +122,20 @@ fn run() -> Result<(), String> {
         }
         [command, source_path, expected_sha256, output]
             if command == "inspect-dcache-resident-reads"
-                || command == "verify-dcache-resident-reads" =>
+                || command == "verify-dcache-resident-reads"
+                || command == "inspect-dcache-store64"
+                || command == "verify-dcache-store64" =>
         {
             let source = fs::read(source_path).map_err(|e| e.to_string())?;
             if command.starts_with("verify-") {
                 let report: DcacheResidentReadReport =
                     serde_json::from_slice(&fs::read(output).map_err(|e| e.to_string())?)
                         .map_err(|e| e.to_string())?;
-                verify_dcache_resident_read_report(&report, &source, expected_sha256)?;
+                if command.ends_with("store64") {
+                    verify_dcache_store64_report(&report, &source, expected_sha256)?;
+                } else {
+                    verify_dcache_resident_read_report(&report, &source, expected_sha256)?;
+                }
                 println!("D-cache reads/writebacks match complete source and independent receipt");
             } else {
                 if let Ok(destination) = fs::canonicalize(output)
@@ -136,16 +143,28 @@ fn run() -> Result<(), String> {
                 {
                     return Err("inspection output would overwrite an input".into());
                 }
-                let report = inspect_dcache_resident_read_history(&source, expected_sha256)?;
+                let report = if command.ends_with("store64") {
+                    inspect_dcache_store64_history(&source, expected_sha256)?
+                } else {
+                    inspect_dcache_resident_read_history(&source, expected_sha256)?
+                };
                 fs::write(
                     output,
                     serde_json::to_string_pretty(&report).map_err(|e| e.to_string())? + "\n",
                 )
                 .map_err(|e| e.to_string())?;
-                println!(
-                    "inspected {} resident Word reads; table/target closure remains uncertified",
-                    report.reads.len()
-                );
+                if command.ends_with("store64") {
+                    println!(
+                        "inspected {} decoded store64 attempts and {} backing exports; executable lifetime remains uncertified",
+                        report.store64_operations.as_ref().map_or(0, Vec::len),
+                        report.writeback.successful_backing_writebacks
+                    );
+                } else {
+                    println!(
+                        "inspected {} resident Word reads; table/target closure remains uncertified",
+                        report.reads.len()
+                    );
+                }
             }
         }
         [command, source_path, expected_sha256, output]
@@ -703,7 +722,7 @@ fn run() -> Result<(), String> {
         }
         _ => {
             return Err(
-                "usage: plaid compose-cop1-mutations <history.json> <expected-source-sha256> <contexts.json> <expected-contexts-sha256> <report.json> | verify-cop1-mutations <same-inputs> | inspect-dcache-resident-reads <history-v1.json> <expected-source-sha256> <report.json> | verify-dcache-resident-reads <same-inputs> | inspect-rsp-cpu-imem <history.json> <expected-source-sha256> <report.json> | verify-rsp-cpu-imem <same-inputs> | inspect-sp-writer-fetch <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-writer-fetch <same-inputs> | create-trace-expectations <new-expected.json> <trace.ndjson>... | solve-traces <rom> <map.json> <expected.json> <trace.ndjson>... | inspect-cpu-definitions <history.json> <external-source-sha256> <report.json> | verify-cpu-definitions <history.json> <external-source-sha256> <report.json> | inspect-cpu-copy-history <history.json> <external-source-sha256> <report.json> | verify-cpu-copy-history <history.json> <external-source-sha256> <report.json> | rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | verify-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | inspect-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | verify-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | merge <left.json> <right.json> <output.json>"
+                "usage: plaid inspect-dcache-store64 <history-v2.json> <expected-source-sha256> <report.json> | verify-dcache-store64 <same-inputs> | compose-cop1-mutations <history.json> <expected-source-sha256> <contexts.json> <expected-contexts-sha256> <report.json> | verify-cop1-mutations <same-inputs> | inspect-dcache-resident-reads <history-v1.json> <expected-source-sha256> <report.json> | verify-dcache-resident-reads <same-inputs> | inspect-rsp-cpu-imem <history.json> <expected-source-sha256> <report.json> | verify-rsp-cpu-imem <same-inputs> | inspect-sp-writer-fetch <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-writer-fetch <same-inputs> | create-trace-expectations <new-expected.json> <trace.ndjson>... | solve-traces <rom> <map.json> <expected.json> <trace.ndjson>... | inspect-cpu-definitions <history.json> <external-source-sha256> <report.json> | verify-cpu-definitions <history.json> <external-source-sha256> <report.json> | inspect-cpu-copy-history <history.json> <external-source-sha256> <report.json> | verify-cpu-copy-history <history.json> <external-source-sha256> <report.json> | rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | verify-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | inspect-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | verify-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | merge <left.json> <right.json> <output.json>"
                     .into(),
             );
         }
