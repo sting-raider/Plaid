@@ -37,7 +37,7 @@ int main(int argc,char** argv) {
   for(auto& r:rsp.ipu.r) r.u32=0;
   cpu.scc.status.exceptionLevel=cpu.scc.status.errorLevel=0;cpu.context.setMode();cpu.context.endian=CPU::Context::Endian::Big;cpu.icache.power(false);cpu.dcache.power(false);
 
-  constexpr u32 pure=PLAID_RSP_DEFINITIONS_FIXTURE?0x3344u:0x11223344u, cpuBase=0xaabbccddu, mixed=0xaaee7722u;
+  constexpr u32 pure=PLAID_RSP_DEFINITIONS_FIXTURE>=3?0u:PLAID_RSP_DEFINITIONS_FIXTURE?0x3344u:0x11223344u, cpuBase=0xaabbccddu, mixed=0xaaee7722u;
   rsp.dmem.write<Word>(0,0x340800aau);rsp.dmem.write<Word>(4,mixed);
   for(u32 off: {0u,4u,8u,12u,16u}) rsp.imem.write<Word>(off,0xdeadbeefu);
   const u32 words[]={insn_lw(8,16,0),insn_sw(8,16,0x1000),insn_lw(8,16,0),insn_sw(8,16,0x1004),insn_sw(9,16,0),insn_lw(8,16,0),insn_lw(9,16,4),insn_sw(8,16,0x1008),0x01404021u,insn_sw(8,16,0x100c)};
@@ -67,7 +67,7 @@ int main(int argc,char** argv) {
     std::printf("]");
   };
   std::printf("{\"initial_dmem\":");printBytes(false,8);
-  std::printf(",\"initial_imem\":");printBytes(true,20);
+  std::printf(",\"initial_imem\":");printBytes(true,PLAID_RSP_DEFINITIONS_FIXTURE>=3?4096:20);
   auto cpuStep=[&](u32 p,u32 index){
     phase(p);CpuStep s{};s.phase=p;s.index=index;s.word=words[index];s.pc=0xffffffffa0006000ull+index*4;
     for(u32 n=0;n<32;n++)s.before[n]=cpu.ipu.r[n].u64;
@@ -78,18 +78,24 @@ int main(int argc,char** argv) {
   auto rspInstruction=[&](u32 p,u32 instruction,u32 base,u32 scalar,u8 vectorByte,u32 expected){
     phase(p);rsp.ipu.r[1].u32=base;rsp.ipu.r[2].u32=scalar;rsp.vpu.r[2].byte(0)=vectorByte;
     u32 code=0x100;
+    auto install=[&](u32 address,u32 word){
+      rsp.imem.write<Word>(address,word);
+      #if PLAID_RSP_CPU_IMEM_SENSOR && PLAID_RSP_DEFINITIONS_FIXTURE >= 3
+      compose_imem_seed(address,word);
+      #endif
+    };
     if(PLAID_RSP_DEFINITIONS_FIXTURE && p==1) {
       rsp.ipu.r[2].u32=0x13579bdfu;
-      for(u32 word:{0x3400ffffu,0x34023344u,0x34023344u,0x00401821u,0x00601021u}) {
-        rsp.imem.write<Word>(code,word);code+=4;
+      for(u32 word:{0x3400ffffu,PLAID_RSP_DEFINITIONS_FIXTURE>=3?0x34020000u:0x34023344u,PLAID_RSP_DEFINITIONS_FIXTURE>=3?0x34020000u:0x34023344u,0x00401821u,0x00601021u}) {
+        install(code,word);code+=4;
       }
       if(PLAID_RSP_DEFINITIONS_FIXTURE >= 2) {
         for(u32 word:{0xac220000u,0x8c240000u,0x00801021u}) {
-          rsp.imem.write<Word>(code,word);code+=4;
+          install(code,word);code+=4;
         }
       }
     }
-    rsp.imem.write<Word>(code,instruction);rsp.imem.write<Word>(code+4,0x0000000du);
+    install(code,instruction);install(code+4,0x0000000du);
     rsp.pipeline={};rsp.branch.setPc(0x100);rsp.ipu.pc=0x100;rsp.status.halted=0;rsp.status.broken=0;
     for(u32 guard=0;guard<(PLAID_RSP_DEFINITIONS_FIXTURE>=2?16u:8u)&&!rsp.status.halted;guard++)rsp.instruction();
     if(!rsp.status.halted||(u32)rsp.dmem.read<Word>(0)!=expected){std::fprintf(stderr,"rsp phase=%u halted=%u expected=%08x got=%08x\n",p,(u32)rsp.status.halted,expected,(u32)rsp.dmem.read<Word>(0));std::abort();}
@@ -97,6 +103,11 @@ int main(int argc,char** argv) {
   };
   const u32 rspSw=0xac220000u,rspSb=0xa0220000u,rspSbv=(58u<<26)|(1u<<21)|(2u<<16);
   rspInstruction(1,rspSw,0,pure,0,pure);cpuStep(2,0);cpuStep(3,1);
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=3) {
+    phase(3);rsp.pipeline={};rsp.pipeline.singleIssue=1;rsp.branch.setPc(0);rsp.ipu.pc=0;
+    rsp.status.halted=0;rsp.status.broken=0;rsp.instruction();rsp.status.halted=1;
+    checkpoint();
+  }
   rspInstruction(4,rspSw,0,pure,0,pure);cpuStep(5,2);cpuStep(6,3);
   cpu.ipu.r[9].u64=cpuBase;cpuStep(7,4);
   phase(8);rsp.dmem.write<Byte>(1,0xee);checkpoint();
@@ -119,6 +130,6 @@ int main(int argc,char** argv) {
   for(u32 n=0;n<32;n++)std::printf("%s%llu",n?",":"",(unsigned long long)cpu.ipu.r[n].u64);std::printf("]},\"checkpoints\":[");
   for(size_t i=0;i<checkpoints.size();i++) std::printf("%s\"%s\"",i?",":"",checkpoints[i].data());
   std::printf("],\"final_dmem\":");printBytes(false,8);
-  std::printf(",\"final_imem\":");printBytes(true,20);
+  std::printf(",\"final_imem\":");printBytes(true,PLAID_RSP_DEFINITIONS_FIXTURE>=3?4096:20);
   std::printf("}\n");ares::Nintendo64::system.unload();return 0;
 }

@@ -2078,6 +2078,18 @@ V0/v1 report bytes remain identical; focused11 and full local gate pass (two
 build jobs after Windows paging capacity failure). No census/execution/lifetime/
 native/milestone promotion. See the RSP word-read/IMEM integration receipt.
 
+ADR-0118 consumption follow-up (2026-10-12): controlled v3 joins the existing
+RSP definition/DMEM/CPU IMEM graph to actual decoded words. Require full4096-byte
+initial/final IMEM snapshots; record controlled host code seeds as opaque cuts
+even when their payload repeats. Compare each instruction-prologue word against
+current modeled bytes and retain four current writer IDs. This senses the existing
+decoded word without adding a guest read. A97-event exact pinned fixture/17 matched
+checkpoints independently reproduces six definitions, three copies and seventeen
+fetches, including one actually executed installed NOP with CPU writer parents.
+V0/v1/v2 reports remain exact. This proves discrete consumption; complete mutation
+census, continuous executable lifetime, hardware consensus and whole-ROM/native
+closure remain OPEN. See the installed-IMEM-fetch integration receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

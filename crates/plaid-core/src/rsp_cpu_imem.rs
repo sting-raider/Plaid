@@ -17,6 +17,9 @@ pub const DEFINITION_PROFILE: &str =
 pub const READ_FORMAT: &str = "plaid-rsp-cpu-imem-history-v2";
 pub const READ_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-rsp-cpu-imem-word-read-definitions-sbv2e0-v2";
+pub const EXECUTION_FORMAT: &str = "plaid-rsp-cpu-imem-history-v3";
+pub const EXECUTION_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-rsp-cpu-imem-controlled-consumption-v3";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -49,6 +52,7 @@ enum Kind {
     RspEnd,
     RspSink,
     RspRead,
+    OpaqueImemSeed,
     ForeignSink,
     SpRead,
     SpWrite,
@@ -142,6 +146,17 @@ pub struct RspRegisterDefinition {
     pub value: u32,
     pub expression: RspDefinitionExpression,
 }
+
+/// One actually decoded IMEM word, not a continuous image lifetime. Byte
+/// parents are the latest captured writes in this complete controlled source.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RspImemFetch {
+    pub context: u64,
+    pub pc: u16,
+    pub word: u32,
+    pub origins: [SpByteOrigin; 4],
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ImemCopyChain {
@@ -171,6 +186,8 @@ pub struct RspCpuImemReport {
     pub final_imem_sha256: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rsp_definitions: Option<Vec<RspRegisterDefinition>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imem_fetches: Option<Vec<RspImemFetch>>,
     pub source_ancestry_certified: bool,
     pub mutation_coverage_certified: bool,
     pub imem_execution_certified: bool,
@@ -390,7 +407,8 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let reads_enabled = h.format == READ_FORMAT && h.profile == READ_PROFILE;
+    let execution_enabled = h.format == EXECUTION_FORMAT && h.profile == EXECUTION_PROFILE;
+    let reads_enabled = execution_enabled || (h.format == READ_FORMAT && h.profile == READ_PROFILE);
     let definitions_enabled =
         reads_enabled || (h.format == DEFINITION_FORMAT && h.profile == DEFINITION_PROFILE);
     require(
@@ -407,6 +425,10 @@ pub fn inspect_rsp_cpu_imem_history(
             .all(|len| (4..=4096).contains(&len) && len.is_multiple_of(4)),
         "invalid declared backing snapshots",
     )?;
+    require(
+        !execution_enabled || h.initial_imem.len() == 4096,
+        "IMEM consumption requires the complete initial bank",
+    )?;
     let records = h.events.len();
     let mut dmem = h.initial_dmem;
     let mut imem = h.initial_imem;
@@ -419,6 +441,7 @@ pub fn inspect_rsp_cpu_imem_history(
     let mut previous_rsp: Option<Row> = None;
     let mut rsp_registers = [None; 32];
     let mut rsp_definitions = Vec::new();
+    let mut imem_fetches = Vec::new();
     let mut phase = 0;
     let mut copies = Vec::new();
     let mut cpu_instructions = 0;
@@ -430,6 +453,31 @@ pub fn inspect_rsp_cpu_imem_history(
         )?;
         phase = row.phase;
         match row.kind {
+            Kind::OpaqueImemSeed => {
+                effect_row(&row)?;
+                require(
+                    execution_enabled
+                        && active.is_none()
+                        && row.context == 0
+                        && !row.cpu
+                        && row.word == 0
+                        && row.bank == 1
+                        && row.bytes == 4
+                        && row.address == row.offset
+                        && row.offset < 4096
+                        && row.offset.is_multiple_of(4),
+                    "invalid controlled opaque IMEM initialization",
+                )?;
+                store(
+                    &mut imem,
+                    &mut iorig,
+                    row.offset,
+                    &payload(row.value, row.bytes)?,
+                    SpByteOrigin::Unknown {
+                        cut_ordinal: Some(row.ordinal),
+                    },
+                )?;
+            }
             Kind::CpuBegin => {
                 require(
                     active.is_none() && row.context == row.ordinal,
@@ -454,6 +502,22 @@ pub fn inspect_rsp_cpu_imem_history(
                     "invalid RSP begin context",
                 )?;
                 boundary(&row, false)?;
+                if execution_enabled {
+                    let offset = row.pc as usize;
+                    let observed: [u8; 4] = imem[offset..offset + 4]
+                        .try_into()
+                        .expect("bounded aligned RSP PC");
+                    require(
+                        u32::from_be_bytes(observed) == row.word,
+                        "RSP decoded word disagrees with current IMEM bytes",
+                    )?;
+                    imem_fetches.push(RspImemFetch {
+                        context: row.context,
+                        pc: row.pc as u16,
+                        word: row.word,
+                        origins: std::array::from_fn(|n| iorig[offset + n].clone()),
+                    });
+                }
                 require(
                     !row.halted && u64::from(row.next) == row.pc,
                     "RSP begin is not an active decoded instruction",
@@ -903,6 +967,7 @@ pub fn inspect_rsp_cpu_imem_history(
         final_dmem_sha256: sha256(&dmem),
         final_imem_sha256: sha256(&imem),
         rsp_definitions: definitions_enabled.then_some(rsp_definitions),
+        imem_fetches: execution_enabled.then_some(imem_fetches),
         source_ancestry_certified: false,
         mutation_coverage_certified: false,
         imem_execution_certified: false,
@@ -1384,5 +1449,151 @@ mod tests {
             }
             assert!(inspect(&data).is_err(), "duplicate {duplicate}");
         }
+    }
+
+    fn execution_fixture(opaque_replace: bool) -> Value {
+        let mut data = read_fixture(4);
+        data["format"] = json!(EXECUTION_FORMAT);
+        data["profile"] = json!(EXECUTION_PROFILE);
+        fn zero(value: &mut Value) {
+            match value {
+                Value::Array(values) => values.iter_mut().for_each(zero),
+                Value::Object(values) => values.values_mut().for_each(zero),
+                _ if value.as_u64() == Some(0x3344) => *value = json!(0),
+                _ if value.as_u64() == Some(0x34023344) => *value = json!(0x34020000),
+                _ => {}
+            }
+        }
+        zero(&mut data);
+        data["final_dmem"] = json!([0, 0, 0, 0]);
+        for r in data["events"].as_array_mut().unwrap() {
+            if r["kind"] == "rsp_sink" {
+                r["value"] = json!(0);
+            }
+        }
+        let mut image = vec![0u8; 4096];
+        data["initial_imem"] = json!(image);
+        let mut rows = Vec::new();
+        let mut last_rsp = Value::Null;
+        for r in data["events"].as_array().unwrap() {
+            if r["kind"] == "rsp_begin" {
+                let address = r["pc"].as_u64().unwrap() as usize;
+                let word = r["word"].as_u64().unwrap() as u32;
+                let mut seed = row("opaque_imem_seed", 0, 0);
+                seed["address"] = json!(address);
+                seed["offset"] = json!(address);
+                seed["bank"] = json!(1);
+                seed["bytes"] = json!(4);
+                seed["value"] = json!(word);
+                rows.push(seed);
+                image[address..address + 4].copy_from_slice(&word.to_be_bytes());
+            }
+            if r["kind"] == "rsp_end" {
+                last_rsp = r.clone();
+            }
+            if r["kind"] == "sp_write" && r["bank"] == 1 {
+                let address = r["offset"].as_u64().unwrap() as usize;
+                image[address..address + 4]
+                    .copy_from_slice(&(r["value"].as_u64().unwrap() as u32).to_be_bytes());
+            }
+            rows.push(r.clone());
+        }
+        if opaque_replace {
+            let mut seed = row("opaque_imem_seed", 0, 0);
+            seed["phase"] = json!(2);
+            seed["bank"] = json!(1);
+            seed["bytes"] = json!(4);
+            rows.push(seed);
+        }
+        last_rsp["phase"] = json!(2);
+        last_rsp["kind"] = json!("rsp_begin");
+        last_rsp["word"] = json!(0);
+        last_rsp["pc"] = json!(0);
+        last_rsp["next"] = json!(0);
+        rows.push(last_rsp.clone());
+        last_rsp["kind"] = json!("rsp_end");
+        last_rsp["next"] = json!(4);
+        rows.push(last_rsp);
+        let mut active = 0;
+        for (n, r) in rows.iter_mut().enumerate() {
+            r["ordinal"] = json!(n + 1);
+            if r["kind"] == "rsp_begin" || r["kind"] == "cpu_begin" {
+                active = n + 1;
+            }
+            r["context"] = json!(active);
+            if r["kind"] == "rsp_end" || r["kind"] == "cpu_end" {
+                active = 0;
+            }
+        }
+        data["events"] = json!(rows);
+        data["final_imem"] = json!(image);
+        data
+    }
+
+    #[test]
+    fn captured_cpu_install_reaches_actual_rsp_consumption_without_lifetime_promotion() {
+        let data = execution_fixture(false);
+        let report = inspect(&data).unwrap();
+        let fetched = report.imem_fetches.as_ref().unwrap().last().unwrap();
+        assert_eq!((fetched.pc, fetched.word), (0, 0));
+        let writer = data["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["kind"] == "sp_write" && r["bank"] == 1)
+            .unwrap()["ordinal"]
+            .as_u64()
+            .unwrap();
+        assert!(
+            fetched.origins.iter().all(
+                |o| matches!(o,SpByteOrigin::Cpu { write_ordinal,.. } if *write_ordinal==writer)
+            )
+        );
+        assert!(
+            !report.imem_execution_certified
+                && !report.executable_lifetime_certified
+                && !report.native_complete
+        );
+    }
+
+    #[test]
+    fn equal_opaque_install_cuts_cpu_origin_and_fetch_state_report_changes_reject() {
+        let report = inspect(&execution_fixture(true)).unwrap();
+        assert!(
+            report
+                .imem_fetches
+                .as_ref()
+                .unwrap()
+                .last()
+                .unwrap()
+                .origins
+                .iter()
+                .all(|o| matches!(
+                    o,
+                    SpByteOrigin::Unknown {
+                        cut_ordinal: Some(_)
+                    }
+                ))
+        );
+        let data = execution_fixture(false);
+        let bytes = serde_json::to_vec(&data).unwrap();
+        let mut forged = inspect(&data).unwrap();
+        forged
+            .imem_fetches
+            .as_mut()
+            .unwrap()
+            .last_mut()
+            .unwrap()
+            .origins[0] = SpByteOrigin::Unknown { cut_ordinal: None };
+        assert!(verify_rsp_cpu_imem_report(&forged, &bytes, &sha256(&bytes)).is_err());
+        let mut wrong = data.clone();
+        let n = wrong["events"].as_array().unwrap().len();
+        wrong["events"][n - 2]["word"] = json!(13);
+        wrong["events"][n - 1]["word"] = json!(13);
+        wrong["events"][n - 1]["halted"] = json!(true);
+        assert!(inspect(&wrong).is_err());
+        let mut partial = data;
+        partial["initial_imem"] = json!([0, 0, 0, 0]);
+        assert!(inspect(&partial).is_err());
     }
 }
