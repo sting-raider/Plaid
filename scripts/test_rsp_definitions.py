@@ -16,8 +16,10 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--source',type=Path)
+    parser.add_argument('--word-reads',action='store_true')
     args = parser.parse_args()
-    spec = importlib.util.spec_from_file_location('census',ROOT/'spikes/058-rsp-defined-imem/verify.py')
+    recipe = '059-rsp-word-read-imem' if args.word_reads else '058-rsp-defined-imem'
+    spec = importlib.util.spec_from_file_location('census',ROOT/'spikes'/recipe/'verify.py')
     model = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(model)
     events,definitions = model.expected_events()
@@ -62,6 +64,21 @@ def main():
             elif mode==3: forged['profile']= 'ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-rsp-cpu-imem-scalar-sbv2e0-v0'
             else: forged['events'][0]['rgpr'][0]=1
             run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.word_reads:
+            for mode in range(3):
+                forged = copy.deepcopy(expected)
+                read = next(e for e in forged['events'] if e['kind']=='rsp_read')
+                if mode==0:
+                    forged['events'].remove(read)
+                    active=0
+                    for ordinal,event in enumerate(forged['events'],1):
+                        event['ordinal']=ordinal
+                        if event['kind'] in ('rsp_begin','cpu_begin'): active=ordinal
+                        event['context']=active
+                        if event['kind'] in ('rsp_end','cpu_end'): active=0
+                elif mode==1: read.update(address=4,offset=4)
+                else: read['value'] ^= 1
+                run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
             forged = json.loads(original)
@@ -69,6 +86,11 @@ def main():
             elif mode==1: forged['copies'][1]['source_bytes'][0]['source_definition']=9
             elif mode==2: del forged['rsp_definitions']
             else: forged['source_ancestry_certified']=True
+            output.write_text(json.dumps(forged),encoding='utf-8')
+            run('verify-rsp-cpu-imem',digest,False)
+        if args.word_reads:
+            forged = json.loads(original)
+            forged['rsp_definitions'][4]['expression']['origins'][0]['source_definition']=3
             output.write_text(json.dumps(forged),encoding='utf-8')
             run('verify-rsp-cpu-imem',digest,False)
     print('RSP definitions: original-clock ORI/ADDU parents, phase cuts, full register snapshots, source/report/input gates and unchanged proof flags passed')

@@ -15,7 +15,7 @@ REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 OUTPUT = ROOT / "target/ares-oracle-spike"
 
 
-def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False, rdram_scalar_access=False, fetch_boundary_access=False, pi_dma_access=False, queue_access=False, sp_backing_access=False, pif_backing_access=False, rsp_dmem_access=False, cpu_instruction_access=False):
+def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False, rdram_scalar_access=False, fetch_boundary_access=False, pi_dma_access=False, queue_access=False, sp_backing_access=False, pif_backing_access=False, rsp_dmem_access=False, cpu_instruction_access=False, rsp_word_read_access=False):
     if cache_fill_access: assert raw_fetch_access and physical_fetch_access
     if cache_operation_access: assert raw_fetch_access and physical_fetch_access
     if rdram_burst_access: assert raw_fetch_access and physical_fetch_access
@@ -26,6 +26,7 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
     if sp_backing_access: assert raw_fetch_access and physical_fetch_access
     if pif_backing_access: assert raw_fetch_access and physical_fetch_access
     if cpu_instruction_access: assert raw_fetch_access and physical_fetch_access
+    if rsp_word_read_access: assert rsp_dmem_access
     output = Path(directory)
     assert subprocess.check_output(["git","rev-parse","HEAD"],cwd=REF,text=True).strip() == REV
     subprocess.run(["git","-c","core.autocrlf=true","diff","--quiet","HEAD"],cwd=REF,check=True)
@@ -55,6 +56,8 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
         "extra_sources":{str(Path(p).relative_to(ROOT)):hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in extra_sources},
         "fixture_driver":hashlib.sha256(Path(__file__).with_name("driver.cpp").read_bytes()).hexdigest(),
         "recipe":hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+    if rsp_word_read_access:
+        inputs["rsp_word_read_access"]=True
     exe = output / "oracle"
     manifest = output / "build.json"
     if not manifest.exists() or json.loads(manifest.read_text()) != inputs or not exe.exists():
@@ -283,7 +286,7 @@ struct PlaidQueueDispatchScope {
         if rsp_dmem_access:
             spec = importlib.util.spec_from_file_location("plaid_rsp_dmem_generation", ROOT/"spikes/042-ares-rsp-dmem-history/prepare.py")
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
-            module.generate(REF, output,sp_backing=sp_backing_access)
+            module.generate(REF, output,sp_backing=sp_backing_access,word_reads=rsp_word_read_access)
         if cpu_instruction_access:
             spec = importlib.util.spec_from_file_location("plaid_cpu_instruction_generation", ROOT/"spikes/044-ares-cpu-copy-dataflow/prepare.py")
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)

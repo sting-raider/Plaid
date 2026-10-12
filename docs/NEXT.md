@@ -1,11 +1,13 @@
 # Next
 
 Continue the existing RSP producer path from original-clock register definitions.
-ORI/ADDU now link to scalar DMEM writers and CPU IMEM installs under v1, without
-inventing full state from PR8's selected-register schema. Broader scalar loads/
+ORI/ADDU and actual DMEM LW now link to scalar writers and CPU IMEM installs
+under v1/v2, without inventing full state from PR8's selected-register schema or
+a performed read from equal bits. Broader scalar loads/
 stores, vector operand ancestry, DMA producers and actual IMEM execution still
 need compatible sensing/composition. Reuse the retained68-event/16-checkpoint
-fixture and old v0 compatibility source; no repeat reference build is needed.
+and79-event/16-checkpoint fixtures plus v0/v1 compatibility sources; no repeat
+reference build is needed for compatible consumers.
 
 Continue from the complete twenty-million-call CIC6105 PI/fill/consumption join.
 Canonical and independent replay agree on2472203 full candidate fetches,
