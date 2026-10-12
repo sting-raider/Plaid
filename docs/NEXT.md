@@ -147,6 +147,15 @@ separate; the finite read/writeback report grants no table certificate. The
 physical-immutability prepared histories remain pending composition with an
 authenticated snapshot and complete mutation census.
 
+COP1 physical FPR byte lineage now composes with canonical completed uncached
+backing-store normalization (ADR-0120). Preserve the same source clock and
+independent normalization contexts. Join actual backing writer ancestry and
+executable fills/fetches next; cached COP1 loads/stores, arithmetic/other FPR
+writers, producer census and context/lifetime still need source evidence. The
+96-case fixture's declared instruction/GPR seeds and modeled physical selections
+are checked against actual selected-register snapshots and backing effects;
+they are not a complete guest instruction/writer capture for arbitrary ROMs.
+
 EBus hidden fetches require a separate derived-bits source witness or Unknown; retain actual read context and hidden-storage lifecycle before any origin promotion (ADR-0062).
 
 Successful TLB-mapped uncached fetches now have finite source evidence; retain current translated/post-endian addresses in each access context and add mapping-generation/lifecycle evidence before proving alias history (ADR-0063).

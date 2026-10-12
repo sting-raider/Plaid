@@ -164,6 +164,23 @@ Backing context records only captured writes, never invented initial writers.
 This normalized access protocol does not authenticate decoded LW operands or a
 subsequent JR, physical table immutability, complete sensing or target closure.
 
+Compose source-bound COP1 FPR lineage with separately preserved completed-store
+normalization contexts:
+
+```bash
+plaid compose-cop1-mutations <fpr-history.json> <expected-source-sha256> <contexts.json> <expected-contexts-sha256> <report.json>
+plaid verify-cop1-mutations <same-inputs>
+python scripts/test_cop1_mutation_lineage.py [retained-actual-matrix.json]
+```
+
+Every store occurrence must have exactly one normalization context. The canonical
+COP1 verifier checks the supplied instruction/GPR/FPR/FR/CU1 inputs and completed
+effect; its FPR snapshot, selected lanes, ordinal and direct-KSEG1 destination
+must agree with the source replay. Reports preserve the full lineage and all
+normalization inputs. External digests must be retained independently of editable
+submissions. This checks the represented facts, without proving the ancestry or
+complete capture of those architectural contexts or backing memory producers.
+
 ## Source-bound history consumers
 
 Plaid also contains strict consumers for bounded research histories. These are deliberately separate from claims of whole-ROM completeness.

@@ -4,6 +4,12 @@
 
 Implemented:
 
+- COP1 completed reads now retain physical FPR byte generations through loads,
+  same-value register moves and mixed-width stores, then compose with canonical
+  CU1-aware completed backing-store normalization. Both CLI inputs require
+  independent receipts. All 96 reference cases reproduce with 72 exact store
+  joins. Complete writer/source/context ancestry and executable lifetime stay OPEN.
+
 - Cached Word reads now compose with the canonical D-cache writeback engine,
   sharing resident generation/revision and per-byte origins. Captured backing
   writes stay distinct from resident source; equal-value fills and mutations
