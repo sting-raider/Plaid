@@ -6,7 +6,12 @@ writer/fill/read ordinals stay distinct from renumbered legacy projections;
 SP events supply no invented RAM origins. Cached and uncached contracts, source
 replacement/report/input adversaries and full local gate pass. The prior610k v2
 report rechecks unchanged; independent100k v3 replay agrees with zero PI chains.
-The larger20m chain replay is pending; no additional closure state is claimed.
+Complete20m Rust and independent Python chain replay now agree on all fields,
+172 samples and the ordered digest:2472203 full candidate fetches,0 partial,
+27 captured fills. The first candidate is the declared entry at seq17527797:
+ROM0x1000 -> four PI writes -> cached RAM0x400. Prior complete primitive report
+unchanged. Mutation coverage, ultimate ancestry and executable lifetime remain
+uncertified; whole-ROM/native stay OPEN. See the installed-entry receipt.
 
 Complete buffered twenty-million-call CIC6105 sources now pass independent
 receipt checks and canonical paired-source reconstruction. Request 1/token 6
