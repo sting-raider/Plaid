@@ -169,6 +169,13 @@ plaid verify-rsp-cpu-imem <history.json> <expected-source-sha256> <report.json>
 python scripts/test_rsp_cpu_imem.py
 ```
 
+The explicit `plaid-rsp-cpu-imem-history-v1` definition profile additionally
+checks full ORI/ADDU register/control boundaries and retains raw-context parent
+nodes through scalar RSP stores into CPU IMEM copy chains. Reentry cuts tags;
+captured incoming registers remain opaque. Legacy v0 reports stay byte-compatible.
+`python scripts/test_rsp_definitions.py` exercises source/report/profile/phase
+boundaries; spike058 retains the exact pinned actual component controls.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

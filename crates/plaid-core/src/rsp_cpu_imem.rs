@@ -11,6 +11,9 @@ use serde::{Deserialize, Serialize};
 pub const FORMAT: &str = "plaid-rsp-cpu-imem-history-v0";
 pub const PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-rsp-cpu-imem-scalar-sbv2e0-v0";
+pub const DEFINITION_FORMAT: &str = "plaid-rsp-cpu-imem-history-v1";
+pub const DEFINITION_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-rsp-cpu-imem-scalar-definitions-sbv2e0-v1";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -76,6 +79,8 @@ pub enum SpByteOrigin {
         pc: u16,
         word: u32,
         write_ordinal: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_definition: Option<u64>,
     },
     Cpu {
         context: u64,
@@ -86,6 +91,41 @@ pub enum SpByteOrigin {
     Unknown {
         cut_ordinal: Option<u64>,
     },
+}
+
+/// Parent identity at the actual decoded instruction boundary. Captured inputs
+/// remain opaque; equal bits never substitute for an earlier definition.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum RspRegisterParent {
+    ArchitecturalZero,
+    Definition { context: u64 },
+    CapturedInput { register: u8, value: u32 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum RspDefinitionExpression {
+    Ori {
+        source: RspRegisterParent,
+        immediate: u16,
+    },
+    Addu {
+        left: RspRegisterParent,
+        right: RspRegisterParent,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RspRegisterDefinition {
+    pub context: u64,
+    pub phase: u32,
+    pub pc: u16,
+    pub word: u32,
+    pub register: u8,
+    pub value: u32,
+    pub expression: RspDefinitionExpression,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -114,6 +154,8 @@ pub struct RspCpuImemReport {
     pub final_imem_writers: Vec<SpByteOrigin>,
     pub final_dmem_sha256: String,
     pub final_imem_sha256: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rsp_definitions: Option<Vec<RspRegisterDefinition>>,
     pub source_ancestry_certified: bool,
     pub mutation_coverage_certified: bool,
     pub imem_execution_certified: bool,
@@ -150,6 +192,8 @@ enum Active {
         lanes: Vec<(u16, u8)>,
         consumed: usize,
         breaking: bool,
+        expected_gpr: Vec<u32>,
+        definition: Option<RspRegisterDefinition>,
     },
 }
 fn require(ok: bool, why: &str) -> Result<(), String> {
@@ -265,6 +309,55 @@ fn rsp_lanes(row: &Row) -> Result<(Vec<(u16, u8)>, bool), String> {
     ))
 }
 
+fn is_definition(word: u32) -> bool {
+    word >> 26 == 0x0d || (word >> 26 == 0 && word & 63 == 0x21 && (word >> 6) & 31 == 0)
+}
+
+fn rsp_definition(row: &Row, registers: &[Option<u64>; 32]) -> Option<RspRegisterDefinition> {
+    let rs = ((row.word >> 21) & 31) as usize;
+    let rt = ((row.word >> 16) & 31) as usize;
+    let parent = |r: usize| {
+        if r == 0 {
+            RspRegisterParent::ArchitecturalZero
+        } else if let Some(context) = registers[r] {
+            RspRegisterParent::Definition { context }
+        } else {
+            RspRegisterParent::CapturedInput {
+                register: r as u8,
+                value: row.rgpr[r],
+            }
+        }
+    };
+    let (register, value, expression) = if row.word >> 26 == 0x0d {
+        (
+            rt,
+            row.rgpr[rs] | u32::from(row.word as u16),
+            RspDefinitionExpression::Ori {
+                source: parent(rs),
+                immediate: row.word as u16,
+            },
+        )
+    } else {
+        (
+            ((row.word >> 11) & 31) as usize,
+            row.rgpr[rs].wrapping_add(row.rgpr[rt]),
+            RspDefinitionExpression::Addu {
+                left: parent(rs),
+                right: parent(rt),
+            },
+        )
+    };
+    (register != 0).then_some(RspRegisterDefinition {
+        context: row.context,
+        phase: row.phase,
+        pc: row.pc as u16,
+        word: row.word,
+        register: register as u8,
+        value,
+        expression,
+    })
+}
+
 /// Verify a complete externally committed controlled chronology. No fixture
 /// phase numbers, fixed code PCs, payloads or certificate counts are assumed.
 pub fn inspect_rsp_cpu_imem_history(
@@ -281,8 +374,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
+    let definitions_enabled = h.format == DEFINITION_FORMAT && h.profile == DEFINITION_PROFILE;
     require(
-        h.format == FORMAT && h.profile == PROFILE,
+        (h.format == FORMAT && h.profile == PROFILE) || definitions_enabled,
         "unsupported RSP/CPU composition profile",
     )?;
     require(
@@ -305,6 +399,8 @@ pub fn inspect_rsp_cpu_imem_history(
     let mut active: Option<Active> = None;
     let mut previous_cpu: Option<Row> = None;
     let mut previous_rsp: Option<Row> = None;
+    let mut rsp_registers = [None; 32];
+    let mut rsp_definitions = Vec::new();
     let mut phase = 0;
     let mut copies = Vec::new();
     let mut cpu_instructions = 0;
@@ -352,12 +448,31 @@ pub fn inspect_rsp_cpu_imem_history(
                         "RSP same-phase continuity mismatch",
                     )?;
                 }
-                let (lanes, breaking) = rsp_lanes(&row)?;
+                if previous_rsp
+                    .as_ref()
+                    .is_none_or(|previous| previous.phase != row.phase)
+                {
+                    rsp_registers.fill(None);
+                }
+                let mut expected_gpr = row.rgpr.clone();
+                let (lanes, breaking, definition) =
+                    if definitions_enabled && is_definition(row.word) {
+                        let definition = rsp_definition(&row, &rsp_registers);
+                        if let Some(d) = &definition {
+                            expected_gpr[d.register as usize] = d.value;
+                        }
+                        (Vec::new(), false, definition)
+                    } else {
+                        let (lanes, breaking) = rsp_lanes(&row)?;
+                        (lanes, breaking, None)
+                    };
                 active = Some(Active::Rsp {
                     begin: row,
                     lanes,
                     consumed: 0,
                     breaking,
+                    expected_gpr,
+                    definition,
                 });
             }
             Kind::RspSink => {
@@ -405,6 +520,13 @@ pub fn inspect_rsp_cpu_imem_history(
                         pc: row.pc as u16,
                         word: row.word,
                         write_ordinal: row.ordinal,
+                        source_definition: if definitions_enabled
+                            && matches!(row.word >> 26, 0x28 | 0x29 | 0x2b)
+                        {
+                            rsp_registers[((row.word >> 16) & 31) as usize]
+                        } else {
+                            None
+                        },
                     },
                 )?;
                 *consumed += data.len();
@@ -651,6 +773,8 @@ pub fn inspect_rsp_cpu_imem_history(
                     lanes,
                     consumed,
                     breaking,
+                    expected_gpr,
+                    definition,
                 }) = active.take()
                 else {
                     return Err("RSP end lacks begin".into());
@@ -658,12 +782,16 @@ pub fn inspect_rsp_cpu_imem_history(
                 require(
                     same(&begin, &row)
                         && consumed == lanes.len()
-                        && row.rgpr == begin.rgpr
+                        && row.rgpr == expected_gpr
                         && row.vector_byte == begin.vector_byte
                         && row.next == ((begin.pc as u32 + 4) & 4095)
                         && row.halted == breaking,
                     "RSP result/effect census mismatch",
                 )?;
+                if let Some(definition) = definition {
+                    rsp_registers[definition.register as usize] = Some(definition.context);
+                    rsp_definitions.push(definition);
+                }
                 rsp_instructions += 1;
                 previous_rsp = Some(row);
             }
@@ -679,8 +807,8 @@ pub fn inspect_rsp_cpu_imem_history(
         "modeled effects disagree with final backing snapshots",
     )?;
     Ok(RspCpuImemReport {
-        format: FORMAT.into(),
-        profile: PROFILE.into(),
+        format: h.format,
+        profile: h.profile,
         source_sha256: digest,
         records,
         cpu_instructions,
@@ -689,6 +817,7 @@ pub fn inspect_rsp_cpu_imem_history(
         final_imem_writers: iorig,
         final_dmem_sha256: sha256(&dmem),
         final_imem_sha256: sha256(&imem),
+        rsp_definitions: definitions_enabled.then_some(rsp_definitions),
         source_ancestry_certified: false,
         mutation_coverage_certified: false,
         imem_execution_certified: false,
@@ -828,5 +957,179 @@ mod tests {
         let mut deleted = data;
         deleted["events"].as_array_mut().unwrap().remove(3);
         assert!(inspect(&deleted).is_err());
+    }
+
+    fn defined_fixture(repeat: bool) -> Value {
+        let mut data = fixture();
+        data["format"] = json!(DEFINITION_FORMAT);
+        data["profile"] = json!(DEFINITION_PROFILE);
+        fn replace(value: &mut Value) {
+            match value {
+                Value::Array(values) => values.iter_mut().for_each(replace),
+                Value::Object(values) => values.values_mut().for_each(replace),
+                _ if value.as_u64() == Some(0x11223344) => *value = json!(0x3344),
+                _ => {}
+            }
+        }
+        replace(&mut data);
+        data["final_dmem"] = json!([0, 0, 0x33, 0x44]);
+        data["final_imem"] = data["final_dmem"].clone();
+        data["events"][1]["value"] = json!(0);
+        data["events"][2]["value"] = json!(0);
+        let mut words = vec![0x34023344u32];
+        if repeat {
+            words.push(0x34023344);
+        }
+        words.extend([0x00401821, 0x00601021]);
+        let mut regs = [0u32; 32];
+        regs[1] = 0x1000;
+        regs[2] = 0x5555;
+        let mut prefix = Vec::new();
+        for (n, word) in words.iter().copied().enumerate() {
+            let ordinal = prefix.len() as u64 + 1;
+            let pc = 0xffc - (words.len() - n) as u32 * 4;
+            let mut begin = row("rsp_begin", ordinal, ordinal);
+            begin["pc"] = json!(pc);
+            begin["next"] = json!(pc);
+            begin["word"] = json!(word);
+            begin["rgpr"] = json!(regs);
+            prefix.push(begin.clone());
+            if word >> 26 == 0x0d {
+                regs[2] = 0x3344;
+            } else if (word >> 11) & 31 == 3 {
+                regs[3] = regs[2];
+            } else {
+                regs[2] = regs[3];
+            }
+            begin["kind"] = json!("rsp_end");
+            begin["ordinal"] = json!(ordinal + 1);
+            begin["next"] = json!(pc + 4);
+            begin["rgpr"] = json!(regs);
+            prefix.push(begin);
+        }
+        let shift = prefix.len() as u64;
+        for r in data["events"].as_array_mut().unwrap() {
+            r["ordinal"] = json!(r["ordinal"].as_u64().unwrap() + shift);
+            r["context"] = json!(r["context"].as_u64().unwrap() + shift);
+            if r["kind"] == "rsp_begin" || r["kind"] == "rsp_end" {
+                r["rgpr"] = json!(regs);
+            }
+            prefix.push(r.clone());
+        }
+        data["events"] = json!(prefix);
+        data
+    }
+
+    #[test]
+    fn rsp_literal_and_same_value_definitions_reach_imem_on_the_original_clock() {
+        for repeat in [false, true] {
+            let data = defined_fixture(repeat);
+            let report = inspect(&data).unwrap();
+            let definitions = report.rsp_definitions.as_ref().unwrap();
+            assert_eq!(definitions.len(), if repeat { 4 } else { 3 });
+            assert!(matches!(
+                definitions[0].expression,
+                RspDefinitionExpression::Ori {
+                    source: RspRegisterParent::ArchitecturalZero,
+                    immediate: 0x3344
+                }
+            ));
+            let last = definitions.last().unwrap();
+            assert_eq!(last.value, 0x3344);
+            assert!(matches!(last.expression, RspDefinitionExpression::Addu {
+                left: RspRegisterParent::Definition { context }, right: RspRegisterParent::ArchitecturalZero
+            } if context == definitions[definitions.len() - 2].context));
+            assert!(report.copies[0].source_bytes.iter().all(|b| matches!(b,
+                SpByteOrigin::Rsp { source_definition: Some(context), .. } if *context == last.context)));
+            if repeat {
+                assert_ne!(definitions[0].context, definitions[1].context);
+            }
+            assert!(
+                !report.source_ancestry_certified
+                    && !report.mutation_coverage_certified
+                    && !report.imem_execution_certified
+                    && !report.native_complete
+            );
+        }
+    }
+
+    #[test]
+    fn rsp_reentry_cuts_definitions_even_when_scalar_values_are_identical() {
+        let mut data = defined_fixture(false);
+        for r in data["events"].as_array_mut().unwrap().iter_mut().skip(6) {
+            r["phase"] = json!(2);
+        }
+        for step in data["steps"].as_array_mut().unwrap() {
+            step["phase"] = json!(2);
+        }
+        let report = inspect(&data).unwrap();
+        assert_eq!(report.rsp_definitions.as_ref().unwrap().len(), 3);
+        assert!(report.copies[0].source_bytes.iter().all(|b| matches!(
+            b,
+            SpByteOrigin::Rsp {
+                source_definition: None,
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn rsp_definition_snapshots_profiles_parents_and_store_tags_are_rechecked() {
+        let data = defined_fixture(false);
+        for mode in 0..4 {
+            let mut forged = data.clone();
+            match mode {
+                0 => forged["events"][1]["rgpr"][2] = json!(0x3345),
+                1 => forged["events"][3]["rgpr"][10] = json!(1),
+                2 => forged["events"][2]["word"] = json!(0x00401861u32),
+                _ => forged["profile"] = json!(PROFILE),
+            }
+            assert!(inspect(&forged).is_err(), "mode {mode}");
+        }
+        let bytes = serde_json::to_vec(&data).unwrap();
+        let digest = sha256(&bytes);
+        let report = inspect(&data).unwrap();
+        let mut forged = report.clone();
+        if let RspDefinitionExpression::Addu { left, .. } =
+            &mut forged.rsp_definitions.as_mut().unwrap()[2].expression
+        {
+            *left = RspRegisterParent::Definition { context: 999999 };
+        }
+        assert!(verify_rsp_cpu_imem_report(&forged, &bytes, &digest).is_err());
+        let mut forged = report;
+        if let SpByteOrigin::Rsp {
+            source_definition, ..
+        } = &mut forged.copies[0].source_bytes[0]
+        {
+            *source_definition = None;
+        }
+        assert!(verify_rsp_cpu_imem_report(&forged, &bytes, &digest).is_err());
+        let mut legacy = data;
+        legacy["format"] = json!(FORMAT);
+        legacy["profile"] = json!(PROFILE);
+        assert!(inspect(&legacy).is_err());
+    }
+
+    #[test]
+    fn rsp_definitions_keep_opaque_incoming_operands_distinct_from_zero() {
+        let mut data = defined_fixture(false);
+        for index in [0, 1] {
+            data["events"][index]["word"] = json!(0x34222344u32);
+        }
+        let report = inspect(&data).unwrap();
+        assert!(matches!(
+            report.rsp_definitions.as_ref().unwrap()[0].expression,
+            RspDefinitionExpression::Ori {
+                source: RspRegisterParent::CapturedInput {
+                    register: 1,
+                    value: 0x1000
+                },
+                immediate: 0x2344
+            }
+        ));
+        assert!(!report.source_ancestry_certified);
+        let mut encoded = serde_json::to_value(&report).unwrap();
+        encoded["rsp_definitions"][0]["expression"]["source"]["invented_root"] = json!(true);
+        assert!(serde_json::from_value::<RspCpuImemReport>(encoded).is_err());
     }
 }
