@@ -25,6 +25,10 @@ DrvFS runs retain the complete Git clean-source check with serial index reads.
 The call budget is bounded by the shared driver's twenty-million-call ceiling.
 Hashing uses bounded chunks for retained traces; a larger budget still proves
 only the supplied finite prefix. Budget exhaustion does not establish completion.
+The driver uses explicit live 1 MiB buffers for machine-readable fetch/history
+streams. Formatting, tracer callbacks, guest accesses and record order remain
+unchanged; complete close/flush success is required. A capture without its final
+footer/checkpoint is rejected regardless of how much output was produced.
 
 Import/recheck the result using `plaid import-boot-fetch` and
 `plaid verify-boot-fetch`. A configuration declaration does not authenticate a

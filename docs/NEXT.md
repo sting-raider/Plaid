@@ -1,5 +1,11 @@
 # Next
 
+Use the explicit buffered capture path to finish the bounded larger PI/SP prefix.
+It preserves exact sources and reduces measured host logging overhead about 5x.
+Do not bypass disassembly getters: Random-register annotation can consume RNG.
+The discarded raw-text prototype did not improve the baseline. Recheck complete
+larger sources and actual dispatch/status/entry before changing proof state.
+
 The bounded capture ceiling is now 20 million calls. Address measured logging
 overhead before repeating the larger PI/SP source: the plain reference reached
 higher RAM/cleared PI busy, while the instrumented attempt timed out and has no

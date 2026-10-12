@@ -2,6 +2,7 @@
  * Stream already-completed results and existing fields, without guest accesses.
  */
 static FILE* accessBootTrace = nullptr;
+static char accessBootOutputBuffer[1024 * 1024];
 static u64 accessBootOrdinal = 0, accessBootActive = 0, accessBootPending = 0;
 static u64 accessBootPc = 0, accessBootVaddr = 0;
 static u32 accessBootTranslated = 0, accessBootBus = 0, accessBootWord = 0;
@@ -84,6 +85,7 @@ static void access_boot_start(const char* tracePath,const char* romHash,u32 budg
   std::string filename = std::string(tracePath) + ".history.ndjson";
   accessBootTrace = std::fopen(filename.c_str(),"wb");
   if(!accessBootTrace) std::abort();
+  if(std::setvbuf(accessBootTrace,accessBootOutputBuffer,_IOFBF,sizeof(accessBootOutputBuffer))) std::abort();
   std::fprintf(accessBootTrace,"{\"record\":\"header\",\"format\":\"%s\",\"revision\":\"9408cb43d4948fc3ea6e152a307a34348df3fe04\",\"rom_sha256\":\"%s\",\"budget\":%u,\"mapped_cartridge_size\":%u,\"firmware_sha256\":\"%s\",\"policy\":\"%s\",\"lifecycle_policy\":\"single_run_no_host_restore\",\"paired_fetch_format\":\"plaid-ares-fetch-research-v5\"}\n",
     PLAID_ACCESS_BOOT_FORMAT,romHash,budget,mappedSize,firmwareHash,PLAID_ACCESS_BOOT_POLICY);
   plaidRdramScalarObserver = access_boot_scalar;

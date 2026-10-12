@@ -15,6 +15,7 @@ struct Observer : Headless {
   RomObserver rom;
   #endif
   FILE* trace = nullptr;
+  std::vector<char> traceBuffer;
   FILE* messages = nullptr;
   u64 fetches = 0;
   auto log(Node::Debugger::Tracer::Tracer node, string_view message) -> void override {
@@ -113,6 +114,12 @@ int fetch_observer_main(int argc, char** argv) {
   if(traced) {
     frontend.trace = std::fopen(argv[3], "wb");
     if(!frontend.trace) return 4;
+    frontend.traceBuffer.resize(1024 * 1024);
+    if(std::setvbuf(frontend.trace, frontend.traceBuffer.data(), _IOFBF, frontend.traceBuffer.size())) {
+      std::fclose(frontend.trace);
+      frontend.trace = nullptr;
+      return 4;
+    }
     auto romHash = nall::Hash::SHA256(std::span<const u8>{bytes.data(), bytes.size()}).digest();
     #if defined(PLAID_BOOT_PROFILE)
     boot_profile_header(frontend.trace, romHash.data(), budget, cartridge.rom.size, firmwareHash.data());
@@ -144,7 +151,10 @@ int fetch_observer_main(int argc, char** argv) {
     #endif
     std::fprintf(frontend.trace, "{\"record\":\"end\",\"fetch_count\":%llu,\"reason\":\"instruction_call_budget\"}\n",
       (unsigned long long)frontend.fetches);
-    if(std::ferror(frontend.trace) || std::fclose(frontend.trace)) return 7;
+    bool traceError = std::ferror(frontend.trace);
+    if(std::fclose(frontend.trace)) traceError = true;
+    frontend.trace = nullptr;
+    if(traceError) return 7;
   }
   auto state = std::fopen(argv[4], "wb");
   if(!state) return 4;
