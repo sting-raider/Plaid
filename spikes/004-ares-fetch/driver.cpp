@@ -70,8 +70,10 @@ int fetch_observer_main(int argc, char** argv) {
   if(!traced && strcmp(argv[1], "plain")) return 2;
   auto bytes = nall::file::read(argv[2]);
   if(bytes.size() < 4096 || bytes.size() > 64_MiB || bytes.size() % 4) return 3;
-  u32 budget = std::strtoul(argv[6], nullptr, 10);
-  if(!budget || budget > 10000000) return 3;
+  char* budgetEnd = nullptr;
+  auto parsedBudget = std::strtoul(argv[6], &budgetEnd, 10);
+  if(budgetEnd == argv[6] || *budgetEnd || !parsedBudget || parsedBudget > 20000000) return 3;
+  u32 budget = (u32)parsedBudget;
   Observer frontend;
   platform = &frontend;
   #if defined(PLAID_PIF_BOOT)

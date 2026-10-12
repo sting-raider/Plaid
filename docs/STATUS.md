@@ -1,5 +1,12 @@
 # Status
 
+Capture capacity is explicitly bounded at 20 million calls across importer,
+map validation and the shared driver. Strict driver parsing rejects overflow,
+trailing junk and over-capacity values. The retained million-call source report
+still rechecks unchanged. A 20-million plain reference run cleared PI busy and
+reached higher RAM, but its instrumented attempt hit the 600-second wall limit;
+that partial source is excluded from evidence pending capture-overhead work.
+
 The local CIC6105 recipe now joins the existing PI/queue/SP v3 source clock to
 paired v5 capture/rechecking, with exact baseline equality. Its million-call
 source has 8,168,531 records and 1,048,576 successful canonical-ROM-origin RAM

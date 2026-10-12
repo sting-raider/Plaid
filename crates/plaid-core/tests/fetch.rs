@@ -36,6 +36,30 @@ fn import(input: &str) -> Result<ProgramMap, String> {
     import_fetch(Cursor::new(input.as_bytes()), &rom())
 }
 
+#[test]
+fn larger_capture_capacity_stays_bounded_and_does_not_certify_execution() {
+    let input = raw(&[(0x4000, 0, false)]);
+    let budget = plaid_core::fetch::MAX_BUDGET;
+    assert_eq!(budget, 20_000_000);
+    let accepted = input.replace("\"budget\":10", &format!("\"budget\":{budget}"));
+    let map = import(&accepted).unwrap();
+    verify_fetch_capture(&map, Cursor::new(accepted.as_bytes()), &rom()).unwrap();
+    for invalid in [0, budget + 1, u64::MAX] {
+        assert!(import(&input.replace("\"budget\":10", &format!("\"budget\":{invalid}"))).is_err());
+    }
+    let mut forged = map.clone();
+    forged
+        .fetch_captures
+        .values_mut()
+        .next()
+        .unwrap()
+        .instruction_call_budget = budget + 1;
+    assert!(forged.validate().is_err());
+    let report = solve(&map, &[], Scope::WholeRom).unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    assert!(!report.native_complete);
+}
+
 fn physical_raw(events: &[(u32, bool)]) -> String {
     let input = raw(&vec![(0x4000, 0, false); events.len()]);
     input
