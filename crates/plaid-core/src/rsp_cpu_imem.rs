@@ -1,7 +1,9 @@
 //! Source-bound composition of decoded RSP writers and CPU IMEM installation.
 //! Captured scalar/vector operands are inputs, not ultimate register ancestry.
 //! The controlled profile has CPU register/control continuity, explicit RSP
-//! reentry phases and no modeled cache, TLB, DMA or restore interleavings.
+//! reentry phases and no modeled cache, TLB or restore interleavings. Controlled
+//! v4 separately binds completed DMEM DMA Word writes to uncached CPU fetches
+//! and decoder contexts; it grants no request lifetime or mutation census.
 use crate::{
     program::{GuestVirtualAddr, PhysicalAddr},
     rom::sha256,
@@ -20,6 +22,9 @@ pub const READ_PROFILE: &str =
 pub const EXECUTION_FORMAT: &str = "plaid-rsp-cpu-imem-history-v3";
 pub const EXECUTION_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-rsp-cpu-imem-controlled-consumption-v3";
+pub const DMA_FORMAT: &str = "plaid-rsp-cpu-imem-history-v4";
+pub const DMA_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-rsp-dmem-dma-cpu-consumption-v4";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -32,6 +37,15 @@ struct History {
     final_imem: Vec<u8>,
     steps: Vec<CpuStep>,
     events: Vec<Row>,
+    #[serde(default)]
+    ram: Option<RamSnapshot>,
+}
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RamSnapshot {
+    start: PhysicalAddr,
+    initial: Vec<u8>,
+    final_bytes: Vec<u8>,
 }
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -56,6 +70,10 @@ enum Kind {
     ForeignSink,
     SpRead,
     SpWrite,
+    RamWrite,
+    RamRead,
+    RamFetchBegin,
+    RamFetchEnd,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -77,6 +95,69 @@ struct Row {
     vector_byte: u32,
     gpr: Vec<u64>,
     rgpr: Vec<u32>,
+    #[serde(default)]
+    dma: Option<DmemDmaDescriptor>,
+    #[serde(default)]
+    fetch: Option<RamFetchAccess>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DmemDmaDescriptor {
+    pub pbus: u32,
+    pub dram: PhysicalAddr,
+    pub length: u32,
+    pub count: u32,
+    pub skip: u32,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RamFetchAccess {
+    pub physical: PhysicalAddr,
+    pub cached: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum RamByteOrigin {
+    Unknown {
+        cut_ordinal: Option<u64>,
+    },
+    SpDma {
+        write_ordinal: u64,
+        source_offset: u16,
+    },
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DmemDmaWord {
+    pub write_ordinal: u64,
+    pub destination: PhysicalAddr,
+    pub descriptor: DmemDmaDescriptor,
+    pub source_offset: u16,
+    pub word: u32,
+    pub source_bytes: [SpByteOrigin; 4],
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DmaCpuFetch {
+    pub fetch_context: u64,
+    pub read_ordinal: u64,
+    pub decoder_context: u64,
+    pub pc: GuestVirtualAddr,
+    pub physical: PhysicalAddr,
+    pub word: u32,
+    pub origins: [RamByteOrigin; 4],
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DmemDmaConsumption {
+    pub ram_start: PhysicalAddr,
+    pub ram_bytes: usize,
+    pub initial_ram_sha256: String,
+    pub final_ram_sha256: String,
+    pub writes: Vec<DmemDmaWord>,
+    pub fetches: Vec<DmaCpuFetch>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -188,6 +269,8 @@ pub struct RspCpuImemReport {
     pub rsp_definitions: Option<Vec<RspRegisterDefinition>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub imem_fetches: Option<Vec<RspImemFetch>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dma_consumption: Option<DmemDmaConsumption>,
     pub source_ancestry_certified: bool,
     pub mutation_coverage_certified: bool,
     pub imem_execution_certified: bool,
@@ -228,6 +311,226 @@ enum Active {
         definition: Option<RspRegisterDefinition>,
         read: bool,
     },
+}
+
+struct RamReplay {
+    start: PhysicalAddr,
+    initial_sha256: String,
+    bytes: Vec<u8>,
+    origins: Vec<RamByteOrigin>,
+    final_bytes: Vec<u8>,
+    writes: Vec<DmemDmaWord>,
+    fetches: Vec<DmaCpuFetch>,
+    active: Option<(Row, Option<DmaCpuFetch>)>,
+    pending: Option<usize>,
+}
+impl RamReplay {
+    fn new(snapshot: RamSnapshot) -> Result<Self, String> {
+        require(
+            !snapshot.initial.is_empty()
+                && snapshot.initial.len() <= 65536
+                && snapshot.initial.len().is_multiple_of(4)
+                && snapshot.start.0.is_multiple_of(4)
+                && u64::from(snapshot.start.0) + snapshot.initial.len() as u64 <= 0x800000
+                && snapshot.initial.len() == snapshot.final_bytes.len(),
+            "invalid controlled RAM snapshot",
+        )?;
+        Ok(Self {
+            start: snapshot.start,
+            initial_sha256: sha256(&snapshot.initial),
+            origins: vec![RamByteOrigin::Unknown { cut_ordinal: None }; snapshot.initial.len()],
+            bytes: snapshot.initial,
+            final_bytes: snapshot.final_bytes,
+            writes: Vec::new(),
+            fetches: Vec::new(),
+            active: None,
+            pending: None,
+        })
+    }
+    fn offset(&self, address: u32, width: usize) -> Result<usize, String> {
+        let offset = address
+            .checked_sub(self.start.0)
+            .ok_or("RAM access precedes snapshot")? as usize;
+        require(
+            offset
+                .checked_add(width)
+                .is_some_and(|end| end <= self.bytes.len()),
+            "RAM access escapes declared snapshot",
+        )?;
+        Ok(offset)
+    }
+    fn observe(&mut self, row: Row, dmem: &[u8], dorig: &[SpByteOrigin]) -> Result<(), String> {
+        effect_row(&row)?;
+        require(
+            row.bank == 0 && row.gpr.is_empty() && row.rgpr.is_empty() && row.word == 0,
+            "invalid RAM observation metadata",
+        )?;
+        match row.kind {
+            Kind::RamWrite => {
+                require(
+                    self.active.is_none()
+                        && self.pending.is_none()
+                        && row.context == 0
+                        && !row.cpu
+                        && row.bytes == 4
+                        && row.address.is_multiple_of(4),
+                    "invalid controlled RAM write scope",
+                )?;
+                let offset = self.offset(row.address, 4)?;
+                let data = payload(row.value, 4)?;
+                let origins: [RamByteOrigin; 4] = if let Some(descriptor) = &row.dma {
+                    require(
+                        descriptor.pbus < 4096
+                            && descriptor.pbus.is_multiple_of(8)
+                            && descriptor.dram.0 < 0x800000
+                            && descriptor.dram.0.is_multiple_of(8)
+                            && descriptor.length <= 0xff8
+                            && descriptor.length.is_multiple_of(8)
+                            && descriptor.count <= 255
+                            && descriptor.skip <= 4095
+                            && descriptor.skip.is_multiple_of(8),
+                        "invalid completed DMEM DMA descriptor",
+                    )?;
+                    let lane = row
+                        .address
+                        .checked_sub(descriptor.dram.0)
+                        .ok_or("DMA write precedes descriptor")?;
+                    require(
+                        lane == 0 || lane == 4,
+                        "DMA Word is not a current descriptor lane",
+                    )?;
+                    let source = (descriptor.pbus + lane) & 4095;
+                    require(row.offset == source, "DMA source does not match descriptor")?;
+                    let values: [u8; 4] =
+                        std::array::from_fn(|n| dmem[(source as usize + n) & 4095]);
+                    require(
+                        values.as_slice() == data,
+                        "DMA payload disagrees with current DMEM",
+                    )?;
+                    self.writes.push(DmemDmaWord {
+                        write_ordinal: row.ordinal,
+                        destination: PhysicalAddr(row.address),
+                        descriptor: descriptor.clone(),
+                        source_offset: source as u16,
+                        word: row.value as u32,
+                        source_bytes: std::array::from_fn(|n| {
+                            dorig[(source as usize + n) & 4095].clone()
+                        }),
+                    });
+                    std::array::from_fn(|n| RamByteOrigin::SpDma {
+                        write_ordinal: row.ordinal,
+                        source_offset: ((source as usize + n) & 4095) as u16,
+                    })
+                } else {
+                    require(row.offset == 0, "opaque RAM writer has source offset")?;
+                    std::array::from_fn(|_| RamByteOrigin::Unknown {
+                        cut_ordinal: Some(row.ordinal),
+                    })
+                };
+                self.bytes[offset..offset + 4].copy_from_slice(&data);
+                self.origins[offset..offset + 4].clone_from_slice(&origins);
+            }
+            Kind::RamFetchBegin => {
+                let access = row
+                    .fetch
+                    .as_ref()
+                    .ok_or("RAM fetch lacks access metadata")?;
+                require(
+                    self.active.is_none()
+                        && self.pending.is_none()
+                        && row.context == row.ordinal
+                        && row.cpu
+                        && row.bytes == 0
+                        && row.value == 0
+                        && row.offset == 0
+                        && !access.cached
+                        && access.physical.0 == row.address
+                        && (0xffffffffa0000000..0xffffffffa0800000).contains(&row.pc)
+                        && row.pc.is_multiple_of(4)
+                        && row.pc & 0x1fffffff == u64::from(row.address),
+                    "invalid controlled direct RAM fetch",
+                )?;
+                self.offset(row.address, 4)?;
+                self.active = Some((row, None));
+            }
+            Kind::RamRead => {
+                let offset = self.offset(row.address, 4)?;
+                let (begin, read) = self.active.as_mut().ok_or("unscoped RAM fetch read")?;
+                require(
+                    read.is_none()
+                        && row.cpu
+                        && row.context == begin.context
+                        && row.pc == begin.pc
+                        && row.phase == begin.phase
+                        && row.address == begin.address
+                        && row.bytes == 4
+                        && row.offset == 0
+                        && payload(row.value, 4)? == self.bytes[offset..offset + 4],
+                    "RAM fetch read differs from current backing/scope",
+                )?;
+                *read = Some(DmaCpuFetch {
+                    fetch_context: begin.context,
+                    read_ordinal: row.ordinal,
+                    decoder_context: 0,
+                    pc: GuestVirtualAddr(row.pc),
+                    physical: PhysicalAddr(row.address),
+                    word: row.value as u32,
+                    origins: std::array::from_fn(|n| self.origins[offset + n].clone()),
+                });
+            }
+            Kind::RamFetchEnd => {
+                let (begin, read) = self.active.take().ok_or("RAM fetch end lacks begin")?;
+                let read = read.ok_or("RAM fetch lacks actual completed read")?;
+                require(
+                    row.cpu
+                        && row.context == begin.context
+                        && row.pc == begin.pc
+                        && row.phase == begin.phase
+                        && row.address == begin.address
+                        && row.bytes == 0
+                        && row.offset == 0
+                        && row.fetch == begin.fetch
+                        && row.value == u64::from(read.word),
+                    "RAM fetch result differs from actual read",
+                )?;
+                self.pending = Some(self.fetches.len());
+                self.fetches.push(read);
+            }
+            _ => unreachable!(),
+        }
+        Ok(())
+    }
+    fn bind(&mut self, row: &Row) -> Result<(), String> {
+        require(
+            self.active.is_none(),
+            "decoder began before fetch completed",
+        )?;
+        let index = self
+            .pending
+            .take()
+            .ok_or("CPU decoder lacks completed RAM fetch")?;
+        let fetched = &mut self.fetches[index];
+        require(
+            fetched.pc.0 == row.pc && fetched.word == row.word,
+            "CPU decoder disagrees with fetched RAM word",
+        )?;
+        fetched.decoder_context = row.context;
+        Ok(())
+    }
+    fn finish(self) -> Result<DmemDmaConsumption, String> {
+        require(
+            self.active.is_none() && self.pending.is_none() && self.bytes == self.final_bytes,
+            "incomplete RAM fetch/decoder or contradictory final snapshot",
+        )?;
+        Ok(DmemDmaConsumption {
+            ram_start: self.start,
+            ram_bytes: self.bytes.len(),
+            initial_ram_sha256: self.initial_sha256,
+            final_ram_sha256: sha256(&self.bytes),
+            writes: self.writes,
+            fetches: self.fetches,
+        })
+    }
 }
 fn require(ok: bool, why: &str) -> Result<(), String> {
     if ok { Ok(()) } else { Err(why.into()) }
@@ -407,7 +710,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let execution_enabled = h.format == EXECUTION_FORMAT && h.profile == EXECUTION_PROFILE;
+    let dma_enabled = h.format == DMA_FORMAT && h.profile == DMA_PROFILE;
+    let execution_enabled =
+        dma_enabled || (h.format == EXECUTION_FORMAT && h.profile == EXECUTION_PROFILE);
     let reads_enabled = execution_enabled || (h.format == READ_FORMAT && h.profile == READ_PROFILE);
     let definitions_enabled =
         reads_enabled || (h.format == DEFINITION_FORMAT && h.profile == DEFINITION_PROFILE);
@@ -429,6 +734,15 @@ pub fn inspect_rsp_cpu_imem_history(
         !execution_enabled || h.initial_imem.len() == 4096,
         "IMEM consumption requires the complete initial bank",
     )?;
+    require(
+        !dma_enabled || h.initial_dmem.len() == 4096,
+        "DMA composition requires the complete DMEM bank",
+    )?;
+    require(
+        dma_enabled == h.ram.is_some(),
+        "RAM snapshot does not match source profile",
+    )?;
+    let mut ram = h.ram.map(RamReplay::new).transpose()?;
     let records = h.events.len();
     let mut dmem = h.initial_dmem;
     let mut imem = h.initial_imem;
@@ -452,7 +766,35 @@ pub fn inspect_rsp_cpu_imem_history(
             "noncontiguous event identity or phase order",
         )?;
         phase = row.phase;
+        require(
+            row.dma.is_none() || (dma_enabled && row.kind == Kind::RamWrite),
+            "DMA metadata outside completed RAM write",
+        )?;
+        require(
+            row.fetch.is_none()
+                || (dma_enabled && matches!(row.kind, Kind::RamFetchBegin | Kind::RamFetchEnd)),
+            "fetch metadata outside RAM boundary",
+        )?;
+        if let Some(ram) = &ram {
+            require(
+                ram.active.is_none() || matches!(row.kind, Kind::RamRead | Kind::RamFetchEnd),
+                "interleaved controlled RAM fetch",
+            )?;
+            require(
+                ram.pending.is_none() || row.kind == Kind::CpuBegin,
+                "completed RAM fetch was not immediately decoded",
+            )?;
+        }
         match row.kind {
+            Kind::RamWrite | Kind::RamRead | Kind::RamFetchBegin | Kind::RamFetchEnd => {
+                require(
+                    active.is_none(),
+                    "RAM observation interleaves decoded instruction",
+                )?;
+                ram.as_mut()
+                    .ok_or("RAM observation outside DMA profile")?
+                    .observe(row, &dmem, &dorig)?;
+            }
             Kind::OpaqueImemSeed => {
                 effect_row(&row)?;
                 require(
@@ -484,6 +826,9 @@ pub fn inspect_rsp_cpu_imem_history(
                     "invalid CPU begin context",
                 )?;
                 boundary(&row, true)?;
+                if let Some(ram) = &mut ram {
+                    ram.bind(&row)?;
+                }
                 if let Some(previous) = &previous_cpu {
                     require(
                         row.gpr == previous.gpr && previous.pc.checked_add(4) == Some(row.pc),
@@ -968,6 +1313,7 @@ pub fn inspect_rsp_cpu_imem_history(
         final_imem_sha256: sha256(&imem),
         rsp_definitions: definitions_enabled.then_some(rsp_definitions),
         imem_fetches: execution_enabled.then_some(imem_fetches),
+        dma_consumption: ram.map(RamReplay::finish).transpose()?,
         source_ancestry_certified: false,
         mutation_coverage_certified: false,
         imem_execution_certified: false,
@@ -1595,5 +1941,230 @@ mod tests {
         let mut partial = data;
         partial["initial_imem"] = json!([0, 0, 0, 0]);
         assert!(inspect(&partial).is_err());
+    }
+
+    fn dma_fixture(opaque_replace: bool) -> Value {
+        let mut data = execution_fixture(false);
+        data["format"] = json!(DMA_FORMAT);
+        data["profile"] = json!(DMA_PROFILE);
+        for field in ["initial_dmem", "final_dmem"] {
+            data[field].as_array_mut().unwrap().resize(4096, json!(0));
+        }
+        let mut initial = Vec::new();
+        for step in data["steps"].as_array().unwrap() {
+            initial.extend_from_slice(&(step["word"].as_u64().unwrap() as u32).to_be_bytes());
+        }
+        initial.extend_from_slice(&[0; 8]);
+        data["ram"] = json!({"start":0x6000,"initial":initial,"final_bytes":initial});
+        let mut rows = data["events"].as_array().unwrap().clone();
+        let last_cpu = rows
+            .iter()
+            .rfind(|r| r["kind"] == "cpu_end")
+            .unwrap()
+            .clone();
+        for lane in [0, 4] {
+            let mut write = row("ram_write", 0, 0);
+            write["phase"] = json!(2);
+            write["address"] = json!(0x6008 + lane);
+            write["offset"] = json!(lane);
+            write["bytes"] = json!(4);
+            write["dma"] = json!({"pbus":0,"dram":0x6008,"length":0,"count":0,"skip":0});
+            rows.push(write);
+        }
+        if opaque_replace {
+            let mut cut = rows[rows.len() - 2].clone();
+            cut["dma"] = Value::Null;
+            cut["address"] = json!(0x6008);
+            cut["offset"] = json!(0);
+            rows.push(cut);
+        }
+        let mut begin = last_cpu;
+        begin["kind"] = json!("cpu_begin");
+        begin["phase"] = json!(2);
+        begin["pc"] = json!(0xffffffffa0006008u64);
+        begin["word"] = json!(0);
+        let mut end = begin.clone();
+        end["kind"] = json!("cpu_end");
+        data["steps"].as_array_mut().unwrap().push(json!({"phase":2,"index":2,"word":0,"pc":0xffffffffa0006008u64,"before":begin["gpr"],"after":end["gpr"]}));
+        rows.extend([begin, end]);
+        let mut result = Vec::new();
+        for r in rows {
+            if r["kind"] == "cpu_begin" {
+                let pc = r["pc"].as_u64().unwrap();
+                let mut fetch = row("ram_fetch_begin", 0, 0);
+                fetch["phase"] = r["phase"].clone();
+                fetch["pc"] = json!(pc);
+                fetch["cpu"] = json!(true);
+                fetch["address"] = json!(pc as u32 & 0x1fffffff);
+                fetch["fetch"] = json!({"physical":pc as u32 & 0x1fffffff,"cached":false});
+                let mut read = fetch.clone();
+                read["fetch"] = Value::Null;
+                read["kind"] = json!("ram_read");
+                read["bytes"] = json!(4);
+                read["value"] = r["word"].clone();
+                let mut end = fetch.clone();
+                end["kind"] = json!("ram_fetch_end");
+                end["value"] = r["word"].clone();
+                result.extend([fetch, read, end]);
+            }
+            result.push(r);
+        }
+        let mut active = 0;
+        for (n, r) in result.iter_mut().enumerate() {
+            r["ordinal"] = json!(n + 1);
+            if matches!(
+                r["kind"].as_str(),
+                Some("cpu_begin" | "rsp_begin" | "ram_fetch_begin")
+            ) {
+                active = n + 1;
+            }
+            r["context"] = json!(active);
+            if matches!(
+                r["kind"].as_str(),
+                Some("cpu_end" | "rsp_end" | "ram_fetch_end")
+            ) {
+                active = 0;
+            }
+        }
+        data["events"] = json!(result);
+        data
+    }
+
+    #[test]
+    fn rsp_definition_dma_write_and_cpu_decoded_word_compose_on_the_original_clock() {
+        let report = inspect(&dma_fixture(false)).unwrap();
+        let graph = report.dma_consumption.as_ref().unwrap();
+        let writer = &graph.writes[0];
+        assert!(writer.source_bytes.iter().all(|o| matches!(
+            o,
+            SpByteOrigin::Rsp {
+                source_definition: Some(_),
+                ..
+            }
+        )));
+        let fetched = graph.fetches.last().unwrap();
+        assert_eq!(fetched.word, 0);
+        assert!(fetched.origins.iter().all(|o| matches!(o,RamByteOrigin::SpDma { write_ordinal,.. } if *write_ordinal==writer.write_ordinal)));
+        assert!(fetched.decoder_context > fetched.read_ordinal);
+        let report = inspect(&dma_fixture(true)).unwrap();
+        assert!(
+            report
+                .dma_consumption
+                .unwrap()
+                .fetches
+                .last()
+                .unwrap()
+                .origins
+                .iter()
+                .all(|o| matches!(
+                    o,
+                    RamByteOrigin::Unknown {
+                        cut_ordinal: Some(_)
+                    }
+                ))
+        );
+    }
+
+    #[test]
+    fn dma_source_descriptor_fetch_decoder_and_report_forgeries_fail_closed() {
+        let source = dma_fixture(false);
+        for mode in 0..8 {
+            let mut forged = source.clone();
+            let rows = forged["events"].as_array_mut().unwrap();
+            let write = rows.iter_mut().find(|r| r["kind"] == "ram_write").unwrap();
+            match mode {
+                0 => write["offset"] = json!(4),
+                1 => write["dma"]["pbus"] = json!(0x1000),
+                2 => write["dma"]["skip"] = json!(1),
+                3 => write["value"] = json!(1),
+                4 => {
+                    rows.iter_mut().find(|r| r["kind"] == "ram_read").unwrap()["address"] =
+                        json!(0x6004)
+                }
+                5 => {
+                    rows.iter_mut()
+                        .find(|r| r["kind"] == "ram_fetch_begin")
+                        .unwrap()["fetch"]["cached"] = json!(true)
+                }
+                6 => {
+                    rows.iter_mut()
+                        .find(|r| r["kind"] == "ram_fetch_end")
+                        .unwrap()["value"] = json!(1)
+                }
+                _ => forged["ram"]["final_bytes"][0] = json!(255),
+            }
+            assert!(inspect(&forged).is_err(), "mode {mode}");
+        }
+        let bytes = serde_json::to_vec(&source).unwrap();
+        let mut forged = inspect(&source).unwrap();
+        forged
+            .dma_consumption
+            .as_mut()
+            .unwrap()
+            .fetches
+            .last_mut()
+            .unwrap()
+            .decoder_context = 1;
+        assert!(verify_rsp_cpu_imem_report(&forged, &bytes, &sha256(&bytes)).is_err());
+    }
+
+    #[test]
+    fn dma_equal_decoy_and_byte_local_unknown_writers_preserve_source_cuts() {
+        let mut decoy = dma_fixture(false);
+        for r in decoy["events"].as_array_mut().unwrap() {
+            if r["kind"] == "ram_write" {
+                r["dma"]["pbus"] = json!(8);
+                r["offset"] = json!(r["offset"].as_u64().unwrap() + 8);
+            }
+        }
+        let report = inspect(&decoy).unwrap();
+        assert!(
+            report.dma_consumption.unwrap().writes[0]
+                .source_bytes
+                .iter()
+                .all(|o| matches!(o, SpByteOrigin::Unknown { cut_ordinal: None }))
+        );
+
+        let mut mixed = dma_fixture(false);
+        let rows = mixed["events"].as_array_mut().unwrap();
+        let index = rows.iter().position(|r| r["kind"] == "ram_write").unwrap();
+        let mut cut = row("foreign_sink", 0, 0);
+        cut["phase"] = json!(2);
+        cut["address"] = json!(1);
+        cut["offset"] = json!(1);
+        cut["bytes"] = json!(1);
+        rows.insert(index, cut);
+        let mut active = 0;
+        for (n, r) in rows.iter_mut().enumerate() {
+            r["ordinal"] = json!(n + 1);
+            if matches!(
+                r["kind"].as_str(),
+                Some("cpu_begin" | "rsp_begin" | "ram_fetch_begin")
+            ) {
+                active = n + 1;
+            }
+            r["context"] = json!(active);
+            if matches!(
+                r["kind"].as_str(),
+                Some("cpu_end" | "rsp_end" | "ram_fetch_end")
+            ) {
+                active = 0;
+            }
+        }
+        let report = inspect(&mixed).unwrap();
+        let graph = report.dma_consumption.unwrap();
+        assert!(matches!(
+            graph.writes[0].source_bytes[1],
+            SpByteOrigin::Unknown {
+                cut_ordinal: Some(_)
+            }
+        ));
+        for n in [0, 2, 3] {
+            assert!(matches!(
+                graph.writes[0].source_bytes[n],
+                SpByteOrigin::Rsp { .. }
+            ));
+        }
+        assert!(graph.fetches.last().unwrap().origins.iter().all(|o| matches!(o,RamByteOrigin::SpDma {write_ordinal,..} if *write_ordinal==graph.writes[0].write_ordinal)));
     }
 }

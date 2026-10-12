@@ -1,5 +1,14 @@
 # Status
 
+RSP definitions now also reach actual CPU execution through reverse SP-DMA
+under controlled v4. Descriptor-selected DMEM byte parents survive two separate
+completed Word writes, then an actual uncached backing read/fetch and decoder
+context. The134-event pinned fixture/19 matched checkpoints independently agrees
+on six definitions, two DMA writes, eleven CPU fetch/decoder pairs and seventeen
+RSP fetches. Equal-value decoys/unknown overwrites do not inherit parents; v0-v3
+reports stay exact. General mutation census, DMA request/completion lifetime,
+cached/mapped/reset/restore composition and whole-ROM/native remain OPEN.
+
 Actual RSP consumption now joins the producer/read/CPU IMEM installation graph
 under controlled v3. A full4096-byte image replay checks each fetched word and
 retains its current four byte writers; explicit opaque host seeds cut ancestry.
