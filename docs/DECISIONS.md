@@ -2153,6 +2153,12 @@ consumption and whole-ROM/native closure remain OPEN. All closure/census/native
 flags stay false. No solver or progress milestone change. Only project-owned
 instrumentation and Rust were integrated; upstream code/notices remain ignored.
 
+ADR-0120 follow-up (2026-10-12): canonical completed-store normalization now
+rejects nonzero architectural GPR[0], including absent-sink contexts. A red/green
+forged-base regression and exact retained 96-case report replay verify the change;
+no source/census/lifetime certificate or milestone is promoted. See the COP1 zero
+primary receipt.
+
 ## ADR-0122: Execution-root classification carries an explicit target and hardware exclusion
 
 Status: Accepted for target-qualified proof composition, 2026-10-12.
@@ -2182,3 +2188,9 @@ reachability, root census, handler bytes or executable lifetime. Other hardware
 targets and reset/NMI/interrupt/watch/source/whole-ROM/native obligations remain
 OPEN. All corresponding certification flags remain false. No manual text or
 upstream implementation is copied into production.
+
+ADR-0120 follow-up (2026-10-12): canonical completed-store normalization now
+rejects nonzero architectural GPR[0], including absent-sink contexts. A red/green
+forged-base regression and exact retained 96-case report replay verify the change;
+no source/census/lifetime certificate or milestone is promoted. See the COP1 zero
+primary receipt.

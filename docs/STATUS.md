@@ -1,5 +1,10 @@
 # Status
 
+Canonical COP1 store normalization rejects impossible nonzero architectural
+register-zero snapshots, including forged base-zero destinations and absent
+sinks. The authenticated 96-case FPR/store composition retains its exact report
+digest; mutation census and whole-ROM closure remain OPEN.
+
 2026-10-09. Milestone scope: M1–M3 synthetic executable discovery foundation.
 
 Implemented:

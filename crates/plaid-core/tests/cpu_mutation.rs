@@ -29,6 +29,20 @@ fn effect(payload: &[u8]) -> CompletedCop1StoreEffect {
 }
 
 #[test]
+fn impossible_zero_register_cannot_supply_a_store_destination() {
+    let (mut gpr, fpr) = state();
+    gpr[0] = gpr[1];
+    let observed = effect(&[0x55, 0x66, 0x77, 0x88]);
+    for base in [0, 1] {
+        assert!(
+            verify_cop1_store_effect(swc1(base, 0, 0), &gpr, &fpr, false, true, Some(&observed))
+                .is_err()
+        );
+    }
+    assert!(verify_cop1_store_effect(swc1(1, 0, 0), &gpr, &fpr, false, true, None).is_err());
+}
+
+#[test]
 fn cu1_disabled_context_cannot_claim_completed_sink() {
     let (gpr, fpr) = state();
     let observed = effect(&[0x55, 0x66, 0x77, 0x88]);
