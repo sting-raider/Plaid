@@ -11,7 +11,7 @@ use std::{
 pub const FORMAT: &str = "plaid-ares-access-history-v0";
 pub const POLICY: &str = "identity_ram_successful_access_and_fetch_boundaries";
 pub const LIFECYCLE_POLICY: &str = "single_run_no_host_restore";
-pub const MAX_BUDGET: u64 = 1_000_000;
+pub const MAX_BUDGET: u64 = fetch::MAX_BUDGET;
 pub const MAX_RECORDS: u64 = 100_000_000;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
