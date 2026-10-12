@@ -1,5 +1,14 @@
 # Status
 
+The original RSP graph now composes through reverse-DMA RAM writers and actual
+IMEM DMA ingress back to RSP consumption under controlled v6. Every installed
+byte keeps its actual Dual read/install/promotion and current RAM writer parents;
+direction-specific full progression precedes completion. The142-event pinned
+source/21 matched checkpoints independently agrees on both execution paths,
+six definitions, two requests and one Dual install. V0-v5 reports stay exact.
+General mutation/FIFO/hardware/cache/mapping/reset/restore/lifetime coverage and
+whole-ROM/native closure remain OPEN; certification flags remain false.
+
 Promoted-current DMA identity now composes with the RSP DMEM -> RAM -> CPU
 execution graph under controlled v5. Complete descriptor-derived Word/lane/row
 progression and endpoints are required before recording completion. A prepared

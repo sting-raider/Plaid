@@ -2117,6 +2117,20 @@ was built. V0-v4 reports remain exact. No general FIFO/hardware rule, accepted
 pending provenance, ingress/reset/restore/census/lifetime or whole-ROM/native
 certificate follows. See the promoted-DMA/CPU integration receipt.
 
+ADR-0118 IMEM-ingress follow-up (2026-10-12): reconcile remaining PR29 Dual
+installation atoms with the original RSP/DMEM/RAM writer/request/CPU execution
+graph. Controlled v6 requires each actual successful Dual RAM read before its
+exact completed Dual IMEM sink, snapshots all eight current RAM byte parents and
+installs distinct per-byte identities retaining read/install/promotion/address.
+Actual RSP consumption retains those installed parents. Completion validates one
+Dual install per ingress block separately from two egress Word writes, with full
+count/skip/wrap/end progression. A142-event pinned fixture/21 matched checkpoints
+independently reproduces both execution paths and the round trip; v0-v5 reports
+remain exact. New guest behavior required a new small baseline/sensor; retained
+sources supply compatibility without repeated builds. General FIFO/census/hardware/
+cache/mapping/reset/restore/lifetime and whole-ROM/native remain uncertified.
+See the DMA RAM/IMEM round-trip integration receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

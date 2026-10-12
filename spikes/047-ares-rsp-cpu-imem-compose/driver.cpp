@@ -60,6 +60,9 @@ int main(int argc,char** argv) {
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 5
   plaidRspDmaLifecycleObserver=traced?compose_dma_lifecycle:nullptr;
   #endif
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 6
+  plaidSpDmaStoreObserver=traced?compose_imem_dma_store:nullptr;
+  #endif
   #endif
   auto phase=[](u32 n){
     #if PLAID_RSP_CPU_IMEM_SENSOR
@@ -138,6 +141,14 @@ int main(int argc,char** argv) {
   cpuStep(11,5);cpuStep(12,6);cpuStep(13,7);cpuStep(14,8);cpuStep(15,9);
   phase(16);rsp.writeWord(0x04001010,mixed,cpu);checkpoint();
   if(PLAID_RSP_DEFINITIONS_FIXTURE>=4) cpuStep(17,10);
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=6) {
+    phase(18);rsp.writeWord(0x04040000,0x1300,cpu);rsp.writeWord(0x04040004,0x6028,cpu);
+    rsp.writeWord(0x04040008,0,cpu);
+    if(!rsp.dma.busy.read || !rsp.dma.current.pbusRegion) std::abort();
+    rsp.dmaTransferStep();checkpoint();
+    phase(19);rsp.pipeline={};rsp.pipeline.singleIssue=1;rsp.branch.setPc(0x300);rsp.ipu.pc=0x300;
+    rsp.status.halted=0;rsp.status.broken=0;rsp.instruction();rsp.status.halted=1;checkpoint();
+  }
   if((u32)rsp.dmem.read<Word>(0)!=mixed || (u32)rsp.dmem.read<Word>(4)!=mixed || (u32)rsp.imem.read<Word>(0)!=pure || (u32)rsp.imem.read<Word>(4)!=pure || (u32)rsp.imem.read<Word>(8)!=mixed || (u32)rsp.imem.read<Word>(12)!=mixed || (u32)rsp.imem.read<Word>(16)!=mixed) std::abort();
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=false;
