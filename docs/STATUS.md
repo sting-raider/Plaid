@@ -4,6 +4,11 @@
 
 Implemented:
 
+- Execution-root classification now composes an explicit CPU target with the
+  canonical general/TLB vector resolver and VR4300 hardware-backed cache-error
+  exclusion. Generic MIPS III stays unresolved. Numeric candidates and excluded
+  classes certify neither handler bytes, complete roots nor executable lifetime.
+
 - Decoded SD/SDL/SDR contexts now compose actual ordered Byte/Half/Word/Double
   cached subwrites with resident byte ownership and full-line backing export.
   Repeated equal stores remain distinct; untouched lanes keep fill parents.
