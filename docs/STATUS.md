@@ -4,6 +4,12 @@
 
 Implemented:
 
+- Decoded SD/SDL/SDR contexts now compose actual ordered Byte/Half/Word/Double
+  cached subwrites with resident byte ownership and full-line backing export.
+  Repeated equal stores remain distinct; untouched lanes keep fill parents.
+  A new single-clock 48-case source reproduces 34 exports with 150 forgeries
+  rejected. General census/operand ancestry, mapping/lifetime and native stay OPEN.
+
 - COP1 completed reads now retain physical FPR byte generations through loads,
   same-value register moves and mixed-width stores, then compose with canonical
   CU1-aware completed backing-store normalization. Both CLI inputs require

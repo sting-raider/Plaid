@@ -2113,3 +2113,42 @@ does not prove decoded context/operand ancestry or complete writer coverage for
 arbitrary ROMs. RDRAM producers, other FPR writers/arithmetic, cached/TLB/endian
 paths, executable consumption/lifetime and whole-ROM/native closure stay OPEN.
 All corresponding flags remain false; no solver or milestone promotion.
+
+## ADR-0121: Ordered decoded store64 primitives compose with canonical backing export
+
+Status: Accepted for bounded source composition, 2026-10-12.
+
+Reconcile the prepared SD/SDL/SDR rechecker into the canonical D-cache engine
+through explicit v2 source events. Bind each attempted architectural operation
+to its captured opcode, base/source register values, GPR preservation and
+control/exception result. Require the complete ordered Byte/Half/Word/Double
+subwrite set, direct/endian physical identity, resident slot/line and full
+post-mutation snapshot. A single operation may produce multiple primitives;
+neither a fake Double-to-two-Word split nor payload equality supplies their
+identities. Repeated same-value operations preserve fresh byte occurrences.
+
+The same resident state supplies the exact full-line writeback receipt. Clean
+lanes retain backing-fill parents while modified lanes retain their latest
+operation/subwrite/byte identity. Missing effects, wrong order, false decoded
+context, changed untouched lanes, borrowed earlier equal-value parents and
+source/report forgeries reject. V0/v1 contracts stay compatible; the retained
+v1 report-set digest is unchanged. Box the large private context variant to pass
+strict Clippy without weakening checks or changing serialization.
+
+The original 158-case matrix validated aggregate handler results, not a shared
+primitive clock. Do not turn modeled decomposition rows into actual sensors.
+Reuse spike 034's generic lower callbacks in a new integration fixture: 48
+decoded cases, 82 attempts (two equal stores for each successful case), 34 actual
+backing exports and 14 alignment failures. Original/disabled/repeated full GPR/
+PC/control, HI/LO, timing count, RAM/hidden/cache hashes agree. Actual primitive
+snapshots supply every byte parent; all 150 fresh source/report forgeries reject.
+The necessary local source bridge and original aggregate/model evidence pass;
+no Actions execution or branch workflow import.
+
+The v2 profile is prefilled direct-KSEG0 identity-RDRAM, kernel32 with BEV1.
+Register snapshots bind represented operands, not the ancestry of their writers.
+General cached misses, uncached/TLB/degraded paths, other actor mutations,
+hardware transaction/atomicity, restore/reset/mapping/cache lifetimes, executable
+consumption and whole-ROM/native closure remain OPEN. All closure/census/native
+flags stay false. No solver or progress milestone change. Only project-owned
+instrumentation and Rust were integrated; upstream code/notices remain ignored.
