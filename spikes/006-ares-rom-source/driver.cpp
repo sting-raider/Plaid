@@ -4,6 +4,7 @@
 #define main original_fixture_main
 #include "../003-ares-oracle/driver.cpp"
 #undef main
+#include "../004-ares-fetch/boot_cic.hpp"
 
 #if defined(PLAID_ROM_HALF_ACCESS)
 // Project-owned optional result callback; no guest access or device layout change.

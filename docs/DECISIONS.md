@@ -2194,3 +2194,38 @@ rejects nonzero architectural GPR[0], including absent-sink contexts. A red/gree
 forged-base regression and exact retained 96-case report replay verify the change;
 no source/census/lifetime certificate or milestone is promoted. See the COP1 zero
 primary receipt.
+
+## ADR-0123: Explicit CIC configuration joins local ROM capture to boot-profile import
+
+Status: Accepted for bounded reference discovery, 2026-10-12.
+
+The supplied local ROM has an independently retained pinned-mia IPL3 diagnostic
+for CIC-NUS-6105. Hardcoded 6102 reference setup is inappropriate for that input.
+The existing shared profiled driver now accepts an explicit optional 6102/6105
+selection. Its cartridge configuration and v4/v5 metadata use the same value.
+Omitting the argument retains 6102 exactly; unprofiled/post-IPL2 interfaces keep
+their existing scope. Other CIC/region/RAM/firmware/PIF modes remain unsupported.
+
+Admit the declared NTSC/6105 boot-input profile in the existing typed importer,
+retaining complete source/session/firmware checks and every executable-identity
+blocker. A configuration declaration is not a ROM-CIC or hardware boot proof.
+Exact pinned ares CIC configuration uses 6105 seed 0x91, checksum 8618a45bc2d3
+and RealChallenge. CIC commands, PIF HLE and mia source objects were rechecked;
+reference ISC licensing/notices stay in ignored builds. No upstream code or
+firmware/ROM bytes are copied into production.
+
+The general local recipe keeps outputs ignored, rejects unsupported selections,
+checks disabled/repeated full existing checkpoints and repeated source bytes,
+and reuses builds only when every recorded input matches. Build inputs include
+the selector header. DrvFS uses serial index reads for the complete clean-source
+check after a slow threaded scan; no source validation is skipped.
+
+Actual local 6105 capture/import/rechecking passed for 10,000 calls: 2,055 PIF and
+7,945 SP fetches, 305 summaries, no RAM fetches. Default/explicit 6102 trace,
+checkpoint and messages reproduce retained homebrew bytes exactly without
+another reference build. Fourteen focused tests, actual-source profile/firmware
+adversaries and the full local gate pass. No Actions execution.
+
+Extend actual writer/PI/SP/RAM chronology before granting executable source or
+lifetime. Boot completion, mutation census, hardware consensus, whole-ROM and
+native closure remain OPEN. No milestone promotion or game-specific hash rule.
