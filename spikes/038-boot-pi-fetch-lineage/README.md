@@ -10,7 +10,11 @@ The checker also accepts canonical v3 SP/PI sources and their typed
 `inspect-sp-pi-fetch-lineage` report. Keep original raw ordinals and digest all
 SP rows; they supply no RAM byte origins. The retained100k v3 prefix independently
 agrees with Rust on every count/sample/digest, including zero PI chains. V2
-remains compatible. A larger ongoing replay is not an outcome claim.
+remains compatible. Full20m v3 replay now agrees on every Rust count/sample/digest:
+2472203 full chains,0 partial,172 samples/27 fills, ordered
+`3c0fa305fb62a86c24d085288ccbe39abc0e95f1923b8cb49ddefd576352bf6f`.
+First candidate consumption is seq17527797 at the declared ROM entry. This
+remains finite observed compatibility, not mutation coverage or lifetime.
 
 Known records describe observed successful writers and witnessed fill/read paths.
 Ordinary scalar and burst writes remove prior PI chains even for equal payloads;

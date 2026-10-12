@@ -1092,6 +1092,15 @@ retained610k v2 report recheck and independent100k v3 replay pass. Larger20m
 chain replay is pending; no native readiness or milestone promotion. See the
 SP/PI fetch-clock integration receipt.
 
+ADR-0071 actual-source follow-up: full20m v3/v5 Rust replay and independent Python
+replay now agree on every field/sample/source/ordered digest.2472203 full
+candidate fetches/172 samples/27 fills begin at the ROM entry: ROM0x1000,
+four distinct raw PI byte writes and fill58083773 at cached RAM0x400. The prior
+entire primitive projection is unchanged. Record this storage/install/residency/
+consumption composition without promoting ultimate ancestry, mutation coverage,
+continuous executable lifetime, whole-ROM or native closure. No Rust/CLI change,
+new reference build or milestone. See the installed-entry receipt.
+
 ## ADR-0072: CPU SP fetch identity requires the actual bank read result
 
 Status: Accepted for finite reference sensing, 2026-10-09.
