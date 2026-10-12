@@ -1,5 +1,14 @@
 # Status
 
+Complete buffered twenty-million-call CIC6105 sources now pass independent
+receipt checks and canonical paired-source reconstruction. Request 1/token 6
+joins dispatch event 1 and one completion-status transition; the pending list
+is empty. The declared ROM entry is observed at seq17527797/PCffffffff80000400,
+physical0x400, cached, source unknown. Align the history budget with the existing
+fetch ceiling; retain the 100-million-record guard. All executable ancestry,
+mutation census, lifetime, hardware boot and native closure obligations stay OPEN.
+See the local PI-entry receipt; no progress milestone changes.
+
 Machine-readable fetch/history output now uses explicit live 1 MiB stdio buffers.
 The matched 100,000-call capture improves from 29.827 to 5.837 seconds with exact
 source/checkpoint/message equality; flush failures return an error without a
@@ -10,9 +19,9 @@ disassembly bypass is excluded from production.
 Capture capacity is explicitly bounded at 20 million calls across importer,
 map validation and the shared driver. Strict driver parsing rejects overflow,
 trailing junk and over-capacity values. The retained million-call source report
-still rechecks unchanged. A 20-million plain reference run cleared PI busy and
-reached higher RAM, but its instrumented attempt hit the 600-second wall limit;
-that partial source is excluded from evidence pending capture-overhead work.
+still rechecks unchanged. The original unbuffered instrumented attempt hit the
+600-second wall limit and remains excluded; the later complete buffered source
+and repeated/disabled controls supersede that capture limitation.
 
 The local CIC6105 recipe now joins the existing PI/queue/SP v3 source clock to
 paired v5 capture/rechecking, with exact baseline equality. Its million-call

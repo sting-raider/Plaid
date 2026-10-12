@@ -99,6 +99,33 @@ fn inspect(f: &Fixture) -> Result<AccessHistoryReport, String> {
 }
 
 #[test]
+fn paired_history_uses_the_canonical_finite_capture_budget() {
+    let mut f = fixture();
+    let budget = fetch::MAX_BUDGET;
+    assert_eq!(history::MAX_BUDGET, budget);
+    f.history[0]["budget"] = budget.into();
+    f.fetches[0]["budget"] = budget.into();
+    let report = inspect(&f).unwrap();
+    assert_eq!(report.instruction_call_budget, budget);
+    verify_boot_history_report(
+        &report,
+        Cursor::new(wire(&f.history)),
+        Cursor::new(wire(&f.fetches)),
+        &f.rom,
+        &f.firmware,
+    )
+    .unwrap();
+    f.history[0]["budget"] = (budget - 1).into();
+    assert!(inspect(&f).is_err());
+    for invalid in [0, budget + 1, u64::MAX] {
+        f.history[0]["budget"] = invalid.into();
+        f.fetches[0]["budget"] = invalid.into();
+        assert!(inspect(&f).is_err());
+    }
+    assert_eq!(history::MAX_RECORDS, 100_000_000);
+}
+
+#[test]
 fn access_report_is_source_bound_and_does_not_close_execution() {
     let f = fixture();
     let report = inspect(&f).unwrap();

@@ -2258,3 +2258,12 @@ with exact source and checkpoint bytes. Close streams before freeing owned stora
 even on flush errors. /dev/full failure and full local gate pass. Rejected raw-
 disassembly bypass: no useful speedup and Random getter side effects require a
 separate contract. No guest optimization, source waiver or milestone promotion.
+
+ADR-0123 paired-history follow-up: align its finite call budget with the canonical
+fetch ceiling rather than maintaining a stale independent one-million limit.
+The full twenty-million source exposed this admission mismatch; history records
+remain bounded at100million and all paired header/footer/source checks remain.
+Six focused regressions and the full local gate pass. Complete actual v3/v5
+reconstruction retains request1/token6/event1 status linkage and observed ROM
+entry while keeping all ancestry/census/lifetime/native flags false. See the
+local PI-entry receipt. No additional reference build or progress promotion.

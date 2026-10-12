@@ -1,32 +1,27 @@
 # Next
 
-Use the explicit buffered capture path to finish the bounded larger PI/SP prefix.
-It preserves exact sources and reduces measured host logging overhead about 5x.
-Do not bypass disassembly getters: Random-register annotation can consume RNG.
-The discarded raw-text prototype did not improve the baseline. Recheck complete
-larger sources and actual dispatch/status/entry before changing proof state.
+Compose the authenticated complete twenty-million-call CIC6105 v3/v5 pair into
+RAM writer/fill/executable-consumption candidates. Canonical reconstruction now
+joins request1/token6 to dispatch event1 and one status transition; its pending
+list is empty. The declared ROM entry is observed at seq17527797, cached physical
+0x400, with source unknown. Do not infer executable lifetime, mutation coverage
+or hardware boot from finite byte agreement. Reuse retained sources and the
+release CLI; no additional emulator rebuild is needed for compatible consumers.
 
-The bounded capture ceiling is now 20 million calls. Address measured logging
-overhead before repeating the larger PI/SP source: the plain reference reached
-higher RAM/cleared PI busy, while the instrumented attempt timed out and has no
-valid footer/checkpoint. Retain the authenticated million-call pair; partial
-timed-out sources do not establish completion, entry or executable ancestry.
-
-Continue from actual pending PI completion, using the retained CIC6105 v3/v5
-source pair and generic `--history sp` recipe. The million-call capture already
-joins accepted request 1/token 6 to a returned 1 MiB ROM-to-RAM copy, with zero
-completion-status transitions. Queue insertion clock and CPU Count have separate
-bases; do not infer completion or a stall from either alone. Observe the actual
-status/dispatch and first installed-code consumption before executable ancestry.
-Use the release CLI for large source replay; its report matches debug bytes.
+The bounded fetch/history capture ceiling is twenty million calls, with the
+unchanged 100-million history-record guard. Full repeated sources and disabled/
+repeated checkpoints agree. Preserve the earlier million-call report as a
+compatibility receipt; exclude the old timed-out partial source. Buffered output
+preserves all getters/records and measured about5x improvement. Do not bypass
+Random-register disassembly queries or conflate queue clock with CPU Count.
 
 Use explicit verified CIC selection for local ROM capture (ADR-0123). The shared
 profiled driver and import gate now admit NTSC/6102 and NTSC/6105; existing
 homebrew captures retain their original 6102 scope. Reuse the compatible build
 and retained sources to extend the supplied ROM prefix into actual RAM/PI/SP
 chronology. The million-call prefix reaches low RAM at PC ffffffff80000004;
-its 41 distinct RAM PCs remain source/lifetime unknown and the ROM entry is not
-yet observed. Preserve that boundary before composing actual producer clocks;
+its 41 distinct RAM PCs remain source/lifetime unknown. The larger authenticated
+prefix now observes the ROM entry. Preserve both boundaries and producer clocks;
 larger prefixes do not establish boot completion or executable immutability.
 
 COP1 context consumers must preserve the canonical architectural register-zero
