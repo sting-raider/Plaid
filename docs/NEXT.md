@@ -7,9 +7,11 @@ parents through separate reverse-DMA RAM writes to actual CPU fetch/decoder
 contexts. Controlled v5 also binds promoted-current identity and exact complete
 descriptor progression to that graph. Controlled v6 joins the RAM byte writers
 through actual Dual read/IMEM installation back to RSP instruction consumption.
-Next compose mutable pending/accepted request provenance, DMEM ingress, broader
-scalar/vector inputs and complete mutation/cache/mapping/root lifetime coverage.
-Reuse retained142-event/21-checkpoint v6,136-event v5 and
+Controlled v7 also joins actual two-read/two-store DMEM ingress to RSP load
+definitions with distinct lane parents. Next compose mutable pending/accepted
+request provenance, broader scalar/vector inputs and complete mutation/cache/
+mapping/root lifetime coverage. Reuse retained152-event/23-checkpoint v7,
+142-event/21-checkpoint v6,136-event v5 and
 134-event v4 (same19 controls),97-event/17-checkpoint v3 and all earlier
 compatibility sources; no repeat reference build is needed for compatible consumers.
 A fetched word or matching final image cannot exclude unsensed writes.

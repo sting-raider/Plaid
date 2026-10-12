@@ -2131,6 +2131,19 @@ sources supply compatibility without repeated builds. General FIFO/census/hardwa
 cache/mapping/reset/restore/lifetime and whole-ROM/native remain uncertified.
 See the DMA RAM/IMEM round-trip integration receipt.
 
+ADR-0118 DMEM-ingress follow-up (2026-10-12): compose retained spike051's actual
+two-Word-read/two-Word-store contract onto the original producer/RAM/request/
+execution graph. Controlled v7 explicitly distinguishes DMEM egress, IMEM ingress
+and DMEM ingress. Require both actual source reads before either lower DMEM store;
+retain each lane's exact read/store/promotion and prior RAM byte parent through a
+performed RSP LW definition. Equal returned values cannot identify the lane or
+writer. Completion still validates complete count/skip/wrap/end progression;
+missing successful/OOB reads cannot supply successful-source ancestry. A152-event
+pinned source/23 matched checkpoints independently reproduces seven definitions
+and all three directions; v0-v6 reports stay exact. General census/pending/FIFO/
+hardware/cache/mapping/reset/restore/lifetime and whole-ROM/native remain OPEN.
+See the DMEM ingress/RSP load integration receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

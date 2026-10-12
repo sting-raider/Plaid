@@ -31,6 +31,9 @@ pub const DMA_LIFECYCLE_PROFILE: &str =
 pub const DMA_ROUNDTRIP_FORMAT: &str = "plaid-rsp-cpu-imem-history-v6";
 pub const DMA_ROUNDTRIP_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-rsp-dmem-ram-imem-dma-consumption-v6";
+pub const DMEM_INGRESS_FORMAT: &str = "plaid-rsp-cpu-imem-history-v7";
+pub const DMEM_INGRESS_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-rsp-dmem-ram-dmem-imem-consumption-v7";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -84,6 +87,8 @@ enum Kind {
     DmaComplete,
     ImemDmaRead,
     ImemDmaWrite,
+    DmemDmaRead,
+    DmemDmaWrite,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -109,6 +114,8 @@ struct Row {
     dma: Option<DmemDmaDescriptor>,
     #[serde(default)]
     fetch: Option<RamFetchAccess>,
+    #[serde(default)]
+    dma_direction: Option<SpDmaDirection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -165,6 +172,19 @@ pub struct PromotedDmemDmaRequest {
 pub enum SpDmaDirection {
     DmemEgress,
     ImemIngress,
+    DmemIngress,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RamToDmemDmaWord {
+    pub promote_context: u64,
+    pub read_ordinal: u64,
+    pub write_ordinal: u64,
+    pub descriptor: DmemDmaDescriptor,
+    pub source: PhysicalAddr,
+    pub offset: u16,
+    pub value: u32,
+    pub source_bytes: [RamByteOrigin; 4],
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -200,11 +220,20 @@ pub struct DmemDmaConsumption {
     pub promoted_requests: Option<Vec<PromotedDmemDmaRequest>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub imem_installs: Option<Vec<RamToImemDmaInstall>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dmem_installs: Option<Vec<RamToDmemDmaWord>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SpByteOrigin {
+    DmemDma {
+        promote_context: u64,
+        read_ordinal: u64,
+        write_ordinal: u64,
+        source: PhysicalAddr,
+        parent: RamByteOrigin,
+    },
     ImemDma {
         promote_context: u64,
         read_ordinal: u64,
@@ -378,18 +407,28 @@ struct RamReplay {
     ingress: bool,
     ingress_read: Option<(Row, [RamByteOrigin; 8])>,
     installs: Vec<RamToImemDmaInstall>,
+    dmem_ingress: bool,
+    dmem_reads: Vec<(Row, [RamByteOrigin; 4])>,
+    dmem_installs: Vec<RamToDmemDmaWord>,
 }
 struct ActiveDmemDma {
     context: u64,
     descriptor: DmemDmaDescriptor,
     writes: Vec<u64>,
-    ingress: bool,
+    direction: SpDmaDirection,
 }
 impl ActiveDmemDma {
+    fn fragments_per_block(&self) -> u64 {
+        if self.direction == SpDmaDirection::ImemIngress {
+            1
+        } else {
+            2
+        }
+    }
     fn total_words(&self) -> u64 {
         u64::from((self.descriptor.length + 8) / 8)
             * u64::from(self.descriptor.count + 1)
-            * if self.ingress { 1 } else { 2 }
+            * self.fragments_per_block()
     }
     fn current(&self, block: u64) -> DmemDmaDescriptor {
         let row = block / u64::from((self.descriptor.length + 8) / 8);
@@ -419,7 +458,12 @@ fn valid_dmem_dma_descriptor(descriptor: &DmemDmaDescriptor) -> bool {
         && descriptor.skip.is_multiple_of(8)
 }
 impl RamReplay {
-    fn new(snapshot: RamSnapshot, lifecycle: bool, ingress: bool) -> Result<Self, String> {
+    fn new(
+        snapshot: RamSnapshot,
+        lifecycle: bool,
+        ingress: bool,
+        dmem_ingress: bool,
+    ) -> Result<Self, String> {
         require(
             !snapshot.initial.is_empty()
                 && snapshot.initial.len() <= 65536
@@ -445,6 +489,9 @@ impl RamReplay {
             ingress,
             ingress_read: None,
             installs: Vec::new(),
+            dmem_ingress,
+            dmem_reads: Vec::new(),
+            dmem_installs: Vec::new(),
         })
     }
     fn offset(&self, address: u32, width: usize) -> Result<usize, String> {
@@ -486,11 +533,23 @@ impl RamReplay {
                         && valid_dmem_dma_descriptor(descriptor),
                     "invalid promoted DMEM DMA request",
                 )?;
+                let direction = if self.dmem_ingress {
+                    let direction = row.dma_direction.ok_or("DMA promotion lacks direction")?;
+                    require(
+                        row.bank == u32::from(direction == SpDmaDirection::ImemIngress),
+                        "DMA bank/direction mismatch",
+                    )?;
+                    direction
+                } else if row.bank == 1 {
+                    SpDmaDirection::ImemIngress
+                } else {
+                    SpDmaDirection::DmemEgress
+                };
                 self.request = Some(ActiveDmemDma {
                     context: row.context,
                     descriptor: descriptor.clone(),
                     writes: Vec::new(),
-                    ingress: row.bank == 1,
+                    direction,
                 });
             }
             Kind::DmaComplete => {
@@ -498,7 +557,7 @@ impl RamReplay {
                     .request
                     .take()
                     .ok_or("DMA completion lacks promotion")?;
-                let blocks = request.total_words() / if request.ingress { 1 } else { 2 };
+                let blocks = request.total_words() / request.fragments_per_block();
                 let end_pbus = ((u64::from(request.descriptor.pbus) + blocks * 8) & 4095) as u32;
                 let end_dram = ((u64::from(request.descriptor.dram.0)
                     + blocks * 8
@@ -511,7 +570,8 @@ impl RamReplay {
                         && row.bytes == 0
                         && row.value == 0
                         && row.dma.is_none()
-                        && row.bank == u32::from(request.ingress)
+                        && row.bank == u32::from(request.direction == SpDmaDirection::ImemIngress)
+                        && (!self.dmem_ingress || row.dma_direction == Some(request.direction))
                         && request.writes.len() as u64 == request.total_words()
                         && row.address == end_dram
                         && row.offset == end_pbus,
@@ -522,11 +582,7 @@ impl RamReplay {
                     complete_ordinal: row.ordinal,
                     descriptor: request.descriptor,
                     write_ordinals: request.writes,
-                    direction: self.ingress.then_some(if request.ingress {
-                        SpDmaDirection::ImemIngress
-                    } else {
-                        SpDmaDirection::DmemEgress
-                    }),
+                    direction: self.ingress.then_some(request.direction),
                 });
             }
             Kind::RamWrite => {
@@ -560,7 +616,10 @@ impl RamReplay {
                             .as_mut()
                             .ok_or("DMA Word lacks actual promotion")?;
                         let index = request.writes.len() as u64;
-                        require(!request.ingress, "RAM write attached to ingress request")?;
+                        require(
+                            request.direction == SpDmaDirection::DmemEgress,
+                            "RAM write attached to ingress request",
+                        )?;
                         require(
                             index < request.total_words(),
                             "DMA request has excess Word effects",
@@ -720,7 +779,7 @@ impl RamReplay {
             .ok_or("IMEM ingress lacks promotion")?;
         let index = request.writes.len() as u64;
         require(
-            request.ingress
+            request.direction == SpDmaDirection::ImemIngress
                 && row.context == request.context
                 && index < request.total_words()
                 && *descriptor == request.current(index)
@@ -779,12 +838,115 @@ impl RamReplay {
         }
         Ok(())
     }
+    fn dmem_ingress(
+        &mut self,
+        row: Row,
+        dmem: &mut [u8],
+        origins: &mut [SpByteOrigin],
+    ) -> Result<(), String> {
+        effect_row(&row)?;
+        require(
+            self.dmem_ingress
+                && row.bank == 0
+                && !row.cpu
+                && row.word == 0
+                && row.bytes == 4
+                && row.gpr.is_empty()
+                && row.rgpr.is_empty(),
+            "invalid DMEM ingress observation",
+        )?;
+        let descriptor = row.dma.as_ref().ok_or("DMEM ingress lacks descriptor")?;
+        let request = self
+            .request
+            .as_ref()
+            .ok_or("DMEM ingress lacks promotion")?;
+        let index = request.writes.len() as u64;
+        require(
+            request.direction == SpDmaDirection::DmemIngress
+                && row.context == request.context
+                && index < request.total_words()
+                && *descriptor == request.current(index / 2),
+            "DMEM ingress disagrees with promoted progression",
+        )?;
+        if row.kind == Kind::DmemDmaRead {
+            require(
+                index.is_multiple_of(2) && self.dmem_reads.len() < 2,
+                "out-of-order DMEM DMA read",
+            )?;
+            let lane = self.dmem_reads.len() as u32 * 4;
+            require(
+                row.address == descriptor.dram.0 + lane
+                    && row.offset == (descriptor.pbus + lane) & 4095,
+                "DMEM read lane differs from descriptor",
+            )?;
+            if let Some((previous, _)) = self.dmem_reads.first() {
+                require(
+                    row.phase == previous.phase && row.pc == previous.pc,
+                    "DMEM reads crossed controlled scope",
+                )?;
+            }
+            let offset = self.offset(row.address, 4)?;
+            require(
+                payload(row.value, 4)? == self.bytes[offset..offset + 4],
+                "DMEM DMA read disagrees with current RAM",
+            )?;
+            let parents = std::array::from_fn(|n| self.origins[offset + n].clone());
+            self.dmem_reads.push((row, parents));
+        } else {
+            require(
+                self.dmem_reads.len() == 2,
+                "DMEM sink lacks both actual source reads",
+            )?;
+            let (read, parents) = &self.dmem_reads[(index % 2) as usize];
+            require(
+                row.phase == read.phase
+                    && row.pc == read.pc
+                    && row.address == read.address
+                    && row.offset == read.offset
+                    && row.dma == read.dma
+                    && row.value == read.value,
+                "DMEM sink differs from its exact source read",
+            )?;
+            let data = payload(row.value, 4)?;
+            for (n, value) in data.iter().enumerate() {
+                store(
+                    dmem,
+                    origins,
+                    (row.offset + n as u32) & 4095,
+                    &[*value],
+                    SpByteOrigin::DmemDma {
+                        promote_context: row.context,
+                        read_ordinal: read.ordinal,
+                        write_ordinal: row.ordinal,
+                        source: PhysicalAddr(row.address + n as u32),
+                        parent: parents[n].clone(),
+                    },
+                )?;
+            }
+            self.dmem_installs.push(RamToDmemDmaWord {
+                promote_context: row.context,
+                read_ordinal: read.ordinal,
+                write_ordinal: row.ordinal,
+                descriptor: descriptor.clone(),
+                source: PhysicalAddr(row.address),
+                offset: row.offset as u16,
+                value: row.value as u32,
+                source_bytes: parents.clone(),
+            });
+            self.request.as_mut().unwrap().writes.push(row.ordinal);
+            if index % 2 == 1 {
+                self.dmem_reads.clear();
+            }
+        }
+        Ok(())
+    }
     fn finish(self) -> Result<DmemDmaConsumption, String> {
         require(
             self.active.is_none()
                 && self.pending.is_none()
                 && self.request.is_none()
                 && self.ingress_read.is_none()
+                && self.dmem_reads.is_empty()
                 && self.bytes == self.final_bytes,
             "incomplete RAM fetch/decoder or contradictory final snapshot",
         )?;
@@ -797,6 +959,7 @@ impl RamReplay {
             fetches: self.fetches,
             promoted_requests: self.lifecycle.then_some(self.requests),
             imem_installs: self.ingress.then_some(self.installs),
+            dmem_installs: self.dmem_ingress.then_some(self.dmem_installs),
         })
     }
 }
@@ -978,7 +1141,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let ingress_enabled = h.format == DMA_ROUNDTRIP_FORMAT && h.profile == DMA_ROUNDTRIP_PROFILE;
+    let dmem_ingress_enabled = h.format == DMEM_INGRESS_FORMAT && h.profile == DMEM_INGRESS_PROFILE;
+    let ingress_enabled = dmem_ingress_enabled
+        || (h.format == DMA_ROUNDTRIP_FORMAT && h.profile == DMA_ROUNDTRIP_PROFILE);
     let lifecycle_enabled =
         ingress_enabled || (h.format == DMA_LIFECYCLE_FORMAT && h.profile == DMA_LIFECYCLE_PROFILE);
     let dma_enabled = lifecycle_enabled || (h.format == DMA_FORMAT && h.profile == DMA_PROFILE);
@@ -1015,7 +1180,14 @@ pub fn inspect_rsp_cpu_imem_history(
     )?;
     let mut ram = h
         .ram
-        .map(|snapshot| RamReplay::new(snapshot, lifecycle_enabled, ingress_enabled))
+        .map(|snapshot| {
+            RamReplay::new(
+                snapshot,
+                lifecycle_enabled,
+                ingress_enabled,
+                dmem_ingress_enabled,
+            )
+        })
         .transpose()?;
     let records = h.events.len();
     let mut dmem = h.initial_dmem;
@@ -1044,7 +1216,9 @@ pub fn inspect_rsp_cpu_imem_history(
             row.dma.is_none()
                 || (dma_enabled && row.kind == Kind::RamWrite)
                 || (lifecycle_enabled && row.kind == Kind::DmaPromote)
-                || (ingress_enabled && matches!(row.kind, Kind::ImemDmaRead | Kind::ImemDmaWrite)),
+                || (ingress_enabled && matches!(row.kind, Kind::ImemDmaRead | Kind::ImemDmaWrite))
+                || (dmem_ingress_enabled
+                    && matches!(row.kind, Kind::DmemDmaRead | Kind::DmemDmaWrite)),
             "DMA metadata outside completed RAM write",
         )?;
         require(
@@ -1052,7 +1226,21 @@ pub fn inspect_rsp_cpu_imem_history(
                 || (dma_enabled && matches!(row.kind, Kind::RamFetchBegin | Kind::RamFetchEnd)),
             "fetch metadata outside RAM boundary",
         )?;
+        require(
+            row.dma_direction.is_none()
+                || (dmem_ingress_enabled
+                    && matches!(row.kind, Kind::DmaPromote | Kind::DmaComplete)),
+            "DMA direction outside lifecycle boundary",
+        )?;
         if let Some(ram) = &ram {
+            require(
+                ram.dmem_reads.len() != 1 || row.kind == Kind::DmemDmaRead,
+                "DMEM sink/actor preceded second source read",
+            )?;
+            require(
+                ram.dmem_reads.len() != 2 || row.kind == Kind::DmemDmaWrite,
+                "interleaved DMEM source reads/sinks",
+            )?;
             require(
                 ram.ingress_read.is_none() || row.kind == Kind::ImemDmaWrite,
                 "interleaved IMEM DMA read/sink",
@@ -1067,6 +1255,15 @@ pub fn inspect_rsp_cpu_imem_history(
             )?;
         }
         match row.kind {
+            Kind::DmemDmaRead | Kind::DmemDmaWrite => {
+                require(
+                    active.is_none(),
+                    "DMEM ingress interleaves decoded instruction",
+                )?;
+                ram.as_mut()
+                    .ok_or("DMEM ingress outside profile")?
+                    .dmem_ingress(row, &mut dmem, &mut dorig)?;
+            }
             Kind::ImemDmaRead | Kind::ImemDmaWrite => {
                 require(
                     active.is_none(),
@@ -2482,7 +2679,12 @@ mod tests {
             }
             let owned = matches!(
                 kind,
-                "dma_promote" | "dma_complete" | "imem_dma_read" | "imem_dma_write"
+                "dma_promote"
+                    | "dma_complete"
+                    | "imem_dma_read"
+                    | "imem_dma_write"
+                    | "dmem_dma_read"
+                    | "dmem_dma_write"
             ) || (kind == "ram_write" && row["dma"].is_object());
             let end = matches!(kind, "cpu_end" | "rsp_end" | "ram_fetch_end");
             let completed = kind == "dma_complete";
@@ -2607,7 +2809,7 @@ mod tests {
                 skip: 8,
             },
             writes: Vec::new(),
-            ingress: false,
+            direction: SpDmaDirection::DmemEgress,
         };
         assert_eq!(request.total_words(), 8);
         for (block, pbus, dram, count) in [
@@ -2633,6 +2835,7 @@ mod tests {
                 final_bytes: vec![0; 40],
             },
             true,
+            false,
             false,
         )
         .unwrap();
@@ -2858,6 +3061,7 @@ mod tests {
             },
             true,
             true,
+            false,
         )
         .unwrap();
         let dmem = vec![0; 4096];
@@ -2918,6 +3122,221 @@ mod tests {
             origins[0],
             SpByteOrigin::ImemDma {
                 write_ordinal: 5,
+                ..
+            }
+        ));
+    }
+
+    fn dmem_ingress_fixture() -> Value {
+        let mut data = roundtrip_fixture(false);
+        data["format"] = json!(DMEM_INGRESS_FORMAT);
+        data["profile"] = json!(DMEM_INGRESS_PROFILE);
+        let rows = data["events"].as_array_mut().unwrap();
+        for r in rows.iter_mut() {
+            if matches!(r["kind"].as_str(), Some("dma_promote" | "dma_complete")) {
+                r["dma_direction"] = json!(if r["bank"] == 1 {
+                    "imem_ingress"
+                } else {
+                    "dmem_egress"
+                });
+            }
+        }
+        let mut promote = row("dma_promote", 0, 0);
+        promote["phase"] = json!(5);
+        promote["address"] = json!(0x6008);
+        promote["dma"] = json!({"pbus":0,"dram":0x6008,"length":0,"count":0,"skip":0});
+        promote["dma_direction"] = json!("dmem_ingress");
+        rows.push(promote.clone());
+        for kind in ["dmem_dma_read", "dmem_dma_write"] {
+            for lane in [0, 4] {
+                let mut event = promote.clone();
+                event["dma_direction"] = Value::Null;
+                event["kind"] = json!(kind);
+                event["address"] = json!(0x6008 + lane);
+                event["offset"] = json!(lane);
+                event["bytes"] = json!(4);
+                rows.push(event);
+            }
+        }
+        let mut complete = promote;
+        complete["kind"] = json!("dma_complete");
+        complete["dma"] = Value::Null;
+        complete["address"] = json!(0x6010);
+        complete["offset"] = json!(8);
+        rows.push(complete);
+        let mut seed = row("opaque_imem_seed", 0, 0);
+        seed["phase"] = json!(6);
+        seed["bank"] = json!(1);
+        seed["address"] = json!(0x320);
+        seed["offset"] = json!(0x320);
+        seed["bytes"] = json!(4);
+        seed["value"] = json!(0x8c040000u32);
+        rows.push(seed);
+        let mut begin = rows
+            .iter()
+            .rfind(|r| r["kind"] == "rsp_end")
+            .unwrap()
+            .clone();
+        begin["kind"] = json!("rsp_begin");
+        begin["phase"] = json!(6);
+        begin["pc"] = json!(0x320);
+        begin["next"] = json!(0x320);
+        begin["word"] = json!(0x8c040000u32);
+        let mut read = row("rsp_read", 0, 0);
+        read["phase"] = json!(6);
+        read["pc"] = json!(0x320);
+        read["word"] = json!(0x8c040000u32);
+        read["bytes"] = json!(4);
+        let mut end = begin.clone();
+        end["kind"] = json!("rsp_end");
+        end["next"] = json!(0x324);
+        rows.extend([begin, read, end]);
+        for (n, value) in 0x8c040000u32.to_be_bytes().iter().enumerate() {
+            data["final_imem"][0x320 + n] = json!(value);
+        }
+        reclock_promoted(&mut data);
+        data
+    }
+
+    #[test]
+    fn dmem_ingress_keeps_each_source_read_and_ram_writer_in_rsp_load_definition() {
+        let report = inspect(&dmem_ingress_fixture()).unwrap();
+        let graph = report.dma_consumption.as_ref().unwrap();
+        let installs = graph.dmem_installs.as_ref().unwrap();
+        assert_eq!(installs.len(), 2);
+        assert!(
+            installs[0].read_ordinal < installs[1].read_ordinal
+                && installs[1].read_ordinal < installs[0].write_ordinal
+        );
+        assert!(installs[0].source_bytes.iter().all(|o|matches!(o,RamByteOrigin::SpDma {write_ordinal,..} if *write_ordinal==graph.writes[0].write_ordinal)));
+        assert!(installs[1].source_bytes.iter().all(|o|matches!(o,RamByteOrigin::SpDma {write_ordinal,..} if *write_ordinal==graph.writes[1].write_ordinal)));
+        let load = &report
+            .rsp_definitions
+            .as_ref()
+            .unwrap()
+            .last()
+            .unwrap()
+            .expression;
+        let RspDefinitionExpression::DmemWordLoad(load) = load else {
+            panic!("missing load")
+        };
+        assert!(load.origins.iter().all(|o|matches!(o,SpByteOrigin::DmemDma {read_ordinal,write_ordinal,parent:RamByteOrigin::SpDma {write_ordinal:ram_writer,..},..}
+            if *read_ordinal==installs[0].read_ordinal && *write_ordinal==installs[0].write_ordinal && *ram_writer==graph.writes[0].write_ordinal)));
+    }
+
+    #[test]
+    fn dmem_two_reads_precede_writes_and_decoys_direction_or_parents_cannot_replace_them() {
+        let source = dmem_ingress_fixture();
+        for mode in 0..5 {
+            let mut data = source.clone();
+            let rows = data["events"].as_array_mut().unwrap();
+            let reads = rows
+                .iter()
+                .enumerate()
+                .filter_map(|(n, r)| (r["kind"] == "dmem_dma_read").then_some(n))
+                .collect::<Vec<_>>();
+            let write = rows
+                .iter()
+                .position(|r| r["kind"] == "dmem_dma_write")
+                .unwrap();
+            match mode {
+                0 => {
+                    rows.remove(reads[1]);
+                }
+                1 => rows.swap(reads[1], write),
+                2 => rows[reads[0]]["address"] = json!(0x600c),
+                3 => rows[write]["value"] = json!(1),
+                _ => {
+                    rows.iter_mut()
+                        .rfind(|r| r["kind"] == "dma_promote")
+                        .unwrap()["dma_direction"] = json!("dmem_egress")
+                }
+            }
+            reclock_promoted(&mut data);
+            assert!(inspect(&data).is_err(), "mode {mode}");
+        }
+        let bytes = serde_json::to_vec(&source).unwrap();
+        let mut report = inspect(&source).unwrap();
+        report
+            .dma_consumption
+            .as_mut()
+            .unwrap()
+            .dmem_installs
+            .as_mut()
+            .unwrap()[0]
+            .source_bytes[0] = RamByteOrigin::Unknown { cut_ordinal: None };
+        assert!(verify_rsp_cpu_imem_report(&report, &bytes, &sha256(&bytes)).is_err());
+    }
+
+    #[test]
+    fn dmem_ingress_count_skip_wrap_preserves_two_reads_then_two_stores_per_block() {
+        let mut ram = RamReplay::new(
+            RamSnapshot {
+                start: PhysicalAddr(0x1000),
+                initial: vec![0; 40],
+                final_bytes: vec![0; 40],
+            },
+            true,
+            true,
+            true,
+        )
+        .unwrap();
+        let mut dmem = vec![0; 4096];
+        let mut origins = vec![SpByteOrigin::Unknown { cut_ordinal: None }; 4096];
+        let mut promote = row("dma_promote", 1, 1);
+        promote["dma_direction"] = json!("dmem_ingress");
+        promote["address"] = json!(0x1000);
+        promote["offset"] = json!(0xff8);
+        promote["dma"] = json!({"pbus":0xff8,"dram":0x1000,"length":8,"count":1,"skip":8});
+        ram.observe(serde_json::from_value(promote).unwrap(), &dmem, &origins)
+            .unwrap();
+        let mut ordinal = 2;
+        for (pbus, dram, count) in [
+            (0xff8, 0x1000, 1),
+            (0, 0x1008, 1),
+            (8, 0x1018, 0),
+            (16, 0x1020, 0),
+        ] {
+            for kind in ["dmem_dma_read", "dmem_dma_write"] {
+                for lane in [0, 4] {
+                    let mut event = row(kind, ordinal, 1);
+                    event["address"] = json!(dram + lane);
+                    event["offset"] = json!((pbus + lane) & 4095);
+                    event["bytes"] = json!(4);
+                    event["dma"] =
+                        json!({"pbus":pbus,"dram":dram,"length":8,"count":count,"skip":8});
+                    ram.dmem_ingress(
+                        serde_json::from_value(event).unwrap(),
+                        &mut dmem,
+                        &mut origins,
+                    )
+                    .unwrap();
+                    ordinal += 1;
+                }
+            }
+        }
+        let mut complete = row("dma_complete", ordinal, 1);
+        complete["dma_direction"] = json!("dmem_ingress");
+        complete["address"] = json!(0x1028);
+        complete["offset"] = json!(24);
+        ram.observe(serde_json::from_value(complete).unwrap(), &dmem, &origins)
+            .unwrap();
+        let graph = ram.finish().unwrap();
+        assert_eq!(
+            graph.promoted_requests.unwrap()[0].write_ordinals,
+            [4, 5, 8, 9, 12, 13, 16, 17]
+        );
+        let installs = graph.dmem_installs.unwrap();
+        assert_eq!(
+            installs.iter().map(|i| i.read_ordinal).collect::<Vec<_>>(),
+            [2, 3, 6, 7, 10, 11, 14, 15]
+        );
+        assert_eq!(installs[4].source, PhysicalAddr(0x1018));
+        assert!(matches!(
+            origins[0],
+            SpByteOrigin::DmemDma {
+                read_ordinal: 6,
+                write_ordinal: 8,
                 ..
             }
         ));

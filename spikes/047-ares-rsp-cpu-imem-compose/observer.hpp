@@ -10,6 +10,7 @@ struct ComposeEvent {
   std::vector<u32> rgpr;
   bool dmaValid=false,fetchValid=false,fetchCached=false;
   u32 dmaPbus=0,dmaDram=0,dmaLength=0,dmaCount=0,dmaSkip=0,fetchPhysical=0;
+  const char* dmaDirection=nullptr;
 };
 static std::vector<ComposeEvent> composeEvents;
 static u32 composePhase=0,composeRspContext=0,composeRspPc=0,composeRspWord=0;
@@ -56,6 +57,18 @@ static void compose_rsp_instruction(bool begin,u32 pc,u32 word,u32 next,bool hal
 static void compose_rsp_dmem(u32 offset,u32 bytes,u64 value) {
   if(composeRspContext)
     compose_push("rsp_sink",composeRspContext,composeRspPc,composeRspWord,offset,0,offset,bytes,value);
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 7
+  else if(composeDmaContext && composeDmaBank==0 && !composeDmaWrite) {
+    if(bytes!=4 || composeCpuContext || composeFetchContext) std::abort();
+    auto& current=rsp.dma.current;
+    u32 lane=(offset-(u32)current.pbusAddress)&4095;
+    if(lane!=0 && lane!=4) std::abort();
+    compose_push("dmem_dma_write",composeDmaContext,cpu.ipu.pc,0,(u32)current.dramAddress+lane,0,offset,bytes,value);
+    auto& event=composeEvents.back();event.dmaValid=true;
+    event.dmaPbus=current.pbusAddress;event.dmaDram=current.dramAddress;
+    event.dmaLength=current.length;event.dmaCount=current.count;event.dmaSkip=current.skip;
+  }
+  #endif
   else compose_push("foreign_sink",composeCpuContext,composeCpuContext?composeCpuPc:cpu.ipu.pc,
     composeCpuWord,offset,0,offset,bytes,value);
 }
@@ -78,7 +91,9 @@ static void compose_sp_word(bool write,u32 address,u32 bank,u32 offset,u32 value
 #if PLAID_RSP_DEFINITIONS_FIXTURE >= 4
 #if PLAID_RSP_DEFINITIONS_FIXTURE >= 5
 static void compose_dma_lifecycle(bool begin,u32 bank,bool write,u32 pbus,u32 dram,u32 length,u32 count,u32 skip) {
-  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 6
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 7
+  if(bank>1 || (bank==1 && write) || (bool)rsp.dma.busy.read==write) std::abort();
+  #elif PLAID_RSP_DEFINITIONS_FIXTURE >= 6
   if(!((bank==0 && write)||(bank==1 && !write))) std::abort();
   #else
   if(bank || !write) std::abort();
@@ -89,6 +104,9 @@ static void compose_dma_lifecycle(bool begin,u32 bank,bool write,u32 pbus,u32 dr
     composeDmaContext=composeEvents.size()+1;composeDmaBank=bank;composeDmaWrite=write;
   } else if(!composeDmaContext || bank!=composeDmaBank || write!=composeDmaWrite) std::abort();
   compose_push(begin?"dma_promote":"dma_complete",composeDmaContext,cpu.ipu.pc,0,dram,bank,pbus);
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 7
+  composeEvents.back().dmaDirection=write?"dmem_egress":bank?"imem_ingress":"dmem_ingress";
+  #endif
   if(begin) {
     auto& event=composeEvents.back();event.dmaValid=true;
     event.dmaPbus=pbus;event.dmaDram=dram;event.dmaLength=length;event.dmaCount=count;event.dmaSkip=skip;
@@ -97,6 +115,9 @@ static void compose_dma_lifecycle(bool begin,u32 bank,bool write,u32 pbus,u32 dr
 #endif
 #if PLAID_RSP_DEFINITIONS_FIXTURE >= 6
 static void compose_imem_dma_store(u32 address,u32 bank,u32 offset,u32 bytes,u64 value) {
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 7
+  if(bank==0 && composeDmaContext && composeDmaBank==0 && !composeDmaWrite) return; // Lower primitive DMEM sink is already captured.
+  #endif
   if(!composeDmaContext || composeDmaBank!=1 || composeDmaWrite || bank!=1 || bytes!=8) std::abort();
   compose_push("imem_dma_write",composeDmaContext,cpu.ipu.pc,0,address,bank,offset,bytes,value);
   auto& event=composeEvents.back();auto& current=rsp.dma.current;
@@ -144,6 +165,16 @@ static void compose_ram_scalar(bool write,u32 address,u32 bytes,u32 device,u64 v
     event.dmaLength=current.length;event.dmaCount=current.count;event.dmaSkip=current.skip;
   }
   #endif
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 7
+  else if(composeDmaContext && composeDmaBank==0 && !composeDmaWrite && device==(u32)RBusDevice::SP_DMA) {
+    if(bytes!=4 || composeCpuContext || composeRspContext || composeFetchContext) std::abort();
+    auto& current=rsp.dma.current;
+    compose_push("dmem_dma_read",composeDmaContext,cpu.ipu.pc,0,address,0,((u32)current.pbusAddress+(address-(u32)current.dramAddress))&4095,bytes,value);
+    auto& event=composeEvents.back();event.dmaValid=true;
+    event.dmaPbus=current.pbusAddress;event.dmaDram=current.dramAddress;
+    event.dmaLength=current.length;event.dmaCount=current.count;event.dmaSkip=current.skip;
+  }
+  #endif
   else if(composeFetchContext) {
     if(device!=(u32)RBusDevice::VR4300_UNCACHED || bytes!=4) std::abort();
     compose_push("ram_read",composeFetchContext,composeFetchPc,0,address,0,0,bytes,value,true);
@@ -166,6 +197,7 @@ static void compose_print() {
     std::printf("]");
     if(e.dmaValid) std::printf(",\"dma\":{\"pbus\":%u,\"dram\":%u,\"length\":%u,\"count\":%u,\"skip\":%u}",e.dmaPbus,e.dmaDram,e.dmaLength,e.dmaCount,e.dmaSkip);
     if(e.fetchValid) std::printf(",\"fetch\":{\"physical\":%u,\"cached\":%s}",e.fetchPhysical,e.fetchCached?"true":"false");
+    if(e.dmaDirection) std::printf(",\"dma_direction\":\"%s\"",e.dmaDirection);
     std::printf("}");
   }
   std::printf("]");
