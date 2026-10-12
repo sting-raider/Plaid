@@ -4,9 +4,11 @@ Continue the existing RSP producer path from original-clock register definitions
 through actual installed-code consumption. Controlled v3 joins CPU IMEM installs
 to RSP fetched words; v4 additionally joins original-clock RSP definition/DMEM
 parents through separate reverse-DMA RAM writes to actual CPU fetch/decoder
-contexts. Next compose accepted request/completion lifetime, broader scalar/vector
-inputs, DMA ingress and complete mutation/cache/mapping/root lifetime coverage.
-Reuse retained134-event/19-checkpoint v4,97-event/17-checkpoint v3 and all earlier
+contexts. Controlled v5 also binds promoted-current identity and exact complete
+descriptor progression to that graph. Next compose mutable pending/accepted
+request provenance, DMA ingress, broader scalar/vector inputs and complete
+mutation/cache/mapping/root lifetime coverage. Reuse retained136-event v5 and
+134-event v4 (same19 controls),97-event/17-checkpoint v3 and all earlier
 compatibility sources; no repeat reference build is needed for compatible consumers.
 A fetched word or matching final image cannot exclude unsensed writes.
 

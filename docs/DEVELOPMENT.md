@@ -198,6 +198,12 @@ stay separate from request lifetime and DMA atomicity. Use spike061 controls and
 `python scripts/test_rsp_definitions.py --dma`; v0-v3 reports remain exact.
 General mutation/cached/mapped/lifecycle/closure obligations stay open.
 
+Controlled v5 additionally requires actual promoted-current identity and complete
+descriptor-derived DMA Word/lane/length/count/skip/end progression. A partial
+nonempty sink set cannot acquire completion. Use spike062's authenticated reused
+baseline controls and `python scripts/test_rsp_definitions.py --promoted`.
+V0-v4 reports remain exact; pending/FIFO/hardware/general-lifetime flags stay open.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

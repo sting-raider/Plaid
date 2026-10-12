@@ -57,6 +57,9 @@ int main(int argc,char** argv) {
   plaidRdramScalarObserver=traced?compose_ram_scalar:nullptr;
   plaidCpuFetchObserver=traced?compose_ram_fetch:nullptr;
   #endif
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 5
+  plaidRspDmaLifecycleObserver=traced?compose_dma_lifecycle:nullptr;
+  #endif
   #endif
   auto phase=[](u32 n){
     #if PLAID_RSP_CPU_IMEM_SENSOR
