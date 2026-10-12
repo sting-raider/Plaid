@@ -29,7 +29,8 @@ def worker(budget, *, driver=None, output_root=OUTPUT, boot_inputs=None, cache_p
     builder = importlib.util.module_from_spec(spec); spec.loader.exec_module(builder)
     exe = builder.build(driver or Path(__file__).with_name("driver.cpp"),output_root / "build",
         raw_fetch_access=True,physical_fetch_access=True,
-        extra_sources=(ROOT / "spikes/006-ares-rom-source/driver.cpp",ROOT / "spikes/004-ares-fetch/driver.cpp",*observer_sources),
+        extra_sources=(ROOT / "spikes/006-ares-rom-source/driver.cpp",ROOT / "spikes/004-ares-fetch/driver.cpp",
+            ROOT / "spikes/004-ares-fetch/boot_cic.hpp",*observer_sources),
         **(build_options or {}))
     output = output_root / str(budget); output.mkdir(exist_ok=True)
     (output / "results.json").unlink(missing_ok=True)

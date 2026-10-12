@@ -1,5 +1,12 @@
 # Next
 
+Use explicit verified CIC selection for local ROM capture (ADR-0123). The shared
+profiled driver and import gate now admit NTSC/6102 and NTSC/6105; existing
+homebrew captures retain their original 6102 scope. Reuse the compatible build
+and retained sources to extend the supplied ROM prefix into actual RAM/PI/SP
+chronology. The first 10,000-call prefix has no RAM fetches and establishes no
+executable lifetime or boot-completion certificate.
+
 COP1 context consumers must preserve the canonical architectural register-zero
 check. Frame callback clocks still need an authenticated join to FPR ancestry
 and resident/backing lifetime; equal values or ordinals alone do not supply it.

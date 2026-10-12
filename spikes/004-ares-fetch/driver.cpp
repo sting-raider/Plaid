@@ -8,6 +8,7 @@
 #endif
 #include <cstdlib>
 #include <nall/hash/sha256.hpp>
+#include "boot_cic.hpp"
 
 struct Observer : Headless {
   #if defined(PLAID_ROM_FETCH_SOURCE)
@@ -55,7 +56,13 @@ struct Observer : Headless {
 
 int fetch_observer_main(int argc, char** argv) {
   #if defined(PLAID_PIF_BOOT)
+  #if defined(PLAID_BOOT_PROFILE)
+  if(argc != 8 && argc != 9) return 2;
+  plaidBootCic = argc == 9 ? argv[8] : "CIC-NUS-6102";
+  if(strcmp(plaidBootCic, "CIC-NUS-6102") && strcmp(plaidBootCic, "CIC-NUS-6105")) return 3;
+  #else
   if(argc != 8) return 2;
+  #endif
   #else
   if(argc != 7) return 2;
   #endif
@@ -77,7 +84,7 @@ int fetch_observer_main(int argc, char** argv) {
   if(!frontend.messages) return 4;
   frontend.cartPak->setAttribute("title", "Pinned n64-systemtest research");
   frontend.cartPak->setAttribute("region", "NTSC");
-  frontend.cartPak->setAttribute("cic", "CIC-NUS-6102");
+  frontend.cartPak->setAttribute("cic", plaidBootCic);
   frontend.cartPak->append("program.rom", std::span<const u8>{bytes.data(), bytes.size()});
   ares::Nintendo64::system.expansionPak = true;
   Node::System root;

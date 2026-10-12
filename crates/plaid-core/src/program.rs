@@ -476,7 +476,7 @@ impl FetchBootInputs {
         .validate()?;
         if self.firmware_size != 1984
             || self.region != "ntsc"
-            || self.cic != "CIC-NUS-6102"
+            || !matches!(self.cic.as_str(), "CIC-NUS-6102" | "CIC-NUS-6105")
             || self.rdram_size != 8 * 1024 * 1024
             || !self.deterministic_entropy
             || self.pif_processor != "reference_hle"

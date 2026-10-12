@@ -90,6 +90,15 @@ plaid solve [rom] <map.json>
 
 Numbers accept decimal or `0x` notation.
 
+For a canonical local `.z64` ROM, the ignored capture recipe in
+`spikes/057-local-boot-capture/` accepts an explicit NTSC CIC configuration
+(`CIC-NUS-6102` or `CIC-NUS-6105`). It reuses the pinned v5 observer, records
+disabled/repeated controls and keeps ROM/firmware/captures external to git.
+Reuse a compatible build with `--build`, or replay sources with
+`--verify-existing`. Preserve an independent CIC diagnostic; the selected
+profile is a reference configuration declaration. Import and recheck with the
+boot-fetch commands above; finite raw fetches retain unknown execution identity.
+
 `discover` requires an explicit load mapping. Trace import compares captured DMA-backed code against canonical ROM bytes. Supplying a ROM to `solve` enables source-witness rechecking. The CLI whole-ROM solve path remains fail-closed; producing a report is not the same as reaching `CLOSED`.
 
 For discovery sources preserved independently at a trusted capture/import boundary:

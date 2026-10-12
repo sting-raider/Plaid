@@ -1,5 +1,12 @@
 # Status
 
+Explicit NTSC/6105 reference boot profiles now compose with canonical boot-fetch
+import/rechecking. A user-supplied local ROM prefix passes disabled/repeated
+controls and imports 305 finite summaries from 10,000 actual PIF/SP fetches.
+The 6102 default retains exact prior trace/checkpoint bytes. Declared CIC setup
+does not prove hardware boot or executable identity; whole-ROM remains OPEN
+(ADR-0123). ROM, firmware, traces and maps remain external/ignored.
+
 Canonical COP1 store normalization rejects impossible nonzero architectural
 register-zero snapshots, including forged base-zero destinations and absent
 sinks. The authenticated 96-case FPR/store composition retains its exact report

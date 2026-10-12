@@ -325,6 +325,32 @@ fn boot_fetches_require_supplied_inputs_and_remain_unknown_execution() {
 }
 
 #[test]
+fn declared_6105_profile_is_retained_and_cannot_replace_a_6102_capture() {
+    use plaid_core::fetch::{import_boot_fetch, verify_boot_fetch_capture};
+    let (input, firmware) = boot_raw();
+    let selected = input.replace("CIC-NUS-6102", "CIC-NUS-6105");
+    let map = import_boot_fetch(Cursor::new(selected.as_bytes()), &rom(), &firmware).unwrap();
+    assert_eq!(
+        map.fetch_captures
+            .values()
+            .next()
+            .unwrap()
+            .boot_inputs
+            .as_ref()
+            .unwrap()
+            .cic,
+        "CIC-NUS-6105"
+    );
+    verify_boot_fetch_capture(&map, Cursor::new(selected.as_bytes()), &rom(), &firmware).unwrap();
+    assert!(
+        verify_boot_fetch_capture(&map, Cursor::new(input.as_bytes()), &rom(), &firmware).is_err()
+    );
+    let report = solve(&map, &[], Scope::WholeRom).unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    assert!(!report.native_complete);
+}
+
+#[test]
 fn boot_profile_hash_size_version_and_power_entry_are_rechecked() {
     use plaid_core::fetch::import_boot_fetch;
     let (input, firmware) = boot_raw();
@@ -347,7 +373,7 @@ fn boot_profile_hash_size_version_and_power_entry_are_rechecked() {
         .collect();
     for (index, key, value) in [
         (0, "region", serde_json::json!("pal")),
-        (0, "cic", serde_json::json!("CIC-NUS-6105")),
+        (0, "cic", serde_json::json!("CIC-NUS-6106")),
         (0, "rdram_size", serde_json::json!(4194304)),
         (0, "deterministic_entropy", serde_json::json!(false)),
         (0, "pif_processor", serde_json::json!("hardware")),
