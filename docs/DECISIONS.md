@@ -2069,3 +2069,47 @@ finite absence of observed writes cannot establish a complete mutation census.
 Table/target identity, cache/mapping/reset/restore lifetime, hardware semantics
 and whole-ROM/native closure remain OPEN. No solver or milestone promotion. No
 reference implementation was copied into production.
+
+## ADR-0120: Physical FPR byte generations compose with canonical COP1 store normalization
+
+Status: Accepted for bounded source composition, 2026-10-12.
+
+Adopt the prepared COP1 replay's physical-byte invariant and connect it to the
+existing completed-store verifier. A completed uncached identity-RDRAM read
+enters FPR storage only through its exact load definition/context/phase/width.
+Same-value MTC1/DMTC1 writes replace selected byte generations. Failed loads
+create no origin. Stores select actual supplied physical lanes, retaining
+initial, memory-read and captured-move byte parents separately. FR or architectural
+register numbers do not supply load ancestry.
+
+Composition additionally runs the canonical CU1-aware SWC1/SDC1 verifier on
+separately preserved normalization side inputs. Require a complete one-to-one
+store set, exact occurrence ordinal, kind/FR/ft/storage/lane, replayed full FPR
+state, semantic payload and direct-KSEG1 backing destination. Keep cache-resident
+effects out of this uncached source contract. The canonical normalizer's existing
+selection policy constrains this join; the generic FPR replay itself does not
+infer physical lane selection or declare an emulator-specific odd-FR policy to
+be hardware truth. Preserve the canonical CU1 gate and private wrapper unchanged.
+
+Both CLI sources need independent external digests; full-report rechecking
+reconstructs every field. Unknown event/report envelopes reject. New source
+composition/adversarial regressions and the existing FPR/normalizer regressions
+pass the required full local gate.
+
+Existing swarm receipts retained the 96-case result but no accessible raw matrix.
+One justified local exact-pin fixture reproduction matched that result and
+retained detailed disabled/traced/repeated observations for future replay.
+Rust reproduces 72 completed store joins, ten mixed-origin stores and six
+equal-value false matches, plus eight same-value move cuts and 24 failed loads.
+All 72 CU1-disabled side-input forgeries reject. No Actions execution or branch
+workflow import. Original project Rust was reconciled; upstream implementation
+and required notices remain only in ignored reference diagnostics.
+
+Normalization contexts in this controlled matrix include declared instruction/
+GPR seeds from the authenticated fixture, observed FPR0/1 snapshots and backing
+effects, and initialized untouched FPR constants. FPR writer rows/selected lanes
+are a checked fixture projection, not an additional raw writer sensor. This
+does not prove decoded context/operand ancestry or complete writer coverage for
+arbitrary ROMs. RDRAM producers, other FPR writers/arithmetic, cached/TLB/endian
+paths, executable consumption/lifetime and whole-ROM/native closure stay OPEN.
+All corresponding flags remain false; no solver or milestone promotion.

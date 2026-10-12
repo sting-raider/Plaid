@@ -1,5 +1,9 @@
 use plaid_core::{
     GuestAddr,
+    cop1_lineage::{
+        Cop1MutationContext, Cop1MutationLineageReport, compose_cop1_mutation_history,
+        verify_cop1_mutation_lineage_report,
+    },
     cpu_copy::{
         CpuCopyReport, inspect_cpu_copy_history, inspect_cpu_definition_history,
         verify_cpu_copy_report, verify_cpu_definition_report,
@@ -72,6 +76,49 @@ fn rom_images(rom: &CanonicalRom, map: &ProgramMap) -> Result<Vec<CodeImage>, St
 fn run() -> Result<(), String> {
     let args: Vec<_> = env::args().skip(1).collect();
     match args.as_slice() {
+        [
+            command,
+            source_path,
+            expected_sha256,
+            contexts_path,
+            expected_contexts_sha256,
+            output,
+        ] if command == "compose-cop1-mutations" || command == "verify-cop1-mutations" => {
+            let source = fs::read(source_path).map_err(|e| e.to_string())?;
+            let contexts = fs::read(contexts_path).map_err(|e| e.to_string())?;
+            if plaid_core::rom::sha256(&contexts) != *expected_contexts_sha256 {
+                return Err("COP1 normalization side-input receipt mismatch".into());
+            }
+            let contexts: Vec<Cop1MutationContext> =
+                serde_json::from_slice(&contexts).map_err(|e| e.to_string())?;
+            if command.starts_with("verify-") {
+                let report: Cop1MutationLineageReport =
+                    serde_json::from_slice(&fs::read(output).map_err(|e| e.to_string())?)
+                        .map_err(|e| e.to_string())?;
+                verify_cop1_mutation_lineage_report(&report, &source, expected_sha256, &contexts)?;
+                println!(
+                    "COP1 FPR lineage/normalized mutations match both independently preserved inputs"
+                );
+            } else {
+                if let Ok(destination) = fs::canonicalize(output) {
+                    for input in [source_path, contexts_path] {
+                        if destination == fs::canonicalize(input).map_err(|e| e.to_string())? {
+                            return Err("composition output would overwrite an input".into());
+                        }
+                    }
+                }
+                let report = compose_cop1_mutation_history(&source, expected_sha256, &contexts)?;
+                fs::write(
+                    output,
+                    serde_json::to_string_pretty(&report).map_err(|e| e.to_string())? + "\n",
+                )
+                .map_err(|e| e.to_string())?;
+                println!(
+                    "composed {} COP1 backing mutations; executable ancestry remains uncertified",
+                    report.mutations.len()
+                );
+            }
+        }
         [command, source_path, expected_sha256, output]
             if command == "inspect-dcache-resident-reads"
                 || command == "verify-dcache-resident-reads" =>
@@ -656,7 +703,7 @@ fn run() -> Result<(), String> {
         }
         _ => {
             return Err(
-                "usage: plaid inspect-dcache-resident-reads <history-v1.json> <expected-source-sha256> <report.json> | verify-dcache-resident-reads <same-inputs> | inspect-rsp-cpu-imem <history.json> <expected-source-sha256> <report.json> | verify-rsp-cpu-imem <same-inputs> | inspect-sp-writer-fetch <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-writer-fetch <same-inputs> | create-trace-expectations <new-expected.json> <trace.ndjson>... | solve-traces <rom> <map.json> <expected.json> <trace.ndjson>... | inspect-cpu-definitions <history.json> <external-source-sha256> <report.json> | verify-cpu-definitions <history.json> <external-source-sha256> <report.json> | inspect-cpu-copy-history <history.json> <external-source-sha256> <report.json> | verify-cpu-copy-history <history.json> <external-source-sha256> <report.json> | rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | verify-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | inspect-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | verify-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | merge <left.json> <right.json> <output.json>"
+                "usage: plaid compose-cop1-mutations <history.json> <expected-source-sha256> <contexts.json> <expected-contexts-sha256> <report.json> | verify-cop1-mutations <same-inputs> | inspect-dcache-resident-reads <history-v1.json> <expected-source-sha256> <report.json> | verify-dcache-resident-reads <same-inputs> | inspect-rsp-cpu-imem <history.json> <expected-source-sha256> <report.json> | verify-rsp-cpu-imem <same-inputs> | inspect-sp-writer-fetch <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-writer-fetch <same-inputs> | create-trace-expectations <new-expected.json> <trace.ndjson>... | solve-traces <rom> <map.json> <expected.json> <trace.ndjson>... | inspect-cpu-definitions <history.json> <external-source-sha256> <report.json> | verify-cpu-definitions <history.json> <external-source-sha256> <report.json> | inspect-cpu-copy-history <history.json> <external-source-sha256> <report.json> | verify-cpu-copy-history <history.json> <external-source-sha256> <report.json> | rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | verify-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | inspect-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | verify-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | merge <left.json> <right.json> <output.json>"
                     .into(),
             );
         }

@@ -2,6 +2,7 @@
 //!
 //! Keep this crate free of ROM assets and game-specific assumptions.
 
+pub mod cop1_lineage;
 pub mod cpu_copy;
 #[path = "cpu_mutation.rs"]
 mod cpu_mutation_impl;
