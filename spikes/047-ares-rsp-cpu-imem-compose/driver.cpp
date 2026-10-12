@@ -46,6 +46,9 @@ int main(int argc,char** argv) {
 
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=traced;plaidCpuInstructionObserver=traced?compose_cpu_instruction:nullptr;plaidSpWordObserver=traced?compose_sp_word:nullptr;plaidRspInstructionObserver=traced?compose_rsp_instruction:nullptr;plaidRspDmemObserver=traced?compose_rsp_dmem:nullptr;
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 2
+  plaidRspWordReadObserver=traced?compose_rsp_word_read:nullptr;
+  #endif
   #endif
   auto phase=[](u32 n){
     #if PLAID_RSP_CPU_IMEM_SENSOR
@@ -80,10 +83,15 @@ int main(int argc,char** argv) {
       for(u32 word:{0x3400ffffu,0x34023344u,0x34023344u,0x00401821u,0x00601021u}) {
         rsp.imem.write<Word>(code,word);code+=4;
       }
+      if(PLAID_RSP_DEFINITIONS_FIXTURE >= 2) {
+        for(u32 word:{0xac220000u,0x8c240000u,0x00801021u}) {
+          rsp.imem.write<Word>(code,word);code+=4;
+        }
+      }
     }
     rsp.imem.write<Word>(code,instruction);rsp.imem.write<Word>(code+4,0x0000000du);
     rsp.pipeline={};rsp.branch.setPc(0x100);rsp.ipu.pc=0x100;rsp.status.halted=0;rsp.status.broken=0;
-    for(u32 guard=0;guard<8&&!rsp.status.halted;guard++)rsp.instruction();
+    for(u32 guard=0;guard<(PLAID_RSP_DEFINITIONS_FIXTURE>=2?16u:8u)&&!rsp.status.halted;guard++)rsp.instruction();
     if(!rsp.status.halted||(u32)rsp.dmem.read<Word>(0)!=expected){std::fprintf(stderr,"rsp phase=%u halted=%u expected=%08x got=%08x\n",p,(u32)rsp.status.halted,expected,(u32)rsp.dmem.read<Word>(0));std::abort();}
     checkpoint();
   };

@@ -1,5 +1,13 @@
 # Status
 
+Actual RSP DMEM word reads now compose with register definitions and later
+DMEM -> CPU -> IMEM copies under v2. The source reuses the original unaligned
+read result; no extra guest access. A79-event pinned source/16 matched
+checkpoints independently reproduces six definitions and three copies, with
+four distinct byte parents retained through LW and ADDU. Missing/duplicate/
+decoy reads fail closed. V0/v1 report bytes stay identical; full local gate passes.
+General ancestry, mutation coverage, IMEM execution/lifetime and native stay OPEN.
+
 RSP ORI/ADDU definitions now compose on the existing full-snapshot DMEM -> CPU
 LW -> IMEM SW clock under an explicit v1 profile. Fresh raw-context nodes retain
 parents and reach scalar sinks; repeated equal definitions remain distinct and

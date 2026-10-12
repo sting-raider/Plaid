@@ -2066,6 +2066,18 @@ report/phase/input adversaries and full local gate pass. PR8 broader load/store
 work remains pending. No census/execution/lifetime/native or milestone promotion.
 See the RSP definition/IMEM integration receipt.
 
+ADR-0118 completed-read follow-up (2026-10-12): extend the original clock with
+an observed RSP LW return, preserving readUnaligned<Word> and using its result
+once before assignment. Explicit v2 admission binds actual context/address/
+offset/payload to four captured DMEM byte parents, then verifies full after-state
+and carries the load/ADDU definition through later DMEM and CPU IMEM stores.
+Discarded zero-register loads still require a read. Reclocked missing/duplicate
+and equal-valued decoy reads cannot supply provenance. A79-event exact pinned
+source/16 matched checkpoints independently reproduces six nodes/three copies.
+V0/v1 report bytes remain identical; focused11 and full local gate pass (two
+build jobs after Windows paging capacity failure). No census/execution/lifetime/
+native/milestone promotion. See the RSP word-read/IMEM integration receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

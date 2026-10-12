@@ -53,6 +53,12 @@ static void compose_rsp_dmem(u32 offset,u32 bytes,u64 value) {
   else compose_push("foreign_sink",composeCpuContext,composeCpuContext?composeCpuPc:cpu.ipu.pc,
     composeCpuWord,offset,0,offset,bytes,value);
 }
+#if PLAID_RSP_DEFINITIONS_FIXTURE >= 2
+static void compose_rsp_word_read(u32 address,u32 value) {
+  if(!composeRspContext) std::abort();
+  compose_push("rsp_read",composeRspContext,composeRspPc,composeRspWord,address,0,address&4095,4,value);
+}
+#endif
 static void compose_sp_word(bool write,u32 address,u32 bank,u32 offset,u32 value,bool originCpu) {
   compose_push(write?"sp_write":"sp_read",composeCpuContext,
     composeCpuContext?composeCpuPc:cpu.ipu.pc,composeCpuWord,address,bank,offset,4,value,originCpu);

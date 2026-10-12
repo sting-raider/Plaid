@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 
 
-def generate(ref,out,sp_backing=False):
+def generate(ref,out,sp_backing=False,word_reads=False):
     ref,out=Path(ref),Path(out)
     destination=out/'include/n64/rsp/rsp.hpp'
     header=(destination if destination.exists() else ref/'ares/n64/rsp/rsp.hpp').read_text(encoding='utf-8')
@@ -12,6 +12,10 @@ using PlaidRspInstructionObserver = void (*)(bool,u32,u32,u32,bool);
 using PlaidRspDmemObserver = void (*)(u32,u32,u64);
 inline PlaidRspInstructionObserver plaidRspInstructionObserver = nullptr;
 inline PlaidRspDmemObserver plaidRspDmemObserver = nullptr;
+'''
+    if word_reads:
+        declarations += '''using PlaidRspWordReadObserver = void (*)(u32,u32);
+inline PlaidRspWordReadObserver plaidRspWordReadObserver = nullptr;
 '''
     marker='      if constexpr(Size == Dual) *(u64*)&data[address & maskDual] = bswap64(value);'
     assert header.count(marker)==1
@@ -37,6 +41,23 @@ inline PlaidRspDmemObserver plaidRspDmemObserver = nullptr;
     rsp=rsp.replace(marker,'''  auto plaidResult=instructionBranchEpilogue();
   if(plaidRspInstructionObserver) plaidRspInstructionObserver(false,pipeline.address,pipeline.instruction,ipu.pc,status.halted);
   return plaidResult;''')
+    if word_reads:
+        ipu=(ref/'ares/n64/rsp/interpreter-ipu.cpp').read_text(encoding='utf-8')
+        marker='''auto RSP::LW(r32& rt, cr32& rs, s16 imm) -> void {
+  rt.u32 = dmem.readUnaligned<Word>(rs.u32 + imm);
+}'''
+        assert ipu.count(marker)==1
+        ipu=ipu.replace(marker,'''auto RSP::LW(r32& rt, cr32& rs, s16 imm) -> void {
+  u32 plaidAddress=rs.u32 + imm;
+  auto plaidValue=dmem.readUnaligned<Word>(plaidAddress);
+  if(plaidRspWordReadObserver) plaidRspWordReadObserver(plaidAddress,u32(plaidValue));
+  rt.u32=plaidValue;
+}''')
+        patched=out/'rsp-interpreter-ipu.cpp'
+        patched.write_text(ipu,encoding='utf-8',newline='\n')
+        marker=f'#include "{ref/"ares/n64/rsp/interpreter-ipu.cpp"}"'
+        assert rsp.count(marker)==1
+        rsp=rsp.replace(marker,f'#include "{patched}"')
     source.write_text(rsp,encoding='utf-8',newline='\n')
     unity=(out/'n64.cpp').read_text(encoding='utf-8')
     marker='#include <n64/rsp/rsp.cpp>'

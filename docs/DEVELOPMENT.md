@@ -176,6 +176,14 @@ captured incoming registers remain opaque. Legacy v0 reports stay byte-compatibl
 `python scripts/test_rsp_definitions.py` exercises source/report/profile/phase
 boundaries; spike058 retains the exact pinned actual component controls.
 
+The v2 word-read profile additionally requires an actual in-context completed
+RSP LW read, checks raw address/modulo-bank offset/payload and retains each byte
+writer in a load definition before propagating it through later stores/copies.
+The original unaligned-read result is sensed once. Missing, duplicate and
+equal-valued decoy reads reject; zero destinations still require the read.
+Use spike059 controls and `python scripts/test_rsp_definitions.py --word-reads`.
+V0/v1 inputs/reports remain compatible; no mutation/lifetime/closure flag changes.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

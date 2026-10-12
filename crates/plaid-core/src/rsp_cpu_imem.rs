@@ -14,6 +14,9 @@ pub const PROFILE: &str =
 pub const DEFINITION_FORMAT: &str = "plaid-rsp-cpu-imem-history-v1";
 pub const DEFINITION_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-rsp-cpu-imem-scalar-definitions-sbv2e0-v1";
+pub const READ_FORMAT: &str = "plaid-rsp-cpu-imem-history-v2";
+pub const READ_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-rsp-cpu-imem-word-read-definitions-sbv2e0-v2";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -45,6 +48,7 @@ enum Kind {
     RspBegin,
     RspEnd,
     RspSink,
+    RspRead,
     ForeignSink,
     SpRead,
     SpWrite,
@@ -114,6 +118,17 @@ pub enum RspDefinitionExpression {
         left: RspRegisterParent,
         right: RspRegisterParent,
     },
+    DmemWordLoad(Box<RspDmemWordRead>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RspDmemWordRead {
+    pub read_ordinal: u64,
+    pub address: u32,
+    pub offset: u16,
+    pub payload: [u8; 4],
+    pub origins: [SpByteOrigin; 4],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -194,6 +209,7 @@ enum Active {
         breaking: bool,
         expected_gpr: Vec<u32>,
         definition: Option<RspRegisterDefinition>,
+        read: bool,
     },
 }
 fn require(ok: bool, why: &str) -> Result<(), String> {
@@ -374,7 +390,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let definitions_enabled = h.format == DEFINITION_FORMAT && h.profile == DEFINITION_PROFILE;
+    let reads_enabled = h.format == READ_FORMAT && h.profile == READ_PROFILE;
+    let definitions_enabled =
+        reads_enabled || (h.format == DEFINITION_FORMAT && h.profile == DEFINITION_PROFILE);
     require(
         (h.format == FORMAT && h.profile == PROFILE) || definitions_enabled,
         "unsupported RSP/CPU composition profile",
@@ -455,17 +473,18 @@ pub fn inspect_rsp_cpu_imem_history(
                     rsp_registers.fill(None);
                 }
                 let mut expected_gpr = row.rgpr.clone();
-                let (lanes, breaking, definition) =
-                    if definitions_enabled && is_definition(row.word) {
-                        let definition = rsp_definition(&row, &rsp_registers);
-                        if let Some(d) = &definition {
-                            expected_gpr[d.register as usize] = d.value;
-                        }
-                        (Vec::new(), false, definition)
-                    } else {
-                        let (lanes, breaking) = rsp_lanes(&row)?;
-                        (lanes, breaking, None)
-                    };
+                let (lanes, breaking, definition) = if reads_enabled && row.word >> 26 == 0x23 {
+                    (Vec::new(), false, None)
+                } else if definitions_enabled && is_definition(row.word) {
+                    let definition = rsp_definition(&row, &rsp_registers);
+                    if let Some(d) = &definition {
+                        expected_gpr[d.register as usize] = d.value;
+                    }
+                    (Vec::new(), false, definition)
+                } else {
+                    let (lanes, breaking) = rsp_lanes(&row)?;
+                    (lanes, breaking, None)
+                };
                 active = Some(Active::Rsp {
                     begin: row,
                     lanes,
@@ -473,7 +492,68 @@ pub fn inspect_rsp_cpu_imem_history(
                     breaking,
                     expected_gpr,
                     definition,
+                    read: false,
                 });
+            }
+            Kind::RspRead => {
+                effect_row(&row)?;
+                let Some(Active::Rsp {
+                    begin,
+                    expected_gpr,
+                    definition,
+                    read,
+                    ..
+                }) = &mut active
+                else {
+                    return Err("unscoped RSP DMEM read".into());
+                };
+                let rs = ((begin.word >> 21) & 31) as usize;
+                let rt = ((begin.word >> 16) & 31) as usize;
+                let address = begin.rgpr[rs].wrapping_add_signed(i32::from(begin.word as i16));
+                require(
+                    reads_enabled
+                        && begin.word >> 26 == 0x23
+                        && !*read
+                        && same(begin, &row)
+                        && !row.cpu
+                        && row.bank == 0
+                        && row.bytes == 4
+                        && row.address == address
+                        && row.offset == address & 4095,
+                    "RSP read does not match decoded LW/context/address",
+                )?;
+                let offsets: [usize; 4] =
+                    std::array::from_fn(|n| ((address.wrapping_add(n as u32)) & 4095) as usize);
+                require(
+                    offsets.iter().all(|n| *n < dmem.len()),
+                    "RSP read escapes declared DMEM snapshot",
+                )?;
+                let payload: [u8; 4] = std::array::from_fn(|n| dmem[offsets[n]]);
+                require(
+                    row.value == u64::from(u32::from_be_bytes(payload)),
+                    "RSP completed read disagrees with modeled byte state",
+                )?;
+                *read = true;
+                if rt != 0 {
+                    expected_gpr[rt] = row.value as u32;
+                    *definition = Some(RspRegisterDefinition {
+                        context: begin.context,
+                        phase: begin.phase,
+                        pc: begin.pc as u16,
+                        word: begin.word,
+                        register: rt as u8,
+                        value: row.value as u32,
+                        expression: RspDefinitionExpression::DmemWordLoad(Box::new(
+                            RspDmemWordRead {
+                                read_ordinal: row.ordinal,
+                                address,
+                                offset: row.offset as u16,
+                                payload,
+                                origins: std::array::from_fn(|n| dorig[offsets[n]].clone()),
+                            },
+                        )),
+                    });
+                }
             }
             Kind::RspSink => {
                 effect_row(&row)?;
@@ -775,6 +855,7 @@ pub fn inspect_rsp_cpu_imem_history(
                     breaking,
                     expected_gpr,
                     definition,
+                    read,
                 }) = active.take()
                 else {
                     return Err("RSP end lacks begin".into());
@@ -787,6 +868,10 @@ pub fn inspect_rsp_cpu_imem_history(
                         && row.next == ((begin.pc as u32 + 4) & 4095)
                         && row.halted == breaking,
                     "RSP result/effect census mismatch",
+                )?;
+                require(
+                    read == (reads_enabled && begin.word >> 26 == 0x23),
+                    "RSP LW lacks its actual completed read",
                 )?;
                 if let Some(definition) = definition {
                     rsp_registers[definition.register as usize] = Some(definition.context);
@@ -1131,5 +1216,173 @@ mod tests {
         let mut encoded = serde_json::to_value(&report).unwrap();
         encoded["rsp_definitions"][0]["expression"]["source"]["invented_root"] = json!(true);
         assert!(serde_json::from_value::<RspCpuImemReport>(encoded).is_err());
+    }
+
+    fn read_fixture(target: usize) -> Value {
+        let mut data = defined_fixture(false);
+        data["format"] = json!(READ_FORMAT);
+        data["profile"] = json!(READ_PROFILE);
+        let mut regs = [0u32; 32];
+        regs[1] = 0x1000;
+        regs[2] = 0x3344;
+        regs[3] = 0x3344;
+        let word = (0x23u32 << 26) | (1 << 21) | ((target as u32) << 16);
+        let mut begin = row("rsp_begin", 13, 13);
+        begin["pc"] = json!(0);
+        begin["next"] = json!(0);
+        begin["word"] = json!(word);
+        begin["rgpr"] = json!(regs);
+        let mut read = row("rsp_read", 14, 13);
+        read["pc"] = json!(0);
+        read["word"] = json!(word);
+        read["address"] = json!(0x1000);
+        read["bytes"] = json!(4);
+        read["value"] = json!(0x3344);
+        let mut inserted = vec![begin.clone(), read];
+        if target != 0 {
+            regs[target] = 0x3344;
+        }
+        begin["kind"] = json!("rsp_end");
+        begin["ordinal"] = json!(15);
+        begin["next"] = json!(4);
+        begin["rgpr"] = json!(regs);
+        inserted.push(begin);
+        if target == 4 {
+            let mut begin = row("rsp_begin", 16, 16);
+            begin["pc"] = json!(4);
+            begin["next"] = json!(4);
+            begin["word"] = json!(0xac240000u32);
+            begin["rgpr"] = json!(regs);
+            inserted.push(begin.clone());
+            for (n, value) in [0u8, 0, 0x33, 0x44].into_iter().enumerate() {
+                let mut sink = row("rsp_sink", 17 + n as u64, 16);
+                sink["pc"] = json!(4);
+                sink["word"] = json!(0xac240000u32);
+                sink["address"] = json!(n);
+                sink["offset"] = json!(n);
+                sink["bytes"] = json!(1);
+                sink["value"] = json!(value);
+                inserted.push(sink);
+            }
+            begin["kind"] = json!("rsp_end");
+            begin["ordinal"] = json!(21);
+            begin["next"] = json!(8);
+            inserted.push(begin);
+        }
+        let rows = data["events"].as_array_mut().unwrap();
+        for r in rows.iter_mut().skip(12) {
+            r["ordinal"] = json!(r["ordinal"].as_u64().unwrap() + inserted.len() as u64);
+            r["context"] = json!(r["context"].as_u64().unwrap() + inserted.len() as u64);
+        }
+        rows.splice(12..12, inserted);
+        data
+    }
+
+    #[test]
+    fn actual_rsp_word_read_keeps_each_writer_parent_through_a_later_imem_copy() {
+        let report = inspect(&read_fixture(4)).unwrap();
+        let definitions = report.rsp_definitions.as_ref().unwrap();
+        let RspDefinitionExpression::DmemWordLoad(read) = &definitions[3].expression else {
+            panic!("missing read parent");
+        };
+        assert_eq!(
+            (read.read_ordinal, read.address, read.offset),
+            (14, 0x1000, 0)
+        );
+        for (n, parent) in read.origins.iter().enumerate() {
+            assert!(
+                matches!(parent, SpByteOrigin::Rsp { context: 7, write_ordinal, source_definition: Some(5), .. } if *write_ordinal == 8 + n as u64)
+            );
+        }
+        assert!(report.copies[0].source_bytes.iter().all(|b| matches!(
+            b,
+            SpByteOrigin::Rsp {
+                context: 16,
+                source_definition: Some(13),
+                ..
+            }
+        )));
+        assert!(
+            !report.source_ancestry_certified
+                && !report.mutation_coverage_certified
+                && !report.native_complete
+        );
+    }
+
+    #[test]
+    fn rsp_word_read_binds_the_prewrite_base_and_requires_even_discarded_reads() {
+        for target in [0, 1] {
+            let data = read_fixture(target);
+            let report = inspect(&data).unwrap();
+            assert_eq!(
+                report.rsp_definitions.as_ref().unwrap().len(),
+                if target == 0 { 3 } else { 4 }
+            );
+            let mut missing = data;
+            missing["events"].as_array_mut().unwrap().remove(13);
+            assert!(inspect(&missing).is_err());
+        }
+    }
+
+    #[test]
+    fn same_value_decoy_read_and_forged_read_parents_cannot_repair_source_identity() {
+        let data = read_fixture(4);
+        let mut decoy = data.clone();
+        decoy["initial_dmem"] = json!([0, 0, 0, 0, 0, 0, 0x33, 0x44]);
+        decoy["final_dmem"] = json!([0, 0, 0x33, 0x44, 0, 0, 0x33, 0x44]);
+        decoy["events"][13]["address"] = json!(0x1004);
+        decoy["events"][13]["offset"] = json!(4);
+        assert!(inspect(&decoy).is_err());
+        for field in ["context", "word", "value", "bytes", "cpu"] {
+            let mut forged = data.clone();
+            forged["events"][13][field] = if field == "cpu" {
+                json!(true)
+            } else {
+                json!(999)
+            };
+            assert!(inspect(&forged).is_err(), "{field}");
+        }
+        let bytes = serde_json::to_vec(&data).unwrap();
+        let digest = sha256(&bytes);
+        let mut forged = inspect(&data).unwrap();
+        if let RspDefinitionExpression::DmemWordLoad(read) =
+            &mut forged.rsp_definitions.as_mut().unwrap()[3].expression
+            && let SpByteOrigin::Rsp {
+                source_definition, ..
+            } = &mut read.origins[0]
+        {
+            *source_definition = Some(3);
+        }
+        assert!(verify_rsp_cpu_imem_report(&forged, &bytes, &digest).is_err());
+        let mut downgraded = data;
+        downgraded["format"] = json!(DEFINITION_FORMAT);
+        downgraded["profile"] = json!(DEFINITION_PROFILE);
+        assert!(inspect(&downgraded).is_err());
+    }
+
+    #[test]
+    fn duplicate_or_missing_read_callbacks_fail_after_reclocking_complete_sources() {
+        for duplicate in [false, true] {
+            let mut data = read_fixture(4);
+            let rows = data["events"].as_array_mut().unwrap();
+            if duplicate {
+                rows.insert(14, rows[13].clone());
+            } else {
+                rows.remove(13);
+            }
+            let mut active = 0;
+            for (index, row) in rows.iter_mut().enumerate() {
+                let ordinal = index as u64 + 1;
+                row["ordinal"] = json!(ordinal);
+                if row["kind"] == "rsp_begin" || row["kind"] == "cpu_begin" {
+                    active = ordinal;
+                }
+                row["context"] = json!(active);
+                if row["kind"] == "rsp_end" || row["kind"] == "cpu_end" {
+                    active = 0;
+                }
+            }
+            assert!(inspect(&data).is_err(), "duplicate {duplicate}");
+        }
     }
 }
