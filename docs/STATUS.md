@@ -1,5 +1,13 @@
 # Status
 
+The existing finite PI writer/fill/fetch consumer now accepts the complete v3
+SP/PI source clock with independently expected raw history/fetch digests. Raw
+writer/fill/read ordinals stay distinct from renumbered legacy projections;
+SP events supply no invented RAM origins. Cached and uncached contracts, source
+replacement/report/input adversaries and full local gate pass. The prior610k v2
+report rechecks unchanged; independent100k v3 replay agrees with zero PI chains.
+The larger20m chain replay is pending; no additional closure state is claimed.
+
 Complete buffered twenty-million-call CIC6105 sources now pass independent
 receipt checks and canonical paired-source reconstruction. Request 1/token 6
 joins dispatch event 1 and one completion-status transition; the pending list

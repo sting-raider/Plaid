@@ -1116,6 +1116,258 @@ mod queue {
         assert_eq!(unknown.unattributed_fetches, 2);
         assert!(unknown.samples.is_empty());
     }
+    mod sp_pi_lineage {
+        use super::*;
+        use plaid_core::{
+            pi_fetch_lineage::{
+                SpPiFetchLineageReport, inspect_sp_pi_fetch_lineage,
+                verify_sp_pi_fetch_lineage_report,
+            },
+            sp_history,
+        };
+
+        fn source(cached: bool) -> Fixture {
+            let mut f = fixture();
+            f.history[0]["format"] = json!(sp_history::FORMAT);
+            f.history[0]["policy"] = json!(sp_history::POLICY);
+            // One SP observation shifts every subsequent raw writer identity.
+            f.history.insert(
+                4,
+                row(json!({"record":"sp_word","write":true,
+                "address":0x04000000,"bank":0,"offset":0,"bytes":4,"value":7,"cpu":true})),
+            );
+            if cached {
+                let begin = f
+                    .history
+                    .iter()
+                    .rposition(|r| r["record"] == "fetch_begin")
+                    .unwrap();
+                let pc = 0xffffffff80001000u64;
+                let words = [7u32, 0, 0, 0, 0, 0, 0, 0];
+                let burst = json!({"record":"burst","pc":pc,"write":false,
+                    "address":4096,"bytes":32,"device":1,"words":words});
+                let fill = json!({"record":"fill","pc":pc,"slot":128,
+                    "physical":4096,"index":0,"words":words});
+                f.history.splice(begin + 1..begin + 2, [burst, fill]);
+                for r in f.history.iter_mut().skip(begin) {
+                    if r["record"] == "end" {
+                        break;
+                    }
+                    r["pc"] = json!(pc);
+                    if r["cached"].is_boolean() {
+                        r["cached"] = json!(true);
+                    }
+                    if r["vaddr"].is_number() {
+                        r["vaddr"] = json!(pc);
+                    }
+                }
+                f.fetches[2]["pc"] = json!(pc);
+                f.fetches[2]["cached"] = json!(true);
+                f.fetches[2]["cache_line"] =
+                    json!({"slot":128,"tag_key":4097,"index":0,"words":words});
+            }
+            renumber(&mut f.history);
+            f
+        }
+
+        fn inspect(f: &Fixture) -> Result<SpPiFetchLineageReport, String> {
+            inspect_sp_pi_fetch_lineage(
+                Cursor::new(wire(&f.history)),
+                Cursor::new(wire(&f.fetches)),
+                &f.rom,
+                &f.firmware,
+                &sha256(&wire(&f.history)),
+                &sha256(&wire(&f.fetches)),
+            )
+        }
+
+        fn verify(r: &SpPiFetchLineageReport, f: &Fixture) -> Result<(), String> {
+            verify_sp_pi_fetch_lineage_report(
+                r,
+                Cursor::new(wire(&f.history)),
+                Cursor::new(wire(&f.fetches)),
+                &f.rom,
+                &f.firmware,
+                &sha256(&wire(&f.history)),
+                &sha256(&wire(&f.fetches)),
+            )
+        }
+
+        #[test]
+        fn raw_sp_clock_composes_rom_writers_with_uncached_and_full_line_consumption() {
+            for cached in [false, true] {
+                let f = source(cached);
+                let report = inspect(&f).unwrap();
+                assert_eq!(
+                    report.projection,
+                    sp_history::inspect_sp_boot_history(
+                        Cursor::new(wire(&f.history)),
+                        Cursor::new(wire(&f.fetches)),
+                        &f.rom,
+                        &f.firmware,
+                    )
+                    .unwrap()
+                );
+                assert_eq!(
+                    (
+                        report.fetches,
+                        report.fully_attributed_fetches,
+                        report.unattributed_fetches
+                    ),
+                    (2, 1, 1)
+                );
+                let sample = &report.samples[0];
+                assert_eq!(sample.cached, cached);
+                let writers: Vec<_> = f
+                    .history
+                    .iter()
+                    .filter(|r| r["record"] == "scalar" && r["pi"]["transfer"] == 1)
+                    .map(|r| r["ordinal"].as_u64().unwrap())
+                    .collect();
+                for (n, byte) in sample.bytes.iter().enumerate() {
+                    let b = byte.unwrap();
+                    assert_eq!(
+                        (b.writer_ordinal, b.transfer, b.rom_offset.0),
+                        (writers[n], 1, 0x2000 + n as u64)
+                    );
+                }
+                if cached {
+                    assert_eq!(
+                        sample.fill_ordinal,
+                        f.history.iter().find(|r| r["record"] == "fill").unwrap()["ordinal"]
+                            .as_u64()
+                    );
+                } else {
+                    assert_eq!(
+                        sample.read_ordinal,
+                        f.history
+                            .iter()
+                            .find(|r| r["record"] == "scalar" && r["device"] == 3)
+                            .unwrap()["ordinal"]
+                            .as_u64()
+                    );
+                    // Raw queue JSON and canonical projection serialize fields
+                    // differently; compare semantics without replacing digests.
+                    let legacy = super::inspect(&fixture()).unwrap();
+                    assert_eq!(report.projection.projection.projection, legacy.projection);
+                    assert_eq!(
+                        report.projection.projection.event_counts,
+                        legacy.event_counts
+                    );
+                }
+                assert!(
+                    !report.mutation_coverage_certified
+                        && !report.executable_lifetime_certified
+                        && !report.native_complete
+                );
+                verify(&report, &f).unwrap();
+            }
+        }
+
+        #[test]
+        fn source_receipts_and_nested_raw_clock_reports_reject_forgeries() {
+            let f = source(true);
+            let report = inspect(&f).unwrap();
+            for field in [
+                "mutation_coverage_certified",
+                "executable_lifetime_certified",
+                "native_complete",
+            ] {
+                let mut forged = serde_json::to_value(&report).unwrap();
+                forged[field] = json!(true);
+                assert!(verify(&serde_json::from_value(forged).unwrap(), &f).is_err());
+            }
+            let mut forged = report.clone();
+            forged.samples[0].bytes[0].as_mut().unwrap().writer_ordinal -= 1;
+            assert!(verify(&forged, &f).is_err());
+            let mut forged = report.clone();
+            forged.projection.projection.requests_without_status.clear();
+            assert!(verify(&forged, &f).is_err());
+            let mut encoded = serde_json::to_value(&report).unwrap();
+            encoded["extra_certificate"] = json!(true);
+            assert!(serde_json::from_value::<SpPiFetchLineageReport>(encoded).is_err());
+            for (h, t) in [
+                ("0".repeat(64), sha256(&wire(&f.fetches))),
+                (sha256(&wire(&f.history)), "0".repeat(64)),
+            ] {
+                assert!(
+                    inspect_sp_pi_fetch_lineage(
+                        Cursor::new(wire(&f.history)),
+                        Cursor::new(wire(&f.fetches)),
+                        &f.rom,
+                        &f.firmware,
+                        &h,
+                        &t
+                    )
+                    .is_err()
+                );
+            }
+            let mut changed = source(true);
+            changed.history[4]["value"] = json!(8);
+            assert!(
+                inspect_sp_pi_fetch_lineage(
+                    Cursor::new(wire(&changed.history)),
+                    Cursor::new(wire(&f.fetches)),
+                    &f.rom,
+                    &f.firmware,
+                    &sha256(&wire(&f.history)),
+                    &sha256(&wire(&f.fetches))
+                )
+                .is_err()
+            );
+            let mut changed = source(true);
+            changed.history[4]["ordinal"] = json!(999);
+            assert!(inspect(&changed).is_err());
+        }
+
+        #[test]
+        fn replay_cannot_replace_even_ignored_sp_rows_or_paired_source() {
+            let f = source(false);
+            let mut changed = f.history.clone();
+            changed[4]["value"] = json!(8);
+            let history = ChangedOnReplay {
+                cursor: Cursor::new(wire(&f.history)),
+                replacement: wire(&changed),
+                rewinds: 0,
+                change_at: 1,
+            };
+            let error = inspect_sp_pi_fetch_lineage(
+                history,
+                Cursor::new(wire(&f.fetches)),
+                &f.rom,
+                &f.firmware,
+                &sha256(&wire(&f.history)),
+                &sha256(&wire(&f.fetches)),
+            )
+            .unwrap_err();
+            assert!(
+                error.contains("between validation and lineage replay"),
+                "{error}"
+            );
+            let mut changed = f.fetches.clone();
+            changed[0]["budget"] = json!(1);
+            let fetched = ChangedOnReplay {
+                cursor: Cursor::new(wire(&f.fetches)),
+                replacement: wire(&changed),
+                rewinds: 0,
+                change_at: 2,
+            };
+            let error = inspect_sp_pi_fetch_lineage(
+                Cursor::new(wire(&f.history)),
+                fetched,
+                &f.rom,
+                &f.firmware,
+                &sha256(&wire(&f.history)),
+                &sha256(&wire(&f.fetches)),
+            )
+            .unwrap_err();
+            assert!(
+                error.contains("between validation and lineage replay"),
+                "{error}"
+            );
+        }
+    }
+
     struct ChangedOnReplay {
         cursor: Cursor<Vec<u8>>,
         replacement: Vec<u8>,

@@ -1080,6 +1080,18 @@ unobserved same-value mutations cannot be excluded by value equality. Keep
 mutation-coverage, executable-lifetime and native flags false and leave ProgramMap
 and solver unchanged. Actual SP/PIF sources and their producers remain separate.
 
+ADR-0071 composition follow-up (2026-10-12): reuse the same byte-chain engine on
+complete v3 SP/PI sources after canonical SP/queue/PI/access/fetch validation.
+Require independently expected raw v3/v5 digests and reject changes between
+validation and replay, including SP rows unused by the RAM-chain engine. Keep
+raw v3 ordinals; never substitute renumbered v2 projection ordinals. A typed
+report retains the complete SP projection and false census/lifetime/native flags.
+SP observations do not invent RAM origins. Existing v2 format/report bytes stay
+compatible. Cached/uncached raw-clock contracts, forgeries, full local gate,
+retained610k v2 report recheck and independent100k v3 replay pass. Larger20m
+chain replay is pending; no native readiness or milestone promotion. See the
+SP/PI fetch-clock integration receipt.
+
 ## ADR-0072: CPU SP fetch identity requires the actual bank read result
 
 Status: Accepted for finite reference sensing, 2026-10-09.

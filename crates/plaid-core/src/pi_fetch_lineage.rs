@@ -5,6 +5,7 @@ use crate::{
     pi_queue_history::{self, PiQueueHistoryReport},
     program::*,
     rom::CanonicalRom,
+    sp_history::{self, SpHistoryReport},
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -17,7 +18,7 @@ use std::{
 #[serde(deny_unknown_fields)]
 pub struct ObservedPiByteChain {
     pub rom_offset: RomOffset,
-    /// Ordinal of the successful scalar writer in the raw v2 source.
+    /// Ordinal of the successful scalar writer in the containing raw source.
     pub writer_ordinal: u64,
     pub transfer: u64,
 }
@@ -38,10 +39,10 @@ pub struct ObservedPiFetch {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct PiFetchLineageReport {
+pub struct PiFetchLineageReport<P = PiQueueHistoryReport> {
     pub format: String,
     pub scope: String,
-    pub projection: PiQueueHistoryReport,
+    pub projection: P,
     pub fetches: u64,
     pub fully_attributed_fetches: u64,
     pub partially_attributed_fetches: u64,
@@ -55,6 +56,10 @@ pub struct PiFetchLineageReport {
     pub executable_lifetime_certified: bool,
     pub native_complete: bool,
 }
+
+/// Byte-chain ordinals belong to the complete raw v3 source, not its renumbered
+/// v2 projection. SP observations are validated but supply no RAM byte origins.
+pub type SpPiFetchLineageReport = PiFetchLineageReport<SpHistoryReport>;
 
 #[derive(Clone)]
 struct Resident {
@@ -514,6 +519,60 @@ pub fn inspect_pi_fetch_lineage<H: BufRead + Seek, F: BufRead + Seek>(
     )?;
     let projection =
         pi_queue_history::inspect_pi_queue_boot_history(&mut history, &mut fetched, rom, firmware)?;
+    let hashes = (
+        projection.history_sha256.clone(),
+        projection.projection.projection.fetch_sha256.clone(),
+    );
+    replay_lineage(
+        history,
+        fetched,
+        rom,
+        projection,
+        (&hashes.0, &hashes.1),
+        false,
+    )
+}
+
+/// Compose the existing PI writer/fill/fetch consumer with complete v3 source
+/// validation. Require independent receipts and retain original event ordinals.
+/// Compatible finite chains never certify a complete mutation census/lifetime.
+pub fn inspect_sp_pi_fetch_lineage<H: BufRead + Seek, F: BufRead + Seek>(
+    mut history: H,
+    mut fetched: F,
+    rom: &CanonicalRom,
+    firmware: &[u8],
+    expected_history_sha256: &str,
+    expected_fetch_sha256: &str,
+) -> Result<SpPiFetchLineageReport, String> {
+    require(
+        history.stream_position().map_err(|e| e.to_string())? == 0,
+        "lineage history must begin at zero",
+    )?;
+    let projection =
+        sp_history::inspect_sp_boot_history(&mut history, &mut fetched, rom, firmware)?;
+    require(
+        projection.history_sha256 == expected_history_sha256
+            && projection.projection.projection.projection.fetch_sha256 == expected_fetch_sha256,
+        "SP/PI lineage source receipt mismatch",
+    )?;
+    replay_lineage(
+        history,
+        fetched,
+        rom,
+        projection,
+        (expected_history_sha256, expected_fetch_sha256),
+        true,
+    )
+}
+
+fn replay_lineage<H: BufRead + Seek, F: BufRead + Seek, P>(
+    mut history: H,
+    mut fetched: F,
+    rom: &CanonicalRom,
+    projection: P,
+    source_hashes: (&str, &str),
+    sp_clock: bool,
+) -> Result<PiFetchLineageReport<P>, String> {
     history
         .seek(SeekFrom::Start(0))
         .map_err(|e| e.to_string())?;
@@ -538,9 +597,18 @@ pub fn inspect_pi_fetch_lineage<H: BufRead + Seek, F: BufRead + Seek>(
             "lineage replay exceeds record bound",
         )?;
         hash.update(&raw);
-        let record: pi_queue_history::Wire =
-            serde_json::from_slice(&raw).map_err(|e| e.to_string())?;
-        if let pi_queue_history::Wire::Legacy(record) = record {
+        let record = if sp_clock {
+            match serde_json::from_slice::<sp_history::Wire>(&raw).map_err(|e| e.to_string())? {
+                sp_history::Wire::Legacy(r) => Some(r),
+                sp_history::Wire::Sp(_) => None,
+            }
+        } else {
+            Some(
+                serde_json::from_slice::<pi_queue_history::Wire>(&raw)
+                    .map_err(|e| e.to_string())?,
+            )
+        };
+        if let Some(pi_queue_history::Wire::Legacy(record)) = record {
             match record {
                 pi_history::Wire::Pi(p) => ledger.pi(&p)?,
                 pi_history::Wire::Scalar(s) => {
@@ -566,14 +634,23 @@ pub fn inspect_pi_fetch_lineage<H: BufRead + Seek, F: BufRead + Seek>(
         "lineage paired footer/EOF changed",
     )?;
     require(
-        format!("{:x}", hash.finalize()) == projection.history_sha256
-            && format!("{:x}", fetch_hash.finalize())
-                == projection.projection.projection.fetch_sha256,
+        format!("{:x}", hash.finalize()) == source_hashes.0
+            && format!("{:x}", fetch_hash.finalize()) == source_hashes.1,
         "complete source changed between validation and lineage replay",
     )?;
     Ok(PiFetchLineageReport {
-        format: "plaid-pi-fetch-lineage-report-v0".into(),
-        scope: "finite_observed_pi_byte_chains_without_mutation_census".into(),
+        format: if sp_clock {
+            "plaid-sp-pi-fetch-lineage-report-v0"
+        } else {
+            "plaid-pi-fetch-lineage-report-v0"
+        }
+        .into(),
+        scope: if sp_clock {
+            "finite_observed_pi_byte_chains_on_raw_sp_clock_without_mutation_census"
+        } else {
+            "finite_observed_pi_byte_chains_without_mutation_census"
+        }
+        .into(),
         projection,
         fetches: ledger.fetches,
         fully_attributed_fetches: ledger.full,
@@ -594,6 +671,28 @@ fn record_identity(record: &history::Record) -> Result<u64, String> {
         .identity()
         .map(|r| r.0)
         .ok_or_else(|| "missing lineage writer identity".into())
+}
+pub fn verify_sp_pi_fetch_lineage_report<H: BufRead + Seek, F: BufRead + Seek>(
+    report: &SpPiFetchLineageReport,
+    history: H,
+    fetched: F,
+    rom: &CanonicalRom,
+    firmware: &[u8],
+    expected_history_sha256: &str,
+    expected_fetch_sha256: &str,
+) -> Result<(), String> {
+    require(
+        *report
+            == inspect_sp_pi_fetch_lineage(
+                history,
+                fetched,
+                rom,
+                firmware,
+                expected_history_sha256,
+                expected_fetch_sha256,
+            )?,
+        "SP/PI lineage report does not match complete sources/inputs/receipts",
+    )
 }
 pub fn verify_pi_fetch_lineage_report<H: BufRead + Seek, F: BufRead + Seek>(
     report: &PiFetchLineageReport,

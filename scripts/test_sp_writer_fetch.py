@@ -66,6 +66,24 @@ def main():
         run('inspect-sp-writer-fetch',*inputs[:4],'0'*64,inputs[5],output,ok=False)
         run('inspect-sp-writer-fetch',*inputs[:5],'0'*64,output,ok=False)
         assert output.read_bytes()==preserved
+        pi_output=directory/'pi-fetch.json'
+        run('inspect-sp-pi-fetch-lineage',*inputs,pi_output)
+        run('verify-sp-pi-fetch-lineage',*inputs,pi_output)
+        pi_report=json.loads(pi_output.read_bytes())
+        assert pi_report['projection']==json.loads(legacy.read_bytes())
+        assert pi_report['fetches']==pi_report['unattributed_fetches']==2
+        assert pi_report['samples']==[] and not pi_report['native_complete']
+        for index in range(4):
+            before=inputs[index].read_bytes()
+            run('inspect-sp-pi-fetch-lineage',*inputs,inputs[index],ok=False)
+            assert inputs[index].read_bytes()==before
+        pi_preserved=pi_output.read_bytes()
+        run('inspect-sp-pi-fetch-lineage',*inputs[:4],'0'*64,inputs[5],pi_output,ok=False)
+        run('inspect-sp-pi-fetch-lineage',*inputs[:5],'0'*64,pi_output,ok=False)
+        assert pi_output.read_bytes()==pi_preserved
+        pi_report['fully_attributed_fetches']=1
+        pi_output.write_text(json.dumps(pi_report),encoding='utf-8')
+        run('verify-sp-pi-fetch-lineage',*inputs,pi_output,ok=False)
         altered=json.loads(preserved);altered['samples'][0]['writers'][0]['write_ordinal']+=1
         output.write_text(json.dumps(altered),encoding='utf-8')
         run('verify-sp-writer-fetch',*inputs,output,ok=False)

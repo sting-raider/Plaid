@@ -30,7 +30,9 @@ def inspect(history_path, fetch_path, source):
     history = rows(history_path, history_hash)
     fetched = rows(fetch_path, fetch_hash)
     header, paired_header = next(history), next(fetched)
-    assert header['format'] == 'plaid-ares-access-history-v2'
+    assert header['format'] in ('plaid-ares-access-history-v2', 'plaid-ares-access-history-v3')
+    if header['format'] == 'plaid-ares-access-history-v3':
+        assert header['policy'] == 'identity_ram_pi_queue_and_observed_sp_backing'
     assert header['lifecycle_policy'] == 'single_run_no_host_restore'
     assert header['rom_sha256'] == paired_header['rom_sha256'] == hashlib.sha256(source).hexdigest()
     assert header['firmware_sha256'] == paired_header['boot_inputs']['firmware_sha256']
@@ -176,7 +178,10 @@ def main():
     result, history_hash, fetch_hash = inspect(args.history,args.fetch,args.rom.read_bytes())
     rust = json.loads(args.rust_report.read_text(encoding='utf-8'),object_pairs_hook=unique)
     assert history_hash == rust['projection']['history_sha256']
-    assert fetch_hash == rust['projection']['projection']['projection']['fetch_sha256']
+    projection = rust['projection']
+    if rust['format'] == 'plaid-sp-pi-fetch-lineage-report-v0':
+        projection = projection['projection']
+    assert fetch_hash == projection['projection']['projection']['fetch_sha256']
     for key,value in result.items(): assert rust[key] == value,key
     args.output.write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8',newline='\n')
     print('PASS independent lineage replay:',result['fetches'],'fetches;',result['fully_attributed_fetches'],
