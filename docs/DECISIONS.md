@@ -2152,3 +2152,33 @@ hardware transaction/atomicity, restore/reset/mapping/cache lifetimes, executabl
 consumption and whole-ROM/native closure remain OPEN. All closure/census/native
 flags stay false. No solver or progress milestone change. Only project-owned
 instrumentation and Rust were integrated; upstream code/notices remain ignored.
+
+## ADR-0122: Execution-root classification carries an explicit target and hardware exclusion
+
+Status: Accepted for target-qualified proof composition, 2026-10-12.
+
+Adopt the prepared cache-error negative result using its explicit hardware basis.
+The NEC VR4300 manual Appendix B.1.7/Table B-1, printed p632, excludes cache-error
+exceptions; chapter 6.3.11/p178 describes unused compatibility CacheErr storage.
+Reviewed the original seventh-edition PDF [manual mirror](https://hack64.net/docs/VR43XX.pdf#page=632).
+Emulator silence alone is not an exclusion. Generic MIPS III remains unresolved.
+
+Compose this typed target policy with the existing general/TLB vector resolver
+at a new root-classification boundary. Numeric candidates and hardware-excluded
+classes are separate report variants. The VR4300 vector contract is admitted
+only for the explicit Nintendo64Vr4300 target; the existing vector API retains
+its contract. Recompute full reports from target/class/context, rejecting forged
+targets, classes, authority fields, handler/lifetime/native promotions and
+unknown serialized fields. Existing root/lifetime/whole-ROM gates are unchanged.
+
+Six focused tests include every existing class/BEV/EXL/address-mode combination.
+Authenticated retained two-BEV CacheErr/readback-zero controls preserve sentinel
+state and match four exact clean pinned source objects; the original negative
+model hash reproduces. Full required local gate passes. No emulator rebuild,
+Actions execution, source-workflow import or progress milestone change.
+
+This resolves one target-level exclusion obligation, without proving exception
+reachability, root census, handler bytes or executable lifetime. Other hardware
+targets and reset/NMI/interrupt/watch/source/whole-ROM/native obligations remain
+OPEN. All corresponding certification flags remain false. No manual text or
+upstream implementation is copied into production.

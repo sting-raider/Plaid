@@ -164,6 +164,14 @@ ancestry and subsequent executable fills/fetches to these byte occurrences next.
 Uncached/TLB/degraded/cache-miss paths, other actors, lifecycle and complete
 mutation coverage remain separate obligations; no whole-ROM gate is promoted.
 
+Target-qualified root classification now preserves VR4300 cache-error exclusion
+and existing numeric exception candidates as distinct proof results (ADR-0122).
+Carry the explicit target and hardware authority through future root-universe
+certificates. Exclusion is not emulator silence and numeric selection is not
+reachability, handler provenance or lifetime. Reset/NMI/interrupt/watch/root
+census obligations remain OPEN; do not invent a CacheError handler for VR4300
+or apply this exclusion/vector contract to generic MIPS III.
+
 EBus hidden fetches require a separate derived-bits source witness or Unknown; retain actual read context and hidden-storage lifecycle before any origin promotion (ADR-0062).
 
 Successful TLB-mapped uncached fetches now have finite source evidence; retain current translated/post-endian addresses in each access context and add mapping-generation/lifecycle evidence before proving alias history (ADR-0063).
