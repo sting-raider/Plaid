@@ -39,7 +39,9 @@ def main():
     parser.add_argument('--tlbr-context',action='store_true')
     parser.add_argument('--conditional-imem',action='store_true')
     parser.add_argument('--subword-imem',action='store_true')
+    parser.add_argument('--ram-load-imem',action='store_true')
     args = parser.parse_args()
+    args.subword_imem = args.subword_imem or args.ram_load_imem
     args.conditional_imem = args.conditional_imem or args.subword_imem
     args.tlbr_context = args.tlbr_context or args.conditional_imem
     args.entrylo_remap = args.entrylo_remap or args.tlbr_context
@@ -61,7 +63,8 @@ def main():
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('081-subword-transform-imem-consumption' if args.subword_imem else
+    recipe = ('082-ram-load-imem-consumption' if args.ram_load_imem else
+        '081-subword-transform-imem-consumption' if args.subword_imem else
         '080-conditional-sp-imem-consumption' if args.conditional_imem else
         '079-tlbr-context-root-return' if args.tlbr_context else
         '078-entrylo-remap-root-return' if args.entrylo_remap else
@@ -622,13 +625,35 @@ def main():
                     if event['word']==0xa2081003:event['word']=0xa2081000
                     if event['kind'] in ('ram_read','ram_fetch_end'):event['value']=0xa2081000
                     if event['kind']=='sp_write':event.update(value=0x21000000,sp_device_address=0x04001000)
-            shifted['steps'][-2]['word']=0xa2081000
+            next(s for s in shifted['steps'] if s['pc']==0xffffffffa00060f8)['word']=0xa2081000
             rows[:]=[e for e in rows if e['ordinal'] not in (561,562)]
             reclock(rows)
             run('inspect-rsp-cpu-imem',save(shifted));partial=json.loads(output.read_bytes())
-            assert len(partial['copies'])==6
+            assert len(partial['copies'])==len(report['copies'])-1
             assert partial['subword_sp_writes'][0]['value']==0x21000000
             assert not any(partial[k] for k in ('source_ancestry_certified','mutation_coverage_certified','imem_execution_certified','executable_lifetime_certified','native_complete'))
+        if args.ram_load_imem:
+            for mode in range(15):
+                forged=json.loads(json.dumps(expected));rows=forged['events']
+                read=next(e for e in rows if e['kind']=='cpu_ram_read')
+                begin=next(e for e in rows if e['kind']=='cpu_begin' and e['context']==read['context'])
+                end=next(e for e in rows if e['kind']=='cpu_end' and e['context']==read['context'])
+                if mode==0: rows.remove(read);reclock(rows)
+                elif mode==1: rows.insert(rows.index(read),copy.deepcopy(read));reclock(rows)
+                elif mode==2: read['context']=548
+                elif mode==3: read['address']-=4
+                elif mode==4: read['value']=0x21
+                elif mode==5: read['bytes']=8
+                elif mode==6: read['kind']='ram_read' # fetch-stage observation cannot supply an operand
+                elif mode==7: read['cpu']=False
+                elif mode==8: begin.pop('ram_load_state')
+                elif mode==9: end.pop('ram_load_state')
+                elif mode==10: begin['ram_load_state']['reverse_endian']=True
+                elif mode==11: end['ram_load_state']['linked']['control']['llbit']=False
+                elif mode==12: begin['ram_load_state']['linked']['control']['state']['kernel']=False
+                elif mode==13: end['gpr'][8]=0x21
+                else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
+                run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
             forged = json.loads(original)
@@ -729,7 +754,7 @@ def main():
         if args.cpu_xori:
             for mode in range(6):
                 forged=json.loads(original);graph=forged['dma_consumption']
-                parent=next(w['copy_parent'] for w in reversed(graph['cpu_writes']) if w['copy_parent'] and 'transform' in w['copy_parent']);transform=parent['transform']
+                parent=next(w['copy_parent'] for w in graph['cpu_writes'] if w['write_ordinal']==276);transform=parent['transform']
                 if mode==0: parent.pop('transform')
                 elif mode==1: transform['decoder_context']=264
                 elif mode==2: transform['source_value']=0x21
@@ -891,16 +916,33 @@ def main():
         if args.subword_imem:
             for mode in range(10):
                 forged=json.loads(original);writes=forged['subword_sp_writes']
+                copy_parent=next(c for c in forged['copies'] if c['store_context']==566)
                 if mode==0: forged.pop('subword_sp_writes')
                 elif mode==1: writes[-1]['effect_ordinal']=559
                 elif mode==2: writes[-1]['translated_physical']=0x04001003
                 elif mode==3: writes[-1]['value']=0x21000000
-                elif mode==4: forged['copies'][-1].pop('transform')
-                elif mode==5: forged['copies'][-1]['transform']['decoder_context']=532
-                elif mode==6: forged['copies'][-1]['source_bytes'][0]['parent']['write_ordinal']=220
+                elif mode==4: copy_parent.pop('transform')
+                elif mode==5: copy_parent['transform']['decoder_context']=532
+                elif mode==6: copy_parent['source_bytes'][0]['parent']['write_ordinal']=220
                 elif mode==7: forged['imem_fetches'][-1]['origins'][0]['write_ordinal']=559
                 elif mode==8: forged['final_imem_writers'][0]['write_ordinal']=559
-                else: forged['copies'][-1]['read_ordinal']=519
+                else: copy_parent['read_ordinal']=519
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.ram_load_imem:
+            for mode in range(11):
+                forged=json.loads(original);first,last=forged['copies'][-2:];origins=last['source_bytes']
+                if mode==0: forged['copies'].pop()
+                elif mode==1: origins[0]['parent']['write_ordinal']=473 # equal older RAM writer
+                elif mode==2: origins[0]['read_ordinal']=576
+                elif mode==3: origins[0]['physical']-=4
+                elif mode==4: origins[0]['parent']['source_offset']=1
+                elif mode==5: first['source_bytes'][0]['parent']['write_ordinal']=595 # future write cannot change prior load
+                elif mode==6: first['transform']['decoder_context']=553
+                elif mode==7: last['load_context']=575
+                elif mode==8: forged['dma_consumption']['cpu_writes'][-1]['copy_parent']['source_bytes'][0]['parent']['write_ordinal']=595
+                elif mode==9: forged['imem_fetches'][-1]['origins'][0]['write_ordinal']=587
+                else: forged['final_imem_writers'][0]['write_ordinal']=587
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
     print('RSP definitions: original-clock ORI/ADDU parents, phase cuts, full register snapshots, source/report/input gates and unchanged proof flags passed')

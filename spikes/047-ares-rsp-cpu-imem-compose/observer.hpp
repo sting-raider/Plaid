@@ -27,7 +27,7 @@ struct ComposeEvent {
   u32 exceptionCause=0,kernelBits=0;
   bool returnValid=false,epcValid=false,interruptEnable=false,llbit=false;
   bool linkedValid=false;
-  bool storeValid=false,reverseEndian=false,spDeviceValid=false;
+  bool storeValid=false,ramLoadValid=false,reverseEndian=false,spDeviceValid=false;
   u32 spDeviceAddress=0;
   u64 linkedAddress=0;
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 18
@@ -42,6 +42,7 @@ static u32 composePhase=0,composeRspContext=0,composeRspPc=0,composeRspWord=0;
 static u32 composeCpuContext=0,composeCpuWord=0;
 static u64 composeCpuPc=0;
 static bool composeEnabled=false;
+static bool composeCpuRamLoad=false;
 static u64 composeFetchContext=0,composeFetchPc=0;
 static u64 composeDmaContext=0;
 static u32 composeDmaBank=0;
@@ -119,6 +120,10 @@ static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
   if(begin) {
     if(composeCpuContext || composeRspContext) std::abort();
     composeCpuContext=composeEvents.size()+1;composeCpuPc=pc;composeCpuWord=word;
+    #if PLAID_RSP_DEFINITIONS_FIXTURE >= 25
+    u64 address=cpu.ipu.r[(word>>21)&31].u64+(s16)word;
+    composeCpuRamLoad=(word>>26)==0x23 && address>=0xffffffffa0000000ull && address<0xffffffffa0800000ull;
+    #endif
   } else if(!composeCpuContext || word!=composeCpuWord) std::abort();
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 14
   if(!begin && (word&0xfc00003f)==13) {
@@ -152,6 +157,12 @@ static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
     e.storeValid=true;e.linkedAddress=cpu.scc.ll;e.reverseEndian=cpu.context.littleEndian();
   }
   #endif
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 25
+  if(composeCpuRamLoad){
+    auto& e=composeEvents.back();compose_return_state(e);e.returnValid=false;
+    e.ramLoadValid=true;e.linkedAddress=cpu.scc.ll;e.reverseEndian=cpu.context.littleEndian();
+  }
+  #endif
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 14
   if(begin && (word&0xfc00003f)==13) compose_exception_state(composeEvents.back());
   #endif
@@ -175,7 +186,7 @@ static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
   if(begin && (word&0xffe0ffffu)==0x40801000u)compose_tlb_state(composeEvents.back());
   #endif
   #endif
-  if(!begin) composeCpuContext=composeCpuPc=composeCpuWord=0;
+  if(!begin) {composeCpuContext=composeCpuPc=composeCpuWord=0;composeCpuRamLoad=false;}
 }
 static void compose_rsp_instruction(bool begin,u32 pc,u32 word,u32 next,bool halted) {
   if(begin) {
@@ -383,6 +394,12 @@ static void compose_ram_scalar(bool write,u32 address,u32 bytes,u32 device,u64 v
     event.dmaLength=current.length;event.dmaCount=current.count;event.dmaSkip=current.skip;
   }
   #endif
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 25
+  else if(composeCpuContext && device==(u32)RBusDevice::VR4300_UNCACHED) {
+    if(!composeCpuRamLoad || bytes!=4 || composeFetchContext || composeRspContext)std::abort();
+    compose_push("cpu_ram_read",composeCpuContext,composeCpuPc,composeCpuWord,address,0,0,bytes,value,true);
+  }
+  #endif
   else if(composeFetchContext) {
     if(device!=(u32)RBusDevice::VR4300_UNCACHED || bytes!=4) std::abort();
     compose_push("ram_read",composeFetchContext,composeFetchPc,0,address,0,0,bytes,value,true);
@@ -440,7 +457,7 @@ static void compose_print() {
       std::printf(",\"interrupt_enable\":%s,\"llbit\":%s}",e.interruptEnable?"true":"false",e.llbit?"true":"false");}
     if(e.linkedValid){std::printf(",\"linked_state\":{\"control\":{\"state\":");compose_print_exception_state(e);
       std::printf(",\"interrupt_enable\":%s,\"llbit\":%s},\"linked_address\":%llu}",e.interruptEnable?"true":"false",e.llbit?"true":"false",(unsigned long long)e.linkedAddress);}
-    if(e.storeValid){std::printf(",\"store_state\":{\"linked\":{\"control\":{\"state\":");compose_print_exception_state(e);
+    if(e.storeValid || e.ramLoadValid){std::printf(",\"%s\":{\"linked\":{\"control\":{\"state\":",e.storeValid?"store_state":"ram_load_state");compose_print_exception_state(e);
       std::printf(",\"interrupt_enable\":%s,\"llbit\":%s},\"linked_address\":%llu},\"reverse_endian\":%s}",e.interruptEnable?"true":"false",e.llbit?"true":"false",(unsigned long long)e.linkedAddress,e.reverseEndian?"true":"false");}
     if(e.spDeviceValid)std::printf(",\"sp_device_address\":%u",e.spDeviceAddress);
     std::printf("}");

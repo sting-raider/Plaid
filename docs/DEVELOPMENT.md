@@ -364,6 +364,15 @@ requires an actual shift-zero lane; other lanes retain the mutation witness only
 Run `python scripts/test_rsp_definitions.py --subword-imem`; earlier shapes/bytes
 stay exact. General faults/aliases/endian/shift ancestry/census/native remain OPEN.
 
+Controlled v24/spike082 composes actual decoded direct-KSEG1 RAM LW with current
+RAM writers and existing held CPU expressions/RAM/IMEM sinks/RSP execution.
+Operand reads have their own kind, control/endian snapshots and full signed GPR
+result; `cpu_ram_load` byte wrappers preserve the actual read and physical writer
+parents. Equal later RAM writes cannot change earlier held reads, while a fresh
+read selects the new writer. Run `python scripts/test_rsp_definitions.py
+--ram-load-imem`; earlier report bytes remain exact. Cached/mapped/degraded/failed
+and other loads/global census/root/lifetime/whole-ROM/native stay OPEN.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

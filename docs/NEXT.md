@@ -44,10 +44,14 @@ v22 additionally joins completed direct-SP SC effects/current LL source reads to
 actual IMEM/RSP consumption, preserving failed attempts and equal writer identity.
 Controlled v23 also joins SB/SH whole-SP-Word sinks and a held XORI expression
 to actual IMEM/RSP consumption, keeping device vs aligned addresses and shifted
-lanes' weaker ancestry distinct. Next
+lanes' weaker ancestry distinct. Controlled v24 also connects actual decoded
+uncached RAM LW/current byte writers through CPU held expressions and RAM/IMEM
+copies to RSP consumption; an equal fresh RAM writer changes the next load's
+parent without changing the previous load. Next
 compose other mapping/control producers and broader root/control lifetime with
 complete mutation coverage. Keep ERET admission bounded to the uncut ERL0/kernel32/IE0 frame;
-ordinary static ERET stays unsupported. Reuse retained570-event/94-control v23,
+ordinary static ERET stays unsupported. Reuse retained610-event/102-control v24,
+570-event/94-control v23,
 542-event/88-control v22,
 506-event/80-control v21,
 485-event/77-control v20,

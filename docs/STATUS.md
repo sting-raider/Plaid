@@ -1,5 +1,13 @@
 # Status
 
+Controlled v24 now joins actual CPU RAM LW to current RAM writer ancestry and
+IMEM/RSP executable consumption. Read576 selects handler writer473; identity
+XORI581 feeds IMEMwriter587/RSP589 and equal RAMwriter595. Fresh read601 selects
+595, then IMEMwriter607/RSP609, without changing the older read's parent. The
+610-event/102-control graph agrees independently; all25 earlier reports stay
+exact. General cached/mapped/load/source/census/lifetime/whole-ROM/native remain
+OPEN; all flags false.
+
 Controlled v23 now joins actual CPU SB/SH whole-SP-Word effects and one held
 XORI expression to executable IMEM consumption. Device04001003/04001002 remain
 separate from aligned sink04001000. Writes559/567 install equal ADDU21 and are

@@ -79,6 +79,9 @@ pub const CONDITIONAL_FORMAT: &str = "plaid-rsp-cpu-imem-history-v22";
 pub const SUBWORD_FORMAT: &str = "plaid-rsp-cpu-imem-history-v23";
 pub const SUBWORD_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-subword-transform-imem-consumption-v23";
+pub const RAM_LOAD_FORMAT: &str = "plaid-rsp-cpu-imem-history-v24";
+pub const RAM_LOAD_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-ram-load-imem-consumption-v24";
 pub const CONDITIONAL_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-conditional-sp-imem-consumption-v22";
 pub const LOAD_PROFILE: &str =
@@ -164,6 +167,7 @@ enum Kind {
     CpuReentry,
     CacheOperation,
     CpuRamWrite,
+    CpuRamRead,
     ExceptionTransfer,
     ReturnTransfer,
     EpcRead,
@@ -182,6 +186,8 @@ struct Row {
     linked_state: Option<CpuLinkedState>,
     #[serde(default)]
     store_state: Option<CpuSpStoreState>,
+    #[serde(default)]
+    ram_load_state: Option<CpuSpStoreState>,
     #[serde(default)]
     sp_device_address: Option<PhysicalAddr>,
     context: u64,
@@ -904,6 +910,14 @@ pub struct DmemDmaConsumption {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SpByteOrigin {
+    /// Actual decoded CPU RAM load, retained inside subsequent copy ancestry.
+    /// This is not an independently installed SP writer.
+    CpuRamLoad {
+        decoder_context: u64,
+        read_ordinal: u64,
+        physical: PhysicalAddr,
+        parent: RamByteOrigin,
+    },
     DmemDma {
         promote_context: u64,
         read_ordinal: u64,
@@ -1059,14 +1073,15 @@ pub struct CpuSpStoreState {
     pub reverse_endian: bool,
 }
 fn subword_end(begin: &Row, end: &Row) -> Result<(), String> {
-    let before = begin
-        .store_state
-        .as_ref()
-        .ok_or("subword store lacks before state")?;
-    let after = end
-        .store_state
-        .as_ref()
-        .ok_or("subword store lacks completed state")?;
+    memory_control_end(begin, begin.store_state.as_ref(), end.store_state.as_ref())
+}
+fn memory_control_end(
+    begin: &Row,
+    before: Option<&CpuSpStoreState>,
+    after: Option<&CpuSpStoreState>,
+) -> Result<(), String> {
+    let before = before.ok_or("memory operation lacks before state")?;
+    let after = after.ok_or("memory operation lacks completed state")?;
     let control = &before.linked.control;
     require(
         control.state.pc.0 == begin.pc
@@ -1081,7 +1096,7 @@ fn subword_end(begin: &Row, end: &Row) -> Result<(), String> {
             && !before.reverse_endian
             && before.linked.linked_address < 1 << 28
             && before == after,
-        "subword store changed or lost bounded control/endian state",
+        "memory operation changed or lost bounded control/endian state",
     )
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1402,6 +1417,48 @@ impl RamReplay {
             copy_parent,
         });
         Ok(())
+    }
+    fn cpu_read(&self, row: &Row, begin: &Row) -> Result<Loaded, String> {
+        effect_row(row)?;
+        let rs = ((begin.word >> 21) & 31) as usize;
+        let rt = ((begin.word >> 16) & 31) as usize;
+        let address = begin.gpr[rs].wrapping_add_signed(i64::from(begin.word as i16));
+        require(
+            self.cpu_ram_enabled
+                && same(begin, row)
+                && begin.word >> 26 == 0x23
+                && (0xffffffffa0000000..0xffffffffa0800000).contains(&address)
+                && address.is_multiple_of(4)
+                && row.address == address as u32 & 0x1fffffff
+                && row.cpu
+                && row.bank == 0
+                && row.offset == 0
+                && row.bytes == 4
+                && row.value <= u64::from(u32::MAX)
+                && self.active.is_none()
+                && self.pending.is_none()
+                && self.request.is_none(),
+            "RAM read differs from decoded direct-KSEG1 LW",
+        )?;
+        let offset = self.offset(row.address, 4)?;
+        require(
+            payload(row.value, 4)? == self.bytes[offset..offset + 4],
+            "CPU RAM load differs from current captured backing",
+        )?;
+        Ok(Loaded {
+            context: begin.context,
+            read: row.ordinal,
+            register: rt,
+            bits: row.value as u32 as i32 as i64 as u64,
+            address: PhysicalAddr(row.address),
+            origins: std::array::from_fn(|n| SpByteOrigin::CpuRamLoad {
+                decoder_context: begin.context,
+                read_ordinal: row.ordinal,
+                physical: PhysicalAddr(row.address + n as u32),
+                parent: self.origins[offset + n].clone(),
+            }),
+            transform: None,
+        })
     }
     fn observe(&mut self, row: Row, dmem: &[u8], dorig: &[SpByteOrigin]) -> Result<(), String> {
         effect_row(&row)?;
@@ -2303,7 +2360,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let subword_enabled = h.format == SUBWORD_FORMAT && h.profile == SUBWORD_PROFILE;
+    let ram_load_enabled = h.format == RAM_LOAD_FORMAT && h.profile == RAM_LOAD_PROFILE;
+    let subword_enabled =
+        ram_load_enabled || (h.format == SUBWORD_FORMAT && h.profile == SUBWORD_PROFILE);
     let conditional_enabled =
         subword_enabled || (h.format == CONDITIONAL_FORMAT && h.profile == CONDITIONAL_PROFILE);
     let load_enabled =
@@ -2463,6 +2522,13 @@ pub fn inspect_rsp_cpu_imem_history(
             "noncontiguous event identity or phase order",
         )?;
         phase = row.phase;
+        require(
+            row.ram_load_state.is_none()
+                || (ram_load_enabled
+                    && matches!(row.kind, Kind::CpuBegin | Kind::CpuEnd)
+                    && row.word >> 26 == 0x23),
+            "RAM load state outside decoded LW",
+        )?;
         require(
             row.store_state.is_none()
                 || (subword_enabled
@@ -2891,6 +2957,25 @@ pub fn inspect_rsp_cpu_imem_history(
                 epc_registers.fill(None);
                 exception_roots.push(receipt);
                 *written = true;
+            }
+            Kind::CpuRamRead => {
+                let Some(Active::Cpu {
+                    begin,
+                    read,
+                    written,
+                }) = &mut active
+                else {
+                    return Err("CPU RAM read lacks decoder scope".into());
+                };
+                require(
+                    ram_load_enabled && read.is_none() && !*written,
+                    "duplicate or unsupported CPU RAM load effect",
+                )?;
+                *read = Some(
+                    ram.as_ref()
+                        .ok_or("RAM load lacks RAM profile")?
+                        .cpu_read(&row, begin)?,
+                );
             }
             Kind::CpuRamWrite => {
                 let Some(Active::Cpu {
@@ -3663,6 +3748,24 @@ pub fn inspect_rsp_cpu_imem_history(
                             .ok_or("BREAK lacks transfer identity")?,
                     );
                 } else if op == 0x23 || (conditional_enabled && op == 0x30) {
+                    if begin.ram_load_state.is_some() || row.ram_load_state.is_some() {
+                        memory_control_end(
+                            &begin,
+                            begin.ram_load_state.as_ref(),
+                            row.ram_load_state.as_ref(),
+                        )?;
+                        require(
+                            read.as_ref()
+                                .is_some_and(|load| load.address.0 < 0x00800000),
+                            "RAM load state attached to SP load",
+                        )?;
+                    } else {
+                        require(
+                            read.as_ref()
+                                .is_none_or(|load| load.address.0 >= 0x00800000),
+                            "CPU RAM load lacks control/endian snapshots",
+                        )?;
+                    }
                     if op == 0x30 {
                         linked_end(&begin, &row, read.as_ref())?;
                     }
@@ -5990,6 +6093,84 @@ mod tests {
             serde_json::from_value(effect).unwrap(),
             parent,
         )
+    }
+    #[test]
+    fn cpu_ram_load_preserves_current_equal_writer_and_opaque_cuts() {
+        let (mut ram, store, mut effect, parent) = cpu_ram_fixture();
+        ram.cpu_write(&effect, &store, Some(&parent)).unwrap();
+        let mut load = store.clone();
+        load.word = 0x8e680000;
+        load.context = 30;
+        load.ordinal = 30;
+        let mut read = effect.clone();
+        read.kind = Kind::CpuRamRead;
+        read.word = load.word;
+        read.context = 30;
+        read.ordinal = 31;
+        let first = ram.cpu_read(&read, &load).unwrap();
+        effect.ordinal = 32;
+        ram.cpu_write(&effect, &store, Some(&parent)).unwrap();
+        read.ordinal = 33;
+        let second = ram.cpu_read(&read, &load).unwrap();
+        for (held, writer) in [(&first, 21), (&second, 32)] {
+            for n in 0..4 {
+                assert_eq!(
+                    held.origins[n],
+                    SpByteOrigin::CpuRamLoad {
+                        decoder_context: 30,
+                        read_ordinal: held.read,
+                        physical: PhysicalAddr(0x1000 + n as u32),
+                        parent: RamByteOrigin::CpuCopy {
+                            write_ordinal: writer,
+                            source_offset: n as u8
+                        },
+                    }
+                );
+            }
+        }
+        effect.ordinal = 34;
+        ram.cpu_write(&effect, &store, None).unwrap();
+        read.ordinal = 35;
+        let cut = ram.cpu_read(&read, &load).unwrap();
+        assert!(cut.origins.iter().all(|origin| matches!(
+            origin,
+            SpByteOrigin::CpuRamLoad {
+                parent: RamByteOrigin::Unknown {
+                    cut_ordinal: Some(34)
+                },
+                ..
+            }
+        )));
+        assert_ne!(first.origins, second.origins);
+        assert_ne!(second.origins, cut.origins);
+    }
+    #[test]
+    fn cpu_ram_load_requires_decoded_completed_direct_word_and_sign_extends() {
+        let (mut ram, mut begin, mut read, _) = cpu_ram_fixture();
+        begin.word = 0x8e680000;
+        read.kind = Kind::CpuRamRead;
+        read.word = begin.word;
+        ram.bytes[..4].copy_from_slice(&0x80000000u32.to_be_bytes());
+        read.value = 0x80000000;
+        let load = ram.cpu_read(&read, &begin).unwrap();
+        assert_eq!(load.bits, 0xffffffff80000000);
+        assert_eq!(load.register, 8);
+        for mode in 0..10 {
+            let (mut decoded, mut effect) = (begin.clone(), read.clone());
+            match mode {
+                0 => decoded.gpr[19] = 0xffffffff80001000,
+                1 => decoded.word = 0x8c080000,
+                2 => effect.address += 4,
+                3 => effect.bytes = 8,
+                4 => effect.value ^= 1,
+                5 => effect.context += 1,
+                6 => effect.pc += 4,
+                7 => effect.cpu = false,
+                8 => decoded.gpr[19] += 1,
+                _ => effect.value |= 1 << 32,
+            }
+            assert!(ram.cpu_read(&effect, &decoded).is_err(), "mode {mode}");
+        }
     }
     #[test]
     fn subword_control_end_cannot_change_privilege_endian_or_link_state() {

@@ -2402,6 +2402,23 @@ Preserve masked-source/reference disagreement and general fault/alias/endian/
 shift/source/census/root/lifetime/whole-ROM/native gaps. All flags false; no
 milestone promotion or upstream production reuse. See subword IMEM receipt.
 
+ADR-0118 RAM-load/IMEM follow-up (2026-10-13): controlled v24 connects actual
+decoded aligned direct-KSEG1 Word LW to current RAM byte-writer ancestry rather
+than reusing equal SP labels. Operand reads are distinct from instruction-fetch
+reads and bind full GPR/control/link/endian before/completed snapshots and signed
+64-bit result in the bounded kernel32/IE0/BEV0/EXL0/ERL0/non-delay/big-endian scope.
+`SpByteOrigin::CpuRamLoad` is an ancestry wrapper inside subsequent copy receipts,
+not an independently installed SP writer. It retains actual decoder/read/physical
+byte identity and `RamByteOrigin`; current SP sinks still have their own actual
+writer occurrences. Existing RAM/IMEM copy and XORI structures compose these
+parents without creating a parallel consumer. Handler writer473 -> LW575/read576
+-> identity XORI581 -> IMEMwriter587/RSP589 and equal RAMwriter595; fresh LW600/
+read601 -> IMEMwriter607/RSP609. Earlier held reads retain473 while the fresh
+read selects595. Unknown writers remain Unknown, including equal writes. All
+earlier formats/shapes remain exact. Cached/mapped/degraded/failed/other loads,
+global source/census/root/lifetime/whole-ROM/native remain OPEN; all flags false,
+no milestone promotion or upstream production reuse. See RAM-load IMEM receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.
