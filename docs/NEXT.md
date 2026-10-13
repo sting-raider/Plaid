@@ -1,5 +1,13 @@
 # Next
 
+Compose the opt-in storage mutation sensor (spike086) on the existing original
+fetch/writer clock. It reaches ordinary Memory::Writable effects beneath RAM
+wrappers, including translated/EBus writes and explicit bulk/restore/retirement
+cuts. Preserve actual component splits and unknown parents; bind actual producer
+contexts separately. The25-effect/20-checkpoint contract does not cover raw-pointer
+backends, hidden RAM or complete scheduling. Reuse its retained controls before
+extending local-ROM capture; do not treat identity-only history as a writer census.
+
 Continue the existing RSP producer path from original-clock register definitions
 through actual installed-code consumption. Controlled v3 joins CPU IMEM installs
 to RSP fetched words; v4 additionally joins original-clock RSP definition/DMEM

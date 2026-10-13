@@ -2708,3 +2708,26 @@ Six focused regressions and the full local gate pass. Complete actual v3/v5
 reconstruction retains request1/token6/event1 status linkage and observed ROM
 entry while keeping all ancestry/census/lifetime/native flags false. See the
 local PI-entry receipt. No additional reference build or progress promotion.
+
+## ADR-0124: Storage mutation sensing sits beneath identity-only RAM wrappers
+
+Identity-only scalar/burst callbacks cannot exclude translated or EBus writes.
+Add an opt-in passive observer to the exact pinned little-endian
+Memory::Writable primitive. Preserve actual aligned/masked destinations and
+truncated payloads, equal-value occurrence identity, Dual/unaligned/burst
+component effects and stable writable-object identity. Existing protocols and
+callbacks remain unchanged by default; toggling the recipe removes both shadows.
+
+Fill, file load and reading serialization emit conservative whole-storage cuts,
+not invented byte ancestry. Retirement cuts occur before freeing storage; saving
+does not mint a restore. No extra guest access or object-layout change is made.
+The25-effect/20-checkpoint actual component contract retains full ordinary/hidden
+backing and baseline/disabled/repeat equality; exact source hashes fail closed
+on drift. ISC reference code and notices stay in ignored generated builds, with
+no reference implementation linked into production or native artifacts.
+
+These callbacks must next compose with the existing original fetch/writer clock
+and actual producer scopes. Requestor-labeled component calls do not authenticate
+DMA tasks or guest execution. Hidden-RAM effects, raw pointer/JIT/Vulkan writes,
+all lifecycle/scheduler paths and complete mutation coverage remain independent
+obligations. No certificate, native flag or progress milestone is promoted.
