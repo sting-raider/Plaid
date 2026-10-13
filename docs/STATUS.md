@@ -1,5 +1,13 @@
 # Status
 
+The RSP/DMA graph now reaches actual cached CPU consumption under controlled v10.
+Completed32-byte burst/fill pairs retain all fill-time RAM byte parents and the
+canonical resident tuple. Later changed backing cannot replace those parents.
+The208-event source/31 matched controls includes a cached NOP executing after RAM
+changes to BREAK; two explicit host PC seeds remain unknown roots. All ten v0-v9
+reports stay exact. Complete mutation/cache/mapping/root/lifetime and native closure
+remain OPEN; no certification flags promoted.
+
 Cached exception-root v2 now composes successful restore boundaries as cuts of
 prior resident/backing observer ancestry. Repeated equal snapshot loads cut again;
 post-load roots/refills stay unknown until fresh captured writers and later fills.

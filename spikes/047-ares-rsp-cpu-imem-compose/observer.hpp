@@ -12,6 +12,9 @@ struct ComposeEvent {
   u32 dmaPbus=0,dmaDram=0,dmaLength=0,dmaCount=0,dmaSkip=0,fetchPhysical=0;
   const char* dmaDirection=nullptr;
   bool pendingValid=false,pendingFull=false;
+  bool cacheValid=false;
+  u32 cacheSlot=0,cacheTag=0,cacheIndex=0;
+  std::vector<u32> cacheWords;
 };
 static std::vector<ComposeEvent> composeEvents;
 static u32 composePhase=0,composeRspContext=0,composeRspPc=0,composeRspWord=0;
@@ -29,7 +32,7 @@ static void compose_push(const char* kind,u64 context,u64 pc,u32 word,
   if(!composeEnabled) return;
   ComposeEvent e{kind,composeEvents.size()+1,context,pc,value,composePhase,word,
     address,bank,offset,bytes,next,0,cpuOrigin,halted,{},{}};
-  if(!strcmp(kind,"cpu_begin") || !strcmp(kind,"cpu_end"))
+  if(!strcmp(kind,"cpu_begin") || !strcmp(kind,"cpu_end") || !strcmp(kind,"cpu_reentry"))
     for(auto& r:cpu.ipu.r) e.gpr.push_back(r.u64);
   if(!strcmp(kind,"rsp_begin") || !strcmp(kind,"rsp_end")) {
     for(auto& r:rsp.ipu.r) e.rgpr.push_back(r.u32);
@@ -90,6 +93,25 @@ static void compose_sp_word(bool write,u32 address,u32 bank,u32 offset,u32 value
     composeCpuContext?composeCpuPc:cpu.ipu.pc,composeCpuWord,address,bank,offset,4,value,originCpu);
 }
 #if PLAID_RSP_DEFINITIONS_FIXTURE >= 4
+#if PLAID_RSP_DEFINITIONS_FIXTURE >= 10
+static void compose_cache_snapshot(ComposeEvent& event,u32 slot,u32 tag,u32 index,const u32* words) {
+  event.cacheValid=true;event.cacheSlot=slot;event.cacheTag=tag;event.cacheIndex=index;
+  for(u32 n=0;n<8;n++) event.cacheWords.push_back(words[n]);
+}
+static void compose_cache_burst(bool write,u32 address,u32 bytes,u32 device,const u32* words) {
+  if(!composeEnabled) return;
+  if(write || bytes!=32 || device!=(u32)RBusDevice::VR4300_ICACHE || !composeFetchContext
+      || composeCpuContext || composeRspContext) std::abort();
+  compose_push("cache_burst_read",composeFetchContext,composeFetchPc,0,address,0,0,32,0,true);
+  compose_cache_snapshot(composeEvents.back(),(composeFetchPc>>5)&511,(address&~4095)|1,address&0xfe0,words);
+}
+static void compose_cache_fill(u32 slot,u32 physical,u32 index,const u32* words) {
+  if(!composeEnabled) return;
+  if(!composeFetchContext || composeCpuContext || composeRspContext) std::abort();
+  compose_push("cache_fill",composeFetchContext,composeFetchPc,0,(physical&~4095)|index,0,0,32,0,true);
+  compose_cache_snapshot(composeEvents.back(),slot,(physical&~4095)|1,index,words);
+}
+#endif
 #if PLAID_RSP_DEFINITIONS_FIXTURE >= 8
 static void compose_dma_pending(u32 address,u32 value,bool originCpu) {
   if(!composeEnabled) return;
@@ -149,17 +171,24 @@ static void compose_imem_dma_store(u32 address,u32 bank,u32 offset,u32 bytes,u64
 }
 #endif
 static void compose_ram_fetch(bool begin,u64 pc,u32 physical,u32 busAddress,bool cached,u32 value) {
-  if(composeCpuContext || composeRspContext || cached || physical!=busAddress) std::abort();
+  if(composeCpuContext || composeRspContext || physical!=busAddress) std::abort();
+  #if PLAID_RSP_DEFINITIONS_FIXTURE < 10
+  if(cached) std::abort();
+  #endif
   if(begin) {
     if(composeFetchContext) std::abort();
     composeFetchContext=composeEvents.size()+1;composeFetchPc=pc;
   } else if(!composeFetchContext || composeFetchPc!=pc) std::abort();
   compose_push(begin?"ram_fetch_begin":"ram_fetch_end",composeFetchContext,pc,0,busAddress,0,0,0,value,true);
   auto& event=composeEvents.back();event.fetchValid=true;event.fetchPhysical=physical;event.fetchCached=cached;
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 10
+  if(!begin && cached) { auto& line=cpu.icache.line(pc);
+    compose_cache_snapshot(event,(pc>>5)&511,line.tagKey,line.index,line.words); }
+  #endif
   if(!begin) composeFetchContext=composeFetchPc=0;
 }
 static void compose_ram_scalar(bool write,u32 address,u32 bytes,u32 device,u64 value) {
-  if(address<0x6000 || address>=0x6030) return; // Explicit declared RAM snapshot.
+  if(address<0x6000 || address>=(PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030)) return; // Explicit declared RAM snapshot.
   if(write) {
     if(composeCpuContext || composeRspContext || composeFetchContext || bytes!=4) std::abort();
     u32 source=0;
@@ -222,6 +251,11 @@ static void compose_print() {
     if(e.fetchValid) std::printf(",\"fetch\":{\"physical\":%u,\"cached\":%s}",e.fetchPhysical,e.fetchCached?"true":"false");
     if(e.dmaDirection) std::printf(",\"dma_direction\":\"%s\"",e.dmaDirection);
     if(e.pendingValid) std::printf(",\"pending_full\":%s",e.pendingFull?"true":"false");
+    if(e.cacheValid) {
+      std::printf(",\"cache_line\":{\"slot\":%u,\"tag_key\":%u,\"index\":%u,\"words\":[",e.cacheSlot,e.cacheTag,e.cacheIndex);
+      for(size_t i=0;i<e.cacheWords.size();i++) std::printf("%s%u",i?",":"",e.cacheWords[i]);
+      std::printf("]}");
+    }
     std::printf("}");
   }
   std::printf("]");

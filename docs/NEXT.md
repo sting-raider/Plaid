@@ -12,8 +12,11 @@ definitions with distinct lane parents. Controlled v8 also retains actual pendin
 address mutations and length recommit/supersession through promotion and immediate
 handoff to installed-code consumption. Controlled v9 connects an actual decoded
 CPU direct-KSEG1 SW through its pending length commit/synchronous promotion to
-installed-code consumption. Next compose broader register/source ancestry and
-complete mutation/cache/mapping/root lifetime coverage. Reuse retained195-event/
+installed-code consumption. Controlled v10 also joins actual completed I-cache
+burst/fill parents to cached CPU execution after changed backing, with explicit
+opaque host control roots. Next compose actual cache operations/invalidation,
+broader register/source ancestry and complete mutation/mapping/root lifetime
+coverage. Reuse retained208-event/31-checkpoint v10,195-event/
 29-checkpoint v9,180-event/26-checkpoint v8,152-event/23-checkpoint v7,
 142-event/21-checkpoint v6,136-event v5 and
 134-event v4 (same19 controls),97-event/17-checkpoint v3 and all earlier

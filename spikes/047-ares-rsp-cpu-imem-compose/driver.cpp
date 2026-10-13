@@ -18,6 +18,14 @@
 
 struct ComposeFrontend : Headless {};
 static std::string memhash(const u8* data,u32 size) { return std::string(nall::Hash::SHA256(std::span<const u8>{data,size}).digest().data()); }
+static string compose_cache_digest() {
+  std::vector<u8> bytes;
+  auto append=[&](u32 value,u32 count){for(u32 n=count;n;n--)bytes.push_back(value>>(8*(n-1)));};
+  for(const auto& line:cpu.icache.lines) {
+    append(line.tagKey,4);append(line.index,2);for(u32 word:line.words)append(word,4);
+  }
+  return nall::Hash::SHA256(std::span<const u8>{bytes.data(),bytes.size()}).digest();
+}
 static u32 insn_lw(u32 rt,u32 rs,s16 imm){return (0x23u<<26)|(rs<<21)|(rt<<16)|u16(imm);}
 static u32 insn_sw(u32 rt,u32 rs,s16 imm){return (0x2bu<<26)|(rs<<21)|(rt<<16)|u16(imm);}
 struct CpuStep { u32 phase,index,word; u64 pc; std::array<u64,32> before,after; };
@@ -57,6 +65,10 @@ int main(int argc,char** argv) {
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 4
   plaidRdramScalarObserver=traced?compose_ram_scalar:nullptr;
   plaidCpuFetchObserver=traced?compose_ram_fetch:nullptr;
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 10
+  plaidRdramBurstObserver=traced?compose_cache_burst:nullptr;
+  plaidCacheFillObserver=traced?compose_cache_fill:nullptr;
+  #endif
   #endif
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 5
   plaidRspDmaLifecycleObserver=traced?compose_dma_lifecycle:nullptr;
@@ -77,8 +89,10 @@ int main(int argc,char** argv) {
   };
   std::vector<CpuStep> steps;
   std::vector<string> checkpoints;
-  auto checkpoint=[&] { checkpoints.push_back(string{rsp_machine_digest(),":",cpu.effectiveCount(),
-    ":",cpu.Thread::clock,":",cpu.scc.cause.exceptionCode,":",cpu.scc.cause.branchDelay,":",cpu.scc.epc}); };
+  auto checkpoint=[&] { string digest{rsp_machine_digest(),":",cpu.effectiveCount(),
+    ":",cpu.Thread::clock,":",cpu.scc.cause.exceptionCode,":",cpu.scc.cause.branchDelay,":",cpu.scc.epc};
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=10)digest.append(":",compose_cache_digest());
+    checkpoints.push_back(digest); };
   auto printBytes=[](bool imem,u32 length) {
     std::printf("[");
     for(u32 i=0;i<length;i++) std::printf("%s%u",i?",":"",u32(imem?rsp.imem.read<Byte>(i):rsp.dmem.read<Byte>(i)));
@@ -86,7 +100,7 @@ int main(int argc,char** argv) {
   };
   auto printRam=[] {
     std::printf("[");
-    for(u32 address=0x6000;address<0x6030;address++) std::printf("%s%u",address==0x6000?"":",",u32(rdram.ram.read<Byte>(address,RBusDevice::ARES_DEBUGGER)));
+    for(u32 address=0x6000;address<(PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030);address++) std::printf("%s%u",address==0x6000?"":",",u32(rdram.ram.read<Byte>(address,RBusDevice::ARES_DEBUGGER)));
     std::printf("]");
   };
   std::printf("{\"initial_dmem\":");printBytes(false,PLAID_RSP_DEFINITIONS_FIXTURE>=4?4096:8);
@@ -98,7 +112,7 @@ int main(int argc,char** argv) {
   std::printf(",\"initial_imem\":");printBytes(true,PLAID_RSP_DEFINITIONS_FIXTURE>=3?4096:20);
   if(PLAID_RSP_DEFINITIONS_FIXTURE>=4) { std::printf(",\"initial_ram\":");printRam(); }
   auto cpuStep=[&](u32 p,u32 index,bool synchronize=true){
-    phase(p);CpuStep s{};s.phase=p;s.index=index;s.word=index==11?insn_sw(0,17,8):index==10?0:words[index];s.pc=0xffffffffa0006000ull+index*4;
+    phase(p);CpuStep s{};s.phase=p;s.index=index;s.word=index>=12?0:index==11?insn_sw(0,17,8):index==10?0:words[index];s.pc=index>=12?0xffffffff80000000ull+(index==12?0x6030:0x6028):0xffffffffa0006000ull+index*4;
     for(u32 n=0;n<32;n++)s.before[n]=cpu.ipu.r[n].u64;
     cpu.pipeline.setPc(s.pc);if(cpu.instruction() && synchronize)cpu.synchronize();
     if(cpu.scc.cause.exceptionCode||cpu.scc.sysadFrozen){std::fprintf(stderr,"cpu phase=%u exception=%u frozen=%u\n",p,(u32)cpu.scc.cause.exceptionCode,(u32)cpu.scc.sysadFrozen);std::abort();}
@@ -190,6 +204,18 @@ int main(int argc,char** argv) {
     phase(25);rsp.dmaTransferStep();checkpoint();
     phase(26);rsp.pipeline={};rsp.pipeline.singleIssue=1;rsp.branch.setPc(0x3e0);rsp.ipu.pc=0x3e0;
     rsp.status.halted=0;rsp.status.broken=0;rsp.instruction();rsp.status.halted=1;checkpoint();
+  }
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=10) {
+    phase(27);
+    #if PLAID_RSP_CPU_IMEM_SENSOR
+    compose_push("cpu_reentry",composeEvents.size()+1,0xffffffff80006030ull,0,0,0,0,0,0,true);
+    #endif
+    cpuStep(27,12,false);
+    phase(28);rdram.ram.write<Word>(0x6028,13,RBusDevice::ARES_DEBUGGER);
+    #if PLAID_RSP_CPU_IMEM_SENSOR
+    compose_push("cpu_reentry",composeEvents.size()+1,0xffffffff80006028ull,0,0,0,0,0,0,true);
+    #endif
+    cpuStep(28,13,false);
   }
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=false;

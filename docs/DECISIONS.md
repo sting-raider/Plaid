@@ -2185,6 +2185,19 @@ concurrent-device timing/hardware/census/lifetime claim follows. Nine v0-v8 repo
 remain exact and all general certification flags remain false. See the decoded
 MMIO/DMA integration receipt.
 
+ADR-0118 cached-consumption follow-up (2026-10-13): controlled v10 requires actual
+completed32-byte RAM burst followed immediately by its exact I-cache fill. Retain
+all32 fill-time byte parents and reuse `FetchCacheLine.validate` for full selected
+resident snapshots. Cached hits consume that frozen tuple and its original
+parents, rather than current backing bytes. Separate cached burst/fill receipts
+from uncached scalar-read receipts; invent no read for a hit. Explicit host PC
+seeds preserve captured GPR state but cut register definitions and remain unknown
+execution roots. The208-event source/31 matched controls executes cached NOP
+after backing changes to BREAK. Missing-root207 capture rejects. All ten older
+v0-v9 reports stay exact. General cache operation/mutation/mapping/root/restore/
+continuous lifetime/hardware/whole-ROM/native obligations remain OPEN; flags stay
+false. See the DMA/cached CPU integration receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.
