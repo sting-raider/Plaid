@@ -37,7 +37,9 @@ def main():
     parser.add_argument('--mapped-reactivation',action='store_true')
     parser.add_argument('--entrylo-remap',action='store_true')
     parser.add_argument('--tlbr-context',action='store_true')
+    parser.add_argument('--conditional-imem',action='store_true')
     args = parser.parse_args()
+    args.tlbr_context = args.tlbr_context or args.conditional_imem
     args.entrylo_remap = args.entrylo_remap or args.tlbr_context
     args.mapped_reactivation = args.mapped_reactivation or args.entrylo_remap
     args.entryhi_context = args.entryhi_context or args.mapped_reactivation
@@ -57,7 +59,8 @@ def main():
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('079-tlbr-context-root-return' if args.tlbr_context else
+    recipe = ('080-conditional-sp-imem-consumption' if args.conditional_imem else
+        '079-tlbr-context-root-return' if args.tlbr_context else
         '078-entrylo-remap-root-return' if args.entrylo_remap else
         '077-mapped-cache-reactivation' if args.mapped_reactivation else
         '076-entryhi-context-mapped-root-return' if args.entryhi_context else
@@ -269,7 +272,7 @@ def main():
                 burst=next(e for e in rows if e['kind']=='cache_burst_read')
                 fill=next(e for e in rows if e['kind']=='cache_fill')
                 seed=next(e for e in rows if e['kind']=='cpu_reentry')
-                end=[e for e in rows if e['kind']=='ram_fetch_end'][-1]
+                end=[e for e in rows if e['kind']=='ram_fetch_end' and e['fetch']['cached']][-1]
                 if mode==0: rows.remove(burst);reclock(rows)
                 elif mode==1: rows.remove(fill);reclock(rows)
                 elif mode==2: rows.insert(rows.index(burst),copy.deepcopy(burst));reclock(rows)
@@ -563,6 +566,27 @@ def main():
                 elif mode==10: load['value']=1
                 else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
                 run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.conditional_imem:
+            for mode in range(14):
+                forged=json.loads(json.dumps(expected));rows=forged['events']
+                begin=next(e for e in rows if e['kind']=='cpu_begin' and e['word']==0xe2081000 and e['ordinal']>514)
+                write=next(e for e in rows if e['kind']=='sp_write' and e['context']==begin['context'])
+                end=next(e for e in rows if e['kind']=='cpu_end' and e['context']==begin['context'])
+                if mode==0: rows.remove(write);reclock(rows)
+                elif mode==1: rows.insert(rows.index(write),copy.deepcopy(write));reclock(rows)
+                elif mode==2: write['value']=1 # post-SC success flag is not source payload
+                elif mode==3: write['context']=511
+                elif mode==4: write['bank']=0
+                elif mode==5: write['address']+=4
+                elif mode==6: end['gpr'][8]=0
+                elif mode==7: begin['linked_state']['control']['llbit']=False
+                elif mode==8: end['linked_state']['control']['llbit']=False
+                elif mode==9: next(e for e in rows if e['kind']=='cpu_end' and e['word']==0xc2080000)['linked_state']['linked_address']+=1
+                elif mode==10: begin.pop('linked_state')
+                elif mode==11: begin['linked_state']['control']['state']['kernel']=False
+                elif mode==12: next(e for e in rows if e['kind']=='cpu_end' and e['ordinal']==512)['gpr'][8]=1
+                else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
+                run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
             forged = json.loads(original)
@@ -805,6 +829,21 @@ def main():
                 elif mode==7: load['generation']['same_context_content']=False
                 elif mode==8: load['generation']['selected_entry']['sha256']='0'*64
                 else: load['generation']['load_ordinal']=431
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.conditional_imem:
+            for mode in range(10):
+                forged=json.loads(original);attempts=forged['conditional_sp_attempts'];fetches=forged['imem_fetches']
+                if mode==0: forged.pop('conditional_sp_attempts')
+                elif mode==1: attempts[0]['completed_effect']=copy.deepcopy(attempts[1]['completed_effect'])
+                elif mode==2: attempts[-1]['completed_effect']['effect_ordinal']=525
+                elif mode==3: attempts[-1]['completed_effect']['source_value_before']=1
+                elif mode==4: attempts[-1]['completed_effect']['context_id']=524
+                elif mode==5: fetches[-1]['origins'][0]['write_ordinal']=525
+                elif mode==6: fetches[-3]['origins'][0]['write_ordinal']=525 # failed attempt leaves old parent
+                elif mode==7: forged['copies'][-1]['read_ordinal']=519
+                elif mode==8: forged['final_imem_writers'][0]['write_ordinal']=525
+                else: attempts[-1]['completed_effect']=None
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
     print('RSP definitions: original-clock ORI/ADDU parents, phase cuts, full register snapshots, source/report/input gates and unchanged proof flags passed')

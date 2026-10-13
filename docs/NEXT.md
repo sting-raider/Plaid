@@ -39,10 +39,14 @@ v20 also binds actual EntryLo0 page writers through TLBWI to changed physical
 selection and fresh writer/root/return ancestry. Staging alone leaves the old
 installed mapping active; equal page rewrites retain distinct identity. Controlled
 v21 also composes actual TLBR loads from installed slot/page ancestry with active
-ASID and mapped consumption; equal loads retain occurrence identity. Next
+ASID and mapped consumption; equal loads retain occurrence identity. Controlled
+v22 additionally joins completed direct-SP SC effects/current LL source reads to
+actual IMEM/RSP consumption, preserving failed attempts and equal writer identity.
+Next
 compose other mapping/control producers and broader root/control lifetime with
 complete mutation coverage. Keep ERET admission bounded to the uncut ERL0/kernel32/IE0 frame;
-ordinary static ERET stays unsupported. Reuse retained506-event/80-control v21,
+ordinary static ERET stays unsupported. Reuse retained542-event/88-control v22,
+506-event/80-control v21,
 485-event/77-control v20,
 431-event/68-control fixture20,
 421-event/66-control v19,

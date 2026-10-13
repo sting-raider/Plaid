@@ -122,6 +122,10 @@ int main(int argc,char** argv) {
     for(u32 i=0;i<5;i++)rdram.ram.write<Word>(0x60b0+i*4,remap[i],RBusDevice::ARES_DEBUGGER);
   }
   if(PLAID_RSP_DEFINITIONS_FIXTURE>=22)rdram.ram.write<Word>(0x60ac,0x42000001u,RBusDevice::ARES_DEBUGGER);
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=23){
+    const u32 linked[]={0xe2081000u,0xc2080000u,0xe2081000u,0xc2080000u,0xe2081000u};
+    for(u32 i=0;i<5;i++)rdram.ram.write<Word>(0x60d0+4*i,linked[i],RBusDevice::ARES_DEBUGGER);
+  }
   #if PLAID_RSP_CPU_IMEM_SENSOR
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 22
   plaidTlbrObserver=traced?compose_tlbr:nullptr;
@@ -230,10 +234,12 @@ int main(int argc,char** argv) {
       if(index>=48 && index<=52){const u32 remap[]={insn_lw(8,16,0),0x3908000du,0x3a738000u,0x3a528000u,insn_sw(8,19,0)};
         s.word=remap[index-48];s.pc=0xffffffffa00060b0ull+(index-48)*4;}}
     if(PLAID_RSP_DEFINITIONS_FIXTURE>=22 && index==53){s.word=0x42000001u;s.pc=0xffffffffa00060acull;}
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=23 && index>=54){
+      s.word=index==55 || index==57?0xc2080000u:0xe2081000u;s.pc=0xffffffffa00060d0ull+(index-54)*4;}
     for(u32 n=0;n<32;n++)s.before[n]=cpu.ipu.r[n].u64;
     if(index>=33 && !(PLAID_RSP_DEFINITIONS_FIXTURE>=18 && index>=43)){if(cpu.ipu.pc!=s.pc)std::abort();}else cpu.pipeline.setPc(s.pc);
     if(cpu.instruction() && synchronize)cpu.synchronize();
-    if((cpu.scc.cause.exceptionCode!=(index>=32 && !(PLAID_RSP_DEFINITIONS_FIXTURE>=18 && index>=43)?9u:0u))||cpu.scc.sysadFrozen){std::fprintf(stderr,"cpu phase=%u exception=%u frozen=%u\n",p,(u32)cpu.scc.cause.exceptionCode,(u32)cpu.scc.sysadFrozen);std::abort();}
+    if((cpu.scc.cause.exceptionCode!=(PLAID_RSP_DEFINITIONS_FIXTURE>=23 && index>=54?9u:index>=32 && !(PLAID_RSP_DEFINITIONS_FIXTURE>=18 && index>=43)?9u:0u))||cpu.scc.sysadFrozen){std::fprintf(stderr,"cpu phase=%u exception=%u frozen=%u\n",p,(u32)cpu.scc.cause.exceptionCode,(u32)cpu.scc.sysadFrozen);std::abort();}
     for(u32 n=0;n<32;n++)s.after[n]=cpu.ipu.r[n].u64;steps.push_back(s);checkpoint();
   };
   auto rspInstruction=[&](u32 p,u32 instruction,u32 base,u32 scalar,u8 vectorByte,u32 expected){
@@ -453,6 +459,17 @@ int main(int argc,char** argv) {
     cpuStep(53,37,false);cpuStep(54,38,false);
     if(PLAID_RSP_DEFINITIONS_FIXTURE>=16){cpuStep(55,39,false);cpuStep(56,40,false);}
     if(PLAID_RSP_DEFINITIONS_FIXTURE>=17){cpuStep(57,41,false);cpuStep(58,42,false);} // Natural guest EPC write and return.
+  }
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=23){
+    phase(64);
+    #if PLAID_RSP_CPU_IMEM_SENSOR
+    compose_push("cpu_reentry",composeEvents.size()+1,0xffffffffa00060d0ull,0,0,0,0,0,0,true);
+    #endif
+    auto consume=[&](u32 p){phase(p);rsp.pipeline={};rsp.pipeline.singleIssue=1;rsp.branch.setPc(0);rsp.ipu.pc=0;
+      rsp.status.halted=0;rsp.status.broken=0;rsp.instruction();rsp.status.halted=1;checkpoint();};
+    cpuStep(64,54,false);consume(65);
+    cpuStep(66,55,false);cpuStep(67,56,false);consume(68);
+    cpuStep(69,57,false);cpuStep(70,58,false);consume(71);
   }
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=false;

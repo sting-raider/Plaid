@@ -5,6 +5,9 @@
 //! v4 separately binds completed DMEM DMA Word writes to uncached CPU fetches
 //! and decoder contexts; it grants no request lifetime or mutation census.
 use crate::{
+    cpu_sp_conditional::{
+        CompletedCpuSpWordEffect, ScExecutionContext, ScSpMutationWitness, verify_sc_sp_effect,
+    },
     exception_roots::{
         ExceptionClass, ExceptionRootInput, ExceptionRootReceipt, KernelAddressMode,
         resolve_exception_root,
@@ -68,6 +71,9 @@ pub const EXCEPTION_PROFILE: &str =
 pub const CONTEXT_FORMAT: &str = "plaid-rsp-cpu-imem-history-v19";
 pub const PAGE_FORMAT: &str = "plaid-rsp-cpu-imem-history-v20";
 pub const LOAD_FORMAT: &str = "plaid-rsp-cpu-imem-history-v21";
+pub const CONDITIONAL_FORMAT: &str = "plaid-rsp-cpu-imem-history-v22";
+pub const CONDITIONAL_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-conditional-sp-imem-consumption-v22";
 pub const LOAD_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-tlbr-context-remap-root-return-v21";
 pub const PAGE_PROFILE: &str =
@@ -165,6 +171,8 @@ enum Kind {
 struct Row {
     kind: Kind,
     ordinal: u64,
+    #[serde(default)]
+    linked_state: Option<CpuLinkedState>,
     context: u64,
     pc: u64,
     phase: u32,
@@ -998,6 +1006,8 @@ pub struct RspCpuImemReport {
     pub cpu_instructions: usize,
     pub rsp_instructions: usize,
     pub copies: Vec<ImemCopyChain>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conditional_sp_attempts: Option<Vec<ScSpAttempt>>,
     pub final_imem_writers: Vec<SpByteOrigin>,
     pub final_dmem_sha256: String,
     pub final_imem_sha256: String,
@@ -1020,6 +1030,56 @@ pub struct RspCpuImemReport {
     pub imem_execution_certified: bool,
     pub executable_lifetime_certified: bool,
     pub native_complete: bool,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CpuLinkedState {
+    pub control: CpuReturnState,
+    pub linked_address: u64,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScSpAttempt {
+    pub decoder_context: u64,
+    pub completed_effect: Option<ScSpMutationWitness>,
+}
+fn linked_end(begin: &Row, end: &Row, load: Option<&Loaded>) -> Result<(), String> {
+    let before = begin
+        .linked_state
+        .as_ref()
+        .ok_or("linked instruction lacks before state")?;
+    let after = end
+        .linked_state
+        .as_ref()
+        .ok_or("linked instruction lacks completed state")?;
+    let control = &before.control;
+    let rs = ((begin.word >> 21) & 31) as usize;
+    let address = begin.gpr[rs].wrapping_add_signed(i64::from(begin.word as i16));
+    require(
+        control.state.pc.0 == begin.pc
+            && control.state.kernel
+            && control.state.kernel_mode == KernelAddressMode::Bits32
+            && !control.interrupt_enable
+            && !control.state.bev
+            && !control.state.exl
+            && !control.state.erl
+            && !control.state.delay_slot
+            && !control.state.branch_delay
+            && before.linked_address < 1 << 28
+            && address.is_multiple_of(4)
+            && (0xffffffffa4000000..0xffffffffa4002000).contains(&address),
+        "linked instruction outside bounded direct-SP privilege/address scope",
+    )?;
+    let mut expected = before.clone();
+    if begin.word >> 26 == 0x30 {
+        let load = load.ok_or("LL lacks completed source read")?;
+        expected.control.llbit = true;
+        expected.linked_address = u64::from(load.address.0 >> 4);
+    }
+    require(
+        *after == expected,
+        "linked instruction completed control/link state differs from pin",
+    )
 }
 #[derive(Clone)]
 struct Loaded {
@@ -2196,7 +2256,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let load_enabled = h.format == LOAD_FORMAT && h.profile == LOAD_PROFILE;
+    let conditional_enabled = h.format == CONDITIONAL_FORMAT && h.profile == CONDITIONAL_PROFILE;
+    let load_enabled =
+        conditional_enabled || (h.format == LOAD_FORMAT && h.profile == LOAD_PROFILE);
     let page_enabled = load_enabled || (h.format == PAGE_FORMAT && h.profile == PAGE_PROFILE);
     let context_enabled =
         page_enabled || (h.format == CONTEXT_FORMAT && h.profile == CONTEXT_PROFILE);
@@ -2317,6 +2379,7 @@ pub fn inspect_rsp_cpu_imem_history(
     let mut registers: [Option<Loaded>; 32] = std::array::from_fn(|_| None);
     let mut active: Option<Active> = None;
     let mut previous_cpu: Option<Row> = None;
+    let mut linked_current: Option<CpuLinkedState> = None;
     let mut exception_roots: Vec<CpuExceptionRoot> = Vec::new();
     let mut pending_exception = None;
     let mut await_root: Option<usize> = None;
@@ -2330,6 +2393,8 @@ pub fn inspect_rsp_cpu_imem_history(
     let mut pending_context = false;
     let mut pending_page = false;
     let mut pending_load = false;
+    let mut pending_sc = None;
+    let mut conditional_sp_attempts = Vec::new();
     let mut eret_returns: Vec<CpuEretReturn> = Vec::new();
     let mut pending_return: Option<usize> = None;
     let mut await_return: Option<usize> = None;
@@ -2348,6 +2413,33 @@ pub fn inspect_rsp_cpu_imem_history(
             "noncontiguous event identity or phase order",
         )?;
         phase = row.phase;
+        if row.kind == Kind::CpuReentry {
+            linked_current = None;
+        }
+        if row.kind == Kind::CpuBegin {
+            if conditional_enabled && matches!(row.word >> 26, 0x30 | 0x38) {
+                let before = row
+                    .linked_state
+                    .as_ref()
+                    .ok_or("linked instruction lacks before state")?;
+                if let Some(mut previous) = linked_current.take() {
+                    previous.control.state.pc = GuestVirtualAddr(row.pc);
+                    require(
+                        previous == *before,
+                        "linked instruction lost continuous control/link state",
+                    )?;
+                }
+            } else {
+                linked_current = None;
+            }
+        }
+        require(
+            row.linked_state.is_none()
+                || (conditional_enabled
+                    && matches!(row.kind, Kind::CpuBegin | Kind::CpuEnd)
+                    && matches!(row.word >> 26, 0x30 | 0x38)),
+            "linked metadata outside LL/SC decoder boundary",
+        )?;
         require(
             row.tlb_state.is_none()
                 || (mapped_enabled
@@ -3242,17 +3334,40 @@ pub fn inspect_rsp_cpu_imem_history(
                     )?;
                     if row.kind == Kind::SpRead {
                         require(
-                            op == 0x23 && read.is_none() && !*written,
+                            (op == 0x23 || (conditional_enabled && op == 0x30))
+                                && read.is_none()
+                                && !*written,
                             "invalid decoded SP load effect",
                         )?;
                     } else {
                         require(
-                            op == 0x2b
+                            (op == 0x2b || (conditional_enabled && op == 0x38))
                                 && read.is_none()
                                 && !*written
                                 && row.value == u64::from(begin.gpr[rt] as u32),
                             "invalid decoded SP store effect",
                         )?;
+                        if op == 0x38 {
+                            let context = ScExecutionContext {
+                                context_id: begin.context,
+                                pc: GuestVirtualAddr(begin.pc),
+                                instruction_word: begin.word,
+                                gpr_before: begin
+                                    .gpr
+                                    .clone()
+                                    .try_into()
+                                    .map_err(|_| "SC GPR cardinality")?,
+                            };
+                            let effect = CompletedCpuSpWordEffect {
+                                effect_ordinal: row.ordinal,
+                                context_id: row.context,
+                                pc: GuestVirtualAddr(row.pc),
+                                virtual_destination: GuestVirtualAddr(virtual_address),
+                                physical_destination: PhysicalAddr(row.address),
+                                value: row.value as u32,
+                            };
+                            pending_sc = verify_sc_sp_effect(&context, Some(&effect))?;
+                        }
                         *written = true;
                     }
                 } else {
@@ -3428,7 +3543,10 @@ pub fn inspect_rsp_cpu_imem_history(
                             .take()
                             .ok_or("BREAK lacks transfer identity")?,
                     );
-                } else if op == 0x23 {
+                } else if op == 0x23 || (conditional_enabled && op == 0x30) {
+                    if op == 0x30 {
+                        linked_end(&begin, &row, read.as_ref())?;
+                    }
                     let load = read.ok_or("CPU load lacks completed read")?;
                     require(!written, "load has store effect")?;
                     if load.register != 0 {
@@ -3437,6 +3555,27 @@ pub fn inspect_rsp_cpu_imem_history(
                         registers[register] = Some(load);
                         epc_registers[register] = None;
                     }
+                } else if conditional_enabled && op == 0x38 {
+                    linked_end(&begin, &row, None)?;
+                    // Pinned direct-SP check; a flag alone never creates a writer.
+                    require(
+                        written == begin.linked_state.as_ref().unwrap().control.llbit,
+                        "SC sink presence contradicts pinned direct-SP linked state",
+                    )?;
+                    require(
+                        read.is_none() && written == pending_sc.is_some(),
+                        "SC effect cardinality mismatch",
+                    )?;
+                    let rt = ((begin.word >> 16) & 31) as usize;
+                    if rt != 0 {
+                        expected[rt] = u64::from(written);
+                        registers[rt] = None;
+                        epc_registers[rt] = None;
+                    }
+                    conditional_sp_attempts.push(ScSpAttempt {
+                        decoder_context: begin.context,
+                        completed_effect: pending_sc.take(),
+                    });
                 } else if op == 0x2b {
                     require(
                         written && read.is_none(),
@@ -3497,6 +3636,7 @@ pub fn inspect_rsp_cpu_imem_history(
                     "CPU decoder snapshots disagree with independent step",
                 )?;
                 cpu_instructions += 1;
+                linked_current = row.linked_state.clone();
                 previous_cpu = Some(row);
             }
             Kind::RspEnd => {
@@ -3560,6 +3700,7 @@ pub fn inspect_rsp_cpu_imem_history(
         cpu_instructions,
         rsp_instructions,
         copies,
+        conditional_sp_attempts: conditional_enabled.then_some(conditional_sp_attempts),
         final_imem_writers: iorig,
         final_dmem_sha256: sha256(&dmem),
         final_imem_sha256: sha256(&imem),
@@ -5723,6 +5864,62 @@ mod tests {
             serde_json::from_value(effect).unwrap(),
             parent,
         )
+    }
+    #[test]
+    fn linked_load_control_requires_the_actual_source_and_physical_link_address() {
+        let (_, mut begin, _, load) = cpu_ram_fixture();
+        begin.word = 0xc2080000;
+        begin.gpr[16] = 0xffffffffa4000000;
+        let state = CpuLinkedState {
+            control: CpuReturnState {
+                state: CpuExceptionState {
+                    pc: GuestVirtualAddr(begin.pc),
+                    bev: false,
+                    exl: false,
+                    erl: false,
+                    kernel_mode: KernelAddressMode::Bits32,
+                    kernel: true,
+                    cause: 9,
+                    branch_delay: false,
+                    epc: GuestVirtualAddr(0xe02c),
+                    delay_slot: false,
+                },
+                interrupt_enable: false,
+                llbit: false,
+            },
+            linked_address: 0,
+        };
+        begin.linked_state = Some(state.clone());
+        let mut end = begin.clone();
+        end.kind = Kind::CpuEnd;
+        end.ordinal += 2;
+        let mut after = state;
+        after.control.llbit = true;
+        after.linked_address = u64::from(load.address.0 >> 4);
+        end.linked_state = Some(after.clone());
+        assert!(linked_end(&begin, &end, Some(&load)).is_ok());
+        assert!(linked_end(&begin, &end, None).is_err());
+        for mode in 0..6 {
+            let (mut before, mut completed) = (begin.clone(), end.clone());
+            match mode {
+                0 => completed.linked_state.as_mut().unwrap().control.llbit = false,
+                1 => completed.linked_state.as_mut().unwrap().linked_address += 1,
+                2 => before.gpr[16] = 0xffffffff84000000,
+                3 => before.linked_state.as_mut().unwrap().control.state.exl = true,
+                4 => before.linked_state.as_mut().unwrap().linked_address = 1 << 28,
+                _ => completed.linked_state = None,
+            }
+            assert!(
+                linked_end(&before, &completed, Some(&load)).is_err(),
+                "mode {mode}"
+            );
+        }
+        begin.word = 0xe2081000;
+        begin.linked_state = Some(after.clone());
+        end.linked_state = Some(after);
+        assert!(linked_end(&begin, &end, None).is_ok());
+        end.linked_state.as_mut().unwrap().control.llbit = false;
+        assert!(linked_end(&begin, &end, None).is_err());
     }
     #[test]
     fn cpu_ram_copy_keeps_held_load_parents_but_unattributed_equal_store_cuts_them() {

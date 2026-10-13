@@ -26,6 +26,8 @@ struct ComposeEvent {
   u64 exceptionPc=0,epc=0;
   u32 exceptionCause=0,kernelBits=0;
   bool returnValid=false,epcValid=false,interruptEnable=false,llbit=false;
+  bool linkedValid=false;
+  u64 linkedAddress=0;
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 18
   bool tlbValid=false,mappingValid=false,mappingKernel=false;
   u32 tlbIndex=0,mappingAsid=0,mappingBits=0;
@@ -136,6 +138,12 @@ static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
   }
   #endif
   compose_push(begin?"cpu_begin":"cpu_end",composeCpuContext,composeCpuPc,word,0,0,0,0,0,true);
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 23
+  if((word>>26)==0x30 || (word>>26)==0x38){
+    auto& e=composeEvents.back();compose_return_state(e);e.returnValid=false;
+    e.linkedValid=true;e.linkedAddress=cpu.scc.ll;
+  }
+  #endif
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 14
   if(begin && (word&0xfc00003f)==13) compose_exception_state(composeEvents.back());
   #endif
@@ -415,6 +423,8 @@ static void compose_print() {
       std::printf(",\"interrupt_enable\":%s,\"llbit\":%s}",e.interruptEnable?"true":"false",e.llbit?"true":"false");}
     if(e.returnValid){std::printf(",\"return_state\":{\"state\":");compose_print_exception_state(e);
       std::printf(",\"interrupt_enable\":%s,\"llbit\":%s}",e.interruptEnable?"true":"false",e.llbit?"true":"false");}
+    if(e.linkedValid){std::printf(",\"linked_state\":{\"control\":{\"state\":");compose_print_exception_state(e);
+      std::printf(",\"interrupt_enable\":%s,\"llbit\":%s},\"linked_address\":%llu}",e.interruptEnable?"true":"false",e.llbit?"true":"false",(unsigned long long)e.linkedAddress);}
     std::printf("}");
   }
   std::printf("]");

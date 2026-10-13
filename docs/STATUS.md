@@ -1,5 +1,13 @@
 # Status
 
+Controlled v22 now joins completed conditional Word SC effects to actual SP IMEM
+writers and RSP consumption using the canonical normalizer. Failed SC511 leaves
+old writer50 selected at RSP513; equal writes525/539 follow distinct LL reads519/
+533 and are selected at RSP527/541. The success flag cuts held GPR ancestry.
+The542-event/88-control graph agrees independently; all earlier reports remain
+exact. General reservation/census/lifetime/whole-ROM/native remain OPEN; all flags
+false, with the pinned reservation-policy disagreement preserved.
+
 Controlled v21 now binds TLBR context loads to actual installed-slot/page-writer
 ancestry and mapped executable consumption. EntryHi424 moves ASID away; loads431/
 438 restore7, with438 an equal load selected by both later mapped consumers.
