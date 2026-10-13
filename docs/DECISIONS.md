@@ -2501,6 +2501,16 @@ Prior reports remain exact. General widths/mapping/cache operations/census/root/
 lifetime/whole-ROM/native stay OPEN; all flags false, no milestone promotion or
 upstream production reuse. See cached Word writeback/IMEM receipt.
 
+ADR-0119 executable writeback follow-up (2026-10-14): fixture28 uses existing
+v26 to connect full D-cache export699 with actual mapped cached CPU instruction
+consumption. Equal backing cannot replace surviving I-cache fill503/CPUwriter473
+at fetch731/decoder733. Guest HitInvalidateI740 ends503; fresh complete fill745/
+decoder747 selects699, including all16 outgoing occurrences and Unknown remaining
+fill lanes. Slot417/page405/TLBR438 mapping parents remain separate. Reuse the
+existing verifier and typed byte-parent graph; no new schema/consumer/Rust policy
+or native/lifetime promotion. Earlier report bytes stay exact. See mapped CPU
+writeback receipt; whole-ROM/source/census/root/hardware/native remain OPEN.
+
 ## ADR-0120: Physical FPR byte generations compose with canonical COP1 store normalization
 
 Status: Accepted for bounded source composition, 2026-10-12.

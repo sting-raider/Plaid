@@ -392,6 +392,13 @@ resolve mutation occurrences; uncached reads resolve exported RAM occurrences.
 Run `python scripts/test_rsp_definitions.py --writeback-imem`; all prior reports
 remain exact, broad width/mapping/census/lifetime/native obligations stay OPEN.
 
+Fixture28/spike085 reuses v26 for complete writeback -> mapped I-cache/CPU
+consumption. Surviving cached bytes retain old fill/writer identity despite equal
+new backing; actual guest invalidation and fresh complete refill selects the
+export. Run `python scripts/test_rsp_definitions.py --writeback-cpu`. Source
+profile downgrade tests select an older distinct protocol when fixture versions
+share one format. No new verifier/schema or general lifetime/native scope.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

@@ -42,7 +42,9 @@ def main():
     parser.add_argument('--ram-load-imem',action='store_true')
     parser.add_argument('--cached-ram-imem',action='store_true')
     parser.add_argument('--writeback-imem',action='store_true')
+    parser.add_argument('--writeback-cpu',action='store_true')
     args = parser.parse_args()
+    args.writeback_imem = args.writeback_imem or args.writeback_cpu
     args.cached_ram_imem = args.cached_ram_imem or args.writeback_imem
     args.ram_load_imem = args.ram_load_imem or args.cached_ram_imem
     args.subword_imem = args.subword_imem or args.ram_load_imem
@@ -67,7 +69,8 @@ def main():
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('084-cached-word-writeback-imem-consumption' if args.writeback_imem else
+    recipe = ('085-writeback-mapped-cpu-consumption' if args.writeback_cpu else
+        '084-cached-word-writeback-imem-consumption' if args.writeback_imem else
         '083-cached-ram-load-imem-consumption' if args.cached_ram_imem else
         '082-ram-load-imem-consumption' if args.ram_load_imem else
         '081-subword-transform-imem-consumption' if args.subword_imem else
@@ -96,6 +99,9 @@ def main():
     spec = importlib.util.spec_from_file_location('census',ROOT/'spikes'/recipe/'verify.py')
     model = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(model)
+    previous_profile=model.prior if hasattr(model,'prior') else model
+    while previous_profile.FORMAT==model.FORMAT and hasattr(previous_profile,'prior'):
+        previous_profile=previous_profile.prior
     events,definitions = model.expected_events()
     starts = [e for e in events if e['kind']=='cpu_begin']
     ends = [e for e in events if e['kind']=='cpu_end']
@@ -559,7 +565,7 @@ def main():
                 elif mode==10: mapped['mapping']['entries'][0]['physical'][0]=0x6000
                 elif mode==11: mapped['fetch']['physical']=0x6028
                 elif mode==12: begin['tlb_state']['control']['state']['exl']=True
-                else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
+                else: forged['format']=previous_profile.FORMAT;forged['profile']=previous_profile.PROFILE
                 run('inspect-rsp-cpu-imem',save(forged),False)
         if args.tlbr_context:
             for mode in range(12):
@@ -577,7 +583,7 @@ def main():
                 elif mode==8: begin['tlb_state']['control']['state']['exl']=True
                 elif mode==9: load['context']=load['ordinal']
                 elif mode==10: load['value']=1
-                else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
+                else: forged['format']=previous_profile.FORMAT;forged['profile']=previous_profile.PROFILE
                 run('inspect-rsp-cpu-imem',save(forged),False)
         if args.conditional_imem:
             for mode in range(14):
@@ -598,7 +604,7 @@ def main():
                 elif mode==10: begin.pop('linked_state')
                 elif mode==11: begin['linked_state']['control']['state']['kernel']=False
                 elif mode==12: next(e for e in rows if e['kind']=='cpu_end' and e['ordinal']==512)['gpr'][8]=1
-                else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
+                else: forged['format']=previous_profile.FORMAT;forged['profile']=previous_profile.PROFILE
                 run('inspect-rsp-cpu-imem',save(forged),False)
         if args.subword_imem:
             for mode in range(14):
@@ -619,7 +625,7 @@ def main():
                 elif mode==10: write.pop('sp_device_address')
                 elif mode==11: begin.pop('store_state')
                 elif mode==12: begin['gpr'][8] ^= 1<<32
-                else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
+                else: forged['format']=previous_profile.FORMAT;forged['profile']=previous_profile.PROFILE
                 run('inspect-rsp-cpu-imem',save(forged),False)
             # A valid shifted Word sink retains its witness, but has no identity
             # copy receipt. Skip executing that unsupported RSP word in this
@@ -659,7 +665,7 @@ def main():
                 elif mode==11: end['ram_load_state']['linked']['control']['llbit']=False
                 elif mode==12: begin['ram_load_state']['linked']['control']['state']['kernel']=False
                 elif mode==13: end['gpr'][8]=0x21
-                else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
+                else: forged['format']=previous_profile.FORMAT;forged['profile']=previous_profile.PROFILE
                 run('inspect-rsp-cpu-imem',save(forged),False)
         if args.cached_ram_imem:
             for mode in range(17):
@@ -684,7 +690,7 @@ def main():
                 elif mode==13: next(e for e in rows if e['kind']=='cpu_begin' and e['context']==656).pop('dcache_cpu_state')
                 elif mode==14: next(e for e in rows if e['kind']=='cpu_end' and e['context']==642)['gpr'][8]=0x21
                 elif mode==15: rows.remove(invalidate);reclock(rows)
-                else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
+                else: forged['format']=previous_profile.FORMAT;forged['profile']=previous_profile.PROFILE
                 run('inspect-rsp-cpu-imem',save(forged),False)
         if args.writeback_imem:
             for mode in range(16):
@@ -706,7 +712,21 @@ def main():
                 elif mode==12: end.pop('dcache_cpu_line')
                 elif mode==13: next(e for e in rows if e['ordinal']==691).pop('dcache_cpu_state')
                 elif mode==14: end['dcache_cpu_state']['linked']['control']['llbit']=False
-                else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
+                else: forged['format']=previous_profile.FORMAT;forged['profile']=previous_profile.PROFILE
+                run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.writeback_cpu:
+            for mode in range(8):
+                forged=json.loads(json.dumps(expected));rows=forged['events']
+                operation=next(e for e in rows if e['ordinal']==740)
+                fill=next(e for e in rows if e['ordinal']==745)
+                if mode==0: rows.remove(operation);reclock(rows)
+                elif mode==1: operation['cache_operation']['after']['tag_key']|=1
+                elif mode==2: operation['cache_operation']['virtual_address']+=32
+                elif mode==3: fill['cache_line']['words'][3]=0x21
+                elif mode==4: fill['address']+=32
+                elif mode==5: next(e for e in rows if e['ordinal']==743)['mapping']['asid']=8
+                elif mode==6: next(e for e in rows if e['ordinal']==732)['cache_line']['words'][3]=0x21
+                else: next(e for e in rows if e['ordinal']==747)['word']=0x21
                 run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
@@ -1034,6 +1054,19 @@ def main():
                 elif mode==9: graph['cache']['reads'][-1]['resident_revision']=686
                 elif mode==10: forged['imem_fetches'][-1]['origins'][0]['write_ordinal']=712
                 else: forged['final_imem_writers'][0]['write_ordinal']=712
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.writeback_cpu:
+            for mode in range(8):
+                forged=json.loads(original);graph=forged['dma_consumption'];old,fresh=graph['cached_fetches'][-2:]
+                if mode==0: old['origins'][0]=copy.deepcopy(fresh['origins'][0])
+                elif mode==1: fresh['origins'][0]=copy.deepcopy(old['origins'][0])
+                elif mode==2: fresh['fill_ordinal']=503
+                elif mode==3: graph['cache_invalidations'][-1]['ended_fill']=745
+                elif mode==4: graph['cache_fills'][-1]['source_bytes'][0]=dict(kind='unknown',cut_ordinal=None)
+                elif mode==5: graph['cache_fills'][-1]['source_bytes'][15]['source_offset']=0
+                elif mode==6: fresh['mapping']['tlbr_load_ordinal']=431
+                else: fresh['mapping']['entry_lo_write_ordinal']=398
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
     print('RSP definitions: original-clock ORI/ADDU parents, phase cuts, full register snapshots, source/report/input gates and unchanged proof flags passed')

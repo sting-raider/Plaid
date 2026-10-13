@@ -1,5 +1,12 @@
 # Status
 
+Fixture28 now composes complete D-cache export699 with mapped cached CPU
+execution using existing v26. Stale fetch731/decoder733 retains fill503/CPUwriter473;
+actual HitInvalidateI740 ends503, then fill745/decoder747 selects export699.
+Slot417/page405/TLBR438 stay separate. The748-event/127-control graph agrees
+independently, all28 earlier reports stay exact. No new verifier/schema or broad
+proof flag; source/census/lifetime/whole-ROM/native remain OPEN.
+
 Controlled v26 now joins actual cached SW producer ancestry through complete
 D-cache writeback to RAM/IMEM/RSP consumption. Equal mutations686/692 select
 latest692 at export699; all16 outgoing byte origins include untouched fill lanes.
