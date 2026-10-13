@@ -91,6 +91,15 @@ int main(int argc,char** argv) {
     rdram.ram.write<Word>(0x198,0x42000018u,RBusDevice::ARES_DEBUGGER);
   }
 
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=17) {
+    rdram.ram.write<Word>(0x18c,insn_sw(8,19,4),RBusDevice::ARES_DEBUGGER);
+    rdram.ram.write<Word>(0x190,0xbe500000u,RBusDevice::ARES_DEBUGGER);
+    rdram.ram.write<Word>(0x194,0x40087000u,RBusDevice::ARES_DEBUGGER);
+    rdram.ram.write<Word>(0x198,0x39080004u,RBusDevice::ARES_DEBUGGER);
+    rdram.ram.write<Word>(0x19c,0x40887000u,RBusDevice::ARES_DEBUGGER);
+    rdram.ram.write<Word>(0x1a0,0x42000018u,RBusDevice::ARES_DEBUGGER);
+  }
+
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=traced;plaidCpuInstructionObserver=traced?compose_cpu_instruction:nullptr;plaidSpWordObserver=traced?compose_sp_word:nullptr;plaidRspInstructionObserver=traced?compose_rsp_instruction:nullptr;plaidRspDmemObserver=traced?compose_rsp_dmem:nullptr;
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 2
@@ -163,6 +172,9 @@ int main(int argc,char** argv) {
     if(PLAID_RSP_DEFINITIONS_FIXTURE>=16 && index>=37){
       s.word=index==37?0x40087000u:index==38?0x40887000u:index==39?0x42000018u:0;
       s.pc=index==40?0xffffffff80006028ull:0xffffffff80000190ull+(index-37)*4;}
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=17 && index>=36){
+      s.word=index==36?insn_sw(8,19,4):index==37?0xbe500000u:index==38?0x40087000u:index==39?0x39080004u:index==40?0x40887000u:index==41?0x42000018u:0;
+      s.pc=index==42?0xffffffff8000602cull:0xffffffff8000018cull+(index-36)*4;}
     for(u32 n=0;n<32;n++)s.before[n]=cpu.ipu.r[n].u64;
     if(index>=33){if(cpu.ipu.pc!=s.pc)std::abort();}else cpu.pipeline.setPc(s.pc);
     if(cpu.instruction() && synchronize)cpu.synchronize();
@@ -330,7 +342,8 @@ int main(int argc,char** argv) {
   if(PLAID_RSP_DEFINITIONS_FIXTURE>=15) {
     cpuStep(50,34,false);cpuStep(51,35,false);cpuStep(52,36,false);
     cpuStep(53,37,false);cpuStep(54,38,false);
-    if(PLAID_RSP_DEFINITIONS_FIXTURE>=16){cpuStep(55,39,false);cpuStep(56,40,false);} // Natural guest EPC write and return.
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=16){cpuStep(55,39,false);cpuStep(56,40,false);}
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=17){cpuStep(57,41,false);cpuStep(58,42,false);} // Natural guest EPC write and return.
   }
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=false;

@@ -294,6 +294,15 @@ opaque roots cut held CP0 ancestry even on equal values. Changed targets and oth
 CP0 writers remain unsupported. Use spike073 and
 `python scripts/test_rsp_definitions.py --guest-epc`; v0-v15 report bytes stay exact.
 
+Controlled v17 retains one actual in-place XORI on a held current EPC read using
+the existing full64/unsigned-u16 transform receipt. MTC0 binds the computed value
+to its completed EPC, and ERET selects the latest writer's state. Repeated,
+renamed, unattributed or opaque-cut transforms cannot supply target ancestry.
+New reads bind to the current writer even after a changed target. V16 policy and
+v0-v16 reports remain exact. Use spike074 and
+`python scripts/test_rsp_definitions.py --epc-target`; general mapping/root/
+mutation/lifetime/native obligations remain OPEN.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

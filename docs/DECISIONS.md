@@ -2283,6 +2283,19 @@ ErrorEPC/ERL/interrupt/root/mutation/mapping/lifetime/whole-ROM/native remain OP
 static ERET unsupported and general flags false. See the guest-EPC integration
 receipt; no upstream code copied/linked or new research lane.
 
+ADR-0118 transformed-EPC target follow-up (2026-10-13): controlled v17 reuses the
+single in-place XORI receipt for a held current CP0 EPC read, without labeling it
+a physical-memory load. MTC0 must bind the full computed GPR to completed EPC;
+ERET and later reads must select the latest write's state, not the exception's
+original captured value. Repeated/renamed/unattributed transforms remain cuts,
+and old v16 keeps its stricter transform policy/report shape. Actual386-event/
+61-control graph joins MFC0 read363 -> XORI367 -> MTC0 writer372 -> ERET379 ->
+returned fill383/decoder385 at602c with separate CPUwriter353/load342/read343/
+DMEM/DMA/RSP ancestry. All seventeen v0-v16 reports stay exact. Broader transforms/
+arbitrary CP0/ERL/interrupt/reset/restore/mapping/root/mutation/lifetime/whole-ROM/
+native remain OPEN; static ERET unsupported, general flags false. See the EPC
+transform/target receipt; no reference implementation copied or linked.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

@@ -25,11 +25,14 @@ first cached handler fetch with separate writer ancestry. Controlled v15 also
 joins the live exception-produced EPC generation through continuous handler
 mutation/cache invalidation/ERET to returned instruction consumption. Controlled
 v16 also retains an actual MFC0 read and equal-value MTC0 EPC writer, selects the
-fresh writer at ERET and rejects held reads of ended generations. Next compose
-changed EPC targets with actual register/transform ancestry, broader root/control
-lifetime and complete mutation/mapping coverage. Keep current ERET admission
+fresh writer at ERET and rejects held reads of ended generations. Controlled v17
+also derives a changed EPC through one actual in-place XORI and connects ERET's
+selected target to a separate CPU writer/refill/executable chain. Next compose
+TLB/mapping generations with these writer/cache/root/return facts and broader
+root/control lifetime and complete mutation coverage. Keep current ERET admission
 bounded to the uncut ERL0/kernel32/IE0 frame; ordinary static ERET stays unsupported.
-Reuse retained375-event/59-checkpoint v16,365-event/57-checkpoint v15,
+Reuse retained386-event/61-checkpoint v17,375-event/59-checkpoint v16,
+365-event/57-checkpoint v15,
 339-event/52-checkpoint v14,
 295-event/45-checkpoint v13,
 259-event/39-checkpoint v12,

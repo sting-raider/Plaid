@@ -60,6 +60,9 @@ pub const CPU_TRANSFORM_PROFILE: &str =
 pub const EXCEPTION_FORMAT: &str = "plaid-rsp-cpu-imem-history-v14";
 pub const EXCEPTION_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-writer-break-handler-consumption-v14";
+pub const EPC_TARGET_FORMAT: &str = "plaid-rsp-cpu-imem-history-v17";
+pub const EPC_TARGET_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-epc-transform-target-consumption-v17";
 pub const EPC_FORMAT: &str = "plaid-rsp-cpu-imem-history-v16";
 pub const EPC_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-guest-epc-return-consumption-v16";
@@ -211,7 +214,9 @@ fn eret_transfer(
         .ok_or("ERET lacks completed state")?;
     let expected_before = CpuExceptionState {
         pc: GuestVirtualAddr(begin.pc),
-        ..producer.after.clone()
+        ..current_write
+            .map_or(&producer.after, |write| &write.after.state)
+            .clone()
     };
     require(
         begin.word == 0x42000018
@@ -274,6 +279,8 @@ pub struct CpuEpcWrite {
     pub register: u8,
     pub value: u64,
     pub read_parent: CpuEpcRead,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<CpuXorTransform>,
     pub before: CpuReturnState,
     pub after: CpuReturnState,
 }
@@ -285,6 +292,7 @@ fn epc_access(
     begin: &Row,
     row: &Row,
     producer: &CpuExceptionRoot,
+    current_write: Option<&CpuEpcWrite>,
 ) -> Result<(CpuReturnState, CpuReturnState), String> {
     effect_row(row)?;
     let before = begin
@@ -297,7 +305,9 @@ fn epc_access(
         .ok_or("EPC access lacks completed state")?;
     let expected = CpuExceptionState {
         pc: GuestVirtualAddr(begin.pc),
-        ..producer.after.clone()
+        ..current_write
+            .map_or(&producer.after, |write| &write.after.state)
+            .clone()
     };
     require(
         epc_instruction(begin.word)
@@ -312,10 +322,11 @@ fn epc_access(
             && before.state == expected,
         "unsupported EPC access or cut producer state",
     )?;
-    // This first writer composition is deliberately limited to a same-value
-    // round trip from a current EPC read. Other CP0 writes remain unsupported.
     // End observer runs after epilogue, before pipeline.end advances ipu.pc.
-    let expected_after = before.clone();
+    let mut expected_after = before.clone();
+    if row.kind == Kind::EpcWrite {
+        expected_after.state.epc = GuestVirtualAddr(begin.gpr[((begin.word >> 16) & 31) as usize]);
+    }
     require(
         *after == expected_after,
         "EPC access changed unsupported architectural state",
@@ -328,7 +339,7 @@ fn epc_read(
     producer: &CpuExceptionRoot,
     current_write: Option<&CpuEpcWrite>,
 ) -> Result<CpuEpcRead, String> {
-    let (before, after) = epc_access(begin, row, producer)?;
+    let (before, after) = epc_access(begin, row, producer, current_write)?;
     require(
         row.kind == Kind::EpcRead && begin.word & 0xffe0ffff == 0x40007000,
         "EPC read differs from decoded MFC0",
@@ -349,17 +360,19 @@ fn epc_write(
     row: &Row,
     producer: &CpuExceptionRoot,
     current_write: Option<&CpuEpcWrite>,
-    held: Option<&CpuEpcRead>,
+    held: Option<&EpcHeld>,
+    target_enabled: bool,
 ) -> Result<CpuEpcWrite, String> {
-    let (before, after) = epc_access(begin, row, producer)?;
+    let (before, after) = epc_access(begin, row, producer, current_write)?;
     let rt = ((begin.word >> 16) & 31) as usize;
-    let parent = held.ok_or("MTC0 lacks held current EPC read")?;
+    let held = held.ok_or("MTC0 lacks held current EPC read")?;
+    let parent = &held.read;
     require(
         row.kind == Kind::EpcWrite
             && begin.word & 0xffe0ffff == 0x40807000
             && parent.register as usize == rt
-            && parent.value == begin.gpr[rt]
-            && parent.value == before.state.epc.0
+            && held.value() == begin.gpr[rt]
+            && (target_enabled || (held.transform.is_none() && parent.value == before.state.epc.0))
             && parent.epc_transfer_ordinal == producer.transfer_ordinal
             && parent.epc_write_ordinal == current_write.map(|write| write.write_ordinal),
         "MTC0 cannot borrow an equal value or past EPC read generation",
@@ -370,9 +383,45 @@ fn epc_write(
         register: rt as u8,
         value: begin.gpr[rt],
         read_parent: parent.clone(),
+        transform: held.transform.clone(),
         before,
         after,
     })
+}
+
+#[derive(Clone)]
+struct EpcHeld {
+    read: CpuEpcRead,
+    transform: Option<CpuXorTransform>,
+}
+impl EpcHeld {
+    fn value(&self) -> u64 {
+        self.transform
+            .as_ref()
+            .map_or(self.read.value, |transform| transform.result_value)
+    }
+    fn xori(parent: Option<Self>, begin: &Row) -> Result<Option<Self>, String> {
+        let rs = ((begin.word >> 21) & 31) as usize;
+        let rt = ((begin.word >> 16) & 31) as usize;
+        let Some(mut held) = parent else {
+            return Ok(None);
+        };
+        require(
+            held.read.register as usize == rs && held.value() == begin.gpr[rs],
+            "XORI source lost held EPC read definition",
+        )?;
+        if rs != rt || held.transform.is_some() {
+            return Ok(None);
+        }
+        held.transform = Some(CpuXorTransform {
+            decoder_context: begin.context,
+            pc: GuestVirtualAddr(begin.pc),
+            word: begin.word,
+            source_value: held.value(),
+            result_value: held.value() ^ u64::from(begin.word as u16),
+        });
+        Ok(Some(held))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -2070,7 +2119,8 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let epc_enabled = h.format == EPC_FORMAT && h.profile == EPC_PROFILE;
+    let target_enabled = h.format == EPC_TARGET_FORMAT && h.profile == EPC_TARGET_PROFILE;
+    let epc_enabled = target_enabled || (h.format == EPC_FORMAT && h.profile == EPC_PROFILE);
     let return_enabled = epc_enabled || (h.format == RETURN_FORMAT && h.profile == RETURN_PROFILE);
     let exception_enabled =
         return_enabled || (h.format == EXCEPTION_FORMAT && h.profile == EXCEPTION_PROFILE);
@@ -2175,7 +2225,7 @@ pub fn inspect_rsp_cpu_imem_history(
     let mut await_root: Option<usize> = None;
     let mut live_exception: Option<usize> = None;
     let mut current_epc_write: Option<usize> = None;
-    let mut epc_registers: [Option<CpuEpcRead>; 32] = std::array::from_fn(|_| None);
+    let mut epc_registers: [Option<EpcHeld>; 32] = std::array::from_fn(|_| None);
     let mut epc_reads = Vec::new();
     let mut epc_writes = Vec::new();
     let mut pending_epc: Option<(Kind, usize)> = None;
@@ -2371,6 +2421,7 @@ pub fn inspect_rsp_cpu_imem_history(
                         &exception_roots[producer],
                         current,
                         epc_registers[rt].as_ref(),
+                        target_enabled,
                     )?;
                     epc_writes.push(receipt);
                     current_epc_write = Some(epc_writes.len() - 1);
@@ -3055,7 +3106,10 @@ pub fn inspect_rsp_cpu_imem_history(
                     if kind == Kind::EpcRead {
                         expected[rt] = epc_reads[index].value;
                         registers[rt] = None;
-                        epc_registers[rt] = Some(epc_reads[index].clone());
+                        epc_registers[rt] = Some(EpcHeld {
+                            read: epc_reads[index].clone(),
+                            transform: None,
+                        });
                     }
                 } else if begin.word == 0x42000018 {
                     require(
@@ -3106,7 +3160,11 @@ pub fn inspect_rsp_cpu_imem_history(
                     if rt != 0 {
                         expected[rt] = begin.gpr[rs] ^ u64::from(begin.word as u16);
                         registers[rt] = Loaded::xori(registers[rs].clone(), &begin)?;
-                        epc_registers[rt] = None;
+                        epc_registers[rt] = if target_enabled {
+                            EpcHeld::xori(epc_registers[rs].clone(), &begin)?
+                        } else {
+                            None
+                        };
                     }
                 } else {
                     require(
@@ -5610,7 +5668,18 @@ mod tests {
         write_row.ordinal += 1;
         write_row.kind = Kind::EpcWrite;
         write_row.gpr.clear();
-        let write = epc_write(&write_begin, &write_row, &producer, None, Some(&read)).unwrap();
+        let write = epc_write(
+            &write_begin,
+            &write_row,
+            &producer,
+            None,
+            Some(&EpcHeld {
+                read: read.clone(),
+                transform: None,
+            }),
+            false,
+        )
+        .unwrap();
         assert_eq!(write.value, producer.after.epc.0);
         assert_ne!(write.write_ordinal, producer.transfer_ordinal);
         let (ret, end, _) = eret_fixture();
@@ -5623,7 +5692,11 @@ mod tests {
                 &write_row,
                 &producer,
                 Some(&write),
-                Some(&read)
+                Some(&EpcHeld {
+                    read: read.clone(),
+                    transform: None
+                }),
+                false
             )
             .is_err()
         );
@@ -5635,7 +5708,11 @@ mod tests {
                 &write_row,
                 &producer,
                 Some(&write),
-                Some(&fresh_read)
+                Some(&EpcHeld {
+                    read: fresh_read,
+                    transform: None
+                }),
+                false
             )
             .is_ok()
         );
@@ -5664,9 +5741,74 @@ mod tests {
                 _ => row.value = read.value,
             }
             assert!(
-                epc_write(&begin, &row, &producer, None, Some(&read)).is_err(),
+                epc_write(
+                    &begin,
+                    &row,
+                    &producer,
+                    None,
+                    Some(&EpcHeld {
+                        read: read.clone(),
+                        transform: None
+                    }),
+                    false
+                )
+                .is_err(),
                 "mode {mode}"
             );
         }
+    }
+    #[test]
+    fn transformed_epc_writer_selects_changed_target_and_new_read_generation() {
+        let (mut begin, mut row, producer) = epc_fixture();
+        let read = epc_read(&begin, &row, &producer, None).unwrap();
+        let held = EpcHeld {
+            read,
+            transform: None,
+        };
+        begin.word = 0x39080004;
+        begin.gpr[8] = held.value();
+        let held = EpcHeld::xori(Some(held), &begin).unwrap().unwrap();
+        assert_eq!(held.value(), producer.after.epc.0 ^ 4);
+        begin.word = 0x40887000;
+        begin.gpr[8] = held.value();
+        row.word = begin.word;
+        row.kind = Kind::EpcWrite;
+        row.epc_state.as_mut().unwrap().state.epc = GuestVirtualAddr(held.value());
+        assert!(epc_write(&begin, &row, &producer, None, Some(&held), false).is_err());
+        let write = epc_write(&begin, &row, &producer, None, Some(&held), true).unwrap();
+        assert_eq!(write.transform.as_ref().unwrap().word, 0x39080004);
+        let (mut ret, mut end, _) = eret_fixture();
+        ret.return_state.as_mut().unwrap().state.epc = write.after.state.epc;
+        end.return_state.as_mut().unwrap().state.epc = write.after.state.epc;
+        end.return_state.as_mut().unwrap().state.pc = write.after.state.epc;
+        assert!(eret_transfer(&ret, &end, &producer, None).is_err());
+        let returned = eret_transfer(&ret, &end, &producer, Some(&write)).unwrap();
+        assert_eq!(returned.after.state.pc, write.after.state.epc);
+        let (mut read_begin, mut read_row, _) = epc_fixture();
+        read_begin.epc_state.as_mut().unwrap().state.epc = write.after.state.epc;
+        read_row.epc_state.as_mut().unwrap().state.epc = write.after.state.epc;
+        let fresh = epc_read(&read_begin, &read_row, &producer, Some(&write)).unwrap();
+        assert_eq!(fresh.value, write.value);
+        assert_eq!(fresh.epc_write_ordinal, Some(write.write_ordinal));
+    }
+    #[test]
+    fn epc_transform_repeated_renamed_or_unattributed_sources_cut_definition() {
+        let (mut begin, row, producer) = epc_fixture();
+        let held = EpcHeld {
+            read: epc_read(&begin, &row, &producer, None).unwrap(),
+            transform: None,
+        };
+        begin.word = 0x39088000;
+        begin.gpr[8] = held.value();
+        let once = EpcHeld::xori(Some(held.clone()), &begin).unwrap().unwrap();
+        assert_eq!(once.value(), held.value() ^ 0x8000); // unsigned immediate/full64
+        begin.gpr[8] = once.value();
+        assert!(EpcHeld::xori(Some(once), &begin).unwrap().is_none());
+        begin.gpr[8] = held.value();
+        begin.word = 0x39090004;
+        assert!(EpcHeld::xori(Some(held.clone()), &begin).unwrap().is_none());
+        begin.gpr[8] &= 0xffffffff;
+        assert!(EpcHeld::xori(Some(held), &begin).is_err());
+        assert!(EpcHeld::xori(None, &begin).unwrap().is_none());
     }
 }
