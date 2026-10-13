@@ -20,6 +20,12 @@ def generate(reference, output):
     block=code[begin:end];assert block.count(read)==1
     block=block.replace(read,'  u64 data = line.read<Size>(paddr);\n  if(plaidOperandDcacheReadObserver) plaidOperandDcacheReadObserver(vaddr, paddr, Size, data, &line);\n  return data;')
     code=code[:begin]+block+code[end:]
+    writeback='  cpu.busWriteBurst<DCache>(tag | index, words);'
+    assert code.count(writeback)==1
+    code=code.replace(writeback,'  if(plaidOperandDcacheObserver) plaidOperandDcacheObserver(3, this, tag | index);\n'+writeback+'\n  if(plaidOperandDcacheObserver) plaidOperandDcacheObserver(4, this, tag | index);')
+    mutation='  dirtyPc = cpu.ipu.pc;'
+    assert code.count(mutation)==1
+    code=code.replace(mutation,mutation+'\n  if constexpr(Size == Word) if(plaidOperandDcacheObserver) plaidOperandDcacheObserver(2, this, paddr);')
     destination=output/'cpu_operand_dcache.cpp';destination.write_text(code)
     cpu=output/'cpu.cpp';text=cpu.read_text()
     include=f'#include "{source}"';assert text.count(include)==1

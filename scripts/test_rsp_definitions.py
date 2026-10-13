@@ -41,7 +41,9 @@ def main():
     parser.add_argument('--subword-imem',action='store_true')
     parser.add_argument('--ram-load-imem',action='store_true')
     parser.add_argument('--cached-ram-imem',action='store_true')
+    parser.add_argument('--writeback-imem',action='store_true')
     args = parser.parse_args()
+    args.cached_ram_imem = args.cached_ram_imem or args.writeback_imem
     args.ram_load_imem = args.ram_load_imem or args.cached_ram_imem
     args.subword_imem = args.subword_imem or args.ram_load_imem
     args.conditional_imem = args.conditional_imem or args.subword_imem
@@ -65,7 +67,8 @@ def main():
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('083-cached-ram-load-imem-consumption' if args.cached_ram_imem else
+    recipe = ('084-cached-word-writeback-imem-consumption' if args.writeback_imem else
+        '083-cached-ram-load-imem-consumption' if args.cached_ram_imem else
         '082-ram-load-imem-consumption' if args.ram_load_imem else
         '081-subword-transform-imem-consumption' if args.subword_imem else
         '080-conditional-sp-imem-consumption' if args.conditional_imem else
@@ -683,6 +686,28 @@ def main():
                 elif mode==15: rows.remove(invalidate);reclock(rows)
                 else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
                 run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.writeback_imem:
+            for mode in range(16):
+                forged=json.loads(json.dumps(expected));rows=forged['events']
+                mutation=next(e for e in rows if e['ordinal']==692);burst=next(e for e in rows if e['ordinal']==699)
+                end=next(e for e in rows if e['ordinal']==701)
+                if mode==0: rows.remove(mutation);reclock(rows)
+                elif mode==1: rows.insert(rows.index(mutation),copy.deepcopy(mutation));reclock(rows)
+                elif mode==2: mutation['dcache_event']['payload'][-1]=0x21
+                elif mode==3: mutation['dcache_line']['words'][0]=1 # untouched lane
+                elif mode==4: mutation['dcache_line']['dirty']=15
+                elif mode==5: mutation['dcache_event']['physical']-=4
+                elif mode==6: rows.remove(burst);reclock(rows)
+                elif mode==7: burst['dcache_event']['payload'][0]=1
+                elif mode==8: burst['dcache_event']['physical_line']+=16
+                elif mode==9: burst['dcache_event']['payload']=burst['dcache_event']['payload'][12:] # dirty-only export
+                elif mode==10: end['dcache_cpu_line']['dirty']=0xf000
+                elif mode==11: end['dcache_cpu_line']['words'][1]=1
+                elif mode==12: end.pop('dcache_cpu_line')
+                elif mode==13: next(e for e in rows if e['ordinal']==691).pop('dcache_cpu_state')
+                elif mode==14: end['dcache_cpu_state']['linked']['control']['llbit']=False
+                else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
+                run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
             forged = json.loads(original)
@@ -978,7 +1003,7 @@ def main():
                 run('verify-rsp-cpu-imem',digest,False)
         if args.cached_ram_imem:
             for mode in range(13):
-                forged=json.loads(original);graph=forged['dma_consumption']['dcache_consumption'];reads=graph['cache']['reads'];copies=forged['copies'][-3:]
+                forged=json.loads(original);graph=forged['dma_consumption']['dcache_consumption'];reads=graph['cache']['reads'];copies=[c for c in forged['copies'] if c['store_context'] in (623,648,670)]
                 if mode==0: forged['dma_consumption'].pop('dcache_consumption')
                 elif mode==1: copies[1]['source_bytes'][0]['parent']['write_ordinal']=637
                 elif mode==2: copies[1]['source_bytes'][0]['resident_generation']=664
@@ -992,6 +1017,23 @@ def main():
                 elif mode==10: copies[-1]['source_bytes'][0]['physical']-=4
                 elif mode==11: forged['imem_fetches'][-1]['origins'][0]['write_ordinal']=649
                 else: forged['final_imem_writers'][0]['write_ordinal']=649
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.writeback_imem:
+            for mode in range(12):
+                forged=json.loads(original);graph=forged['dma_consumption']['dcache_consumption'];receipt=graph['cache']['writeback']['receipts'][0]
+                if mode==0: graph.pop('cpu_word_mutations')
+                elif mode==1: receipt['resident_revision']=686
+                elif mode==2: receipt['origins'][-1]['mutation_ordinal']=686
+                elif mode==3: receipt['origins'][0]=copy.deepcopy(receipt['origins'][-1]) # clean lane replaced by dirty origin
+                elif mode==4: receipt['backing_write_ordinal']=698
+                elif mode==5: graph['cpu_word_mutations'][-1]['copy_parent']['read_ordinal']=548
+                elif mode==6: forged['copies'][-2]['source_bytes'][0]['parent']['write_ordinal']=637
+                elif mode==7: forged['copies'][-2]['source_bytes'][0]['parent']['source_offset']=0
+                elif mode==8: forged['copies'][-1]['source_bytes'][0]['mutation_ordinal']=686
+                elif mode==9: graph['cache']['reads'][-1]['resident_revision']=686
+                elif mode==10: forged['imem_fetches'][-1]['origins'][0]['write_ordinal']=712
+                else: forged['final_imem_writers'][0]['write_ordinal']=712
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
     print('RSP definitions: original-clock ORI/ADDU parents, phase cuts, full register snapshots, source/report/input gates and unchanged proof flags passed')

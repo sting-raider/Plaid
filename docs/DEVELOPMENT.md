@@ -383,6 +383,15 @@ CPU expressions/RAM/IMEM copies retain these cached parents. Run
 stay exact. Cached mutation/writeback/mapping/dirty/global census/lifetime/native
 remain OPEN.
 
+Controlled v26/spike084 adds actual cached Word SW and successful dirty-hit
+HitWritebackD to that same state. Bind complete after-store payload/dirty mask
+and full control/GPR boundaries; preserve equal mutation identity. Only an actual
+complete16-byte backing burst creates RAM writeback parents, including clean
+lanes. CPU completion must preserve the line and clear dirty bits. Cached reads
+resolve mutation occurrences; uncached reads resolve exported RAM occurrences.
+Run `python scripts/test_rsp_definitions.py --writeback-imem`; all prior reports
+remain exact, broad width/mapping/census/lifetime/native obligations stay OPEN.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,
