@@ -22,7 +22,7 @@ struct ComposeEvent {
   bool exceptionValid=false,bev=false,exl=false,erl=false,kernel=false,branchDelay=false,delaySlot=false;
   u64 exceptionPc=0,epc=0;
   u32 exceptionCause=0,kernelBits=0;
-  bool returnValid=false,interruptEnable=false,llbit=false;
+  bool returnValid=false,epcValid=false,interruptEnable=false,llbit=false;
 };
 static std::vector<ComposeEvent> composeEvents;
 static u32 composePhase=0,composeRspContext=0,composeRspPc=0,composeRspWord=0;
@@ -81,12 +81,24 @@ static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
     compose_return_state(composeEvents.back());
   }
   #endif
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 16
+  bool epcAccess=(word&0xffe0ffffu)==0x40007000u || (word&0xffe0ffffu)==0x40807000u;
+  if(!begin && epcAccess) {
+    compose_push((word&0x00800000u)?"epc_write":"epc_read",composeCpuContext,composeCpuPc,word,0,0,0,0,0,true);
+    compose_return_state(composeEvents.back());composeEvents.back().returnValid=false;composeEvents.back().epcValid=true;
+  }
+  #endif
   compose_push(begin?"cpu_begin":"cpu_end",composeCpuContext,composeCpuPc,word,0,0,0,0,0,true);
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 14
   if(begin && (word&0xfc00003f)==13) compose_exception_state(composeEvents.back());
   #endif
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 15
   if(begin && word==0x42000018u) compose_return_state(composeEvents.back());
+  #endif
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 16
+  if(begin && epcAccess) {
+    compose_return_state(composeEvents.back());composeEvents.back().returnValid=false;composeEvents.back().epcValid=true;
+  }
   #endif
   if(!begin) composeCpuContext=composeCpuPc=composeCpuWord=0;
 }
@@ -329,6 +341,8 @@ static void compose_print() {
       std::printf("}");
     }
     if(e.exceptionValid){std::printf(",\"exception_state\":");compose_print_exception_state(e);}
+    if(e.epcValid){std::printf(",\"epc_state\":{\"state\":");compose_print_exception_state(e);
+      std::printf(",\"interrupt_enable\":%s,\"llbit\":%s}",e.interruptEnable?"true":"false",e.llbit?"true":"false");}
     if(e.returnValid){std::printf(",\"return_state\":{\"state\":");compose_print_exception_state(e);
       std::printf(",\"interrupt_enable\":%s,\"llbit\":%s}",e.interruptEnable?"true":"false",e.llbit?"true":"false");}
     std::printf("}");

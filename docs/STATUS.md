@@ -1,5 +1,14 @@
 # Status
 
+Controlled v16 now composes actual MFC0/MTC0 EPC generations with the existing
+continuous handler/cache/return graph. Read358 retains exception producer332;
+equal-value write363 creates a fresh generation selected by ERET368. Returned
+fill372/decoder374 still retains replacement writer348 and DMEM/DMA/RSP parents.
+The375-event/59-control actual graph agrees independently; all sixteen v0-v15
+reports remain exact. Same-value register rewrites cut held CP0 ancestry and a
+second write cannot borrow the ended read generation. Broader CP0/ERL/interrupt/
+root/mutation/mapping/lifetime/whole-ROM/native obligations remain OPEN.
+
 Controlled v15 now joins the actual exception-produced EPC generation through
 continuous handler mutation/invalidation to ERET and returned-code consumption.
 Handler writer348 replaces BREAK with NOP; ERET358 uses uncut EPC producer332;
