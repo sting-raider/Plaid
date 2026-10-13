@@ -11,6 +11,7 @@ struct ComposeEvent {
   bool dmaValid=false,fetchValid=false,fetchCached=false;
   u32 dmaPbus=0,dmaDram=0,dmaLength=0,dmaCount=0,dmaSkip=0,fetchPhysical=0;
   const char* dmaDirection=nullptr;
+  bool pendingValid=false,pendingFull=false;
 };
 static std::vector<ComposeEvent> composeEvents;
 static u32 composePhase=0,composeRspContext=0,composeRspPc=0,composeRspWord=0;
@@ -89,6 +90,18 @@ static void compose_sp_word(bool write,u32 address,u32 bank,u32 offset,u32 value
     composeCpuContext?composeCpuPc:cpu.ipu.pc,composeCpuWord,address,bank,offset,4,value,originCpu);
 }
 #if PLAID_RSP_DEFINITIONS_FIXTURE >= 4
+#if PLAID_RSP_DEFINITIONS_FIXTURE >= 8
+static void compose_dma_pending(u32 address,u32 value,bool originCpu) {
+  if(!composeEnabled) return;
+  if(composeCpuContext || composeRspContext || composeFetchContext || !originCpu) std::abort();
+  auto& pending=rsp.dma.pending;
+  compose_push("dma_pending_write",composeEvents.size()+1,cpu.ipu.pc,0,address,pending.pbusRegion,pending.pbusAddress,4,value,originCpu);
+  auto& event=composeEvents.back();event.dmaValid=true;event.pendingValid=true;event.pendingFull=rsp.dma.full.any();
+  event.dmaPbus=pending.pbusAddress;event.dmaDram=pending.dramAddress;
+  event.dmaLength=pending.length;event.dmaCount=pending.count;event.dmaSkip=pending.skip;
+  if(event.pendingFull) event.dmaDirection=rsp.dma.full.write?"dmem_egress":pending.pbusRegion?"imem_ingress":"dmem_ingress";
+}
+#endif
 #if PLAID_RSP_DEFINITIONS_FIXTURE >= 5
 static void compose_dma_lifecycle(bool begin,u32 bank,bool write,u32 pbus,u32 dram,u32 length,u32 count,u32 skip) {
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 7
@@ -198,6 +211,7 @@ static void compose_print() {
     if(e.dmaValid) std::printf(",\"dma\":{\"pbus\":%u,\"dram\":%u,\"length\":%u,\"count\":%u,\"skip\":%u}",e.dmaPbus,e.dmaDram,e.dmaLength,e.dmaCount,e.dmaSkip);
     if(e.fetchValid) std::printf(",\"fetch\":{\"physical\":%u,\"cached\":%s}",e.fetchPhysical,e.fetchCached?"true":"false");
     if(e.dmaDirection) std::printf(",\"dma_direction\":\"%s\"",e.dmaDirection);
+    if(e.pendingValid) std::printf(",\"pending_full\":%s",e.pendingFull?"true":"false");
     std::printf("}");
   }
   std::printf("]");

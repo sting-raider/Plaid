@@ -1,5 +1,14 @@
 # Status
 
+Mutable pending DMA state now composes with the existing writer/consumption graph
+under controlled v8. Latest masked address writes remain separate from length
+commits; equal-value FULL recommits supersede prior occurrences, and promotion
+consumes only the latest mutable state. The180-event pinned source/26 matched
+checkpoints independently reproduces six commits, one supersession, five promoted
+requests and actual consumption after immediate handoff. V0-v7 reports stay exact.
+Guest MMIO operands, general FIFO/hardware/mutation/cache/mapping/root/restore
+lifetime and whole-ROM/native closure remain OPEN; all certification flags false.
+
 Actual DMEM DMA ingress now feeds RSP load definitions on the same graph under
 controlled v7. Both returned Word reads precede the two exact lower stores;
 each latest byte retains its read/store/request and prior RAM writer separately.

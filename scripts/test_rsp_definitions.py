@@ -22,13 +22,15 @@ def main():
     parser.add_argument('--promoted',action='store_true')
     parser.add_argument('--roundtrip',action='store_true')
     parser.add_argument('--dmem-ingress',action='store_true')
+    parser.add_argument('--pending',action='store_true')
     args = parser.parse_args()
-    roundtrip = args.roundtrip or args.dmem_ingress
+    roundtrip = args.roundtrip or args.dmem_ingress or args.pending
     promoted = args.promoted or roundtrip
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('064-dma-dmem-ingress-rsp-load' if args.dmem_ingress else
+    recipe = ('065-mutable-pending-dma' if args.pending else
+        '064-dma-dmem-ingress-rsp-load' if args.dmem_ingress else
         '063-dma-ram-imem-roundtrip' if roundtrip else
         '062-promoted-dma-cpu-consumption' if promoted else
         '061-rsp-dmem-dma-cpu-fetch' if dma else
@@ -53,6 +55,8 @@ def main():
             ram=dict(start=0x6000,initial=replayed['initial_ram'],final_bytes=replayed['final_ram']))
     elif execution:
         expected['initial_imem'],expected['final_imem'],_ = model.replay_image(events)
+    if args.pending:
+        expected['initial_pending']=model.INITIAL
     if args.source:
         assert json.loads(args.source.read_bytes())==expected, 'actual source differs from independent census'
     cargo = shutil.which('cargo') or str(Path.home()/'.cargo/bin/cargo.exe')
@@ -126,7 +130,7 @@ def main():
                     if event['kind'] in ('cpu_begin','rsp_begin','ram_fetch_begin'): active=ordinal
                     if event['kind']=='dma_promote':request=ordinal
                     owned=event['kind'] in ('dma_promote','dma_complete','imem_dma_read','imem_dma_write','dmem_dma_read','dmem_dma_write') or (event['kind']=='ram_write' and event.get('dma') is not None and promoted)
-                    event['context']=request if owned else active
+                    event['context']=ordinal if event['kind']=='dma_pending_write' else request if owned else active
                     if event['kind'] in ('cpu_end','rsp_end','ram_fetch_end'): active=0
                     if event['kind']=='dma_complete':request=0
             for mode in range(7):
@@ -173,7 +177,7 @@ def main():
                 elif mode==4: sink['value'] ^= 1
                 else: read['address']=0x6020
                 run('inspect-rsp-cpu-imem',save(forged),False)
-        if args.dmem_ingress:
+        if args.dmem_ingress or args.pending:
             for mode in range(6):
                 forged = copy.deepcopy(expected)
                 reads = [e for e in forged['events'] if e['kind']=='dmem_dma_read']
@@ -186,6 +190,20 @@ def main():
                 elif mode==3: writes[0]['value'] ^= 1
                 elif mode==4: next(e for e in forged['events'] if e.get('dma_direction')=='dmem_ingress')['dma_direction']='dmem_egress'
                 else: forged['events'].insert(forged['events'].index(reads[0]),copy.deepcopy(reads[0]));reclock(forged['events'])
+                run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.pending:
+            for mode in range(7):
+                forged=copy.deepcopy(expected)
+                writes=[e for e in forged['events'] if e['kind']=='dma_pending_write']
+                if mode==0: del forged['initial_pending']
+                elif mode==1: writes[-3]['pending_full']=False
+                elif mode==2:
+                    promote=[e for e in forged['events'] if e['kind']=='dma_promote'][-1]
+                    promote['dma']['pbus']=promote['offset']=0x380
+                elif mode==3: writes[-1]['value']=0x6020
+                elif mode==4: writes[-1]['value']=1<<32
+                elif mode==5: writes[-1]['dma_direction']='dmem_egress'
+                else: writes[-1]['cpu']=False
                 run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
@@ -238,12 +256,21 @@ def main():
                 else: graph['promoted_requests'][-1]['direction']='dmem_egress'
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
-        if args.dmem_ingress:
+        if args.dmem_ingress or args.pending:
             for mode in range(3):
                 forged = json.loads(original)
                 if mode==0: del forged['dma_consumption']['dmem_installs']
                 elif mode==1: forged['dma_consumption']['dmem_installs'][0]['read_ordinal'] += 1
                 else: forged['rsp_definitions'][-1]['expression']['origins'][0]['parent']['write_ordinal'] += 1
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.pending:
+            for mode in range(4):
+                forged=json.loads(original);graph=forged['dma_consumption']
+                if mode==0: del graph['pending_commits']
+                elif mode==1: graph['pending_commits'][-1]['superseded_commit']=None
+                elif mode==2: graph['promoted_requests'][-1]['pending_provenance']['commit_ordinal']-=1
+                else: graph['promoted_requests'][-1]['pending_provenance']['pbus_write_ordinal']-=1
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
     print('RSP definitions: original-clock ORI/ADDU parents, phase cuts, full register snapshots, source/report/input gates and unchanged proof flags passed')
