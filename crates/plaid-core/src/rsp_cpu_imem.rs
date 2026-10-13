@@ -60,6 +60,9 @@ pub const CPU_TRANSFORM_PROFILE: &str =
 pub const EXCEPTION_FORMAT: &str = "plaid-rsp-cpu-imem-history-v14";
 pub const EXCEPTION_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-writer-break-handler-consumption-v14";
+pub const EPC_FORMAT: &str = "plaid-rsp-cpu-imem-history-v16";
+pub const EPC_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-guest-epc-return-consumption-v16";
 pub const RETURN_FORMAT: &str = "plaid-rsp-cpu-imem-history-v15";
 pub const RETURN_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-live-epc-handler-return-consumption-v15";
@@ -128,6 +131,8 @@ enum Kind {
     CpuRamWrite,
     ExceptionTransfer,
     ReturnTransfer,
+    EpcRead,
+    EpcWrite,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -165,6 +170,8 @@ struct Row {
     exception_state: Option<CpuExceptionState>,
     #[serde(default)]
     return_state: Option<CpuReturnState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    epc_state: Option<CpuReturnState>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -178,6 +185,8 @@ pub struct CpuReturnState {
 #[serde(deny_unknown_fields)]
 pub struct CpuEretReturn {
     pub epc_transfer_ordinal: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epc_write_ordinal: Option<u64>,
     pub decoder_context: u64,
     pub transfer_ordinal: u64,
     pub before: CpuReturnState,
@@ -189,6 +198,7 @@ fn eret_transfer(
     begin: &Row,
     row: &Row,
     producer: &CpuExceptionRoot,
+    current_write: Option<&CpuEpcWrite>,
 ) -> Result<CpuEretReturn, String> {
     effect_row(row)?;
     let before = begin
@@ -231,12 +241,137 @@ fn eret_transfer(
     )?;
     Ok(CpuEretReturn {
         epc_transfer_ordinal: producer.transfer_ordinal,
+        epc_write_ordinal: current_write.map(|write| write.write_ordinal),
         decoder_context: begin.context,
         transfer_ordinal: row.ordinal,
         before: before.clone(),
         after: after.clone(),
         fetch_context: 0,
         target_decoder_context: 0,
+    })
+}
+
+// EPC ancestry is separate from physical-memory load ancestry. Equal writes
+// replace the selected generation; a held read of an older generation cannot
+// witness a new write merely because its bits still agree.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CpuEpcRead {
+    pub decoder_context: u64,
+    pub read_ordinal: u64,
+    pub register: u8,
+    pub value: u64,
+    pub epc_transfer_ordinal: u64,
+    pub epc_write_ordinal: Option<u64>,
+    pub before: CpuReturnState,
+    pub after: CpuReturnState,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CpuEpcWrite {
+    pub decoder_context: u64,
+    pub write_ordinal: u64,
+    pub register: u8,
+    pub value: u64,
+    pub read_parent: CpuEpcRead,
+    pub before: CpuReturnState,
+    pub after: CpuReturnState,
+}
+fn epc_instruction(word: u32) -> bool {
+    // MFC0/MTC0, rd=EPC, no select/reserved bits, nonzero GPR.
+    matches!(word & 0xffe0ffff, 0x40007000 | 0x40807000) && (word >> 16) & 31 != 0
+}
+fn epc_access(
+    begin: &Row,
+    row: &Row,
+    producer: &CpuExceptionRoot,
+) -> Result<(CpuReturnState, CpuReturnState), String> {
+    effect_row(row)?;
+    let before = begin
+        .epc_state
+        .as_ref()
+        .ok_or("EPC access lacks before state")?;
+    let after = row
+        .epc_state
+        .as_ref()
+        .ok_or("EPC access lacks completed state")?;
+    let expected = CpuExceptionState {
+        pc: GuestVirtualAddr(begin.pc),
+        ..producer.after.clone()
+    };
+    require(
+        epc_instruction(begin.word)
+            && same(begin, row)
+            && row.cpu
+            && row.address == 0
+            && row.bank == 0
+            && row.offset == 0
+            && row.bytes == 0
+            && row.value == 0
+            && !before.interrupt_enable
+            && before.state == expected,
+        "unsupported EPC access or cut producer state",
+    )?;
+    // This first writer composition is deliberately limited to a same-value
+    // round trip from a current EPC read. Other CP0 writes remain unsupported.
+    // End observer runs after epilogue, before pipeline.end advances ipu.pc.
+    let expected_after = before.clone();
+    require(
+        *after == expected_after,
+        "EPC access changed unsupported architectural state",
+    )?;
+    Ok((before.clone(), after.clone()))
+}
+fn epc_read(
+    begin: &Row,
+    row: &Row,
+    producer: &CpuExceptionRoot,
+    current_write: Option<&CpuEpcWrite>,
+) -> Result<CpuEpcRead, String> {
+    let (before, after) = epc_access(begin, row, producer)?;
+    require(
+        row.kind == Kind::EpcRead && begin.word & 0xffe0ffff == 0x40007000,
+        "EPC read differs from decoded MFC0",
+    )?;
+    Ok(CpuEpcRead {
+        decoder_context: begin.context,
+        read_ordinal: row.ordinal,
+        register: ((begin.word >> 16) & 31) as u8,
+        value: sign32(before.state.epc.0 as u32),
+        epc_transfer_ordinal: producer.transfer_ordinal,
+        epc_write_ordinal: current_write.map(|write| write.write_ordinal),
+        before,
+        after,
+    })
+}
+fn epc_write(
+    begin: &Row,
+    row: &Row,
+    producer: &CpuExceptionRoot,
+    current_write: Option<&CpuEpcWrite>,
+    held: Option<&CpuEpcRead>,
+) -> Result<CpuEpcWrite, String> {
+    let (before, after) = epc_access(begin, row, producer)?;
+    let rt = ((begin.word >> 16) & 31) as usize;
+    let parent = held.ok_or("MTC0 lacks held current EPC read")?;
+    require(
+        row.kind == Kind::EpcWrite
+            && begin.word & 0xffe0ffff == 0x40807000
+            && parent.register as usize == rt
+            && parent.value == begin.gpr[rt]
+            && parent.value == before.state.epc.0
+            && parent.epc_transfer_ordinal == producer.transfer_ordinal
+            && parent.epc_write_ordinal == current_write.map(|write| write.write_ordinal),
+        "MTC0 cannot borrow an equal value or past EPC read generation",
+    )?;
+    Ok(CpuEpcWrite {
+        decoder_context: begin.context,
+        write_ordinal: row.ordinal,
+        register: rt as u8,
+        value: begin.gpr[rt],
+        read_parent: parent.clone(),
+        before,
+        after,
     })
 }
 
@@ -790,6 +925,10 @@ pub struct RspCpuImemReport {
     pub exception_roots: Option<Vec<CpuExceptionRoot>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub eret_returns: Option<Vec<CpuEretReturn>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epc_reads: Option<Vec<CpuEpcRead>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epc_writes: Option<Vec<CpuEpcWrite>>,
     pub source_ancestry_certified: bool,
     pub mutation_coverage_certified: bool,
     pub imem_execution_certified: bool,
@@ -1931,7 +2070,8 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let return_enabled = h.format == RETURN_FORMAT && h.profile == RETURN_PROFILE;
+    let epc_enabled = h.format == EPC_FORMAT && h.profile == EPC_PROFILE;
+    let return_enabled = epc_enabled || (h.format == RETURN_FORMAT && h.profile == RETURN_PROFILE);
     let exception_enabled =
         return_enabled || (h.format == EXCEPTION_FORMAT && h.profile == EXCEPTION_PROFILE);
     let transform_enabled = exception_enabled
@@ -2034,6 +2174,11 @@ pub fn inspect_rsp_cpu_imem_history(
     let mut pending_exception = None;
     let mut await_root: Option<usize> = None;
     let mut live_exception: Option<usize> = None;
+    let mut current_epc_write: Option<usize> = None;
+    let mut epc_registers: [Option<CpuEpcRead>; 32] = std::array::from_fn(|_| None);
+    let mut epc_reads = Vec::new();
+    let mut epc_writes = Vec::new();
+    let mut pending_epc: Option<(Kind, usize)> = None;
     let mut eret_returns: Vec<CpuEretReturn> = Vec::new();
     let mut pending_return: Option<usize> = None;
     let mut await_return: Option<usize> = None;
@@ -2052,6 +2197,17 @@ pub fn inspect_rsp_cpu_imem_history(
             "noncontiguous event identity or phase order",
         )?;
         phase = row.phase;
+        require(
+            row.epc_state.is_none()
+                || (epc_enabled
+                    && (matches!(row.kind, Kind::EpcRead | Kind::EpcWrite)
+                        || (row.kind == Kind::CpuBegin && epc_instruction(row.word)))),
+            "EPC metadata outside controlled CP0 boundary",
+        )?;
+        require(
+            pending_epc.is_none() || row.kind == Kind::CpuEnd,
+            "EPC access was not immediately completed by decoder",
+        )?;
         require(
             row.return_state.is_none()
                 || (return_enabled
@@ -2188,6 +2344,41 @@ pub fn inspect_rsp_cpu_imem_history(
             )?;
         }
         match row.kind {
+            Kind::EpcRead | Kind::EpcWrite => {
+                let Some(Active::Cpu {
+                    begin,
+                    read,
+                    written,
+                }) = &mut active
+                else {
+                    return Err("EPC access lacks CPU decoder".into());
+                };
+                require(
+                    epc_enabled && read.is_none() && !*written,
+                    "duplicate or unsupported EPC effect",
+                )?;
+                let producer = live_exception.ok_or("EPC producer generation is unknown")?;
+                let current = current_epc_write.map(|index| &epc_writes[index]);
+                let index = if row.kind == Kind::EpcRead {
+                    let receipt = epc_read(begin, &row, &exception_roots[producer], current)?;
+                    epc_reads.push(receipt);
+                    epc_reads.len() - 1
+                } else {
+                    let rt = ((begin.word >> 16) & 31) as usize;
+                    let receipt = epc_write(
+                        begin,
+                        &row,
+                        &exception_roots[producer],
+                        current,
+                        epc_registers[rt].as_ref(),
+                    )?;
+                    epc_writes.push(receipt);
+                    current_epc_write = Some(epc_writes.len() - 1);
+                    epc_writes.len() - 1
+                };
+                pending_epc = Some((row.kind, index));
+                *written = true;
+            }
             Kind::ReturnTransfer => {
                 let Some(Active::Cpu {
                     begin,
@@ -2204,7 +2395,14 @@ pub fn inspect_rsp_cpu_imem_history(
                 let producer = live_exception
                     .take()
                     .ok_or("ERET selected EPC generation is unknown")?;
-                let receipt = eret_transfer(begin, &row, &exception_roots[producer])?;
+                let receipt = eret_transfer(
+                    begin,
+                    &row,
+                    &exception_roots[producer],
+                    current_epc_write.map(|index| &epc_writes[index]),
+                )?;
+                current_epc_write = None;
+                epc_registers.fill(None);
                 pending_return = Some(eret_returns.len());
                 eret_returns.push(receipt);
                 *written = true;
@@ -2225,6 +2423,8 @@ pub fn inspect_rsp_cpu_imem_history(
                 let receipt = break_transfer(begin, &row)?;
                 pending_exception = Some(exception_roots.len());
                 live_exception = pending_exception;
+                current_epc_write = None;
+                epc_registers.fill(None);
                 exception_roots.push(receipt);
                 *written = true;
             }
@@ -2282,6 +2482,8 @@ pub fn inspect_rsp_cpu_imem_history(
                 )?;
                 registers.fill(None);
                 live_exception = None;
+                current_epc_write = None;
+                epc_registers.fill(None);
                 previous_cpu = None;
                 cpu_reentry = Some(row);
             }
@@ -2841,7 +3043,21 @@ pub fn inspect_rsp_cpu_imem_history(
                 require(same(&begin, &row), "CPU end context mismatch")?;
                 let mut expected = begin.gpr.clone();
                 let op = begin.word >> 26;
-                if begin.word == 0x42000018 {
+                if epc_instruction(begin.word) {
+                    require(
+                        epc_enabled && written && read.is_none(),
+                        "CP0 instruction lacks completed EPC effect",
+                    )?;
+                    let (kind, index) = pending_epc
+                        .take()
+                        .ok_or("CP0 instruction lacks EPC identity")?;
+                    let rt = ((begin.word >> 16) & 31) as usize;
+                    if kind == Kind::EpcRead {
+                        expected[rt] = epc_reads[index].value;
+                        registers[rt] = None;
+                        epc_registers[rt] = Some(epc_reads[index].clone());
+                    }
+                } else if begin.word == 0x42000018 {
                     require(
                         return_enabled && written && read.is_none(),
                         "ERET lacks completed return transfer",
@@ -2868,6 +3084,7 @@ pub fn inspect_rsp_cpu_imem_history(
                         expected[load.register] = load.bits;
                         let register = load.register;
                         registers[register] = Some(load);
+                        epc_registers[register] = None;
                     }
                 } else if op == 0x2b {
                     require(
@@ -2889,6 +3106,7 @@ pub fn inspect_rsp_cpu_imem_history(
                     if rt != 0 {
                         expected[rt] = begin.gpr[rs] ^ u64::from(begin.word as u16);
                         registers[rt] = Loaded::xori(registers[rs].clone(), &begin)?;
+                        epc_registers[rt] = None;
                     }
                 } else {
                     require(
@@ -2907,6 +3125,7 @@ pub fn inspect_rsp_cpu_imem_history(
                             expected[rd] =
                                 sign32((begin.gpr[rs] as u32).wrapping_add(begin.gpr[rt] as u32));
                             registers[rd] = None;
+                            epc_registers[rd] = None;
                         }
                     }
                 }
@@ -2994,6 +3213,8 @@ pub fn inspect_rsp_cpu_imem_history(
         dma_consumption: ram.map(RamReplay::finish).transpose()?,
         exception_roots: exception_enabled.then_some(exception_roots),
         eret_returns: return_enabled.then_some(eret_returns),
+        epc_reads: epc_enabled.then_some(epc_reads),
+        epc_writes: epc_enabled.then_some(epc_writes),
         source_ancestry_certified: false,
         mutation_coverage_certified: false,
         imem_execution_certified: false,
@@ -5338,7 +5559,7 @@ mod tests {
     #[test]
     fn eret_uses_live_epc_generation_clears_exl_and_llbit() {
         let (begin, end, producer) = eret_fixture();
-        let receipt = eret_transfer(&begin, &end, &producer).unwrap();
+        let receipt = eret_transfer(&begin, &end, &producer, None).unwrap();
         assert_eq!(receipt.epc_transfer_ordinal, producer.transfer_ordinal);
         assert_eq!(receipt.after.state.pc, producer.after.epc);
         assert!(!receipt.after.state.exl && !receipt.after.llbit);
@@ -5360,7 +5581,90 @@ mod tests {
                 _ => begin.word ^= 1,
             }
             assert!(
-                eret_transfer(&begin, &end, &producer).is_err(),
+                eret_transfer(&begin, &end, &producer, None).is_err(),
+                "mode {mode}"
+            );
+        }
+    }
+    fn epc_fixture() -> (Row, Row, CpuExceptionRoot) {
+        let (mut begin, _, producer) = eret_fixture();
+        begin.word = 0x40087000;
+        begin.return_state.as_mut().unwrap().llbit = false;
+        begin.epc_state = begin.return_state.take();
+        let mut row = begin.clone();
+        row.kind = Kind::EpcRead;
+        row.ordinal += 1;
+        row.gpr.clear();
+        (begin, row, producer)
+    }
+    #[test]
+    fn equal_epc_write_is_fresh_generation_and_eret_selects_it() {
+        let (begin, read_row, producer) = epc_fixture();
+        let read = epc_read(&begin, &read_row, &producer, None).unwrap();
+        let mut write_begin = begin.clone();
+        write_begin.word = 0x40887000;
+        write_begin.ordinal += 5;
+        write_begin.context = write_begin.ordinal;
+        write_begin.gpr[8] = read.value;
+        let mut write_row = write_begin.clone();
+        write_row.ordinal += 1;
+        write_row.kind = Kind::EpcWrite;
+        write_row.gpr.clear();
+        let write = epc_write(&write_begin, &write_row, &producer, None, Some(&read)).unwrap();
+        assert_eq!(write.value, producer.after.epc.0);
+        assert_ne!(write.write_ordinal, producer.transfer_ordinal);
+        let (ret, end, _) = eret_fixture();
+        let receipt = eret_transfer(&ret, &end, &producer, Some(&write)).unwrap();
+        assert_eq!(receipt.epc_write_ordinal, Some(write.write_ordinal));
+        // An equal second write cannot borrow a read from the ended generation.
+        assert!(
+            epc_write(
+                &write_begin,
+                &write_row,
+                &producer,
+                Some(&write),
+                Some(&read)
+            )
+            .is_err()
+        );
+        let fresh_read = epc_read(&begin, &read_row, &producer, Some(&write)).unwrap();
+        assert_eq!(fresh_read.epc_write_ordinal, Some(write.write_ordinal));
+        assert!(
+            epc_write(
+                &write_begin,
+                &write_row,
+                &producer,
+                Some(&write),
+                Some(&fresh_read)
+            )
+            .is_ok()
+        );
+    }
+    #[test]
+    fn epc_access_rejects_wrong_effect_operand_state_and_equal_low_bits() {
+        for mode in 0..12 {
+            let (mut begin, mut row, producer) = epc_fixture();
+            let read = epc_read(&begin, &row, &producer, None).unwrap();
+            begin.word = 0x40887000;
+            begin.gpr[8] = read.value;
+            row.word = begin.word;
+            row.kind = Kind::EpcWrite;
+            match mode {
+                0 => begin.word ^= 0x800,
+                1 => begin.word ^= 1,
+                2 => begin.word ^= 0x10000,
+                3 => begin.gpr[8] &= 0xffffffff,
+                4 => row.context += 1,
+                5 => row.kind = Kind::EpcRead,
+                6 => row.epc_state.as_mut().unwrap().state.epc.0 += 4,
+                7 => begin.epc_state.as_mut().unwrap().state.erl = true,
+                8 => begin.epc_state.as_mut().unwrap().interrupt_enable = true,
+                9 => row.epc_state.as_mut().unwrap().llbit = true,
+                10 => row.gpr = vec![0; 32],
+                _ => row.value = read.value,
+            }
+            assert!(
+                epc_write(&begin, &row, &producer, None, Some(&read)).is_err(),
                 "mode {mode}"
             );
         }

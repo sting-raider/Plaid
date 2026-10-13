@@ -23,11 +23,13 @@ RAM writing/invalidation/refill to transformed instruction consumption. Controll
 v14 also joins an actual copied/transformed BREAK to its exception transfer and
 first cached handler fetch with separate writer ancestry. Controlled v15 also
 joins the live exception-produced EPC generation through continuous handler
-mutation/cache invalidation/ERET to returned instruction consumption. Next
-compose actual guest CP0 writer generations (including equal EPC rewrites), broader
-root/control lifetime and complete mutation/mapping coverage. Keep current ERET
-admission bounded to the uncut ERL0/kernel32/IE0 frame; ordinary static ERET stays
-unsupported. Reuse retained365-event/57-checkpoint v15,
+mutation/cache invalidation/ERET to returned instruction consumption. Controlled
+v16 also retains an actual MFC0 read and equal-value MTC0 EPC writer, selects the
+fresh writer at ERET and rejects held reads of ended generations. Next compose
+changed EPC targets with actual register/transform ancestry, broader root/control
+lifetime and complete mutation/mapping coverage. Keep current ERET admission
+bounded to the uncut ERL0/kernel32/IE0 frame; ordinary static ERET stays unsupported.
+Reuse retained375-event/59-checkpoint v16,365-event/57-checkpoint v15,
 339-event/52-checkpoint v14,
 295-event/45-checkpoint v13,
 259-event/39-checkpoint v12,

@@ -85,6 +85,12 @@ int main(int argc,char** argv) {
     rdram.ram.write<Word>(0x190,0x42000018u,RBusDevice::ARES_DEBUGGER);
   }
 
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=16) {
+    rdram.ram.write<Word>(0x190,0x40087000u,RBusDevice::ARES_DEBUGGER);
+    rdram.ram.write<Word>(0x194,0x40887000u,RBusDevice::ARES_DEBUGGER);
+    rdram.ram.write<Word>(0x198,0x42000018u,RBusDevice::ARES_DEBUGGER);
+  }
+
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=traced;plaidCpuInstructionObserver=traced?compose_cpu_instruction:nullptr;plaidSpWordObserver=traced?compose_sp_word:nullptr;plaidRspInstructionObserver=traced?compose_rsp_instruction:nullptr;plaidRspDmemObserver=traced?compose_rsp_dmem:nullptr;
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 2
@@ -154,6 +160,9 @@ int main(int argc,char** argv) {
       s.pc=index<31?0xffffffffa0006060ull+(index-27)*4:index==33?0xffffffff80000180ull:0xffffffff80000000ull+(index==31?0x6034:0x6028);}
     if(index>=34){s.word=index==34?insn_lw(8,16,0):index==35?insn_sw(8,19,0):index==36?0xbe500000u:index==37?0x42000018u:0;
       s.pc=index==38?0xffffffff80006028ull:0xffffffff80000184ull+(index-34)*4;}
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=16 && index>=37){
+      s.word=index==37?0x40087000u:index==38?0x40887000u:index==39?0x42000018u:0;
+      s.pc=index==40?0xffffffff80006028ull:0xffffffff80000190ull+(index-37)*4;}
     for(u32 n=0;n<32;n++)s.before[n]=cpu.ipu.r[n].u64;
     if(index>=33){if(cpu.ipu.pc!=s.pc)std::abort();}else cpu.pipeline.setPc(s.pc);
     if(cpu.instruction() && synchronize)cpu.synchronize();
@@ -320,7 +329,8 @@ int main(int argc,char** argv) {
   }
   if(PLAID_RSP_DEFINITIONS_FIXTURE>=15) {
     cpuStep(50,34,false);cpuStep(51,35,false);cpuStep(52,36,false);
-    cpuStep(53,37,false);cpuStep(54,38,false); // Natural handler and selected EPC return.
+    cpuStep(53,37,false);cpuStep(54,38,false);
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=16){cpuStep(55,39,false);cpuStep(56,40,false);} // Natural guest EPC write and return.
   }
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=false;

@@ -286,6 +286,14 @@ consumed, without clearing physical EPC. Use spike072 and
 Handler/return steps use actual PCs without host setters. Static discovery still
 rejects ERET; general CP0/ERL/interrupt/mutation/lifetime closure remains OPEN.
 
+Controlled v16 adds completed MFC0/MTC0 EPC access states in the original decoder
+clock. CP0 ancestry is separate from physical SP/RAM loads. A held read must match
+the full source GPR and current EPC generation; every accepted equal-value MTC0
+gets a fresh writer ID. ERET selects that writer. LW/XORI/ADDU destinations and
+opaque roots cut held CP0 ancestry even on equal values. Changed targets and other
+CP0 writers remain unsupported. Use spike073 and
+`python scripts/test_rsp_definitions.py --guest-epc`; v0-v15 report bytes stay exact.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

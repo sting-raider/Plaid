@@ -2267,6 +2267,22 @@ this production scope claims neither guest EPC writes nor ErrorEPC/ERL support.
 Static ERET remains unsupported and all general proof flags false. See the live
 EPC return receipt; no upstream implementation copied or linked.
 
+ADR-0118 guest-EPC writer follow-up (2026-10-13): controlled v16 composes actual
+MFC0/MTC0 EPC accesses into the same handler/ERET/executable graph. Explicit
+before/completed state checks admit only current EPC reads and same-value writes
+from held current reads in the uncut kernel32/ERL0/IE0 frame. MFC0 sign-extends
+low32 EPC; pinned MTC0 passes the full source GPR to the EPC setter. Keep these
+CP0 definitions separate from physical-memory load parents; register rewrites
+cut them even when bits agree. Each accepted MTC0 replaces selected writer
+identity; a later equal write cannot borrow an old read. ERET keeps the exception
+frame ID and distinct latest guest-writer ID. Actual375-event/59-control graph
+joins read358 -> writer363 -> ERET368 -> fresh returned fill372/decoder374 with
+replacement RAMwriter348/DMEM/DMA/RSP ancestry. All sixteen v0-v15 reports stay
+exact; no host PC setters after handler entry. Broader writers/changed targets/
+ErrorEPC/ERL/interrupt/root/mutation/mapping/lifetime/whole-ROM/native remain OPEN,
+static ERET unsupported and general flags false. See the guest-EPC integration
+receipt; no upstream code copied/linked or new research lane.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.
