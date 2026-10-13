@@ -1,5 +1,13 @@
 # Status
 
+Controlled v23 now joins actual CPU SB/SH whole-SP-Word effects and one held
+XORI expression to executable IMEM consumption. Device04001003/04001002 remain
+separate from aligned sink04001000. Writes559/567 install equal ADDU21 and are
+selected by RSP561/569, retaining load547/read548/XORI553/DMEM/DMA/RSP parents.
+The570-event/94-control graph agrees independently; all earlier reports remain
+exact. Shifted lanes cannot borrow identity-copy ancestry. General source/census/
+lifetime/hardware/whole-ROM/native remain OPEN; all flags false.
+
 Controlled v22 now joins completed conditional Word SC effects to actual SP IMEM
 writers and RSP consumption using the canonical normalizer. Failed SC511 leaves
 old writer50 selected at RSP513; equal writes525/539 follow distinct LL reads519/

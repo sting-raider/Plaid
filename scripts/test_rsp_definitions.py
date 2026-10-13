@@ -38,7 +38,9 @@ def main():
     parser.add_argument('--entrylo-remap',action='store_true')
     parser.add_argument('--tlbr-context',action='store_true')
     parser.add_argument('--conditional-imem',action='store_true')
+    parser.add_argument('--subword-imem',action='store_true')
     args = parser.parse_args()
+    args.conditional_imem = args.conditional_imem or args.subword_imem
     args.tlbr_context = args.tlbr_context or args.conditional_imem
     args.entrylo_remap = args.entrylo_remap or args.tlbr_context
     args.mapped_reactivation = args.mapped_reactivation or args.entrylo_remap
@@ -59,7 +61,8 @@ def main():
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('080-conditional-sp-imem-consumption' if args.conditional_imem else
+    recipe = ('081-subword-transform-imem-consumption' if args.subword_imem else
+        '080-conditional-sp-imem-consumption' if args.conditional_imem else
         '079-tlbr-context-root-return' if args.tlbr_context else
         '078-entrylo-remap-root-return' if args.entrylo_remap else
         '077-mapped-cache-reactivation' if args.mapped_reactivation else
@@ -587,6 +590,45 @@ def main():
                 elif mode==12: next(e for e in rows if e['kind']=='cpu_end' and e['ordinal']==512)['gpr'][8]=1
                 else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
                 run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.subword_imem:
+            for mode in range(14):
+                forged=json.loads(json.dumps(expected));rows=forged['events']
+                write=next(e for e in rows if e['kind']=='sp_write' and e['word']==0xa2081003)
+                begin=next(e for e in rows if e['kind']=='cpu_begin' and e['context']==write['context'])
+                end=next(e for e in rows if e['kind']=='cpu_end' and e['context']==write['context'])
+                if mode==0: rows.remove(write);reclock(rows)
+                elif mode==1: rows.insert(rows.index(write),copy.deepcopy(write));reclock(rows)
+                elif mode==2: write['bytes']=1
+                elif mode==3: write['sp_device_address']-=1
+                elif mode==4: write['address']+=4
+                elif mode==5: write['value']=0x21000000
+                elif mode==6: write['bank']=0
+                elif mode==7: begin['store_state']['reverse_endian']=True
+                elif mode==8: end['store_state']['linked']['control']['llbit']=False
+                elif mode==9: begin['store_state']['linked']['control']['state']['kernel']=False
+                elif mode==10: write.pop('sp_device_address')
+                elif mode==11: begin.pop('store_state')
+                elif mode==12: begin['gpr'][8] ^= 1<<32
+                else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
+                run('inspect-rsp-cpu-imem',save(forged),False)
+            # A valid shifted Word sink retains its witness, but has no identity
+            # copy receipt. Skip executing that unsupported RSP word in this
+            # synthetic chronology; all completeness flags remain false.
+            shifted=json.loads(json.dumps(expected));rows=shifted['events']
+            for field in ('initial','final_bytes'):
+                shifted['ram'][field][0x60f8:0x60fc]=list((0xa2081000).to_bytes(4,'big'))
+            for event in rows:
+                if event['pc']==0xffffffffa00060f8:
+                    if event['word']==0xa2081003:event['word']=0xa2081000
+                    if event['kind'] in ('ram_read','ram_fetch_end'):event['value']=0xa2081000
+                    if event['kind']=='sp_write':event.update(value=0x21000000,sp_device_address=0x04001000)
+            shifted['steps'][-2]['word']=0xa2081000
+            rows[:]=[e for e in rows if e['ordinal'] not in (561,562)]
+            reclock(rows)
+            run('inspect-rsp-cpu-imem',save(shifted));partial=json.loads(output.read_bytes())
+            assert len(partial['copies'])==6
+            assert partial['subword_sp_writes'][0]['value']==0x21000000
+            assert not any(partial[k] for k in ('source_ancestry_certified','mutation_coverage_certified','imem_execution_certified','executable_lifetime_certified','native_complete'))
         digest = save(expected)
         for mode in range(4):
             forged = json.loads(original)
@@ -840,10 +882,25 @@ def main():
                 elif mode==3: attempts[-1]['completed_effect']['source_value_before']=1
                 elif mode==4: attempts[-1]['completed_effect']['context_id']=524
                 elif mode==5: fetches[-1]['origins'][0]['write_ordinal']=525
-                elif mode==6: fetches[-3]['origins'][0]['write_ordinal']=525 # failed attempt leaves old parent
+                elif mode==6: next(f for f in fetches if f['context']==513)['origins'][0]['write_ordinal']=525 # failed attempt leaves old parent
                 elif mode==7: forged['copies'][-1]['read_ordinal']=519
                 elif mode==8: forged['final_imem_writers'][0]['write_ordinal']=525
                 else: attempts[-1]['completed_effect']=None
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.subword_imem:
+            for mode in range(10):
+                forged=json.loads(original);writes=forged['subword_sp_writes']
+                if mode==0: forged.pop('subword_sp_writes')
+                elif mode==1: writes[-1]['effect_ordinal']=559
+                elif mode==2: writes[-1]['translated_physical']=0x04001003
+                elif mode==3: writes[-1]['value']=0x21000000
+                elif mode==4: forged['copies'][-1].pop('transform')
+                elif mode==5: forged['copies'][-1]['transform']['decoder_context']=532
+                elif mode==6: forged['copies'][-1]['source_bytes'][0]['parent']['write_ordinal']=220
+                elif mode==7: forged['imem_fetches'][-1]['origins'][0]['write_ordinal']=559
+                elif mode==8: forged['final_imem_writers'][0]['write_ordinal']=559
+                else: forged['copies'][-1]['read_ordinal']=519
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
     print('RSP definitions: original-clock ORI/ADDU parents, phase cuts, full register snapshots, source/report/input gates and unchanged proof flags passed')

@@ -356,6 +356,14 @@ leave old writers; equal successful effects create fresh generations. Run
 stay exact. The direct-SP check is pin-specific, not a hardware reservation policy;
 general fault/cached/mapped/lifetime/census/native obligations stay OPEN.
 
+Controlled v23/spike081 composes actual CPU SB/SH with the canonical subword
+normalizer and IMEM/RSP consumption. Keep raw device and aligned Word addresses
+separate, bind direct mapping and before/completed control/endian data, and reuse
+the existing XORI receipt in optional IMEM-copy transforms. Identity-copy ancestry
+requires an actual shift-zero lane; other lanes retain the mutation witness only.
+Run `python scripts/test_rsp_definitions.py --subword-imem`; earlier shapes/bytes
+stay exact. General faults/aliases/endian/shift ancestry/census/native remain OPEN.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,
