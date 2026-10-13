@@ -26,7 +26,9 @@ def main():
     parser.add_argument('--decoded-mmio',action='store_true')
     parser.add_argument('--cached-cpu',action='store_true')
     parser.add_argument('--cache-invalidation',action='store_true')
+    parser.add_argument('--cpu-ram-copy',action='store_true')
     args = parser.parse_args()
+    args.cache_invalidation = args.cache_invalidation or args.cpu_ram_copy
     args.cached_cpu = args.cached_cpu or args.cache_invalidation
     args.decoded_mmio = args.decoded_mmio or args.cached_cpu
     args.pending = args.pending or args.decoded_mmio
@@ -35,7 +37,8 @@ def main():
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('068-dma-cache-invalidation' if args.cache_invalidation else
+    recipe = ('069-cpu-copy-ram-cached' if args.cpu_ram_copy else
+        '068-dma-cache-invalidation' if args.cache_invalidation else
         '067-dma-cached-cpu' if args.cached_cpu else
         '066-decoded-mmio-dma' if args.decoded_mmio else
         '065-mutable-pending-dma' if args.pending else
@@ -269,6 +272,23 @@ def main():
                     rows.remove(next(e for e in reversed(rows) if e['kind']=='cache_burst_read'));reclock(rows)
                 else: forged['format']='plaid-rsp-cpu-imem-history-v10';forged['profile']='ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-dma-cached-cpu-consumption-v10'
                 run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.cpu_ram_copy:
+            for mode in range(10):
+                forged=copy.deepcopy(expected);rows=forged['events']
+                write=next(e for e in rows if e['kind']=='cpu_ram_write')
+                begin=next(e for e in rows if e['kind']=='cpu_begin' and e['context']==write['context'])
+                end=next(e for e in rows if e['kind']=='cpu_end' and e['context']==write['context'])
+                if mode==0: rows.remove(write);reclock(rows)
+                elif mode==1: rows.insert(rows.index(write),copy.deepcopy(write));reclock(rows)
+                elif mode==2: write['value']=1
+                elif mode==3: write['address'] += 4
+                elif mode==4: write['context']=write['ordinal']
+                elif mode==5: write['bytes']=8
+                elif mode==6: write['cpu']=False
+                elif mode==7: begin['gpr'][19]=0xffffffff80006028
+                elif mode==8: end['gpr'][8]=1
+                else: forged['format']='plaid-rsp-cpu-imem-history-v11';forged['profile']='ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-dma-cached-cpu-invalidation-v11'
+                run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
             forged = json.loads(original)
@@ -352,6 +372,18 @@ def main():
                 elif mode==2: graph['cache_invalidations'][0]['ended_fill']=None
                 elif mode==3: graph['cached_fetches'][-1]['fill_ordinal']=199
                 else: graph['cached_fetches'][-1]['origins'][0]['write_ordinal']=58
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.cpu_ram_copy:
+            for mode in range(7):
+                forged=json.loads(original);graph=forged['dma_consumption'];writer=graph['cpu_writes'][0]
+                if mode==0: graph.pop('cpu_writes')
+                elif mode==1: writer['copy_parent']=None
+                elif mode==2: writer['copy_parent']['read_ordinal']=231
+                elif mode==3: writer['copy_parent']['source_bytes'][0]['parent']['write_ordinal']=219
+                elif mode==4: writer['source_register']=9
+                elif mode==5: graph['cached_fetches'][-1]['origins'][0]=dict(kind='sp_dma',write_ordinal=219,source_offset=0)
+                else: graph['cached_fetches'][-3]['origins'][0]=dict(kind='cpu_copy',write_ordinal=240,source_offset=0)
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
         if args.cached_cpu:

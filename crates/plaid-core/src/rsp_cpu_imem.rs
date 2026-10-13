@@ -47,6 +47,9 @@ pub const CACHED_DMA_PROFILE: &str =
 pub const INVALIDATION_FORMAT: &str = "plaid-rsp-cpu-imem-history-v11";
 pub const INVALIDATION_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-dma-cached-cpu-invalidation-v11";
+pub const CPU_RAM_FORMAT: &str = "plaid-rsp-cpu-imem-history-v12";
+pub const CPU_RAM_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-cpu-copy-ram-cached-consumption-v12";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -109,6 +112,7 @@ enum Kind {
     CacheFill,
     CpuReentry,
     CacheOperation,
+    CpuRamWrite,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -330,6 +334,29 @@ pub enum RamByteOrigin {
         write_ordinal: u64,
         source_offset: u16,
     },
+    CpuCopy {
+        write_ordinal: u64,
+        source_offset: u8,
+    },
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CpuRamCopyParent {
+    pub load_context: u64,
+    pub read_ordinal: u64,
+    pub source: PhysicalAddr,
+    pub source_bytes: [SpByteOrigin; 4],
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CpuRamWord {
+    pub decoder_context: u64,
+    pub write_ordinal: u64,
+    pub destination: PhysicalAddr,
+    pub source_register: u8,
+    pub register_value: u64,
+    pub word: u32,
+    pub copy_parent: Option<CpuRamCopyParent>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -441,6 +468,8 @@ pub struct DmemDmaConsumption {
     pub cached_fetches: Option<Vec<CachedDmaCpuFetch>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_invalidations: Option<Vec<DmaCacheInvalidation>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu_writes: Option<Vec<CpuRamWord>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -638,6 +667,8 @@ struct RamReplay {
     invalidation_enabled: bool,
     cache_state: BTreeMap<u16, FetchCacheLine>,
     cache_invalidations: Vec<DmaCacheInvalidation>,
+    cpu_ram_enabled: bool,
+    cpu_writes: Vec<CpuRamWord>,
 }
 enum PendingFetch {
     Uncached(usize),
@@ -734,6 +765,8 @@ impl RamReplay {
             invalidation_enabled: false,
             cache_state: BTreeMap::new(),
             cache_invalidations: Vec::new(),
+            cpu_ram_enabled: false,
+            cpu_writes: Vec::new(),
         })
     }
     fn offset(&self, address: u32, width: usize) -> Result<usize, String> {
@@ -747,6 +780,67 @@ impl RamReplay {
             "RAM access escapes declared snapshot",
         )?;
         Ok(offset)
+    }
+    fn cpu_write(&mut self, row: &Row, begin: &Row, parent: Option<&Loaded>) -> Result<(), String> {
+        effect_row(row)?;
+        let rs = ((begin.word >> 21) & 31) as usize;
+        let rt = ((begin.word >> 16) & 31) as usize;
+        let address = begin.gpr[rs].wrapping_add_signed(i64::from(begin.word as i16));
+        require(
+            self.cpu_ram_enabled
+                && same(begin, row)
+                && begin.word >> 26 == 0x2b
+                && (0xffffffffa0000000..0xffffffffa0800000).contains(&address)
+                && address.is_multiple_of(4)
+                && row.address == address as u32 & 0x1fffffff
+                && row.value == u64::from(begin.gpr[rt] as u32)
+                && row.cpu
+                && row.bank == 0
+                && row.offset == 0
+                && row.bytes == 4
+                && self.active.is_none()
+                && self.pending.is_none()
+                && self.request.is_none(),
+            "RAM write differs from decoded direct-KSEG1 SW",
+        )?;
+        let copy_parent = parent
+            .map(|loaded| {
+                require(
+                    loaded.register == rt && loaded.bits == begin.gpr[rt],
+                    "RAM store source lost held CPU load definition",
+                )?;
+                Ok::<_, String>(CpuRamCopyParent {
+                    load_context: loaded.context,
+                    read_ordinal: loaded.read,
+                    source: loaded.address,
+                    source_bytes: loaded.origins.clone(),
+                })
+            })
+            .transpose()?;
+        let offset = self.offset(row.address, 4)?;
+        self.bytes[offset..offset + 4].copy_from_slice(&(row.value as u32).to_be_bytes());
+        for n in 0..4 {
+            self.origins[offset + n] = if copy_parent.is_some() {
+                RamByteOrigin::CpuCopy {
+                    write_ordinal: row.ordinal,
+                    source_offset: n as u8,
+                }
+            } else {
+                RamByteOrigin::Unknown {
+                    cut_ordinal: Some(row.ordinal),
+                }
+            };
+        }
+        self.cpu_writes.push(CpuRamWord {
+            decoder_context: begin.context,
+            write_ordinal: row.ordinal,
+            destination: PhysicalAddr(row.address),
+            source_register: rt as u8,
+            register_value: begin.gpr[rt],
+            word: row.value as u32,
+            copy_parent,
+        });
+        Ok(())
     }
     fn observe(&mut self, row: Row, dmem: &[u8], dorig: &[SpByteOrigin]) -> Result<(), String> {
         effect_row(&row)?;
@@ -1434,6 +1528,7 @@ impl RamReplay {
             cache_invalidations: self
                 .invalidation_enabled
                 .then_some(self.cache_invalidations),
+            cpu_writes: self.cpu_ram_enabled.then_some(self.cpu_writes),
         })
     }
 }
@@ -1615,7 +1710,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let invalidation_enabled = h.format == INVALIDATION_FORMAT && h.profile == INVALIDATION_PROFILE;
+    let cpu_ram_enabled = h.format == CPU_RAM_FORMAT && h.profile == CPU_RAM_PROFILE;
+    let invalidation_enabled =
+        cpu_ram_enabled || (h.format == INVALIDATION_FORMAT && h.profile == INVALIDATION_PROFILE);
     let cached_enabled =
         invalidation_enabled || (h.format == CACHED_DMA_FORMAT && h.profile == CACHED_DMA_PROFILE);
     let decoded_dma_enabled =
@@ -1674,6 +1771,7 @@ pub fn inspect_rsp_cpu_imem_history(
     if let Some(ram) = &mut ram {
         ram.cached = cached_enabled;
         ram.invalidation_enabled = invalidation_enabled;
+        ram.cpu_ram_enabled = cpu_ram_enabled;
     }
     require(
         pending_enabled == h.initial_pending.is_some(),
@@ -1735,6 +1833,7 @@ pub fn inspect_rsp_cpu_imem_history(
         )?;
         require(
             cpu_reentry.is_none()
+                || (cpu_ram_enabled && row.kind == Kind::RamRead)
                 || matches!(
                     row.kind,
                     Kind::RamFetchBegin
@@ -1807,6 +1906,25 @@ pub fn inspect_rsp_cpu_imem_history(
             )?;
         }
         match row.kind {
+            Kind::CpuRamWrite => {
+                let Some(Active::Cpu {
+                    begin,
+                    read,
+                    written,
+                }) = &mut active
+                else {
+                    return Err("CPU RAM write lacks decoder scope".into());
+                };
+                require(
+                    cpu_ram_enabled && read.is_none() && !*written,
+                    "duplicate or unsupported CPU RAM store effect",
+                )?;
+                let rt = ((begin.word >> 16) & 31) as usize;
+                ram.as_mut()
+                    .ok_or("CPU RAM write lacks RAM profile")?
+                    .cpu_write(&row, begin, registers[rt].as_ref())?;
+                *written = true;
+            }
             Kind::CacheOperation => {
                 let Some(Active::Cpu {
                     begin,
@@ -4580,6 +4698,94 @@ mod tests {
                 _ => effect.cpu = false,
             }
             assert!(ram.invalidate(&effect, &begin).is_err(), "mode {mode}");
+        }
+    }
+    fn cpu_ram_fixture() -> (RamReplay, Row, Row, Loaded) {
+        let (mut ram, _) = cache_fixture();
+        ram.cpu_ram_enabled = true;
+        let mut begin = row("cpu_begin", 20, 20);
+        begin["word"] = json!(0xae680000u32);
+        begin["cpu"] = json!(true);
+        let mut gpr = vec![0u64; 32];
+        gpr[19] = 0xffffffffa0001000;
+        begin["gpr"] = json!(gpr);
+        let mut effect = begin.clone();
+        effect["kind"] = json!("cpu_ram_write");
+        effect["ordinal"] = json!(21);
+        effect["address"] = json!(0x1000);
+        effect["bytes"] = json!(4);
+        effect["gpr"] = json!([]);
+        let parent = Loaded {
+            context: 10,
+            read: 11,
+            register: 8,
+            bits: 0,
+            address: PhysicalAddr(0x04000000),
+            origins: std::array::from_fn(|n| SpByteOrigin::DmemDma {
+                promote_context: 1,
+                read_ordinal: 2,
+                write_ordinal: 3,
+                source: PhysicalAddr(0x2000 + n as u32),
+                parent: RamByteOrigin::SpDma {
+                    write_ordinal: 4,
+                    source_offset: n as u16,
+                },
+            }),
+        };
+        (
+            ram,
+            serde_json::from_value(begin).unwrap(),
+            serde_json::from_value(effect).unwrap(),
+            parent,
+        )
+    }
+    #[test]
+    fn cpu_ram_copy_keeps_held_load_parents_but_unattributed_equal_store_cuts_them() {
+        let (mut ram, begin, effect, parent) = cpu_ram_fixture();
+        ram.cpu_write(&effect, &begin, Some(&parent)).unwrap();
+        for n in 0..4 {
+            assert_eq!(
+                ram.origins[n],
+                RamByteOrigin::CpuCopy {
+                    write_ordinal: 21,
+                    source_offset: n as u8
+                }
+            );
+        }
+        let copied = ram.cpu_writes[0].copy_parent.as_ref().unwrap();
+        assert_eq!(copied.source_bytes, parent.origins);
+        assert_eq!((copied.load_context, copied.read_ordinal), (10, 11));
+        let mut equal = effect;
+        equal.ordinal = 22;
+        ram.cpu_write(&equal, &begin, None).unwrap();
+        assert!(ram.cpu_writes[1].copy_parent.is_none());
+        assert!(ram.origins[..4].iter().all(|origin| *origin
+            == RamByteOrigin::Unknown {
+                cut_ordinal: Some(22)
+            }));
+        assert_eq!(ram.bytes[..4], [0; 4]);
+    }
+    #[test]
+    fn cpu_ram_copy_cannot_borrow_wrong_register_or_equal_low_bits_definition() {
+        for mode in 0..11 {
+            let (mut ram, mut begin, mut effect, mut parent) = cpu_ram_fixture();
+            match mode {
+                0 => parent.register = 9,
+                1 => parent.bits = 1 << 32,
+                2 => begin.gpr[19] = 0xffffffff80001000,
+                3 => begin.gpr[19] += 1,
+                4 => effect.address += 4,
+                5 => effect.value = 1,
+                6 => effect.bytes = 8,
+                7 => effect.context += 1,
+                8 => effect.cpu = false,
+                9 => ram.cpu_ram_enabled = false,
+                _ => effect.word ^= 1,
+            }
+            assert!(
+                ram.cpu_write(&effect, &begin, Some(&parent)).is_err(),
+                "mode {mode}"
+            );
         }
     }
 }

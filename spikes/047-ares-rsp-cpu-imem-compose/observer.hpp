@@ -205,6 +205,13 @@ static void compose_ram_fetch(bool begin,u64 pc,u32 physical,u32 busAddress,bool
 static void compose_ram_scalar(bool write,u32 address,u32 bytes,u32 device,u64 value) {
   if(address<0x6000 || address>=(PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030)) return; // Explicit declared RAM snapshot.
   if(write) {
+    #if PLAID_RSP_DEFINITIONS_FIXTURE >= 12
+    if(composeCpuContext && device==(u32)RBusDevice::VR4300_UNCACHED) {
+      if(composeRspContext || composeFetchContext || bytes!=4) std::abort();
+      compose_push("cpu_ram_write",composeCpuContext,composeCpuPc,composeCpuWord,address,0,0,bytes,value,true);
+      return;
+    }
+    #endif
     if(composeCpuContext || composeRspContext || composeFetchContext || bytes!=4) std::abort();
     u32 source=0;
     bool dma=device==(u32)RBusDevice::SP_DMA;

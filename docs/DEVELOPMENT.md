@@ -248,6 +248,16 @@ line. Use spike068 and `python scripts/test_rsp_definitions.py --cache-invalidat
 v0-v10 reports stay exact. Other cache operations remain unsupported; the powered
 initial cache and explicit host roots grant no general lifetime/census proof.
 
+Controlled v12 joins the existing actual SP LW/held-register verifier to one
+completed direct-KSEG1 CPU SW RAM effect per decoder. Preserve load/read IDs and
+byte parents in its writer receipt; no held definition means UNKNOWN byte cuts.
+SW copies low32 bits but the held definition must match the complete source GPR.
+Cached hits keep fill-time parents; invalidation/refill captures the new CPU
+writer. Explicit opaque roots may include uncached fetch/scalar-read boundaries
+in this profile and still cut register definitions. Use spike069 and
+`python scripts/test_rsp_definitions.py --cpu-ram-copy`; v0-v11 reports stay exact.
+General cached data copies/transforms/source/mutation/lifetime remain OPEN.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,
