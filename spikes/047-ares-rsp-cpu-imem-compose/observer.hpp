@@ -101,6 +101,15 @@ static void compose_tlb_write(u32 slot) {
   compose_push("tlb_write",composeCpuContext,composeCpuPc,composeCpuWord,slot,0,0,0,0,true);
   compose_tlb_state(composeEvents.back());
 }
+#if PLAID_RSP_DEFINITIONS_FIXTURE >= 22
+static void compose_tlbr(u32 slot) {
+  if(!composeEnabled)return;
+  if(!composeCpuContext || composeCpuWord!=0x42000001u || composeRspContext || composeFetchContext
+      || slot!=cpu.scc.index.tlbEntry || slot>=32)std::abort();
+  compose_push("tlb_read",composeCpuContext,composeCpuPc,composeCpuWord,slot,0,0,0,0,true);
+  compose_tlb_state(composeEvents.back());
+}
+#endif
 #endif
 static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
   if(begin) {
@@ -140,6 +149,9 @@ static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
   #endif
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 18
   if(begin && word==0x42000002u)compose_tlb_state(composeEvents.back());
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 22
+  if(begin && word==0x42000001u)compose_tlb_state(composeEvents.back());
+  #endif
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 19
   if(begin && (word&0xffe0ffffu)==0x40805000u)compose_tlb_state(composeEvents.back());
   #endif

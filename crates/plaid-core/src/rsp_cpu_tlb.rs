@@ -1,5 +1,6 @@
 //! Current TLB operation facts for the unified writer/cache/execution graph.
 //! Raw entry observations never mint operation generations by themselves.
+use crate::tlbr_history::{TlbContextFingerprint, TlbrContextGeneration};
 use crate::{
     exception_roots::KernelAddressMode,
     program::{GuestVirtualAddr, PhysicalAddr},
@@ -84,6 +85,8 @@ pub struct Observation {
 #[serde(deny_unknown_fields)]
 pub struct Witness {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tlbr_load_ordinal: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entry_lo_write_ordinal: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_write_ordinal: Option<u64>,
@@ -104,11 +107,27 @@ pub struct ContextWrite {
     pub after: State,
     pub same_staged_content: bool,
 }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContextLoad {
+    pub generation: TlbrContextGeneration,
+    pub installed_write_ordinal: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_lo_write_ordinal: Option<u64>,
+}
+#[derive(Clone, Copy)]
+enum ContextSource {
+    EntryHi(usize),
+    Tlbr(usize),
+}
 pub(crate) struct Replay {
     initial: Initial,
     staged: Entry,
     pub context_writes: Vec<ContextWrite>,
     pub entry_lo_writes: Vec<ContextWrite>,
+    pub context_loads: Vec<ContextLoad>,
+    current_context: Option<ContextSource>,
+    staged_page_writer: Option<u64>,
     entries: Vec<Entry>,
     writers: [Option<usize>; 32],
     page_writers: [Option<u64>; 32],
@@ -133,6 +152,9 @@ impl Replay {
             staged: initial.staged.clone(),
             context_writes: Vec::new(),
             entry_lo_writes: Vec::new(),
+            context_loads: Vec::new(),
+            current_context: None,
+            staged_page_writer: None,
             initial,
             writers: [None; 32],
             page_writers: [None; 32],
@@ -198,7 +220,7 @@ impl Replay {
             same_entry_content: self.entries[slot] == expected[slot],
         });
         self.writers[slot] = Some(self.generations.len() - 1);
-        self.page_writers[slot] = self.entry_lo_writes.last().map(|write| write.write_ordinal);
+        self.page_writers[slot] = self.staged_page_writer;
         self.entries = expected;
         Ok(())
     }
@@ -255,6 +277,7 @@ impl Replay {
             after: after.clone(),
             same_staged_content: before.staged == after.staged,
         });
+        self.current_context = Some(ContextSource::EntryHi(self.context_writes.len() - 1));
         self.staged = expected;
         Ok(())
     }
@@ -327,6 +350,7 @@ impl Replay {
             after: after.clone(),
             same_staged_content: before.staged == after.staged,
         });
+        self.staged_page_writer = Some(ordinal);
         self.staged = expected;
         Ok(())
     }
@@ -354,6 +378,89 @@ impl Replay {
                 && generation.end_ordinal == 0
                 && generation.write_ordinal.checked_add(1) == Some(ordinal),
             "TLBWI end lost operation identity",
+        )?;
+        generation.end_ordinal = ordinal;
+        Ok(())
+    }
+    pub fn load(
+        &mut self,
+        pc: u64,
+        context: u64,
+        ordinal: u64,
+        before: &State,
+        after: &State,
+    ) -> Result<(), String> {
+        let control = &before.control;
+        require(
+            control.state.pc.0 == pc
+                && control.state.kernel
+                && control.state.kernel_mode == KernelAddressMode::Bits32
+                && !control.interrupt_enable
+                && !control.state.bev
+                && !control.state.exl
+                && !control.state.erl
+                && !control.state.delay_slot
+                && !control.state.branch_delay
+                && control.state.cause == 0
+                && after.control == *control,
+            "unsupported TLBR privilege/state transition",
+        )?;
+        require(
+            before.index == self.initial.index
+                && after.index == before.index
+                && before.staged == self.staged
+                && before.entries == self.entries
+                && after.entries == before.entries,
+            "TLBR lost current slot/staged/table state",
+        )?;
+        let slot = before.index as usize;
+        require(
+            after.staged == self.entries[slot],
+            "TLBR did not copy selected installed entry",
+        )?;
+        let writer = self.writers[slot].ok_or("TLBR selected entry lacks captured writer")?;
+        require(
+            self.generations[writer].end_ordinal != 0,
+            "TLBR preceded completed installed write",
+        )?;
+        let fingerprint = |entry: &Entry| TlbContextFingerprint {
+            sha256: entry.fingerprint().sha256,
+            asid: entry.asid,
+        };
+        self.context_loads.push(ContextLoad {
+            generation: TlbrContextGeneration {
+                operation_generation: self.context_loads.len() as u64 + 1,
+                epoch: 1,
+                context,
+                pc: GuestVirtualAddr(pc),
+                begin_ordinal: context,
+                load_ordinal: ordinal,
+                end_ordinal: 0,
+                selected_slot: before.index,
+                before_context: fingerprint(&before.staged),
+                selected_entry: fingerprint(&self.entries[slot]),
+                after_context: fingerprint(&after.staged),
+                same_context_content: before.staged == after.staged,
+            },
+            installed_write_ordinal: self.generations[writer].write_ordinal,
+            entry_lo_write_ordinal: self.page_writers[slot],
+        });
+        self.current_context = Some(ContextSource::Tlbr(self.context_loads.len() - 1));
+        self.staged_page_writer = self.page_writers[slot];
+        self.staged = after.staged.clone();
+        Ok(())
+    }
+    pub fn finish_load(&mut self, context: u64, ordinal: u64) -> Result<(), String> {
+        let generation = &mut self
+            .context_loads
+            .last_mut()
+            .ok_or("TLBR lacks load occurrence")?
+            .generation;
+        require(
+            generation.context == context
+                && generation.end_ordinal == 0
+                && generation.load_ordinal.checked_add(1) == Some(ordinal),
+            "TLBR end lost load identity",
         )?;
         generation.end_ordinal = ordinal;
         Ok(())
@@ -403,13 +510,26 @@ impl Replay {
             "mapped fetch preceded completed context write",
         )?;
         let generation = &self.generations[index];
+        let (context_write_ordinal, tlbr_load_ordinal) = match self.current_context {
+            None => (None, None),
+            Some(ContextSource::EntryHi(n)) => (Some(self.context_writes[n].write_ordinal), None),
+            Some(ContextSource::Tlbr(n)) => {
+                let load = &self.context_loads[n].generation;
+                require(
+                    load.end_ordinal != 0,
+                    "mapped fetch preceded completed TLBR",
+                )?;
+                (None, Some(load.load_ordinal))
+            }
+        };
         require(
             generation.end_ordinal != 0,
             "mapped fetch preceded completed TLBWI",
         )?;
         Ok(Witness {
+            tlbr_load_ordinal,
             entry_lo_write_ordinal: self.page_writers[slot],
-            context_write_ordinal: self.context_writes.last().map(|write| write.write_ordinal),
+            context_write_ordinal,
             write_ordinal: generation.write_ordinal,
             selected_slot: slot as u32,
             current_asid: observation.asid,
@@ -584,6 +704,95 @@ mod tests {
                         &observation
                     )
                     .is_err(),
+                "mode {mode}"
+            );
+        }
+    }
+    #[test]
+    fn tlbr_context_load_restores_installed_page_parent_and_latest_context() {
+        let (mut replay, before, installed) = fixture();
+        let pc = before.control.state.pc.0;
+        replay.write(pc, 10, 11, &before, &installed).unwrap();
+        replay.finish(10, 12).unwrap();
+        let mut staged = installed.clone();
+        staged.staged.asid = 8;
+        replay
+            .context_write(pc, 20, 21, (25, 0x6008), &installed, &staged)
+            .unwrap();
+        replay.finish_context(20, 22).unwrap();
+        staged.staged.physical[0] = 0xe000;
+        staged.staged.dirty[0] = true;
+        let mut prior = installed.clone();
+        prior.staged.asid = 8;
+        replay
+            .entry_lo_write(pc, 30, 31, (27, 0x39e), &prior, &staged)
+            .unwrap();
+        replay.finish_entry_lo(30, 32).unwrap();
+        let observation = Observation {
+            asid: 7,
+            kernel: true,
+            bits: 32,
+            entries: installed.entries.clone(),
+        };
+        replay.load(pc, 40, 41, &staged, &installed).unwrap();
+        assert!(
+            replay
+                .fetch(0x6028, PhysicalAddr(0x6028), &observation)
+                .is_err()
+        );
+        replay.finish_load(40, 42).unwrap();
+        replay.load(pc, 50, 51, &installed, &installed).unwrap();
+        replay.finish_load(50, 52).unwrap();
+        let selected = replay
+            .fetch(0x6028, PhysicalAddr(0x6028), &observation)
+            .unwrap();
+        assert_eq!(selected.tlbr_load_ordinal, Some(51));
+        assert_eq!(selected.context_write_ordinal, None);
+        assert_eq!(selected.entry_lo_write_ordinal, None);
+        assert_eq!(selected.write_ordinal, 11);
+        assert!(replay.context_loads[1].generation.same_context_content);
+        assert_eq!(replay.context_loads[0].installed_write_ordinal, 11);
+        replay.write(pc, 60, 61, &installed, &installed).unwrap();
+        replay.finish(60, 62).unwrap();
+        assert_eq!(
+            replay
+                .fetch(0x6028, PhysicalAddr(0x6028), &observation)
+                .unwrap()
+                .entry_lo_write_ordinal,
+            None
+        );
+        replay
+            .context_write(pc, 70, 71, (26, 0x6007), &installed, &installed)
+            .unwrap();
+        replay.finish_context(70, 72).unwrap();
+        let selected = replay
+            .fetch(0x6028, PhysicalAddr(0x6028), &observation)
+            .unwrap();
+        assert_eq!(selected.tlbr_load_ordinal, None);
+        assert_eq!(selected.context_write_ordinal, Some(71));
+    }
+    #[test]
+    fn tlbr_cannot_borrow_a_slot_snapshot_or_modify_the_installed_table() {
+        for mode in 0..7 {
+            let (mut replay, before, installed) = fixture();
+            let pc = before.control.state.pc.0;
+            if mode != 0 {
+                replay.write(pc, 10, 11, &before, &installed).unwrap();
+                replay.finish(10, 12).unwrap();
+            }
+            let mut before = installed.clone();
+            let mut after = installed;
+            match mode {
+                0 => before.entries = replay.entries.clone(),
+                1 => after.entries[0].asid = 8,
+                2 => after.staged.physical[0] = 0xe000,
+                3 => before.index = 32,
+                4 => before.control.state.exl = true,
+                5 => after.control.state.pc.0 += 4,
+                _ => before.staged.asid = 8,
+            }
+            assert!(
+                replay.load(pc, 20, 21, &before, &after).is_err(),
                 "mode {mode}"
             );
         }

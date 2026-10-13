@@ -2356,6 +2356,21 @@ reports retain their shapes/bytes. Broader CP0/global/geometry/privilege/hazards
 reset/restore/source/census/root/lifetime/whole-ROM/native remain OPEN; all flags
 false, no milestone promotion. See staged-page/remap receipt.
 
+ADR-0118 TLBR/context-load follow-up (2026-10-13): controlled v21 observes
+successful guest TLBR after actual selected-slot copy, binds full normalized
+before/completed staged/table/CP0 state and unchanged GPRs, and derives canonical
+`TlbrContextGeneration` fingerprints. Retain selected installed TLBWI/page-writer
+parents; the load neither writes a slot nor retires a cache fill. Current context
+selects EntryHi or TLBR by latest occurrence, including equal writes/loads.
+Reload also restores staged page ancestry from the selected slot for later
+TLBWI; a newer uninstalled page write cannot be borrowed. Actual EntryHi424
+moves ASID away; loads431/438 restore7, with equal438 selected at remapped BREAK
+and returned consumption. Slot417/page405 and executable writer/fill ancestry
+remain distinct. Reconcile spike054's invariant without importing its staged
+component/CI scaffolding. Broader Index/no-load/privilege/global/geometry/reset/
+restore/hazards/source/census/root/lifetime/whole-ROM/native stay OPEN; all flags
+false, no milestone promotion. See TLBR/context receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

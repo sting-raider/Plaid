@@ -339,6 +339,14 @@ Same-value writes replace occurrence identity. Run
 `python scripts/test_rsp_definitions.py --entrylo-remap`; earlier report shapes
 omit the new optional parents. General CP0/mutation/mapping/lifetime remain OPEN.
 
+Controlled v21/spike079 observes successful TLBR after the selected-slot copy.
+Full normalized data derives canonical `TlbrContextGeneration`; selected
+installed write/page parents remain separate from latest active context. Mapped
+consumers select EntryHi or TLBR by occurrence. Loads preserve installed table/
+cache, and restore staged page ancestry for later TLBWI. Run
+`python scripts/test_rsp_definitions.py --tlbr-context`; older optional report
+fields remain omitted. General no-load/Index/privilege/census/lifetime remain OPEN.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

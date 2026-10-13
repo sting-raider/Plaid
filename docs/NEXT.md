@@ -37,10 +37,13 @@ mapped address with surviving stale hits before/after actual ASID restoration,
 then actual invalidation/refill/root/return in the same v19 protocol. Controlled
 v20 also binds actual EntryLo0 page writers through TLBWI to changed physical
 selection and fresh writer/root/return ancestry. Staging alone leaves the old
-installed mapping active; equal page rewrites retain distinct identity. Next
+installed mapping active; equal page rewrites retain distinct identity. Controlled
+v21 also composes actual TLBR loads from installed slot/page ancestry with active
+ASID and mapped consumption; equal loads retain occurrence identity. Next
 compose other mapping/control producers and broader root/control lifetime with
 complete mutation coverage. Keep ERET admission bounded to the uncut ERL0/kernel32/IE0 frame;
-ordinary static ERET stays unsupported. Reuse retained485-event/77-control v20,
+ordinary static ERET stays unsupported. Reuse retained506-event/80-control v21,
+485-event/77-control v20,
 431-event/68-control fixture20,
 421-event/66-control v19,
 400-event/63-control v18,386-event/61-checkpoint v17,375-event/59-checkpoint v16,
