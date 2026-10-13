@@ -44,6 +44,9 @@ pub const DECODED_DMA_PROFILE: &str =
 pub const CACHED_DMA_FORMAT: &str = "plaid-rsp-cpu-imem-history-v10";
 pub const CACHED_DMA_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-dma-cached-cpu-consumption-v10";
+pub const INVALIDATION_FORMAT: &str = "plaid-rsp-cpu-imem-history-v11";
+pub const INVALIDATION_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-dma-cached-cpu-invalidation-v11";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -105,6 +108,7 @@ enum Kind {
     CacheBurstRead,
     CacheFill,
     CpuReentry,
+    CacheOperation,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -136,6 +140,27 @@ struct Row {
     pending_full: Option<bool>,
     #[serde(default)]
     cache_line: Option<FetchCacheLine>,
+    #[serde(default)]
+    cache_operation: Option<DmaCacheOperation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DmaCacheOperation {
+    pub virtual_address: GuestVirtualAddr,
+    pub operation: u8,
+    pub before: FetchCacheLine,
+    pub after: FetchCacheLine,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DmaCacheInvalidation {
+    pub decoder_context: u64,
+    pub ordinal: u64,
+    pub physical: PhysicalAddr,
+    pub operation: DmaCacheOperation,
+    pub hit: bool,
+    pub ended_fill: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -414,6 +439,8 @@ pub struct DmemDmaConsumption {
     pub cache_fills: Option<Vec<DmaCacheFill>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cached_fetches: Option<Vec<CachedDmaCpuFetch>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_invalidations: Option<Vec<DmaCacheInvalidation>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -608,6 +635,9 @@ struct RamReplay {
     cache_fills: Vec<DmaCacheFill>,
     cache_slots: BTreeMap<u16, usize>,
     cached_fetches: Vec<CachedDmaCpuFetch>,
+    invalidation_enabled: bool,
+    cache_state: BTreeMap<u16, FetchCacheLine>,
+    cache_invalidations: Vec<DmaCacheInvalidation>,
 }
 enum PendingFetch {
     Uncached(usize),
@@ -701,6 +731,9 @@ impl RamReplay {
             cache_fills: Vec::new(),
             cache_slots: BTreeMap::new(),
             cached_fetches: Vec::new(),
+            invalidation_enabled: false,
+            cache_state: BTreeMap::new(),
+            cache_invalidations: Vec::new(),
         })
     }
     fn offset(&self, address: u32, width: usize) -> Result<usize, String> {
@@ -1055,6 +1088,7 @@ impl RamReplay {
                 "cache fill disagrees with preceding completed burst",
             )?;
             self.cache_slots.insert(frame.slot, self.cache_fills.len());
+            self.cache_state.insert(frame.slot, frame);
             self.cache_fills.push(DmaCacheFill {
                 fetch_context: begin.context,
                 burst_ordinal: burst.ordinal,
@@ -1064,6 +1098,73 @@ impl RamReplay {
                 source_bytes: origins,
             });
         }
+        Ok(())
+    }
+    fn invalidate(&mut self, row: &Row, begin: &Row) -> Result<(), String> {
+        effect_row(row)?;
+        let operation = row
+            .cache_operation
+            .as_ref()
+            .ok_or("cache operation lacks snapshots")?;
+        let address = begin.gpr[((begin.word >> 21) & 31) as usize]
+            .wrapping_add_signed(i64::from(begin.word as i16));
+        require(
+            self.invalidation_enabled
+                && same(begin, row)
+                && begin.word >> 26 == 0x2f
+                && ((begin.word >> 16) & 31) == 16
+                && operation.operation == 16
+                && (0xffffffff80000000..0xffffffff80800000).contains(&address)
+                && address.is_multiple_of(4)
+                && operation.virtual_address.0 == address
+                && row.address == address as u32 & 0x1fffffff
+                && row.cpu
+                && row.bank == 0
+                && row.offset == 0
+                && row.bytes == 0
+                && row.value == 0
+                && self.active.is_none()
+                && self.pending.is_none()
+                && self.request.is_none()
+                && self.cache_burst.is_none(),
+            "cache operation differs from decoded direct-KSEG0 HitInvalidateI",
+        )?;
+        let slot = ((address >> 5) & 511) as u16;
+        let initial = FetchCacheLine {
+            slot,
+            tag_key: 0,
+            index: (slot << 5) & 0xfe0,
+            words: [0; 8],
+        };
+        require(
+            operation.before == *self.cache_state.get(&slot).unwrap_or(&initial),
+            "cache operation before snapshot differs from tracked resident state",
+        )?;
+        let hit = operation.before.tag_key == (row.address & !4095) | 1;
+        let mut after = operation.before;
+        if hit {
+            after.tag_key &= !1;
+        }
+        require(
+            operation.after == after,
+            "invalid HitInvalidateI cache transition",
+        )?;
+        let ended_fill = if hit {
+            self.cache_slots
+                .remove(&slot)
+                .map(|index| self.cache_fills[index].fill_ordinal)
+        } else {
+            None
+        };
+        self.cache_state.insert(slot, after);
+        self.cache_invalidations.push(DmaCacheInvalidation {
+            decoder_context: begin.context,
+            ordinal: row.ordinal,
+            physical: PhysicalAddr(row.address),
+            operation: operation.clone(),
+            hit,
+            ended_fill,
+        });
         Ok(())
     }
     fn cached_end(&mut self, begin: &Row, row: &Row, no_scalar: bool) -> Result<(), String> {
@@ -1330,6 +1431,9 @@ impl RamReplay {
             pending_commits: self.pending_dma.map(|pending| pending.commits),
             cache_fills: self.cached.then_some(self.cache_fills),
             cached_fetches: self.cached.then_some(self.cached_fetches),
+            cache_invalidations: self
+                .invalidation_enabled
+                .then_some(self.cache_invalidations),
         })
     }
 }
@@ -1511,7 +1615,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let cached_enabled = h.format == CACHED_DMA_FORMAT && h.profile == CACHED_DMA_PROFILE;
+    let invalidation_enabled = h.format == INVALIDATION_FORMAT && h.profile == INVALIDATION_PROFILE;
+    let cached_enabled =
+        invalidation_enabled || (h.format == CACHED_DMA_FORMAT && h.profile == CACHED_DMA_PROFILE);
     let decoded_dma_enabled =
         cached_enabled || (h.format == DECODED_DMA_FORMAT && h.profile == DECODED_DMA_PROFILE);
     let pending_enabled =
@@ -1567,6 +1673,7 @@ pub fn inspect_rsp_cpu_imem_history(
         .transpose()?;
     if let Some(ram) = &mut ram {
         ram.cached = cached_enabled;
+        ram.invalidation_enabled = invalidation_enabled;
     }
     require(
         pending_enabled == h.initial_pending.is_some(),
@@ -1613,6 +1720,11 @@ pub fn inspect_rsp_cpu_imem_history(
             "noncontiguous event identity or phase order",
         )?;
         phase = row.phase;
+        require(
+            row.cache_operation.is_none()
+                || (invalidation_enabled && row.kind == Kind::CacheOperation),
+            "cache operation metadata outside decoded operation boundary",
+        )?;
         require(
             row.cache_line.is_none()
                 || (cached_enabled
@@ -1695,6 +1807,24 @@ pub fn inspect_rsp_cpu_imem_history(
             )?;
         }
         match row.kind {
+            Kind::CacheOperation => {
+                let Some(Active::Cpu {
+                    begin,
+                    read,
+                    written,
+                }) = &mut active
+                else {
+                    return Err("cache operation lacks CPU decoder scope".into());
+                };
+                require(
+                    invalidation_enabled && read.is_none() && !*written,
+                    "duplicate or unsupported cache operation effect",
+                )?;
+                ram.as_mut()
+                    .ok_or("cache operation lacks RAM profile")?
+                    .invalidate(&row, begin)?;
+                *written = true;
+            }
             Kind::CpuReentry => {
                 boundary(&row, true)?;
                 require(
@@ -2235,6 +2365,11 @@ pub fn inspect_rsp_cpu_imem_history(
                     require(
                         written && read.is_none(),
                         "CPU store lacks its completed sink",
+                    )?;
+                } else if op == 0x2f {
+                    require(
+                        invalidation_enabled && written && read.is_none(),
+                        "CACHE lacks its completed validated operation",
                     )?;
                 } else {
                     require(
@@ -4320,6 +4455,131 @@ mod tests {
                 fill.cache_line.as_mut().unwrap().tag_key ^= 0x1000;
                 assert!(ram.cache(fill).is_err());
             }
+        }
+    }
+    fn invalidate_fixture() -> (RamReplay, Row, Row) {
+        let (mut ram, value) = cache_fixture();
+        ram.invalidation_enabled = true;
+        let frame: FetchCacheLine = serde_json::from_value(value).unwrap();
+        ram.cache_state.insert(frame.slot, frame);
+        ram.cache_slots.insert(frame.slot, 0);
+        ram.cache_fills.push(DmaCacheFill {
+            fetch_context: 1,
+            burst_ordinal: 2,
+            fill_ordinal: 3,
+            physical_line: PhysicalAddr(0x1000),
+            cache_line: frame,
+            source_bytes: std::array::from_fn(|n| ram.origins[n].clone()),
+        });
+        let mut begin = row("cpu_begin", 5, 5);
+        begin["word"] = json!(0xbe500000u32);
+        let mut gpr = vec![0u64; 32];
+        gpr[18] = 0xffffffff80001000;
+        begin["gpr"] = json!(gpr);
+        begin["cpu"] = json!(true);
+        let mut effect = begin.clone();
+        effect["kind"] = json!("cache_operation");
+        effect["ordinal"] = json!(6);
+        effect["address"] = json!(0x1000);
+        effect["gpr"] = json!([]);
+        let mut after = frame;
+        after.tag_key &= !1;
+        effect["cache_operation"] = json!(DmaCacheOperation {
+            virtual_address: GuestVirtualAddr(gpr[18]),
+            operation: 16,
+            before: frame,
+            after,
+        });
+        (
+            ram,
+            serde_json::from_value(begin).unwrap(),
+            serde_json::from_value(effect).unwrap(),
+        )
+    }
+    #[test]
+    fn invalidation_ends_old_fill_and_equal_refill_uses_fresh_writer_parents() {
+        let (mut ram, begin, effect) = invalidate_fixture();
+        ram.invalidate(&effect, &begin).unwrap();
+        assert!(ram.cache_slots.is_empty());
+        assert_eq!(ram.cache_invalidations[0].ended_fill, Some(3));
+        // An invalidation repeated against the now-invalid tuple is a miss.
+        let mut repeated = effect.clone();
+        let operation = repeated.cache_operation.as_mut().unwrap();
+        operation.before = operation.after;
+        ram.invalidate(&repeated, &begin).unwrap();
+        assert!(!ram.cache_invalidations[1].hit);
+        assert_eq!(ram.cache_invalidations[1].ended_fill, None);
+        let dmem = vec![0; 4096];
+        let origins = vec![SpByteOrigin::Unknown { cut_ordinal: None }; 4096];
+        let value = serde_json::to_value(effect.cache_operation.unwrap().before).unwrap();
+        ram.observe(
+            cache_row("ram_fetch_begin", 8, 8, 0x1010, &value),
+            &dmem,
+            &origins,
+        )
+        .unwrap();
+        let mut stale = cache_row("ram_fetch_end", 9, 8, 0x1010, &value);
+        let active = ram.active.as_ref().unwrap().0.clone();
+        assert!(ram.cached_end(&active, &stale, true).is_err());
+        // Equal backing bits do not make writer100 the parent of this new fill.
+        ram.origins[0] = RamByteOrigin::SpDma {
+            write_ordinal: 200,
+            source_offset: 0,
+        };
+        ram.cache(cache_row("cache_burst_read", 9, 8, 0x1000, &value))
+            .unwrap();
+        ram.cache(cache_row("cache_fill", 10, 8, 0x1000, &value))
+            .unwrap();
+        stale.ordinal = 11;
+        ram.observe(stale, &dmem, &origins).unwrap();
+        assert_eq!(
+            ram.cache_fills[1].source_bytes[0],
+            RamByteOrigin::SpDma {
+                write_ordinal: 200,
+                source_offset: 0
+            }
+        );
+        assert_eq!(ram.cached_fetches[0].fill_ordinal, 10);
+    }
+    #[test]
+    fn invalidate_miss_preserves_other_tag_parents_and_initial_invalid_state() {
+        let (mut ram, mut begin, mut effect) = invalidate_fixture();
+        begin.gpr[18] += 0x4000;
+        effect.address += 0x4000;
+        let operation = effect.cache_operation.as_mut().unwrap();
+        operation.virtual_address.0 += 0x4000;
+        operation.after = operation.before;
+        ram.invalidate(&effect, &begin).unwrap();
+        assert!(!ram.cache_invalidations[0].hit);
+        assert_eq!(ram.cache_slots[&128], 0);
+        ram.cache_state.clear();
+        ram.cache_slots.clear();
+        let operation = effect.cache_operation.as_mut().unwrap();
+        operation.before.tag_key = 0;
+        operation.after = operation.before;
+        ram.invalidate(&effect, &begin).unwrap();
+        assert!(!ram.cache_invalidations[1].hit);
+    }
+    #[test]
+    fn invalidate_operand_scope_full_tuple_and_transition_forgeries_fail_closed() {
+        for mode in 0..12 {
+            let (mut ram, mut begin, mut effect) = invalidate_fixture();
+            let operation = effect.cache_operation.as_mut().unwrap();
+            match mode {
+                0 => operation.before.words[7] = 1,
+                1 => operation.after.words[7] = 1,
+                2 => operation.after.tag_key |= 1,
+                3 => operation.before.index = 32,
+                4 => operation.before.slot = 129,
+                5 => operation.operation = 0,
+                6 => operation.virtual_address.0 += 4,
+                7 => begin.gpr[18] += 4,
+                8 => effect.context += 1,
+                9 => effect.address += 4,
+                10 => ram.invalidation_enabled = false,
+                _ => effect.cpu = false,
+            }
+            assert!(ram.invalidate(&effect, &begin).is_err(), "mode {mode}");
         }
     }
 }

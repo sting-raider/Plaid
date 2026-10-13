@@ -15,6 +15,10 @@ struct ComposeEvent {
   bool cacheValid=false;
   u32 cacheSlot=0,cacheTag=0,cacheIndex=0;
   std::vector<u32> cacheWords;
+  bool operationValid=false;
+  u64 operationAddress=0;
+  u32 operation=0,tagBefore=0,tagAfter=0;
+  std::vector<u32> wordsBefore,wordsAfter;
 };
 static std::vector<ComposeEvent> composeEvents;
 static u32 composePhase=0,composeRspContext=0,composeRspPc=0,composeRspWord=0;
@@ -111,6 +115,17 @@ static void compose_cache_fill(u32 slot,u32 physical,u32 index,const u32* words)
   compose_push("cache_fill",composeFetchContext,composeFetchPc,0,(physical&~4095)|index,0,0,32,0,true);
   compose_cache_snapshot(composeEvents.back(),slot,(physical&~4095)|1,index,words);
 }
+#if PLAID_RSP_DEFINITIONS_FIXTURE >= 11
+static void compose_cache_operation(u64 pc,u32 op,u64 virtualAddress,u32 physical,
+    u32 before,u32 after,const u32* wordsBefore,const u32* wordsAfter) {
+  if(!composeEnabled) return;
+  if(!composeCpuContext || composeRspContext || composeFetchContext || pc!=composeCpuPc || op!=16) std::abort();
+  compose_push("cache_operation",composeCpuContext,pc,composeCpuWord,physical,0,0,0,0,true);
+  auto& e=composeEvents.back();e.operationValid=true;e.operationAddress=virtualAddress;e.operation=op;
+  e.cacheSlot=(virtualAddress>>5)&511;e.cacheIndex=virtualAddress&0xfe0;e.tagBefore=before;e.tagAfter=after;
+  for(u32 n=0;n<8;n++){e.wordsBefore.push_back(wordsBefore[n]);e.wordsAfter.push_back(wordsAfter[n]);}
+}
+#endif
 #endif
 #if PLAID_RSP_DEFINITIONS_FIXTURE >= 8
 static void compose_dma_pending(u32 address,u32 value,bool originCpu) {
@@ -255,6 +270,16 @@ static void compose_print() {
       std::printf(",\"cache_line\":{\"slot\":%u,\"tag_key\":%u,\"index\":%u,\"words\":[",e.cacheSlot,e.cacheTag,e.cacheIndex);
       for(size_t i=0;i<e.cacheWords.size();i++) std::printf("%s%u",i?",":"",e.cacheWords[i]);
       std::printf("]}");
+    }
+    if(e.operationValid) {
+      std::printf(",\"cache_operation\":{\"virtual_address\":%llu,\"operation\":%u",(unsigned long long)e.operationAddress,e.operation);
+      for(u32 n=0;n<2;n++) {
+        std::printf(",\"%s\":{\"slot\":%u,\"tag_key\":%u,\"index\":%u,\"words\":[",n?"after":"before",e.cacheSlot,n?e.tagAfter:e.tagBefore,e.cacheIndex);
+        auto& words=n?e.wordsAfter:e.wordsBefore;
+        for(size_t i=0;i<words.size();i++) std::printf("%s%u",i?",":"",words[i]);
+        std::printf("]}");
+      }
+      std::printf("}");
     }
     std::printf("}");
   }

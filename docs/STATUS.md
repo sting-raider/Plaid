@@ -1,5 +1,14 @@
 # Status
 
+Controlled v11 now composes actual guest HitInvalidateI with DMA replacement,
+fresh completed refill and cached executable consumption. Exact decoded operands
+and full before/after tuples end fill199; equal NOP bits later consume fill225
+and fresh RAMwriter219, retaining earlier DMEM ingress/RAM/RSP parents. The228-event
+source/34 matched controls and independent complete graph agree. Misses preserve
+other-tag parents; repeated invalidation cannot recover old fill eligibility.
+All eleven v0-v10 reports stay exact. Other cache operations and complete
+mutation/mapping/root/restore/lifetime/whole-ROM/native coverage remain OPEN.
+
 The RSP/DMA graph now reaches actual cached CPU consumption under controlled v10.
 Completed32-byte burst/fill pairs retain all fill-time RAM byte parents and the
 canonical resident tuple. Later changed backing cannot replace those parents.
