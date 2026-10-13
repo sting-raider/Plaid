@@ -42,10 +42,13 @@ v21 also composes actual TLBR loads from installed slot/page ancestry with activ
 ASID and mapped consumption; equal loads retain occurrence identity. Controlled
 v22 additionally joins completed direct-SP SC effects/current LL source reads to
 actual IMEM/RSP consumption, preserving failed attempts and equal writer identity.
-Next
+Controlled v23 also joins SB/SH whole-SP-Word sinks and a held XORI expression
+to actual IMEM/RSP consumption, keeping device vs aligned addresses and shifted
+lanes' weaker ancestry distinct. Next
 compose other mapping/control producers and broader root/control lifetime with
 complete mutation coverage. Keep ERET admission bounded to the uncut ERL0/kernel32/IE0 frame;
-ordinary static ERET stays unsupported. Reuse retained542-event/88-control v22,
+ordinary static ERET stays unsupported. Reuse retained570-event/94-control v23,
+542-event/88-control v22,
 506-event/80-control v21,
 485-event/77-control v20,
 431-event/68-control fixture20,

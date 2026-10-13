@@ -2387,6 +2387,21 @@ reservations. General faults/cached/mapped/endian/reservation/source/census/root
 lifetime/whole-ROM/native stay OPEN; all flags false, no milestone promotion.
 See conditional IMEM composition receipt.
 
+ADR-0118 subword/IMEM-transform follow-up (2026-10-13): controlled v23 binds
+actual SB/SH raw device addresses separately from aligned completed SP Word
+sinks, full GPR/control/endian before/completed state and direct-KSEG1 translation
+to canonical `cpu_sp_subword`. The lower sink, not nominal opcode width, defines
+mutation span. Optional IMEM-copy transforms reuse `CpuXorTransform`; explicit
+shift-zero lanes (SB3/SH2) retain identity-word source ancestry, while other lanes
+keep their mutation witness without borrowing that relation. Actual load547/
+read548/XORI553 -> equal Word writers559/567 -> RSP561/569 retain distinct writer
+generations and shared DMEM/DMA/RSP ancestry. A separate synthetic shifted-lane
+history checks absent identity copy without executing its unsupported RSP word;
+it is not an actual/hardware result. Earlier report shapes/policies remain exact.
+Preserve masked-source/reference disagreement and general fault/alias/endian/
+shift/source/census/root/lifetime/whole-ROM/native gaps. All flags false; no
+milestone promotion or upstream production reuse. See subword IMEM receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

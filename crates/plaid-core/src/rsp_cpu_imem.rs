@@ -8,6 +8,10 @@ use crate::{
     cpu_sp_conditional::{
         CompletedCpuSpWordEffect, ScExecutionContext, ScSpMutationWitness, verify_sc_sp_effect,
     },
+    cpu_sp_subword::{
+        CompletedCpuSpWordEffect as SubwordEffect, CpuSpBank, CpuSpSubwordContext,
+        CpuSpSubwordMutationWitness, verify_cpu_sp_subword_effect,
+    },
     exception_roots::{
         ExceptionClass, ExceptionRootInput, ExceptionRootReceipt, KernelAddressMode,
         resolve_exception_root,
@@ -72,6 +76,9 @@ pub const CONTEXT_FORMAT: &str = "plaid-rsp-cpu-imem-history-v19";
 pub const PAGE_FORMAT: &str = "plaid-rsp-cpu-imem-history-v20";
 pub const LOAD_FORMAT: &str = "plaid-rsp-cpu-imem-history-v21";
 pub const CONDITIONAL_FORMAT: &str = "plaid-rsp-cpu-imem-history-v22";
+pub const SUBWORD_FORMAT: &str = "plaid-rsp-cpu-imem-history-v23";
+pub const SUBWORD_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-subword-transform-imem-consumption-v23";
 pub const CONDITIONAL_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-conditional-sp-imem-consumption-v22";
 pub const LOAD_PROFILE: &str =
@@ -173,6 +180,10 @@ struct Row {
     ordinal: u64,
     #[serde(default)]
     linked_state: Option<CpuLinkedState>,
+    #[serde(default)]
+    store_state: Option<CpuSpStoreState>,
+    #[serde(default)]
+    sp_device_address: Option<PhysicalAddr>,
     context: u64,
     pc: u64,
     phase: u32,
@@ -995,6 +1006,8 @@ pub struct ImemCopyChain {
     pub destination: PhysicalAddr,
     pub word: u32,
     pub source_bytes: [SpByteOrigin; 4],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<CpuXorTransform>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1008,6 +1021,8 @@ pub struct RspCpuImemReport {
     pub copies: Vec<ImemCopyChain>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conditional_sp_attempts: Option<Vec<ScSpAttempt>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subword_sp_writes: Option<Vec<CpuSpSubwordMutationWitness>>,
     pub final_imem_writers: Vec<SpByteOrigin>,
     pub final_dmem_sha256: String,
     pub final_imem_sha256: String,
@@ -1036,6 +1051,38 @@ pub struct RspCpuImemReport {
 pub struct CpuLinkedState {
     pub control: CpuReturnState,
     pub linked_address: u64,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CpuSpStoreState {
+    pub linked: CpuLinkedState,
+    pub reverse_endian: bool,
+}
+fn subword_end(begin: &Row, end: &Row) -> Result<(), String> {
+    let before = begin
+        .store_state
+        .as_ref()
+        .ok_or("subword store lacks before state")?;
+    let after = end
+        .store_state
+        .as_ref()
+        .ok_or("subword store lacks completed state")?;
+    let control = &before.linked.control;
+    require(
+        control.state.pc.0 == begin.pc
+            && control.state.kernel
+            && control.state.kernel_mode == KernelAddressMode::Bits32
+            && !control.interrupt_enable
+            && !control.state.bev
+            && !control.state.exl
+            && !control.state.erl
+            && !control.state.delay_slot
+            && !control.state.branch_delay
+            && !before.reverse_endian
+            && before.linked.linked_address < 1 << 28
+            && before == after,
+        "subword store changed or lost bounded control/endian state",
+    )
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -2256,7 +2303,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let conditional_enabled = h.format == CONDITIONAL_FORMAT && h.profile == CONDITIONAL_PROFILE;
+    let subword_enabled = h.format == SUBWORD_FORMAT && h.profile == SUBWORD_PROFILE;
+    let conditional_enabled =
+        subword_enabled || (h.format == CONDITIONAL_FORMAT && h.profile == CONDITIONAL_PROFILE);
     let load_enabled =
         conditional_enabled || (h.format == LOAD_FORMAT && h.profile == LOAD_PROFILE);
     let page_enabled = load_enabled || (h.format == PAGE_FORMAT && h.profile == PAGE_PROFILE);
@@ -2395,6 +2444,7 @@ pub fn inspect_rsp_cpu_imem_history(
     let mut pending_load = false;
     let mut pending_sc = None;
     let mut conditional_sp_attempts = Vec::new();
+    let mut subword_sp_writes = Vec::new();
     let mut eret_returns: Vec<CpuEretReturn> = Vec::new();
     let mut pending_return: Option<usize> = None;
     let mut await_return: Option<usize> = None;
@@ -2413,6 +2463,20 @@ pub fn inspect_rsp_cpu_imem_history(
             "noncontiguous event identity or phase order",
         )?;
         phase = row.phase;
+        require(
+            row.store_state.is_none()
+                || (subword_enabled
+                    && matches!(row.kind, Kind::CpuBegin | Kind::CpuEnd)
+                    && matches!(row.word >> 26, 0x28 | 0x29)),
+            "store state outside subword decoder",
+        )?;
+        require(
+            row.sp_device_address.is_none()
+                || (subword_enabled
+                    && row.kind == Kind::SpWrite
+                    && matches!(row.word >> 26, 0x28 | 0x29)),
+            "SP device address outside subword sink",
+        )?;
         if row.kind == Kind::CpuReentry {
             linked_current = None;
         }
@@ -3327,9 +3391,17 @@ pub fn inspect_rsp_cpu_imem_history(
                     rt = ((begin.word >> 16) & 31) as usize;
                     let virtual_address =
                         begin.gpr[rs].wrapping_add_signed(i64::from(begin.word as i16));
+                    let subword = subword_enabled && matches!(op, 0x28 | 0x29);
+                    let observed_address = if subword {
+                        row.sp_device_address
+                            .ok_or("subword sink lacks raw device address")?
+                            .0
+                    } else {
+                        row.address
+                    };
                     require(
                         (0xffffffffa4000000..=0xffffffffa403ffff).contains(&virtual_address)
-                            && (virtual_address & 0x1fffffff) == u64::from(row.address),
+                            && (virtual_address & 0x1fffffff) == u64::from(observed_address),
                         "SP effect does not match decoded direct KSEG1 address",
                     )?;
                     if row.kind == Kind::SpRead {
@@ -3341,12 +3413,47 @@ pub fn inspect_rsp_cpu_imem_history(
                         )?;
                     } else {
                         require(
-                            (op == 0x2b || (conditional_enabled && op == 0x38))
+                            (op == 0x2b || (conditional_enabled && op == 0x38) || subword)
                                 && read.is_none()
                                 && !*written
-                                && row.value == u64::from(begin.gpr[rt] as u32),
+                                && (subword || row.value == u64::from(begin.gpr[rt] as u32)),
                             "invalid decoded SP store effect",
                         )?;
+                        if subword {
+                            let context = CpuSpSubwordContext {
+                                context_ordinal: begin.context,
+                                pc: GuestVirtualAddr(begin.pc),
+                                instruction_word: begin.word,
+                                gpr: begin
+                                    .gpr
+                                    .clone()
+                                    .try_into()
+                                    .map_err(|_| "subword GPR cardinality")?,
+                                reverse_endian: begin
+                                    .store_state
+                                    .as_ref()
+                                    .ok_or("subword lacks state")?
+                                    .reverse_endian,
+                            };
+                            let effect = SubwordEffect {
+                                effect_ordinal: row.ordinal,
+                                producer_context: row.context,
+                                virtual_destination: GuestVirtualAddr(virtual_address),
+                                translated_physical: PhysicalAddr(observed_address),
+                                sink_word_address: PhysicalAddr(row.address),
+                                bank: if row.bank == 0 {
+                                    CpuSpBank::Dmem
+                                } else {
+                                    CpuSpBank::Imem
+                                },
+                                offset: row.offset,
+                                value: row.value as u32,
+                            };
+                            subword_sp_writes.push(
+                                verify_cpu_sp_subword_effect(&context, Some(&effect))?
+                                    .ok_or("subword lacks effect")?,
+                            );
+                        }
                         if op == 0x38 {
                             let context = ScExecutionContext {
                                 context_id: begin.context,
@@ -3429,7 +3536,7 @@ pub fn inspect_rsp_cpu_imem_history(
                     if row.bank == 1
                         && row.context != 0
                         && let Some(parent) = &registers[rt]
-                        && parent.transform.is_none()
+                        && (parent.transform.is_none() || subword_enabled)
                     {
                         let Some(Active::Cpu { begin, .. }) = &active else {
                             unreachable!()
@@ -3437,6 +3544,17 @@ pub fn inspect_rsp_cpu_imem_history(
                         require(
                             begin.gpr[rt] == parent.bits,
                             "store source lost captured register definition",
+                        )?;
+                        let opcode = begin.word >> 26;
+                        let identity = !matches!(opcode, 0x28 | 0x29)
+                            || (opcode == 0x28 && row.sp_device_address.unwrap().0 & 3 == 3)
+                            || (opcode == 0x29 && row.sp_device_address.unwrap().0 & 3 == 2);
+                        if !identity {
+                            continue;
+                        }
+                        require(
+                            row.value as u32 == parent.bits as u32,
+                            "IMEM copy differs from held source expression",
                         )?;
                         copies.push(ImemCopyChain {
                             phase: row.phase,
@@ -3449,6 +3567,7 @@ pub fn inspect_rsp_cpu_imem_history(
                             destination: PhysicalAddr(row.address),
                             word: row.value as u32,
                             source_bytes: parent.origins.clone(),
+                            transform: parent.transform.clone(),
                         });
                     }
                 }
@@ -3576,6 +3695,12 @@ pub fn inspect_rsp_cpu_imem_history(
                         decoder_context: begin.context,
                         completed_effect: pending_sc.take(),
                     });
+                } else if subword_enabled && matches!(op, 0x28 | 0x29) {
+                    subword_end(&begin, &row)?;
+                    require(
+                        written && read.is_none(),
+                        "subword store lacks completed Word sink",
+                    )?;
                 } else if op == 0x2b {
                     require(
                         written && read.is_none(),
@@ -3701,6 +3826,7 @@ pub fn inspect_rsp_cpu_imem_history(
         rsp_instructions,
         copies,
         conditional_sp_attempts: conditional_enabled.then_some(conditional_sp_attempts),
+        subword_sp_writes: subword_enabled.then_some(subword_sp_writes),
         final_imem_writers: iorig,
         final_dmem_sha256: sha256(&dmem),
         final_imem_sha256: sha256(&imem),
@@ -5864,6 +5990,75 @@ mod tests {
             serde_json::from_value(effect).unwrap(),
             parent,
         )
+    }
+    #[test]
+    fn subword_control_end_cannot_change_privilege_endian_or_link_state() {
+        let (_, mut begin, _, _) = cpu_ram_fixture();
+        begin.word = 0xa2081003;
+        let state = CpuSpStoreState {
+            linked: CpuLinkedState {
+                control: CpuReturnState {
+                    state: CpuExceptionState {
+                        pc: GuestVirtualAddr(begin.pc),
+                        bev: false,
+                        exl: false,
+                        erl: false,
+                        kernel_mode: KernelAddressMode::Bits32,
+                        kernel: true,
+                        cause: 9,
+                        branch_delay: false,
+                        epc: GuestVirtualAddr(0xe02c),
+                        delay_slot: false,
+                    },
+                    interrupt_enable: false,
+                    llbit: true,
+                },
+                linked_address: 0x400000,
+            },
+            reverse_endian: false,
+        };
+        begin.store_state = Some(state);
+        let mut end = begin.clone();
+        end.kind = Kind::CpuEnd;
+        assert!(subword_end(&begin, &end).is_ok());
+        for mode in 0..7 {
+            let (mut before, mut completed) = (begin.clone(), end.clone());
+            match mode {
+                0 => before.store_state.as_mut().unwrap().reverse_endian = true,
+                1 => completed.store_state.as_mut().unwrap().linked.control.llbit = false,
+                2 => {
+                    before
+                        .store_state
+                        .as_mut()
+                        .unwrap()
+                        .linked
+                        .control
+                        .state
+                        .exl = true
+                }
+                3 => {
+                    completed
+                        .store_state
+                        .as_mut()
+                        .unwrap()
+                        .linked
+                        .linked_address += 1
+                }
+                4 => {
+                    before
+                        .store_state
+                        .as_mut()
+                        .unwrap()
+                        .linked
+                        .control
+                        .state
+                        .kernel = false
+                }
+                5 => before.store_state = None,
+                _ => completed.store_state = None,
+            }
+            assert!(subword_end(&before, &completed).is_err(), "mode {mode}");
+        }
     }
     #[test]
     fn linked_load_control_requires_the_actual_source_and_physical_link_address() {

@@ -27,6 +27,8 @@ struct ComposeEvent {
   u32 exceptionCause=0,kernelBits=0;
   bool returnValid=false,epcValid=false,interruptEnable=false,llbit=false;
   bool linkedValid=false;
+  bool storeValid=false,reverseEndian=false,spDeviceValid=false;
+  u32 spDeviceAddress=0;
   u64 linkedAddress=0;
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 18
   bool tlbValid=false,mappingValid=false,mappingKernel=false;
@@ -144,6 +146,12 @@ static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
     e.linkedValid=true;e.linkedAddress=cpu.scc.ll;
   }
   #endif
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 24
+  if((word>>26)==0x28 || (word>>26)==0x29){
+    auto& e=composeEvents.back();compose_return_state(e);e.returnValid=false;
+    e.storeValid=true;e.linkedAddress=cpu.scc.ll;e.reverseEndian=cpu.context.littleEndian();
+  }
+  #endif
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 14
   if(begin && (word&0xfc00003f)==13) compose_exception_state(composeEvents.back());
   #endif
@@ -208,8 +216,15 @@ static void compose_imem_seed(u32 address,u32 value) {
 }
 #endif
 static void compose_sp_word(bool write,u32 address,u32 bank,u32 offset,u32 value,bool originCpu) {
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 24
+  bool subword=write && composeCpuContext && ((composeCpuWord>>26)==0x28 || (composeCpuWord>>26)==0x29);
+  u32 rawAddress=address;if(subword)address&=~3u;
+  #endif
   compose_push(write?"sp_write":"sp_read",composeCpuContext,
     composeCpuContext?composeCpuPc:cpu.ipu.pc,composeCpuWord,address,bank,offset,4,value,originCpu);
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 24
+  if(subword){composeEvents.back().spDeviceValid=true;composeEvents.back().spDeviceAddress=rawAddress;}
+  #endif
 }
 #if PLAID_RSP_DEFINITIONS_FIXTURE >= 4
 #if PLAID_RSP_DEFINITIONS_FIXTURE >= 10
@@ -425,6 +440,9 @@ static void compose_print() {
       std::printf(",\"interrupt_enable\":%s,\"llbit\":%s}",e.interruptEnable?"true":"false",e.llbit?"true":"false");}
     if(e.linkedValid){std::printf(",\"linked_state\":{\"control\":{\"state\":");compose_print_exception_state(e);
       std::printf(",\"interrupt_enable\":%s,\"llbit\":%s},\"linked_address\":%llu}",e.interruptEnable?"true":"false",e.llbit?"true":"false",(unsigned long long)e.linkedAddress);}
+    if(e.storeValid){std::printf(",\"store_state\":{\"linked\":{\"control\":{\"state\":");compose_print_exception_state(e);
+      std::printf(",\"interrupt_enable\":%s,\"llbit\":%s},\"linked_address\":%llu},\"reverse_endian\":%s}",e.interruptEnable?"true":"false",e.llbit?"true":"false",(unsigned long long)e.linkedAddress,e.reverseEndian?"true":"false");}
+    if(e.spDeviceValid)std::printf(",\"sp_device_address\":%u",e.spDeviceAddress);
     std::printf("}");
   }
   std::printf("]");
