@@ -1955,6 +1955,20 @@ writer compatibility is not ultimate byte origin. Actual event authentication,
 complete writers/cache/mapping/root census, restore epochs, exception-delivery
 composition, whole-ROM/native closure and progress milestones remain OPEN.
 
+ADR-0115 restore follow-up (2026-10-13): v2 explicitly admits successful restore
+boundaries as opaque cuts of all prior resident/backing observer ancestry. Equal
+snapshot labels, cache words, PCs or physical addresses cannot recover earlier
+writer/fill IDs. A refill before a fresh writer stays unknown even after a later
+equal write; only a subsequent fresh fill can use that new writer. Snapshot SHA
+labels are captured metadata, not authenticated snapshot bytes or component-root
+certificates. V0/v1 continue rejecting restore and preserve their output shape.
+Retained exact pinned restore counterexample binaries/source/manifests/results
+authenticate and reproduce their original controls without rebuilding. The added
+exception-root composition is synthetic; the old fixture runs ordinary PA0 code,
+not exception delivery at PA180. Its shared I-cache restore invariant supplies
+the cut rule, not a reachability/lifetime/hardware/whole-ROM claim. All proof flags
+remain false. See the cached-root restore integration receipt.
+
 ## ADR-0116: Captured SP writers compose with actual executable reads without claiming a census
 
 Status: Accepted for source-bound finite writer/fetch composition, 2026-10-12.
