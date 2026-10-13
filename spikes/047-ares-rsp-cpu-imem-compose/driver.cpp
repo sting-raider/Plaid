@@ -59,6 +59,9 @@ int main(int argc,char** argv) {
   #endif
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 5
   plaidRspDmaLifecycleObserver=traced?compose_dma_lifecycle:nullptr;
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 8
+  plaidRspDmaPendingObserver=traced?compose_dma_pending:nullptr;
+  #endif
   #endif
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 6
   plaidSpDmaStoreObserver=traced?compose_imem_dma_store:nullptr;
@@ -86,6 +89,11 @@ int main(int argc,char** argv) {
     std::printf("]");
   };
   std::printf("{\"initial_dmem\":");printBytes(false,PLAID_RSP_DEFINITIONS_FIXTURE>=4?4096:8);
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=8) {
+    auto& p=rsp.dma.pending;
+    if(rsp.dma.full.any() || rsp.dma.busy.any()) std::abort();
+    std::printf(",\"initial_pending\":{\"bank\":%u,\"descriptor\":{\"pbus\":%u,\"dram\":%u,\"length\":%u,\"count\":%u,\"skip\":%u}}",(u32)p.pbusRegion,(u32)p.pbusAddress,(u32)p.dramAddress,(u32)p.length,(u32)p.count,(u32)p.skip);
+  }
   std::printf(",\"initial_imem\":");printBytes(true,PLAID_RSP_DEFINITIONS_FIXTURE>=3?4096:20);
   if(PLAID_RSP_DEFINITIONS_FIXTURE>=4) { std::printf(",\"initial_ram\":");printRam(); }
   auto cpuStep=[&](u32 p,u32 index){
@@ -161,6 +169,18 @@ int main(int argc,char** argv) {
     rsp.status.halted=0;rsp.status.broken=0;rsp.instruction();rsp.status.halted=1;checkpoint();
   }
   if((u32)rsp.dmem.read<Word>(0)!=(PLAID_RSP_DEFINITIONS_FIXTURE>=7?pure:mixed) || (u32)rsp.dmem.read<Word>(4)!=mixed || (u32)rsp.imem.read<Word>(0)!=pure || (u32)rsp.imem.read<Word>(4)!=pure || (u32)rsp.imem.read<Word>(8)!=mixed || (u32)rsp.imem.read<Word>(12)!=mixed || (u32)rsp.imem.read<Word>(16)!=mixed) std::abort();
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=8) {
+    phase(22);rsp.writeWord(0x04040000,0x1340,cpu);rsp.writeWord(0x04040004,0x6028,cpu);rsp.writeWord(0x04040008,0,cpu);
+    rsp.writeWord(0x04040000,0x1380,cpu);rsp.writeWord(0x04040004,0x6028,cpu);rsp.writeWord(0x04040008,0,cpu);
+    rsp.writeWord(0x04040008,0,cpu); // Equal recommit supersedes the pending occurrence.
+    rsp.writeWord(0x04040000,0x13c0,cpu);rsp.writeWord(0x04040004,0x6028,cpu);
+    if(!rsp.dma.busy.read || !rsp.dma.full.read) std::abort();
+    rsp.dmaTransferStep();checkpoint();
+    if(!rsp.dma.busy.read || rsp.dma.full.any() || (u32)rsp.dma.current.pbusAddress!=0x3c0) std::abort();
+    rsp.dmaTransferStep();checkpoint();
+    phase(23);rsp.pipeline={};rsp.pipeline.singleIssue=1;rsp.branch.setPc(0x3c0);rsp.ipu.pc=0x3c0;
+    rsp.status.halted=0;rsp.status.broken=0;rsp.instruction();rsp.status.halted=1;checkpoint();
+  }
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=false;
   #endif

@@ -218,6 +218,13 @@ consume them. Use spike064 controls and
 `python scripts/test_rsp_definitions.py --dmem-ingress`. V0-v6 reports remain exact;
 unsupported failed/OOB sources and general completeness obligations stay open.
 
+Controlled v8 adds an initially empty pending-slot snapshot and completed address/
+length mutations before transfer-start. Replay masked fields, keep equal recommits
+distinct, retain latest address writers even after the length commit, and require
+immediate promotion whenever FULL is idle. Use spike065 controls and
+`python scripts/test_rsp_definitions.py --pending`; v0-v7 reports stay exact.
+The host-driven MMIO fixture supplies no guest operand ancestry or hardware policy.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

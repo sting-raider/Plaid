@@ -2144,6 +2144,20 @@ and all three directions; v0-v6 reports stay exact. General census/pending/FIFO/
 hardware/cache/mapping/reset/restore/lifetime and whole-ROM/native remain OPEN.
 See the DMEM ingress/RSP load integration receipt.
 
+ADR-0118 pending-DMA follow-up (2026-10-13): reconcile retained spike034's mutable
+pending/FULL-overwrite invariant into the existing source/writer/consumption graph.
+Controlled v8 starts with an observed empty pending slot; capture address/length
+mutations after their masked assignments and before transfer-start. Keep length
+commit identity separate from latest PBUS/DRAM writer identity. FULL recommits
+supersede prior occurrences even at equal values; later address writes still
+mutate pending state. Actual promotion consumes only that latest state, including
+immediate handoff after complete current progression. The180-event source/26
+matched controls independently agrees on six commits, one supersession, five
+promotions and subsequent RSP consumption. V0-v7 reports remain exact. This
+reference-specific host-driven MMIO contract supplies no guest operand ancestry,
+hardware/FIFO consensus, mutation census or continuous executable lifetime; all
+general proof flags stay false. See the mutable-pending DMA integration receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

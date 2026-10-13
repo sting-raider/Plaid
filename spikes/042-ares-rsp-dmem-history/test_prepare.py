@@ -13,22 +13,30 @@ def main():
     prior=importlib.util.module_from_spec(spec);spec.loader.exec_module(prior)
     with tempfile.TemporaryDirectory(prefix='rsp-shadow-test-',dir=ROOT/'target') as temporary:
         out=Path(temporary)
-        def reset(composed,lifecycle=False):
+        def reset(composed,lifecycle=False,pending=False):
             (out/'n64.cpp').write_text('#include <n64/rsp/rsp.cpp>\n',encoding='utf-8',newline='\n')
             if composed:prior.generate(REF,out)
             else:(out/'include/n64/rsp/rsp.hpp').unlink(missing_ok=True)
             # Keep stale rsp.cpp intentionally: a failed earlier build leaves it.
-            generate(REF,out,sp_backing=composed,dma_lifecycle=lifecycle)
+            generate(REF,out,sp_backing=composed,dma_lifecycle=lifecycle,dma_pending=pending)
             header=(out/'include/n64/rsp/rsp.hpp').read_text(encoding='utf-8')
             cpp=(out/'rsp.cpp').read_text(encoding='utf-8')
             assert header.count('inline PlaidRspInstructionObserver')==1
             assert header.count('plaidRspDmemObserver(plaidOffset,Size,plaidValue);')==1
             assert cpp.count('plaidRspInstructionObserver(true,')==1
             assert cpp.count('plaidRspInstructionObserver(false,')==1
-            assert ('rsp_io.cpp' in cpp)==composed
+            assert ('rsp_io.cpp' in cpp)==(composed and not pending)
+            assert ('rsp-io-pending.cpp' in cpp)==pending
             if not lifecycle:assert ('rsp_dma.cpp' in cpp)==composed
             assert ('plaidSpWordObserver' in header)==composed
             assert ('plaidRspDmaLifecycleObserver' in header)==lifecycle
+            assert ('plaidRspDmaPendingObserver' in header)==pending
+            if pending:
+                io=(out/'rsp-io-pending.cpp').read_text(encoding='utf-8')
+                assert io.count('plaidRspDmaPendingObserver(address,data_,&thread==&cpu);')==4
+                assert ('plaidSpWordObserver' in io)==composed
+                for block in io.split('dmaTransferStart(thread);')[:2]:
+                    assert block.rfind('plaidRspDmaPendingObserver(')>block.rfind('dma.full.write =')
             if lifecycle:
                 dma=(out/'rsp-dma-lifecycle.cpp').read_text(encoding='utf-8')
                 assert 'rsp-dma-lifecycle.cpp' in cpp
@@ -42,6 +50,7 @@ def main():
         for composed in (False,True,False,True):
             first=reset(composed);assert reset(composed)==first
             first=reset(composed,True);assert reset(composed,True)==first
+            first=reset(composed,True,True);assert reset(composed,True,True)==first
     print('PASS repeated RSP-only/SP-composed shadows and stale failed-output guards; no reference execution claim')
 
 

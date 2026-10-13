@@ -3,7 +3,8 @@ from pathlib import Path
 import re
 
 
-def generate(ref,out,sp_backing=False,word_reads=False,dma_lifecycle=False):
+def generate(ref,out,sp_backing=False,word_reads=False,dma_lifecycle=False,dma_pending=False):
+    assert not dma_pending or dma_lifecycle
     ref,out=Path(ref),Path(out)
     destination=out/'include/n64/rsp/rsp.hpp'
     header=(destination if destination.exists() else ref/'ares/n64/rsp/rsp.hpp').read_text(encoding='utf-8')
@@ -20,6 +21,10 @@ inline PlaidRspWordReadObserver plaidRspWordReadObserver = nullptr;
     if dma_lifecycle:
         declarations += '''using PlaidRspDmaLifecycleObserver = void (*)(bool,u32,bool,u32,u32,u32,u32,u32);
 inline PlaidRspDmaLifecycleObserver plaidRspDmaLifecycleObserver = nullptr;
+'''
+    if dma_pending:
+        declarations += '''using PlaidRspDmaPendingObserver = void (*)(u32,u32,bool);
+inline PlaidRspDmaPendingObserver plaidRspDmaPendingObserver = nullptr;
 '''
     marker='      if constexpr(Size == Dual) *(u64*)&data[address & maskDual] = bswap64(value);'
     assert header.count(marker)==1
@@ -61,6 +66,19 @@ inline PlaidRspDmaLifecycleObserver plaidRspDmaLifecycleObserver = nullptr;
         patched.write_text(ipu,encoding='utf-8',newline='\n')
         marker=f'#include "{ref/"ares/n64/rsp/interpreter-ipu.cpp"}"'
         assert rsp.count(marker)==1
+        rsp=rsp.replace(marker,f'#include "{patched}"')
+    if dma_pending:
+        io_input=out/'rsp_io.cpp' if sp_backing else ref/'ares/n64/rsp/io.cpp'
+        io=io_input.read_text(encoding='utf-8')
+        callback='    if(plaidRspDmaPendingObserver) plaidRspDmaPendingObserver(address,data_,&thread==&cpu);'
+        for marker in ('    dma.pending.pbusRegion            = data.bit(12);',
+                       '    dma.pending.dramAddress.bit(3,23) = data.bit(3,23);',
+                       '    dmaTransferStart(thread);'):
+            assert io.count(marker)==(2 if 'dmaTransferStart' in marker else 1)
+            io=io.replace(marker,callback+'\n'+marker if 'dmaTransferStart' in marker else marker+'\n'+callback)
+        patched=out/'rsp-io-pending.cpp'
+        patched.write_text(io,encoding='utf-8',newline='\n')
+        marker=f'#include "{io_input}"';assert rsp.count(marker)==1
         rsp=rsp.replace(marker,f'#include "{patched}"')
     if dma_lifecycle:
         dma_input=out/'rsp_dma.cpp' if sp_backing else ref/'ares/n64/rsp/dma.cpp'

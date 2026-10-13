@@ -8,9 +8,11 @@ contexts. Controlled v5 also binds promoted-current identity and exact complete
 descriptor progression to that graph. Controlled v6 joins the RAM byte writers
 through actual Dual read/IMEM installation back to RSP instruction consumption.
 Controlled v7 also joins actual two-read/two-store DMEM ingress to RSP load
-definitions with distinct lane parents. Next compose mutable pending/accepted
-request provenance, broader scalar/vector inputs and complete mutation/cache/
-mapping/root lifetime coverage. Reuse retained152-event/23-checkpoint v7,
+definitions with distinct lane parents. Controlled v8 also retains actual pending
+address mutations and length recommit/supersession through promotion and immediate
+handoff to installed-code consumption. Next compose guest MMIO operand ancestry,
+broader scalar/vector inputs and complete mutation/cache/mapping/root lifetime
+coverage. Reuse retained180-event/26-checkpoint v8,152-event/23-checkpoint v7,
 142-event/21-checkpoint v6,136-event v5 and
 134-event v4 (same19 controls),97-event/17-checkpoint v3 and all earlier
 compatibility sources; no repeat reference build is needed for compatible consumers.
