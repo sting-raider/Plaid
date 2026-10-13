@@ -2371,6 +2371,22 @@ component/CI scaffolding. Broader Index/no-load/privilege/global/geometry/reset/
 restore/hazards/source/census/root/lifetime/whole-ROM/native stay OPEN; all flags
 false, no milestone promotion. See TLBR/context receipt.
 
+ADR-0118 conditional-store composition follow-up (2026-10-13): controlled v22
+joins actual aligned direct-SP Word LL/SC and RSP executable consumption into
+the shared chronology. Full before/completed GPR/CP0/link snapshots check the
+pinned read/control transition. A writer requires the independently completed
+Word sink through canonical `verify_sc_sp_effect`; neither opcode, success flag,
+LLbit nor payload equality mints one. Bound pre-SC payload/address before rt is
+overwritten, then cut held register ancestry. The direct-SP effect/result check
+is specific to this exact interpreter scope; retain cross-reference reservation
+disagreement rather than defining universal success/lifetime semantics. Failed
+SC511 leaves writer50 selected; fresh LL reads519/533 feed equal writers525/539,
+selected by actual RSP527/541. Explicit attempts distinguish no sink from success.
+Opaque roots/other CPU instructions cut linked observer continuity, not physical
+reservations. General faults/cached/mapped/endian/reservation/source/census/root/
+lifetime/whole-ROM/native stay OPEN; all flags false, no milestone promotion.
+See conditional IMEM composition receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

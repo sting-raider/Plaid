@@ -347,6 +347,15 @@ cache, and restore staged page ancestry for later TLBWI. Run
 `python scripts/test_rsp_definitions.py --tlbr-context`; older optional report
 fields remain omitted. General no-load/Index/privilege/census/lifetime remain OPEN.
 
+Controlled v22/spike080 composes direct-SP Word LL/SC with actual IMEM/RSP
+consumption. Before/completed GPR/CP0/link snapshots check pinned transitions;
+completed sinks use `cpu_sp_conditional` and preserve pre-SC payload separately
+from rt's success flag. The flag cuts held register ancestry. Failed attempts
+leave old writers; equal successful effects create fresh generations. Run
+`python scripts/test_rsp_definitions.py --conditional-imem`; earlier report bytes
+stay exact. The direct-SP check is pin-specific, not a hardware reservation policy;
+general fault/cached/mapped/lifetime/census/native obligations stay OPEN.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,
