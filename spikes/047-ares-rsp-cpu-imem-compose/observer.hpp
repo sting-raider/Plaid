@@ -22,6 +22,7 @@ struct ComposeEvent {
   bool exceptionValid=false,bev=false,exl=false,erl=false,kernel=false,branchDelay=false,delaySlot=false;
   u64 exceptionPc=0,epc=0;
   u32 exceptionCause=0,kernelBits=0;
+  bool returnValid=false,interruptEnable=false,llbit=false;
 };
 static std::vector<ComposeEvent> composeEvents;
 static u32 composePhase=0,composeRspContext=0,composeRspPc=0,composeRspWord=0;
@@ -56,6 +57,12 @@ static void compose_exception_state(ComposeEvent& e) {
   e.kernelBits=cpu.context.bits;e.exceptionCause=cpu.scc.cause.exceptionCode;
   e.branchDelay=cpu.scc.cause.branchDelay;e.epc=cpu.scc.epc;e.delaySlot=cpu.pipeline.inDelaySlot();
 }
+#if PLAID_RSP_DEFINITIONS_FIXTURE >= 15
+static void compose_return_state(ComposeEvent& e) {
+  compose_exception_state(e);e.exceptionValid=false;e.returnValid=true;
+  e.interruptEnable=cpu.scc.status.interruptEnable;e.llbit=cpu.scc.llbit;
+}
+#endif
 #endif
 static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
   if(begin) {
@@ -68,9 +75,18 @@ static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
     compose_exception_state(composeEvents.back());
   }
   #endif
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 15
+  if(!begin && word==0x42000018u) {
+    compose_push("return_transfer",composeCpuContext,composeCpuPc,word,0,0,0,0,0,true);
+    compose_return_state(composeEvents.back());
+  }
+  #endif
   compose_push(begin?"cpu_begin":"cpu_end",composeCpuContext,composeCpuPc,word,0,0,0,0,0,true);
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 14
   if(begin && (word&0xfc00003f)==13) compose_exception_state(composeEvents.back());
+  #endif
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 15
+  if(begin && word==0x42000018u) compose_return_state(composeEvents.back());
   #endif
   if(!begin) composeCpuContext=composeCpuPc=composeCpuWord=0;
 }
@@ -277,6 +293,10 @@ static void compose_ram_scalar(bool write,u32 address,u32 bytes,u32 device,u64 v
 #endif
 #endif
 
+static void compose_print_exception_state(const ComposeEvent& e) {
+  std::printf("{\"pc\":%llu,\"bev\":%s,\"exl\":%s,\"erl\":%s,\"kernel_mode\":\"bits%u\",\"kernel\":%s,\"cause\":%u,\"branch_delay\":%s,\"epc\":%llu,\"delay_slot\":%s}",
+    (unsigned long long)e.exceptionPc,e.bev?"true":"false",e.exl?"true":"false",e.erl?"true":"false",e.kernelBits,e.kernel?"true":"false",e.exceptionCause,e.branchDelay?"true":"false",(unsigned long long)e.epc,e.delaySlot?"true":"false");
+}
 static void compose_print() {
   std::printf("[");
   for(size_t n=0;n<composeEvents.size();n++) {
@@ -308,8 +328,9 @@ static void compose_print() {
       }
       std::printf("}");
     }
-    if(e.exceptionValid) std::printf(",\"exception_state\":{\"pc\":%llu,\"bev\":%s,\"exl\":%s,\"erl\":%s,\"kernel_mode\":\"bits%u\",\"kernel\":%s,\"cause\":%u,\"branch_delay\":%s,\"epc\":%llu,\"delay_slot\":%s}",
-      (unsigned long long)e.exceptionPc,e.bev?"true":"false",e.exl?"true":"false",e.erl?"true":"false",e.kernelBits,e.kernel?"true":"false",e.exceptionCause,e.branchDelay?"true":"false",(unsigned long long)e.epc,e.delaySlot?"true":"false");
+    if(e.exceptionValid){std::printf(",\"exception_state\":");compose_print_exception_state(e);}
+    if(e.returnValid){std::printf(",\"return_state\":{\"state\":");compose_print_exception_state(e);
+      std::printf(",\"interrupt_enable\":%s,\"llbit\":%s}",e.interruptEnable?"true":"false",e.llbit?"true":"false");}
     std::printf("}");
   }
   std::printf("]");
