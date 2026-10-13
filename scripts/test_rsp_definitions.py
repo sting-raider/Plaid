@@ -25,7 +25,9 @@ def main():
     parser.add_argument('--pending',action='store_true')
     parser.add_argument('--decoded-mmio',action='store_true')
     parser.add_argument('--cached-cpu',action='store_true')
+    parser.add_argument('--cache-invalidation',action='store_true')
     args = parser.parse_args()
+    args.cached_cpu = args.cached_cpu or args.cache_invalidation
     args.decoded_mmio = args.decoded_mmio or args.cached_cpu
     args.pending = args.pending or args.decoded_mmio
     roundtrip = args.roundtrip or args.dmem_ingress or args.pending
@@ -33,7 +35,8 @@ def main():
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('067-dma-cached-cpu' if args.cached_cpu else
+    recipe = ('068-dma-cache-invalidation' if args.cache_invalidation else
+        '067-dma-cached-cpu' if args.cached_cpu else
         '066-decoded-mmio-dma' if args.decoded_mmio else
         '065-mutable-pending-dma' if args.pending else
         '064-dma-dmem-ingress-rsp-load' if args.dmem_ingress else
@@ -208,7 +211,7 @@ def main():
                     promote['dma']['pbus']=promote['offset']=0x380
                 elif mode==3: writes[-1]['value']=0x6020
                 elif mode==4: writes[-1]['value']=1<<32
-                elif mode==5: writes[-1]['dma_direction']='dmem_egress'
+                elif mode==5: next(e for e in writes if e.get('dma_direction')=='imem_ingress')['dma_direction']='dmem_egress'
                 else: writes[-1]['cpu']=False
                 run('inspect-rsp-cpu-imem',save(forged),False)
         if args.decoded_mmio:
@@ -243,6 +246,28 @@ def main():
                 elif mode==7: seed['gpr'][5]=1
                 elif mode==8: burst['context']=1
                 else: burst['address'] += 32
+                run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.cache_invalidation:
+            for mode in range(13):
+                forged=copy.deepcopy(expected);rows=forged['events']
+                operation=next(e for e in rows if e['kind']=='cache_operation')
+                begin=next(e for e in rows if e['kind']=='cpu_begin' and e['context']==operation['context'])
+                end=next(e for e in rows if e['kind']=='cpu_end' and e['context']==operation['context'])
+                snapshot=operation['cache_operation']
+                if mode==0: rows.remove(operation);reclock(rows)
+                elif mode==1: rows.insert(rows.index(operation),copy.deepcopy(operation));reclock(rows)
+                elif mode==2: snapshot['operation']=0
+                elif mode==3: snapshot['virtual_address'] += 4
+                elif mode==4: operation['address'] += 0x4000
+                elif mode==5: snapshot['before']['words'][7]=1
+                elif mode==6: snapshot['after']['words'][7]=1
+                elif mode==7: snapshot['after']['tag_key'] |= 1
+                elif mode==8: operation['context']=operation['ordinal']
+                elif mode==9: end['gpr'][5]=1
+                elif mode==10: begin['gpr'][18] += 4
+                elif mode==11:
+                    rows.remove(next(e for e in reversed(rows) if e['kind']=='cache_burst_read'));reclock(rows)
+                else: forged['format']='plaid-rsp-cpu-imem-history-v10';forged['profile']='ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-dma-cached-cpu-consumption-v10'
                 run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
@@ -292,7 +317,7 @@ def main():
                 if mode==0: del graph['imem_installs']
                 elif mode==1: graph['imem_installs'][0]['source_bytes'][0]['write_ordinal'] += 1
                 elif mode==2: next(f for f in forged['imem_fetches'] if f['pc']==0x300)['origins'][0]['parent']['write_ordinal'] += 1
-                else: graph['promoted_requests'][-1]['direction']='dmem_egress'
+                else: next(r for r in graph['promoted_requests'] if r['direction']=='imem_ingress')['direction']='dmem_egress'
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
         if args.dmem_ingress or args.pending:
@@ -315,8 +340,18 @@ def main():
         if args.decoded_mmio:
             for mode in range(2):
                 forged=json.loads(original);graph=forged['dma_consumption']
-                if mode==0: graph['pending_commits'][-1].pop('decoder_context')
-                else: graph['promoted_requests'][-1]['pending_provenance']['commit_decoder_context']=1
+                if mode==0: next(c for c in graph['pending_commits'] if 'decoder_context' in c).pop('decoder_context')
+                else: next(r for r in graph['promoted_requests'] if 'commit_decoder_context' in r['pending_provenance'])['pending_provenance']['commit_decoder_context']=1
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.cache_invalidation:
+            for mode in range(5):
+                forged=json.loads(original);graph=forged['dma_consumption']
+                if mode==0: graph.pop('cache_invalidations')
+                elif mode==1: graph['cache_invalidations'][0]['hit']=False
+                elif mode==2: graph['cache_invalidations'][0]['ended_fill']=None
+                elif mode==3: graph['cached_fetches'][-1]['fill_ordinal']=199
+                else: graph['cached_fetches'][-1]['origins'][0]['write_ordinal']=58
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
         if args.cached_cpu:

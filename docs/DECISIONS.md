@@ -2198,6 +2198,19 @@ v0-v9 reports stay exact. General cache operation/mutation/mapping/root/restore/
 continuous lifetime/hardware/whole-ROM/native obligations remain OPEN; flags stay
 false. See the DMA/cached CPU integration receipt.
 
+ADR-0118 invalidation follow-up (2026-10-13): controlled v11 binds one actual
+completed guest HitInvalidateI to its decoded CACHE context, operation selector,
+direct-KSEG0 effective address and complete before/after cache tuple. Matching
+valid tags clear only validity; miss tuples remain unchanged. Track invalid slot
+contents separately from resident fill eligibility, so repeated invalidation or
+equal later words cannot recover ended fill parents. Subsequent completed burst/
+fill snapshots capture their own fresh DMA byte writers. Actual228-event/
+34-control source ends fill199, then fresh RAMwriter219 reaches cached CPU NOP
+through fill225, retaining earlier DMEM ingress/RAM/RSP ancestry. Other operations,
+TLB/aliases/restore/concurrency, complete mutation/root/lifetime and whole-ROM/
+native remain OPEN; all flags stay false. All eleven v0-v10 reports remain exact.
+See the DMA/cache invalidation integration receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

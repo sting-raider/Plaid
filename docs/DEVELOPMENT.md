@@ -239,6 +239,15 @@ scalar reads. Explicit host PC seeds cut register definitions and remain unknown
 execution roots. Use spike067 controls and
 `python scripts/test_rsp_definitions.py --cached-cpu`; v0-v9 reports stay exact.
 
+Controlled v11 binds actual decoded direct-KSEG0 CACHE HitInvalidateI to one
+completed operation with exact effective address and complete cache before/after
+tuples. Hits end resident fill eligibility; misses preserve it. Keep invalid
+slot contents for later transition checks. A subsequent DMA writer and completed
+refill supply new executable parents even when instruction bits equal the old
+line. Use spike068 and `python scripts/test_rsp_definitions.py --cache-invalidation`;
+v0-v10 reports stay exact. Other cache operations remain unsupported; the powered
+initial cache and explicit host roots grant no general lifetime/census proof.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,
