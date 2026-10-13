@@ -102,7 +102,7 @@ int main(int argc,char** argv) {
 
   if(PLAID_RSP_DEFINITIONS_FIXTURE>=18) {
     for(auto& entry:cpu.tlb.entry){entry={};entry.synchronize();}
-    cpu.scc.tlb={};cpu.scc.tlb.virtualAddress=0x6000;cpu.scc.tlb.addressSpaceID=7;
+    cpu.scc.tlb={};cpu.scc.tlb.virtualAddress=PLAID_RSP_DEFINITIONS_FIXTURE>=20?0xe000:0x6000;cpu.scc.tlb.addressSpaceID=7;
     cpu.scc.tlb.valid[0]=1;cpu.scc.tlb.dirty[0]=1;
     cpu.scc.tlb.cacheAlgorithm[0]=cpu.scc.tlb.cacheAlgorithm[1]=3;
     cpu.scc.tlb.physicalAddress[0]=0x6000;cpu.scc.tlb.physicalAddress[1]=0x7000;
@@ -111,7 +111,7 @@ int main(int argc,char** argv) {
   }
 
   if(PLAID_RSP_DEFINITIONS_FIXTURE>=19){
-    cpu.ipu.r[25].u64=0x6008;cpu.ipu.r[26].u64=0x6007;
+    cpu.ipu.r[25].u64=PLAID_RSP_DEFINITIONS_FIXTURE>=20?0xe008:0x6008;cpu.ipu.r[26].u64=PLAID_RSP_DEFINITIONS_FIXTURE>=20?0xe007:0x6007;
     rdram.ram.write<Word>(0x60a0,0x40995000u,RBusDevice::ARES_DEBUGGER);
     rdram.ram.write<Word>(0x60a4,0x409a5000u,RBusDevice::ARES_DEBUGGER);
   }
@@ -208,6 +208,10 @@ int main(int argc,char** argv) {
       if(index==32)s.pc=0x6028;
       if(index==42)s.pc=0x602c;}
     if(PLAID_RSP_DEFINITIONS_FIXTURE>=19 && index>=44){s.word=index==44?0x40995000u:0x409a5000u;s.pc=index==44?0xffffffffa00060a0ull:0xffffffffa00060a4ull;}
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=20){
+      if(index==32)s.pc=0xe028;
+      if(index==42)s.pc=0xe02c;
+      if(index==46){s.word=0x21u;s.pc=0xe028;}}
     for(u32 n=0;n<32;n++)s.before[n]=cpu.ipu.r[n].u64;
     if(index>=33 && !(PLAID_RSP_DEFINITIONS_FIXTURE>=18 && index>=43)){if(cpu.ipu.pc!=s.pc)std::abort();}else cpu.pipeline.setPc(s.pc);
     if(cpu.instruction() && synchronize)cpu.synchronize();
@@ -370,17 +374,27 @@ int main(int argc,char** argv) {
       #endif
       cpuStep(p,43,false);
     }
+    auto mappedHit=[&](u32 p){
+      phase(p);
+      #if PLAID_RSP_CPU_IMEM_SENSOR
+      compose_push("cpu_reentry",composeEvents.size()+1,0xe028ull,0,0,0,0,0,0,true);
+      #endif
+      cpuStep(p,46,false);
+    };
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=20)mappedHit(48);
+    u32 contextPhase=49;
     if(PLAID_RSP_DEFINITIONS_FIXTURE>=19)for(u32 index:{44u,45u,45u}) {
-      u32 p=49+steps.size()-33;phase(p);
+      u32 p=contextPhase++;phase(p);
       #if PLAID_RSP_CPU_IMEM_SENSOR
       compose_push("cpu_reentry",composeEvents.size()+1,index==44?0xffffffffa00060a0ull:0xffffffffa00060a4ull,0,0,0,0,0,0,true);
       #endif
       cpuStep(p,index,false);
     }
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=20)mappedHit(51);
     for(u32 index:{31u,32u}) {
       phase(index+16+(PLAID_RSP_DEFINITIONS_FIXTURE>=19?5:PLAID_RSP_DEFINITIONS_FIXTURE>=18?2:0));
       #if PLAID_RSP_CPU_IMEM_SENSOR
-      compose_push("cpu_reentry",composeEvents.size()+1,index==31?0xffffffff80006034ull:PLAID_RSP_DEFINITIONS_FIXTURE>=18?0x6028ull:0xffffffff80006028ull,0,0,0,0,0,0,true);
+      compose_push("cpu_reentry",composeEvents.size()+1,index==31?0xffffffff80006034ull:PLAID_RSP_DEFINITIONS_FIXTURE>=20?0xe028ull:PLAID_RSP_DEFINITIONS_FIXTURE>=18?0x6028ull:0xffffffff80006028ull,0,0,0,0,0,0,true);
       #endif
       cpuStep(index+16,index,false);
     }
