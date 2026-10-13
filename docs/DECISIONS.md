@@ -2423,6 +2423,17 @@ no milestone promotion or upstream production reuse. See RAM-load IMEM receipt.
 
 Status: Accepted for bounded source composition, 2026-10-12.
 
+Original-clock reuse follow-up (2026-10-13): extract the existing transition state
+as internal `DcacheReplay` before adding decoded cached-operand composition. The
+transition body is unchanged. Standalone sources retain complete contiguous
+ordinals/external digests; containing authenticated sources may pass increasing
+global-clock primitive occurrences, with backing-read/fill adjacency unchanged.
+Event counts remain primitive counts rather than the final global ordinal.
+Rejection consumes state so partially applied operations cannot be retried.
+Existing v0/v1/v2 policies/reports/flags stay unchanged; this extraction supplies
+no new capture, operand/source/census/lifetime or closure proof. See replay reuse
+receipt; no reference rebuild is required for retained compatible consumers.
+
 Reconcile the prepared pointer D-cache candidate into the existing writeback
 engine rather than creating a second resident state machine. An explicit v1
 source adds normalized completed cached Word reads and backing Word mutations.

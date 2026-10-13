@@ -563,6 +563,15 @@ Do not relax the local gate to avoid a handoff.
 
 ## Scope discipline
 
+The canonical D-cache primitive state can also replay occurrences on a containing
+source's original clock. Internal callers authenticate and validate that complete
+clock; primitive ordinals must increase, and a backing read/fill pair still must
+be adjacent. Standalone v0/v1/v2 sources retain their complete contiguous ordinal
+gate and existing report shapes. Reuse this state for decoded cached operands;
+do not create another resident policy or infer incoming writer ancestry from
+current backing equality. A rejected transition consumes its state and supplies
+no usable continuation or receipt.
+
 Plaid's strongest rule is also the boring one: do not convert uncertainty into confidence by changing vocabulary.
 
 A fact can be useful while still being partial. A reference can be informative while still disagreeing with hardware or another reference. A source-bound receipt can be valid while still not proving a complete executable lifetime.
