@@ -53,10 +53,13 @@ parents and IMEM/RSP consumption. Current backing changes cannot alter old
 resident parents; actual HitInvalidateD/refill selects the new RAM writer.
 Controlled v26 also binds actual cached SW sources/equal mutation revisions to
 complete16-byte HitWritebackD export, including untouched resident lanes, then
-RAM/IMEM/RSP consumption. Cached post-export reads retain mutation ancestry. Next
+RAM/IMEM/RSP consumption. Cached post-export reads retain mutation ancestry.
+Fixture28 also composes surviving mapped I-cache execution after equal export,
+then actual guest invalidation/refill to CPU consumption of that export. Next
 compose other mapping/control producers and broader root/control lifetime with
 complete mutation coverage. Keep ERET admission bounded to the uncut ERL0/kernel32/IE0 frame;
-ordinary static ERET stays unsupported. Reuse retained729-event/124-control v26,
+ordinary static ERET stays unsupported. Reuse retained748-event/127-control
+fixture28 and729-event/124-control v26,
 674-event/114-control v25,
 610-event/102-control v24,
 570-event/94-control v23,

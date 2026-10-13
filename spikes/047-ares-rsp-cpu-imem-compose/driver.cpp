@@ -142,6 +142,7 @@ int main(int argc,char** argv) {
     const u32 writeback[]={0x8e080000u,0xae480004u,0xae480004u,0xbe590004u,0x8e680004u,0xae081000u,0x8e480004u,0xae081000u};
     for(u32 i=0;i<8;i++)rdram.ram.write<Word>(0x6170+4*i,writeback[i],RBusDevice::ARES_DEBUGGER);
   }
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=28)rdram.ram.write<Word>(0x61b0,0xbe500004u,RBusDevice::ARES_DEBUGGER);
   #if PLAID_RSP_CPU_IMEM_SENSOR
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 22
   plaidTlbrObserver=traced?compose_tlbr:nullptr;
@@ -264,9 +265,11 @@ int main(int argc,char** argv) {
     if(PLAID_RSP_DEFINITIONS_FIXTURE>=26 && index>=69 && index<=77){
       const u32 cached[]={0x8e480004u,0xae081000u,0x39080021u,0xae680004u,0x8e480004u,0xae081000u,0xbe510004u,0x8e480004u,0xae081000u};
       s.word=cached[index-69];s.pc=0xffffffffa0006130ull+(index-69)*4;}
-    if(PLAID_RSP_DEFINITIONS_FIXTURE>=27 && index>=78){
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=27 && index>=78 && index<=85){
       const u32 writeback[]={0x8e080000u,0xae480004u,0xae480004u,0xbe590004u,0x8e680004u,0xae081000u,0x8e480004u,0xae081000u};
       s.word=writeback[index-78];s.pc=0xffffffffa0006170ull+(index-78)*4;}
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=28 && index>=86){
+      s.word=index==87?0xbe500004u:0;s.pc=index==87?0xffffffffa00061b0ull:0xe02c;}
     for(u32 n=0;n<32;n++)s.before[n]=cpu.ipu.r[n].u64;
     if(index>=33 && !(PLAID_RSP_DEFINITIONS_FIXTURE>=18 && index>=43)){if(cpu.ipu.pc!=s.pc)std::abort();}else cpu.pipeline.setPc(s.pc);
     if(cpu.instruction() && synchronize)cpu.synchronize();
@@ -542,6 +545,15 @@ int main(int argc,char** argv) {
       rsp.status.halted=0;rsp.status.broken=0;rsp.instruction();rsp.status.halted=1;checkpoint();};
     for(u32 index=78;index<=83;index++)cpuStep(98+index-78,index,false);consume(104);
     cpuStep(105,84,false);cpuStep(106,85,false);consume(107);
+  }
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=28){
+    for(u32 index=86;index<=88;index++){
+      phase(index+22);
+      #if PLAID_RSP_CPU_IMEM_SENSOR
+      compose_push("cpu_reentry",composeEvents.size()+1,index==87?0xffffffffa00061b0ull:0xe02c,0,0,0,0,0,0,true);
+      #endif
+      cpuStep(index+22,index,false);
+    }
   }
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=false;
