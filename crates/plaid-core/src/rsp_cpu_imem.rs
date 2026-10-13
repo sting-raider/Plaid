@@ -50,6 +50,9 @@ pub const INVALIDATION_PROFILE: &str =
 pub const CPU_RAM_FORMAT: &str = "plaid-rsp-cpu-imem-history-v12";
 pub const CPU_RAM_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-cpu-copy-ram-cached-consumption-v12";
+pub const CPU_TRANSFORM_FORMAT: &str = "plaid-rsp-cpu-imem-history-v13";
+pub const CPU_TRANSFORM_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-cpu-xori-ram-cached-consumption-v13";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -346,6 +349,17 @@ pub struct CpuRamCopyParent {
     pub read_ordinal: u64,
     pub source: PhysicalAddr,
     pub source_bytes: [SpByteOrigin; 4],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transform: Option<CpuXorTransform>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CpuXorTransform {
+    pub decoder_context: u64,
+    pub pc: GuestVirtualAddr,
+    pub word: u32,
+    pub source_value: u64,
+    pub result_value: u64,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -611,6 +625,33 @@ struct Loaded {
     bits: u64,
     address: PhysicalAddr,
     origins: [SpByteOrigin; 4],
+    transform: Option<CpuXorTransform>,
+}
+impl Loaded {
+    fn xori(parent: Option<Self>, begin: &Row) -> Result<Option<Self>, String> {
+        let rs = ((begin.word >> 21) & 31) as usize;
+        let rt = ((begin.word >> 16) & 31) as usize;
+        let Some(mut loaded) = parent else {
+            return Ok(None);
+        };
+        require(
+            loaded.register == rs && loaded.bits == begin.gpr[rs],
+            "XORI source lost held CPU load definition",
+        )?;
+        if rs != rt || loaded.transform.is_some() {
+            return Ok(None);
+        }
+        let result_value = loaded.bits ^ u64::from(begin.word as u16);
+        loaded.transform = Some(CpuXorTransform {
+            decoder_context: begin.context,
+            pc: GuestVirtualAddr(begin.pc),
+            word: begin.word,
+            source_value: loaded.bits,
+            result_value,
+        });
+        loaded.bits = result_value;
+        Ok(Some(loaded))
+    }
 }
 fn effect_row(row: &Row) -> Result<(), String> {
     require(
@@ -814,6 +855,7 @@ impl RamReplay {
                     read_ordinal: loaded.read,
                     source: loaded.address,
                     source_bytes: loaded.origins.clone(),
+                    transform: loaded.transform.clone(),
                 })
             })
             .transpose()?;
@@ -1710,7 +1752,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let cpu_ram_enabled = h.format == CPU_RAM_FORMAT && h.profile == CPU_RAM_PROFILE;
+    let transform_enabled = h.format == CPU_TRANSFORM_FORMAT && h.profile == CPU_TRANSFORM_PROFILE;
+    let cpu_ram_enabled =
+        transform_enabled || (h.format == CPU_RAM_FORMAT && h.profile == CPU_RAM_PROFILE);
     let invalidation_enabled =
         cpu_ram_enabled || (h.format == INVALIDATION_FORMAT && h.profile == INVALIDATION_PROFILE);
     let cached_enabled =
@@ -2408,6 +2452,7 @@ pub fn inspect_rsp_cpu_imem_history(
                         bits: sign32(row.value as u32),
                         address: PhysicalAddr(row.address),
                         origins: std::array::from_fn(|i| origins[offset + i].clone()),
+                        transform: None,
                     };
                     if let Some(Active::Cpu { read, .. }) = &mut active {
                         *read = Some(loaded);
@@ -2435,6 +2480,7 @@ pub fn inspect_rsp_cpu_imem_history(
                     if row.bank == 1
                         && row.context != 0
                         && let Some(parent) = &registers[rt]
+                        && parent.transform.is_none()
                     {
                         let Some(Active::Cpu { begin, .. }) = &active else {
                             unreachable!()
@@ -2489,6 +2535,17 @@ pub fn inspect_rsp_cpu_imem_history(
                         invalidation_enabled && written && read.is_none(),
                         "CACHE lacks its completed validated operation",
                     )?;
+                } else if op == 0x0e {
+                    require(
+                        transform_enabled && read.is_none() && !written,
+                        "unsupported XORI or scalar effect on transform",
+                    )?;
+                    let rs = ((begin.word >> 21) & 31) as usize;
+                    let rt = ((begin.word >> 16) & 31) as usize;
+                    if rt != 0 {
+                        expected[rt] = begin.gpr[rs] ^ u64::from(begin.word as u16);
+                        registers[rt] = Loaded::xori(registers[rs].clone(), &begin)?;
+                    }
                 } else {
                     require(
                         read.is_none() && !written,
@@ -4731,6 +4788,7 @@ mod tests {
                     source_offset: n as u16,
                 },
             }),
+            transform: None,
         };
         (
             ram,
@@ -4787,5 +4845,50 @@ mod tests {
                 "mode {mode}"
             );
         }
+    }
+    #[test]
+    fn xori_preserves_original_load_bytes_and_full_64_bit_result_in_ram_parent() {
+        let (mut ram, mut begin, mut effect, mut parent) = cpu_ram_fixture();
+        // A sign-extended LW remains sign-extended through unsigned XORI16.
+        parent.bits = 0xffffffff80000000;
+        begin.gpr[8] = parent.bits;
+        let mut transform = begin.clone();
+        transform.word = 0x3908ffff;
+        transform.context = 15;
+        let held = Loaded::xori(Some(parent.clone()), &transform)
+            .unwrap()
+            .unwrap();
+        assert_eq!(held.bits, 0xffffffff8000ffff);
+        assert_eq!(held.origins, parent.origins);
+        begin.gpr[8] = held.bits;
+        effect.value = 0x8000ffff;
+        ram.cpu_write(&effect, &begin, Some(&held)).unwrap();
+        let copied = ram.cpu_writes[0].copy_parent.as_ref().unwrap();
+        let receipt = copied.transform.as_ref().unwrap();
+        assert_eq!(receipt.decoder_context, 15);
+        assert_eq!(
+            (receipt.source_value, receipt.result_value),
+            (parent.bits, held.bits)
+        );
+        assert_eq!(copied.read_ordinal, parent.read);
+        assert_eq!(ram.bytes[..4], [0x80, 0, 0xff, 0xff]);
+    }
+    #[test]
+    fn repeated_or_renamed_xori_cannot_recover_a_held_copy_parent_from_equal_bits() {
+        let (_, mut begin, _, parent) = cpu_ram_fixture();
+        begin.word = 0x39080021;
+        let held = Loaded::xori(Some(parent), &begin).unwrap().unwrap();
+        begin.gpr[8] = held.bits;
+        assert!(Loaded::xori(Some(held), &begin).unwrap().is_none());
+        let (_, mut begin, _, parent) = cpu_ram_fixture();
+        begin.word = 0x39090021;
+        assert!(
+            Loaded::xori(Some(parent.clone()), &begin)
+                .unwrap()
+                .is_none()
+        );
+        assert!(Loaded::xori(None, &begin).unwrap().is_none());
+        begin.gpr[8] = 1 << 32;
+        assert!(Loaded::xori(Some(parent), &begin).is_err());
     }
 }

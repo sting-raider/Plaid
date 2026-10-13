@@ -27,7 +27,9 @@ def main():
     parser.add_argument('--cached-cpu',action='store_true')
     parser.add_argument('--cache-invalidation',action='store_true')
     parser.add_argument('--cpu-ram-copy',action='store_true')
+    parser.add_argument('--cpu-xori',action='store_true')
     args = parser.parse_args()
+    args.cpu_ram_copy = args.cpu_ram_copy or args.cpu_xori
     args.cache_invalidation = args.cache_invalidation or args.cpu_ram_copy
     args.cached_cpu = args.cached_cpu or args.cache_invalidation
     args.decoded_mmio = args.decoded_mmio or args.cached_cpu
@@ -37,7 +39,8 @@ def main():
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('069-cpu-copy-ram-cached' if args.cpu_ram_copy else
+    recipe = ('070-cpu-xori-ram-cached' if args.cpu_xori else
+        '069-cpu-copy-ram-cached' if args.cpu_ram_copy else
         '068-dma-cache-invalidation' if args.cache_invalidation else
         '067-dma-cached-cpu' if args.cached_cpu else
         '066-decoded-mmio-dma' if args.decoded_mmio else
@@ -289,6 +292,19 @@ def main():
                 elif mode==8: end['gpr'][8]=1
                 else: forged['format']='plaid-rsp-cpu-imem-history-v11';forged['profile']='ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-dma-cached-cpu-invalidation-v11'
                 run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.cpu_xori:
+            for mode in range(7):
+                forged=copy.deepcopy(expected);rows=forged['events']
+                begin=next(e for e in rows if e['kind']=='cpu_begin' and e['word']>>26==14)
+                end=next(e for e in rows if e['kind']=='cpu_end' and e['context']==begin['context'])
+                if mode==0: end['gpr'][8]=0
+                elif mode==1: end['gpr'][9]=1
+                elif mode==2: begin['gpr'][8]=1
+                elif mode==3: begin['word'] ^= 1
+                elif mode==4: rows.remove(begin);reclock(rows)
+                elif mode==5: forged['steps'][22]['after'][8]=0
+                else: forged['format']='plaid-rsp-cpu-imem-history-v12';forged['profile']='ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-cpu-copy-ram-cached-consumption-v12'
+                run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
             forged = json.loads(original)
@@ -383,7 +399,19 @@ def main():
                 elif mode==3: writer['copy_parent']['source_bytes'][0]['parent']['write_ordinal']=219
                 elif mode==4: writer['source_register']=9
                 elif mode==5: graph['cached_fetches'][-1]['origins'][0]=dict(kind='sp_dma',write_ordinal=219,source_offset=0)
-                else: graph['cached_fetches'][-3]['origins'][0]=dict(kind='cpu_copy',write_ordinal=240,source_offset=0)
+                else: next(f for f in graph['cached_fetches'] if f['fetch_context']==243)['origins'][0]=dict(kind='cpu_copy',write_ordinal=240,source_offset=0)
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.cpu_xori:
+            for mode in range(6):
+                forged=json.loads(original);graph=forged['dma_consumption']
+                parent=graph['cpu_writes'][-1]['copy_parent'];transform=parent['transform']
+                if mode==0: parent.pop('transform')
+                elif mode==1: transform['decoder_context']=264
+                elif mode==2: transform['source_value']=0x21
+                elif mode==3: transform['result_value']=0
+                elif mode==4: transform['word'] ^= 1
+                else: graph['cached_fetches'][-1]['origins'][0]['write_ordinal']=240
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
         if args.cached_cpu:

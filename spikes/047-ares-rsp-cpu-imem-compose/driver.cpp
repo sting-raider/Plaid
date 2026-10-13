@@ -65,6 +65,11 @@ int main(int argc,char** argv) {
     rdram.ram.write<Word>(0x6038,insn_lw(8,16,0),RBusDevice::ARES_DEBUGGER);
     rdram.ram.write<Word>(0x603c,insn_sw(8,19,0),RBusDevice::ARES_DEBUGGER);
   }
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=13) {
+    rdram.ram.write<Word>(0x6040,insn_lw(8,16,0),RBusDevice::ARES_DEBUGGER);
+    rdram.ram.write<Word>(0x6044,0x39080021u,RBusDevice::ARES_DEBUGGER);
+    rdram.ram.write<Word>(0x6048,insn_sw(8,19,0),RBusDevice::ARES_DEBUGGER);
+  }
 
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=traced;plaidCpuInstructionObserver=traced?compose_cpu_instruction:nullptr;plaidSpWordObserver=traced?compose_sp_word:nullptr;plaidRspInstructionObserver=traced?compose_rsp_instruction:nullptr;plaidRspDmemObserver=traced?compose_rsp_dmem:nullptr;
@@ -112,7 +117,7 @@ int main(int argc,char** argv) {
   };
   auto printRam=[] {
     std::printf("[");
-    for(u32 address=0x6000;address<(PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030);address++) std::printf("%s%u",address==0x6000?"":",",u32(rdram.ram.read<Byte>(address,RBusDevice::ARES_DEBUGGER)));
+    for(u32 address=0x6000;address<(PLAID_RSP_DEFINITIONS_FIXTURE>=13?0x6060:PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030);address++) std::printf("%s%u",address==0x6000?"":",",u32(rdram.ram.read<Byte>(address,RBusDevice::ARES_DEBUGGER)));
     std::printf("]");
   };
   std::printf("{\"initial_dmem\":");printBytes(false,PLAID_RSP_DEFINITIONS_FIXTURE>=4?4096:8);
@@ -127,6 +132,8 @@ int main(int argc,char** argv) {
     phase(p);CpuStep s{};s.phase=p;s.index=index;s.word=index==14?0xbe500000u:index>=12?0:index==11?insn_sw(0,17,8):index==10?0:words[index];s.pc=index>=12?0xffffffff80000000ull+(index==12?0x6030:index==14?0x6034:0x6028):0xffffffffa0006000ull+index*4;
     if(index>=16){s.word=index==16?insn_lw(8,16,0):index==17?insn_sw(8,19,0):index==19?0xbe500000u:0;
       s.pc=index<18?0xffffffffa0006038ull+(index-16)*4:0xffffffff80000000ull+(index==19?0x6034:0x6028);}
+    if(index>=21){s.word=index==21?insn_lw(8,16,0):index==22?0x39080021u:index==23?insn_sw(8,19,0):index==25?0xbe500000u:index==26?0x21u:0;
+      s.pc=index<24?0xffffffffa0006040ull+(index-21)*4:0xffffffff80000000ull+(index==25?0x6034:0x6028);}
     for(u32 n=0;n<32;n++)s.before[n]=cpu.ipu.r[n].u64;
     cpu.pipeline.setPc(s.pc);if(cpu.instruction() && synchronize)cpu.synchronize();
     if(cpu.scc.cause.exceptionCode||cpu.scc.sysadFrozen){std::fprintf(stderr,"cpu phase=%u exception=%u frozen=%u\n",p,(u32)cpu.scc.cause.exceptionCode,(u32)cpu.scc.sysadFrozen);std::abort();}
@@ -257,6 +264,20 @@ int main(int argc,char** argv) {
       phase(index+16);
       #if PLAID_RSP_CPU_IMEM_SENSOR
       compose_push("cpu_reentry",composeEvents.size()+1,index==19?0xffffffff80006034ull:0xffffffff80006028ull,0,0,0,0,0,0,true);
+      #endif
+      cpuStep(index+16,index,false);
+    }
+  }
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=13) {
+    phase(37);
+    #if PLAID_RSP_CPU_IMEM_SENSOR
+    compose_push("cpu_reentry",composeEvents.size()+1,0xffffffffa0006040ull,0,0,0,0,0,0,true);
+    #endif
+    cpuStep(37,21,false);cpuStep(38,22,false);cpuStep(39,23,false);
+    for(u32 index:{24u,25u,26u}) {
+      phase(index+16);
+      #if PLAID_RSP_CPU_IMEM_SENSOR
+      compose_push("cpu_reentry",composeEvents.size()+1,index==25?0xffffffff80006034ull:0xffffffff80006028ull,0,0,0,0,0,0,true);
       #endif
       cpuStep(index+16,index,false);
     }

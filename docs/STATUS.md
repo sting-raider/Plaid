@@ -1,5 +1,14 @@
 # Status
 
+Controlled v13 now connects an actual CPU XORI transform through RAM writing,
+invalidation/refill and execution to original DMEM/DMA/RSP byte parents. Source
+NOP becomes ADDU r0,r0,r0 at writer276; old fill256 still executes NOP, then fresh
+fill292/decoder294 consumes the transformed word. Preserve transform270 and
+load264/read265 separately. The295-event/45-control graph agrees independently;
+all thirteen v0-v12 reports remain exact. Repeated/renamed/unattributed transform
+parents stay UNKNOWN under the bounded policy. General mutation/root/mapping/
+lifetime/whole-ROM/native closure remains OPEN; all proof flags stay false.
+
 Controlled v12 connects actual SP LW/register/CPU SW RAM copies to cached
 executable ancestry. An equal CPU write keeps existing resident fill225 parents;
 guest invalidation and fresh fill256 expose CPUwriter240 -> load233/read234 ->
