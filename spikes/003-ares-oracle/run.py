@@ -15,7 +15,8 @@ REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 OUTPUT = ROOT / "target/ares-oracle-spike"
 
 
-def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False, rdram_scalar_access=False, fetch_boundary_access=False, pi_dma_access=False, queue_access=False, sp_backing_access=False, pif_backing_access=False, rsp_dmem_access=False, cpu_instruction_access=False, rsp_word_read_access=False, rsp_dma_lifecycle_access=False, rsp_dma_pending_access=False, tlb_write_access=False, entryhi_write_access=False, entrylo_write_access=False, tlbr_load_access=False):
+def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False, rdram_scalar_access=False, fetch_boundary_access=False, pi_dma_access=False, queue_access=False, sp_backing_access=False, pif_backing_access=False, rsp_dmem_access=False, cpu_instruction_access=False, rsp_word_read_access=False, rsp_dma_lifecycle_access=False, rsp_dma_pending_access=False, tlb_write_access=False, entryhi_write_access=False, entrylo_write_access=False, tlbr_load_access=False, dcache_access=False):
+    if dcache_access: assert cpu_instruction_access and rdram_burst_access
     if cache_fill_access: assert raw_fetch_access and physical_fetch_access
     if cache_operation_access: assert raw_fetch_access and physical_fetch_access
     if rdram_burst_access: assert raw_fetch_access and physical_fetch_access
@@ -67,6 +68,9 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
         "extra_sources":{str(Path(p).relative_to(ROOT)):hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in extra_sources},
         "fixture_driver":hashlib.sha256(Path(__file__).with_name("driver.cpp").read_bytes()).hexdigest(),
         "recipe":hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+    if dcache_access:
+        inputs["dcache_access"]=True
+        inputs["dcache_recipe"]=hashlib.sha256((ROOT/"spikes/083-cached-ram-load-imem-consumption/prepare.py").read_bytes()).hexdigest()
     if rsp_word_read_access:
         inputs["rsp_word_read_access"]=True
     if rsp_dma_lifecycle_access:
@@ -310,6 +314,10 @@ struct PlaidQueueDispatchScope {
             spec = importlib.util.spec_from_file_location("plaid_tlb_write_generation", ROOT/"spikes/075-tlb-mapped-cache-root-return/prepare.py")
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
             module.generate(REF, output,entryhi=entryhi_write_access,entrylo=entrylo_write_access,tlbr=tlbr_load_access)
+        if dcache_access:
+            spec = importlib.util.spec_from_file_location("plaid_operand_dcache_generation", ROOT/"spikes/083-cached-ram-load-imem-consumption/prepare.py")
+            module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+            module.generate(REF, output)
         objects = []
         with (output / "build.log").open("w") as log:
             for name, source in [("sljit",REF / "thirdparty/sljit/sljit_src/sljitLir.c"),("libco",REF / "libco/libco.c")]:

@@ -373,6 +373,16 @@ read selects the new writer. Run `python scripts/test_rsp_definitions.py
 --ram-load-imem`; earlier report bytes remain exact. Cached/mapped/degraded/failed
 and other loads/global census/root/lifetime/whole-ROM/native stay OPEN.
 
+Controlled v25/spike083 uses the canonical D-cache replay for actual cached
+direct-KSEG0 Word LW and HitInvalidateD. Bind primitive occurrences to their
+decoded scope, complete resident snapshots and bounded control/GPR results;
+capture RAM parents at actual backing reads and resolve each delivered byte
+through its resident fill. Current backing is diagnostic context. Existing held
+CPU expressions/RAM/IMEM copies retain these cached parents. Run
+`python scripts/test_rsp_definitions.py --cached-ram-imem`; all earlier shapes
+stay exact. Cached mutation/writeback/mapping/dirty/global census/lifetime/native
+remain OPEN.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

@@ -27,6 +27,10 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+#[path = "rsp_cpu_dcache.rs"]
+mod dcache;
+pub use dcache::{DcacheFillParents, RspDcacheConsumption};
+
 pub const FORMAT: &str = "plaid-rsp-cpu-imem-history-v0";
 pub const PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-rsp-cpu-imem-scalar-sbv2e0-v0";
@@ -82,6 +86,9 @@ pub const SUBWORD_PROFILE: &str =
 pub const RAM_LOAD_FORMAT: &str = "plaid-rsp-cpu-imem-history-v24";
 pub const RAM_LOAD_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-ram-load-imem-consumption-v24";
+pub const DCACHE_FORMAT: &str = "plaid-rsp-cpu-imem-history-v25";
+pub const DCACHE_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-cached-ram-load-imem-consumption-v25";
 pub const CONDITIONAL_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-conditional-sp-imem-consumption-v22";
 pub const LOAD_PROFILE: &str =
@@ -168,6 +175,7 @@ enum Kind {
     CacheOperation,
     CpuRamWrite,
     CpuRamRead,
+    DcachePrimitive,
     ExceptionTransfer,
     ReturnTransfer,
     EpcRead,
@@ -188,6 +196,12 @@ struct Row {
     store_state: Option<CpuSpStoreState>,
     #[serde(default)]
     ram_load_state: Option<CpuSpStoreState>,
+    #[serde(default)]
+    dcache_cpu_state: Option<CpuSpStoreState>,
+    #[serde(default)]
+    dcache_event: Option<crate::dcache_writeback::Event>,
+    #[serde(default)]
+    dcache_line: Option<dcache::DcacheLine>,
     #[serde(default)]
     sp_device_address: Option<PhysicalAddr>,
     context: u64,
@@ -898,6 +912,8 @@ pub struct DmemDmaConsumption {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cpu_writes: Option<Vec<CpuRamWord>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dcache_consumption: Option<RspDcacheConsumption>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tlb_generations: Option<Vec<TlbwiGeneration>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_writes: Option<Vec<ContextWrite>>,
@@ -910,6 +926,15 @@ pub struct DmemDmaConsumption {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SpByteOrigin {
+    CpuCachedRamLoad {
+        decoder_context: u64,
+        read_ordinal: u64,
+        physical: PhysicalAddr,
+        resident_generation: u64,
+        resident_revision: u64,
+        origin: crate::dcache_writeback::DcacheByteOrigin,
+        parent: RamByteOrigin,
+    },
     /// Actual decoded CPU RAM load, retained inside subsequent copy ancestry.
     /// This is not an independently installed SP writer.
     CpuRamLoad {
@@ -1192,7 +1217,7 @@ fn effect_row(row: &Row) -> Result<(), String> {
 enum Active {
     Cpu {
         begin: Row,
-        read: Option<Loaded>,
+        read: Option<Box<Loaded>>,
         written: bool,
     },
     Rsp {
@@ -1236,6 +1261,7 @@ struct RamReplay {
     cache_invalidations: Vec<DmaCacheInvalidation>,
     cpu_ram_enabled: bool,
     cpu_writes: Vec<CpuRamWord>,
+    dcache: Option<dcache::DcacheCompose>,
     tlb: Option<TlbReplay>,
     context_enabled: bool,
     page_enabled: bool,
@@ -1342,6 +1368,7 @@ impl RamReplay {
             cache_invalidations: Vec::new(),
             cpu_ram_enabled: false,
             cpu_writes: Vec::new(),
+            dcache: None,
         })
     }
     fn offset(&self, address: u32, width: usize) -> Result<usize, String> {
@@ -2169,6 +2196,7 @@ impl RamReplay {
                 .invalidation_enabled
                 .then_some(self.cache_invalidations),
             cpu_writes: self.cpu_ram_enabled.then_some(self.cpu_writes),
+            dcache_consumption: self.dcache.map(dcache::DcacheCompose::finish).transpose()?,
             context_writes: self
                 .context_enabled
                 .then(|| self.tlb.as_ref().unwrap().context_writes.clone()),
@@ -2360,7 +2388,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let ram_load_enabled = h.format == RAM_LOAD_FORMAT && h.profile == RAM_LOAD_PROFILE;
+    let dcache_enabled = h.format == DCACHE_FORMAT && h.profile == DCACHE_PROFILE;
+    let ram_load_enabled =
+        dcache_enabled || (h.format == RAM_LOAD_FORMAT && h.profile == RAM_LOAD_PROFILE);
     let subword_enabled =
         ram_load_enabled || (h.format == SUBWORD_FORMAT && h.profile == SUBWORD_PROFILE);
     let conditional_enabled =
@@ -2473,6 +2503,9 @@ pub fn inspect_rsp_cpu_imem_history(
         ram.context_enabled = context_enabled;
         ram.page_enabled = page_enabled;
         ram.load_enabled = load_enabled;
+        if dcache_enabled {
+            ram.dcache = Some(dcache::DcacheCompose::new(digest.clone()));
+        }
     }
     if let Some(initial) = h.initial_tlb {
         ram.as_mut().ok_or("TLB composition lacks RAM profile")?.tlb =
@@ -2522,6 +2555,24 @@ pub fn inspect_rsp_cpu_imem_history(
             "noncontiguous event identity or phase order",
         )?;
         phase = row.phase;
+        require(
+            row.dcache_cpu_state.is_none()
+                || (dcache_enabled
+                    && matches!(row.kind, Kind::CpuBegin | Kind::CpuEnd)
+                    && row.word >> 26 == 0x2f
+                    && (row.word >> 16) & 31 == 17),
+            "D-cache CPU state outside HitInvalidateD",
+        )?;
+        require(
+            (row.dcache_event.is_none() && row.dcache_line.is_none())
+                || (dcache_enabled && row.kind == Kind::DcachePrimitive),
+            "D-cache metadata outside primitive scope",
+        )?;
+        if matches!(row.kind, Kind::RamWrite | Kind::CpuRamWrite)
+            && let Some(cache) = ram.as_mut().and_then(|ram| ram.dcache.as_mut())
+        {
+            cache.backing_write(&row)?;
+        }
         require(
             row.ram_load_state.is_none()
                 || (ram_load_enabled
@@ -2958,6 +3009,37 @@ pub fn inspect_rsp_cpu_imem_history(
                 exception_roots.push(receipt);
                 *written = true;
             }
+            Kind::DcachePrimitive => {
+                let Some(Active::Cpu {
+                    begin,
+                    read,
+                    written,
+                }) = &mut active
+                else {
+                    return Err("D-cache primitive lacks CPU decoder".into());
+                };
+                require(
+                    dcache_enabled && read.is_none() && !*written,
+                    "interleaved or duplicate D-cache primitive",
+                )?;
+                let memory = ram.as_mut().ok_or("D-cache primitive lacks RAM")?;
+                require(
+                    memory.active.is_none() && memory.pending.is_none() && memory.request.is_none(),
+                    "D-cache primitive interleaves RAM fetch/DMA",
+                )?;
+                *read = memory
+                    .dcache
+                    .as_mut()
+                    .ok_or("D-cache profile absent")?
+                    .observe(&row, begin, memory.start, &memory.bytes, &memory.origins)?
+                    .map(Box::new);
+                if matches!(
+                    row.dcache_event,
+                    Some(crate::dcache_writeback::Event::Invalidate { .. })
+                ) {
+                    *written = true;
+                }
+            }
             Kind::CpuRamRead => {
                 let Some(Active::Cpu {
                     begin,
@@ -2971,11 +3053,11 @@ pub fn inspect_rsp_cpu_imem_history(
                     ram_load_enabled && read.is_none() && !*written,
                     "duplicate or unsupported CPU RAM load effect",
                 )?;
-                *read = Some(
+                *read = Some(Box::new(
                     ram.as_ref()
                         .ok_or("RAM load lacks RAM profile")?
                         .cpu_read(&row, begin)?,
-                );
+                ));
             }
             Kind::CpuRamWrite => {
                 let Some(Active::Cpu {
@@ -3596,7 +3678,7 @@ pub fn inspect_rsp_cpu_imem_history(
                         transform: None,
                     };
                     if let Some(Active::Cpu { read, .. }) = &mut active {
-                        *read = Some(loaded);
+                        *read = Some(Box::new(loaded));
                     }
                 } else {
                     let origin = if row.context == 0 {
@@ -3767,9 +3849,9 @@ pub fn inspect_rsp_cpu_imem_history(
                         )?;
                     }
                     if op == 0x30 {
-                        linked_end(&begin, &row, read.as_ref())?;
+                        linked_end(&begin, &row, read.as_deref())?;
                     }
-                    let load = read.ok_or("CPU load lacks completed read")?;
+                    let load = *read.ok_or("CPU load lacks completed read")?;
                     require(!written, "load has store effect")?;
                     if load.register != 0 {
                         expected[load.register] = load.bits;
@@ -3803,6 +3885,16 @@ pub fn inspect_rsp_cpu_imem_history(
                     require(
                         written && read.is_none(),
                         "subword store lacks completed Word sink",
+                    )?;
+                } else if dcache_enabled && op == 0x2f && (begin.word >> 16) & 31 == 17 {
+                    memory_control_end(
+                        &begin,
+                        begin.dcache_cpu_state.as_ref(),
+                        row.dcache_cpu_state.as_ref(),
+                    )?;
+                    require(
+                        written && read.is_none(),
+                        "HitInvalidateD lacks actual completed hit invalidation",
                     )?;
                 } else if op == 0x2b {
                     require(

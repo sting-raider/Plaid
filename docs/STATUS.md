@@ -1,5 +1,13 @@
 # Status
 
+Controlled v25 now joins decoded cached RAM LW to the canonical D-cache state,
+captured RAM writer parents and IMEM/RSP consumption. Read618 and stale read643
+retain fill617/writer595 even after uncached writer637 installs ADDU21. Actual
+HitInvalidateD657 ends617; fresh fill664/read665 selects637, then IMEM671/RSP673.
+The674-event/114-control graph agrees independently; all26 earlier reports stay
+exact. Cached writes/dirty/mapped/other accesses/global census/lifetime/whole-ROM/
+native remain OPEN; all flags false.
+
 Controlled v24 now joins actual CPU RAM LW to current RAM writer ancestry and
 IMEM/RSP executable consumption. Read576 selects handler writer473; identity
 XORI581 feeds IMEMwriter587/RSP589 and equal RAMwriter595. Fresh read601 selects
