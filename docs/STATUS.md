@@ -1,5 +1,13 @@
 # Status
 
+The existing v19 protocol now also composes nonidentity mapped execution with
+ASID/cache reactivation (fixture20, spike077). VA e028 -> PA6028 hits retain old
+fill292/CPUwriter276 before and after guest context changes despite current RAM
+BREAK/writer318. Only actual invalidation ends292; fresh BREAK/root/changed-EPC
+return retains the later writer chain. Virtual EPC e028/e02c remains distinct
+from physical bytes. No new schema/consumer or general proof flag is introduced;
+changed physical selection and broader census/lifetime/whole-ROM/native stay OPEN.
+
 Controlled v19 now joins actual EntryHi/ASID context writers to the existing
 TLB/cache/root/return graph. Writes339/346/353 change7->8->7 then repeat7 without
 changing installed entries or retiring cache fills. Both mapped fetches select

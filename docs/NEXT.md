@@ -32,10 +32,13 @@ also binds actual TLBWI/current normalized entries to mapped cached BREAK/EPC/
 ERET/returned execution. Equal TLB writes replace mapping operation identity but
 preserve I-cache generations. Controlled v19 also binds actual EntryHi/ASID
 context writes (including equal rewrites) separately from installed-slot writers
-to both mapped consumptions. Next compose changed mapping/context selection and
-cached hit-vs-refill paths, broader root/control lifetime and complete mutation
-coverage. Keep ERET admission bounded to the uncut ERL0/kernel32/IE0 frame;
-ordinary static ERET stays unsupported. Reuse retained421-event/66-control v19,
+to both mapped consumptions. Fixture20 additionally composes a nonidentity
+mapped address with surviving stale hits before/after actual ASID restoration,
+then actual invalidation/refill/root/return in the same v19 protocol. Next compose
+changed physical mapping selection, broader root/control lifetime and complete
+mutation coverage. Keep ERET admission bounded to the uncut ERL0/kernel32/IE0 frame;
+ordinary static ERET stays unsupported. Reuse retained431-event/68-control fixture20,
+421-event/66-control v19,
 400-event/63-control v18,386-event/61-checkpoint v17,375-event/59-checkpoint v16,
 365-event/57-checkpoint v15,
 339-event/52-checkpoint v14,

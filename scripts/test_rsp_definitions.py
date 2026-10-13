@@ -34,7 +34,9 @@ def main():
     parser.add_argument('--epc-target',action='store_true')
     parser.add_argument('--mapped-root',action='store_true')
     parser.add_argument('--entryhi-context',action='store_true')
+    parser.add_argument('--mapped-reactivation',action='store_true')
     args = parser.parse_args()
+    args.entryhi_context = args.entryhi_context or args.mapped_reactivation
     args.mapped_root = args.mapped_root or args.entryhi_context
     args.epc_target = args.epc_target or args.mapped_root
     args.guest_epc = args.guest_epc or args.epc_target
@@ -51,7 +53,8 @@ def main():
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('076-entryhi-context-mapped-root-return' if args.entryhi_context else
+    recipe = ('077-mapped-cache-reactivation' if args.mapped_reactivation else
+        '076-entryhi-context-mapped-root-return' if args.entryhi_context else
         '075-tlb-mapped-cache-root-return' if args.mapped_root else
         '074-epc-transform-target' if args.epc_target else
         '073-guest-epc-return' if args.guest_epc else
@@ -499,6 +502,22 @@ def main():
                 elif mode==10: begin['tlb_state']['control']['state']['kernel']=False
                 else: next(e for e in rows if e['kind']=='ram_fetch_begin' and 'mapping' in e)['mapping']['asid']=8
                 run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.mapped_reactivation:
+            for mode in range(9):
+                forged=json.loads(json.dumps(expected));rows=forged['events']
+                hit=next(e for e in rows if e['kind']=='ram_fetch_begin' and 'mapping' in e)
+                end=next(e for e in rows if e['kind']=='ram_fetch_end' and e['context']==hit['context'])
+                restored=next(e for e in rows if e['kind']=='ram_fetch_begin' and 'mapping' in e and e['ordinal']>hit['ordinal'])
+                if mode==0: hit['fetch']['physical']=hit['address']=hit['pc']
+                elif mode==1: hit['mapping']['asid']=8
+                elif mode==2: hit.pop('mapping')
+                elif mode==3: end['cache_line']['tag_key'] ^= 0x8000
+                elif mode==4: end['value']=13 # current backing cannot replace stale resident
+                elif mode==5: end['cache_line']['words'][2]=13
+                elif mode==6: restored['mapping']['asid']=8
+                elif mode==7: restored['mapping']['entries'][0]['physical'][0]=0xe000
+                else: hit['pc']=0x6028 # physical identity is not the mapped virtual PC
+                run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
             forged = json.loads(original)
@@ -673,7 +692,7 @@ def main():
         if args.entryhi_context:
             for mode in range(8):
                 forged=json.loads(original);graph=forged['dma_consumption'];write=graph['context_writes'][-1]
-                mapped=next(f for f in graph['cached_fetches'] if 'mapping' in f)
+                mapped=next(f for f in graph['cached_fetches'] if 'context_write_ordinal' in f.get('mapping',{}))
                 if mode==0: graph.pop('context_writes')
                 elif mode==1: graph['context_writes'].pop()
                 elif mode==2: mapped['mapping']['context_write_ordinal']=346
@@ -692,6 +711,20 @@ def main():
                 elif mode==2: graph['cache_fills'][0]['source_bytes'][8]['write_ordinal'] += 1
                 elif mode==3: graph['cached_fetches'][-1]['origins'][0]=dict(kind='unknown',cut_ordinal=202)
                 else: graph['cached_fetches'][-1]['fill_ordinal']=197
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.mapped_reactivation:
+            for mode in range(8):
+                forged=json.loads(original);graph=forged['dma_consumption']
+                mapped=[f for f in graph['cached_fetches'] if 'mapping' in f]
+                if mode==0: mapped[0]['fill_ordinal']=mapped[2]['fill_ordinal']
+                elif mode==1: mapped[1]['origins'][0]['write_ordinal']=318
+                elif mode==2: mapped[0]['physical']=mapped[0]['pc']
+                elif mode==3: mapped[0]['mapping']['context_write_ordinal']=358
+                elif mode==4: mapped[1]['mapping']['context_write_ordinal']=351
+                elif mode==5: mapped[1]['fill_ordinal']=mapped[2]['fill_ordinal']
+                elif mode==6: mapped[2]['origins'][0]['write_ordinal']=276
+                else: forged['eret_returns'][0]['after']['state']['pc']=0x602c
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
     print('RSP definitions: original-clock ORI/ADDU parents, phase cuts, full register snapshots, source/report/input gates and unchanged proof flags passed')

@@ -2329,6 +2329,18 @@ unknown inputs; broader sources/selection changes/hazards/TLBR/privilege/reset/
 restore/census/root/lifetime/whole-ROM/native remain OPEN, all flags false, static
 ERET unsupported. No reference implementation copied/linked. See EntryHi receipt.
 
+ADR-0118 mapping/reactivation composition follow-up (2026-10-13): fixture20
+reuses the v19 source protocol rather than adding another consumer or profile.
+Actual TLBWI maps virtual e028 to physical6028; the exception EPC and transformed
+ERET target remain virtual e028/e02c. Cached hits before/after EntryHi ASID
+restoration retain fill292/CPUwriter276 despite changed RAM BREAK/writer318.
+Only actual HitInvalidateI ends292; fresh BREAK/handler/return consume their
+separate writer/fill parents. Context and installed-slot occurrences remain
+distinct, even on equal values. Congruent cache colors avoid the unresolved
+ares/Gopher index disagreement; no hardware synonym or hazard generalization.
+General changed-physical selection/source/census/root/lifetime/whole-ROM/native
+flags remain false; no milestone promotion. See mapping-reactivation receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

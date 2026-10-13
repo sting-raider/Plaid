@@ -503,6 +503,42 @@ mod tests {
         }
     }
     #[test]
+    fn nonidentity_virtual_epc_keeps_physical_translation_separate() {
+        let (mut replay, mut before, mut after) = fixture();
+        replay.staged.virtual_address = 0xe000;
+        before.staged = replay.staged.clone();
+        after.staged = before.staged.clone();
+        after.entries[0] = after.staged.clone();
+        replay
+            .write(before.control.state.pc.0, 10, 11, &before, &after)
+            .unwrap();
+        replay.finish(10, 12).unwrap();
+        let observation = Observation {
+            asid: 7,
+            kernel: true,
+            bits: 32,
+            entries: after.entries.clone(),
+        };
+        for (virtual_pc, physical) in [(0xe028, 0x6028), (0xe02c, 0x602c)] {
+            let witness = replay
+                .fetch(virtual_pc, PhysicalAddr(physical), &observation)
+                .unwrap();
+            assert_eq!(witness.entry.virtual_address, 0xe000);
+            assert_eq!(witness.entry.physical[0], 0x6000);
+            assert_eq!(witness.write_ordinal, 11);
+            assert!(
+                replay
+                    .fetch(virtual_pc, PhysicalAddr(virtual_pc as u32), &observation)
+                    .is_err()
+            );
+        }
+        assert!(
+            replay
+                .fetch(0x6028, PhysicalAddr(0x6028), &observation)
+                .is_err()
+        );
+    }
+    #[test]
     fn context_writers_change_matching_without_retiring_slot_generation() {
         let (mut replay, before, after) = fixture();
         let pc = before.control.state.pc.0;
