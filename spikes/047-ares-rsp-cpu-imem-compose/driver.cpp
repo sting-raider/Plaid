@@ -70,6 +70,14 @@ int main(int argc,char** argv) {
     rdram.ram.write<Word>(0x6044,0x39080021u,RBusDevice::ARES_DEBUGGER);
     rdram.ram.write<Word>(0x6048,insn_sw(8,19,0),RBusDevice::ARES_DEBUGGER);
   }
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=14) {
+    cpu.ipu.r[20].u64=0xffffffffa0000180ull;
+    cpu.scc.status.vectorLocation=0;cpu.scc.status.kernelExtendedAddressing=0;cpu.context.setMode();
+    rdram.ram.write<Word>(0x6060,insn_lw(8,16,0),RBusDevice::ARES_DEBUGGER);
+    rdram.ram.write<Word>(0x6064,insn_sw(8,20,0),RBusDevice::ARES_DEBUGGER);
+    rdram.ram.write<Word>(0x6068,0x3908000du,RBusDevice::ARES_DEBUGGER);
+    rdram.ram.write<Word>(0x606c,insn_sw(8,19,0),RBusDevice::ARES_DEBUGGER);
+  }
 
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=traced;plaidCpuInstructionObserver=traced?compose_cpu_instruction:nullptr;plaidSpWordObserver=traced?compose_sp_word:nullptr;plaidRspInstructionObserver=traced?compose_rsp_instruction:nullptr;plaidRspDmemObserver=traced?compose_rsp_dmem:nullptr;
@@ -117,7 +125,8 @@ int main(int argc,char** argv) {
   };
   auto printRam=[] {
     std::printf("[");
-    for(u32 address=0x6000;address<(PLAID_RSP_DEFINITIONS_FIXTURE>=13?0x6060:PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030);address++) std::printf("%s%u",address==0x6000?"":",",u32(rdram.ram.read<Byte>(address,RBusDevice::ARES_DEBUGGER)));
+    u32 start=PLAID_RSP_DEFINITIONS_FIXTURE>=14?0:0x6000;
+    for(u32 address=start;address<(PLAID_RSP_DEFINITIONS_FIXTURE>=14?0x6080:PLAID_RSP_DEFINITIONS_FIXTURE>=13?0x6060:PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030);address++) std::printf("%s%u",address==start?"":",",u32(rdram.ram.read<Byte>(address,RBusDevice::ARES_DEBUGGER)));
     std::printf("]");
   };
   std::printf("{\"initial_dmem\":");printBytes(false,PLAID_RSP_DEFINITIONS_FIXTURE>=4?4096:8);
@@ -134,9 +143,12 @@ int main(int argc,char** argv) {
       s.pc=index<18?0xffffffffa0006038ull+(index-16)*4:0xffffffff80000000ull+(index==19?0x6034:0x6028);}
     if(index>=21){s.word=index==21?insn_lw(8,16,0):index==22?0x39080021u:index==23?insn_sw(8,19,0):index==25?0xbe500000u:index==26?0x21u:0;
       s.pc=index<24?0xffffffffa0006040ull+(index-21)*4:0xffffffff80000000ull+(index==25?0x6034:0x6028);}
+    if(index>=27){s.word=index==27?insn_lw(8,16,0):index==28?insn_sw(8,20,0):index==29?0x3908000du:index==30?insn_sw(8,19,0):index==31?0xbe500000u:index==32?13:0;
+      s.pc=index<31?0xffffffffa0006060ull+(index-27)*4:index==33?0xffffffff80000180ull:0xffffffff80000000ull+(index==31?0x6034:0x6028);}
     for(u32 n=0;n<32;n++)s.before[n]=cpu.ipu.r[n].u64;
-    cpu.pipeline.setPc(s.pc);if(cpu.instruction() && synchronize)cpu.synchronize();
-    if(cpu.scc.cause.exceptionCode||cpu.scc.sysadFrozen){std::fprintf(stderr,"cpu phase=%u exception=%u frozen=%u\n",p,(u32)cpu.scc.cause.exceptionCode,(u32)cpu.scc.sysadFrozen);std::abort();}
+    if(index==33){if(cpu.ipu.pc!=s.pc)std::abort();}else cpu.pipeline.setPc(s.pc);
+    if(cpu.instruction() && synchronize)cpu.synchronize();
+    if((cpu.scc.cause.exceptionCode!=(index>=32?9u:0u))||cpu.scc.sysadFrozen){std::fprintf(stderr,"cpu phase=%u exception=%u frozen=%u\n",p,(u32)cpu.scc.cause.exceptionCode,(u32)cpu.scc.sysadFrozen);std::abort();}
     for(u32 n=0;n<32;n++)s.after[n]=cpu.ipu.r[n].u64;steps.push_back(s);checkpoint();
   };
   auto rspInstruction=[&](u32 p,u32 instruction,u32 base,u32 scalar,u8 vectorByte,u32 expected){
@@ -281,6 +293,21 @@ int main(int argc,char** argv) {
       #endif
       cpuStep(index+16,index,false);
     }
+  }
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=14) {
+    phase(43);
+    #if PLAID_RSP_CPU_IMEM_SENSOR
+    compose_push("cpu_reentry",composeEvents.size()+1,0xffffffffa0006060ull,0,0,0,0,0,0,true);
+    #endif
+    cpuStep(43,27,false);cpuStep(44,28,false);cpuStep(45,29,false);cpuStep(46,30,false);
+    for(u32 index:{31u,32u}) {
+      phase(index+16);
+      #if PLAID_RSP_CPU_IMEM_SENSOR
+      compose_push("cpu_reentry",composeEvents.size()+1,index==31?0xffffffff80006034ull:0xffffffff80006028ull,0,0,0,0,0,0,true);
+      #endif
+      cpuStep(index+16,index,false);
+    }
+    cpuStep(49,33,false); // Actual exception PC; no host PC seed or setter.
   }
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=false;

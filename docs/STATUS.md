@@ -1,5 +1,14 @@
 # Status
 
+Controlled v14 now joins actual writer/transform/cached BREAK ancestry to its
+exception transfer and first handler fetch. CPUwriter318 produces BREAK consumed
+by decoder331; transfer332 verifies cause9/non-delay EPC/EXL and the canonical
+BEV0/kernel32 root. First root fetch334/fill336/decoder338 retains separate
+handler CPUwriter307/DMEM/RAM/RSP parents, with no host PC setter for handler entry.
+The339-event/52-control actual graph agrees independently; all fourteen v0-v13
+reports remain exact. General root/mutation/mapping/lifetime/whole-ROM/native
+closure remains OPEN; all proof flags stay false.
+
 Controlled v13 now connects an actual CPU XORI transform through RAM writing,
 invalidation/refill and execution to original DMEM/DMA/RSP byte parents. Source
 NOP becomes ADDU r0,r0,r0 at writer276; old fill256 still executes NOP, then fresh

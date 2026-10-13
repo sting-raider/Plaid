@@ -267,6 +267,15 @@ SP stores do not receive identity IMEM-copy witnesses. Use spike070 and
 This composes actual transformed RAM code with cache invalidation/refill and
 decoder consumption; broader transforms/decompression/relocation stay OPEN.
 
+Controlled v14 binds BREAK before/after exception state in its actual decoder
+scope, using `resolve_exception_root` for the BEV0/kernel32 General vector. Check
+non-delay/non-nested cause9/EPC/EXL and unchanged complete GPRs. Require immediate
+first cached root fetch/decoder, preserving the handler fill/writer identities;
+reject opaque reseeding, interleaving and truncation. The fixture uses the actual
+exception PC for handler entry, without a host setter. Use spike071 and
+`python scripts/test_rsp_definitions.py --break-root`; v0-v13 reports stay exact.
+This proves one controlled occurrence, never complete root reachability/lifetime.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

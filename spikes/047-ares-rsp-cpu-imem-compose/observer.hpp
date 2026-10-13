@@ -19,6 +19,9 @@ struct ComposeEvent {
   u64 operationAddress=0;
   u32 operation=0,tagBefore=0,tagAfter=0;
   std::vector<u32> wordsBefore,wordsAfter;
+  bool exceptionValid=false,bev=false,exl=false,erl=false,kernel=false,branchDelay=false,delaySlot=false;
+  u64 exceptionPc=0,epc=0;
+  u32 exceptionCause=0,kernelBits=0;
 };
 static std::vector<ComposeEvent> composeEvents;
 static u32 composePhase=0,composeRspContext=0,composeRspPc=0,composeRspWord=0;
@@ -46,12 +49,29 @@ static void compose_push(const char* kind,u64 context,u64 pc,u32 word,
 }
 
 #if PLAID_RSP_CPU_IMEM_SENSOR
+#if PLAID_RSP_DEFINITIONS_FIXTURE >= 14
+static void compose_exception_state(ComposeEvent& e) {
+  e.exceptionValid=true;e.exceptionPc=cpu.ipu.pc;e.bev=cpu.scc.status.vectorLocation;
+  e.exl=cpu.scc.status.exceptionLevel;e.erl=cpu.scc.status.errorLevel;e.kernel=cpu.context.kernelMode();
+  e.kernelBits=cpu.context.bits;e.exceptionCause=cpu.scc.cause.exceptionCode;
+  e.branchDelay=cpu.scc.cause.branchDelay;e.epc=cpu.scc.epc;e.delaySlot=cpu.pipeline.inDelaySlot();
+}
+#endif
 static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
   if(begin) {
     if(composeCpuContext || composeRspContext) std::abort();
     composeCpuContext=composeEvents.size()+1;composeCpuPc=pc;composeCpuWord=word;
   } else if(!composeCpuContext || word!=composeCpuWord) std::abort();
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 14
+  if(!begin && (word&0xfc00003f)==13) {
+    compose_push("exception_transfer",composeCpuContext,composeCpuPc,word,0,0,0,0,0,true);
+    compose_exception_state(composeEvents.back());
+  }
+  #endif
   compose_push(begin?"cpu_begin":"cpu_end",composeCpuContext,composeCpuPc,word,0,0,0,0,0,true);
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 14
+  if(begin && (word&0xfc00003f)==13) compose_exception_state(composeEvents.back());
+  #endif
   if(!begin) composeCpuContext=composeCpuPc=composeCpuWord=0;
 }
 static void compose_rsp_instruction(bool begin,u32 pc,u32 word,u32 next,bool halted) {
@@ -203,7 +223,7 @@ static void compose_ram_fetch(bool begin,u64 pc,u32 physical,u32 busAddress,bool
   if(!begin) composeFetchContext=composeFetchPc=0;
 }
 static void compose_ram_scalar(bool write,u32 address,u32 bytes,u32 device,u64 value) {
-  if(address<0x6000 || address>=(PLAID_RSP_DEFINITIONS_FIXTURE>=13?0x6060:PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030)) return; // Explicit declared RAM snapshot.
+  if(address<(PLAID_RSP_DEFINITIONS_FIXTURE>=14?0:0x6000) || address>=(PLAID_RSP_DEFINITIONS_FIXTURE>=14?0x6080:PLAID_RSP_DEFINITIONS_FIXTURE>=13?0x6060:PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030)) return; // Explicit declared RAM snapshot.
   if(write) {
     #if PLAID_RSP_DEFINITIONS_FIXTURE >= 12
     if(composeCpuContext && device==(u32)RBusDevice::VR4300_UNCACHED) {
@@ -288,6 +308,8 @@ static void compose_print() {
       }
       std::printf("}");
     }
+    if(e.exceptionValid) std::printf(",\"exception_state\":{\"pc\":%llu,\"bev\":%s,\"exl\":%s,\"erl\":%s,\"kernel_mode\":\"bits%u\",\"kernel\":%s,\"cause\":%u,\"branch_delay\":%s,\"epc\":%llu,\"delay_slot\":%s}",
+      (unsigned long long)e.exceptionPc,e.bev?"true":"false",e.exl?"true":"false",e.erl?"true":"false",e.kernelBits,e.kernel?"true":"false",e.exceptionCause,e.branchDelay?"true":"false",(unsigned long long)e.epc,e.delaySlot?"true":"false");
     std::printf("}");
   }
   std::printf("]");

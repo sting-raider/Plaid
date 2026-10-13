@@ -28,7 +28,9 @@ def main():
     parser.add_argument('--cache-invalidation',action='store_true')
     parser.add_argument('--cpu-ram-copy',action='store_true')
     parser.add_argument('--cpu-xori',action='store_true')
+    parser.add_argument('--break-root',action='store_true')
     args = parser.parse_args()
+    args.cpu_xori = args.cpu_xori or args.break_root
     args.cpu_ram_copy = args.cpu_ram_copy or args.cpu_xori
     args.cache_invalidation = args.cache_invalidation or args.cpu_ram_copy
     args.cached_cpu = args.cached_cpu or args.cache_invalidation
@@ -39,7 +41,8 @@ def main():
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('070-cpu-xori-ram-cached' if args.cpu_xori else
+    recipe = ('071-writer-break-handler' if args.break_root else
+        '070-cpu-xori-ram-cached' if args.cpu_xori else
         '069-cpu-copy-ram-cached' if args.cpu_ram_copy else
         '068-dma-cache-invalidation' if args.cache_invalidation else
         '067-dma-cached-cpu' if args.cached_cpu else
@@ -67,7 +70,7 @@ def main():
         replayed = model.replay(events,definitions)
         expected.update(initial_dmem=list(bytes.fromhex('340800aaaaee7722')+bytes(4088)),
             final_dmem=replayed['final_dmem'],initial_imem=replayed['initial_imem'],final_imem=replayed['final_imem'],
-            ram=dict(start=0x6000,initial=replayed['initial_ram'],final_bytes=replayed['final_ram']))
+            ram=dict(start=getattr(model,'RAM_START',0x6000),initial=replayed['initial_ram'],final_bytes=replayed['final_ram']))
     elif execution:
         expected['initial_imem'],expected['final_imem'],_ = model.replay_image(events)
     if args.pending:
@@ -305,6 +308,31 @@ def main():
                 elif mode==5: forged['steps'][22]['after'][8]=0
                 else: forged['format']='plaid-rsp-cpu-imem-history-v12';forged['profile']='ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-cpu-copy-ram-cached-consumption-v12'
                 run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.break_root:
+            for mode in range(14):
+                forged=copy.deepcopy(expected);rows=forged['events']
+                begin=next(e for e in rows if e['kind']=='cpu_begin' and e.get('exception_state'))
+                transfer=next(e for e in rows if e['kind']=='exception_transfer')
+                before=begin['exception_state'];after=transfer['exception_state']
+                if mode==0: rows.remove(transfer);reclock(rows)
+                elif mode==1: rows.insert(rows.index(transfer),copy.deepcopy(transfer));reclock(rows)
+                elif mode==2: before['exl']=True
+                elif mode==3: before['bev']=True
+                elif mode==4: before['delay_slot']=True
+                elif mode==5: before['kernel_mode']='bits64'
+                elif mode==6: after['epc']-=4
+                elif mode==7: after['pc']+=4
+                elif mode==8: after['cause']=8
+                elif mode==9: after['exl']=False
+                elif mode==10: after['branch_delay']=True
+                elif mode==11: transfer['context']=transfer['ordinal']
+                elif mode==12:
+                    forged['events']=rows[:rows.index(transfer)+2];forged['steps']=forged['steps'][:-1]
+                else:
+                    seed=copy.deepcopy(next(e for e in reversed(rows) if e['kind']=='cpu_reentry'))
+                    seed.update(phase=49,pc=model.ROOT_PC)
+                    rows.insert(next(i for i,e in enumerate(rows) if e['kind']=='ram_fetch_begin' and e['pc']==model.ROOT_PC),seed);reclock(rows)
+                run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
             forged = json.loads(original)
@@ -412,6 +440,17 @@ def main():
                 elif mode==3: transform['result_value']=0
                 elif mode==4: transform['word'] ^= 1
                 else: graph['cached_fetches'][-1]['origins'][0]['write_ordinal']=240
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.break_root:
+            for mode in range(6):
+                forged=json.loads(original);root=forged['exception_roots'][0]
+                if mode==0: forged.pop('exception_roots')
+                elif mode==1: root['trigger_context']=317
+                elif mode==2: root['root']['input']['class']='tlb_miss'
+                elif mode==3: root['fetch_context']=327
+                elif mode==4: root['decoder_context']=331
+                else: forged['dma_consumption']['cached_fetches'][-1]['origins'][0]['write_ordinal']=318
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
         if args.cached_cpu:

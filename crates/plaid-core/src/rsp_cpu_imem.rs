@@ -5,6 +5,10 @@
 //! v4 separately binds completed DMEM DMA Word writes to uncached CPU fetches
 //! and decoder contexts; it grants no request lifetime or mutation census.
 use crate::{
+    exception_roots::{
+        ExceptionClass, ExceptionRootInput, ExceptionRootReceipt, KernelAddressMode,
+        resolve_exception_root,
+    },
     program::{FetchAccess, FetchCacheLine, GuestVirtualAddr, PhysicalAddr},
     rom::sha256,
 };
@@ -53,6 +57,9 @@ pub const CPU_RAM_PROFILE: &str =
 pub const CPU_TRANSFORM_FORMAT: &str = "plaid-rsp-cpu-imem-history-v13";
 pub const CPU_TRANSFORM_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-cpu-xori-ram-cached-consumption-v13";
+pub const EXCEPTION_FORMAT: &str = "plaid-rsp-cpu-imem-history-v14";
+pub const EXCEPTION_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-writer-break-handler-consumption-v14";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -116,6 +123,7 @@ enum Kind {
     CpuReentry,
     CacheOperation,
     CpuRamWrite,
+    ExceptionTransfer,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -149,6 +157,94 @@ struct Row {
     cache_line: Option<FetchCacheLine>,
     #[serde(default)]
     cache_operation: Option<DmaCacheOperation>,
+    #[serde(default)]
+    exception_state: Option<CpuExceptionState>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CpuExceptionState {
+    pub pc: GuestVirtualAddr,
+    pub bev: bool,
+    pub exl: bool,
+    pub erl: bool,
+    pub kernel_mode: KernelAddressMode,
+    pub kernel: bool,
+    pub cause: u32,
+    pub branch_delay: bool,
+    pub epc: GuestVirtualAddr,
+    pub delay_slot: bool,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CpuExceptionRoot {
+    pub trigger_context: u64,
+    pub transfer_ordinal: u64,
+    pub before: CpuExceptionState,
+    pub after: CpuExceptionState,
+    pub root: ExceptionRootReceipt,
+    pub fetch_context: u64,
+    pub decoder_context: u64,
+}
+fn break_word(word: u32) -> bool {
+    word & 0xfc00003f == 13
+}
+fn break_transfer(begin: &Row, row: &Row) -> Result<CpuExceptionRoot, String> {
+    effect_row(row)?;
+    let before = begin
+        .exception_state
+        .as_ref()
+        .ok_or("BREAK lacks pre-transfer state")?;
+    let after = row
+        .exception_state
+        .as_ref()
+        .ok_or("exception transfer lacks state")?;
+    require(
+        break_word(begin.word)
+            && same(begin, row)
+            && row.cpu
+            && row.bank == 0
+            && row.address == 0
+            && row.offset == 0
+            && row.bytes == 0
+            && row.value == 0
+            && before.pc.0 == begin.pc
+            && !before.bev
+            && !before.exl
+            && !before.erl
+            && before.kernel
+            && before.kernel_mode == KernelAddressMode::Bits32
+            && !before.delay_slot
+            && before.cause == 0
+            && !before.branch_delay,
+        "unsupported or unscoped BREAK exception state",
+    )?;
+    let root = resolve_exception_root(ExceptionRootInput {
+        class: ExceptionClass::General,
+        bev: before.bev,
+        exl: before.exl,
+        kernel_mode: before.kernel_mode,
+    });
+    let expected = CpuExceptionState {
+        pc: root.root,
+        exl: true,
+        cause: 9,
+        epc: GuestVirtualAddr(begin.pc),
+        ..before.clone()
+    };
+    require(
+        *after == expected,
+        "BREAK exception result differs from architectural root/EPC/EXL",
+    )?;
+    Ok(CpuExceptionRoot {
+        trigger_context: begin.context,
+        transfer_ordinal: row.ordinal,
+        before: before.clone(),
+        after: after.clone(),
+        root,
+        fetch_context: 0,
+        decoder_context: 0,
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -611,6 +707,8 @@ pub struct RspCpuImemReport {
     pub imem_fetches: Option<Vec<RspImemFetch>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dma_consumption: Option<DmemDmaConsumption>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exception_roots: Option<Vec<CpuExceptionRoot>>,
     pub source_ancestry_certified: bool,
     pub mutation_coverage_certified: bool,
     pub imem_execution_certified: bool,
@@ -1752,7 +1850,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let transform_enabled = h.format == CPU_TRANSFORM_FORMAT && h.profile == CPU_TRANSFORM_PROFILE;
+    let exception_enabled = h.format == EXCEPTION_FORMAT && h.profile == EXCEPTION_PROFILE;
+    let transform_enabled = exception_enabled
+        || (h.format == CPU_TRANSFORM_FORMAT && h.profile == CPU_TRANSFORM_PROFILE);
     let cpu_ram_enabled =
         transform_enabled || (h.format == CPU_RAM_FORMAT && h.profile == CPU_RAM_PROFILE);
     let invalidation_enabled =
@@ -1847,6 +1947,9 @@ pub fn inspect_rsp_cpu_imem_history(
     let mut registers: [Option<Loaded>; 32] = std::array::from_fn(|_| None);
     let mut active: Option<Active> = None;
     let mut previous_cpu: Option<Row> = None;
+    let mut exception_roots: Vec<CpuExceptionRoot> = Vec::new();
+    let mut pending_exception = None;
+    let mut await_root: Option<usize> = None;
     let mut cpu_reentry: Option<Row> = None;
     let mut previous_rsp: Option<Row> = None;
     let mut rsp_registers = [None; 32];
@@ -1862,6 +1965,30 @@ pub fn inspect_rsp_cpu_imem_history(
             "noncontiguous event identity or phase order",
         )?;
         phase = row.phase;
+        require(
+            row.exception_state.is_none()
+                || (exception_enabled
+                    && (row.kind == Kind::ExceptionTransfer
+                        || (row.kind == Kind::CpuBegin && break_word(row.word)))),
+            "exception state outside controlled BREAK boundary",
+        )?;
+        require(
+            pending_exception.is_none() || row.kind == Kind::CpuEnd,
+            "exception transfer was not immediately completed by its decoder",
+        )?;
+        if let Some(index) = await_root {
+            require(
+                matches!(
+                    row.kind,
+                    Kind::RamFetchBegin
+                        | Kind::CacheBurstRead
+                        | Kind::CacheFill
+                        | Kind::RamFetchEnd
+                        | Kind::CpuBegin
+                ) && row.pc == exception_roots[index].root.root.0,
+                "exception root was not immediately fetched and decoded",
+            )?;
+        }
         require(
             row.cache_operation.is_none()
                 || (invalidation_enabled && row.kind == Kind::CacheOperation),
@@ -1950,6 +2077,24 @@ pub fn inspect_rsp_cpu_imem_history(
             )?;
         }
         match row.kind {
+            Kind::ExceptionTransfer => {
+                let Some(Active::Cpu {
+                    begin,
+                    read,
+                    written,
+                }) = &mut active
+                else {
+                    return Err("exception transfer lacks CPU decoder".into());
+                };
+                require(
+                    exception_enabled && read.is_none() && !*written && await_root.is_none(),
+                    "duplicate or unsupported exception transfer",
+                )?;
+                let receipt = break_transfer(begin, &row)?;
+                pending_exception = Some(exception_roots.len());
+                exception_roots.push(receipt);
+                *written = true;
+            }
             Kind::CpuRamWrite => {
                 let Some(Active::Cpu {
                     begin,
@@ -2128,18 +2273,42 @@ pub fn inspect_rsp_cpu_imem_history(
                     "invalid CPU begin context",
                 )?;
                 boundary(&row, true)?;
+                require(
+                    !break_word(row.word) || (exception_enabled && row.exception_state.is_some()),
+                    "BREAK lacks controlled exception profile/state",
+                )?;
                 if let Some(seed) = cpu_reentry.take() {
                     require(
                         row.pc == seed.pc && row.phase == seed.phase && row.gpr == seed.gpr,
                         "CPU decoder differs from opaque control seed",
                     )?;
                 }
+                if let Some(index) = await_root.take() {
+                    let ram = ram.as_ref().ok_or("exception root lacks RAM profile")?;
+                    let fetch_context = match ram
+                        .pending
+                        .as_ref()
+                        .ok_or("exception handler lacks completed fetch")?
+                    {
+                        PendingFetch::Cached(index) => ram.cached_fetches[*index].fetch_context,
+                        PendingFetch::Uncached(_) => {
+                            return Err("controlled exception handler must use cached root".into());
+                        }
+                    };
+                    exception_roots[index].fetch_context = fetch_context;
+                    exception_roots[index].decoder_context = row.context;
+                }
                 if let Some(ram) = &mut ram {
                     ram.bind(&row)?;
                 }
                 if let Some(previous) = &previous_cpu {
+                    let next_pc = if break_word(previous.word) {
+                        exception_roots.last().map(|receipt| receipt.root.root.0)
+                    } else {
+                        previous.pc.checked_add(4)
+                    };
                     require(
-                        row.gpr == previous.gpr && previous.pc.checked_add(4) == Some(row.pc),
+                        row.gpr == previous.gpr && next_pc == Some(row.pc),
                         "CPU register/control continuity mismatch",
                     )?;
                 }
@@ -2517,7 +2686,17 @@ pub fn inspect_rsp_cpu_imem_history(
                 require(same(&begin, &row), "CPU end context mismatch")?;
                 let mut expected = begin.gpr.clone();
                 let op = begin.word >> 26;
-                if op == 0x23 {
+                if break_word(begin.word) {
+                    require(
+                        exception_enabled && written && read.is_none(),
+                        "BREAK lacks its completed exception transfer",
+                    )?;
+                    await_root = Some(
+                        pending_exception
+                            .take()
+                            .ok_or("BREAK lacks transfer identity")?,
+                    );
+                } else if op == 0x23 {
                     let load = read.ok_or("CPU load lacks completed read")?;
                     require(!written, "load has store effect")?;
                     if load.register != 0 {
@@ -2618,7 +2797,10 @@ pub fn inspect_rsp_cpu_imem_history(
         }
     }
     require(
-        active.is_none() && cpu_reentry.is_none(),
+        active.is_none()
+            && cpu_reentry.is_none()
+            && pending_exception.is_none()
+            && await_root.is_none(),
         "truncated RSP/CPU instruction or control seed",
     )?;
     require(
@@ -2643,6 +2825,7 @@ pub fn inspect_rsp_cpu_imem_history(
         rsp_definitions: definitions_enabled.then_some(rsp_definitions),
         imem_fetches: execution_enabled.then_some(imem_fetches),
         dma_consumption: ram.map(RamReplay::finish).transpose()?,
+        exception_roots: exception_enabled.then_some(exception_roots),
         source_ancestry_certified: false,
         mutation_coverage_certified: false,
         imem_execution_certified: false,
@@ -4890,5 +5073,71 @@ mod tests {
         assert!(Loaded::xori(None, &begin).unwrap().is_none());
         begin.gpr[8] = 1 << 32;
         assert!(Loaded::xori(Some(parent), &begin).is_err());
+    }
+    fn break_fixture() -> (Row, Row) {
+        let mut begin: Row = serde_json::from_value(row("cpu_begin", 10, 10)).unwrap();
+        begin.word = 13;
+        begin.pc = 0xffffffff80001000;
+        begin.cpu = true;
+        begin.gpr = vec![0; 32];
+        begin.exception_state = Some(CpuExceptionState {
+            pc: GuestVirtualAddr(begin.pc),
+            bev: false,
+            exl: false,
+            erl: false,
+            kernel_mode: KernelAddressMode::Bits32,
+            kernel: true,
+            cause: 0,
+            branch_delay: false,
+            epc: GuestVirtualAddr(0x1234),
+            delay_slot: false,
+        });
+        let mut transfer = begin.clone();
+        transfer.kind = Kind::ExceptionTransfer;
+        transfer.ordinal = 11;
+        transfer.gpr.clear();
+        let state = transfer.exception_state.as_mut().unwrap();
+        state.pc = GuestVirtualAddr(0xffffffff80000180);
+        state.exl = true;
+        state.cause = 9;
+        state.epc = GuestVirtualAddr(begin.pc);
+        (begin, transfer)
+    }
+    #[test]
+    fn break_transfer_derives_general_root_and_overwrites_old_epc() {
+        let (begin, transfer) = break_fixture();
+        let receipt = break_transfer(&begin, &transfer).unwrap();
+        assert_eq!(receipt.root.root, GuestVirtualAddr(0xffffffff80000180));
+        assert_eq!(receipt.after.epc, GuestVirtualAddr(begin.pc));
+        assert_ne!(receipt.before.epc, receipt.after.epc);
+        assert_eq!(
+            (receipt.trigger_context, receipt.transfer_ordinal),
+            (10, 11)
+        );
+        assert_eq!((receipt.fetch_context, receipt.decoder_context), (0, 0));
+    }
+    #[test]
+    fn break_transfer_cannot_borrow_nested_delay_bev_or_wrong_result_state() {
+        for mode in 0..13 {
+            let (mut begin, mut transfer) = break_fixture();
+            match mode {
+                0 => begin.exception_state.as_mut().unwrap().exl = true,
+                1 => begin.exception_state.as_mut().unwrap().bev = true,
+                2 => begin.exception_state.as_mut().unwrap().erl = true,
+                3 => begin.exception_state.as_mut().unwrap().delay_slot = true,
+                4 => {
+                    begin.exception_state.as_mut().unwrap().kernel_mode = KernelAddressMode::Bits64
+                }
+                5 => begin.exception_state.as_mut().unwrap().kernel = false,
+                6 => transfer.exception_state.as_mut().unwrap().pc.0 += 4,
+                7 => transfer.exception_state.as_mut().unwrap().epc.0 -= 4,
+                8 => transfer.exception_state.as_mut().unwrap().cause = 8,
+                9 => transfer.exception_state.as_mut().unwrap().exl = false,
+                10 => transfer.exception_state.as_mut().unwrap().branch_delay = true,
+                11 => transfer.context += 1,
+                _ => begin.word = 12,
+            }
+            assert!(break_transfer(&begin, &transfer).is_err(), "mode {mode}");
+        }
     }
 }
