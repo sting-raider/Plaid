@@ -84,6 +84,8 @@ pub struct Observation {
 #[serde(deny_unknown_fields)]
 pub struct Witness {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_lo_write_ordinal: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_write_ordinal: Option<u64>,
     pub write_ordinal: u64,
     pub selected_slot: u32,
@@ -106,8 +108,10 @@ pub(crate) struct Replay {
     initial: Initial,
     staged: Entry,
     pub context_writes: Vec<ContextWrite>,
+    pub entry_lo_writes: Vec<ContextWrite>,
     entries: Vec<Entry>,
     writers: [Option<usize>; 32],
+    page_writers: [Option<u64>; 32],
     pub generations: Vec<TlbwiGeneration>,
 }
 impl Replay {
@@ -128,8 +132,10 @@ impl Replay {
             entries: initial.entries.clone(),
             staged: initial.staged.clone(),
             context_writes: Vec::new(),
+            entry_lo_writes: Vec::new(),
             initial,
             writers: [None; 32],
+            page_writers: [None; 32],
             generations: Vec::new(),
         })
     }
@@ -165,6 +171,12 @@ impl Replay {
             "TLBWI lost current slot/staged/table state",
         )?;
         let slot = before.index as usize;
+        require(
+            self.entry_lo_writes
+                .last()
+                .is_none_or(|write| write.end_ordinal != 0),
+            "TLBWI preceded completed EntryLo0 write",
+        )?;
         let mut expected = self.entries.clone();
         expected[slot] = before.staged.clone();
         require(
@@ -186,6 +198,7 @@ impl Replay {
             same_entry_content: self.entries[slot] == expected[slot],
         });
         self.writers[slot] = Some(self.generations.len() - 1);
+        self.page_writers[slot] = self.entry_lo_writes.last().map(|write| write.write_ordinal);
         self.entries = expected;
         Ok(())
     }
@@ -259,6 +272,78 @@ impl Replay {
         write.end_ordinal = ordinal;
         Ok(())
     }
+    pub fn entry_lo_write(
+        &mut self,
+        pc: u64,
+        context: u64,
+        ordinal: u64,
+        source: (u8, u64),
+        before: &State,
+        after: &State,
+    ) -> Result<(), String> {
+        let (register, value) = source;
+        let control = &before.control;
+        require(
+            control.state.pc.0 == pc
+                && control.state.kernel
+                && control.state.kernel_mode == KernelAddressMode::Bits32
+                && !control.interrupt_enable
+                && !control.state.bev
+                && !control.state.exl
+                && !control.state.erl
+                && !control.state.delay_slot
+                && !control.state.branch_delay
+                && control.state.cause == 0
+                && after.control == *control,
+            "unsupported EntryLo0 privilege/state transition",
+        )?;
+        require(
+            before.index == self.initial.index
+                && after.index == before.index
+                && before.staged == self.staged
+                && before.entries == self.entries
+                && after.entries == before.entries,
+            "EntryLo0 write changed or borrowed installed table/state",
+        )?;
+        let mut expected = self.staged.clone();
+        expected.global[0] = value & 1 != 0;
+        expected.valid[0] = value & 2 != 0;
+        expected.dirty[0] = value & 4 != 0;
+        expected.cca[0] = ((value >> 3) & 7) as u8;
+        let mask = 0xff_ffffu64 << 12;
+        expected.physical[0] = (expected.physical[0] & !mask) | (((value >> 6) & 0xff_ffff) << 12);
+        expected.validate()?;
+        require(
+            register > 0 && register < 32 && after.staged == expected,
+            "EntryLo0 masked fields differ from full source register",
+        )?;
+        self.entry_lo_writes.push(ContextWrite {
+            decoder_context: context,
+            write_ordinal: ordinal,
+            end_ordinal: 0,
+            source_register: register,
+            register_value: value,
+            before: before.clone(),
+            after: after.clone(),
+            same_staged_content: before.staged == after.staged,
+        });
+        self.staged = expected;
+        Ok(())
+    }
+    pub fn finish_entry_lo(&mut self, context: u64, ordinal: u64) -> Result<(), String> {
+        let write = self
+            .entry_lo_writes
+            .last_mut()
+            .ok_or("EntryLo0 lacks write occurrence")?;
+        require(
+            write.decoder_context == context
+                && write.end_ordinal == 0
+                && write.write_ordinal.checked_add(1) == Some(ordinal),
+            "EntryLo0 end lost page write identity",
+        )?;
+        write.end_ordinal = ordinal;
+        Ok(())
+    }
     pub fn finish(&mut self, context: u64, ordinal: u64) -> Result<(), String> {
         let generation = self
             .generations
@@ -323,6 +408,7 @@ impl Replay {
             "mapped fetch preceded completed TLBWI",
         )?;
         Ok(Witness {
+            entry_lo_write_ordinal: self.page_writers[slot],
             context_write_ordinal: self.context_writes.last().map(|write| write.write_ordinal),
             write_ordinal: generation.write_ordinal,
             selected_slot: slot as u32,
@@ -497,6 +583,103 @@ mod tests {
                         physical,
                         &observation
                     )
+                    .is_err(),
+                "mode {mode}"
+            );
+        }
+    }
+    #[test]
+    fn staged_page_writes_need_installation_and_keep_the_installed_writer() {
+        let (mut replay, before, installed) = fixture();
+        let pc = before.control.state.pc.0;
+        replay.write(pc, 10, 11, &before, &installed).unwrap();
+        replay.finish(10, 12).unwrap();
+        let mut staged = installed.clone();
+        staged.staged.physical[0] = 0xe000;
+        staged.staged.dirty[0] = true;
+        replay
+            .entry_lo_write(pc, 20, 21, (27, 0x39e), &installed, &staged)
+            .unwrap();
+        replay.finish_entry_lo(20, 22).unwrap();
+        replay
+            .entry_lo_write(pc, 30, 31, (27, 0x39e), &staged, &staged)
+            .unwrap();
+        replay.finish_entry_lo(30, 32).unwrap();
+        assert!(replay.entry_lo_writes[1].same_staged_content);
+        let mut observation = Observation {
+            asid: 7,
+            kernel: true,
+            bits: 32,
+            entries: installed.entries.clone(),
+        };
+        let old = replay
+            .fetch(0x6028, PhysicalAddr(0x6028), &observation)
+            .unwrap();
+        assert_eq!(old.write_ordinal, 11);
+        assert_eq!(old.entry_lo_write_ordinal, None);
+        assert!(
+            replay
+                .fetch(0x6028, PhysicalAddr(0xe028), &observation)
+                .is_err()
+        );
+        let mut remapped = staged.clone();
+        remapped.entries[0] = remapped.staged.clone();
+        replay.write(pc, 40, 41, &staged, &remapped).unwrap();
+        replay.finish(40, 42).unwrap();
+        observation.entries = remapped.entries.clone();
+        let selected = replay
+            .fetch(0x6028, PhysicalAddr(0xe028), &observation)
+            .unwrap();
+        assert_eq!(selected.write_ordinal, 41);
+        assert_eq!(selected.entry_lo_write_ordinal, Some(31));
+        let mut later_staged = remapped.clone();
+        later_staged.staged.physical[0] = 0x6000;
+        replay
+            .entry_lo_write(pc, 50, 51, (27, 0x19e), &remapped, &later_staged)
+            .unwrap();
+        replay.finish_entry_lo(50, 52).unwrap();
+        assert_eq!(
+            replay
+                .fetch(0x6028, PhysicalAddr(0xe028), &observation)
+                .unwrap(),
+            selected
+        );
+    }
+    #[test]
+    fn page_setter_checks_masked_fields_table_and_operation_completion() {
+        for mode in 0..9 {
+            let (mut replay, before, installed) = fixture();
+            let pc = before.control.state.pc.0;
+            replay.write(pc, 10, 11, &before, &installed).unwrap();
+            replay.finish(10, 12).unwrap();
+            let mut staged = installed.clone();
+            staged.staged.physical[0] = 0xe000;
+            staged.staged.dirty[0] = true;
+            let mut operand = (27, 0x39e);
+            match mode {
+                0 => staged.entries[0].physical[0] = 0xe000,
+                1 => staged.staged.physical[1] = 0xe000,
+                2 => staged.staged.asid = 8,
+                3 => staged.staged.cca[0] = 2,
+                4 => staged.control.state.pc.0 += 4,
+                5 => operand.0 = 0,
+                6 => operand.1 ^= 0x40,
+                7 => staged.staged.dirty[0] = false,
+                _ => {
+                    replay
+                        .entry_lo_write(pc, 20, 21, operand, &installed, &staged)
+                        .unwrap();
+                    let mut after = staged.clone();
+                    after.entries[0] = after.staged.clone();
+                    assert!(replay.write(pc, 30, 31, &staged, &after).is_err());
+                    assert!(replay.finish_entry_lo(21, 22).is_err());
+                    assert!(replay.finish_entry_lo(20, 23).is_err());
+                    continue;
+                }
+            }
+            assert!(
+                replay
+                    .entry_lo_write(pc, 20, 21, operand, &installed, &staged)
                     .is_err(),
                 "mode {mode}"
             );

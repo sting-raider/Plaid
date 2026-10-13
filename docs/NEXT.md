@@ -34,10 +34,14 @@ preserve I-cache generations. Controlled v19 also binds actual EntryHi/ASID
 context writes (including equal rewrites) separately from installed-slot writers
 to both mapped consumptions. Fixture20 additionally composes a nonidentity
 mapped address with surviving stale hits before/after actual ASID restoration,
-then actual invalidation/refill/root/return in the same v19 protocol. Next compose
-changed physical mapping selection, broader root/control lifetime and complete
-mutation coverage. Keep ERET admission bounded to the uncut ERL0/kernel32/IE0 frame;
-ordinary static ERET stays unsupported. Reuse retained431-event/68-control fixture20,
+then actual invalidation/refill/root/return in the same v19 protocol. Controlled
+v20 also binds actual EntryLo0 page writers through TLBWI to changed physical
+selection and fresh writer/root/return ancestry. Staging alone leaves the old
+installed mapping active; equal page rewrites retain distinct identity. Next
+compose other mapping/control producers and broader root/control lifetime with
+complete mutation coverage. Keep ERET admission bounded to the uncut ERL0/kernel32/IE0 frame;
+ordinary static ERET stays unsupported. Reuse retained485-event/77-control v20,
+431-event/68-control fixture20,
 421-event/66-control v19,
 400-event/63-control v18,386-event/61-checkpoint v17,375-event/59-checkpoint v16,
 365-event/57-checkpoint v15,

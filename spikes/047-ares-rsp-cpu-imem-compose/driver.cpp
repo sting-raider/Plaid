@@ -115,7 +115,16 @@ int main(int argc,char** argv) {
     rdram.ram.write<Word>(0x60a0,0x40995000u,RBusDevice::ARES_DEBUGGER);
     rdram.ram.write<Word>(0x60a4,0x409a5000u,RBusDevice::ARES_DEBUGGER);
   }
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=21){
+    cpu.ipu.r[27].u64=0x39e;
+    rdram.ram.write<Word>(0x60a8,0x409b1000u,RBusDevice::ARES_DEBUGGER);
+    const u32 remap[]={insn_lw(8,16,0),0x3908000du,0x3a738000u,0x3a528000u,insn_sw(8,19,0)};
+    for(u32 i=0;i<5;i++)rdram.ram.write<Word>(0x60b0+i*4,remap[i],RBusDevice::ARES_DEBUGGER);
+  }
   #if PLAID_RSP_CPU_IMEM_SENSOR
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 21
+  plaidEntryLoObserver=traced?compose_entrylo_write:nullptr;
+  #endif
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 19
   plaidEntryHiObserver=traced?compose_entryhi_write:nullptr;
   #endif
@@ -172,7 +181,7 @@ int main(int argc,char** argv) {
   auto printRam=[] {
     std::printf("[");
     u32 start=PLAID_RSP_DEFINITIONS_FIXTURE>=14?0:0x6000;
-    for(u32 address=start;address<(PLAID_RSP_DEFINITIONS_FIXTURE>=19?0x60c0:PLAID_RSP_DEFINITIONS_FIXTURE>=18?0x60a0:PLAID_RSP_DEFINITIONS_FIXTURE>=14?0x6080:PLAID_RSP_DEFINITIONS_FIXTURE>=13?0x6060:PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030);address++) std::printf("%s%u",address==start?"":",",u32(rdram.ram.read<Byte>(address,RBusDevice::ARES_DEBUGGER)));
+    for(u32 address=start;address<(PLAID_RSP_DEFINITIONS_FIXTURE>=21?0xe0c0:PLAID_RSP_DEFINITIONS_FIXTURE>=19?0x60c0:PLAID_RSP_DEFINITIONS_FIXTURE>=18?0x60a0:PLAID_RSP_DEFINITIONS_FIXTURE>=14?0x6080:PLAID_RSP_DEFINITIONS_FIXTURE>=13?0x6060:PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030);address++) std::printf("%s%u",address==start?"":",",u32(rdram.ram.read<Byte>(address,RBusDevice::ARES_DEBUGGER)));
     std::printf("]");
   };
   std::printf("{\"initial_dmem\":");printBytes(false,PLAID_RSP_DEFINITIONS_FIXTURE>=4?4096:8);
@@ -212,6 +221,10 @@ int main(int argc,char** argv) {
       if(index==32)s.pc=0xe028;
       if(index==42)s.pc=0xe02c;
       if(index==46){s.word=0x21u;s.pc=0xe028;}}
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=21){
+      if(index==47){s.word=0x409b1000u;s.pc=0xffffffffa00060a8ull;}
+      if(index>=48){const u32 remap[]={insn_lw(8,16,0),0x3908000du,0x3a738000u,0x3a528000u,insn_sw(8,19,0)};
+        s.word=remap[index-48];s.pc=0xffffffffa00060b0ull+(index-48)*4;}}
     for(u32 n=0;n<32;n++)s.before[n]=cpu.ipu.r[n].u64;
     if(index>=33 && !(PLAID_RSP_DEFINITIONS_FIXTURE>=18 && index>=43)){if(cpu.ipu.pc!=s.pc)std::abort();}else cpu.pipeline.setPc(s.pc);
     if(cpu.instruction() && synchronize)cpu.synchronize();
@@ -391,6 +404,24 @@ int main(int argc,char** argv) {
       cpuStep(p,index,false);
     }
     if(PLAID_RSP_DEFINITIONS_FIXTURE>=20)mappedHit(51);
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=21){
+      phase(51);
+      #if PLAID_RSP_CPU_IMEM_SENSOR
+      compose_push("cpu_reentry",composeEvents.size()+1,0xffffffffa00060b0ull,0,0,0,0,0,0,true);
+      #endif
+      for(u32 index=48;index<=52;index++)cpuStep(51,index,false);
+      for(u32 n=0;n<2;n++){
+        #if PLAID_RSP_CPU_IMEM_SENSOR
+        compose_push("cpu_reentry",composeEvents.size()+1,0xffffffffa00060a8ull,0,0,0,0,0,0,true);
+        #endif
+        cpuStep(51,47,false);
+      }
+      mappedHit(51); // Staging a new page frame alone cannot change installed translation.
+      #if PLAID_RSP_CPU_IMEM_SENSOR
+      compose_push("cpu_reentry",composeEvents.size()+1,0xffffffffa0006080ull,0,0,0,0,0,0,true);
+      #endif
+      cpuStep(51,43,false);
+    }
     for(u32 index:{31u,32u}) {
       phase(index+16+(PLAID_RSP_DEFINITIONS_FIXTURE>=19?5:PLAID_RSP_DEFINITIONS_FIXTURE>=18?2:0));
       #if PLAID_RSP_CPU_IMEM_SENSOR

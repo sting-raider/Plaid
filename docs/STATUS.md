@@ -1,5 +1,13 @@
 # Status
 
+Controlled v20 now binds actual guest EntryLo0 page-frame writes to TLBWI and
+changed physical executable consumption. Equal page writer405 is installed by
+slot operation417; staging alone still hits old PA6028/fill292. Mapped e028 then
+refills from new PAe028/CPUwriter391, triggers BREAK and naturally returns through
+handler mutation/cache invalidation to PAe02c/CPUwriter452/DMEM/DMA/RSP ancestry.
+The485-event/77-control graph agrees independently. General CP0/mapping/source/
+census/lifetime/whole-ROM/native remain OPEN; all flags false.
+
 The existing v19 protocol now also composes nonidentity mapped execution with
 ASID/cache reactivation (fixture20, spike077). VA e028 -> PA6028 hits retain old
 fill292/CPUwriter276 before and after guest context changes despite current RAM

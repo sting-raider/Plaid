@@ -331,6 +331,14 @@ the natural changed-EPC return. Run
 or profile is needed. Cache colors are congruent; the pinned reference index
 disagreement and general changed-physical-selection/census/lifetime remain OPEN.
 
+Controlled v20/spike078 adds the actual EntryLo0 masked setter occurrence and
+full decoded GPR/CP0/staged/table state. Staged page writes stay separate from
+installed mappings; TLBWI fixes the completed page-writer parent for that slot,
+and mapped executable consumption retains it separately from current ASID.
+Same-value writes replace occurrence identity. Run
+`python scripts/test_rsp_definitions.py --entrylo-remap`; earlier report shapes
+omit the new optional parents. General CP0/mutation/mapping/lifetime remain OPEN.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

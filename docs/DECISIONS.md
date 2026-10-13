@@ -2341,6 +2341,21 @@ ares/Gopher index disagreement; no hardware synonym or hazard generalization.
 General changed-physical selection/source/census/root/lifetime/whole-ROM/native
 flags remain false; no milestone promotion. See mapping-reactivation receipt.
 
+ADR-0118 staged-page/remap follow-up (2026-10-13): controlled v20 observes
+actual guest MTC0 EntryLo0 after the masked setter and binds full source GPR,
+decoder and before/completed CP0/staged/table state. Require installed entries
+unchanged and normalized low-region/non-global/4KiB/kernel32/IE0 pre-trap scope.
+Each TLBWI fixes its selected slot's completed page-writer parent; later staged
+writes cannot retrospectively change installed ancestry. Keep that parent
+separate from current ASID writes and operation/byte/cache identities. Actual
+page398/405 (equal rewrite) -> TLBWI417 changes VAe028 from PA6028 to PAe028.
+The staged-only hit retains old fill292; remapped BREAK refill428 retains new
+CPUwriter391 despite equal BREAK at the old physical address. Natural handler/
+EPC/ERET return retains PAe02c/CPUwriter452/DMEM/DMA/RSP parents. All earlier
+reports retain their shapes/bytes. Broader CP0/global/geometry/privilege/hazards/
+reset/restore/source/census/root/lifetime/whole-ROM/native remain OPEN; all flags
+false, no milestone promotion. See staged-page/remap receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

@@ -35,7 +35,9 @@ def main():
     parser.add_argument('--mapped-root',action='store_true')
     parser.add_argument('--entryhi-context',action='store_true')
     parser.add_argument('--mapped-reactivation',action='store_true')
+    parser.add_argument('--entrylo-remap',action='store_true')
     args = parser.parse_args()
+    args.mapped_reactivation = args.mapped_reactivation or args.entrylo_remap
     args.entryhi_context = args.entryhi_context or args.mapped_reactivation
     args.mapped_root = args.mapped_root or args.entryhi_context
     args.epc_target = args.epc_target or args.mapped_root
@@ -53,7 +55,8 @@ def main():
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('077-mapped-cache-reactivation' if args.mapped_reactivation else
+    recipe = ('078-entrylo-remap-root-return' if args.entrylo_remap else
+        '077-mapped-cache-reactivation' if args.mapped_reactivation else
         '076-entryhi-context-mapped-root-return' if args.entryhi_context else
         '075-tlb-mapped-cache-root-return' if args.mapped_root else
         '074-epc-transform-target' if args.epc_target else
@@ -518,6 +521,27 @@ def main():
                 elif mode==7: restored['mapping']['entries'][0]['physical'][0]=0xe000
                 else: hit['pc']=0x6028 # physical identity is not the mapped virtual PC
                 run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.entrylo_remap:
+            for mode in range(14):
+                forged=json.loads(json.dumps(expected));rows=forged['events']
+                writes=[e for e in rows if e['kind']=='entry_lo_write'];write=writes[-1]
+                begin=next(e for e in rows if e['kind']=='cpu_begin' and e['context']==write['context'])
+                mapped=next(e for e in rows if e['kind']=='ram_fetch_begin' and e.get('mapping') and e['fetch']['physical']==0xe028)
+                if mode==0: rows.remove(write);reclock(rows)
+                elif mode==1: rows.insert(rows.index(write),copy.deepcopy(write));reclock(rows)
+                elif mode==2: write['value'] ^= 1<<32
+                elif mode==3: write['tlb_state']['entries'][0]['physical'][0]=0xe000
+                elif mode==4: write['tlb_state']['staged']['physical'][0]=0x6000
+                elif mode==5: write['tlb_state']['staged']['physical'][1]=0xe000
+                elif mode==6: write['tlb_state']['staged']['asid']=8
+                elif mode==7: begin['word'] ^= 0x800 # EntryLo1 is not this captured setter
+                elif mode==8: begin['gpr'][27] ^= 1<<32
+                elif mode==9: write['tlb_state']['staged']['dirty'][0]=False
+                elif mode==10: mapped['mapping']['entries'][0]['physical'][0]=0x6000
+                elif mode==11: mapped['fetch']['physical']=0x6028
+                elif mode==12: begin['tlb_state']['control']['state']['exl']=True
+                else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
+                run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
             forged = json.loads(original)
@@ -682,7 +706,7 @@ def main():
                 elif mode==1: graph['tlb_generations'].pop()
                 elif mode==2: mapped['mapping']['write_ordinal']=325 # equal first write cannot replace second
                 elif mode==3: mapped['mapping']['selected_slot']=1
-                elif mode==4: graph['tlb_generations'][-1]['same_entry_content']=False
+                elif mode==4: graph['tlb_generations'][-1]['same_entry_content']=not graph['tlb_generations'][-1]['same_entry_content']
                 elif mode==5: graph['tlb_generations'][-1]['write_ordinal']=325
                 elif mode==6: mapped.pop('mapping')
                 elif mode==7: mapped['mapping']['entry']['physical'][0]=0x8000
@@ -717,14 +741,32 @@ def main():
             for mode in range(8):
                 forged=json.loads(original);graph=forged['dma_consumption']
                 mapped=[f for f in graph['cached_fetches'] if 'mapping' in f]
-                if mode==0: mapped[0]['fill_ordinal']=mapped[2]['fill_ordinal']
+                replaced=next(f for f in mapped if f['word']==13)
+                if mode==0: mapped[0]['fill_ordinal']=replaced['fill_ordinal']
                 elif mode==1: mapped[1]['origins'][0]['write_ordinal']=318
                 elif mode==2: mapped[0]['physical']=mapped[0]['pc']
                 elif mode==3: mapped[0]['mapping']['context_write_ordinal']=358
                 elif mode==4: mapped[1]['mapping']['context_write_ordinal']=351
-                elif mode==5: mapped[1]['fill_ordinal']=mapped[2]['fill_ordinal']
-                elif mode==6: mapped[2]['origins'][0]['write_ordinal']=276
+                elif mode==5: mapped[1]['fill_ordinal']=replaced['fill_ordinal']
+                elif mode==6: replaced['origins'][0]['write_ordinal']=276
                 else: forged['eret_returns'][0]['after']['state']['pc']=0x602c
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.entrylo_remap:
+            for mode in range(10):
+                forged=json.loads(original);graph=forged['dma_consumption']
+                mapped=[f for f in graph['cached_fetches'] if 'mapping' in f]
+                installed=next(f for f in mapped if f['word']==13)
+                if mode==0: graph.pop('entry_lo_writes')
+                elif mode==1: graph['entry_lo_writes'].pop()
+                elif mode==2: installed['mapping']['entry_lo_write_ordinal']=398
+                elif mode==3: installed['mapping'].pop('entry_lo_write_ordinal')
+                elif mode==4: mapped[2]['mapping']['entry_lo_write_ordinal']=405 # staged writer not installed yet
+                elif mode==5: installed['mapping']['write_ordinal']=332
+                elif mode==6: installed['origins'][0]['write_ordinal']=318 # equal BREAK, different physical writer
+                elif mode==7: graph['entry_lo_writes'][-1]['same_staged_content']=False
+                elif mode==8: graph['entry_lo_writes'][-1]['register_value'] ^= 1<<32
+                else: installed['mapping']['entry']['physical'][0]=0x6000
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
     print('RSP definitions: original-clock ORI/ADDU parents, phase cuts, full register snapshots, source/report/input gates and unchanged proof flags passed')
