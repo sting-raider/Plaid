@@ -134,6 +134,10 @@ int main(int argc,char** argv) {
     const u32 ramLoad[]={0x8e680004u,0x39080000u,0xae081000u,0xae680004u,0x8e680004u,0xae081000u};
     for(u32 i=0;i<6;i++)rdram.ram.write<Word>(0x6110+4*i,ramLoad[i],RBusDevice::ARES_DEBUGGER);
   }
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=26){
+    const u32 cached[]={0x8e480004u,0xae081000u,0x39080021u,0xae680004u,0x8e480004u,0xae081000u,0xbe510004u,0x8e480004u,0xae081000u};
+    for(u32 i=0;i<9;i++)rdram.ram.write<Word>(0x6130+4*i,cached[i],RBusDevice::ARES_DEBUGGER);
+  }
   #if PLAID_RSP_CPU_IMEM_SENSOR
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 22
   plaidTlbrObserver=traced?compose_tlbr:nullptr;
@@ -148,6 +152,10 @@ int main(int argc,char** argv) {
   plaidTlbWriteObserver=traced?compose_tlb_write:nullptr;
   #endif
   composeEnabled=traced;plaidCpuInstructionObserver=traced?compose_cpu_instruction:nullptr;plaidSpWordObserver=traced?compose_sp_word:nullptr;plaidRspInstructionObserver=traced?compose_rsp_instruction:nullptr;plaidRspDmemObserver=traced?compose_rsp_dmem:nullptr;
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 26
+  plaidOperandDcacheObserver=traced?compose_operand_dcache:nullptr;
+  plaidOperandDcacheReadObserver=traced?compose_operand_dcache_read:nullptr;
+  #endif
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 2
   plaidRspWordReadObserver=traced?compose_rsp_word_read:nullptr;
   #endif
@@ -246,9 +254,12 @@ int main(int argc,char** argv) {
       s.word=index==55 || index==57?0xc2080000u:0xe2081000u;s.pc=0xffffffffa00060d0ull+(index-54)*4;}
     if(PLAID_RSP_DEFINITIONS_FIXTURE>=24 && index>=59 && index<=62){
       const u32 subword[]={0x8e080000u,0x39080021u,0xa2081003u,0xa6081002u};s.word=subword[index-59];s.pc=0xffffffffa00060f0ull+(index-59)*4;}
-    if(PLAID_RSP_DEFINITIONS_FIXTURE>=25 && index>=63){
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=25 && index>=63 && index<=68){
       const u32 ramLoad[]={0x8e680004u,0x39080000u,0xae081000u,0xae680004u,0x8e680004u,0xae081000u};
       s.word=ramLoad[index-63];s.pc=0xffffffffa0006110ull+(index-63)*4;}
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=26 && index>=69){
+      const u32 cached[]={0x8e480004u,0xae081000u,0x39080021u,0xae680004u,0x8e480004u,0xae081000u,0xbe510004u,0x8e480004u,0xae081000u};
+      s.word=cached[index-69];s.pc=0xffffffffa0006130ull+(index-69)*4;}
     for(u32 n=0;n<32;n++)s.before[n]=cpu.ipu.r[n].u64;
     if(index>=33 && !(PLAID_RSP_DEFINITIONS_FIXTURE>=18 && index>=43)){if(cpu.ipu.pc!=s.pc)std::abort();}else cpu.pipeline.setPc(s.pc);
     if(cpu.instruction() && synchronize)cpu.synchronize();
@@ -503,6 +514,17 @@ int main(int argc,char** argv) {
       rsp.status.halted=0;rsp.status.broken=0;rsp.instruction();rsp.status.halted=1;checkpoint();};
     cpuStep(78,63,false);cpuStep(79,64,false);cpuStep(80,65,false);consume(81);
     cpuStep(82,66,false);cpuStep(83,67,false);cpuStep(84,68,false);consume(85);
+  }
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=26){
+    phase(86);
+    #if PLAID_RSP_CPU_IMEM_SENSOR
+    compose_push("cpu_reentry",composeEvents.size()+1,0xffffffffa0006130ull,0,0,0,0,0,0,true);
+    #endif
+    auto consume=[&](u32 p){phase(p);rsp.pipeline={};rsp.pipeline.singleIssue=1;rsp.branch.setPc(0);rsp.ipu.pc=0;
+      rsp.status.halted=0;rsp.status.broken=0;rsp.instruction();rsp.status.halted=1;checkpoint();};
+    cpuStep(86,69,false);cpuStep(87,70,false);consume(88);
+    cpuStep(89,71,false);cpuStep(90,72,false);cpuStep(91,73,false);cpuStep(92,74,false);consume(93);
+    cpuStep(94,75,false);cpuStep(95,76,false);cpuStep(96,77,false);consume(97);
   }
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=false;

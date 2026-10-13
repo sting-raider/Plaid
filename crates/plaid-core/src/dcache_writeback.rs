@@ -146,7 +146,7 @@ struct History {
     events: Vec<Event>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum Event {
     Store64 {
@@ -214,7 +214,7 @@ pub(crate) enum Event {
 }
 
 impl Event {
-    fn ordinal(&self) -> u64 {
+    pub(crate) fn ordinal(&self) -> u64 {
         match self {
             Self::Store64 { ordinal, .. }
             | Self::Store64Subwrite { ordinal, .. }
@@ -455,6 +455,14 @@ pub(crate) struct DcacheReplay {
 }
 
 impl DcacheReplay {
+    pub(crate) fn latest_read(&self) -> Option<&DcacheResidentReadReceipt> {
+        self.reads.last()
+    }
+    pub(crate) fn resident_snapshot(&self, slot: u16) -> Option<(PhysicalAddr, [u8; LINE_BYTES])> {
+        self.lines
+            .get(&slot)
+            .map(|line| (line.physical_line, line.payload))
+    }
     pub(crate) fn new(with_reads: bool, with_store64: bool) -> Self {
         Self {
             with_reads,

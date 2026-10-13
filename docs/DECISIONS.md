@@ -2467,6 +2467,24 @@ Table/target identity, cache/mapping/reset/restore lifetime, hardware semantics
 and whole-ROM/native closure remain OPEN. No solver or milestone promotion. No
 reference implementation was copied into production.
 
+ADR-0119 decoded cached-operand follow-up (2026-10-14): controlled v25 binds
+actual direct-KSEG0 Word LW/backing burst/fill/delivered read to the same canonical
+DcacheReplay. Full resident16-byte/tag/index/dirty and CPU control/endian/GPR
+snapshots restrict the kernel32/IE0/BEV0/EXL0/ERL0/non-delay/big-endian clean scope.
+Existing RAM writes enter that state's backing diagnostics on their actual
+ordinals. Capture current RamByteOrigin at each actual backing burst; resolve
+delivered bytes through canonical BackingFill identities to those frozen parents.
+CpuCachedRamLoad ancestry wraps actual decoder/read/resident/physical byte and
+RAM parents in existing CPU expression/copy receipts, not an installed SP writer.
+Read618 and stale643 retain fill617/writer595 despite backing637/ADDU21; actual
+HitInvalidateD657 then fresh fill664/read665 selects637, reaching IMEM671/RSP673.
+No second resident policy or inference from backing equality. Full signed64
+results and untouched resident lanes are checked; earlier reports stay exact.
+Passive callbacks exclude debugger cache reads. Cached mutation/writeback/warm
+unsensed/dirty/mapped/failed/other accesses and global source/census/root/lifetime/
+whole-ROM/native remain OPEN; flags false, no milestone promotion or upstream
+production reuse. See cached RAM-load/IMEM receipt.
+
 ## ADR-0120: Physical FPR byte generations compose with canonical COP1 store normalization
 
 Status: Accepted for bounded source composition, 2026-10-12.

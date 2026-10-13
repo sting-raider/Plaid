@@ -30,6 +30,10 @@ struct ComposeEvent {
   bool storeValid=false,ramLoadValid=false,reverseEndian=false,spDeviceValid=false;
   u32 spDeviceAddress=0;
   u64 linkedAddress=0;
+  bool dcacheCpuValid=false;
+  u32 dcacheKind=0,dcacheSlot=0,dcacheTag=0,dcacheIndex=0,dcacheDirty=0,dcachePhysical=0;
+  u64 dcacheVirtual=0,dcacheValue=0;
+  std::vector<u32> dcacheWords;
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 18
   bool tlbValid=false,mappingValid=false,mappingKernel=false;
   u32 tlbIndex=0,mappingAsid=0,mappingBits=0;
@@ -123,6 +127,9 @@ static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
     #if PLAID_RSP_DEFINITIONS_FIXTURE >= 25
     u64 address=cpu.ipu.r[(word>>21)&31].u64+(s16)word;
     composeCpuRamLoad=(word>>26)==0x23 && address>=0xffffffffa0000000ull && address<0xffffffffa0800000ull;
+    #if PLAID_RSP_DEFINITIONS_FIXTURE >= 26
+    composeCpuRamLoad=composeCpuRamLoad || ((word>>26)==0x23 && address>=0xffffffff80000000ull && address<0xffffffff80800000ull);
+    #endif
     #endif
   } else if(!composeCpuContext || word!=composeCpuWord) std::abort();
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 14
@@ -186,6 +193,12 @@ static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
   if(begin && (word&0xffe0ffffu)==0x40801000u)compose_tlb_state(composeEvents.back());
   #endif
   #endif
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 26
+  if((word>>26)==0x2f && ((word>>16)&31)==17){
+    auto& e=composeEvents.back();compose_return_state(e);e.returnValid=false;
+    e.dcacheCpuValid=true;e.linkedAddress=cpu.scc.ll;e.reverseEndian=cpu.context.littleEndian();
+  }
+  #endif
   if(!begin) {composeCpuContext=composeCpuPc=composeCpuWord=0;composeCpuRamLoad=false;}
 }
 static void compose_rsp_instruction(bool begin,u32 pc,u32 word,u32 next,bool halted) {
@@ -245,11 +258,39 @@ static void compose_cache_snapshot(ComposeEvent& event,u32 slot,u32 tag,u32 inde
 }
 static void compose_cache_burst(bool write,u32 address,u32 bytes,u32 device,const u32* words) {
   if(!composeEnabled) return;
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 26
+  if(device==(u32)RBusDevice::VR4300_DCACHE){
+    if(write || bytes!=16 || !composeCpuContext || composeCpuWord>>26!=0x23 || composeRspContext || composeFetchContext)std::abort();
+    compose_push("dcache_primitive",composeCpuContext,composeCpuPc,composeCpuWord,0,0,0,0,0,true);
+    auto& e=composeEvents.back();e.dcacheKind=1;e.dcachePhysical=address;
+    for(u32 n=0;n<4;n++)e.dcacheWords.push_back(words[n]);return;
+  }
+  #endif
   if(write || bytes!=32 || device!=(u32)RBusDevice::VR4300_ICACHE || !composeFetchContext
       || composeCpuContext || composeRspContext) std::abort();
   compose_push("cache_burst_read",composeFetchContext,composeFetchPc,0,address,0,0,32,0,true);
   compose_cache_snapshot(composeEvents.back(),(composeFetchPc>>5)&511,(address&~4095)|1,address&0xfe0,words);
 }
+#if PLAID_RSP_DEFINITIONS_FIXTURE >= 26
+static void compose_dcache_snapshot(ComposeEvent& e,const CPU::DataCache::Line* line){
+  e.dcacheSlot=line-&cpu.dcache.lines[0];e.dcacheTag=line->tagKey;e.dcacheIndex=line->index;e.dcacheDirty=line->dirty;
+  if(e.dcacheSlot>=512)std::abort();for(u32 n=0;n<4;n++)e.dcacheWords.push_back(line->words[n]);
+}
+static void compose_operand_dcache(u32 kind,const void* opaque,u32 physical){
+  if(!composeEnabled)return;
+  if(!composeCpuContext || composeRspContext || composeFetchContext || (kind!=1 && kind!=5))std::abort();
+  compose_push("dcache_primitive",composeCpuContext,composeCpuPc,composeCpuWord,0,0,0,0,0,true);
+  auto& e=composeEvents.back();e.dcacheKind=kind==1?2:4;e.dcachePhysical=physical;
+  compose_dcache_snapshot(e,static_cast<const CPU::DataCache::Line*>(opaque));
+}
+static void compose_operand_dcache_read(u64 virtualAddress,u32 physical,u32 bytes,u64 value,const void* opaque){
+  if(!composeEnabled)return;
+  if(!composeCpuContext || composeCpuWord>>26!=0x23 || bytes!=4 || composeRspContext || composeFetchContext)std::abort();
+  compose_push("dcache_primitive",composeCpuContext,composeCpuPc,composeCpuWord,0,0,0,0,0,true);
+  auto& e=composeEvents.back();e.dcacheKind=3;e.dcachePhysical=physical;e.dcacheVirtual=virtualAddress;e.dcacheValue=value;
+  compose_dcache_snapshot(e,static_cast<const CPU::DataCache::Line*>(opaque));
+}
+#endif
 static void compose_cache_fill(u32 slot,u32 physical,u32 index,const u32* words) {
   if(!composeEnabled) return;
   if(!composeFetchContext || composeCpuContext || composeRspContext) std::abort();
@@ -412,6 +453,12 @@ static void compose_print_exception_state(const ComposeEvent& e) {
   std::printf("{\"pc\":%llu,\"bev\":%s,\"exl\":%s,\"erl\":%s,\"kernel_mode\":\"bits%u\",\"kernel\":%s,\"cause\":%u,\"branch_delay\":%s,\"epc\":%llu,\"delay_slot\":%s}",
     (unsigned long long)e.exceptionPc,e.bev?"true":"false",e.exl?"true":"false",e.erl?"true":"false",e.kernelBits,e.kernel?"true":"false",e.exceptionCause,e.branchDelay?"true":"false",(unsigned long long)e.epc,e.delaySlot?"true":"false");
 }
+static void compose_print_data_bytes(const ComposeEvent& e,bool word=false){
+  std::printf("[");for(u32 n=0;n<(word?4u:16u);n++){
+    u32 bits=word?(u32)e.dcacheValue:e.dcacheWords[n/4];
+    std::printf("%s%u",n?",":"",(bits>>(24-8*(n&3)))&255);
+  }std::printf("]");
+}
 static void compose_print() {
   std::printf("[");
   for(size_t n=0;n<composeEvents.size();n++) {
@@ -457,9 +504,20 @@ static void compose_print() {
       std::printf(",\"interrupt_enable\":%s,\"llbit\":%s}",e.interruptEnable?"true":"false",e.llbit?"true":"false");}
     if(e.linkedValid){std::printf(",\"linked_state\":{\"control\":{\"state\":");compose_print_exception_state(e);
       std::printf(",\"interrupt_enable\":%s,\"llbit\":%s},\"linked_address\":%llu}",e.interruptEnable?"true":"false",e.llbit?"true":"false",(unsigned long long)e.linkedAddress);}
-    if(e.storeValid || e.ramLoadValid){std::printf(",\"%s\":{\"linked\":{\"control\":{\"state\":",e.storeValid?"store_state":"ram_load_state");compose_print_exception_state(e);
+    if(e.storeValid || e.ramLoadValid || e.dcacheCpuValid){std::printf(",\"%s\":{\"linked\":{\"control\":{\"state\":",e.storeValid?"store_state":e.ramLoadValid?"ram_load_state":"dcache_cpu_state");compose_print_exception_state(e);
       std::printf(",\"interrupt_enable\":%s,\"llbit\":%s},\"linked_address\":%llu},\"reverse_endian\":%s}",e.interruptEnable?"true":"false",e.llbit?"true":"false",(unsigned long long)e.linkedAddress,e.reverseEndian?"true":"false");}
     if(e.spDeviceValid)std::printf(",\"sp_device_address\":%u",e.spDeviceAddress);
+    if(e.dcacheKind){
+      const char* record=e.dcacheKind==1?"backing_read":e.dcacheKind==2?"fill":e.dcacheKind==3?"cached_word_read":"invalidate";
+      std::printf(",\"dcache_event\":{\"record\":\"%s\",\"ordinal\":%llu",record,(unsigned long long)e.ordinal);
+      if(e.dcacheKind<=2)std::printf(",\"physical_line\":%u",e.dcachePhysical);
+      if(e.dcacheKind>=2)std::printf(",\"slot\":%u",e.dcacheSlot);
+      if(e.dcacheKind==3)std::printf(",\"pc\":%llu,\"effective_virtual\":%llu,\"physical\":%u",(unsigned long long)e.pc,(unsigned long long)e.dcacheVirtual,e.dcachePhysical);
+      if(e.dcacheKind<=3){std::printf(",\"payload\":");compose_print_data_bytes(e,e.dcacheKind==3);}
+      std::printf("}");
+      if(e.dcacheKind>=2){std::printf(",\"dcache_line\":{\"slot\":%u,\"tag\":%u,\"index\":%u,\"dirty\":%u,\"words\":[",e.dcacheSlot,e.dcacheTag,e.dcacheIndex,e.dcacheDirty);
+        for(u32 n=0;n<4;n++)std::printf("%s%u",n?",":"",e.dcacheWords[n]);std::printf("]}");}
+    }
     std::printf("}");
   }
   std::printf("]");

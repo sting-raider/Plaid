@@ -47,10 +47,14 @@ to actual IMEM/RSP consumption, keeping device vs aligned addresses and shifted
 lanes' weaker ancestry distinct. Controlled v24 also connects actual decoded
 uncached RAM LW/current byte writers through CPU held expressions and RAM/IMEM
 copies to RSP consumption; an equal fresh RAM writer changes the next load's
-parent without changing the previous load. Next
+parent without changing the previous load. Controlled v25 also binds actual
+cached RAM LW to canonical D-cache resident state, captured backing-read writer
+parents and IMEM/RSP consumption. Current backing changes cannot alter old
+resident parents; actual HitInvalidateD/refill selects the new RAM writer. Next
 compose other mapping/control producers and broader root/control lifetime with
 complete mutation coverage. Keep ERET admission bounded to the uncut ERL0/kernel32/IE0 frame;
-ordinary static ERET stays unsupported. Reuse retained610-event/102-control v24,
+ordinary static ERET stays unsupported. Reuse retained674-event/114-control v25,
+610-event/102-control v24,
 570-event/94-control v23,
 542-event/88-control v22,
 506-event/80-control v21,
@@ -247,8 +251,9 @@ available. Reuse those authenticated sources; do not relabel a 6102 run or the
 conditional static map as game boot evidence.
 
 Cached Word reads now share dcache_writeback's resident state and full-line
-export ancestry (ADR-0119). Compose actual decoded CPU load/register/dispatch
-definitions and backing-writer roots with this normalized operation stream.
+export ancestry (ADR-0119). Controlled v25 joins actual decoded LW/register,
+backing-writer roots and IMEM/RSP consumption on the original clock. Compose
+broader cached mutations/writebacks/dispatch with this normalized operation stream.
 Current backing content cannot replace the source of a cached pointer. Keep
 physical immutability and complete writer/guard/target/cache-lifetime coverage
 separate; the finite read/writeback report grants no table certificate. The
