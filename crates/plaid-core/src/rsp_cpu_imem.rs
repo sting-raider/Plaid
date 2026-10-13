@@ -11,6 +11,11 @@ use crate::{
     },
     program::{FetchAccess, FetchCacheLine, GuestVirtualAddr, PhysicalAddr},
     rom::sha256,
+    rsp_cpu_tlb::{
+        Initial as InitialTlb, Observation as TlbObservation, Replay as TlbReplay,
+        State as TlbState, Witness as TlbWitness,
+    },
+    tlb_history::TlbwiGeneration,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -60,6 +65,9 @@ pub const CPU_TRANSFORM_PROFILE: &str =
 pub const EXCEPTION_FORMAT: &str = "plaid-rsp-cpu-imem-history-v14";
 pub const EXCEPTION_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-writer-break-handler-consumption-v14";
+pub const MAPPED_FORMAT: &str = "plaid-rsp-cpu-imem-history-v18";
+pub const MAPPED_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-tlbwi-mapped-cache-root-return-v18";
 pub const EPC_TARGET_FORMAT: &str = "plaid-rsp-cpu-imem-history-v17";
 pub const EPC_TARGET_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-epc-transform-target-consumption-v17";
@@ -85,6 +93,8 @@ struct History {
     ram: Option<RamSnapshot>,
     #[serde(default)]
     initial_pending: Option<PendingDmaSnapshot>,
+    #[serde(default)]
+    initial_tlb: Option<InitialTlb>,
 }
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -136,6 +146,7 @@ enum Kind {
     ReturnTransfer,
     EpcRead,
     EpcWrite,
+    TlbWrite,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -175,6 +186,10 @@ struct Row {
     return_state: Option<CpuReturnState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     epc_state: Option<CpuReturnState>,
+    #[serde(default)]
+    tlb_state: Option<TlbState>,
+    #[serde(default)]
+    mapping: Option<TlbObservation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -808,6 +823,8 @@ pub struct DmaCacheFill {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CachedDmaCpuFetch {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mapping: Option<TlbWitness>,
     pub fetch_context: u64,
     pub end_ordinal: u64,
     pub decoder_context: u64,
@@ -843,6 +860,8 @@ pub struct DmemDmaConsumption {
     pub cache_invalidations: Option<Vec<DmaCacheInvalidation>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cpu_writes: Option<Vec<CpuRamWord>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tlb_generations: Option<Vec<TlbwiGeneration>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1077,6 +1096,7 @@ struct RamReplay {
     cache_invalidations: Vec<DmaCacheInvalidation>,
     cpu_ram_enabled: bool,
     cpu_writes: Vec<CpuRamWord>,
+    tlb: Option<TlbReplay>,
 }
 enum PendingFetch {
     Uncached(usize),
@@ -1172,6 +1192,7 @@ impl RamReplay {
             cached_fetches: Vec::new(),
             invalidation_enabled: false,
             cache_state: BTreeMap::new(),
+            tlb: None,
             cache_invalidations: Vec::new(),
             cpu_ram_enabled: false,
             cpu_writes: Vec::new(),
@@ -1424,6 +1445,22 @@ impl RamReplay {
                     .fetch
                     .as_ref()
                     .ok_or("RAM fetch lacks access metadata")?;
+                let direct = if let Some(observation) = &row.mapping {
+                    require(access.cached, "mapped stream requires cached fetch")?;
+                    self.tlb
+                        .as_ref()
+                        .ok_or("mapped fetch lacks TLB profile")?
+                        .fetch(row.pc, access.physical, observation)?;
+                    true
+                } else {
+                    (if access.cached {
+                        0xffffffff80000000..0xffffffff80800000
+                    } else {
+                        0xffffffffa0000000..0xffffffffa0800000
+                    })
+                    .contains(&row.pc)
+                        && row.pc & 0x1fffffff == u64::from(row.address)
+                };
                 require(
                     self.active.is_none()
                         && self.pending.is_none()
@@ -1434,14 +1471,8 @@ impl RamReplay {
                         && row.offset == 0
                         && (!access.cached || self.cached)
                         && access.physical.0 == row.address
-                        && (if access.cached {
-                            0xffffffff80000000..0xffffffff80800000
-                        } else {
-                            0xffffffffa0000000..0xffffffffa0800000
-                        })
-                        .contains(&row.pc)
-                        && row.pc.is_multiple_of(4)
-                        && row.pc & 0x1fffffff == u64::from(row.address),
+                        && direct
+                        && row.pc.is_multiple_of(4),
                     "invalid controlled direct RAM fetch",
                 )?;
                 self.offset(row.address, 4)?;
@@ -1686,6 +1717,7 @@ impl RamReplay {
                 && row.bytes == 0
                 && row.offset == 0
                 && row.fetch == begin.fetch
+                && row.mapping == begin.mapping
                 && row.value <= u32::MAX as u64,
             "cached fetch completion differs from scope",
         )?;
@@ -1708,7 +1740,18 @@ impl RamReplay {
         )?;
         let lane = row.address as usize & 31;
         self.pending = Some(PendingFetch::Cached(self.cached_fetches.len()));
+        let mapping = begin
+            .mapping
+            .as_ref()
+            .map(|observation| {
+                self.tlb
+                    .as_ref()
+                    .ok_or("mapped consumption lacks TLB profile")?
+                    .fetch(begin.pc, PhysicalAddr(begin.address), observation)
+            })
+            .transpose()?;
         self.cached_fetches.push(CachedDmaCpuFetch {
+            mapping,
             fetch_context: begin.context,
             end_ordinal: row.ordinal,
             decoder_context: 0,
@@ -1938,6 +1981,7 @@ impl RamReplay {
                 .invalidation_enabled
                 .then_some(self.cache_invalidations),
             cpu_writes: self.cpu_ram_enabled.then_some(self.cpu_writes),
+            tlb_generations: self.tlb.map(|tlb| tlb.generations),
         })
     }
 }
@@ -2119,7 +2163,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let target_enabled = h.format == EPC_TARGET_FORMAT && h.profile == EPC_TARGET_PROFILE;
+    let mapped_enabled = h.format == MAPPED_FORMAT && h.profile == MAPPED_PROFILE;
+    let target_enabled =
+        mapped_enabled || (h.format == EPC_TARGET_FORMAT && h.profile == EPC_TARGET_PROFILE);
     let epc_enabled = target_enabled || (h.format == EPC_FORMAT && h.profile == EPC_PROFILE);
     let return_enabled = epc_enabled || (h.format == RETURN_FORMAT && h.profile == RETURN_PROFILE);
     let exception_enabled =
@@ -2211,6 +2257,14 @@ pub fn inspect_rsp_cpu_imem_history(
             commit_decoder: None,
         });
     }
+    require(
+        mapped_enabled == h.initial_tlb.is_some(),
+        "initial TLB state does not match profile",
+    )?;
+    if let Some(initial) = h.initial_tlb {
+        ram.as_mut().ok_or("TLB composition lacks RAM profile")?.tlb =
+            Some(TlbReplay::new(initial)?);
+    }
     let records = h.events.len();
     let mut dmem = h.initial_dmem;
     let mut imem = h.initial_imem;
@@ -2229,6 +2283,7 @@ pub fn inspect_rsp_cpu_imem_history(
     let mut epc_reads = Vec::new();
     let mut epc_writes = Vec::new();
     let mut pending_epc: Option<(Kind, usize)> = None;
+    let mut pending_tlb = false;
     let mut eret_returns: Vec<CpuEretReturn> = Vec::new();
     let mut pending_return: Option<usize> = None;
     let mut await_return: Option<usize> = None;
@@ -2247,6 +2302,24 @@ pub fn inspect_rsp_cpu_imem_history(
             "noncontiguous event identity or phase order",
         )?;
         phase = row.phase;
+        require(
+            row.tlb_state.is_none()
+                || (mapped_enabled
+                    && (row.kind == Kind::TlbWrite
+                        || (row.kind == Kind::CpuBegin && row.word == 0x42000002))),
+            "TLB state outside decoded TLBWI boundary",
+        )?;
+        require(
+            row.mapping.is_none()
+                || (mapped_enabled
+                    && matches!(row.kind, Kind::RamFetchBegin | Kind::RamFetchEnd)
+                    && row.fetch.as_ref().is_some_and(|access| access.cached)),
+            "mapping observation outside fetch boundary",
+        )?;
+        require(
+            !pending_tlb || row.kind == Kind::CpuEnd,
+            "TLBWI write not immediately completed",
+        )?;
         require(
             row.epc_state.is_none()
                 || (epc_enabled
@@ -2394,6 +2467,49 @@ pub fn inspect_rsp_cpu_imem_history(
             )?;
         }
         match row.kind {
+            Kind::TlbWrite => {
+                effect_row(&row)?;
+                let Some(Active::Cpu {
+                    begin,
+                    read,
+                    written,
+                }) = &mut active
+                else {
+                    return Err("TLB write lacks CPU decoder".into());
+                };
+                require(
+                    mapped_enabled
+                        && !*written
+                        && read.is_none()
+                        && same(begin, &row)
+                        && begin.word == 0x42000002
+                        && row.cpu
+                        && row.address
+                            == begin
+                                .tlb_state
+                                .as_ref()
+                                .map_or(u32::MAX, |state| state.index)
+                        && row.bank == 0
+                        && row.offset == 0
+                        && row.bytes == 0
+                        && row.value == 0,
+                    "duplicate, unscoped or unsupported TLBWI write",
+                )?;
+                ram.as_mut()
+                    .and_then(|ram| ram.tlb.as_mut())
+                    .ok_or("TLB write lacks profile")?
+                    .write(
+                        begin.pc,
+                        begin.context,
+                        row.ordinal,
+                        begin.tlb_state.as_ref().ok_or("TLBWI lacks before state")?,
+                        row.tlb_state
+                            .as_ref()
+                            .ok_or("TLBWI lacks completed table")?,
+                    )?;
+                *written = true;
+                pending_tlb = true;
+            }
             Kind::EpcRead | Kind::EpcWrite => {
                 let Some(Active::Cpu {
                     begin,
@@ -3094,7 +3210,17 @@ pub fn inspect_rsp_cpu_imem_history(
                 require(same(&begin, &row), "CPU end context mismatch")?;
                 let mut expected = begin.gpr.clone();
                 let op = begin.word >> 26;
-                if epc_instruction(begin.word) {
+                if begin.word == 0x42000002 {
+                    require(
+                        mapped_enabled && pending_tlb && written && read.is_none(),
+                        "TLBWI lacks actual slot write",
+                    )?;
+                    ram.as_mut()
+                        .and_then(|ram| ram.tlb.as_mut())
+                        .ok_or("TLBWI lacks profile")?
+                        .finish(begin.context, row.ordinal)?;
+                    pending_tlb = false;
+                } else if epc_instruction(begin.word) {
                     require(
                         epc_enabled && written && read.is_none(),
                         "CP0 instruction lacks completed EPC effect",

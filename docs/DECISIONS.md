@@ -2296,6 +2296,25 @@ arbitrary CP0/ERL/interrupt/reset/restore/mapping/root/mutation/lifetime/whole-R
 native remain OPEN; static ERET unsupported, general flags false. See the EPC
 transform/target receipt; no reference implementation copied or linked.
 
+ADR-0118 TLB/mapped-execution composition follow-up (2026-10-13): controlled v18
+connects actual TLBWI write/synchronize callbacks and full raw32-entry state to
+the existing writer/cache/exception/EPC/ERET graph. Normalize/recheck staged/current
+entries and full table delta; derive fingerprints from entry data and reuse the
+canonical operation-generation type. Never infer a write from diff/hash labels.
+Mapped cached fetches require current table/ASID/kernel32/4KiB/CCA3/unique matching
+entry and latest completed selected-slot operation. Invalid matching entries
+also count for ambiguity; unsupported geometry/context/endian paths stay closed.
+Equal write332 replaces325 while preserving resident fill292 until guest CACHE.
+Actual400-event/63-control graph joins mapped BREAK345/exception346 -> EPCread377/
+XORI381/writer386/ERET393 -> mapped returned fill397/decoder399 with independent
+CPUwriter367/DMEM/DMA/RSP ancestry. All eighteen v0-v17 reports stay exact. Preserve
+pinned ares virtual-slot vs Gopher physical-slot counter-reference; this fixture
+uses matching colors and makes no hardware-wide synonym claim. General mapping/
+context/census/root/reset/restore/lifetime/whole-ROM/native remain OPEN, static
+ERET unsupported, all flags false. See the TLB/mapped root-return receipt.
+No reference implementation copied/linked; only project-owned observational
+callbacks/getters run in separately licensed ignored reference builds.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.
