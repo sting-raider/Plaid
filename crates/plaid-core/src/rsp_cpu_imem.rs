@@ -37,6 +37,9 @@ pub const DMEM_INGRESS_PROFILE: &str =
 pub const PENDING_DMA_FORMAT: &str = "plaid-rsp-cpu-imem-history-v8";
 pub const PENDING_DMA_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-mutable-pending-dma-consumption-v8";
+pub const DECODED_DMA_FORMAT: &str = "plaid-rsp-cpu-imem-history-v9";
+pub const DECODED_DMA_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-decoded-mmio-dma-consumption-v9";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -138,12 +141,16 @@ pub struct PendingDmaProvenance {
     pub commit_ordinal: u64,
     pub pbus_write_ordinal: Option<u64>,
     pub dram_write_ordinal: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit_decoder_context: Option<u64>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PendingDmaCommit {
     pub commit_ordinal: u64,
     pub superseded_commit: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decoder_context: Option<u64>,
 }
 struct PendingDmaReplay {
     snapshot: PendingDmaSnapshot,
@@ -152,14 +159,32 @@ struct PendingDmaReplay {
     pbus_writer: Option<u64>,
     dram_writer: Option<u64>,
     commits: Vec<PendingDmaCommit>,
+    commit_decoder: Option<u64>,
 }
 impl PendingDmaReplay {
-    fn write(&mut self, row: &Row) -> Result<(), String> {
+    fn write(&mut self, row: &Row, decoded: Option<&Row>) -> Result<(), String> {
         effect_row(row)?;
+        if let Some(begin) = decoded {
+            let rs = ((begin.word >> 21) & 31) as usize;
+            let rt = ((begin.word >> 16) & 31) as usize;
+            let address = begin.gpr[rs].wrapping_add_signed(i64::from(begin.word as i16));
+            require(
+                same(begin, row)
+                    && begin.word >> 26 == 0x2b
+                    && (0xffffffffa4040000..=0xffffffffa404000c).contains(&address)
+                    && address.is_multiple_of(4)
+                    && row.address == (address as u32 & 31) >> 2
+                    && row.value == u64::from(begin.gpr[rt] as u32),
+                "pending DMA effect differs from decoded direct-KSEG1 SW",
+            )?;
+        } else {
+            require(
+                row.context == row.ordinal && row.word == 0,
+                "unscoped pending DMA has decoder metadata",
+            )?;
+        }
         require(
-            row.context == row.ordinal
-                && row.cpu
-                && row.word == 0
+            row.cpu
                 && row.bytes == 4
                 && row.value <= u32::MAX as u64
                 && row.gpr.is_empty()
@@ -209,7 +234,9 @@ impl PendingDmaReplay {
                 self.commits.push(PendingDmaCommit {
                     commit_ordinal: row.ordinal,
                     superseded_commit: self.commit.replace(row.ordinal),
+                    decoder_context: decoded.map(|begin| begin.context),
                 });
+                self.commit_decoder = decoded.map(|begin| begin.context);
             }
             _ => return Err("unsupported pending DMA register".into()),
         }
@@ -238,6 +265,7 @@ impl PendingDmaReplay {
             commit_ordinal,
             pbus_write_ordinal: self.pbus_writer,
             dram_write_ordinal: self.dram_writer,
+            commit_decoder_context: self.commit_decoder.take(),
         })
     }
 }
@@ -1283,7 +1311,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let pending_enabled = h.format == PENDING_DMA_FORMAT && h.profile == PENDING_DMA_PROFILE;
+    let decoded_dma_enabled = h.format == DECODED_DMA_FORMAT && h.profile == DECODED_DMA_PROFILE;
+    let pending_enabled =
+        decoded_dma_enabled || (h.format == PENDING_DMA_FORMAT && h.profile == PENDING_DMA_PROFILE);
     let dmem_ingress_enabled =
         pending_enabled || (h.format == DMEM_INGRESS_FORMAT && h.profile == DMEM_INGRESS_PROFILE);
     let ingress_enabled = dmem_ingress_enabled
@@ -1351,6 +1381,7 @@ pub fn inspect_rsp_cpu_imem_history(
             pbus_writer: None,
             dram_writer: None,
             commits: Vec::new(),
+            commit_decoder: None,
         });
     }
     let records = h.events.len();
@@ -1436,13 +1467,29 @@ pub fn inspect_rsp_cpu_imem_history(
         match row.kind {
             Kind::DmaPendingWrite => {
                 require(
-                    pending_enabled && active.is_none(),
+                    pending_enabled,
                     "pending DMA write outside controlled profile",
                 )?;
+                let decoded = match &mut active {
+                    Some(Active::Cpu {
+                        begin,
+                        read,
+                        written,
+                    }) => {
+                        require(
+                            decoded_dma_enabled && read.is_none() && !*written,
+                            "invalid decoded pending DMA effect scope",
+                        )?;
+                        *written = true;
+                        Some(&*begin)
+                    }
+                    None => None,
+                    _ => return Err("pending DMA write inside RSP instruction".into()),
+                };
                 ram.as_mut()
                     .and_then(|ram| ram.pending_dma.as_mut())
                     .ok_or("pending DMA state missing")?
-                    .write(&row)?;
+                    .write(&row, decoded)?;
             }
             Kind::DmemDmaRead | Kind::DmemDmaWrite => {
                 require(
@@ -1468,10 +1515,34 @@ pub fn inspect_rsp_cpu_imem_history(
             | Kind::RamFetchEnd
             | Kind::DmaPromote
             | Kind::DmaComplete => {
-                require(
-                    active.is_none(),
-                    "RAM observation interleaves decoded instruction",
-                )?;
+                if let Some(Active::Cpu {
+                    begin,
+                    written,
+                    read,
+                }) = &active
+                {
+                    require(
+                        decoded_dma_enabled
+                            && row.kind == Kind::DmaPromote
+                            && *written
+                            && read.is_none()
+                            && row.pc == begin.pc
+                            && row.phase == begin.phase
+                            && ram
+                                .as_ref()
+                                .and_then(|ram| ram.pending_dma.as_ref())
+                                .is_some_and(|pending| {
+                                    pending.commit == row.ordinal.checked_sub(1)
+                                        && pending.commit_decoder == Some(begin.context)
+                                }),
+                        "DMA promotion lacks synchronous decoded length-write scope",
+                    )?;
+                } else {
+                    require(
+                        active.is_none(),
+                        "RAM observation interleaves decoded instruction",
+                    )?;
+                }
                 ram.as_mut()
                     .ok_or("RAM observation outside DMA profile")?
                     .observe(row, &dmem, &dorig)?;
@@ -3733,6 +3804,7 @@ mod tests {
             pbus_writer: None,
             dram_writer: None,
             commits: Vec::new(),
+            commit_decoder: None,
         };
         for ordinal in [1, 2] {
             let mut event = row("dma_pending_write", ordinal, ordinal);
@@ -3745,7 +3817,7 @@ mod tests {
             event["dma_direction"] = json!("imem_ingress");
             event["dma"] = json!(pending.snapshot.descriptor);
             pending
-                .write(&serde_json::from_value(event).unwrap())
+                .write(&serde_json::from_value(event).unwrap(), None)
                 .unwrap();
         }
         assert_eq!(pending.commits[1].superseded_commit, Some(1));
@@ -3762,7 +3834,7 @@ mod tests {
         descriptor.pbus = 0x100;
         event["dma"] = json!(descriptor);
         pending
-            .write(&serde_json::from_value(event).unwrap())
+            .write(&serde_json::from_value(event).unwrap(), None)
             .unwrap();
         let mut promote = row("dma_promote", 4, 4);
         promote["bank"] = json!(1);
@@ -3774,5 +3846,71 @@ mod tests {
         assert_eq!(parent.pbus_write_ordinal, Some(3));
         assert_eq!(parent.dram_write_ordinal, None);
         assert!(pending.promote(&promote).is_err());
+    }
+
+    #[test]
+    fn decoded_mmio_commit_retains_exact_sw_scope_and_rejects_equal_decoys() {
+        let descriptor = DmemDmaDescriptor {
+            pbus: 0x3e0,
+            dram: PhysicalAddr(0x6028),
+            length: 0,
+            count: 0,
+            skip: 0,
+        };
+        let make = || PendingDmaReplay {
+            snapshot: PendingDmaSnapshot {
+                bank: 1,
+                descriptor: descriptor.clone(),
+            },
+            direction: None,
+            commit: None,
+            pbus_writer: Some(8),
+            dram_writer: Some(9),
+            commits: Vec::new(),
+            commit_decoder: None,
+        };
+        let mut begin = row("cpu_begin", 11, 11);
+        begin["cpu"] = json!(true);
+        begin["word"] = json!(0xae200008u32);
+        let mut registers = vec![0u64; 32];
+        registers[17] = 0xffffffffa4040000;
+        begin["gpr"] = json!(registers);
+        let begin: Row = serde_json::from_value(begin).unwrap();
+        let mut write = row("dma_pending_write", 12, 11);
+        write["cpu"] = json!(true);
+        write["word"] = json!(begin.word);
+        write["address"] = json!(2);
+        write["bank"] = json!(1);
+        write["offset"] = json!(0x3e0);
+        write["bytes"] = json!(4);
+        write["dma"] = json!(descriptor);
+        write["dma_direction"] = json!("imem_ingress");
+        write["pending_full"] = json!(true);
+        let write: Row = serde_json::from_value(write).unwrap();
+        let mut pending = make();
+        pending.write(&write, Some(&begin)).unwrap();
+        assert_eq!(pending.commits[0].decoder_context, Some(11));
+        let mut promote = row("dma_promote", 13, 13);
+        promote["bank"] = json!(1);
+        promote["dma"] = json!(descriptor);
+        promote["dma_direction"] = json!("imem_ingress");
+        let parent = pending
+            .promote(&serde_json::from_value(promote).unwrap())
+            .unwrap();
+        assert_eq!(parent.commit_decoder_context, Some(11));
+        assert_eq!(parent.commit_ordinal, 12);
+        for mode in 0..5 {
+            let mut decoy = write.clone();
+            let mut cpu = begin.clone();
+            match mode {
+                0 => decoy.value = 1,
+                1 => decoy.context = 12,
+                2 => cpu.gpr[17] = 0xffffffff80040000,
+                3 => decoy.address = 3,
+                _ => cpu.word = 0xae290008,
+            }
+            assert!(make().write(&decoy, Some(&cpu)).is_err(), "mode {mode}");
+        }
+        assert!(make().write(&write, None).is_err());
     }
 }

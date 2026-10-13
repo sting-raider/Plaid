@@ -47,6 +47,7 @@ int main(int argc,char** argv) {
     rdram.ram.write<Word>(0x602c,0,RBusDevice::ARES_DEBUGGER);
   }
   cpu.ipu.r[16].u64=0xffffffffa4000000ull;cpu.ipu.r[9].u64=cpuBase;cpu.ipu.r[10].u64=mixed;
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=9) cpu.ipu.r[17].u64=0xffffffffa4040000ull;
 
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=traced;plaidCpuInstructionObserver=traced?compose_cpu_instruction:nullptr;plaidSpWordObserver=traced?compose_sp_word:nullptr;plaidRspInstructionObserver=traced?compose_rsp_instruction:nullptr;plaidRspDmemObserver=traced?compose_rsp_dmem:nullptr;
@@ -96,10 +97,10 @@ int main(int argc,char** argv) {
   }
   std::printf(",\"initial_imem\":");printBytes(true,PLAID_RSP_DEFINITIONS_FIXTURE>=3?4096:20);
   if(PLAID_RSP_DEFINITIONS_FIXTURE>=4) { std::printf(",\"initial_ram\":");printRam(); }
-  auto cpuStep=[&](u32 p,u32 index){
-    phase(p);CpuStep s{};s.phase=p;s.index=index;s.word=index==10?0:words[index];s.pc=0xffffffffa0006000ull+index*4;
+  auto cpuStep=[&](u32 p,u32 index,bool synchronize=true){
+    phase(p);CpuStep s{};s.phase=p;s.index=index;s.word=index==11?insn_sw(0,17,8):index==10?0:words[index];s.pc=0xffffffffa0006000ull+index*4;
     for(u32 n=0;n<32;n++)s.before[n]=cpu.ipu.r[n].u64;
-    cpu.pipeline.setPc(s.pc);if(cpu.instruction())cpu.synchronize();
+    cpu.pipeline.setPc(s.pc);if(cpu.instruction() && synchronize)cpu.synchronize();
     if(cpu.scc.cause.exceptionCode||cpu.scc.sysadFrozen){std::fprintf(stderr,"cpu phase=%u exception=%u frozen=%u\n",p,(u32)cpu.scc.cause.exceptionCode,(u32)cpu.scc.sysadFrozen);std::abort();}
     for(u32 n=0;n<32;n++)s.after[n]=cpu.ipu.r[n].u64;steps.push_back(s);checkpoint();
   };
@@ -179,6 +180,15 @@ int main(int argc,char** argv) {
     if(!rsp.dma.busy.read || rsp.dma.full.any() || (u32)rsp.dma.current.pbusAddress!=0x3c0) std::abort();
     rsp.dmaTransferStep();checkpoint();
     phase(23);rsp.pipeline={};rsp.pipeline.singleIssue=1;rsp.branch.setPc(0x3c0);rsp.ipu.pc=0x3c0;
+    rsp.status.halted=0;rsp.status.broken=0;rsp.instruction();rsp.status.halted=1;checkpoint();
+  }
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=9) {
+    phase(24);rsp.writeWord(0x04040000,0x13e0,cpu);rsp.writeWord(0x04040004,0x6028,cpu);
+    rdram.ram.write<Word>(0x602c,insn_sw(0,17,8),RBusDevice::ARES_DEBUGGER);
+    cpuStep(24,11,false); // Controlled scheduler: drain separately after decoder completion.
+    if(!rsp.dma.busy.read || rsp.dma.full.any()) std::abort();
+    phase(25);rsp.dmaTransferStep();checkpoint();
+    phase(26);rsp.pipeline={};rsp.pipeline.singleIssue=1;rsp.branch.setPc(0x3e0);rsp.ipu.pc=0x3e0;
     rsp.status.halted=0;rsp.status.broken=0;rsp.instruction();rsp.status.halted=1;checkpoint();
   }
   #if PLAID_RSP_CPU_IMEM_SENSOR

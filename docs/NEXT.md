@@ -10,9 +10,11 @@ through actual Dual read/IMEM installation back to RSP instruction consumption.
 Controlled v7 also joins actual two-read/two-store DMEM ingress to RSP load
 definitions with distinct lane parents. Controlled v8 also retains actual pending
 address mutations and length recommit/supersession through promotion and immediate
-handoff to installed-code consumption. Next compose guest MMIO operand ancestry,
-broader scalar/vector inputs and complete mutation/cache/mapping/root lifetime
-coverage. Reuse retained180-event/26-checkpoint v8,152-event/23-checkpoint v7,
+handoff to installed-code consumption. Controlled v9 connects an actual decoded
+CPU direct-KSEG1 SW through its pending length commit/synchronous promotion to
+installed-code consumption. Next compose broader register/source ancestry and
+complete mutation/cache/mapping/root lifetime coverage. Reuse retained195-event/
+29-checkpoint v9,180-event/26-checkpoint v8,152-event/23-checkpoint v7,
 142-event/21-checkpoint v6,136-event v5 and
 134-event v4 (same19 controls),97-event/17-checkpoint v3 and all earlier
 compatibility sources; no repeat reference build is needed for compatible consumers.

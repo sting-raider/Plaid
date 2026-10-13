@@ -225,6 +225,13 @@ immediate promotion whenever FULL is idle. Use spike065 controls and
 `python scripts/test_rsp_definitions.py --pending`; v0-v7 reports stay exact.
 The host-driven MMIO fixture supplies no guest operand ancestry or hardware policy.
 
+Controlled v9 additionally checks decoded CPU SW effects into direct-KSEG1 SP
+address/length registers, with one exact pending mutation per decoder context and
+synchronous promotion only immediately after the accepted length effect. Retain
+the commit decoder identity through the existing install/fetch graph. Use spike066
+controls and `python scripts/test_rsp_definitions.py --decoded-mmio`; v0-v8 reports
+stay exact. Its explicit post-decoder DMA drain schedule proves no general timing.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

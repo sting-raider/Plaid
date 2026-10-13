@@ -1,5 +1,13 @@
 # Status
 
+An actual decoded CPU MMIO SW now feeds the pending commit and synchronous DMA
+promotion on the same original clock under controlled v9. Exact direct-KSEG1
+register/address/value/context and complete GPR continuity checks precede retained
+decoder identity through installation and RSP consumption. The195-event source/
+29 matched controls independently agrees; v0-v8 reports stay exact. Fetched code
+and host address setup keep their existing unknown ancestry; general concurrent
+scheduling/hardware/census/cache/mapping/root/lifetime and whole-ROM/native stay OPEN.
+
 Mutable pending DMA state now composes with the existing writer/consumption graph
 under controlled v8. Latest masked address writes remain separate from length
 commits; equal-value FULL recommits supersede prior occurrences, and promotion
