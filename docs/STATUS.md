@@ -1,5 +1,13 @@
 # Status
 
+Cached exception-root v2 now composes successful restore boundaries as cuts of
+prior resident/backing observer ancestry. Repeated equal snapshot loads cut again;
+post-load roots/refills stay unknown until fresh captured writers and later fills.
+Snapshot digest labels are source-bound metadata, never authenticated snapshot
+bytes or recovered old generations. Retained exact-reference restore controls
+reproduce without rebuilding; the new root chronology is synthetic. V0/v1 remain
+compatible, and all reachability/census/lifetime/whole-ROM/native flags stay false.
+
 An actual decoded CPU MMIO SW now feeds the pending commit and synchronous DMA
 promotion on the same original clock under controlled v9. Exact direct-KSEG1
 register/address/value/context and complete GPR continuity checks precede retained

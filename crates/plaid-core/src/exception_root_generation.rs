@@ -6,7 +6,8 @@
 //! does not claim mutation-census, reachability, lifetime, or whole-ROM closure.
 //! V0 retains its root-word-only contract. V1 explicitly composes full-line
 //! identity-RDRAM slot replacement with the canonical pinned reset/NMI profile;
-//! it excludes translated/degraded accesses and nonmonotonic restore.
+//! it excludes translated/degraded accesses. V2 treats successful restore as an
+//! opaque ancestry cut, never as a relabeled earlier fill or writer.
 use crate::{
     exception_roots::{
         ExceptionClass, ExceptionRootInput, ExceptionRootReceipt, ExceptionVectorClass,
@@ -23,6 +24,9 @@ pub const FORMAT: &str = "plaid-exception-root-generation-history-v0";
 pub const POLICY: &str = "identity_rdram_cached_bev0_general_word";
 pub const LINE_FORMAT: &str = "plaid-exception-root-generation-history-v1";
 pub const LINE_POLICY: &str = "identity_rdram_cached_bev0_general_lines";
+pub const RESTORE_FORMAT: &str = "plaid-exception-root-generation-history-v2";
+pub const RESTORE_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-root-cache-restore-cuts-v2";
 const ROOT_PHYSICAL: PhysicalAddr = PhysicalAddr(0x0000_0180);
 
 #[derive(Debug, Deserialize)]
@@ -35,7 +39,7 @@ struct History {
     events: Vec<Event>,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 enum Event {
     BackingWrite {
@@ -74,6 +78,10 @@ enum Event {
         resident_reinitialized: bool,
         backing_reinitialized: bool,
     },
+    Restore {
+        ordinal: u64,
+        snapshot_sha256: String,
+    },
 }
 
 impl Event {
@@ -85,7 +93,8 @@ impl Event {
             | Self::RootFetch { ordinal, .. }
             | Self::FillLine { ordinal, .. }
             | Self::IndexInvalidate { ordinal, .. }
-            | Self::Lifecycle { ordinal, .. } => *ordinal,
+            | Self::Lifecycle { ordinal, .. }
+            | Self::Restore { ordinal, .. } => *ordinal,
         }
     }
 
@@ -98,7 +107,7 @@ impl Event {
             Self::FillLine { physical_line, .. } | Self::IndexInvalidate { physical_line, .. } => {
                 Some(*physical_line)
             }
-            Self::Lifecycle { .. } => None,
+            Self::Lifecycle { .. } | Self::Restore { .. } => None,
         }
     }
 }
@@ -142,10 +151,20 @@ pub struct ExceptionRootGenerationReport {
     pub records: usize,
     pub root_fetches: usize,
     pub witnesses: Vec<ExceptionRootWordWitness>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restore_cuts: Option<Vec<RestoreCutReceipt>>,
     pub reachability_certified: bool,
     pub mutation_coverage_certified: bool,
     pub executable_lifetime_certified: bool,
     pub native_complete: bool,
+}
+
+/// A source-bound boundary label; the snapshot bytes are not authenticated here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RestoreCutReceipt {
+    pub ordinal: u64,
+    pub snapshot_sha256: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -221,18 +240,25 @@ pub fn inspect_exception_root_generation_history(
         "exception root generation source receipt mismatch",
     )?;
     let history: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let line_scope = history.format == LINE_FORMAT;
+    let restore_scope = history.format == RESTORE_FORMAT;
+    let line_scope = restore_scope || history.format == LINE_FORMAT;
     require(
         (history.format == FORMAT && history.policy == POLICY && history.profile.is_none())
             || (line_scope
                 && history.policy == LINE_POLICY
-                && history.profile.as_deref() == Some(RESET_PROFILE)),
+                && history.profile.as_deref()
+                    == Some(if restore_scope {
+                        RESTORE_PROFILE
+                    } else {
+                        RESET_PROFILE
+                    })),
         "unsupported exception root generation format/policy/profile",
     )?;
 
     let mut backing = BTreeMap::<PhysicalAddr, BackingGeneration>::new();
     let mut resident = BTreeMap::<u16, ResidentGeneration>::new();
     let mut witnesses = Vec::new();
+    let mut restore_cuts = Vec::new();
 
     for (index, event) in history.events.iter().enumerate() {
         require(
@@ -251,7 +277,27 @@ pub fn inspect_exception_root_generation_history(
                 "exception root generation event targets an unsupported physical word or operation",
             )?;
         }
-        match *event {
+        match event.clone() {
+            Event::Restore {
+                ordinal,
+                snapshot_sha256,
+            } => {
+                require(
+                    restore_scope
+                        && snapshot_sha256.len() == 64
+                        && snapshot_sha256
+                            .bytes()
+                            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+                    "restore cut outside profile or malformed snapshot label",
+                )?;
+                // Restored equality cannot recover any pre-load observer ancestry.
+                resident.clear();
+                backing.clear();
+                restore_cuts.push(RestoreCutReceipt {
+                    ordinal,
+                    snapshot_sha256,
+                });
+            }
             Event::BackingWrite {
                 ordinal,
                 physical,
@@ -408,6 +454,7 @@ pub fn inspect_exception_root_generation_history(
         records: history.events.len(),
         root_fetches: witnesses.len(),
         witnesses,
+        restore_cuts: restore_scope.then_some(restore_cuts),
         reachability_certified: false,
         mutation_coverage_certified: false,
         executable_lifetime_certified: false,

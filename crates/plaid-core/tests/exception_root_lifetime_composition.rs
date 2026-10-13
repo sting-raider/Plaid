@@ -1,7 +1,8 @@
 use plaid_core::{
     exception_root_generation::{
-        ExceptionRootGenerationReport, FORMAT, LINE_FORMAT, LINE_POLICY, POLICY, RootWordOrigin,
-        inspect_exception_root_generation_history, verify_exception_root_generation_report,
+        ExceptionRootGenerationReport, FORMAT, LINE_FORMAT, LINE_POLICY, POLICY, RESTORE_FORMAT,
+        RESTORE_PROFILE, RootWordOrigin, inspect_exception_root_generation_history,
+        verify_exception_root_generation_report,
     },
     reset_cache_lifetime::PROFILE,
     rom::sha256,
@@ -39,6 +40,149 @@ fn inspect(events: Vec<Value>) -> ExceptionRootGenerationReport {
             && !report.native_complete
     );
     report
+}
+
+fn restore_source(events: Vec<Value>) -> Vec<u8> {
+    serde_json::to_vec(&json!({"format":RESTORE_FORMAT,"policy":LINE_POLICY,
+        "profile":RESTORE_PROFILE,"events":events}))
+    .unwrap()
+}
+fn restore(ordinal: u64) -> Value {
+    json!({"kind":"restore","ordinal":ordinal,"snapshot_sha256":"11".repeat(32)})
+}
+
+#[test]
+fn repeated_equal_snapshot_loads_cut_all_old_root_writer_and_fill_parents() {
+    let bytes = restore_source(vec![
+        write(1, 0x180, 7),
+        fill(2, 0x180, 7),
+        root(3, 7),
+        restore(4),
+        root(5, 7),
+        fill(6, 0x180, 7),
+        write(7, 0x180, 7),
+        root(8, 7),
+        fill(9, 0x180, 7),
+        root(10, 7),
+        restore(11),
+        root(12, 7),
+        fill(13, 0x180, 7),
+        root(14, 7),
+    ]);
+    let digest = sha256(&bytes);
+    let report = inspect_exception_root_generation_history(&bytes, &digest).unwrap();
+    assert_eq!(
+        report.witnesses[0].origin,
+        RootWordOrigin::Resident {
+            fill_ordinal: 2,
+            backing_write_ordinal: 1
+        }
+    );
+    assert_eq!(report.witnesses[1].origin, RootWordOrigin::Unknown);
+    assert_eq!(report.witnesses[1].current_backing, None);
+    assert_eq!(report.witnesses[2].origin, RootWordOrigin::Unknown);
+    assert_eq!(
+        report.witnesses[2].current_backing.unwrap().write_ordinal,
+        7
+    );
+    assert_eq!(
+        report.witnesses[3].origin,
+        RootWordOrigin::Resident {
+            fill_ordinal: 9,
+            backing_write_ordinal: 7
+        }
+    );
+    for witness in &report.witnesses[4..] {
+        assert_eq!(witness.origin, RootWordOrigin::Unknown);
+        assert_eq!(witness.current_backing, None);
+    }
+    let cuts = report.restore_cuts.as_ref().unwrap();
+    assert_eq!(
+        cuts.iter().map(|cut| cut.ordinal).collect::<Vec<_>>(),
+        [4, 11]
+    );
+    assert_eq!(cuts[0].snapshot_sha256, cuts[1].snapshot_sha256);
+    assert!(
+        !report.reachability_certified
+            && !report.mutation_coverage_certified
+            && !report.executable_lifetime_certified
+            && !report.native_complete
+    );
+    verify_exception_root_generation_report(&report, &bytes, &digest).unwrap();
+    let mut forged = report.clone();
+    forged.witnesses[1].origin = report.witnesses[0].origin;
+    assert!(verify_exception_root_generation_report(&forged, &bytes, &digest).is_err());
+    let mut forged = report;
+    forged.restore_cuts.as_mut().unwrap().pop();
+    assert!(verify_exception_root_generation_report(&forged, &bytes, &digest).is_err());
+}
+
+#[test]
+fn restore_cuts_nonroot_slots_and_keeps_current_root_selection_independent() {
+    let bytes = restore_source(vec![
+        write(1, 0x4180, 3),
+        fill(2, 0x4180, 3),
+        write(3, 0x180, 4),
+        restore(4),
+        fill(5, 0x4180, 3),
+        root(6, 4),
+        write(7, 0x180, 4),
+        fill(8, 0x180, 4),
+        root(9, 4),
+        transition(10, "nmi", false, false),
+        root(11, 4),
+        restore(12),
+        root(13, 4),
+    ]);
+    let report = inspect_exception_root_generation_history(&bytes, &sha256(&bytes)).unwrap();
+    assert_eq!(report.witnesses[0].current_backing, None);
+    assert_eq!(report.witnesses[0].origin, RootWordOrigin::Unknown);
+    assert_eq!(
+        report.witnesses[1].origin,
+        RootWordOrigin::Resident {
+            fill_ordinal: 8,
+            backing_write_ordinal: 7
+        }
+    );
+    assert_eq!(report.witnesses[2].origin, report.witnesses[1].origin);
+    assert_eq!(report.witnesses[3].origin, RootWordOrigin::Unknown);
+}
+
+#[test]
+fn restore_source_profile_metadata_and_report_cannot_borrow_old_receipts() {
+    let events = vec![
+        write(1, 0x180, 7),
+        fill(2, 0x180, 7),
+        restore(3),
+        root(4, 7),
+    ];
+    let bytes = restore_source(events.clone());
+    let digest = sha256(&bytes);
+    assert!(
+        inspect_exception_root_generation_history(
+            &source(events.clone()),
+            &sha256(&source(events.clone()))
+        )
+        .is_err()
+    );
+    for mode in 0..5 {
+        let mut value: Value = serde_json::from_slice(&bytes).unwrap();
+        match mode {
+            0 => value["profile"] = json!(PROFILE),
+            1 => value["events"][2]["snapshot_sha256"] = json!("AA".repeat(32)),
+            2 => value["events"][2]["snapshot_sha256"] = json!("0"),
+            3 => {
+                value["events"].as_array_mut().unwrap().remove(2);
+            }
+            _ => value["events"][2]["snapshot_bytes_authenticated"] = json!(true),
+        }
+        let changed = serde_json::to_vec(&value).unwrap();
+        assert!(
+            inspect_exception_root_generation_history(&changed, &sha256(&changed)).is_err(),
+            "mode {mode}"
+        );
+        assert!(inspect_exception_root_generation_history(&changed, &digest).is_err());
+    }
 }
 
 #[test]
