@@ -2485,6 +2485,22 @@ unsensed/dirty/mapped/failed/other accesses and global source/census/root/lifeti
 whole-ROM/native remain OPEN; flags false, no milestone promotion or upstream
 production reuse. See cached RAM-load/IMEM receipt.
 
+ADR-0119 cached producer/export follow-up (2026-10-14): controlled v26 binds
+actual cached Word SW to decoded GPR/control/endian before/completed boundaries,
+exact changed Word/unchanged lanes/dirty mask and canonical resident revisions.
+Retain source load/expression parents in separate occurrence-keyed mutation
+receipts; equal stores create new revisions. CACHE0x19 must have actual matching
+begin/completed16-byte RAM burst/end and verified unchanged-line/dirty-clear CPU
+result. Reuse DcacheReplay's full outgoing origins, including untouched fill
+lanes; never invent four Word writes or dirty-mask-only ancestry. Actual RAM
+bytes receive DcacheWriteback occurrence parents. Cached reads of mutated Words
+retain mutation identity and source receipts; exported RAM reads retain the
+actual backing writer identity. Mutation692/export699 -> read706/IMEM712/RSP714
+and cached read720/IMEM726/RSP728 compose both paths with DMEM/DMA/RSP ancestry.
+Prior reports remain exact. General widths/mapping/cache operations/census/root/
+lifetime/whole-ROM/native stay OPEN; all flags false, no milestone promotion or
+upstream production reuse. See cached Word writeback/IMEM receipt.
+
 ## ADR-0120: Physical FPR byte generations compose with canonical COP1 store normalization
 
 Status: Accepted for bounded source composition, 2026-10-12.

@@ -1,5 +1,13 @@
 # Status
 
+Controlled v26 now joins actual cached SW producer ancestry through complete
+D-cache writeback to RAM/IMEM/RSP consumption. Equal mutations686/692 select
+latest692 at export699; all16 outgoing byte origins include untouched fill lanes.
+Uncached read706/IMEM712/RSP714 selects699; cached read720/IMEM726/RSP728 retains
+resident mutation692 after actual dirty clearing. The729-event/124-control graph
+agrees independently; all27 prior reports stay exact. General mapping/width/
+source/census/lifetime/whole-ROM/native remain OPEN; all flags false.
+
 Controlled v25 now joins decoded cached RAM LW to the canonical D-cache state,
 captured RAM writer parents and IMEM/RSP consumption. Read618 and stale read643
 retain fill617/writer595 even after uncached writer637 installs ADDU21. Actual

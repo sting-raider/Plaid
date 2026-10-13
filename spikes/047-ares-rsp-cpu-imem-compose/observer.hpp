@@ -31,6 +31,9 @@ struct ComposeEvent {
   u32 spDeviceAddress=0;
   u64 linkedAddress=0;
   bool dcacheCpuValid=false;
+  bool dcacheCpuLineValid=false;
+  u32 dcacheCpuSlot=0,dcacheCpuTag=0,dcacheCpuIndex=0,dcacheCpuDirty=0;
+  std::vector<u32> dcacheCpuWords;
   u32 dcacheKind=0,dcacheSlot=0,dcacheTag=0,dcacheIndex=0,dcacheDirty=0,dcachePhysical=0;
   u64 dcacheVirtual=0,dcacheValue=0;
   std::vector<u32> dcacheWords;
@@ -199,6 +202,17 @@ static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
     e.dcacheCpuValid=true;e.linkedAddress=cpu.scc.ll;e.reverseEndian=cpu.context.littleEndian();
   }
   #endif
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 27
+  u64 memoryAddress=cpu.ipu.r[(word>>21)&31].u64+(s16)word;
+  bool cachedStore=(word>>26)==0x2b && memoryAddress>=0xffffffff80000000ull && memoryAddress<0xffffffff80800000ull;
+  if(cachedStore || ((word>>26)==0x2f && ((word>>16)&31)==25)){
+    auto& e=composeEvents.back();compose_return_state(e);e.returnValid=false;
+    e.dcacheCpuValid=true;e.linkedAddress=cpu.scc.ll;e.reverseEndian=cpu.context.littleEndian();
+    if(!cachedStore){const auto& line=cpu.dcache.line(memoryAddress);e.dcacheCpuLineValid=true;
+      e.dcacheCpuSlot=(memoryAddress>>4)&511;e.dcacheCpuTag=line.tagKey;e.dcacheCpuIndex=line.index;e.dcacheCpuDirty=line.dirty;
+      for(u32 n=0;n<4;n++)e.dcacheCpuWords.push_back(line.words[n]);}
+  }
+  #endif
   if(!begin) {composeCpuContext=composeCpuPc=composeCpuWord=0;composeCpuRamLoad=false;}
 }
 static void compose_rsp_instruction(bool begin,u32 pc,u32 word,u32 next,bool halted) {
@@ -260,9 +274,9 @@ static void compose_cache_burst(bool write,u32 address,u32 bytes,u32 device,cons
   if(!composeEnabled) return;
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 26
   if(device==(u32)RBusDevice::VR4300_DCACHE){
-    if(write || bytes!=16 || !composeCpuContext || composeCpuWord>>26!=0x23 || composeRspContext || composeFetchContext)std::abort();
+    if(bytes!=16 || !composeCpuContext || (write?(composeCpuWord>>26!=0x2f || ((composeCpuWord>>16)&31)!=25):composeCpuWord>>26!=0x23) || composeRspContext || composeFetchContext)std::abort();
     compose_push("dcache_primitive",composeCpuContext,composeCpuPc,composeCpuWord,0,0,0,0,0,true);
-    auto& e=composeEvents.back();e.dcacheKind=1;e.dcachePhysical=address;
+    auto& e=composeEvents.back();e.dcacheKind=write?7:1;e.dcachePhysical=address;
     for(u32 n=0;n<4;n++)e.dcacheWords.push_back(words[n]);return;
   }
   #endif
@@ -278,9 +292,9 @@ static void compose_dcache_snapshot(ComposeEvent& e,const CPU::DataCache::Line* 
 }
 static void compose_operand_dcache(u32 kind,const void* opaque,u32 physical){
   if(!composeEnabled)return;
-  if(!composeCpuContext || composeRspContext || composeFetchContext || (kind!=1 && kind!=5))std::abort();
+  if(!composeCpuContext || composeRspContext || composeFetchContext || kind<1 || kind>5)std::abort();
   compose_push("dcache_primitive",composeCpuContext,composeCpuPc,composeCpuWord,0,0,0,0,0,true);
-  auto& e=composeEvents.back();e.dcacheKind=kind==1?2:4;e.dcachePhysical=physical;
+  auto& e=composeEvents.back();e.dcacheKind=kind==1?2:kind==2?5:kind==3?6:kind==4?8:4;e.dcachePhysical=physical;
   compose_dcache_snapshot(e,static_cast<const CPU::DataCache::Line*>(opaque));
 }
 static void compose_operand_dcache_read(u64 virtualAddress,u32 physical,u32 bytes,u64 value,const void* opaque){
@@ -507,15 +521,20 @@ static void compose_print() {
     if(e.storeValid || e.ramLoadValid || e.dcacheCpuValid){std::printf(",\"%s\":{\"linked\":{\"control\":{\"state\":",e.storeValid?"store_state":e.ramLoadValid?"ram_load_state":"dcache_cpu_state");compose_print_exception_state(e);
       std::printf(",\"interrupt_enable\":%s,\"llbit\":%s},\"linked_address\":%llu},\"reverse_endian\":%s}",e.interruptEnable?"true":"false",e.llbit?"true":"false",(unsigned long long)e.linkedAddress,e.reverseEndian?"true":"false");}
     if(e.spDeviceValid)std::printf(",\"sp_device_address\":%u",e.spDeviceAddress);
+    if(e.dcacheCpuLineValid){std::printf(",\"dcache_cpu_line\":{\"slot\":%u,\"tag\":%u,\"index\":%u,\"dirty\":%u,\"words\":[",e.dcacheCpuSlot,e.dcacheCpuTag,e.dcacheCpuIndex,e.dcacheCpuDirty);
+      for(u32 n=0;n<4;n++)std::printf("%s%u",n?",":"",e.dcacheCpuWords[n]);std::printf("]}");}
     if(e.dcacheKind){
-      const char* record=e.dcacheKind==1?"backing_read":e.dcacheKind==2?"fill":e.dcacheKind==3?"cached_word_read":"invalidate";
+      const char* record=e.dcacheKind==1?"backing_read":e.dcacheKind==2?"fill":e.dcacheKind==3?"cached_word_read":e.dcacheKind==4?"invalidate":e.dcacheKind==5?"resident_word_mutation":e.dcacheKind==6?"writeback_begin":e.dcacheKind==7?"backing_write":"writeback_end";
       std::printf(",\"dcache_event\":{\"record\":\"%s\",\"ordinal\":%llu",record,(unsigned long long)e.ordinal);
-      if(e.dcacheKind<=2)std::printf(",\"physical_line\":%u",e.dcachePhysical);
-      if(e.dcacheKind>=2)std::printf(",\"slot\":%u",e.dcacheSlot);
+      if(e.dcacheKind<=2 || e.dcacheKind==6 || e.dcacheKind==7)std::printf(",\"physical_line\":%u",e.dcachePhysical);
+      if(e.dcacheKind>=2 && e.dcacheKind!=7)std::printf(",\"slot\":%u",e.dcacheSlot);
       if(e.dcacheKind==3)std::printf(",\"pc\":%llu,\"effective_virtual\":%llu,\"physical\":%u",(unsigned long long)e.pc,(unsigned long long)e.dcacheVirtual,e.dcachePhysical);
-      if(e.dcacheKind<=3){std::printf(",\"payload\":");compose_print_data_bytes(e,e.dcacheKind==3);}
+      if(e.dcacheKind==5)std::printf(",\"physical\":%u",e.dcachePhysical);
+      if(e.dcacheKind<=3 || e.dcacheKind==5 || e.dcacheKind==7){std::printf(",\"payload\":");
+        if(e.dcacheKind==5){std::printf("[");for(u32 n=0;n<4;n++)std::printf("%s%u",n?",":"",(e.dcacheWords[(e.dcachePhysical&15)/4]>>(24-8*n))&255);std::printf("]");}
+        else compose_print_data_bytes(e,e.dcacheKind==3);}
       std::printf("}");
-      if(e.dcacheKind>=2){std::printf(",\"dcache_line\":{\"slot\":%u,\"tag\":%u,\"index\":%u,\"dirty\":%u,\"words\":[",e.dcacheSlot,e.dcacheTag,e.dcacheIndex,e.dcacheDirty);
+      if(e.dcacheKind>=2 && e.dcacheKind!=7){std::printf(",\"dcache_line\":{\"slot\":%u,\"tag\":%u,\"index\":%u,\"dirty\":%u,\"words\":[",e.dcacheSlot,e.dcacheTag,e.dcacheIndex,e.dcacheDirty);
         for(u32 n=0;n<4;n++)std::printf("%s%u",n?",":"",e.dcacheWords[n]);std::printf("]}");}
     }
     std::printf("}");

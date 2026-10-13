@@ -455,6 +455,9 @@ pub(crate) struct DcacheReplay {
 }
 
 impl DcacheReplay {
+    pub(crate) fn latest_writeback(&self) -> Option<&DcacheWritebackReceipt> {
+        self.receipts.last()
+    }
     pub(crate) fn latest_read(&self) -> Option<&DcacheResidentReadReceipt> {
         self.reads.last()
     }

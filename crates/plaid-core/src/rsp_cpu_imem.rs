@@ -29,7 +29,7 @@ use std::collections::BTreeMap;
 
 #[path = "rsp_cpu_dcache.rs"]
 mod dcache;
-pub use dcache::{DcacheFillParents, RspDcacheConsumption};
+pub use dcache::{CpuCachedWordMutation, DcacheFillParents, RspDcacheConsumption};
 
 pub const FORMAT: &str = "plaid-rsp-cpu-imem-history-v0";
 pub const PROFILE: &str =
@@ -89,6 +89,9 @@ pub const RAM_LOAD_PROFILE: &str =
 pub const DCACHE_FORMAT: &str = "plaid-rsp-cpu-imem-history-v25";
 pub const DCACHE_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-cached-ram-load-imem-consumption-v25";
+pub const WRITEBACK_FORMAT: &str = "plaid-rsp-cpu-imem-history-v26";
+pub const WRITEBACK_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-cached-word-writeback-imem-consumption-v26";
 pub const CONDITIONAL_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-conditional-sp-imem-consumption-v22";
 pub const LOAD_PROFILE: &str =
@@ -202,6 +205,8 @@ struct Row {
     dcache_event: Option<crate::dcache_writeback::Event>,
     #[serde(default)]
     dcache_line: Option<dcache::DcacheLine>,
+    #[serde(default)]
+    dcache_cpu_line: Option<dcache::DcacheLine>,
     #[serde(default)]
     sp_device_address: Option<PhysicalAddr>,
     context: u64,
@@ -755,6 +760,10 @@ pub struct RamFetchAccess {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum RamByteOrigin {
+    DcacheWriteback {
+        write_ordinal: u64,
+        source_offset: u8,
+    },
     Unknown {
         cut_ordinal: Option<u64>,
     },
@@ -926,6 +935,15 @@ pub struct DmemDmaConsumption {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SpByteOrigin {
+    CpuCachedMutationLoad {
+        decoder_context: u64,
+        read_ordinal: u64,
+        physical: PhysicalAddr,
+        resident_generation: u64,
+        resident_revision: u64,
+        mutation_ordinal: u64,
+        source_offset: u8,
+    },
     CpuCachedRamLoad {
         decoder_context: u64,
         read_ordinal: u64,
@@ -2388,7 +2406,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let dcache_enabled = h.format == DCACHE_FORMAT && h.profile == DCACHE_PROFILE;
+    let writeback_enabled = h.format == WRITEBACK_FORMAT && h.profile == WRITEBACK_PROFILE;
+    let dcache_enabled =
+        writeback_enabled || (h.format == DCACHE_FORMAT && h.profile == DCACHE_PROFILE);
     let ram_load_enabled =
         dcache_enabled || (h.format == RAM_LOAD_FORMAT && h.profile == RAM_LOAD_PROFILE);
     let subword_enabled =
@@ -2505,6 +2525,9 @@ pub fn inspect_rsp_cpu_imem_history(
         ram.load_enabled = load_enabled;
         if dcache_enabled {
             ram.dcache = Some(dcache::DcacheCompose::new(digest.clone()));
+            if writeback_enabled {
+                ram.dcache.as_mut().unwrap().enable_writes();
+            }
         }
     }
     if let Some(initial) = h.initial_tlb {
@@ -2559,9 +2582,19 @@ pub fn inspect_rsp_cpu_imem_history(
             row.dcache_cpu_state.is_none()
                 || (dcache_enabled
                     && matches!(row.kind, Kind::CpuBegin | Kind::CpuEnd)
-                    && row.word >> 26 == 0x2f
-                    && (row.word >> 16) & 31 == 17),
+                    && ((row.word >> 26 == 0x2f
+                        && ((row.word >> 16) & 31 == 17
+                            || (writeback_enabled && (row.word >> 16) & 31 == 25)))
+                        || (writeback_enabled && row.word >> 26 == 0x2b))),
             "D-cache CPU state outside HitInvalidateD",
+        )?;
+        require(
+            row.dcache_cpu_line.is_none()
+                || (writeback_enabled
+                    && matches!(row.kind, Kind::CpuBegin | Kind::CpuEnd)
+                    && row.word >> 26 == 0x2f
+                    && (row.word >> 16) & 31 == 25),
+            "D-cache CPU line outside HitWritebackD",
         )?;
         require(
             (row.dcache_event.is_none() && row.dcache_line.is_none())
@@ -3031,11 +3064,37 @@ pub fn inspect_rsp_cpu_imem_history(
                     .dcache
                     .as_mut()
                     .ok_or("D-cache profile absent")?
-                    .observe(&row, begin, memory.start, &memory.bytes, &memory.origins)?
+                    .observe(
+                        &row,
+                        begin,
+                        memory.start,
+                        &memory.bytes,
+                        &memory.origins,
+                        registers[((begin.word >> 16) & 31) as usize].as_ref(),
+                    )?
                     .map(Box::new);
+                if let Some(crate::dcache_writeback::Event::BackingWrite {
+                    physical_line,
+                    payload,
+                    ..
+                }) = &row.dcache_event
+                {
+                    let offset = memory.offset(physical_line.0, 16)?;
+                    memory.bytes[offset..offset + 16].copy_from_slice(payload);
+                    for n in 0..16 {
+                        memory.origins[offset + n] = RamByteOrigin::DcacheWriteback {
+                            write_ordinal: row.ordinal,
+                            source_offset: n as u8,
+                        };
+                    }
+                }
                 if matches!(
                     row.dcache_event,
-                    Some(crate::dcache_writeback::Event::Invalidate { .. })
+                    Some(
+                        crate::dcache_writeback::Event::Invalidate { .. }
+                            | crate::dcache_writeback::Event::ResidentWordMutation { .. }
+                            | crate::dcache_writeback::Event::WritebackEnd { .. }
+                    )
                 ) {
                     *written = true;
                 }
@@ -3886,7 +3945,11 @@ pub fn inspect_rsp_cpu_imem_history(
                         written && read.is_none(),
                         "subword store lacks completed Word sink",
                     )?;
-                } else if dcache_enabled && op == 0x2f && (begin.word >> 16) & 31 == 17 {
+                } else if dcache_enabled
+                    && op == 0x2f
+                    && ((begin.word >> 16) & 31 == 17
+                        || (writeback_enabled && (begin.word >> 16) & 31 == 25))
+                {
                     memory_control_end(
                         &begin,
                         begin.dcache_cpu_state.as_ref(),
@@ -3896,7 +3959,34 @@ pub fn inspect_rsp_cpu_imem_history(
                         written && read.is_none(),
                         "HitInvalidateD lacks actual completed hit invalidation",
                     )?;
+                    if (begin.word >> 16) & 31 == 25 {
+                        ram.as_mut()
+                            .unwrap()
+                            .dcache
+                            .as_mut()
+                            .unwrap()
+                            .finish_instruction(&begin, &row)?;
+                    }
                 } else if op == 0x2b {
+                    let rs = ((begin.word >> 21) & 31) as usize;
+                    let address = begin.gpr[rs].wrapping_add_signed(i64::from(begin.word as i16));
+                    if begin.dcache_cpu_state.is_some()
+                        || row.dcache_cpu_state.is_some()
+                        || (writeback_enabled
+                            && (0xffffffff80000000..0xffffffff80800000).contains(&address))
+                    {
+                        memory_control_end(
+                            &begin,
+                            begin.dcache_cpu_state.as_ref(),
+                            row.dcache_cpu_state.as_ref(),
+                        )?;
+                        ram.as_mut()
+                            .unwrap()
+                            .dcache
+                            .as_mut()
+                            .ok_or("cached SW lacks profile")?
+                            .finish_instruction(&begin, &row)?;
+                    }
                     require(
                         written && read.is_none(),
                         "CPU store lacks its completed sink",
