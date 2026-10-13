@@ -2252,6 +2252,21 @@ fourteen v0-v13 reports stay exact. General exceptions/interrupts/TLB/reset/rest
 root census/mutation/mapping/lifetime/whole-ROM/native remain OPEN; flags stay
 false. See the writer/BREAK/handler integration receipt; no upstream code copied.
 
+ADR-0118 selected-EPC return follow-up (2026-10-13): controlled v15 retains the
+live exception-produced EPC generation only through its permitted continuous
+handler instruction stream. Opaque control roots cut candidate ownership, even
+when EPC numerically equals a past capture; CP0 writers/reset/restore remain
+unsupported. Check ERL0/kernel32/IE0 ERET current selected EPC, EXL/LLbit/full GPR
+effects and immediate first cached returned-code fetch/decoder. The bounded frame
+is consumed for this scope; physical EPC is not cleared. Actual365-event/57-control
+graph joins BREAK transfer332 -> handler writer348/invalidation353 -> ERET358 ->
+returned fill362/decoder364 with fresh DMEM/DMA/RSP parents. Handler and return
+have no host PC setters. All fifteen v0-v14 reports stay exact. Retain common-EPC
+research's current-writer obligation and exact pinned Mupen ERL stop disagreement;
+this production scope claims neither guest EPC writes nor ErrorEPC/ERL support.
+Static ERET remains unsupported and all general proof flags false. See the live
+EPC return receipt; no upstream implementation copied or linked.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

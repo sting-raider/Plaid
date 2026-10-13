@@ -1,5 +1,14 @@
 # Status
 
+Controlled v15 now joins the actual exception-produced EPC generation through
+continuous handler mutation/invalidation to ERET and returned-code consumption.
+Handler writer348 replaces BREAK with NOP; ERET358 uses uncut EPC producer332;
+fresh fill362/decoder364 retains the replacement writer's DMEM/DMA/RSP parents.
+No host PC setter drives the handler or return. The365-event/57-control actual
+graph agrees independently; all fifteen v0-v14 reports stay exact. Opaque roots
+cut EPC candidate ownership even for equal targets. General CP0 writers/ERL/
+interrupt/root/mutation/mapping/lifetime/whole-ROM/native coverage remain OPEN.
+
 Controlled v14 now joins actual writer/transform/cached BREAK ancestry to its
 exception transfer and first handler fetch. CPUwriter318 produces BREAK consumed
 by decoder331; transfer332 verifies cause9/non-delay EPC/EXL and the canonical

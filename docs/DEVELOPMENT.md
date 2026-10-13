@@ -276,6 +276,16 @@ exception PC for handler entry, without a host setter. Use spike071 and
 `python scripts/test_rsp_definitions.py --break-root`; v0-v13 reports stay exact.
 This proves one controlled occurrence, never complete root reachability/lifetime.
 
+Controlled v15 requires an uncut live exception-produced EPC generation through
+the permitted handler stream. Opaque PC seeds cut candidate ownership; unknown/
+unsupported CP0 writers/reset/restore cannot borrow equal past capture values.
+ERL0/kernel32/IE0 ERET must select that current EPC, clear EXL/LLbit, preserve full
+GPRs, then immediately fetch/decode the cached target. The bounded frame is
+consumed, without clearing physical EPC. Use spike072 and
+`python scripts/test_rsp_definitions.py --eret-return`; v0-v14 reports stay exact.
+Handler/return steps use actual PCs without host setters. Static discovery still
+rejects ERET; general CP0/ERL/interrupt/mutation/lifetime closure remains OPEN.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

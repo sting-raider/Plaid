@@ -60,6 +60,9 @@ pub const CPU_TRANSFORM_PROFILE: &str =
 pub const EXCEPTION_FORMAT: &str = "plaid-rsp-cpu-imem-history-v14";
 pub const EXCEPTION_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-writer-break-handler-consumption-v14";
+pub const RETURN_FORMAT: &str = "plaid-rsp-cpu-imem-history-v15";
+pub const RETURN_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-live-epc-handler-return-consumption-v15";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -124,6 +127,7 @@ enum Kind {
     CacheOperation,
     CpuRamWrite,
     ExceptionTransfer,
+    ReturnTransfer,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -159,6 +163,81 @@ struct Row {
     cache_operation: Option<DmaCacheOperation>,
     #[serde(default)]
     exception_state: Option<CpuExceptionState>,
+    #[serde(default)]
+    return_state: Option<CpuReturnState>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CpuReturnState {
+    pub state: CpuExceptionState,
+    pub interrupt_enable: bool,
+    pub llbit: bool,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CpuEretReturn {
+    pub epc_transfer_ordinal: u64,
+    pub decoder_context: u64,
+    pub transfer_ordinal: u64,
+    pub before: CpuReturnState,
+    pub after: CpuReturnState,
+    pub fetch_context: u64,
+    pub target_decoder_context: u64,
+}
+fn eret_transfer(
+    begin: &Row,
+    row: &Row,
+    producer: &CpuExceptionRoot,
+) -> Result<CpuEretReturn, String> {
+    effect_row(row)?;
+    let before = begin
+        .return_state
+        .as_ref()
+        .ok_or("ERET lacks selected-register state")?;
+    let after = row
+        .return_state
+        .as_ref()
+        .ok_or("ERET lacks completed state")?;
+    let expected_before = CpuExceptionState {
+        pc: GuestVirtualAddr(begin.pc),
+        ..producer.after.clone()
+    };
+    require(
+        begin.word == 0x42000018
+            && same(begin, row)
+            && row.cpu
+            && row.address == 0
+            && row.bank == 0
+            && row.offset == 0
+            && row.bytes == 0
+            && row.value == 0
+            && !before.interrupt_enable
+            && before.state == expected_before,
+        "ERET lacks uncut selected EPC generation or supported state",
+    )?;
+    let expected = CpuReturnState {
+        state: CpuExceptionState {
+            pc: before.state.epc,
+            exl: false,
+            ..before.state.clone()
+        },
+        interrupt_enable: false,
+        llbit: false,
+    };
+    require(
+        *after == expected,
+        "ERET target/EXL/LLbit differs from selected EPC",
+    )?;
+    Ok(CpuEretReturn {
+        epc_transfer_ordinal: producer.transfer_ordinal,
+        decoder_context: begin.context,
+        transfer_ordinal: row.ordinal,
+        before: before.clone(),
+        after: after.clone(),
+        fetch_context: 0,
+        target_decoder_context: 0,
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -709,6 +788,8 @@ pub struct RspCpuImemReport {
     pub dma_consumption: Option<DmemDmaConsumption>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exception_roots: Option<Vec<CpuExceptionRoot>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eret_returns: Option<Vec<CpuEretReturn>>,
     pub source_ancestry_certified: bool,
     pub mutation_coverage_certified: bool,
     pub imem_execution_certified: bool,
@@ -1850,7 +1931,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let exception_enabled = h.format == EXCEPTION_FORMAT && h.profile == EXCEPTION_PROFILE;
+    let return_enabled = h.format == RETURN_FORMAT && h.profile == RETURN_PROFILE;
+    let exception_enabled =
+        return_enabled || (h.format == EXCEPTION_FORMAT && h.profile == EXCEPTION_PROFILE);
     let transform_enabled = exception_enabled
         || (h.format == CPU_TRANSFORM_FORMAT && h.profile == CPU_TRANSFORM_PROFILE);
     let cpu_ram_enabled =
@@ -1950,6 +2033,10 @@ pub fn inspect_rsp_cpu_imem_history(
     let mut exception_roots: Vec<CpuExceptionRoot> = Vec::new();
     let mut pending_exception = None;
     let mut await_root: Option<usize> = None;
+    let mut live_exception: Option<usize> = None;
+    let mut eret_returns: Vec<CpuEretReturn> = Vec::new();
+    let mut pending_return: Option<usize> = None;
+    let mut await_return: Option<usize> = None;
     let mut cpu_reentry: Option<Row> = None;
     let mut previous_rsp: Option<Row> = None;
     let mut rsp_registers = [None; 32];
@@ -1965,6 +2052,30 @@ pub fn inspect_rsp_cpu_imem_history(
             "noncontiguous event identity or phase order",
         )?;
         phase = row.phase;
+        require(
+            row.return_state.is_none()
+                || (return_enabled
+                    && (row.kind == Kind::ReturnTransfer
+                        || (row.kind == Kind::CpuBegin && row.word == 0x42000018))),
+            "return state outside controlled ERET boundary",
+        )?;
+        require(
+            pending_return.is_none() || row.kind == Kind::CpuEnd,
+            "return transfer was not immediately completed by its decoder",
+        )?;
+        if let Some(index) = await_return {
+            require(
+                matches!(
+                    row.kind,
+                    Kind::RamFetchBegin
+                        | Kind::CacheBurstRead
+                        | Kind::CacheFill
+                        | Kind::RamFetchEnd
+                        | Kind::CpuBegin
+                ) && row.pc == eret_returns[index].after.state.pc.0,
+                "ERET target was not immediately fetched and decoded",
+            )?;
+        }
         require(
             row.exception_state.is_none()
                 || (exception_enabled
@@ -2077,6 +2188,27 @@ pub fn inspect_rsp_cpu_imem_history(
             )?;
         }
         match row.kind {
+            Kind::ReturnTransfer => {
+                let Some(Active::Cpu {
+                    begin,
+                    read,
+                    written,
+                }) = &mut active
+                else {
+                    return Err("return transfer lacks CPU decoder".into());
+                };
+                require(
+                    return_enabled && read.is_none() && !*written,
+                    "duplicate or unsupported ERET transfer",
+                )?;
+                let producer = live_exception
+                    .take()
+                    .ok_or("ERET selected EPC generation is unknown")?;
+                let receipt = eret_transfer(begin, &row, &exception_roots[producer])?;
+                pending_return = Some(eret_returns.len());
+                eret_returns.push(receipt);
+                *written = true;
+            }
             Kind::ExceptionTransfer => {
                 let Some(Active::Cpu {
                     begin,
@@ -2092,6 +2224,7 @@ pub fn inspect_rsp_cpu_imem_history(
                 )?;
                 let receipt = break_transfer(begin, &row)?;
                 pending_exception = Some(exception_roots.len());
+                live_exception = pending_exception;
                 exception_roots.push(receipt);
                 *written = true;
             }
@@ -2148,6 +2281,7 @@ pub fn inspect_rsp_cpu_imem_history(
                     "invalid opaque CPU control reentry",
                 )?;
                 registers.fill(None);
+                live_exception = None;
                 previous_cpu = None;
                 cpu_reentry = Some(row);
             }
@@ -2274,6 +2408,10 @@ pub fn inspect_rsp_cpu_imem_history(
                 )?;
                 boundary(&row, true)?;
                 require(
+                    row.word != 0x42000018 || (return_enabled && row.return_state.is_some()),
+                    "ERET lacks controlled return profile/state",
+                )?;
+                require(
                     !break_word(row.word) || (exception_enabled && row.exception_state.is_some()),
                     "BREAK lacks controlled exception profile/state",
                 )?;
@@ -2298,12 +2436,29 @@ pub fn inspect_rsp_cpu_imem_history(
                     exception_roots[index].fetch_context = fetch_context;
                     exception_roots[index].decoder_context = row.context;
                 }
+                if let Some(index) = await_return.take() {
+                    let ram = ram.as_ref().ok_or("ERET target lacks RAM profile")?;
+                    let fetch_context = match ram
+                        .pending
+                        .as_ref()
+                        .ok_or("ERET target lacks completed fetch")?
+                    {
+                        PendingFetch::Cached(index) => ram.cached_fetches[*index].fetch_context,
+                        PendingFetch::Uncached(_) => {
+                            return Err("controlled ERET target must be cached".into());
+                        }
+                    };
+                    eret_returns[index].fetch_context = fetch_context;
+                    eret_returns[index].target_decoder_context = row.context;
+                }
                 if let Some(ram) = &mut ram {
                     ram.bind(&row)?;
                 }
                 if let Some(previous) = &previous_cpu {
                     let next_pc = if break_word(previous.word) {
                         exception_roots.last().map(|receipt| receipt.root.root.0)
+                    } else if previous.word == 0x42000018 {
+                        eret_returns.last().map(|receipt| receipt.after.state.pc.0)
                     } else {
                         previous.pc.checked_add(4)
                     };
@@ -2686,7 +2841,17 @@ pub fn inspect_rsp_cpu_imem_history(
                 require(same(&begin, &row), "CPU end context mismatch")?;
                 let mut expected = begin.gpr.clone();
                 let op = begin.word >> 26;
-                if break_word(begin.word) {
+                if begin.word == 0x42000018 {
+                    require(
+                        return_enabled && written && read.is_none(),
+                        "ERET lacks completed return transfer",
+                    )?;
+                    await_return = Some(
+                        pending_return
+                            .take()
+                            .ok_or("ERET lacks transfer identity")?,
+                    );
+                } else if break_word(begin.word) {
                     require(
                         exception_enabled && written && read.is_none(),
                         "BREAK lacks its completed exception transfer",
@@ -2800,7 +2965,9 @@ pub fn inspect_rsp_cpu_imem_history(
         active.is_none()
             && cpu_reentry.is_none()
             && pending_exception.is_none()
-            && await_root.is_none(),
+            && await_root.is_none()
+            && pending_return.is_none()
+            && await_return.is_none(),
         "truncated RSP/CPU instruction or control seed",
     )?;
     require(
@@ -2826,6 +2993,7 @@ pub fn inspect_rsp_cpu_imem_history(
         imem_fetches: execution_enabled.then_some(imem_fetches),
         dma_consumption: ram.map(RamReplay::finish).transpose()?,
         exception_roots: exception_enabled.then_some(exception_roots),
+        eret_returns: return_enabled.then_some(eret_returns),
         source_ancestry_certified: false,
         mutation_coverage_certified: false,
         imem_execution_certified: false,
@@ -5138,6 +5306,63 @@ mod tests {
                 _ => begin.word = 12,
             }
             assert!(break_transfer(&begin, &transfer).is_err(), "mode {mode}");
+        }
+    }
+    fn eret_fixture() -> (Row, Row, CpuExceptionRoot) {
+        let (trigger, transfer) = break_fixture();
+        let producer = break_transfer(&trigger, &transfer).unwrap();
+        let mut begin = trigger;
+        begin.pc = 0xffffffff80000190;
+        begin.word = 0x42000018;
+        begin.context = 20;
+        begin.ordinal = 20;
+        begin.exception_state = None;
+        begin.return_state = Some(CpuReturnState {
+            state: CpuExceptionState {
+                pc: GuestVirtualAddr(begin.pc),
+                ..producer.after.clone()
+            },
+            interrupt_enable: false,
+            llbit: true,
+        });
+        let mut end = begin.clone();
+        end.kind = Kind::ReturnTransfer;
+        end.ordinal = 21;
+        end.gpr.clear();
+        let after = end.return_state.as_mut().unwrap();
+        after.state.pc = after.state.epc;
+        after.state.exl = false;
+        after.llbit = false;
+        (begin, end, producer)
+    }
+    #[test]
+    fn eret_uses_live_epc_generation_clears_exl_and_llbit() {
+        let (begin, end, producer) = eret_fixture();
+        let receipt = eret_transfer(&begin, &end, &producer).unwrap();
+        assert_eq!(receipt.epc_transfer_ordinal, producer.transfer_ordinal);
+        assert_eq!(receipt.after.state.pc, producer.after.epc);
+        assert!(!receipt.after.state.exl && !receipt.after.llbit);
+        assert!(receipt.before.llbit);
+    }
+    #[test]
+    fn eret_cannot_borrow_equal_past_capture_or_unsupported_selector_state() {
+        for mode in 0..9 {
+            let (mut begin, mut end, mut producer) = eret_fixture();
+            match mode {
+                0 => begin.return_state.as_mut().unwrap().state.epc.0 += 4,
+                1 => producer.after.epc.0 += 4,
+                2 => begin.return_state.as_mut().unwrap().state.erl = true,
+                3 => begin.return_state.as_mut().unwrap().interrupt_enable = true,
+                4 => end.return_state.as_mut().unwrap().llbit = true,
+                5 => end.return_state.as_mut().unwrap().state.exl = true,
+                6 => end.return_state.as_mut().unwrap().state.pc.0 += 4,
+                7 => end.context += 1,
+                _ => begin.word ^= 1,
+            }
+            assert!(
+                eret_transfer(&begin, &end, &producer).is_err(),
+                "mode {mode}"
+            );
         }
     }
 }

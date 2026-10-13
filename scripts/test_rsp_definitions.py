@@ -29,7 +29,9 @@ def main():
     parser.add_argument('--cpu-ram-copy',action='store_true')
     parser.add_argument('--cpu-xori',action='store_true')
     parser.add_argument('--break-root',action='store_true')
+    parser.add_argument('--eret-return',action='store_true')
     args = parser.parse_args()
+    args.break_root = args.break_root or args.eret_return
     args.cpu_xori = args.cpu_xori or args.break_root
     args.cpu_ram_copy = args.cpu_ram_copy or args.cpu_xori
     args.cache_invalidation = args.cache_invalidation or args.cpu_ram_copy
@@ -41,7 +43,8 @@ def main():
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('071-writer-break-handler' if args.break_root else
+    recipe = ('072-live-epc-handler-return' if args.eret_return else
+        '071-writer-break-handler' if args.break_root else
         '070-cpu-xori-ram-cached' if args.cpu_xori else
         '069-cpu-copy-ram-cached' if args.cpu_ram_copy else
         '068-dma-cache-invalidation' if args.cache_invalidation else
@@ -333,6 +336,28 @@ def main():
                     seed.update(phase=49,pc=model.ROOT_PC)
                     rows.insert(next(i for i,e in enumerate(rows) if e['kind']=='ram_fetch_begin' and e['pc']==model.ROOT_PC),seed);reclock(rows)
                 run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.eret_return:
+            for mode in range(11):
+                forged=copy.deepcopy(expected);rows=forged['events']
+                begin=next(e for e in rows if e['kind']=='cpu_begin' and e['word']==0x42000018)
+                transfer=next(e for e in rows if e['kind']=='return_transfer')
+                if mode==0: rows.remove(transfer);reclock(rows)
+                elif mode==1: rows.insert(rows.index(transfer),copy.deepcopy(transfer));reclock(rows)
+                elif mode==2: begin['return_state']['state']['epc'] += 4
+                elif mode==3: begin['return_state']['state']['erl']=True
+                elif mode==4: begin['return_state']['interrupt_enable']=True
+                elif mode==5: transfer['return_state']['state']['pc']+=4
+                elif mode==6: transfer['return_state']['state']['exl']=True
+                elif mode==7: transfer['return_state']['llbit']=True
+                elif mode==8: transfer['context']=transfer['ordinal']
+                elif mode==9:
+                    seed=copy.deepcopy(next(e for e in rows if e['kind']=='cpu_reentry'))
+                    end=next(e for e in rows if e['kind']=='cpu_end' and e['context']==338)
+                    seed.update(phase=50,pc=model.ROOT_PC+4,gpr=end['gpr'],word=0)
+                    rows.insert(next(i for i,e in enumerate(rows) if e['kind']=='ram_fetch_begin' and e['context']==340),seed);reclock(rows)
+                else:
+                    forged['events']=rows[:rows.index(transfer)+2];forged['steps']=forged['steps'][:-1]
+                run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
             forged = json.loads(original)
@@ -433,7 +458,7 @@ def main():
         if args.cpu_xori:
             for mode in range(6):
                 forged=json.loads(original);graph=forged['dma_consumption']
-                parent=graph['cpu_writes'][-1]['copy_parent'];transform=parent['transform']
+                parent=next(w['copy_parent'] for w in reversed(graph['cpu_writes']) if w['copy_parent'] and 'transform' in w['copy_parent']);transform=parent['transform']
                 if mode==0: parent.pop('transform')
                 elif mode==1: transform['decoder_context']=264
                 elif mode==2: transform['source_value']=0x21
@@ -450,6 +475,16 @@ def main():
                 elif mode==2: root['root']['input']['class']='tlb_miss'
                 elif mode==3: root['fetch_context']=327
                 elif mode==4: root['decoder_context']=331
+                else: forged['dma_consumption']['cached_fetches'][-1]['origins'][0]['write_ordinal']=318
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.eret_return:
+            for mode in range(5):
+                forged=json.loads(original);receipt=forged['eret_returns'][0]
+                if mode==0: forged.pop('eret_returns')
+                elif mode==1: receipt['epc_transfer_ordinal']=307
+                elif mode==2: receipt['fetch_context']=327
+                elif mode==3: receipt['target_decoder_context']=331
                 else: forged['dma_consumption']['cached_fetches'][-1]['origins'][0]['write_ordinal']=318
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)

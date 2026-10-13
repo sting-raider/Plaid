@@ -78,6 +78,12 @@ int main(int argc,char** argv) {
     rdram.ram.write<Word>(0x6068,0x3908000du,RBusDevice::ARES_DEBUGGER);
     rdram.ram.write<Word>(0x606c,insn_sw(8,19,0),RBusDevice::ARES_DEBUGGER);
   }
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=15) {
+    rdram.ram.write<Word>(0x184,insn_lw(8,16,0),RBusDevice::ARES_DEBUGGER);
+    rdram.ram.write<Word>(0x188,insn_sw(8,19,0),RBusDevice::ARES_DEBUGGER);
+    rdram.ram.write<Word>(0x18c,0xbe500000u,RBusDevice::ARES_DEBUGGER);
+    rdram.ram.write<Word>(0x190,0x42000018u,RBusDevice::ARES_DEBUGGER);
+  }
 
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=traced;plaidCpuInstructionObserver=traced?compose_cpu_instruction:nullptr;plaidSpWordObserver=traced?compose_sp_word:nullptr;plaidRspInstructionObserver=traced?compose_rsp_instruction:nullptr;plaidRspDmemObserver=traced?compose_rsp_dmem:nullptr;
@@ -117,6 +123,7 @@ int main(int argc,char** argv) {
   auto checkpoint=[&] { string digest{rsp_machine_digest(),":",cpu.effectiveCount(),
     ":",cpu.Thread::clock,":",cpu.scc.cause.exceptionCode,":",cpu.scc.cause.branchDelay,":",cpu.scc.epc};
     if(PLAID_RSP_DEFINITIONS_FIXTURE>=10)digest.append(":",compose_cache_digest());
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=15)digest.append(":",u32(cpu.scc.status.exceptionLevel),":",u32(cpu.scc.status.errorLevel),":",u32(cpu.scc.status.vectorLocation),":",u32(cpu.scc.status.interruptEnable),":",u32(cpu.scc.llbit),":",u32(cpu.context.bits),":",cpu.context.kernelMode(),":",cpu.pipeline.pc,":",cpu.pipeline.nextpc,":",cpu.pipeline.state,":",cpu.pipeline.nstate);
     checkpoints.push_back(digest); };
   auto printBytes=[](bool imem,u32 length) {
     std::printf("[");
@@ -145,8 +152,10 @@ int main(int argc,char** argv) {
       s.pc=index<24?0xffffffffa0006040ull+(index-21)*4:0xffffffff80000000ull+(index==25?0x6034:0x6028);}
     if(index>=27){s.word=index==27?insn_lw(8,16,0):index==28?insn_sw(8,20,0):index==29?0x3908000du:index==30?insn_sw(8,19,0):index==31?0xbe500000u:index==32?13:0;
       s.pc=index<31?0xffffffffa0006060ull+(index-27)*4:index==33?0xffffffff80000180ull:0xffffffff80000000ull+(index==31?0x6034:0x6028);}
+    if(index>=34){s.word=index==34?insn_lw(8,16,0):index==35?insn_sw(8,19,0):index==36?0xbe500000u:index==37?0x42000018u:0;
+      s.pc=index==38?0xffffffff80006028ull:0xffffffff80000184ull+(index-34)*4;}
     for(u32 n=0;n<32;n++)s.before[n]=cpu.ipu.r[n].u64;
-    if(index==33){if(cpu.ipu.pc!=s.pc)std::abort();}else cpu.pipeline.setPc(s.pc);
+    if(index>=33){if(cpu.ipu.pc!=s.pc)std::abort();}else cpu.pipeline.setPc(s.pc);
     if(cpu.instruction() && synchronize)cpu.synchronize();
     if((cpu.scc.cause.exceptionCode!=(index>=32?9u:0u))||cpu.scc.sysadFrozen){std::fprintf(stderr,"cpu phase=%u exception=%u frozen=%u\n",p,(u32)cpu.scc.cause.exceptionCode,(u32)cpu.scc.sysadFrozen);std::abort();}
     for(u32 n=0;n<32;n++)s.after[n]=cpu.ipu.r[n].u64;steps.push_back(s);checkpoint();
@@ -308,6 +317,10 @@ int main(int argc,char** argv) {
       cpuStep(index+16,index,false);
     }
     cpuStep(49,33,false); // Actual exception PC; no host PC seed or setter.
+  }
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=15) {
+    cpuStep(50,34,false);cpuStep(51,35,false);cpuStep(52,36,false);
+    cpuStep(53,37,false);cpuStep(54,38,false); // Natural handler and selected EPC return.
   }
   #if PLAID_RSP_CPU_IMEM_SENSOR
   composeEnabled=false;
