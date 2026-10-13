@@ -6,6 +6,14 @@ The authoritative engineering state is still [`STATUS.md`](STATUS.md) and [`NEXT
 
 ## Toolchain
 
+For storage mutation coverage groundwork, spike086 exposes an opt-in passive
+`memory_mutation_access` reference build. Its recipe guards exact source hashes
+and shadow-header reuse; its actual baseline compares full backing checkpoints.
+Run `python spikes/086-storage-mutation-sensing/test_prepare.py` and
+`python spikes/086-storage-mutation-sensing/run.py` locally. Existing retained
+sources need no rebuild. See its README for the pending global-clock/coverage
+obligations; these callbacks are analysis instrumentation, never native runtime.
+
 Core development requires:
 
 - Rust toolchain from `rust-toolchain.toml`

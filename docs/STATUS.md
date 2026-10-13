@@ -1,5 +1,12 @@
 # Status
 
+Optional storage-level sensing now reaches ordinary/equal/base-class/EBus/
+translated writes below identity-only RAM callbacks, with explicit fill/load/
+restore/retirement cuts. Spike086's25 effects/20 complete RAM+hidden checkpoints
+agree with unchanged baseline/disabled/repeat controls. Old protocols stay exact
+by default. Global-clock producer/executable composition, raw-pointer/hidden-RAM
+coverage and mutation census/whole-ROM/native remain OPEN.
+
 Fixture28 now composes complete D-cache export699 with mapped cached CPU
 execution using existing v26. Stale fetch731/decoder733 retains fill503/CPUwriter473;
 actual HitInvalidateI740 ends503, then fill745/decoder747 selects export699.
