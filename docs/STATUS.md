@@ -1,5 +1,13 @@
 # Status
 
+Controlled v17 now joins an actual EPC-read/XORI expression through MTC0 to a
+changed ERET target and its executable ancestry. Read363 -> transform367 ->
+writer372 selects602c; returned fill383/decoder385 retains separate CPUwriter353/
+load342/read343/DMEM/DMA/RSP parents. The386-event/61-control actual graph agrees
+independently; all seventeen v0-v16 reports stay exact. Old v16 still cuts XORI
+held CP0 ancestry. Broader transforms/arbitrary CP0 sources/ERL/interrupt/root/
+mutation/mapping/lifetime/whole-ROM/native closure remain OPEN; all flags false.
+
 Controlled v16 now composes actual MFC0/MTC0 EPC generations with the existing
 continuous handler/cache/return graph. Read358 retains exception producer332;
 equal-value write363 creates a fresh generation selected by ERET368. Returned

@@ -31,7 +31,9 @@ def main():
     parser.add_argument('--break-root',action='store_true')
     parser.add_argument('--eret-return',action='store_true')
     parser.add_argument('--guest-epc',action='store_true')
+    parser.add_argument('--epc-target',action='store_true')
     args = parser.parse_args()
+    args.guest_epc = args.guest_epc or args.epc_target
     args.eret_return = args.eret_return or args.guest_epc
     args.break_root = args.break_root or args.eret_return
     args.cpu_xori = args.cpu_xori or args.break_root
@@ -45,7 +47,8 @@ def main():
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('073-guest-epc-return' if args.guest_epc else
+    recipe = ('074-epc-transform-target' if args.epc_target else
+        '073-guest-epc-return' if args.guest_epc else
         '072-live-epc-handler-return' if args.eret_return else
         '071-writer-break-handler' if args.break_root else
         '070-cpu-xori-ram-cached' if args.cpu_xori else
@@ -366,7 +369,7 @@ def main():
                 forged=copy.deepcopy(expected);rows=forged['events']
                 read=next(e for e in rows if e['kind']=='epc_read')
                 write=next(e for e in rows if e['kind']=='epc_write')
-                begin=next(e for e in rows if e['kind']=='cpu_begin' and e['context']==362)
+                begin=next(e for e in rows if e['kind']=='cpu_begin' and e['context']==write['context'])
                 if mode==0: rows.remove(read);reclock(rows)
                 elif mode==1: rows.remove(write);reclock(rows)
                 elif mode==2: rows.insert(rows.index(read),copy.deepcopy(read));reclock(rows)
@@ -387,7 +390,7 @@ def main():
             # Insert a real modeled no-op register rewrite or equal second MTC0
             # on the continuous cached handler path. Require the precise stale
             # ancestry error, so malformed fixture bookkeeping cannot pass it.
-            for word in (0x39080000,0x01004021,0x40887000):
+            for word in (() if args.epc_target else (0x39080000,0x01004021,0x40887000)):
                 forged=json.loads(json.dumps(expected));rows=forged['events']
                 extra_write=word==0x40887000
                 insertion=next(i for i,e in enumerate(rows) if e['kind']=='ram_fetch_begin'
@@ -426,6 +429,26 @@ def main():
                     for i,(a,b) in enumerate(zip(starts,ends))]
                 rejection=subprocess.run([str(exe),'inspect-rsp-cpu-imem',str(source),save(forged),str(output)],capture_output=True,text=True)
                 assert rejection.returncode!=0 and ('past EPC read generation' if extra_write else 'lacks held current EPC read') in rejection.stderr,rejection.stderr
+        if args.epc_target:
+            for mode in range(8):
+                forged=copy.deepcopy(expected);rows=forged['events']
+                transform=next(e for e in rows if e['kind']=='cpu_begin' and e['context']==367)
+                write=next(e for e in rows if e['kind']=='epc_write')
+                ret=next(e for e in rows if e['kind']=='cpu_begin' and e['word']==0x42000018)
+                if mode==0: transform['word'] ^= 0x10000 # renamed destination loses held ancestry
+                elif mode==1: transform['word'] ^= 0x20 # different result
+                elif mode==2: transform['gpr'][8] &= 0xffffffff
+                elif mode==3: write['epc_state']['state']['epc']=0xffffffff80006028
+                elif mode==4: ret['return_state']['state']['epc']=0xffffffff80006028
+                elif mode==5:
+                    seed=copy.deepcopy(next(e for e in rows if e['kind']=='cpu_reentry'))
+                    end=next(e for e in rows if e['kind']=='cpu_end' and e['context']==367)
+                    seed.update(phase=56,pc=0xffffffff8000019c,gpr=end['gpr'],word=0)
+                    rows.insert(next(i for i,e in enumerate(rows) if e['kind']=='ram_fetch_begin' and e['context']==369),seed);reclock(rows)
+                elif mode==6:
+                    forged['format']='plaid-rsp-cpu-imem-history-v16';forged['profile']='ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-guest-epc-return-consumption-v16'
+                else: write['epc_state']['state']['exl']=False
+                run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
             forged = json.loads(original)
@@ -567,6 +590,19 @@ def main():
                 elif mode==5: forged['epc_reads'][0]['epc_write_ordinal']=363
                 elif mode==6: forged['epc_writes'][0]['value'] &= 0xffffffff
                 else: forged['epc_writes'][0]['write_ordinal']=332
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.epc_target:
+            for mode in range(8):
+                forged=json.loads(original);write=forged['epc_writes'][0]
+                if mode==0: write.pop('transform')
+                elif mode==1: write['transform']['decoder_context']=362
+                elif mode==2: write['transform']['source_value']=write['value']
+                elif mode==3: write['transform']['result_value']=write['read_parent']['value']
+                elif mode==4: write['transform']['word'] ^= 4
+                elif mode==5: forged['eret_returns'][0]['before']['state']['epc']=0xffffffff80006028
+                elif mode==6: forged['dma_consumption']['cached_fetches'][-1]['origins'][0]['write_ordinal']=348
+                else: write['read_parent']['epc_transfer_ordinal']=363
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
         if args.cached_cpu:
