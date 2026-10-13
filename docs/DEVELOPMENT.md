@@ -232,6 +232,13 @@ the commit decoder identity through the existing install/fetch graph. Use spike0
 controls and `python scripts/test_rsp_definitions.py --decoded-mmio`; v0-v8 reports
 stay exact. Its explicit post-decoder DMA drain schedule proves no general timing.
 
+Controlled v10 adds actual completed I-cache burst/fill records, uses the canonical
+`FetchCacheLine.validate` boundary and keeps fill-time RAM byte parents through
+cached hits after backing changes. Cached receipts are separate from uncached
+scalar reads. Explicit host PC seeds cut register definitions and remain unknown
+execution roots. Use spike067 controls and
+`python scripts/test_rsp_definitions.py --cached-cpu`; v0-v9 reports stay exact.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

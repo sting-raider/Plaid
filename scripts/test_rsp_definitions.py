@@ -24,14 +24,17 @@ def main():
     parser.add_argument('--dmem-ingress',action='store_true')
     parser.add_argument('--pending',action='store_true')
     parser.add_argument('--decoded-mmio',action='store_true')
+    parser.add_argument('--cached-cpu',action='store_true')
     args = parser.parse_args()
+    args.decoded_mmio = args.decoded_mmio or args.cached_cpu
     args.pending = args.pending or args.decoded_mmio
     roundtrip = args.roundtrip or args.dmem_ingress or args.pending
     promoted = args.promoted or roundtrip
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('066-decoded-mmio-dma' if args.decoded_mmio else
+    recipe = ('067-dma-cached-cpu' if args.cached_cpu else
+        '066-decoded-mmio-dma' if args.decoded_mmio else
         '065-mutable-pending-dma' if args.pending else
         '064-dma-dmem-ingress-rsp-load' if args.dmem_ingress else
         '063-dma-ram-imem-roundtrip' if roundtrip else
@@ -133,7 +136,7 @@ def main():
                     if event['kind'] in ('cpu_begin','rsp_begin','ram_fetch_begin'): active=ordinal
                     if event['kind']=='dma_promote':request=ordinal
                     owned=event['kind'] in ('dma_promote','dma_complete','imem_dma_read','imem_dma_write','dmem_dma_read','dmem_dma_write') or (event['kind']=='ram_write' and event.get('dma') is not None and promoted)
-                    event['context']=(active if event['word'] else ordinal) if event['kind']=='dma_pending_write' else request if owned else active
+                    event['context']=(active if event['word'] else ordinal) if event['kind']=='dma_pending_write' else ordinal if event['kind']=='cpu_reentry' else request if owned else active
                     if event['kind'] in ('cpu_end','rsp_end','ram_fetch_end'): active=0
                     if event['kind']=='dma_complete':request=0
             for mode in range(7):
@@ -223,6 +226,24 @@ def main():
                 elif mode==5: rows.insert(rows.index(write),copy.deepcopy(write));reclock(rows)
                 else: end['gpr'][5]=1
                 run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.cached_cpu:
+            for mode in range(10):
+                forged=copy.deepcopy(expected);rows=forged['events']
+                burst=next(e for e in rows if e['kind']=='cache_burst_read')
+                fill=next(e for e in rows if e['kind']=='cache_fill')
+                seed=next(e for e in rows if e['kind']=='cpu_reentry')
+                end=[e for e in rows if e['kind']=='ram_fetch_end'][-1]
+                if mode==0: rows.remove(burst);reclock(rows)
+                elif mode==1: rows.remove(fill);reclock(rows)
+                elif mode==2: rows.insert(rows.index(burst),copy.deepcopy(burst));reclock(rows)
+                elif mode==3: fill['cache_line']['words'][7]=1
+                elif mode==4: end['cache_line']['tag_key'] ^= 0x1000
+                elif mode==5: end['value']=13
+                elif mode==6: rows.remove(seed);reclock(rows)
+                elif mode==7: seed['gpr'][5]=1
+                elif mode==8: burst['context']=1
+                else: burst['address'] += 32
+                run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
             forged = json.loads(original)
@@ -296,6 +317,16 @@ def main():
                 forged=json.loads(original);graph=forged['dma_consumption']
                 if mode==0: graph['pending_commits'][-1].pop('decoder_context')
                 else: graph['promoted_requests'][-1]['pending_provenance']['commit_decoder_context']=1
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.cached_cpu:
+            for mode in range(5):
+                forged=json.loads(original);graph=forged['dma_consumption']
+                if mode==0: graph.pop('cache_fills')
+                elif mode==1: graph.pop('cached_fetches')
+                elif mode==2: graph['cache_fills'][0]['source_bytes'][8]['write_ordinal'] += 1
+                elif mode==3: graph['cached_fetches'][-1]['origins'][0]=dict(kind='unknown',cut_ordinal=202)
+                else: graph['cached_fetches'][-1]['fill_ordinal']=197
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
     print('RSP definitions: original-clock ORI/ADDU parents, phase cuts, full register snapshots, source/report/input gates and unchanged proof flags passed')

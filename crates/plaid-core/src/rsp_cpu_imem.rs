@@ -5,10 +5,11 @@
 //! v4 separately binds completed DMEM DMA Word writes to uncached CPU fetches
 //! and decoder contexts; it grants no request lifetime or mutation census.
 use crate::{
-    program::{GuestVirtualAddr, PhysicalAddr},
+    program::{FetchAccess, FetchCacheLine, GuestVirtualAddr, PhysicalAddr},
     rom::sha256,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 pub const FORMAT: &str = "plaid-rsp-cpu-imem-history-v0";
 pub const PROFILE: &str =
@@ -40,6 +41,9 @@ pub const PENDING_DMA_PROFILE: &str =
 pub const DECODED_DMA_FORMAT: &str = "plaid-rsp-cpu-imem-history-v9";
 pub const DECODED_DMA_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-decoded-mmio-dma-consumption-v9";
+pub const CACHED_DMA_FORMAT: &str = "plaid-rsp-cpu-imem-history-v10";
+pub const CACHED_DMA_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-dma-cached-cpu-consumption-v10";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -98,6 +102,9 @@ enum Kind {
     DmemDmaRead,
     DmemDmaWrite,
     DmaPendingWrite,
+    CacheBurstRead,
+    CacheFill,
+    CpuReentry,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -127,6 +134,8 @@ struct Row {
     dma_direction: Option<SpDmaDirection>,
     #[serde(default)]
     pending_full: Option<bool>,
+    #[serde(default)]
+    cache_line: Option<FetchCacheLine>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -363,6 +372,29 @@ pub struct DmaCpuFetch {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct DmaCacheFill {
+    pub fetch_context: u64,
+    pub burst_ordinal: u64,
+    pub fill_ordinal: u64,
+    pub physical_line: PhysicalAddr,
+    pub cache_line: FetchCacheLine,
+    pub source_bytes: [RamByteOrigin; 32],
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CachedDmaCpuFetch {
+    pub fetch_context: u64,
+    pub end_ordinal: u64,
+    pub decoder_context: u64,
+    pub pc: GuestVirtualAddr,
+    pub physical: PhysicalAddr,
+    pub word: u32,
+    pub burst_ordinal: u64,
+    pub fill_ordinal: u64,
+    pub origins: [RamByteOrigin; 4],
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DmemDmaConsumption {
     pub ram_start: PhysicalAddr,
     pub ram_bytes: usize,
@@ -378,6 +410,10 @@ pub struct DmemDmaConsumption {
     pub dmem_installs: Option<Vec<RamToDmemDmaWord>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_commits: Option<Vec<PendingDmaCommit>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_fills: Option<Vec<DmaCacheFill>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_fetches: Option<Vec<CachedDmaCpuFetch>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -556,7 +592,7 @@ struct RamReplay {
     writes: Vec<DmemDmaWord>,
     fetches: Vec<DmaCpuFetch>,
     active: Option<(Row, Option<DmaCpuFetch>)>,
-    pending: Option<usize>,
+    pending: Option<PendingFetch>,
     lifecycle: bool,
     request: Option<ActiveDmemDma>,
     requests: Vec<PromotedDmemDmaRequest>,
@@ -567,6 +603,15 @@ struct RamReplay {
     dmem_reads: Vec<(Row, [RamByteOrigin; 4])>,
     dmem_installs: Vec<RamToDmemDmaWord>,
     pending_dma: Option<PendingDmaReplay>,
+    cached: bool,
+    cache_burst: Option<(Row, [RamByteOrigin; 32])>,
+    cache_fills: Vec<DmaCacheFill>,
+    cache_slots: BTreeMap<u16, usize>,
+    cached_fetches: Vec<CachedDmaCpuFetch>,
+}
+enum PendingFetch {
+    Uncached(usize),
+    Cached(usize),
 }
 struct ActiveDmemDma {
     context: u64,
@@ -651,6 +696,11 @@ impl RamReplay {
             dmem_reads: Vec::new(),
             dmem_installs: Vec::new(),
             pending_dma: None,
+            cached: false,
+            cache_burst: None,
+            cache_fills: Vec::new(),
+            cache_slots: BTreeMap::new(),
+            cached_fetches: Vec::new(),
         })
     }
     fn offset(&self, address: u32, width: usize) -> Result<usize, String> {
@@ -846,9 +896,14 @@ impl RamReplay {
                         && row.bytes == 0
                         && row.value == 0
                         && row.offset == 0
-                        && !access.cached
+                        && (!access.cached || self.cached)
                         && access.physical.0 == row.address
-                        && (0xffffffffa0000000..0xffffffffa0800000).contains(&row.pc)
+                        && (if access.cached {
+                            0xffffffff80000000..0xffffffff80800000
+                        } else {
+                            0xffffffffa0000000..0xffffffffa0800000
+                        })
+                        .contains(&row.pc)
                         && row.pc.is_multiple_of(4)
                         && row.pc & 0x1fffffff == u64::from(row.address),
                     "invalid controlled direct RAM fetch",
@@ -861,6 +916,7 @@ impl RamReplay {
                 let (begin, read) = self.active.as_mut().ok_or("unscoped RAM fetch read")?;
                 require(
                     read.is_none()
+                        && begin.fetch.as_ref().is_some_and(|access| !access.cached)
                         && row.cpu
                         && row.context == begin.context
                         && row.pc == begin.pc
@@ -883,6 +939,10 @@ impl RamReplay {
             }
             Kind::RamFetchEnd => {
                 let (begin, read) = self.active.take().ok_or("RAM fetch end lacks begin")?;
+                if begin.fetch.as_ref().is_some_and(|access| access.cached) {
+                    self.cached_end(&begin, &row, read.is_none())?;
+                    return Ok(());
+                }
                 let read = read.ok_or("RAM fetch lacks actual completed read")?;
                 require(
                     row.cpu
@@ -896,7 +956,7 @@ impl RamReplay {
                         && row.value == u64::from(read.word),
                     "RAM fetch result differs from actual read",
                 )?;
-                self.pending = Some(self.fetches.len());
+                self.pending = Some(PendingFetch::Uncached(self.fetches.len()));
                 self.fetches.push(read);
             }
             _ => unreachable!(),
@@ -912,12 +972,149 @@ impl RamReplay {
             .pending
             .take()
             .ok_or("CPU decoder lacks completed RAM fetch")?;
-        let fetched = &mut self.fetches[index];
+        let (pc, word, context) = match index {
+            PendingFetch::Uncached(index) => {
+                let fetched = &mut self.fetches[index];
+                (fetched.pc, fetched.word, &mut fetched.decoder_context)
+            }
+            PendingFetch::Cached(index) => {
+                let fetched = &mut self.cached_fetches[index];
+                (fetched.pc, fetched.word, &mut fetched.decoder_context)
+            }
+        };
         require(
-            fetched.pc.0 == row.pc && fetched.word == row.word,
+            pc.0 == row.pc && word == row.word,
             "CPU decoder disagrees with fetched RAM word",
         )?;
-        fetched.decoder_context = row.context;
+        *context = row.context;
+        Ok(())
+    }
+    fn cache(&mut self, row: Row) -> Result<(), String> {
+        effect_row(&row)?;
+        let frame = row.cache_line.ok_or("cache observation lacks snapshot")?;
+        let (begin, read) = self
+            .active
+            .as_ref()
+            .ok_or("cache observation lacks fetch scope")?;
+        require(
+            self.cached
+                && begin.fetch.as_ref().is_some_and(|a| a.cached)
+                && read.is_none()
+                && row.context == begin.context
+                && row.pc == begin.pc
+                && row.phase == begin.phase
+                && row.cpu
+                && row.word == 0
+                && row.bank == 0
+                && row.offset == 0
+                && row.bytes == 32
+                && row.value == 0
+                && row.gpr.is_empty()
+                && row.rgpr.is_empty()
+                && row.address == begin.address & !31,
+            "invalid completed I-cache observation scope",
+        )?;
+        frame.validate(
+            GuestVirtualAddr(begin.pc),
+            FetchAccess {
+                physical: PhysicalAddr(begin.address),
+                cached: true,
+            },
+            frame.words[((begin.address >> 2) & 7) as usize],
+        )?;
+        if row.kind == Kind::CacheBurstRead {
+            require(
+                self.cache_burst.is_none()
+                    && self.cache_slots.get(&frame.slot).is_none_or(|index| {
+                        self.cache_fills[*index].cache_line.tag_key != frame.tag_key
+                    }),
+                "cache burst duplicated or emitted on modeled resident hit",
+            )?;
+            let offset = self.offset(row.address, 32)?;
+            let values: Vec<_> = frame
+                .words
+                .iter()
+                .flat_map(|word| word.to_be_bytes())
+                .collect();
+            require(
+                values == self.bytes[offset..offset + 32],
+                "cache burst differs from captured backing image",
+            )?;
+            self.cache_burst = Some((
+                row,
+                std::array::from_fn(|n| self.origins[offset + n].clone()),
+            ));
+        } else {
+            let (burst, origins) = self
+                .cache_burst
+                .take()
+                .ok_or("cache fill lacks completed burst")?;
+            require(
+                burst.ordinal.checked_add(1) == Some(row.ordinal)
+                    && burst.cache_line == Some(frame),
+                "cache fill disagrees with preceding completed burst",
+            )?;
+            self.cache_slots.insert(frame.slot, self.cache_fills.len());
+            self.cache_fills.push(DmaCacheFill {
+                fetch_context: begin.context,
+                burst_ordinal: burst.ordinal,
+                fill_ordinal: row.ordinal,
+                physical_line: PhysicalAddr(row.address),
+                cache_line: frame,
+                source_bytes: origins,
+            });
+        }
+        Ok(())
+    }
+    fn cached_end(&mut self, begin: &Row, row: &Row, no_scalar: bool) -> Result<(), String> {
+        let frame = row
+            .cache_line
+            .ok_or("cached fetch lacks selected resident snapshot")?;
+        require(
+            self.cached
+                && no_scalar
+                && self.cache_burst.is_none()
+                && row.context == begin.context
+                && row.pc == begin.pc
+                && row.phase == begin.phase
+                && row.address == begin.address
+                && row.cpu
+                && row.bytes == 0
+                && row.offset == 0
+                && row.fetch == begin.fetch
+                && row.value <= u32::MAX as u64,
+            "cached fetch completion differs from scope",
+        )?;
+        frame.validate(
+            GuestVirtualAddr(row.pc),
+            FetchAccess {
+                physical: PhysicalAddr(row.address),
+                cached: true,
+            },
+            row.value as u32,
+        )?;
+        let fill = self
+            .cache_slots
+            .get(&frame.slot)
+            .map(|index| &self.cache_fills[*index])
+            .ok_or("cached fetch lacks captured resident fill")?;
+        require(
+            fill.cache_line == frame,
+            "cached fetch snapshot differs from resident fill",
+        )?;
+        let lane = row.address as usize & 31;
+        self.pending = Some(PendingFetch::Cached(self.cached_fetches.len()));
+        self.cached_fetches.push(CachedDmaCpuFetch {
+            fetch_context: begin.context,
+            end_ordinal: row.ordinal,
+            decoder_context: 0,
+            pc: GuestVirtualAddr(row.pc),
+            physical: PhysicalAddr(row.address),
+            word: row.value as u32,
+            burst_ordinal: fill.burst_ordinal,
+            fill_ordinal: fill.fill_ordinal,
+            origins: std::array::from_fn(|n| fill.source_bytes[lane + n].clone()),
+        });
         Ok(())
     }
     fn imem_ingress(
@@ -1112,6 +1309,7 @@ impl RamReplay {
                 && self.request.is_none()
                 && self.ingress_read.is_none()
                 && self.dmem_reads.is_empty()
+                && self.cache_burst.is_none()
                 && self
                     .pending_dma
                     .as_ref()
@@ -1130,6 +1328,8 @@ impl RamReplay {
             imem_installs: self.ingress.then_some(self.installs),
             dmem_installs: self.dmem_ingress.then_some(self.dmem_installs),
             pending_commits: self.pending_dma.map(|pending| pending.commits),
+            cache_fills: self.cached.then_some(self.cache_fills),
+            cached_fetches: self.cached.then_some(self.cached_fetches),
         })
     }
 }
@@ -1311,7 +1511,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let decoded_dma_enabled = h.format == DECODED_DMA_FORMAT && h.profile == DECODED_DMA_PROFILE;
+    let cached_enabled = h.format == CACHED_DMA_FORMAT && h.profile == CACHED_DMA_PROFILE;
+    let decoded_dma_enabled =
+        cached_enabled || (h.format == DECODED_DMA_FORMAT && h.profile == DECODED_DMA_PROFILE);
     let pending_enabled =
         decoded_dma_enabled || (h.format == PENDING_DMA_FORMAT && h.profile == PENDING_DMA_PROFILE);
     let dmem_ingress_enabled =
@@ -1363,6 +1565,9 @@ pub fn inspect_rsp_cpu_imem_history(
             )
         })
         .transpose()?;
+    if let Some(ram) = &mut ram {
+        ram.cached = cached_enabled;
+    }
     require(
         pending_enabled == h.initial_pending.is_some(),
         "pending DMA seed outside profile or missing",
@@ -1393,6 +1598,7 @@ pub fn inspect_rsp_cpu_imem_history(
     let mut registers: [Option<Loaded>; 32] = std::array::from_fn(|_| None);
     let mut active: Option<Active> = None;
     let mut previous_cpu: Option<Row> = None;
+    let mut cpu_reentry: Option<Row> = None;
     let mut previous_rsp: Option<Row> = None;
     let mut rsp_registers = [None; 32];
     let mut rsp_definitions = Vec::new();
@@ -1407,6 +1613,26 @@ pub fn inspect_rsp_cpu_imem_history(
             "noncontiguous event identity or phase order",
         )?;
         phase = row.phase;
+        require(
+            row.cache_line.is_none()
+                || (cached_enabled
+                    && (matches!(row.kind, Kind::CacheBurstRead | Kind::CacheFill)
+                        || (row.kind == Kind::RamFetchEnd
+                            && row.fetch.as_ref().is_some_and(|access| access.cached)))),
+            "cache snapshot outside controlled cache boundary",
+        )?;
+        require(
+            cpu_reentry.is_none()
+                || matches!(
+                    row.kind,
+                    Kind::RamFetchBegin
+                        | Kind::RamFetchEnd
+                        | Kind::CacheBurstRead
+                        | Kind::CacheFill
+                        | Kind::CpuBegin
+                ),
+            "actor interleaved opaque CPU control seed",
+        )?;
         require(
             row.dma.is_none()
                 || (dma_enabled && row.kind == Kind::RamWrite)
@@ -1456,7 +1682,11 @@ pub fn inspect_rsp_cpu_imem_history(
                 "interleaved IMEM DMA read/sink",
             )?;
             require(
-                ram.active.is_none() || matches!(row.kind, Kind::RamRead | Kind::RamFetchEnd),
+                ram.active.is_none()
+                    || matches!(
+                        row.kind,
+                        Kind::RamRead | Kind::RamFetchEnd | Kind::CacheBurstRead | Kind::CacheFill
+                    ),
                 "interleaved controlled RAM fetch",
             )?;
             require(
@@ -1465,6 +1695,34 @@ pub fn inspect_rsp_cpu_imem_history(
             )?;
         }
         match row.kind {
+            Kind::CpuReentry => {
+                boundary(&row, true)?;
+                require(
+                    cached_enabled
+                        && active.is_none()
+                        && row.word == 0
+                        && row.context == row.ordinal
+                        && previous_cpu
+                            .as_ref()
+                            .is_some_and(|previous| previous.gpr == row.gpr)
+                        && ram.as_ref().is_some_and(|ram| {
+                            ram.active.is_none() && ram.pending.is_none() && ram.request.is_none()
+                        }),
+                    "invalid opaque CPU control reentry",
+                )?;
+                registers.fill(None);
+                previous_cpu = None;
+                cpu_reentry = Some(row);
+            }
+            Kind::CacheBurstRead | Kind::CacheFill => {
+                require(
+                    cached_enabled && active.is_none(),
+                    "cache observation interleaves decoder or lacks profile",
+                )?;
+                ram.as_mut()
+                    .ok_or("cache observation lacks RAM")?
+                    .cache(row)?;
+            }
             Kind::DmaPendingWrite => {
                 require(
                     pending_enabled,
@@ -1578,6 +1836,12 @@ pub fn inspect_rsp_cpu_imem_history(
                     "invalid CPU begin context",
                 )?;
                 boundary(&row, true)?;
+                if let Some(seed) = cpu_reentry.take() {
+                    require(
+                        row.pc == seed.pc && row.phase == seed.phase && row.gpr == seed.gpr,
+                        "CPU decoder differs from opaque control seed",
+                    )?;
+                }
                 if let Some(ram) = &mut ram {
                     ram.bind(&row)?;
                 }
@@ -2043,7 +2307,10 @@ pub fn inspect_rsp_cpu_imem_history(
             }
         }
     }
-    require(active.is_none(), "truncated RSP/CPU instruction context")?;
+    require(
+        active.is_none() && cpu_reentry.is_none(),
+        "truncated RSP/CPU instruction or control seed",
+    )?;
     require(
         cpu_instructions == h.steps.len(),
         "extra independent CPU step",
@@ -3912,5 +4179,147 @@ mod tests {
             assert!(make().write(&decoy, Some(&cpu)).is_err(), "mode {mode}");
         }
         assert!(make().write(&write, None).is_err());
+    }
+
+    fn cache_fixture() -> (RamReplay, Value) {
+        let mut final_bytes = vec![0; 64];
+        final_bytes[3] = 13;
+        let mut ram = RamReplay::new(
+            RamSnapshot {
+                start: PhysicalAddr(0x1000),
+                initial: vec![0; 64],
+                final_bytes,
+            },
+            true,
+            true,
+            true,
+        )
+        .unwrap();
+        ram.cached = true;
+        for n in 0..4 {
+            ram.origins[n] = RamByteOrigin::SpDma {
+                write_ordinal: 100,
+                source_offset: n as u16,
+            };
+        }
+        let frame = json!({"slot":128,"tag_key":0x1001,"index":0,"words":vec![0u32;8]});
+        (ram, frame)
+    }
+    fn cache_row(kind: &str, ordinal: u64, context: u64, address: u32, frame: &Value) -> Row {
+        let mut event = row(kind, ordinal, context);
+        event["cpu"] = json!(true);
+        event["pc"] = json!(0xffffffff80001010u64);
+        event["address"] = json!(address);
+        if kind == "ram_fetch_begin" || kind == "ram_fetch_end" {
+            event["fetch"] = json!({"physical":address,"cached":true});
+        } else {
+            event["bytes"] = json!(32);
+        }
+        if kind != "ram_fetch_begin" {
+            event["cache_line"] = frame.clone();
+        }
+        serde_json::from_value(event).unwrap()
+    }
+    #[test]
+    fn cached_consumption_keeps_fill_time_dma_parents_after_changed_backing() {
+        let (mut ram, frame) = cache_fixture();
+        let dmem = vec![0; 4096];
+        let origins = vec![SpByteOrigin::Unknown { cut_ordinal: None }; 4096];
+        ram.observe(
+            cache_row("ram_fetch_begin", 1, 1, 0x1010, &frame),
+            &dmem,
+            &origins,
+        )
+        .unwrap();
+        ram.cache(cache_row("cache_burst_read", 2, 1, 0x1000, &frame))
+            .unwrap();
+        ram.cache(cache_row("cache_fill", 3, 1, 0x1000, &frame))
+            .unwrap();
+        ram.observe(
+            cache_row("ram_fetch_end", 4, 1, 0x1010, &frame),
+            &dmem,
+            &origins,
+        )
+        .unwrap();
+        let mut decoded = row("cpu_begin", 5, 5);
+        decoded["pc"] = json!(0xffffffff80001010u64);
+        ram.bind(&serde_json::from_value(decoded).unwrap()).unwrap();
+        let mut write = row("ram_write", 6, 0);
+        write["address"] = json!(0x1000);
+        write["bytes"] = json!(4);
+        write["value"] = json!(13);
+        ram.observe(serde_json::from_value(write).unwrap(), &dmem, &origins)
+            .unwrap();
+        let mut begin = cache_row("ram_fetch_begin", 7, 7, 0x1000, &frame);
+        begin.pc = 0xffffffff80001000;
+        ram.observe(begin, &dmem, &origins).unwrap();
+        let mut end = cache_row("ram_fetch_end", 8, 7, 0x1000, &frame);
+        end.pc = 0xffffffff80001000;
+        ram.observe(end, &dmem, &origins).unwrap();
+        let mut decoded = row("cpu_begin", 9, 9);
+        decoded["pc"] = json!(0xffffffff80001000u64);
+        ram.bind(&serde_json::from_value(decoded).unwrap()).unwrap();
+        assert_eq!(
+            ram.origins[0],
+            RamByteOrigin::Unknown {
+                cut_ordinal: Some(6)
+            }
+        );
+        let graph = ram.finish().unwrap();
+        let fetches = graph.cached_fetches.unwrap();
+        assert_eq!(fetches[1].word, 0);
+        assert_eq!(fetches[1].fill_ordinal, 3);
+        assert_eq!(fetches[1].burst_ordinal, 2);
+        assert_eq!(
+            fetches[1].origins[0],
+            RamByteOrigin::SpDma {
+                write_ordinal: 100,
+                source_offset: 0
+            }
+        );
+        assert!(graph.fetches.is_empty());
+    }
+    #[test]
+    fn cached_burst_fill_scope_cardinality_and_nonfetched_lanes_are_rechecked() {
+        let dmem = vec![0; 4096];
+        let origins = vec![SpByteOrigin::Unknown { cut_ordinal: None }; 4096];
+        for mode in 0..6 {
+            let (mut ram, frame) = cache_fixture();
+            ram.observe(
+                cache_row("ram_fetch_begin", 1, 1, 0x1010, &frame),
+                &dmem,
+                &origins,
+            )
+            .unwrap();
+            if mode == 0 {
+                assert!(
+                    ram.cache(cache_row("cache_fill", 2, 1, 0x1000, &frame))
+                        .is_err()
+                );
+                continue;
+            }
+            let mut burst = cache_row("cache_burst_read", 2, 1, 0x1000, &frame);
+            match mode {
+                1 => burst.cache_line.as_mut().unwrap().words[7] = 1,
+                2 => burst.context = 99,
+                3 => burst.address = 0x1020,
+                _ => {}
+            }
+            if mode <= 3 {
+                assert!(ram.cache(burst).is_err(), "mode {mode}");
+                continue;
+            }
+            ram.cache(burst).unwrap();
+            if mode == 4 {
+                assert!(
+                    ram.cache(cache_row("cache_burst_read", 3, 1, 0x1000, &frame))
+                        .is_err()
+                );
+            } else {
+                let mut fill = cache_row("cache_fill", 4, 1, 0x1000, &frame);
+                fill.cache_line.as_mut().unwrap().tag_key ^= 0x1000;
+                assert!(ram.cache(fill).is_err());
+            }
+        }
     }
 }
