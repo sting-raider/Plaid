@@ -83,13 +83,29 @@ pub struct Observation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Witness {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_write_ordinal: Option<u64>,
     pub write_ordinal: u64,
     pub selected_slot: u32,
     pub current_asid: u8,
     pub entry: Entry,
 }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContextWrite {
+    pub decoder_context: u64,
+    pub write_ordinal: u64,
+    pub end_ordinal: u64,
+    pub source_register: u8,
+    pub register_value: u64,
+    pub before: State,
+    pub after: State,
+    pub same_staged_content: bool,
+}
 pub(crate) struct Replay {
     initial: Initial,
+    staged: Entry,
+    pub context_writes: Vec<ContextWrite>,
     entries: Vec<Entry>,
     writers: [Option<usize>; 32],
     pub generations: Vec<TlbwiGeneration>,
@@ -110,6 +126,8 @@ impl Replay {
         }
         Ok(Self {
             entries: initial.entries.clone(),
+            staged: initial.staged.clone(),
+            context_writes: Vec::new(),
             initial,
             writers: [None; 32],
             generations: Vec::new(),
@@ -141,7 +159,7 @@ impl Replay {
         require(
             before.index == self.initial.index
                 && after.index == before.index
-                && before.staged == self.initial.staged
+                && before.staged == self.staged
                 && after.staged == before.staged
                 && before.entries == self.entries,
             "TLBWI lost current slot/staged/table state",
@@ -171,6 +189,76 @@ impl Replay {
         self.entries = expected;
         Ok(())
     }
+    pub fn context_write(
+        &mut self,
+        pc: u64,
+        context: u64,
+        ordinal: u64,
+        source: (u8, u64),
+        before: &State,
+        after: &State,
+    ) -> Result<(), String> {
+        let (register, value) = source;
+        let control = &before.control;
+        require(
+            control.state.pc.0 == pc
+                && control.state.kernel
+                && control.state.kernel_mode == KernelAddressMode::Bits32
+                && !control.interrupt_enable
+                && !control.state.bev
+                && !control.state.exl
+                && !control.state.erl
+                && !control.state.delay_slot
+                && !control.state.branch_delay
+                && control.state.cause == 0
+                && after.control == *control,
+            "unsupported EntryHi privilege/state transition",
+        )?;
+        require(
+            before.index == self.initial.index
+                && after.index == before.index
+                && before.staged == self.staged
+                && before.entries == self.entries
+                && after.entries == before.entries,
+            "EntryHi context write changed or borrowed installed table/state",
+        )?;
+        let mut expected = self.staged.clone();
+        expected.asid = value as u8;
+        expected.virtual_address =
+            (expected.virtual_address & 0x1fff) | (value & (((1u64 << 40) - 1) & !0x1fff));
+        expected.region = ((value >> 62) & 3) as u8;
+        expected.validate()?;
+        require(
+            register > 0 && register < 32 && after.staged == expected,
+            "EntryHi masked fields differ from full source register",
+        )?;
+        self.context_writes.push(ContextWrite {
+            decoder_context: context,
+            write_ordinal: ordinal,
+            end_ordinal: 0,
+            source_register: register,
+            register_value: value,
+            before: before.clone(),
+            after: after.clone(),
+            same_staged_content: before.staged == after.staged,
+        });
+        self.staged = expected;
+        Ok(())
+    }
+    pub fn finish_context(&mut self, context: u64, ordinal: u64) -> Result<(), String> {
+        let write = self
+            .context_writes
+            .last_mut()
+            .ok_or("EntryHi lacks write occurrence")?;
+        require(
+            write.decoder_context == context
+                && write.end_ordinal == 0
+                && write.write_ordinal.checked_add(1) == Some(ordinal),
+            "EntryHi end lost context write identity",
+        )?;
+        write.end_ordinal = ordinal;
+        Ok(())
+    }
     pub fn finish(&mut self, context: u64, ordinal: u64) -> Result<(), String> {
         let generation = self
             .generations
@@ -196,7 +284,7 @@ impl Replay {
                 && pc.is_multiple_of(4)
                 && observation.kernel
                 && observation.bits == 32
-                && observation.asid == self.initial.staged.asid
+                && observation.asid == self.staged.asid
                 && observation.entries == self.entries,
             "mapped fetch lost current TLB/context snapshot",
         )?;
@@ -223,12 +311,19 @@ impl Replay {
             "mapped cached fetch differs from valid CCA3 translation",
         )?;
         let index = self.writers[slot].ok_or("mapped fetch lacks current write generation")?;
+        require(
+            self.context_writes
+                .last()
+                .is_none_or(|write| write.end_ordinal != 0),
+            "mapped fetch preceded completed context write",
+        )?;
         let generation = &self.generations[index];
         require(
             generation.end_ordinal != 0,
             "mapped fetch preceded completed TLBWI",
         )?;
         Ok(Witness {
+            context_write_ordinal: self.context_writes.last().map(|write| write.write_ordinal),
             write_ordinal: generation.write_ordinal,
             selected_slot: slot as u32,
             current_asid: observation.asid,
@@ -363,10 +458,12 @@ mod tests {
             if mode == 5 {
                 after.entries[0].valid[0] = false;
                 replay.initial.staged = after.entries[0].clone();
+                replay.staged = replay.initial.staged.clone();
             }
             if mode == 6 {
                 after.entries[0].cca[0] = 2;
                 replay.initial.staged = after.entries[0].clone();
+                replay.staged = replay.initial.staged.clone();
             }
             let mut before = before;
             before.staged = replay.initial.staged.clone();
@@ -400,6 +497,82 @@ mod tests {
                         physical,
                         &observation
                     )
+                    .is_err(),
+                "mode {mode}"
+            );
+        }
+    }
+    #[test]
+    fn context_writers_change_matching_without_retiring_slot_generation() {
+        let (mut replay, before, after) = fixture();
+        let pc = before.control.state.pc.0;
+        replay.write(pc, 10, 11, &before, &after).unwrap();
+        replay.finish(10, 12).unwrap();
+        let mut away = after.clone();
+        away.staged.asid = 8;
+        replay
+            .context_write(pc, 20, 21, (25, 0x6008), &after, &away)
+            .unwrap();
+        replay.finish_context(20, 22).unwrap();
+        let observation = Observation {
+            asid: 8,
+            kernel: true,
+            bits: 32,
+            entries: after.entries.clone(),
+        };
+        assert!(
+            replay
+                .fetch(0x6028, PhysicalAddr(0x6028), &observation)
+                .is_err()
+        );
+        replay
+            .context_write(pc, 30, 31, (26, 0x6007), &away, &after)
+            .unwrap();
+        replay.finish_context(30, 32).unwrap();
+        replay
+            .context_write(pc, 40, 41, (26, 0x6007), &after, &after)
+            .unwrap();
+        let observation = Observation {
+            asid: 7,
+            ..observation
+        };
+        assert!(
+            replay
+                .fetch(0x6028, PhysicalAddr(0x6028), &observation)
+                .is_err()
+        );
+        replay.finish_context(40, 42).unwrap();
+        let witness = replay
+            .fetch(0x6028, PhysicalAddr(0x6028), &observation)
+            .unwrap();
+        assert_eq!(witness.write_ordinal, 11);
+        assert_eq!(witness.context_write_ordinal, Some(41));
+        assert_eq!(replay.generations.len(), 1);
+        assert!(replay.context_writes[2].same_staged_content);
+        assert!(!replay.context_writes[0].same_staged_content);
+    }
+    #[test]
+    fn context_setter_preserves_table_and_rechecks_full_masked_value() {
+        for mode in 0..7 {
+            let (mut replay, before, after) = fixture();
+            let pc = before.control.state.pc.0;
+            replay.write(pc, 10, 11, &before, &after).unwrap();
+            replay.finish(10, 12).unwrap();
+            let mut changed = after.clone();
+            changed.staged.asid = 8;
+            let mut source = (25, 0x6008);
+            match mode {
+                0 => changed.entries[0].asid = 8,
+                1 => changed.staged.virtual_address = 0x8000,
+                2 => changed.staged.region = 1,
+                3 => changed.index = 1,
+                4 => changed.control.state.pc.0 += 4,
+                5 => source.0 = 0,
+                _ => source.1 = 0x6007,
+            }
+            assert!(
+                replay
+                    .context_write(pc, 20, 21, source, &after, &changed)
                     .is_err(),
                 "mode {mode}"
             );

@@ -2315,6 +2315,20 @@ ERET unsupported, all flags false. See the TLB/mapped root-return receipt.
 No reference implementation copied/linked; only project-owned observational
 callbacks/getters run in separately licensed ignored reference builds.
 
+ADR-0118 EntryHi context composition follow-up (2026-10-13): controlled v19
+observes actual MTC0 EntryHi at its masked setter boundary, preserving full source
+GPR/decoded register and before/completed CP0/staged/32-entry snapshots. Only
+ASID/VPN/region may change; installed entries stay unchanged. Keep context writer
+occurrences separate from slot operations even on equal values. Mapped consumers
+select latest completed context and slot writer, without retiring I-cache fills.
+Actual421-event/66-control graph changes ASID7->8->7 then repeats7 at writes339/
+346/353; mapped BREAK366/exception367 and returned fill418/decoder420 select353
+and slot332 independently. Returned code keeps CPUwriter388/DMEM/DMA/RSP parents.
+All nineteen v0-v18 reports stay exact. Initial context/register values remain
+unknown inputs; broader sources/selection changes/hazards/TLBR/privilege/reset/
+restore/census/root/lifetime/whole-ROM/native remain OPEN, all flags false, static
+ERET unsupported. No reference implementation copied/linked. See EntryHi receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

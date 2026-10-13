@@ -1,5 +1,13 @@
 # Status
 
+Controlled v19 now joins actual EntryHi/ASID context writers to the existing
+TLB/cache/root/return graph. Writes339/346/353 change7->8->7 then repeat7 without
+changing installed entries or retiring cache fills. Both mapped fetches select
+context353 and distinct slot writer332. Returned fill418/decoder420 retains
+CPUwriter388/DMEM/DMA/RSP ancestry. The421-event/66-control graph agrees
+independently; all nineteen v0-v18 reports stay exact. General context/mapping/
+census/root/lifetime/whole-ROM/native obligations remain OPEN; all flags false.
+
 Controlled v18 now joins actual TLBWI operations/current raw entries to mapped
 cached BREAK/exception EPC/handler/ERET/returned executable ancestry. Equal write332
 supersedes write325 despite identical tables; both mapped fetches retain332.

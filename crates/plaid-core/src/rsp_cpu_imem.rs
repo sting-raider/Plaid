@@ -12,7 +12,7 @@ use crate::{
     program::{FetchAccess, FetchCacheLine, GuestVirtualAddr, PhysicalAddr},
     rom::sha256,
     rsp_cpu_tlb::{
-        Initial as InitialTlb, Observation as TlbObservation, Replay as TlbReplay,
+        ContextWrite, Initial as InitialTlb, Observation as TlbObservation, Replay as TlbReplay,
         State as TlbState, Witness as TlbWitness,
     },
     tlb_history::TlbwiGeneration,
@@ -65,6 +65,9 @@ pub const CPU_TRANSFORM_PROFILE: &str =
 pub const EXCEPTION_FORMAT: &str = "plaid-rsp-cpu-imem-history-v14";
 pub const EXCEPTION_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-writer-break-handler-consumption-v14";
+pub const CONTEXT_FORMAT: &str = "plaid-rsp-cpu-imem-history-v19";
+pub const CONTEXT_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-entryhi-context-mapped-root-return-v19";
 pub const MAPPED_FORMAT: &str = "plaid-rsp-cpu-imem-history-v18";
 pub const MAPPED_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-tlbwi-mapped-cache-root-return-v18";
@@ -147,6 +150,7 @@ enum Kind {
     EpcRead,
     EpcWrite,
     TlbWrite,
+    EntryHiWrite,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -862,6 +866,8 @@ pub struct DmemDmaConsumption {
     pub cpu_writes: Option<Vec<CpuRamWord>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tlb_generations: Option<Vec<TlbwiGeneration>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_writes: Option<Vec<ContextWrite>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1097,6 +1103,7 @@ struct RamReplay {
     cpu_ram_enabled: bool,
     cpu_writes: Vec<CpuRamWord>,
     tlb: Option<TlbReplay>,
+    context_enabled: bool,
 }
 enum PendingFetch {
     Uncached(usize),
@@ -1193,6 +1200,7 @@ impl RamReplay {
             invalidation_enabled: false,
             cache_state: BTreeMap::new(),
             tlb: None,
+            context_enabled: false,
             cache_invalidations: Vec::new(),
             cpu_ram_enabled: false,
             cpu_writes: Vec::new(),
@@ -1981,6 +1989,9 @@ impl RamReplay {
                 .invalidation_enabled
                 .then_some(self.cache_invalidations),
             cpu_writes: self.cpu_ram_enabled.then_some(self.cpu_writes),
+            context_writes: self
+                .context_enabled
+                .then(|| self.tlb.as_ref().unwrap().context_writes.clone()),
             tlb_generations: self.tlb.map(|tlb| tlb.generations),
         })
     }
@@ -2163,7 +2174,9 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let mapped_enabled = h.format == MAPPED_FORMAT && h.profile == MAPPED_PROFILE;
+    let context_enabled = h.format == CONTEXT_FORMAT && h.profile == CONTEXT_PROFILE;
+    let mapped_enabled =
+        context_enabled || (h.format == MAPPED_FORMAT && h.profile == MAPPED_PROFILE);
     let target_enabled =
         mapped_enabled || (h.format == EPC_TARGET_FORMAT && h.profile == EPC_TARGET_PROFILE);
     let epc_enabled = target_enabled || (h.format == EPC_FORMAT && h.profile == EPC_PROFILE);
@@ -2261,6 +2274,9 @@ pub fn inspect_rsp_cpu_imem_history(
         mapped_enabled == h.initial_tlb.is_some(),
         "initial TLB state does not match profile",
     )?;
+    if let Some(ram) = &mut ram {
+        ram.context_enabled = context_enabled;
+    }
     if let Some(initial) = h.initial_tlb {
         ram.as_mut().ok_or("TLB composition lacks RAM profile")?.tlb =
             Some(TlbReplay::new(initial)?);
@@ -2284,6 +2300,7 @@ pub fn inspect_rsp_cpu_imem_history(
     let mut epc_writes = Vec::new();
     let mut pending_epc: Option<(Kind, usize)> = None;
     let mut pending_tlb = false;
+    let mut pending_context = false;
     let mut eret_returns: Vec<CpuEretReturn> = Vec::new();
     let mut pending_return: Option<usize> = None;
     let mut await_return: Option<usize> = None;
@@ -2306,7 +2323,11 @@ pub fn inspect_rsp_cpu_imem_history(
             row.tlb_state.is_none()
                 || (mapped_enabled
                     && (row.kind == Kind::TlbWrite
-                        || (row.kind == Kind::CpuBegin && row.word == 0x42000002))),
+                        || (row.kind == Kind::CpuBegin && row.word == 0x42000002)
+                        || (context_enabled
+                            && (row.kind == Kind::EntryHiWrite
+                                || (row.kind == Kind::CpuBegin
+                                    && row.word & 0xffe0ffff == 0x40805000))))),
             "TLB state outside decoded TLBWI boundary",
         )?;
         require(
@@ -2317,7 +2338,7 @@ pub fn inspect_rsp_cpu_imem_history(
             "mapping observation outside fetch boundary",
         )?;
         require(
-            !pending_tlb || row.kind == Kind::CpuEnd,
+            (!pending_tlb && !pending_context) || row.kind == Kind::CpuEnd,
             "TLBWI write not immediately completed",
         )?;
         require(
@@ -2467,6 +2488,51 @@ pub fn inspect_rsp_cpu_imem_history(
             )?;
         }
         match row.kind {
+            Kind::EntryHiWrite => {
+                effect_row(&row)?;
+                let Some(Active::Cpu {
+                    begin,
+                    read,
+                    written,
+                }) = &mut active
+                else {
+                    return Err("EntryHi lacks CPU decoder".into());
+                };
+                let rt = ((begin.word >> 16) & 31) as usize;
+                require(
+                    context_enabled
+                        && !*written
+                        && read.is_none()
+                        && same(begin, &row)
+                        && begin.word & 0xffe0ffff == 0x40805000
+                        && rt != 0
+                        && row.cpu
+                        && row.address == 0
+                        && row.bank == 0
+                        && row.offset == 0
+                        && row.bytes == 0
+                        && row.value == begin.gpr[rt],
+                    "unscoped or unbound MTC0 EntryHi write",
+                )?;
+                ram.as_mut()
+                    .and_then(|ram| ram.tlb.as_mut())
+                    .ok_or("EntryHi lacks TLB profile")?
+                    .context_write(
+                        begin.pc,
+                        begin.context,
+                        row.ordinal,
+                        (rt as u8, row.value),
+                        begin
+                            .tlb_state
+                            .as_ref()
+                            .ok_or("EntryHi lacks before state")?,
+                        row.tlb_state
+                            .as_ref()
+                            .ok_or("EntryHi lacks completed state")?,
+                    )?;
+                *written = true;
+                pending_context = true;
+            }
             Kind::TlbWrite => {
                 effect_row(&row)?;
                 let Some(Active::Cpu {
@@ -3210,7 +3276,17 @@ pub fn inspect_rsp_cpu_imem_history(
                 require(same(&begin, &row), "CPU end context mismatch")?;
                 let mut expected = begin.gpr.clone();
                 let op = begin.word >> 26;
-                if begin.word == 0x42000002 {
+                if begin.word & 0xffe0ffff == 0x40805000 {
+                    require(
+                        context_enabled && pending_context && written && read.is_none(),
+                        "EntryHi lacks actual write",
+                    )?;
+                    ram.as_mut()
+                        .and_then(|ram| ram.tlb.as_mut())
+                        .ok_or("EntryHi lacks profile")?
+                        .finish_context(begin.context, row.ordinal)?;
+                    pending_context = false;
+                } else if begin.word == 0x42000002 {
                     require(
                         mapped_enabled && pending_tlb && written && read.is_none(),
                         "TLBWI lacks actual slot write",
