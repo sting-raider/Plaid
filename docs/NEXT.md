@@ -16,8 +16,10 @@ installed-code consumption. Controlled v10 also joins actual completed I-cache
 burst/fill parents to cached CPU execution after changed backing, with explicit
 opaque host control roots. Controlled v11 also joins actual guest HitInvalidateI
 through fresh DMA writers/refill to cached execution; equal words cannot reuse
-ended fill ancestry. Next compose broader cache operations/register/source
-ancestry and complete mutation/mapping/root lifetime coverage. Reuse retained
+ended fill ancestry. Controlled v12 also joins actual SP LW/register/CPU SW RAM
+copies through resident-vs-refilled executable ancestry. Next compose broader
+cache operations/register transforms/source ancestry and complete mutation/
+mapping/root lifetime coverage. Reuse retained259-event/39-checkpoint v12,
 228-event/34-checkpoint v11,208-event/31-checkpoint v10,195-event/
 29-checkpoint v9,180-event/26-checkpoint v8,152-event/23-checkpoint v7,
 142-event/21-checkpoint v6,136-event v5 and

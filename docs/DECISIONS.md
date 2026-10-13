@@ -2211,6 +2211,20 @@ TLB/aliases/restore/concurrency, complete mutation/root/lifetime and whole-ROM/
 native remain OPEN; all flags stay false. All eleven v0-v10 reports remain exact.
 See the DMA/cache invalidation integration receipt.
 
+ADR-0118 CPU RAM copy follow-up (2026-10-13): controlled v12 reuses actual SP LW
+and held-register continuity to bind one completed direct-KSEG1 CPU SW RAM writer.
+Its receipt preserves load/read identities and original byte parents, checked
+against the complete held GPR and decoded low32 store. A captured source without
+a held load definition produces UNKNOWN cuts, even for equal writes. CPU RAM
+byte writer IDs stay separate from SP DMA IDs. Existing resident fills retain
+their old parents through equal CPU writes; later invalidation/refill captures
+fresh CPU writer parents. Actual259-event/39-control history connects CPUwriter240
+through load233/read234 to DMEM ingress/RAM/RSP ancestors, then cached consumption
+through fill256. Explicit host roots remain opaque and cut register definitions.
+All twelve v0-v11 reports remain exact; broad transforms/cached data copies/
+source/mutation/mapping/root/lifetime/whole-ROM/native remain OPEN; flags stay false.
+See the CPU RAM copy/cache integration receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.

@@ -1,5 +1,13 @@
 # Status
 
+Controlled v12 connects actual SP LW/register/CPU SW RAM copies to cached
+executable ancestry. An equal CPU write keeps existing resident fill225 parents;
+guest invalidation and fresh fill256 expose CPUwriter240 -> load233/read234 ->
+DMEM ingress/RAM/RSP parents. Unattributed register sources remain UNKNOWN cuts.
+The259-event/39-control complete actual graph agrees with independent replay;
+all twelve v0-v11 reports stay exact. General source/mutation/root/mapping/lifetime/
+whole-ROM/native obligations remain OPEN; no proof flags promoted.
+
 Controlled v11 now composes actual guest HitInvalidateI with DMA replacement,
 fresh completed refill and cached executable consumption. Exact decoded operands
 and full before/after tuples end fill199; equal NOP bits later consume fill225
