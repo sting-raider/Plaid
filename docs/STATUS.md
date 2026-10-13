@@ -1,5 +1,13 @@
 # Status
 
+Controlled v21 now binds TLBR context loads to actual installed-slot/page-writer
+ancestry and mapped executable consumption. EntryHi424 moves ASID away; loads431/
+438 restore7, with438 an equal load selected by both later mapped consumers.
+Slot417/page405 remain distinct; no cache retirement comes from TLBR. The506-
+event/80-control graph composes through remapped BREAK/handler/ERET to returned
+CPUwriter473/DMEM/DMA/RSP ancestry. Broader CP0/root/census/lifetime/native remain
+OPEN; all flags false.
+
 Controlled v20 now binds actual guest EntryLo0 page-frame writes to TLBWI and
 changed physical executable consumption. Equal page writer405 is installed by
 slot operation417; staging alone still hits old PA6028/fill292. Mapped e028 then

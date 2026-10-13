@@ -121,7 +121,11 @@ int main(int argc,char** argv) {
     const u32 remap[]={insn_lw(8,16,0),0x3908000du,0x3a738000u,0x3a528000u,insn_sw(8,19,0)};
     for(u32 i=0;i<5;i++)rdram.ram.write<Word>(0x60b0+i*4,remap[i],RBusDevice::ARES_DEBUGGER);
   }
+  if(PLAID_RSP_DEFINITIONS_FIXTURE>=22)rdram.ram.write<Word>(0x60ac,0x42000001u,RBusDevice::ARES_DEBUGGER);
   #if PLAID_RSP_CPU_IMEM_SENSOR
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 22
+  plaidTlbrObserver=traced?compose_tlbr:nullptr;
+  #endif
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 21
   plaidEntryLoObserver=traced?compose_entrylo_write:nullptr;
   #endif
@@ -223,8 +227,9 @@ int main(int argc,char** argv) {
       if(index==46){s.word=0x21u;s.pc=0xe028;}}
     if(PLAID_RSP_DEFINITIONS_FIXTURE>=21){
       if(index==47){s.word=0x409b1000u;s.pc=0xffffffffa00060a8ull;}
-      if(index>=48){const u32 remap[]={insn_lw(8,16,0),0x3908000du,0x3a738000u,0x3a528000u,insn_sw(8,19,0)};
+      if(index>=48 && index<=52){const u32 remap[]={insn_lw(8,16,0),0x3908000du,0x3a738000u,0x3a528000u,insn_sw(8,19,0)};
         s.word=remap[index-48];s.pc=0xffffffffa00060b0ull+(index-48)*4;}}
+    if(PLAID_RSP_DEFINITIONS_FIXTURE>=22 && index==53){s.word=0x42000001u;s.pc=0xffffffffa00060acull;}
     for(u32 n=0;n<32;n++)s.before[n]=cpu.ipu.r[n].u64;
     if(index>=33 && !(PLAID_RSP_DEFINITIONS_FIXTURE>=18 && index>=43)){if(cpu.ipu.pc!=s.pc)std::abort();}else cpu.pipeline.setPc(s.pc);
     if(cpu.instruction() && synchronize)cpu.synchronize();
@@ -421,6 +426,18 @@ int main(int argc,char** argv) {
       compose_push("cpu_reentry",composeEvents.size()+1,0xffffffffa0006080ull,0,0,0,0,0,0,true);
       #endif
       cpuStep(51,43,false);
+      if(PLAID_RSP_DEFINITIONS_FIXTURE>=22){
+        #if PLAID_RSP_CPU_IMEM_SENSOR
+        compose_push("cpu_reentry",composeEvents.size()+1,0xffffffffa00060a0ull,0,0,0,0,0,0,true);
+        #endif
+        cpuStep(51,44,false);
+        for(u32 n=0;n<2;n++){
+          #if PLAID_RSP_CPU_IMEM_SENSOR
+          compose_push("cpu_reentry",composeEvents.size()+1,0xffffffffa00060acull,0,0,0,0,0,0,true);
+          #endif
+          cpuStep(51,53,false);
+        }
+      }
     }
     for(u32 index:{31u,32u}) {
       phase(index+16+(PLAID_RSP_DEFINITIONS_FIXTURE>=19?5:PLAID_RSP_DEFINITIONS_FIXTURE>=18?2:0));

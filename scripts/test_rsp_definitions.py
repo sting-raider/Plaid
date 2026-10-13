@@ -36,7 +36,9 @@ def main():
     parser.add_argument('--entryhi-context',action='store_true')
     parser.add_argument('--mapped-reactivation',action='store_true')
     parser.add_argument('--entrylo-remap',action='store_true')
+    parser.add_argument('--tlbr-context',action='store_true')
     args = parser.parse_args()
+    args.entrylo_remap = args.entrylo_remap or args.tlbr_context
     args.mapped_reactivation = args.mapped_reactivation or args.entrylo_remap
     args.entryhi_context = args.entryhi_context or args.mapped_reactivation
     args.mapped_root = args.mapped_root or args.entryhi_context
@@ -55,7 +57,8 @@ def main():
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('078-entrylo-remap-root-return' if args.entrylo_remap else
+    recipe = ('079-tlbr-context-root-return' if args.tlbr_context else
+        '078-entrylo-remap-root-return' if args.entrylo_remap else
         '077-mapped-cache-reactivation' if args.mapped_reactivation else
         '076-entryhi-context-mapped-root-return' if args.entryhi_context else
         '075-tlb-mapped-cache-root-return' if args.mapped_root else
@@ -495,7 +498,7 @@ def main():
                 if mode==0: rows.remove(write);reclock(rows)
                 elif mode==1: rows.insert(rows.index(write),copy.deepcopy(write));reclock(rows)
                 elif mode==2: write['value'] ^= 1<<32
-                elif mode==3: write['tlb_state']['staged']['asid']=8
+                elif mode==3: write['tlb_state']['staged']['asid'] ^= 1
                 elif mode==4: write['tlb_state']['entries'][0]['asid']=8
                 elif mode==5: begin['word'] ^= 0x800
                 elif mode==6: begin['gpr'][26] ^= 1<<32
@@ -540,6 +543,24 @@ def main():
                 elif mode==10: mapped['mapping']['entries'][0]['physical'][0]=0x6000
                 elif mode==11: mapped['fetch']['physical']=0x6028
                 elif mode==12: begin['tlb_state']['control']['state']['exl']=True
+                else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
+                run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.tlbr_context:
+            for mode in range(12):
+                forged=json.loads(json.dumps(expected));rows=forged['events']
+                load=next(e for e in reversed(rows) if e['kind']=='tlb_read')
+                begin=next(e for e in rows if e['kind']=='cpu_begin' and e['context']==load['context'])
+                if mode==0: rows.remove(load);reclock(rows)
+                elif mode==1: rows.insert(rows.index(load),copy.deepcopy(load));reclock(rows)
+                elif mode==2: load['address']=1
+                elif mode==3: load['tlb_state']['entries'][0]['asid']=8
+                elif mode==4: load['tlb_state']['staged']['physical'][0]=0x6000
+                elif mode==5: load['tlb_state']['staged']['asid']=8
+                elif mode==6: begin['word'] ^= 6 # TLBP does not load EntryHi
+                elif mode==7: load['tlb_state']['control']['interrupt_enable']=True
+                elif mode==8: begin['tlb_state']['control']['state']['exl']=True
+                elif mode==9: load['context']=load['ordinal']
+                elif mode==10: load['value']=1
                 else: forged['format']=model.prior.FORMAT;forged['profile']=model.prior.PROFILE
                 run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
@@ -721,7 +742,7 @@ def main():
                 elif mode==1: graph['context_writes'].pop()
                 elif mode==2: mapped['mapping']['context_write_ordinal']=346
                 elif mode==3: mapped['mapping'].pop('context_write_ordinal')
-                elif mode==4: write['same_staged_content']=False
+                elif mode==4: write['same_staged_content']=not write['same_staged_content']
                 elif mode==5: write['register_value'] ^= 1<<32
                 elif mode==6: write['after']['entries'][0]['asid']=8
                 else: write['write_ordinal']=332
@@ -767,6 +788,23 @@ def main():
                 elif mode==7: graph['entry_lo_writes'][-1]['same_staged_content']=False
                 elif mode==8: graph['entry_lo_writes'][-1]['register_value'] ^= 1<<32
                 else: installed['mapping']['entry']['physical'][0]=0x6000
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.tlbr_context:
+            for mode in range(10):
+                forged=json.loads(original);graph=forged['dma_consumption']
+                load=graph['context_loads'][-1]
+                mapped=next(f for f in graph['cached_fetches'] if 'tlbr_load_ordinal' in f.get('mapping',{}))
+                if mode==0: graph.pop('context_loads')
+                elif mode==1: graph['context_loads'].pop()
+                elif mode==2: mapped['mapping']['tlbr_load_ordinal']=431
+                elif mode==3: mapped['mapping']['context_write_ordinal']=424
+                elif mode==4: mapped['mapping'].pop('tlbr_load_ordinal')
+                elif mode==5: load['installed_write_ordinal']=332
+                elif mode==6: load['entry_lo_write_ordinal']=398
+                elif mode==7: load['generation']['same_context_content']=False
+                elif mode==8: load['generation']['selected_entry']['sha256']='0'*64
+                else: load['generation']['load_ordinal']=431
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
     print('RSP definitions: original-clock ORI/ADDU parents, phase cuts, full register snapshots, source/report/input gates and unchanged proof flags passed')

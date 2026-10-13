@@ -2,7 +2,7 @@
 from pathlib import Path
 
 
-def generate(ref,out,entryhi=False,entrylo=False):
+def generate(ref,out,entryhi=False,entrylo=False,tlbr=False):
     ref,out=Path(ref),Path(out)
     hp=out/'include/n64/cpu/cpu.hpp';header=hp.read_text()
     assert 'plaidTlbWriteObserver' not in header
@@ -22,6 +22,11 @@ def generate(ref,out,entryhi=False,entrylo=False):
         marker='    scc.tlb.physicalAddress[0].bit(12,35) = data.bit(6,29);\n    break;'
         assert code.count(marker)==1
         code=code.replace(marker,'    scc.tlb.physicalAddress[0].bit(12,35) = data.bit(6,29);\n    if(plaidEntryLoObserver) plaidEntryLoObserver(data);\n    break;')
+    if tlbr:
+        hp.write_text('using PlaidTlbrObserver = void (*)(u32);\ninline PlaidTlbrObserver plaidTlbrObserver = nullptr;\n'+hp.read_text(),newline='\n')
+        marker='  scc.tlb = tlb.entry[scc.index.tlbEntry];\n}'
+        assert code.count(marker)==1
+        code=code.replace(marker,'  scc.tlb = tlb.entry[scc.index.tlbEntry];\n  if(plaidTlbrObserver) plaidTlbrObserver(scc.index.tlbEntry);\n}')
     shadow=out/'interpreter-scc.cpp';shadow.write_text(code,newline='\n')
     cp=out/'cpu.cpp';cpu=cp.read_text();marker=f'#include "{original}"'
     assert cpu.count(marker)==1

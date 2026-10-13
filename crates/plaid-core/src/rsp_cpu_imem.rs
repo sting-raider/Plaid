@@ -12,8 +12,8 @@ use crate::{
     program::{FetchAccess, FetchCacheLine, GuestVirtualAddr, PhysicalAddr},
     rom::sha256,
     rsp_cpu_tlb::{
-        ContextWrite, Initial as InitialTlb, Observation as TlbObservation, Replay as TlbReplay,
-        State as TlbState, Witness as TlbWitness,
+        ContextLoad, ContextWrite, Initial as InitialTlb, Observation as TlbObservation,
+        Replay as TlbReplay, State as TlbState, Witness as TlbWitness,
     },
     tlb_history::TlbwiGeneration,
 };
@@ -67,6 +67,9 @@ pub const EXCEPTION_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-writer-break-handler-consumption-v14";
 pub const CONTEXT_FORMAT: &str = "plaid-rsp-cpu-imem-history-v19";
 pub const PAGE_FORMAT: &str = "plaid-rsp-cpu-imem-history-v20";
+pub const LOAD_FORMAT: &str = "plaid-rsp-cpu-imem-history-v21";
+pub const LOAD_PROFILE: &str =
+    "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-tlbr-context-remap-root-return-v21";
 pub const PAGE_PROFILE: &str =
     "ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-entrylo-remap-root-return-v20";
 pub const CONTEXT_PROFILE: &str =
@@ -155,6 +158,7 @@ enum Kind {
     TlbWrite,
     EntryHiWrite,
     EntryLoWrite,
+    TlbRead,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -874,6 +878,8 @@ pub struct DmemDmaConsumption {
     pub context_writes: Option<Vec<ContextWrite>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entry_lo_writes: Option<Vec<ContextWrite>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_loads: Option<Vec<ContextLoad>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1111,6 +1117,7 @@ struct RamReplay {
     tlb: Option<TlbReplay>,
     context_enabled: bool,
     page_enabled: bool,
+    load_enabled: bool,
 }
 enum PendingFetch {
     Uncached(usize),
@@ -1209,6 +1216,7 @@ impl RamReplay {
             tlb: None,
             context_enabled: false,
             page_enabled: false,
+            load_enabled: false,
             cache_invalidations: Vec::new(),
             cpu_ram_enabled: false,
             cpu_writes: Vec::new(),
@@ -2003,6 +2011,9 @@ impl RamReplay {
             entry_lo_writes: self
                 .page_enabled
                 .then(|| self.tlb.as_ref().unwrap().entry_lo_writes.clone()),
+            context_loads: self
+                .load_enabled
+                .then(|| self.tlb.as_ref().unwrap().context_loads.clone()),
             tlb_generations: self.tlb.map(|tlb| tlb.generations),
         })
     }
@@ -2185,7 +2196,8 @@ pub fn inspect_rsp_cpu_imem_history(
         "RSP/CPU composition source receipt mismatch",
     )?;
     let h: History = serde_json::from_slice(source).map_err(|e| e.to_string())?;
-    let page_enabled = h.format == PAGE_FORMAT && h.profile == PAGE_PROFILE;
+    let load_enabled = h.format == LOAD_FORMAT && h.profile == LOAD_PROFILE;
+    let page_enabled = load_enabled || (h.format == PAGE_FORMAT && h.profile == PAGE_PROFILE);
     let context_enabled =
         page_enabled || (h.format == CONTEXT_FORMAT && h.profile == CONTEXT_PROFILE);
     let mapped_enabled =
@@ -2290,6 +2302,7 @@ pub fn inspect_rsp_cpu_imem_history(
     if let Some(ram) = &mut ram {
         ram.context_enabled = context_enabled;
         ram.page_enabled = page_enabled;
+        ram.load_enabled = load_enabled;
     }
     if let Some(initial) = h.initial_tlb {
         ram.as_mut().ok_or("TLB composition lacks RAM profile")?.tlb =
@@ -2316,6 +2329,7 @@ pub fn inspect_rsp_cpu_imem_history(
     let mut pending_tlb = false;
     let mut pending_context = false;
     let mut pending_page = false;
+    let mut pending_load = false;
     let mut eret_returns: Vec<CpuEretReturn> = Vec::new();
     let mut pending_return: Option<usize> = None;
     let mut await_return: Option<usize> = None;
@@ -2346,7 +2360,10 @@ pub fn inspect_rsp_cpu_imem_history(
                         || (page_enabled
                             && (row.kind == Kind::EntryLoWrite
                                 || (row.kind == Kind::CpuBegin
-                                    && row.word & 0xffe0ffff == 0x40801000))))),
+                                    && row.word & 0xffe0ffff == 0x40801000)))
+                        || (load_enabled
+                            && (row.kind == Kind::TlbRead
+                                || (row.kind == Kind::CpuBegin && row.word == 0x42000001))))),
             "TLB state outside decoded TLBWI boundary",
         )?;
         require(
@@ -2357,7 +2374,8 @@ pub fn inspect_rsp_cpu_imem_history(
             "mapping observation outside fetch boundary",
         )?;
         require(
-            (!pending_tlb && !pending_context && !pending_page) || row.kind == Kind::CpuEnd,
+            (!pending_tlb && !pending_context && !pending_page && !pending_load)
+                || row.kind == Kind::CpuEnd,
             "TLBWI write not immediately completed",
         )?;
         require(
@@ -2571,7 +2589,7 @@ pub fn inspect_rsp_cpu_imem_history(
                     pending_page = true;
                 }
             }
-            Kind::TlbWrite => {
+            Kind::TlbWrite | Kind::TlbRead => {
                 effect_row(&row)?;
                 let Some(Active::Cpu {
                     begin,
@@ -2582,11 +2600,19 @@ pub fn inspect_rsp_cpu_imem_history(
                     return Err("TLB write lacks CPU decoder".into());
                 };
                 require(
-                    mapped_enabled
-                        && !*written
+                    (if row.kind == Kind::TlbRead {
+                        load_enabled
+                    } else {
+                        mapped_enabled
+                    }) && !*written
                         && read.is_none()
                         && same(begin, &row)
-                        && begin.word == 0x42000002
+                        && begin.word
+                            == if row.kind == Kind::TlbRead {
+                                0x42000001
+                            } else {
+                                0x42000002
+                            }
                         && row.cpu
                         && row.address
                             == begin
@@ -2599,20 +2625,31 @@ pub fn inspect_rsp_cpu_imem_history(
                         && row.value == 0,
                     "duplicate, unscoped or unsupported TLBWI write",
                 )?;
-                ram.as_mut()
+                let replay = ram
+                    .as_mut()
                     .and_then(|ram| ram.tlb.as_mut())
-                    .ok_or("TLB write lacks profile")?
-                    .write(
-                        begin.pc,
-                        begin.context,
-                        row.ordinal,
-                        begin.tlb_state.as_ref().ok_or("TLBWI lacks before state")?,
-                        row.tlb_state
-                            .as_ref()
-                            .ok_or("TLBWI lacks completed table")?,
-                    )?;
+                    .ok_or("TLB operation lacks profile")?;
+                let operation = if row.kind == Kind::TlbRead {
+                    TlbReplay::load
+                } else {
+                    TlbReplay::write
+                };
+                operation(
+                    replay,
+                    begin.pc,
+                    begin.context,
+                    row.ordinal,
+                    begin.tlb_state.as_ref().ok_or("TLBWI lacks before state")?,
+                    row.tlb_state
+                        .as_ref()
+                        .ok_or("TLBWI lacks completed table")?,
+                )?;
                 *written = true;
-                pending_tlb = true;
+                if row.kind == Kind::TlbRead {
+                    pending_load = true;
+                } else {
+                    pending_tlb = true;
+                }
             }
             Kind::EpcRead | Kind::EpcWrite => {
                 let Some(Active::Cpu {
@@ -3334,6 +3371,16 @@ pub fn inspect_rsp_cpu_imem_history(
                         .ok_or("EntryLo0 lacks profile")?
                         .finish_entry_lo(begin.context, row.ordinal)?;
                     pending_page = false;
+                } else if begin.word == 0x42000001 {
+                    require(
+                        load_enabled && pending_load && written && read.is_none(),
+                        "TLBR lacks actual selected-slot load",
+                    )?;
+                    ram.as_mut()
+                        .and_then(|ram| ram.tlb.as_mut())
+                        .ok_or("TLBR lacks profile")?
+                        .finish_load(begin.context, row.ordinal)?;
+                    pending_load = false;
                 } else if begin.word == 0x42000002 {
                     require(
                         mapped_enabled && pending_tlb && written && read.is_none(),
