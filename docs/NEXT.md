@@ -19,9 +19,12 @@ through fresh DMA writers/refill to cached execution; equal words cannot reuse
 ended fill ancestry. Controlled v12 also joins actual SP LW/register/CPU SW RAM
 copies through resident-vs-refilled executable ancestry. Controlled v13 also
 retains one actual in-place XORI expression from original load parents through
-RAM writing/invalidation/refill to transformed instruction consumption. Next
-compose broader cache operations/source ancestry and complete mutation/mapping/
-execution-root lifetime coverage. Reuse retained295-event/45-checkpoint v13,
+RAM writing/invalidation/refill to transformed instruction consumption. Controlled
+v14 also joins an actual copied/transformed BREAK to its exception transfer and
+first cached handler fetch with separate writer ancestry. Next compose broader
+root/control lifetime, cache operations/source ancestry and complete mutation/
+mapping coverage. Reuse retained339-event/52-checkpoint v14,
+295-event/45-checkpoint v13,
 259-event/39-checkpoint v12,
 228-event/34-checkpoint v11,208-event/31-checkpoint v10,195-event/
 29-checkpoint v9,180-event/26-checkpoint v8,152-event/23-checkpoint v7,

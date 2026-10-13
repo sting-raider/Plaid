@@ -2239,6 +2239,19 @@ transforms/decompression/relocation/complete mutation/mapping/root/lifetime/
 whole-ROM/native remain OPEN, with all flags false. See the CPU XORI integration
 receipt; no reference implementation is copied or linked into production.
 
+ADR-0118 exception composition follow-up (2026-10-13): controlled v14 binds actual
+BREAK before/after exception state to its fetched instruction/writer ancestry.
+Reuse `resolve_exception_root`; check BEV0/kernel32, non-delay/non-nested General
+vector, cause9, overwritten EPC, EXL and full unchanged GPRs. Its transfer must
+complete in the same decoder then immediately reach a cached handler fetch and
+decoder, without opaque reseeding or unrelated actors. Actual339-event/52-control
+graph joins CPUwriter318/XORI312/load300/read301 to BREAK331/transfer332 and first
+handler fetch334/fill336/decoder338. Handler NOP has separate CPUwriter307 and
+original DMEM/RAM/RSP parents; no host PC setter supplies handler entry. All
+fourteen v0-v13 reports stay exact. General exceptions/interrupts/TLB/reset/restore/
+root census/mutation/mapping/lifetime/whole-ROM/native remain OPEN; flags stay
+false. See the writer/BREAK/handler integration receipt; no upstream code copied.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.
