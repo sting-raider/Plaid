@@ -33,7 +33,9 @@ def main():
     parser.add_argument('--guest-epc',action='store_true')
     parser.add_argument('--epc-target',action='store_true')
     parser.add_argument('--mapped-root',action='store_true')
+    parser.add_argument('--entryhi-context',action='store_true')
     args = parser.parse_args()
+    args.mapped_root = args.mapped_root or args.entryhi_context
     args.epc_target = args.epc_target or args.mapped_root
     args.guest_epc = args.guest_epc or args.epc_target
     args.eret_return = args.eret_return or args.guest_epc
@@ -49,7 +51,8 @@ def main():
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('075-tlb-mapped-cache-root-return' if args.mapped_root else
+    recipe = ('076-entryhi-context-mapped-root-return' if args.entryhi_context else
+        '075-tlb-mapped-cache-root-return' if args.mapped_root else
         '074-epc-transform-target' if args.epc_target else
         '073-guest-epc-return' if args.guest_epc else
         '072-live-epc-handler-return' if args.eret_return else
@@ -478,6 +481,24 @@ def main():
                 elif mode==16: begin['word'] ^= 4 # cannot borrow a TLBWR occurrence
                 else: next(e for e in rows if e['kind']=='ram_fetch_end' and not e['fetch']['cached'])['mapping']=copy.deepcopy(fetch['mapping'])
                 run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.entryhi_context:
+            for mode in range(12):
+                forged=json.loads(json.dumps(expected));rows=forged['events']
+                writes=[e for e in rows if e['kind']=='entry_hi_write'];write=writes[-1]
+                begin=next(e for e in rows if e['kind']=='cpu_begin' and e['context']==write['context'])
+                if mode==0: rows.remove(write);reclock(rows)
+                elif mode==1: rows.insert(rows.index(write),copy.deepcopy(write));reclock(rows)
+                elif mode==2: write['value'] ^= 1<<32
+                elif mode==3: write['tlb_state']['staged']['asid']=8
+                elif mode==4: write['tlb_state']['entries'][0]['asid']=8
+                elif mode==5: begin['word'] ^= 0x800
+                elif mode==6: begin['gpr'][26] ^= 1<<32
+                elif mode==7: write['tlb_state']['staged']['virtual_address']=0x8000
+                elif mode==8: write['tlb_state']['staged']['region']=1
+                elif mode==9: write['context']=write['ordinal']
+                elif mode==10: begin['tlb_state']['control']['state']['kernel']=False
+                else: next(e for e in rows if e['kind']=='ram_fetch_begin' and 'mapping' in e)['mapping']['asid']=8
+                run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
             forged = json.loads(original)
@@ -647,6 +668,20 @@ def main():
                 elif mode==6: mapped.pop('mapping')
                 elif mode==7: mapped['mapping']['entry']['physical'][0]=0x8000
                 else: graph['tlb_generations'][-1]['staged_entry']['sha256']='0'*64
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.entryhi_context:
+            for mode in range(8):
+                forged=json.loads(original);graph=forged['dma_consumption'];write=graph['context_writes'][-1]
+                mapped=next(f for f in graph['cached_fetches'] if 'mapping' in f)
+                if mode==0: graph.pop('context_writes')
+                elif mode==1: graph['context_writes'].pop()
+                elif mode==2: mapped['mapping']['context_write_ordinal']=346
+                elif mode==3: mapped['mapping'].pop('context_write_ordinal')
+                elif mode==4: write['same_staged_content']=False
+                elif mode==5: write['register_value'] ^= 1<<32
+                elif mode==6: write['after']['entries'][0]['asid']=8
+                else: write['write_ordinal']=332
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
         if args.cached_cpu:

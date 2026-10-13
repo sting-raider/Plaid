@@ -314,6 +314,15 @@ Use spike075 and `python scripts/test_rsp_definitions.py --mapped-root`; all
 v0-v17 report bytes remain exact. Broader mapping/context/census/lifetime/native
 remain OPEN; pinned Gopher/ares synonym-index disagreement stays explicit.
 
+Controlled v19 adds an actual EntryHi setter callback and before/completed CP0/
+staged/table snapshots. Bind decoded MTC0/nonzero GPR/full value to masked ASID/
+VPN/region while requiring installed table unchanged. Current context writer
+is separate from the slot operation; same-value writes still replace it. Mapped
+fetches select both identities. Use spike076 and
+`python scripts/test_rsp_definitions.py --entryhi-context`; v0-v18 bytes stay
+exact. Initial captured GPR/context values retain unknown ultimate ancestry;
+broader context sources/hazards/census/lifetime/native remain OPEN.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

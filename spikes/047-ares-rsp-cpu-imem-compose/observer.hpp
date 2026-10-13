@@ -78,6 +78,14 @@ static void compose_tlb_state(ComposeEvent& e) {
   compose_return_state(e);e.returnValid=false;e.tlbValid=true;
   e.tlbIndex=cpu.scc.index.tlbEntry;e.staged=raw_tlb_entry(cpu.scc.tlb);e.entries=raw_tlb_entries();
 }
+#if PLAID_RSP_DEFINITIONS_FIXTURE >= 19
+static void compose_entryhi_write(u64 value) {
+  if(!composeEnabled)return;
+  if(!composeCpuContext || (composeCpuWord&0xffe0ffffu)!=0x40805000u || composeRspContext || composeFetchContext)std::abort();
+  compose_push("entry_hi_write",composeCpuContext,composeCpuPc,composeCpuWord,0,0,0,0,value,true);
+  compose_tlb_state(composeEvents.back());
+}
+#endif
 static void compose_tlb_write(u32 slot) {
   if(!composeEnabled) return;
   if(!composeCpuContext || composeCpuWord!=0x42000002u || composeRspContext || composeFetchContext
@@ -124,6 +132,9 @@ static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
   #endif
   #if PLAID_RSP_DEFINITIONS_FIXTURE >= 18
   if(begin && word==0x42000002u)compose_tlb_state(composeEvents.back());
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 19
+  if(begin && (word&0xffe0ffffu)==0x40805000u)compose_tlb_state(composeEvents.back());
+  #endif
   #endif
   if(!begin) composeCpuContext=composeCpuPc=composeCpuWord=0;
 }
@@ -280,7 +291,7 @@ static void compose_ram_fetch(bool begin,u64 pc,u32 physical,u32 busAddress,bool
   if(!begin) composeFetchContext=composeFetchPc=0;
 }
 static void compose_ram_scalar(bool write,u32 address,u32 bytes,u32 device,u64 value) {
-  if(address<(PLAID_RSP_DEFINITIONS_FIXTURE>=14?0:0x6000) || address>=(PLAID_RSP_DEFINITIONS_FIXTURE>=18?0x60a0:PLAID_RSP_DEFINITIONS_FIXTURE>=14?0x6080:PLAID_RSP_DEFINITIONS_FIXTURE>=13?0x6060:PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030)) return; // Explicit declared RAM snapshot.
+  if(address<(PLAID_RSP_DEFINITIONS_FIXTURE>=14?0:0x6000) || address>=(PLAID_RSP_DEFINITIONS_FIXTURE>=19?0x60c0:PLAID_RSP_DEFINITIONS_FIXTURE>=18?0x60a0:PLAID_RSP_DEFINITIONS_FIXTURE>=14?0x6080:PLAID_RSP_DEFINITIONS_FIXTURE>=13?0x6060:PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030)) return; // Explicit declared RAM snapshot.
   if(write) {
     #if PLAID_RSP_DEFINITIONS_FIXTURE >= 12
     if(composeCpuContext && device==(u32)RBusDevice::VR4300_UNCACHED) {

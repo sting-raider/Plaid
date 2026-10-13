@@ -30,11 +30,13 @@ also derives a changed EPC through one actual in-place XORI and connects ERET's
 selected target to a separate CPU writer/refill/executable chain. Controlled v18
 also binds actual TLBWI/current normalized entries to mapped cached BREAK/EPC/
 ERET/returned execution. Equal TLB writes replace mapping operation identity but
-preserve I-cache generations. Next compose mapping replacement/ASID/context
-writers and cached hit-vs-refill paths, broader root/control lifetime and complete
-mutation coverage. Keep ERET admission bounded to the uncut ERL0/kernel32/IE0
-frame; ordinary static ERET stays unsupported. Reuse retained400-event/63-control
-v18,386-event/61-checkpoint v17,375-event/59-checkpoint v16,
+preserve I-cache generations. Controlled v19 also binds actual EntryHi/ASID
+context writes (including equal rewrites) separately from installed-slot writers
+to both mapped consumptions. Next compose changed mapping/context selection and
+cached hit-vs-refill paths, broader root/control lifetime and complete mutation
+coverage. Keep ERET admission bounded to the uncut ERL0/kernel32/IE0 frame;
+ordinary static ERET stays unsupported. Reuse retained421-event/66-control v19,
+400-event/63-control v18,386-event/61-checkpoint v17,375-event/59-checkpoint v16,
 365-event/57-checkpoint v15,
 339-event/52-checkpoint v14,
 295-event/45-checkpoint v13,
