@@ -93,9 +93,14 @@ static void compose_sp_word(bool write,u32 address,u32 bank,u32 offset,u32 value
 #if PLAID_RSP_DEFINITIONS_FIXTURE >= 8
 static void compose_dma_pending(u32 address,u32 value,bool originCpu) {
   if(!composeEnabled) return;
-  if(composeCpuContext || composeRspContext || composeFetchContext || !originCpu) std::abort();
+  if(composeRspContext || composeFetchContext || !originCpu) std::abort();
+  #if PLAID_RSP_DEFINITIONS_FIXTURE < 9
+  if(composeCpuContext) std::abort();
+  #endif
   auto& pending=rsp.dma.pending;
-  compose_push("dma_pending_write",composeEvents.size()+1,cpu.ipu.pc,0,address,pending.pbusRegion,pending.pbusAddress,4,value,originCpu);
+  compose_push("dma_pending_write",composeCpuContext?composeCpuContext:composeEvents.size()+1,
+    composeCpuContext?composeCpuPc:cpu.ipu.pc,composeCpuContext?composeCpuWord:0,
+    address,pending.pbusRegion,pending.pbusAddress,4,value,originCpu);
   auto& event=composeEvents.back();event.dmaValid=true;event.pendingValid=true;event.pendingFull=rsp.dma.full.any();
   event.dmaPbus=pending.pbusAddress;event.dmaDram=pending.dramAddress;
   event.dmaLength=pending.length;event.dmaCount=pending.count;event.dmaSkip=pending.skip;
@@ -111,7 +116,12 @@ static void compose_dma_lifecycle(bool begin,u32 bank,bool write,u32 pbus,u32 dr
   #else
   if(bank || !write) std::abort();
   #endif
-  if(composeCpuContext || composeRspContext || composeFetchContext) std::abort();
+  if(composeRspContext || composeFetchContext) std::abort();
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 9
+  if(composeCpuContext && (!begin || composeCpuWord>>26!=0x2b)) std::abort();
+  #else
+  if(composeCpuContext) std::abort();
+  #endif
   if(begin) {
     if(composeDmaContext) std::abort();
     composeDmaContext=composeEvents.size()+1;composeDmaBank=bank;composeDmaWrite=write;

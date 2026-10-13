@@ -2158,6 +2158,19 @@ reference-specific host-driven MMIO contract supplies no guest operand ancestry,
 hardware/FIFO consensus, mutation census or continuous executable lifetime; all
 general proof flags stay false. See the mutable-pending DMA integration receipt.
 
+ADR-0118 decoded-MMIO follow-up (2026-10-13): controlled v9 checks actual CPU SW
+effects into represented direct-KSEG1 SP address/length registers. Validate
+decoded address, low32 payload, full context and unchanged GPR state; one pending
+effect belongs to one SW. Synchronous promotion inside the decoder is admitted
+only immediately after its exact accepted length mutation and retains the commit
+decoder identity. The195-event source/29 matched controls independently joins
+architectural r0's length write through promotion/install to RSP consumption.
+Host address setup and backing code seeds keep their distinct unknown ancestry.
+The explicit fixture drains separately after decoder completion; no generic
+concurrent-device timing/hardware/census/lifetime claim follows. Nine v0-v8 reports
+remain exact and all general certification flags remain false. See the decoded
+MMIO/DMA integration receipt.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.
