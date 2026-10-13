@@ -258,6 +258,15 @@ in this profile and still cut register definitions. Use spike069 and
 `python scripts/test_rsp_definitions.py --cpu-ram-copy`; v0-v11 reports stay exact.
 General cached data copies/transforms/source/mutation/lifetime remain OPEN.
 
+Controlled v13 checks full64 XORI with a zero-extended u16 immediate, no scalar
+effect and exact complete GPR result. One in-place transform retains its held
+LW definition and original byte parents with a distinct expression/context;
+repeated/renamed/unattributed transform sources lose that candidate. Transformed
+SP stores do not receive identity IMEM-copy witnesses. Use spike070 and
+`python scripts/test_rsp_definitions.py --cpu-xori`; v0-v12 reports stay exact.
+This composes actual transformed RAM code with cache invalidation/refill and
+decoder consumption; broader transforms/decompression/relocation stay OPEN.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

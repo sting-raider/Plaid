@@ -203,7 +203,7 @@ static void compose_ram_fetch(bool begin,u64 pc,u32 physical,u32 busAddress,bool
   if(!begin) composeFetchContext=composeFetchPc=0;
 }
 static void compose_ram_scalar(bool write,u32 address,u32 bytes,u32 device,u64 value) {
-  if(address<0x6000 || address>=(PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030)) return; // Explicit declared RAM snapshot.
+  if(address<0x6000 || address>=(PLAID_RSP_DEFINITIONS_FIXTURE>=13?0x6060:PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030)) return; // Explicit declared RAM snapshot.
   if(write) {
     #if PLAID_RSP_DEFINITIONS_FIXTURE >= 12
     if(composeCpuContext && device==(u32)RBusDevice::VR4300_UNCACHED) {

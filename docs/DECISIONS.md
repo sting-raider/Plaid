@@ -2225,6 +2225,20 @@ All twelve v0-v11 reports remain exact; broad transforms/cached data copies/
 source/mutation/mapping/root/lifetime/whole-ROM/native remain OPEN; flags stay false.
 See the CPU RAM copy/cache integration receipt.
 
+ADR-0118 CPU XORI follow-up (2026-10-13): controlled v13 retains one actual
+in-place XORI context/expression on a held SP LW definition, following the existing
+bounded `cpu_copy` policy. Verify full64 result with unsigned u16 immediate and
+no memory effect. Keep original byte parents distinct from transformed bits;
+repeated/renamed/unattributed transform sources lose candidate copy ancestry.
+Transformed SP stores do not acquire identity IMEM-copy witnesses. Actual295-event/
+45-control graph transforms NOP to ADDU r0,r0,r0 through CPU RAMwriter276; resident
+fill256 still executes NOP, then guest invalidation287 and new fill292 expose the
+transformed instruction to decoder294. Preserve transform270/load264/read265 and
+earlier DMEM/DMA/RSP parents. All thirteen v0-v12 reports stay exact. Broad
+transforms/decompression/relocation/complete mutation/mapping/root/lifetime/
+whole-ROM/native remain OPEN, with all flags false. See the CPU XORI integration
+receipt; no reference implementation is copied or linked into production.
+
 ## ADR-0119: Cached pointer reads consume the canonical D-cache resident state
 
 Status: Accepted for bounded source composition, 2026-10-12.
