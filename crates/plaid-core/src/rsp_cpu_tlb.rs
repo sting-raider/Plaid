@@ -1,0 +1,408 @@
+//! Current TLB operation facts for the unified writer/cache/execution graph.
+//! Raw entry observations never mint operation generations by themselves.
+use crate::{
+    exception_roots::KernelAddressMode,
+    program::{GuestVirtualAddr, PhysicalAddr},
+    rom::sha256,
+    rsp_cpu_imem::CpuReturnState,
+    tlb_geometry::derive_tlb_page_offset,
+    tlb_history::{TlbEntryFingerprint, TlbwiGeneration},
+};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Entry {
+    pub global: [bool; 2],
+    pub valid: [bool; 2],
+    pub dirty: [bool; 2],
+    pub cca: [u8; 2],
+    pub physical: [u64; 2],
+    pub page_mask: u32,
+    pub virtual_address: u64,
+    pub asid: u8,
+    pub region: u8,
+    pub globals: bool,
+    pub mask_hi: u64,
+    pub mask_lo: u64,
+    pub select: u64,
+}
+fn require(ok: bool, message: &str) -> Result<(), String> {
+    if ok { Ok(()) } else { Err(message.into()) }
+}
+impl Entry {
+    fn validate(&self) -> Result<(), String> {
+        require(
+            self.page_mask == 0
+                && self.region == 0
+                && self.cca.iter().all(|cca| *cca <= 7)
+                && self
+                    .physical
+                    .iter()
+                    .all(|pa| *pa <= u64::from(u32::MAX) && pa.is_multiple_of(4096))
+                && self.mask_hi == ((1u64 << 40) - 1) & !0x1fff
+                && self.mask_lo == 0xfff
+                && self.select == 0x1000
+                && self.virtual_address == self.virtual_address & self.mask_hi
+                && self.global == [self.globals; 2],
+            "TLB entry outside normalized low-region 4KiB scope",
+        )
+    }
+    fn fingerprint(&self) -> TlbEntryFingerprint {
+        TlbEntryFingerprint {
+            sha256: sha256(&serde_json::to_vec(self).expect("entry serialization")),
+        }
+    }
+    fn matches(&self, pc: u64, asid: u8) -> bool {
+        (self.globals || self.asid == asid) && pc & self.mask_hi == self.virtual_address
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Initial {
+    pub index: u32,
+    pub staged: Entry,
+    pub entries: Vec<Entry>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct State {
+    pub control: CpuReturnState,
+    pub index: u32,
+    pub staged: Entry,
+    pub entries: Vec<Entry>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Observation {
+    pub asid: u8,
+    pub kernel: bool,
+    pub bits: u8,
+    pub entries: Vec<Entry>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Witness {
+    pub write_ordinal: u64,
+    pub selected_slot: u32,
+    pub current_asid: u8,
+    pub entry: Entry,
+}
+pub(crate) struct Replay {
+    initial: Initial,
+    entries: Vec<Entry>,
+    writers: [Option<usize>; 32],
+    pub generations: Vec<TlbwiGeneration>,
+}
+impl Replay {
+    pub fn new(initial: Initial) -> Result<Self, String> {
+        require(
+            initial.entries.len() == 32 && initial.index < 32,
+            "invalid initial TLB array/index",
+        )?;
+        initial.staged.validate()?;
+        for entry in &initial.entries {
+            entry.validate()?;
+            require(
+                entry.valid == [false; 2],
+                "initial valid mapping lacks captured writer",
+            )?;
+        }
+        Ok(Self {
+            entries: initial.entries.clone(),
+            initial,
+            writers: [None; 32],
+            generations: Vec::new(),
+        })
+    }
+    pub fn write(
+        &mut self,
+        pc: u64,
+        context: u64,
+        ordinal: u64,
+        before: &State,
+        after: &State,
+    ) -> Result<(), String> {
+        let control = &before.control;
+        require(
+            control.state.pc.0 == pc
+                && control.state.kernel
+                && control.state.kernel_mode == KernelAddressMode::Bits32
+                && !control.interrupt_enable
+                && !control.state.bev
+                && !control.state.exl
+                && !control.state.erl
+                && !control.state.delay_slot
+                && !control.state.branch_delay
+                && control.state.cause == 0
+                && after.control == *control,
+            "unsupported TLBWI privilege/state transition",
+        )?;
+        require(
+            before.index == self.initial.index
+                && after.index == before.index
+                && before.staged == self.initial.staged
+                && after.staged == before.staged
+                && before.entries == self.entries,
+            "TLBWI lost current slot/staged/table state",
+        )?;
+        let slot = before.index as usize;
+        let mut expected = self.entries.clone();
+        expected[slot] = before.staged.clone();
+        require(
+            after.entries == expected,
+            "TLBWI completed table differs from selected-slot write",
+        )?;
+        self.generations.push(TlbwiGeneration {
+            operation_generation: self.generations.len() as u64 + 1,
+            epoch: 1,
+            context,
+            pc: GuestVirtualAddr(pc),
+            begin_ordinal: context,
+            write_ordinal: ordinal,
+            end_ordinal: 0,
+            selected_slot: before.index,
+            staged_entry: before.staged.fingerprint(),
+            before_entry: self.entries[slot].fingerprint(),
+            after_entry: expected[slot].fingerprint(),
+            same_entry_content: self.entries[slot] == expected[slot],
+        });
+        self.writers[slot] = Some(self.generations.len() - 1);
+        self.entries = expected;
+        Ok(())
+    }
+    pub fn finish(&mut self, context: u64, ordinal: u64) -> Result<(), String> {
+        let generation = self
+            .generations
+            .last_mut()
+            .ok_or("TLBWI lacks write occurrence")?;
+        require(
+            generation.context == context
+                && generation.end_ordinal == 0
+                && generation.write_ordinal.checked_add(1) == Some(ordinal),
+            "TLBWI end lost operation identity",
+        )?;
+        generation.end_ordinal = ordinal;
+        Ok(())
+    }
+    pub fn fetch(
+        &self,
+        pc: u64,
+        physical: PhysicalAddr,
+        observation: &Observation,
+    ) -> Result<Witness, String> {
+        require(
+            pc < 0x80000000
+                && pc.is_multiple_of(4)
+                && observation.kernel
+                && observation.bits == 32
+                && observation.asid == self.initial.staged.asid
+                && observation.entries == self.entries,
+            "mapped fetch lost current TLB/context snapshot",
+        )?;
+        // Invalid matching entries also count: they can fault before another
+        // matching valid entry. Reject every ambiguity rather than pick a label.
+        let matches: Vec<_> = self
+            .entries
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| entry.matches(pc, observation.asid))
+            .collect();
+        require(
+            matches.len() == 1,
+            "mapped fetch has ambiguous or absent TLB entry",
+        )?;
+        let (slot, entry) = matches[0];
+        let page = derive_tlb_page_offset(entry.page_mask, GuestVirtualAddr(pc))
+            .map_err(|e| e.to_string())?;
+        let half = usize::from(pc & entry.select != 0);
+        require(
+            entry.valid[half]
+                && entry.cca[half] == 3
+                && entry.physical[half] + page.in_page_offset == u64::from(physical.0),
+            "mapped cached fetch differs from valid CCA3 translation",
+        )?;
+        let index = self.writers[slot].ok_or("mapped fetch lacks current write generation")?;
+        let generation = &self.generations[index];
+        require(
+            generation.end_ordinal != 0,
+            "mapped fetch preceded completed TLBWI",
+        )?;
+        Ok(Witness {
+            write_ordinal: generation.write_ordinal,
+            selected_slot: slot as u32,
+            current_asid: observation.asid,
+            entry: entry.clone(),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rsp_cpu_imem::CpuExceptionState;
+    fn fixture() -> (Replay, State, State) {
+        let blank = Entry {
+            global: [false; 2],
+            valid: [false; 2],
+            dirty: [false; 2],
+            cca: [0; 2],
+            physical: [0; 2],
+            page_mask: 0,
+            virtual_address: 0,
+            asid: 0,
+            region: 0,
+            globals: false,
+            mask_hi: ((1u64 << 40) - 1) & !0x1fff,
+            mask_lo: 0xfff,
+            select: 0x1000,
+        };
+        let mut staged = blank.clone();
+        staged.valid[0] = true;
+        staged.cca = [3; 2];
+        staged.physical = [0x6000, 0x7000];
+        staged.virtual_address = 0x6000;
+        staged.asid = 7;
+        let initial = Initial {
+            index: 0,
+            staged,
+            entries: vec![blank; 32],
+        };
+        let control = CpuReturnState {
+            state: CpuExceptionState {
+                pc: GuestVirtualAddr(0xffffffffa0006080),
+                bev: false,
+                exl: false,
+                erl: false,
+                kernel_mode: KernelAddressMode::Bits32,
+                kernel: true,
+                cause: 0,
+                branch_delay: false,
+                epc: GuestVirtualAddr(0),
+                delay_slot: false,
+            },
+            interrupt_enable: false,
+            llbit: false,
+        };
+        let before = State {
+            control,
+            index: 0,
+            staged: initial.staged.clone(),
+            entries: initial.entries.clone(),
+        };
+        let mut after = before.clone();
+        after.entries[0] = after.staged.clone();
+        (Replay::new(initial).unwrap(), before, after)
+    }
+    #[test]
+    fn equal_tlbwi_replaces_operation_identity_without_snapshot_diff() {
+        let (mut replay, before, after) = fixture();
+        let pc = before.control.state.pc.0;
+        replay.write(pc, 10, 11, &before, &after).unwrap();
+        let observation = Observation {
+            asid: 7,
+            kernel: true,
+            bits: 32,
+            entries: after.entries.clone(),
+        };
+        assert!(
+            replay
+                .fetch(0x6028, PhysicalAddr(0x6028), &observation)
+                .is_err()
+        );
+        replay.finish(10, 12).unwrap();
+        assert_eq!(
+            replay
+                .fetch(0x6028, PhysicalAddr(0x6028), &observation)
+                .unwrap()
+                .write_ordinal,
+            11
+        );
+        replay.write(pc, 20, 21, &after, &after).unwrap();
+        replay.finish(20, 22).unwrap();
+        assert_eq!(
+            replay
+                .fetch(0x602c, PhysicalAddr(0x602c), &observation)
+                .unwrap()
+                .write_ordinal,
+            21
+        );
+        assert_eq!(
+            replay.generations[0].after_entry,
+            replay.generations[1].after_entry
+        );
+        assert!(
+            !replay.generations[0].same_entry_content && replay.generations[1].same_entry_content
+        );
+    }
+    #[test]
+    fn slot_staged_table_and_privilege_cannot_be_borrowed() {
+        for mode in 0..8 {
+            let (mut replay, mut before, mut after) = fixture();
+            let pc = before.control.state.pc.0;
+            match mode {
+                0 => before.index = 32,
+                1 => before.staged.asid += 1,
+                2 => before.control.state.kernel = false,
+                3 => before.control.state.exl = true,
+                4 => after.entries[1] = after.staged.clone(),
+                5 => after.entries[0].physical[0] = 0x8000,
+                6 => after.control.state.pc.0 += 4,
+                _ => before.entries[0] = before.staged.clone(),
+            }
+            assert!(
+                replay.write(pc, 10, 11, &before, &after).is_err(),
+                "mode {mode}"
+            );
+        }
+    }
+    #[test]
+    fn mapped_fetch_rejects_context_translation_invalid_and_ambiguous_entries() {
+        for mode in 0..9 {
+            let (mut replay, before, mut after) = fixture();
+            if mode == 5 {
+                after.entries[0].valid[0] = false;
+                replay.initial.staged = after.entries[0].clone();
+            }
+            if mode == 6 {
+                after.entries[0].cca[0] = 2;
+                replay.initial.staged = after.entries[0].clone();
+            }
+            let mut before = before;
+            before.staged = replay.initial.staged.clone();
+            after.staged = replay.initial.staged.clone();
+            replay
+                .write(before.control.state.pc.0, 10, 11, &before, &after)
+                .unwrap();
+            replay.finish(10, 12).unwrap();
+            if mode == 7 {
+                replay.entries[1] = replay.entries[0].clone();
+            }
+            let mut observation = Observation {
+                asid: 7,
+                kernel: true,
+                bits: 32,
+                entries: replay.entries.clone(),
+            };
+            let mut physical = PhysicalAddr(0x6028);
+            match mode {
+                0 => observation.asid = 8,
+                1 => observation.bits = 64,
+                2 => observation.kernel = false,
+                3 => physical.0 += 4,
+                4 => observation.entries[0].physical[0] = 0x8000,
+                _ => {}
+            }
+            assert!(
+                replay
+                    .fetch(
+                        if mode == 8 { 0x80006028 } else { 0x6028 },
+                        physical,
+                        &observation
+                    )
+                    .is_err(),
+                "mode {mode}"
+            );
+        }
+    }
+}

@@ -303,6 +303,17 @@ v0-v16 reports remain exact. Use spike074 and
 `python scripts/test_rsp_definitions.py --epc-target`; general mapping/root/
 mutation/lifetime/native obligations remain OPEN.
 
+Controlled v18 observes TLBWI at the actual selected-slot write/synchronize
+boundary. Before/after CP0 eligibility/staged/table states retain full32-entry
+normalized data; snapshot differences cannot mint generations. Reuse the typed
+`TlbwiGeneration` receipt with original unified ordinals and derived entry hashes.
+Mapped fetches require current raw table/ASID/mode, unique low-region4KiB valid
+CCA3 translation and latest completed selected-slot writer. Invalid overlapping
+matches also cause rejection. Mapping writes do not retire I-cache generations.
+Use spike075 and `python scripts/test_rsp_definitions.py --mapped-root`; all
+v0-v17 report bytes remain exact. Broader mapping/context/census/lifetime/native
+remain OPEN; pinned Gopher/ares synonym-index disagreement stays explicit.
+
 `plaid-rsp-cpu-imem-history-v0` preserves unified decoder/effect ordinals, initial
 and final byte snapshots, and independent CPU step snapshots. Its explicit ares
 profile permits controlled RSP reentry seeds, CPU register/control continuity,

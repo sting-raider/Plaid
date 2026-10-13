@@ -1,5 +1,14 @@
 # Status
 
+Controlled v18 now joins actual TLBWI operations/current raw entries to mapped
+cached BREAK/exception EPC/handler/ERET/returned executable ancestry. Equal write332
+supersedes write325 despite identical tables; both mapped fetches retain332.
+Returned fill397/decoder399 retains separate CPUwriter367/load356/read357/DMEM/
+DMA/RSP parents. TLB writes preserve resident fill292 until guest invalidation.
+The400-event/63-control actual graph agrees independently; all eighteen v0-v17
+reports stay exact. Scope is unique low-region4KiB/CCA3/kernel32 identity-RAM;
+broader mapping/context/census/root/lifetime/whole-ROM/native remain OPEN.
+
 Controlled v17 now joins an actual EPC-read/XORI expression through MTC0 to a
 changed ERET target and its executable ancestry. Read363 -> transform367 ->
 writer372 selects602c; returned fill383/decoder385 retains separate CPUwriter353/

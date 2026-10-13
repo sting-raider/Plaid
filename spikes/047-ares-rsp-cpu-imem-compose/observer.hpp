@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: ISC
  * Original unified chronology of actual decoder and completed SP effects.
  */
+#if PLAID_RSP_DEFINITIONS_FIXTURE >= 18
+#include "../075-tlb-mapped-cache-root-return/tlb.hpp"
+#endif
 struct ComposeEvent {
   const char* kind;
   u64 ordinal,context,pc,value;
@@ -23,6 +26,12 @@ struct ComposeEvent {
   u64 exceptionPc=0,epc=0;
   u32 exceptionCause=0,kernelBits=0;
   bool returnValid=false,epcValid=false,interruptEnable=false,llbit=false;
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 18
+  bool tlbValid=false,mappingValid=false,mappingKernel=false;
+  u32 tlbIndex=0,mappingAsid=0,mappingBits=0;
+  RawTlbEntry staged{};
+  std::vector<RawTlbEntry> entries;
+  #endif
 };
 static std::vector<ComposeEvent> composeEvents;
 static u32 composePhase=0,composeRspContext=0,composeRspPc=0,composeRspWord=0;
@@ -64,6 +73,19 @@ static void compose_return_state(ComposeEvent& e) {
 }
 #endif
 #endif
+#if PLAID_RSP_DEFINITIONS_FIXTURE >= 18
+static void compose_tlb_state(ComposeEvent& e) {
+  compose_return_state(e);e.returnValid=false;e.tlbValid=true;
+  e.tlbIndex=cpu.scc.index.tlbEntry;e.staged=raw_tlb_entry(cpu.scc.tlb);e.entries=raw_tlb_entries();
+}
+static void compose_tlb_write(u32 slot) {
+  if(!composeEnabled) return;
+  if(!composeCpuContext || composeCpuWord!=0x42000002u || composeRspContext || composeFetchContext
+      || slot!=cpu.scc.index.tlbEntry || slot>=32)std::abort();
+  compose_push("tlb_write",composeCpuContext,composeCpuPc,composeCpuWord,slot,0,0,0,0,true);
+  compose_tlb_state(composeEvents.back());
+}
+#endif
 static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
   if(begin) {
     if(composeCpuContext || composeRspContext) std::abort();
@@ -99,6 +121,9 @@ static void compose_cpu_instruction(bool begin,u64 pc,u32 word) {
   if(begin && epcAccess) {
     compose_return_state(composeEvents.back());composeEvents.back().returnValid=false;composeEvents.back().epcValid=true;
   }
+  #endif
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 18
+  if(begin && word==0x42000002u)compose_tlb_state(composeEvents.back());
   #endif
   if(!begin) composeCpuContext=composeCpuPc=composeCpuWord=0;
 }
@@ -248,10 +273,14 @@ static void compose_ram_fetch(bool begin,u64 pc,u32 physical,u32 busAddress,bool
   if(!begin && cached) { auto& line=cpu.icache.line(pc);
     compose_cache_snapshot(event,(pc>>5)&511,line.tagKey,line.index,line.words); }
   #endif
+  #if PLAID_RSP_DEFINITIONS_FIXTURE >= 18
+  if(pc<0x80000000ull) { auto& e=composeEvents.back();e.mappingValid=true;
+    e.mappingAsid=cpu.scc.tlb.addressSpaceID;e.mappingKernel=cpu.context.kernelMode();e.mappingBits=cpu.context.bits;e.entries=raw_tlb_entries(); }
+  #endif
   if(!begin) composeFetchContext=composeFetchPc=0;
 }
 static void compose_ram_scalar(bool write,u32 address,u32 bytes,u32 device,u64 value) {
-  if(address<(PLAID_RSP_DEFINITIONS_FIXTURE>=14?0:0x6000) || address>=(PLAID_RSP_DEFINITIONS_FIXTURE>=14?0x6080:PLAID_RSP_DEFINITIONS_FIXTURE>=13?0x6060:PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030)) return; // Explicit declared RAM snapshot.
+  if(address<(PLAID_RSP_DEFINITIONS_FIXTURE>=14?0:0x6000) || address>=(PLAID_RSP_DEFINITIONS_FIXTURE>=18?0x60a0:PLAID_RSP_DEFINITIONS_FIXTURE>=14?0x6080:PLAID_RSP_DEFINITIONS_FIXTURE>=13?0x6060:PLAID_RSP_DEFINITIONS_FIXTURE>=10?0x6040:0x6030)) return; // Explicit declared RAM snapshot.
   if(write) {
     #if PLAID_RSP_DEFINITIONS_FIXTURE >= 12
     if(composeCpuContext && device==(u32)RBusDevice::VR4300_UNCACHED) {
@@ -340,6 +369,13 @@ static void compose_print() {
       }
       std::printf("}");
     }
+    #if PLAID_RSP_DEFINITIONS_FIXTURE >= 18
+    if(e.tlbValid){std::printf(",\"tlb_state\":{\"control\":{\"state\":");compose_print_exception_state(e);
+      std::printf(",\"interrupt_enable\":%s,\"llbit\":%s},\"index\":%u,\"staged\":",e.interruptEnable?"true":"false",e.llbit?"true":"false",e.tlbIndex);
+      print_tlb_entry(e.staged);std::printf(",\"entries\":");print_tlb_entries(e.entries);std::printf("}");}
+    if(e.mappingValid){std::printf(",\"mapping\":{\"asid\":%u,\"kernel\":%s,\"bits\":%u,\"entries\":",e.mappingAsid,e.mappingKernel?"true":"false",e.mappingBits);
+      print_tlb_entries(e.entries);std::printf("}");}
+    #endif
     if(e.exceptionValid){std::printf(",\"exception_state\":");compose_print_exception_state(e);}
     if(e.epcValid){std::printf(",\"epc_state\":{\"state\":");compose_print_exception_state(e);
       std::printf(",\"interrupt_enable\":%s,\"llbit\":%s}",e.interruptEnable?"true":"false",e.llbit?"true":"false");}

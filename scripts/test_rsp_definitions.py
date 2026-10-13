@@ -32,7 +32,9 @@ def main():
     parser.add_argument('--eret-return',action='store_true')
     parser.add_argument('--guest-epc',action='store_true')
     parser.add_argument('--epc-target',action='store_true')
+    parser.add_argument('--mapped-root',action='store_true')
     args = parser.parse_args()
+    args.epc_target = args.epc_target or args.mapped_root
     args.guest_epc = args.guest_epc or args.epc_target
     args.eret_return = args.eret_return or args.guest_epc
     args.break_root = args.break_root or args.eret_return
@@ -47,7 +49,8 @@ def main():
     dma = args.dma or promoted
     execution = args.execution or dma
     reads = args.word_reads or execution
-    recipe = ('074-epc-transform-target' if args.epc_target else
+    recipe = ('075-tlb-mapped-cache-root-return' if args.mapped_root else
+        '074-epc-transform-target' if args.epc_target else
         '073-guest-epc-return' if args.guest_epc else
         '072-live-epc-handler-return' if args.eret_return else
         '071-writer-break-handler' if args.break_root else
@@ -84,6 +87,7 @@ def main():
         expected['initial_imem'],expected['final_imem'],_ = model.replay_image(events)
     if args.pending:
         expected['initial_pending']=model.INITIAL
+    if args.mapped_root:expected['initial_tlb']=model.TLB_INITIAL
     if args.source:
         assert json.loads(args.source.read_bytes())==expected, 'actual source differs from independent census'
     cargo = shutil.which('cargo') or str(Path.home()/'.cargo/bin/cargo.exe')
@@ -358,9 +362,9 @@ def main():
                 elif mode==8: transfer['context']=transfer['ordinal']
                 elif mode==9:
                     seed=copy.deepcopy(next(e for e in rows if e['kind']=='cpu_reentry'))
-                    end=next(e for e in rows if e['kind']=='cpu_end' and e['context']==338)
-                    seed.update(phase=50,pc=model.ROOT_PC+4,gpr=end['gpr'],word=0)
-                    rows.insert(next(i for i,e in enumerate(rows) if e['kind']=='ram_fetch_begin' and e['context']==340),seed);reclock(rows)
+                    end=next(e for e in rows if e['kind']=='cpu_end' and e['context']==getattr(model,'ROOT_CONTEXT',338))
+                    seed.update(phase=end['phase']+1,pc=model.ROOT_PC+4,gpr=end['gpr'],word=0)
+                    rows.insert(next(i for i,e in enumerate(rows) if e['kind']=='ram_fetch_begin' and e['context']==getattr(model,'ROOT_CONTEXT',338)+2),seed);reclock(rows)
                 else:
                     forged['events']=rows[:rows.index(transfer)+2];forged['steps']=forged['steps'][:-1]
                 run('inspect-rsp-cpu-imem',save(forged),False)
@@ -376,7 +380,7 @@ def main():
                 elif mode==3: rows.insert(rows.index(write),copy.deepcopy(write));reclock(rows)
                 elif mode==4: begin['word'] ^= 0x800 # wrong CP0 register
                 elif mode==5: begin['word'] ^= 0x10000 # wrong source GPR
-                elif mode==6: begin['gpr'][8] &= 0xffffffff # equal low bits, wrong full register
+                elif mode==6: begin['gpr'][8] ^= 1<<32 # equal low bits, wrong full register
                 elif mode==7: begin['epc_state']['state']['epc'] += 4
                 elif mode==8: write['epc_state']['state']['epc'] += 4
                 elif mode==9: read['epc_state']['state']['pc'] += 4
@@ -432,22 +436,47 @@ def main():
         if args.epc_target:
             for mode in range(8):
                 forged=copy.deepcopy(expected);rows=forged['events']
-                transform=next(e for e in rows if e['kind']=='cpu_begin' and e['context']==367)
+                transform=next(e for e in rows if e['kind']=='cpu_begin' and e['context']==getattr(model,'TRANSFORM_CONTEXT',367))
                 write=next(e for e in rows if e['kind']=='epc_write')
                 ret=next(e for e in rows if e['kind']=='cpu_begin' and e['word']==0x42000018)
                 if mode==0: transform['word'] ^= 0x10000 # renamed destination loses held ancestry
                 elif mode==1: transform['word'] ^= 0x20 # different result
-                elif mode==2: transform['gpr'][8] &= 0xffffffff
+                elif mode==2: transform['gpr'][8] ^= 1<<32
                 elif mode==3: write['epc_state']['state']['epc']=0xffffffff80006028
                 elif mode==4: ret['return_state']['state']['epc']=0xffffffff80006028
                 elif mode==5:
                     seed=copy.deepcopy(next(e for e in rows if e['kind']=='cpu_reentry'))
-                    end=next(e for e in rows if e['kind']=='cpu_end' and e['context']==367)
-                    seed.update(phase=56,pc=0xffffffff8000019c,gpr=end['gpr'],word=0)
-                    rows.insert(next(i for i,e in enumerate(rows) if e['kind']=='ram_fetch_begin' and e['context']==369),seed);reclock(rows)
+                    end=next(e for e in rows if e['kind']=='cpu_end' and e['context']==getattr(model,'TRANSFORM_CONTEXT',367))
+                    seed.update(phase=end['phase']+1,pc=0xffffffff8000019c,gpr=end['gpr'],word=0)
+                    rows.insert(next(i for i,e in enumerate(rows) if e['kind']=='ram_fetch_begin' and e['context']==getattr(model,'TRANSFORM_CONTEXT',367)+2),seed);reclock(rows)
                 elif mode==6:
                     forged['format']='plaid-rsp-cpu-imem-history-v16';forged['profile']='ares-9408cb43d4948fc3ea6e152a307a34348df3fe04-guest-epc-return-consumption-v16'
                 else: write['epc_state']['state']['exl']=False
+                run('inspect-rsp-cpu-imem',save(forged),False)
+        if args.mapped_root:
+            for mode in range(18):
+                forged=json.loads(json.dumps(expected));rows=forged['events']
+                writes=[e for e in rows if e['kind']=='tlb_write']
+                begin=next(e for e in rows if e['kind']=='cpu_begin' and e['context']==writes[-1]['context'])
+                fetch=next(e for e in rows if e['kind']=='ram_fetch_begin' and 'mapping' in e)
+                if mode==0: rows.remove(writes[-1]);reclock(rows)
+                elif mode==1: rows.insert(rows.index(writes[-1]),copy.deepcopy(writes[-1]));reclock(rows)
+                elif mode==2: writes[-1]['tlb_state']['entries'][0]['physical'][0]=0x8000
+                elif mode==3: writes[-1]['tlb_state']['entries'][1]=copy.deepcopy(model.STAGED)
+                elif mode==4: begin['tlb_state']['index']=32
+                elif mode==5: begin['tlb_state']['control']['state']['kernel']=False
+                elif mode==6: begin['tlb_state']['control']['state']['exl']=True
+                elif mode==7: fetch['mapping']['asid']=8
+                elif mode==8: fetch['mapping']['entries'][0]['valid'][0]=False
+                elif mode==9: fetch['mapping']['entries'][0]['cca'][0]=2
+                elif mode==10: fetch['fetch']['physical']+=4
+                elif mode==11: forged['initial_tlb']['entries'][0]=copy.deepcopy(model.STAGED)
+                elif mode==12: fetch['mapping']['bits']=64
+                elif mode==13: writes[-1]['context']=writes[-1]['ordinal']
+                elif mode==14: begin['tlb_state']['staged']['page_mask']=0x6000
+                elif mode==15: next(e for e in rows if e['kind']=='ram_fetch_end' and 'mapping' in e).pop('mapping')
+                elif mode==16: begin['word'] ^= 4 # cannot borrow a TLBWR occurrence
+                else: next(e for e in rows if e['kind']=='ram_fetch_end' and not e['fetch']['cached'])['mapping']=copy.deepcopy(fetch['mapping'])
                 run('inspect-rsp-cpu-imem',save(forged),False)
         digest = save(expected)
         for mode in range(4):
@@ -588,7 +617,7 @@ def main():
                 elif mode==3: forged['eret_returns'][0]['epc_write_ordinal']=332
                 elif mode==4: forged['epc_writes'][0]['read_parent']['read_ordinal']=343
                 elif mode==5: forged['epc_reads'][0]['epc_write_ordinal']=363
-                elif mode==6: forged['epc_writes'][0]['value'] &= 0xffffffff
+                elif mode==6: forged['epc_writes'][0]['value'] ^= 1<<32
                 else: forged['epc_writes'][0]['write_ordinal']=332
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
@@ -603,6 +632,21 @@ def main():
                 elif mode==5: forged['eret_returns'][0]['before']['state']['epc']=0xffffffff80006028
                 elif mode==6: forged['dma_consumption']['cached_fetches'][-1]['origins'][0]['write_ordinal']=348
                 else: write['read_parent']['epc_transfer_ordinal']=363
+                output.write_text(json.dumps(forged),encoding='utf-8')
+                run('verify-rsp-cpu-imem',digest,False)
+        if args.mapped_root:
+            for mode in range(9):
+                forged=json.loads(original);graph=forged['dma_consumption']
+                mapped=next(f for f in graph['cached_fetches'] if 'mapping' in f)
+                if mode==0: graph.pop('tlb_generations')
+                elif mode==1: graph['tlb_generations'].pop()
+                elif mode==2: mapped['mapping']['write_ordinal']=325 # equal first write cannot replace second
+                elif mode==3: mapped['mapping']['selected_slot']=1
+                elif mode==4: graph['tlb_generations'][-1]['same_entry_content']=False
+                elif mode==5: graph['tlb_generations'][-1]['write_ordinal']=325
+                elif mode==6: mapped.pop('mapping')
+                elif mode==7: mapped['mapping']['entry']['physical'][0]=0x8000
+                else: graph['tlb_generations'][-1]['staged_entry']['sha256']='0'*64
                 output.write_text(json.dumps(forged),encoding='utf-8')
                 run('verify-rsp-cpu-imem',digest,False)
         if args.cached_cpu:
