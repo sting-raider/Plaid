@@ -148,7 +148,7 @@ struct History {
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
-enum Event {
+pub(crate) enum Event {
     Store64 {
         ordinal: u64,
         context: Box<DcacheStore64Context>,
@@ -417,30 +417,81 @@ fn replay(
         "unsupported D-cache writeback history format",
     )?;
 
-    let mut next_ordinal = 1u64;
-    let mut lines: BTreeMap<u16, ResidentLine> = BTreeMap::new();
-    let mut pending: Option<PendingWriteback> = None;
-    let mut pending_read: Option<(u64, PhysicalAddr, [u8; LINE_BYTES])> = None;
-    let mut receipts = Vec::new();
-    let mut backing_reads = 0usize;
-    let mut fills = 0usize;
-    let mut mutations = 0usize;
-    let mut invalidations = 0usize;
-    let mut retired_unexported = 0usize;
-    let mut backing_words = BTreeMap::<PhysicalAddr, DcacheBackingWord>::new();
-    let mut backing_mutations = 0usize;
-    let mut reads = Vec::new();
-    let mut store64_operations = Vec::new();
-    let mut pending_store: Option<(u64, AresStore64Receipt, usize)> = None;
-    let mut store_ids = std::collections::BTreeSet::new();
-
-    for event in history.events {
-        let ordinal = event.ordinal();
+    let mut state = DcacheReplay::new(with_reads, with_store64);
+    for (index, event) in history.events.into_iter().enumerate() {
         require(
-            ordinal == next_ordinal,
+            event.ordinal() == index as u64 + 1,
             "noncontiguous D-cache writeback event ordinals",
         )?;
-        next_ordinal += 1;
+        state = state.observe(event)?;
+    }
+    state.finish(digest)
+}
+
+/// Shared primitive replay. The caller authenticates the complete source clock.
+/// Standalone histories additionally require contiguous source ordinals. Gaps
+/// here permit foreign global-clock observations, never stale/reused identities.
+#[derive(Default)]
+pub(crate) struct DcacheReplay {
+    with_reads: bool,
+    with_store64: bool,
+    last_ordinal: u64,
+    events: usize,
+    lines: BTreeMap<u16, ResidentLine>,
+    pending: Option<PendingWriteback>,
+    pending_read: Option<(u64, PhysicalAddr, [u8; LINE_BYTES])>,
+    receipts: Vec<DcacheWritebackReceipt>,
+    backing_reads: usize,
+    fills: usize,
+    mutations: usize,
+    invalidations: usize,
+    retired_unexported: usize,
+    backing_words: BTreeMap<PhysicalAddr, DcacheBackingWord>,
+    backing_mutations: usize,
+    reads: Vec<DcacheResidentReadReceipt>,
+    store64_operations: Vec<DcacheStore64Operation>,
+    pending_store: Option<(u64, AresStore64Receipt, usize)>,
+    store_ids: std::collections::BTreeSet<String>,
+}
+
+impl DcacheReplay {
+    pub(crate) fn new(with_reads: bool, with_store64: bool) -> Self {
+        Self {
+            with_reads,
+            with_store64,
+            ..Self::default()
+        }
+    }
+    /// Ownership is consumed on rejection, so a failed transition cannot be
+    /// retried against partially mutated resident state.
+    pub(crate) fn observe(self, event: Event) -> Result<Self, String> {
+        let Self {
+            with_reads,
+            with_store64,
+            last_ordinal,
+            mut events,
+            mut lines,
+            mut pending,
+            mut pending_read,
+            mut receipts,
+            mut backing_reads,
+            mut fills,
+            mut mutations,
+            mut invalidations,
+            mut retired_unexported,
+            mut backing_words,
+            mut backing_mutations,
+            mut reads,
+            mut store64_operations,
+            mut pending_store,
+            mut store_ids,
+        } = self;
+        let ordinal = event.ordinal();
+        require(
+            ordinal > last_ordinal,
+            "nonincreasing D-cache primitive event ordinal",
+        )?;
+        events += 1;
         if pending_read.is_some() && !matches!(&event, Event::Fill { .. }) {
             return Err("backing read was not immediately consumed by a fill".into());
         }
@@ -844,58 +895,101 @@ fn replay(
                 invalidations += 1;
             }
         }
-    }
-
-    require(
-        pending_read.is_none(),
-        "source ended after unmatched backing read",
-    )?;
-    require(
-        pending.is_none(),
-        "source ended during active D-cache writeback",
-    )?;
-    require(
-        pending_store.is_none(),
-        "source ended during an incomplete store64 operation",
-    )?;
-
-    Ok(DcacheResidentReadReport {
-        format: if with_store64 {
-            "plaid-dcache-store64-writeback-report-v2"
-        } else {
-            "plaid-dcache-resident-read-report-v1"
-        }
-        .into(),
-        observed_backing_word_mutations: backing_mutations,
-        reads,
-        cpu_operand_dataflow_certified: false,
-        pointer_table_immutability_certified: false,
-        executable_target_identity_certified: false,
-        store64_operations: with_store64.then_some(store64_operations),
-        writeback: DcacheWritebackReport {
-            format: REPORT_FORMAT.into(),
-            scope: if with_store64 {
-                "finite_prefilled_direct_kseg0_kernel32_bev1_store64_writeback"
-            } else {
-                SCOPE
-            }
-            .into(),
-            source_sha256: digest,
-            events: (next_ordinal - 1) as usize,
+        Ok(Self {
+            with_reads,
+            with_store64,
+            last_ordinal: ordinal,
+            events,
+            lines,
+            pending,
+            pending_read,
+            receipts,
             backing_reads,
             fills,
-            resident_word_mutations: mutations,
+            mutations,
             invalidations,
-            retired_unexported_mutations: retired_unexported,
-            successful_backing_writebacks: receipts.len(),
+            retired_unexported,
+            backing_words,
+            backing_mutations,
+            reads,
+            store64_operations,
+            pending_store,
+            store_ids,
+        })
+    }
+    pub(crate) fn finish(self, digest: String) -> Result<DcacheResidentReadReport, String> {
+        let Self {
+            with_reads: _,
+            with_store64,
+            last_ordinal: _,
+            events,
+            lines: _,
+            pending,
+            pending_read,
             receipts,
-            sensor_coverage_certified: false,
-            cache_semantics_complete: false,
-            tlb_cacheability_certified: false,
-            executable_lifetime_certified: false,
-            native_complete: false,
-        },
-    })
+            backing_reads,
+            fills,
+            mutations,
+            invalidations,
+            retired_unexported,
+            backing_words: _,
+            backing_mutations,
+            reads,
+            store64_operations,
+            pending_store,
+            store_ids: _,
+        } = self;
+        require(
+            pending_read.is_none(),
+            "source ended after unmatched backing read",
+        )?;
+        require(
+            pending.is_none(),
+            "source ended during active D-cache writeback",
+        )?;
+        require(
+            pending_store.is_none(),
+            "source ended during an incomplete store64 operation",
+        )?;
+
+        Ok(DcacheResidentReadReport {
+            format: if with_store64 {
+                "plaid-dcache-store64-writeback-report-v2"
+            } else {
+                "plaid-dcache-resident-read-report-v1"
+            }
+            .into(),
+            observed_backing_word_mutations: backing_mutations,
+            reads,
+            cpu_operand_dataflow_certified: false,
+            pointer_table_immutability_certified: false,
+            executable_target_identity_certified: false,
+            store64_operations: with_store64.then_some(store64_operations),
+            writeback: DcacheWritebackReport {
+                format: REPORT_FORMAT.into(),
+                scope: if with_store64 {
+                    "finite_prefilled_direct_kseg0_kernel32_bev1_store64_writeback"
+                } else {
+                    SCOPE
+                }
+                .into(),
+                source_sha256: digest,
+                events,
+                backing_reads,
+                fills,
+                resident_word_mutations: mutations,
+                invalidations,
+                retired_unexported_mutations: retired_unexported,
+                successful_backing_writebacks: receipts.len(),
+                receipts,
+                sensor_coverage_certified: false,
+                cache_semantics_complete: false,
+                tlb_cacheability_certified: false,
+                executable_lifetime_certified: false,
+                native_complete: false,
+            },
+        })
+    }
 }
 
 pub fn verify_dcache_writeback_report(
@@ -907,4 +1001,126 @@ pub fn verify_dcache_writeback_report(
         *report == inspect_dcache_writeback_history(source, expected_sha256)?,
         "D-cache writeback report does not match complete source/receipt",
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn resident() -> DcacheReplay {
+        DcacheReplay::new(true, false)
+            .observe(Event::BackingRead {
+                ordinal: 10,
+                physical_line: PhysicalAddr(0x2000),
+                payload: [17; LINE_BYTES],
+            })
+            .unwrap()
+            .observe(Event::Fill {
+                ordinal: 11,
+                slot: 0,
+                physical_line: PhysicalAddr(0x2000),
+                payload: [17; LINE_BYTES],
+            })
+            .unwrap()
+    }
+    fn read(ordinal: u64) -> Event {
+        Event::CachedWordRead {
+            ordinal,
+            pc: GuestVirtualAddr(0xffffffffa0006000),
+            effective_virtual: GuestVirtualAddr(0xffffffff80002000),
+            physical: PhysicalAddr(0x2000),
+            slot: 0,
+            payload: [17; 4],
+        }
+    }
+    #[test]
+    fn shared_clock_gaps_preserve_resident_parents_and_event_count() {
+        let report = resident()
+            .observe(read(20))
+            .unwrap()
+            .observe(Event::BackingWordMutation {
+                ordinal: 30,
+                physical: PhysicalAddr(0x2000),
+                payload: [34; 4],
+            })
+            .unwrap()
+            .observe(read(40))
+            .unwrap()
+            .finish("0".repeat(64))
+            .unwrap();
+        assert_eq!(report.writeback.events, 5);
+        assert_eq!(report.reads[0].read_ordinal, 20);
+        assert_eq!(report.reads[1].read_ordinal, 40);
+        assert_eq!(report.reads[0].origins, report.reads[1].origins);
+        assert_eq!(report.reads[1].resident_generation, 11);
+        assert!(report.reads[1].origins.iter().all(|origin| matches!(
+            origin,
+            DcacheByteOrigin::BackingFill {
+                backing_read_ordinal: 10,
+                fill_ordinal: 11,
+                ..
+            }
+        )));
+        assert_eq!(
+            report.reads[1]
+                .current_captured_backing
+                .as_ref()
+                .unwrap()
+                .write_ordinal,
+            30
+        );
+        assert_eq!(
+            report.reads[1]
+                .current_captured_backing
+                .as_ref()
+                .unwrap()
+                .payload,
+            [34; 4]
+        );
+        assert!(!report.writeback.sensor_coverage_certified);
+        assert!(!report.cpu_operand_dataflow_certified);
+    }
+    #[test]
+    fn shared_clock_rejects_stale_identities_and_nonadjacent_fill_sources() {
+        for ordinal in [0, 9, 10, 11] {
+            assert!(resident().observe(read(ordinal)).is_err());
+        }
+        assert!(
+            resident()
+                .observe(read(20))
+                .unwrap()
+                .observe(read(20))
+                .is_err()
+        );
+        let pending = || {
+            DcacheReplay::new(true, false)
+                .observe(Event::BackingRead {
+                    ordinal: 10,
+                    physical_line: PhysicalAddr(0x2000),
+                    payload: [17; LINE_BYTES],
+                })
+                .unwrap()
+        };
+        assert!(
+            pending()
+                .observe(Event::Fill {
+                    ordinal: 12,
+                    slot: 0,
+                    physical_line: PhysicalAddr(0x2000),
+                    payload: [17; LINE_BYTES],
+                })
+                .is_err()
+        );
+        assert!(pending().finish("0".repeat(64)).is_err());
+    }
+    #[test]
+    fn standalone_source_cannot_use_shared_clock_gaps() {
+        let source = serde_json::to_vec(&json!({"format":READ_FORMAT,"events":[
+            {"record":"backing_read","ordinal":10,"physical_line":0x2000,"payload":([17;16])},
+            {"record":"fill","ordinal":11,"physical_line":0x2000,"slot":0,"payload":([17;16])}
+        ]}))
+        .unwrap();
+        assert!(inspect_dcache_resident_read_history(&source, &sha256(&source)).is_err());
+    }
 }
