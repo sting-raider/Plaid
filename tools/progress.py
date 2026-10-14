@@ -6,23 +6,13 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import textwrap
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "docs" / "progress.json"
 SVG = ROOT / "docs" / "progress.svg"
 DETAILS = ROOT / "docs" / "PROGRESS.md"
-
-COLORS = {
-    "background": "#0d1117",
-    "panel": "#161b22",
-    "border": "#30363d",
-    "text": "#f0f6fc",
-    "muted": "#8b949e",
-    "verified": "#2ea043",
-    "partial": "#d29922",
-    "open": "#6e7681",
-}
 
 STATE_LABEL = {
     "verified": "verified",
@@ -54,85 +44,90 @@ def esc(value: object) -> str:
 
 
 def render_svg(data: dict) -> str:
-    width = 1100
-    height = 150 + len(data["areas"]) * 70
-    label_x = 24
-    bar_x = 270
-    bar_width = width - bar_x - 30
-    bar_height = 28
-
+    width = 1200
+    card_width = 548
+    row_heights = [
+        132 + 26 * max(len(a["milestones"]) for a in data["areas"][i:i + 2])
+        for i in range(0, len(data["areas"]), 2)
+    ]
+    height = 304 + sum(h + 24 for h in row_heights) + 72
     out = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
         f'width="{width}" height="{height}" role="img" aria-labelledby="title desc">',
-        '<title id="title">Plaid progress map</title>',
-        '<desc id="desc">Verified, partial and open milestones for Plaid subsystems.</desc>',
-        f'<rect width="{width}" height="{height}" rx="12" fill="{COLORS["background"]}"/>',
-        f'<text x="24" y="34" fill="{COLORS["text"]}" font-family="ui-sans-serif,system-ui,sans-serif" '
-        'font-size="22" font-weight="700">Plaid progress map</text>',
-        f'<text x="24" y="57" fill="{COLORS["muted"]}" font-family="ui-sans-serif,system-ui,sans-serif" '
-        f'font-size="12">Auditable milestone counts · updated {esc(data.get("updated", "unknown"))}</text>',
+        '<title id="title">Plaid engineering progress atlas</title>',
+        '<desc id="desc">Detailed integrated, partial and open milestones. '
+        'Retained finite evidence does not establish whole-ROM closure or native completion.</desc>',
+        '<defs><linearGradient id="header" x2="1" y2="1">'
+        '<stop stop-color="#123247"/><stop offset="1" stop-color="#111a2b"/>'
+        '</linearGradient></defs>',
+        f'<rect width="{width}" height="{height}" rx="18" fill="#0b1320"/>',
+        '<rect width="1200" height="250" rx="18" fill="url(#header)"/>',
     ]
 
-    x = 24
-    for state, label in (
-        ("verified", "verified / integrated"),
-        ("partial", "partial / bounded"),
-        ("open", "open"),
-    ):
-        out.append(f'<rect x="{x}" y="74" width="14" height="14" rx="3" fill="{COLORS[state]}"/>')
+    def text(x, y, value, size=14, color="#a9b8ca", weight=400, anchor="start"):
         out.append(
-            f'<text x="{x + 20}" y="86" fill="{COLORS["muted"]}" '
-            f'font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">{esc(label)}</text>'
-        )
-        x += 188 if state == "verified" else 154
-
-    for index, area in enumerate(data["areas"]):
-        y = 112 + index * 70
-        milestones = area["milestones"]
-        counts = {state: 0 for state in STATE_LABEL}
-        for milestone in milestones:
-            counts[milestone["state"]] += 1
-        total = len(milestones)
-
-        out.append(
-            f'<text x="{label_x}" y="{y + 16}" fill="{COLORS["text"]}" '
-            'font-family="ui-sans-serif,system-ui,sans-serif" font-size="14" font-weight="650">'
-            f'{esc(area["name"])}</text>'
-        )
-        out.append(
-            f'<text x="{label_x}" y="{y + 36}" fill="{COLORS["muted"]}" '
-            'font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">'
-            f'{counts["verified"]} verified · {counts["partial"]} partial · {counts["open"]} open</text>'
-        )
-        out.append(
-            f'<rect x="{bar_x}" y="{y}" width="{bar_width}" height="{bar_height}" rx="5" '
-            f'fill="{COLORS["panel"]}" stroke="{COLORS["border"]}"/>'
+            f'<text x="{x}" y="{y}" fill="{color}" font-family="Segoe UI,Arial,sans-serif" '
+            f'font-size="{size}" font-weight="{weight}" text-anchor="{anchor}">{esc(value)}</text>'
         )
 
-        cursor = bar_x
-        for state in ("verified", "partial", "open"):
-            count = counts[state]
-            if not count:
-                continue
-            segment = bar_width * count / total
-            out.append(
-                f'<rect x="{cursor:.2f}" y="{y}" width="{segment:.2f}" height="{bar_height}" '
-                f'fill="{COLORS[state]}"><title>{esc(area["name"])}: {count}/{total} {state}</title></rect>'
-            )
-            if segment >= 58:
-                out.append(
-                    f'<text x="{cursor + segment / 2:.2f}" y="{y + 19}" fill="{COLORS["text"]}" '
-                    'text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" '
-                    f'font-size="11" font-weight="650">{count}/{total}</text>'
-                )
-            cursor += segment
+    def rect(x, y, w, h, fill, radius=0, stroke="none"):
+        out.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" '
+                   f'rx="{radius}" fill="{fill}" stroke="{stroke}"/>')
 
-    out.append(
-        f'<text x="24" y="{height - 20}" fill="{COLORS["muted"]}" '
-        'font-family="ui-sans-serif,system-ui,sans-serif" font-size="11">'
-        'Milestone maturity, not overall project completion. '
-        'native_complete remains false until required closure obligations are proven.</text>'
-    )
+    palette = {"verified": "#58d5ab", "partial": "#ffc66d", "open": "#a9b8ca"}
+    labels = {"verified": "DONE", "partial": "PARTIAL", "open": "OPEN"}
+    text(40, 38, "PLAID  /  ENGINEERING ATLAS", 13, "#78dcca", 700)
+    text(1160, 38, f'Reviewed {data.get("updated", "unknown")}', 13, anchor="end")
+    text(40, 84, "The path from ROM to native gameplay", 32, "#f4f7fc", 700)
+    text(40, 111, "Current frontier: executable provenance + closed-world proof", 16)
+    for i, evidence in enumerate(data.get("evidence", [])):
+        x = 40 + i * 286
+        rect(x, 136, 262, 96, "#152538", 10, "#294052")
+        text(x + 18, 171, evidence["value"], 27, "#f4f7fc", 700)
+        text(x + 18, 194, evidence["label"], 13, "#d7e4f3", 600)
+        text(x + 18, 214, evidence["detail"], 11)
+    for x, state, label in [(40, "verified", "DONE · integrated bounded milestone"),
+                            (410, "partial", "PARTIAL · proof / coverage remains"),
+                            (790, "open", "OPEN · not yet demonstrated")]:
+        rect(x, 265, 9, 9, palette[state], 2)
+        text(x + 17, 274, label, 12)
+
+    y = 304
+    for row, row_height in enumerate(row_heights):
+        for col, area in enumerate(data["areas"][row * 2:row * 2 + 2]):
+            x = 40 + col * (card_width + 24)
+            counts = {state: sum(m["state"] == state for m in area["milestones"])
+                      for state in STATE_LABEL}
+            rect(x, y, card_width, row_height, "#111e2f", 12, "#2a3b4f")
+            text(x + 20, y + 30, f'{row * 2 + col + 1:02d}', 13, "#78dcca", 700)
+            text(x + 54, y + 31, area["name"], 20, "#f4f7fc", 700)
+            text(x + 20, y + 56,
+                 f'{counts["verified"]} integrated   /   {counts["partial"]} partial   /   {counts["open"]} open', 12)
+            cursor = x + 20
+            for state in STATE_LABEL:
+                segment = (card_width - 40) * counts[state] / len(area["milestones"])
+                if segment:
+                    rect(cursor, y + 70, segment, 4, palette[state])
+                cursor += segment
+            for i, milestone in enumerate(area["milestones"]):
+                line_y = y + 99 + i * 26
+                state = milestone["state"]
+                out.append('<g class="milestone">')
+                out.append(f'<title>{esc(area["name"])}: {esc(milestone["name"])} '
+                           f'({STATE_LABEL[state]})</title>')
+                text(x + 20, line_y, "✓" if state == "verified" else "◐" if state == "partial" else "○",
+                     15, palette[state], 700)
+                text(x + 43, line_y, milestone["name"], 14, "#d7e4f3")
+                text(x + card_width - 20, line_y, labels[state], 10, palette[state], 700, "end")
+                out.append('</g>')
+            footer_y = y + row_height - 44
+            text(x + 20, footer_y, "REMAINING", 10, "#ffc66d", 700)
+            for i, line in enumerate(textwrap.wrap(area.get("remaining", ""), width=75)):
+                text(x + 20, footer_y + 18 + i * 16, line, 12)
+        y += row_height + 24
+    text(40, y + 14, "Evidence is finite. Milestones have different scope; these counts are not a completion percentage.", 13)
+    text(40, y + 38, "FIRST COMMERCIAL CLOSED SCOPE: OPEN     /     WHOLE-ROM CLOSURE: OPEN     /     native_complete: false",
+         13, "#ffc66d", 600)
     out.append("</svg>")
     return "\n".join(out) + "\n"
 
@@ -161,13 +156,18 @@ def render_details(data: dict) -> str:
         f"Last progress-data update: **{data.get('updated', 'unknown')}**.",
         "",
     ]
+    lines += ["## Retained evidence", "", "| Evidence | Observed scope | Source |", "| --- | --- | --- |"]
+    for evidence in data.get("evidence", []):
+        source = "../" + evidence["source"] if evidence["source"].startswith("research/") else Path(evidence["source"]).name
+        lines.append(f"| **{evidence['value']}** {evidence['label']} | {evidence['detail']} | [Receipt / status]({source}) |")
+    lines += ["", "These are finite observations, not exhaustive execution coverage or a CLOSED certificate.", ""]
     for area in data["areas"]:
         lines += [f"## {area['name']}", "", "| Milestone | State |", "| --- | --- |"]
         for milestone in area["milestones"]:
             lines.append(
                 f"| {milestone['name']} | {icon(milestone['state'])} {STATE_LABEL[milestone['state']]} |"
             )
-        lines.append("")
+        lines += ["", f"**Remaining:** {area.get('remaining', '')}", ""]
     lines += [
         "## Interpretation",
         "",
