@@ -1,5 +1,12 @@
 # Status
 
+Raw v7 now connects PI/RAM/IMEM parents at an exact Word read to a separately
+performed RSP instruction occurrence. Logical PC, masked offset and read identity
+stay distinct; unused lookahead creates no execution root. The222-event/28-control
+reference graph retains32 reads/24 instructions, including guest JR low bits and
+a paired instruction after HALT. Unknown roots and all broad proof flags remain
+OPEN/false; old source paths and the early100k legacy body stay exact.
+
 Raw history v6 now cuts SP ancestry at actual lower DMEM storage effects,
 including equal RSP Byte lanes, through the shared writer state. IMEM remains
 independent; lower DMA effects preserve frozen source-read/install association.

@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 
 
-def generate(ref,out,sp_backing=False,word_reads=False,dma_lifecycle=False,dma_pending=False):
+def generate(ref,out,sp_backing=False,word_reads=False,dma_lifecycle=False,dma_pending=False,instruction_fetches=False):
     assert not dma_pending or dma_lifecycle
     ref,out=Path(ref),Path(out)
     destination=out/'include/n64/rsp/rsp.hpp'
@@ -17,6 +17,12 @@ inline PlaidRspDmemObserver plaidRspDmemObserver = nullptr;
     if word_reads:
         declarations += '''using PlaidRspWordReadObserver = void (*)(u32,u32);
 inline PlaidRspWordReadObserver plaidRspWordReadObserver = nullptr;
+'''
+    if instruction_fetches:
+        declarations += '''using PlaidRspImemReadObserver = u64 (*)(u32,u32,u32);
+using PlaidRspInstructionFetchObserver = void (*)(bool,u32,u64,u32,u32,bool);
+inline PlaidRspImemReadObserver plaidRspImemReadObserver = nullptr;
+inline PlaidRspInstructionFetchObserver plaidRspInstructionFetchObserver = nullptr;
 '''
     if dma_lifecycle:
         declarations += '''using PlaidRspDmaLifecycleObserver = void (*)(bool,u32,bool,u32,u32,u32,u32,u32);
@@ -50,6 +56,35 @@ inline PlaidRspDmaPendingObserver plaidRspDmaPendingObserver = nullptr;
     rsp=rsp.replace(marker,'''  auto plaidResult=instructionBranchEpilogue();
   if(plaidRspInstructionObserver) plaidRspInstructionObserver(false,pipeline.address,pipeline.instruction,ipu.pc,status.halted);
   return plaidResult;''')
+    if instruction_fetches:
+        first='''    u32 instruction = imem.read<Word>(ipu.pc);
+    instructionPrologue(instruction);'''
+        assert rsp.count(first)==1
+        rsp=rsp.replace(first,'''    u32 plaidInstructionPc = ipu.pc;
+    u32 instruction = imem.read<Word>(plaidInstructionPc);
+    u64 plaidInstructionRead = plaidRspImemReadObserver ? plaidRspImemReadObserver(plaidInstructionPc,plaidInstructionPc & imem.maskWord,instruction) : 0;
+    u32 plaidInstructionWord = instruction;
+    instructionPrologue(instruction);
+    if(plaidRspInstructionFetchObserver) plaidRspInstructionFetchObserver(true,plaidInstructionPc,plaidInstructionRead,instruction,ipu.pc,status.halted);''')
+        second='''      u32 instruction = imem.read<Word>(ipu.pc + 4);'''
+        assert rsp.count(second)==1
+        rsp=rsp.replace(second,'''      u32 plaidNextReadAddress = ipu.pc + 4;
+      u32 instruction = imem.read<Word>(plaidNextReadAddress);
+      u64 plaidNextRead = plaidRspImemReadObserver ? plaidRspImemReadObserver(plaidNextReadAddress,plaidNextReadAddress & imem.maskWord,instruction) : 0;''')
+        paired='''        instructionEpilogue<0>(0);
+        instructionPrologue(instruction);'''
+        assert rsp.count(paired)==1
+        rsp=rsp.replace(paired,'''        instructionEpilogue<0>(0);
+        if(plaidRspInstructionFetchObserver) plaidRspInstructionFetchObserver(false,plaidInstructionPc,plaidInstructionRead,plaidInstructionWord,ipu.pc,status.halted);
+        plaidInstructionPc = ipu.pc;
+        plaidInstructionRead = plaidNextRead;
+        plaidInstructionWord = instruction;
+        instructionPrologue(instruction);
+        if(plaidRspInstructionFetchObserver) plaidRspInstructionFetchObserver(true,plaidInstructionPc,plaidInstructionRead,instruction,ipu.pc,status.halted);''')
+        final='''    pipeline.end();
+    instructionEpilogue<0>(0);'''
+        assert rsp.count(final)==1
+        rsp=rsp.replace(final,final+'''\n    if(plaidRspInstructionFetchObserver) plaidRspInstructionFetchObserver(false,plaidInstructionPc,plaidInstructionRead,plaidInstructionWord,ipu.pc,status.halted);''')
     if word_reads:
         ipu=(ref/'ares/n64/rsp/interpreter-ipu.cpp').read_text(encoding='utf-8')
         marker='''auto RSP::LW(r32& rt, cr32& rs, s16 imm) -> void {

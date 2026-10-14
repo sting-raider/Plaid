@@ -30,11 +30,12 @@ def inspect(history_path, fetch_path, source):
     history = rows(history_path, history_hash)
     fetched = rows(fetch_path, fetch_hash)
     header, paired_header = next(history), next(fetched)
-    assert header['format'] in ('plaid-ares-access-history-v2', 'plaid-ares-access-history-v3', 'plaid-ares-access-history-v5','plaid-ares-access-history-v6')
-    dmem_storage = header['format'] == 'plaid-ares-access-history-v6'
-    storage_clock = header['format'] in ('plaid-ares-access-history-v5','plaid-ares-access-history-v6')
+    assert header['format'] in ('plaid-ares-access-history-v2', 'plaid-ares-access-history-v3', 'plaid-ares-access-history-v5','plaid-ares-access-history-v6','plaid-ares-access-history-v7')
+    rsp_execution = header['format'] == 'plaid-ares-access-history-v7'
+    dmem_storage = header['format'] in ('plaid-ares-access-history-v6','plaid-ares-access-history-v7')
+    storage_clock = header['format'] in ('plaid-ares-access-history-v5','plaid-ares-access-history-v6','plaid-ares-access-history-v7')
     if storage_clock:
-        assert header['policy'] == ('observed_ordinary_storage_and_dmem_mutations_with_pi_queue_sp_backing' if dmem_storage else 'observed_ordinary_storage_mutations_and_pi_queue_sp_backing')
+        assert header['policy'] == ('observed_storage_dmem_and_performed_rsp_instructions_with_pi_queue_sp_backing' if rsp_execution else 'observed_ordinary_storage_and_dmem_mutations_with_pi_queue_sp_backing' if dmem_storage else 'observed_ordinary_storage_mutations_and_pi_queue_sp_backing')
     if header['format'] == 'plaid-ares-access-history-v3':
         assert header['policy'] == 'identity_ram_pi_queue_and_observed_sp_backing'
     assert header['lifecycle_policy'] == 'single_run_no_host_restore'
@@ -49,6 +50,8 @@ def inspect(history_path, fetch_path, source):
     digest = hashlib.sha256()
     count = full = partial = byte_count = words = contradictions = ordinal = 0
     ended = False
+    rsp_active=None; rsp_reads={}; rsp_samples={}; rsp_digest=hashlib.sha256()
+    rsp_count=rsp_full=rsp_partial=0
 
     def backing(address, values):
         nonlocal contradictions
@@ -71,11 +74,19 @@ def inspect(history_path, fetch_path, source):
                 kind=dict(kind='dma_sink',dram=dram,read_ordinal=read))
         return result
 
+    def sp_read(bank,offset,word):
+        parents=[]
+        for n,value in enumerate(word.to_bytes(4,'big')):
+            address=bank*4096+offset+n
+            if address in sp_memory and sp_memory[address][0]!=value:sp_memory.pop(address)
+            parents.append(sp_memory.get(address,(0,None))[1])
+        return parents
+
     for e in history:
         assert not ended
         kind = e['record']
         if kind == 'end':
-            assert e['record_count'] == ordinal and e['fetch_count'] == count
+            assert e['record_count'] == ordinal and e['fetch_count'] == count and rsp_active is None
             ended = True
             continue
         ordinal += 1
@@ -83,7 +94,48 @@ def inspect(history_path, fetch_path, source):
         if kind not in ('storage_effect','sp_dma_store','rsp_dmem_effect') and not \
             (kind=='scalar' and not e['write'] and e['device']==4):
             sp_receipts=[]
-        if kind == 'rsp_dmem_effect':
+        if kind not in ('rsp_instruction','rsp_imem_read','rsp_dmem_effect','sp_word','sp_dma_store','storage_effect') and rsp_active is None:
+            rsp_reads.clear()
+        if kind == 'rsp_imem_read':
+            assert rsp_execution and active is None
+            assert 0 <= e['address'] <= 4099 and e['offset']==e['address']&0xffc
+            if rsp_active is None:
+                assert e['address']<4096
+                rsp_reads.clear();logical=e['address']
+            else:
+                assert not rsp_reads and e['address']==rsp_active[0]['rsp_pc']+4
+                logical=None
+            rsp_reads[e['ordinal']]=(e,sp_read(1,e['offset'],e['word']),logical)
+        elif kind == 'rsp_instruction':
+            assert rsp_execution and active is None
+            assert 0 <= e['rsp_pc'] < 4096 and 0 <= e['next_pc'] < 4096
+            if e['begin']:
+                assert rsp_active is None and e['next_pc']==e['rsp_pc']
+                read,parents,logical=rsp_reads.pop(e['read_ordinal'])
+                assert (read['pc'],read['word'],logical)==(e['pc'],e['word'],e['rsp_pc'])
+                rsp_active=(e,read,parents)
+            else:
+                assert rsp_active is not None
+                begin,read,parents=rsp_active;rsp_active=None
+                assert all(begin[k]==e[k] for k in ('pc','rsp_pc','word','read_ordinal'))
+                for identity,(pending,values,_) in list(rsp_reads.items()):rsp_reads[identity]=(pending,values,e['next_pc'])
+                known=sum(o is not None for o in parents)
+                rsp_count+=1;rsp_full+=known==4;rsp_partial+=0<known<4
+                wire=[None if o is None else origin_wire(o) for o in parents]
+                occurrence=dict(read_ordinal=read['ordinal'],begin_ordinal=begin['ordinal'],end_ordinal=e['ordinal'],
+                    rsp_pc=e['rsp_pc'],read_address=read['address'],fetch_offset=read['offset'],
+                    word=e['word'],next_pc=e['next_pc'],begin_halted=begin['halted'],halted=e['halted'],bytes=wire)
+                rsp_digest.update((json.dumps(occurrence,separators=(',',':'))+'\n').encode())
+                key=(e['rsp_pc'],read['address'],read['offset'],e['word'],e['next_pc'],begin['halted'],e['halted'],
+                    tuple((-1,-1,-1,(-1,-1,-1,-1)) if o is None else o for o in parents))
+                if key not in rsp_samples:
+                    rsp_samples[key]=dict(rsp_pc=e['rsp_pc'],read_address=read['address'],fetch_offset=read['offset'],
+                        word=e['word'],next_pc=e['next_pc'],begin_halted=begin['halted'],halted=e['halted'],bytes=wire,
+                        first_read_ordinal=read['ordinal'],first_begin_ordinal=begin['ordinal'],first_end_ordinal=e['ordinal'],
+                        last_begin_ordinal=begin['ordinal'],last_read_ordinal=read['ordinal'],last_end_ordinal=e['ordinal'],observations=0)
+                rsp_samples[key].update(last_begin_ordinal=begin['ordinal'],last_read_ordinal=read['ordinal'],last_end_ordinal=e['ordinal'])
+                rsp_samples[key]['observations']+=1
+        elif kind == 'rsp_dmem_effect':
             assert dmem_storage and active is None
             assert e['bytes'] in (1,2,4,8) and e['offset'] % e['bytes']==0
             assert 0 <= e['offset'] <= 4096-e['bytes'] and 0 <= e['value'] < 1<<(8*e['bytes'])
@@ -192,7 +244,9 @@ def inspect(history_path, fetch_path, source):
                 parents.append(sp_memory.get(address,(0,None))[1])
             if not e['write'] and e['cpu'] and active is not None and e['address']==active_bus:
                 active.append(dict(e,sp_origins=parents))
-        elif kind == 'fetch_begin': active,active_bus=[],e['bus']
+        elif kind == 'fetch_begin':
+            assert rsp_active is None
+            active,active_bus=[],e['bus']
         elif kind == 'fetch_end': pending, active = active, None
         elif kind == 'fetch':
             p = next(fetched)
@@ -244,6 +298,10 @@ def inspect(history_path, fetch_path, source):
         single_transfer_word_fetches=words,contradicted_backing_bytes=contradictions,
         samples=[samples[k] for k in sorted(samples)],ordered_fetch_chains_sha256=digest.hexdigest(),
         mutation_coverage_certified=False,executable_lifetime_certified=False,native_complete=False)
+    if rsp_count:
+        result['rsp_consumption']=dict(instructions=rsp_count,fully_attributed_instructions=rsp_full,
+            partially_attributed_instructions=rsp_partial,unattributed_instructions=rsp_count-rsp_full-rsp_partial,
+            samples=[rsp_samples[k] for k in sorted(rsp_samples)],ordered_instruction_chains_sha256=rsp_digest.hexdigest())
     return result, history_hash.hexdigest(), fetch_hash.hexdigest()
 
 
@@ -259,7 +317,7 @@ def main():
     rust = json.loads(args.rust_report.read_text(encoding='utf-8'),object_pairs_hook=unique)
     assert history_hash == rust['projection']['history_sha256']
     projection = rust['projection']
-    if rust['format'] in ('plaid-sp-pi-fetch-lineage-report-v0','plaid-sp-pi-fetch-lineage-report-v1'):
+    if rust['format'] in ('plaid-sp-pi-fetch-lineage-report-v0','plaid-sp-pi-fetch-lineage-report-v1','plaid-sp-pi-fetch-lineage-report-v2'):
         projection = projection['projection']
     assert fetch_hash == projection['projection']['projection']['fetch_sha256']
     for key,value in result.items(): assert rust[key] == value,key

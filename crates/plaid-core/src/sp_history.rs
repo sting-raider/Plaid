@@ -15,6 +15,9 @@ pub const STORAGE_POLICY: &str = "observed_ordinary_storage_mutations_and_pi_que
 pub const DMEM_STORAGE_FORMAT: &str = "plaid-ares-access-history-v6";
 pub const DMEM_STORAGE_POLICY: &str =
     "observed_ordinary_storage_and_dmem_mutations_with_pi_queue_sp_backing";
+pub const RSP_EXECUTION_FORMAT: &str = "plaid-ares-access-history-v7";
+pub const RSP_EXECUTION_POLICY: &str =
+    "observed_storage_dmem_and_performed_rsp_instructions_with_pi_queue_sp_backing";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -266,6 +269,25 @@ impl StorageRecord {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum SpRecord {
+    RspImemRead {
+        ordinal: u64,
+        context: u64,
+        pc: GuestVirtualAddr,
+        address: u32,
+        offset: u32,
+        word: u32,
+    },
+    RspInstruction {
+        ordinal: u64,
+        context: u64,
+        pc: GuestVirtualAddr,
+        begin: bool,
+        rsp_pc: u32,
+        read_ordinal: u64,
+        word: u32,
+        next_pc: u32,
+        halted: bool,
+    },
     RspDmemEffect {
         ordinal: u64,
         context: u64,
@@ -312,6 +334,18 @@ impl Wire {
     }
     pub(crate) fn identity(&self) -> Option<(u64, u64, GuestVirtualAddr, &'static str)> {
         match self {
+            Self::Sp(SpRecord::RspImemRead {
+                ordinal,
+                context,
+                pc,
+                ..
+            }) => Some((*ordinal, *context, *pc, "rsp_imem_read")),
+            Self::Sp(SpRecord::RspInstruction {
+                ordinal,
+                context,
+                pc,
+                ..
+            }) => Some((*ordinal, *context, *pc, "rsp_instruction")),
             Self::Sp(SpRecord::RspDmemEffect {
                 ordinal,
                 context,
@@ -350,6 +384,12 @@ impl Wire {
             })
             | Self::Sp(SpRecord::RspDmemEffect {
                 ordinal, context, ..
+            })
+            | Self::Sp(SpRecord::RspInstruction {
+                ordinal, context, ..
+            })
+            | Self::Sp(SpRecord::RspImemRead {
+                ordinal, context, ..
             }) => {
                 *ordinal = next;
                 *context = scope;
@@ -371,6 +411,13 @@ struct ReadWitness {
     offset: u32,
     value: u32,
     writers: [Option<CapturedSpByteWriter>; 4],
+}
+struct RspReadReceipt {
+    pc: GuestVirtualAddr,
+    address: u32,
+    offset: u32,
+    word: u32,
+    logical_pc: Option<u32>,
 }
 struct Span {
     raw: u64,
@@ -402,6 +449,9 @@ struct Projection<H> {
     header: bool,
     storage: bool,
     dmem_storage: bool,
+    rsp_execution: bool,
+    rsp_active: Option<(GuestVirtualAddr, u32, u64, u32)>,
+    rsp_reads: BTreeMap<u64, RspReadReceipt>,
     ended: bool,
     records: u64,
     projected: u64,
@@ -432,6 +482,9 @@ impl<H: BufRead> Projection<H> {
             header: false,
             storage: false,
             dmem_storage: false,
+            rsp_execution: false,
+            rsp_active: None,
+            rsp_reads: BTreeMap::new(),
             ended: false,
             records: 0,
             projected: 0,
@@ -475,6 +528,90 @@ impl<H: BufRead> Projection<H> {
     fn sp(&mut self, row: SpRecord) -> Result<(), String> {
         require(!self.copying, "SP row inside buffered PI copy")?;
         match row {
+            SpRecord::RspImemRead {
+                ordinal,
+                context,
+                pc,
+                address,
+                offset,
+                word,
+            } => {
+                require(
+                    self.rsp_execution
+                        && self.active.is_none()
+                        && address <= 4099
+                        && offset == address & 0xffc,
+                    "invalid or unsupported RSP IMEM read",
+                )?;
+                if let Some((_, logical, _, _)) = self.rsp_active {
+                    require(
+                        self.rsp_reads.is_empty() && address == logical + 4,
+                        "RSP lookahead does not identify its actual read",
+                    )?;
+                } else {
+                    require(address < 4096, "RSP first read outside logical PC domain")?;
+                    self.rsp_reads.clear();
+                }
+                self.identity(ordinal, context, pc, "rsp_imem_read")?;
+                self.rsp_reads.insert(
+                    ordinal,
+                    RspReadReceipt {
+                        pc,
+                        address,
+                        offset,
+                        word,
+                        logical_pc: self.rsp_active.is_none().then_some(address),
+                    },
+                );
+                if let Some(lineage) = &mut self.lineage {
+                    lineage.read(1, offset, word);
+                }
+            }
+            SpRecord::RspInstruction {
+                ordinal,
+                context,
+                pc,
+                begin,
+                rsp_pc,
+                read_ordinal,
+                word,
+                next_pc,
+                halted: _,
+            } => {
+                require(
+                    self.rsp_execution && self.active.is_none() && rsp_pc < 4096 && next_pc < 4096,
+                    "invalid or unsupported performed RSP instruction",
+                )?;
+                self.identity(ordinal, context, pc, "rsp_instruction")?;
+                self.unconsumed += self.receipts.len() as u64;
+                self.receipts.clear();
+                if begin {
+                    require(
+                        self.rsp_active.is_none() && next_pc == rsp_pc,
+                        "nested or invalid RSP instruction begin",
+                    )?;
+                    let read = self
+                        .rsp_reads
+                        .remove(&read_ordinal)
+                        .ok_or("performed RSP instruction lacks its exact IMEM read")?;
+                    require(
+                        read.pc == pc
+                            && read.word == word
+                            && read.logical_pc == Some(rsp_pc)
+                            && read.offset == read.address & 0xffc,
+                        "performed RSP instruction differs from its IMEM read",
+                    )?;
+                    self.rsp_active = Some((pc, rsp_pc, read_ordinal, word));
+                } else {
+                    require(
+                        self.rsp_active.take() == Some((pc, rsp_pc, read_ordinal, word)),
+                        "RSP instruction end lacks its exact begin",
+                    )?;
+                    for read in self.rsp_reads.values_mut() {
+                        read.logical_pc = Some(next_pc);
+                    }
+                }
+            }
             SpRecord::RspDmemEffect {
                 ordinal,
                 context,
@@ -611,6 +748,9 @@ impl<H: BufRead> Projection<H> {
     }
     fn legacy(&mut self, mut row: queue::Wire) -> Result<(), String> {
         use history::Record as R;
+        if self.rsp_active.is_none() {
+            self.rsp_reads.clear();
+        }
         if !matches!(
             &row,
             queue::Wire::Legacy(pi_history::Wire::Base(R::Scalar {
@@ -629,7 +769,9 @@ impl<H: BufRead> Projection<H> {
             ..
         })) = &mut row
         {
-            let dmem_storage = format == DMEM_STORAGE_FORMAT && policy == DMEM_STORAGE_POLICY;
+            let rsp_execution = format == RSP_EXECUTION_FORMAT && policy == RSP_EXECUTION_POLICY;
+            let dmem_storage =
+                (format == DMEM_STORAGE_FORMAT && policy == DMEM_STORAGE_POLICY) || rsp_execution;
             let storage = (format == STORAGE_FORMAT && policy == STORAGE_POLICY) || dmem_storage;
             require(
                 !self.header
@@ -640,6 +782,7 @@ impl<H: BufRead> Projection<H> {
             self.header = true;
             self.storage = storage;
             self.dmem_storage = dmem_storage;
+            self.rsp_execution = rsp_execution;
             *format = queue::FORMAT.into();
             *policy = queue::POLICY.into();
         } else if let queue::Wire::Legacy(pi_history::Wire::Base(R::End {
@@ -654,6 +797,7 @@ impl<H: BufRead> Projection<H> {
                     && *fetch_count == self.fetches
                     && self.active.is_none()
                     && self.pending.is_none()
+                    && self.rsp_active.is_none()
                     && !self.copying,
                 "incomplete v3 footer",
             )?;
@@ -673,7 +817,10 @@ impl<H: BufRead> Projection<H> {
             })) = &row
             {
                 require(
-                    self.active.is_none() && self.pending.is_none() && context == ordinal,
+                    self.active.is_none()
+                        && self.pending.is_none()
+                        && self.rsp_active.is_none()
+                        && context == ordinal,
                     "invalid v3 fetch begin",
                 )?;
                 self.active = Some(Span {
@@ -900,7 +1047,9 @@ fn finish_report<H>(
     projection: queue::PiQueueHistoryReport,
 ) -> SpHistoryReport {
     SpHistoryReport {
-        format: if stream.dmem_storage {
+        format: if stream.rsp_execution {
+            "plaid-observed-sp-backing-report-v3"
+        } else if stream.dmem_storage {
             "plaid-observed-sp-backing-report-v2"
         } else if stream.storage {
             "plaid-observed-sp-backing-report-v1"

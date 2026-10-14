@@ -42,6 +42,74 @@ pub struct ObservedPiFetch {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct ObservedRspInstruction {
+    pub rsp_pc: u32,
+    pub read_address: u32,
+    pub fetch_offset: u32,
+    pub word: u32,
+    pub next_pc: u32,
+    pub begin_halted: bool,
+    pub halted: bool,
+    pub bytes: [Option<ObservedPiByteChain>; 4],
+    /// Discrete instruction occurrences, never a continuous executable lifetime.
+    pub first_read_ordinal: u64,
+    pub first_begin_ordinal: u64,
+    pub first_end_ordinal: u64,
+    pub last_begin_ordinal: u64,
+    pub last_read_ordinal: u64,
+    pub last_end_ordinal: u64,
+    pub observations: u64,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RspInstructionLineage {
+    pub instructions: u64,
+    pub fully_attributed_instructions: u64,
+    pub partially_attributed_instructions: u64,
+    pub unattributed_instructions: u64,
+    pub samples: Vec<ObservedRspInstruction>,
+    pub ordered_instruction_chains_sha256: String,
+}
+#[derive(Serialize)]
+struct RspOccurrence {
+    read_ordinal: u64,
+    begin_ordinal: u64,
+    end_ordinal: u64,
+    rsp_pc: u32,
+    read_address: u32,
+    fetch_offset: u32,
+    word: u32,
+    next_pc: u32,
+    begin_halted: bool,
+    halted: bool,
+    bytes: [Option<ObservedPiByteChain>; 4],
+}
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct RspSampleKey {
+    rsp_pc: u32,
+    read_address: u32,
+    fetch_offset: u32,
+    word: u32,
+    next_pc: u32,
+    begin_halted: bool,
+    halted: bool,
+    bytes: [Option<ObservedPiByteChain>; 4],
+}
+struct RspReadParents {
+    address: u32,
+    offset: u32,
+    word: u32,
+    bytes: [Option<ObservedPiByteChain>; 4],
+}
+struct PendingRspInstruction {
+    read_ordinal: u64,
+    begin_ordinal: u64,
+    rsp_pc: u32,
+    begin_halted: bool,
+    read: RspReadParents,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PiFetchLineageReport<P = PiQueueHistoryReport> {
     pub format: String,
     pub scope: String,
@@ -55,6 +123,8 @@ pub struct PiFetchLineageReport<P = PiQueueHistoryReport> {
     pub contradicted_backing_bytes: u64,
     pub samples: Vec<ObservedPiFetch>,
     pub ordered_fetch_chains_sha256: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rsp_consumption: Option<RspInstructionLineage>,
     pub mutation_coverage_certified: bool,
     pub executable_lifetime_certified: bool,
     pub native_complete: bool,
@@ -112,6 +182,13 @@ struct Lineage<'a> {
     dma_links: BTreeMap<u64, u64>,
     dma_reads: BTreeMap<u64, Vec<Option<ObservedPiByteChain>>>,
     sp_attributed: bool,
+    rsp_active: Option<PendingRspInstruction>,
+    rsp_reads: BTreeMap<u64, RspReadParents>,
+    rsp_samples: BTreeMap<RspSampleKey, ObservedRspInstruction>,
+    rsp_digest: Sha256,
+    rsp_instructions: u64,
+    rsp_full: u64,
+    rsp_partial: u64,
     samples: BTreeMap<SampleKey, ObservedPiFetch>,
     digest: Sha256,
     fetches: u64,
@@ -143,6 +220,13 @@ impl<'a> Lineage<'a> {
             dma_links: BTreeMap::new(),
             dma_reads: BTreeMap::new(),
             sp_attributed: false,
+            rsp_active: None,
+            rsp_reads: BTreeMap::new(),
+            rsp_samples: BTreeMap::new(),
+            rsp_digest: Sha256::new(),
+            rsp_instructions: 0,
+            rsp_full: 0,
+            rsp_partial: 0,
             samples: BTreeMap::new(),
             digest: Sha256::new(),
             fetches: 0,
@@ -448,9 +532,135 @@ impl<'a> Lineage<'a> {
         }
         Ok(())
     }
+    fn sp_parents(
+        &mut self,
+        bank: u32,
+        offset: u32,
+        word: u32,
+    ) -> [Option<ObservedPiByteChain>; 4] {
+        let writers = self.sp.read(bank, offset, word);
+        std::array::from_fn(|n| {
+            self.sp_origins[bank as usize * 4096 + offset as usize + n]
+                .filter(|parent| parent.sp_writer == writers[n] && writers[n].is_some())
+        })
+    }
     fn sp(&mut self, record: &sp_history::SpRecord) -> Result<(), String> {
         use sp_history::{CapturedSpByteWriter, CapturedSpWriterKind, SpRecord};
         match *record {
+            SpRecord::RspImemRead {
+                ordinal,
+                address,
+                offset,
+                word,
+                ..
+            } => {
+                if self.rsp_active.is_none() {
+                    self.rsp_reads.clear();
+                }
+                let bytes = self.sp_parents(1, offset, word);
+                self.rsp_reads.insert(
+                    ordinal,
+                    RspReadParents {
+                        address,
+                        offset,
+                        word,
+                        bytes,
+                    },
+                );
+            }
+            SpRecord::RspInstruction {
+                ordinal,
+                begin,
+                rsp_pc,
+                read_ordinal,
+                word,
+                next_pc,
+                halted,
+                ..
+            } => {
+                if begin {
+                    let read = self
+                        .rsp_reads
+                        .remove(&read_ordinal)
+                        .ok_or("RSP consumption lacks its actual IMEM read")?;
+                    require(read.word == word, "RSP fetched word differs from its read")?;
+                    self.rsp_active = Some(PendingRspInstruction {
+                        read_ordinal,
+                        begin_ordinal: ordinal,
+                        rsp_pc,
+                        begin_halted: halted,
+                        read,
+                    });
+                } else {
+                    let pending = self
+                        .rsp_active
+                        .take()
+                        .ok_or("RSP consumption lacks its captured begin")?;
+                    require(
+                        (pending.rsp_pc, pending.read.word, pending.read_ordinal)
+                            == (rsp_pc, word, read_ordinal),
+                        "RSP consumption changed during instruction",
+                    )?;
+                    let begin_ordinal = pending.begin_ordinal;
+                    let bytes = pending.read.bytes;
+                    let read_address = pending.read.address;
+                    let fetch_offset = pending.read.offset;
+                    let begin_halted = pending.begin_halted;
+                    let known = bytes.iter().flatten().count();
+                    self.rsp_instructions += 1;
+                    self.rsp_full += u64::from(known == 4);
+                    self.rsp_partial += u64::from(known > 0 && known < 4);
+                    let occurrence = RspOccurrence {
+                        read_ordinal,
+                        begin_ordinal,
+                        end_ordinal: ordinal,
+                        rsp_pc,
+                        read_address,
+                        fetch_offset,
+                        word,
+                        next_pc,
+                        begin_halted,
+                        halted,
+                        bytes,
+                    };
+                    self.rsp_digest
+                        .update(serde_json::to_vec(&occurrence).map_err(|e| e.to_string())?);
+                    self.rsp_digest.update(b"\n");
+                    let sample = self
+                        .rsp_samples
+                        .entry(RspSampleKey {
+                            rsp_pc,
+                            read_address,
+                            fetch_offset,
+                            word,
+                            next_pc,
+                            begin_halted,
+                            halted,
+                            bytes,
+                        })
+                        .or_insert(ObservedRspInstruction {
+                            rsp_pc,
+                            read_address,
+                            fetch_offset,
+                            word,
+                            next_pc,
+                            begin_halted,
+                            halted,
+                            bytes,
+                            first_read_ordinal: read_ordinal,
+                            first_begin_ordinal: begin_ordinal,
+                            first_end_ordinal: ordinal,
+                            last_begin_ordinal: begin_ordinal,
+                            last_read_ordinal: read_ordinal,
+                            last_end_ordinal: ordinal,
+                            observations: 0,
+                        });
+                    sample.last_begin_ordinal = begin_ordinal;
+                    sample.last_read_ordinal = read_ordinal;
+                    sample.last_end_ordinal = ordinal;
+                    sample.observations += 1;
+                }
+            }
             SpRecord::RspDmemEffect { offset, bytes, .. } => {
                 self.sp.cut_dmem(offset, bytes);
             }
@@ -473,18 +683,14 @@ impl<'a> Lineage<'a> {
                         CapturedSpWriterKind::WordSink { cpu },
                     );
                 } else {
-                    let writers = self.sp.read(bank, offset, value);
+                    let parents = self.sp_parents(bank, offset, value);
                     if let Some(active) = &mut self.active
                         && cpu
                         && active.bus == Some(address)
                     {
                         active.reads += 1;
                         active.read = Some((ordinal, address, u64::from(value)));
-                        active.sp_origins = Some(std::array::from_fn(|n| {
-                            self.sp_origins[bank as usize * 4096 + offset as usize + n].filter(
-                                |parent| parent.sp_writer == writers[n] && writers[n].is_some(),
-                            )
-                        }));
+                        active.sp_origins = Some(parents);
                     }
                 }
             }
@@ -857,7 +1063,9 @@ fn replay_lineage<H: BufRead + Seek, F: BufRead + Seek, P>(
         "complete source changed between validation and lineage replay",
     )?;
     Ok(PiFetchLineageReport {
-        format: if ledger.sp_attributed {
+        format: if ledger.rsp_instructions > 0 {
+            "plaid-sp-pi-fetch-lineage-report-v2"
+        } else if ledger.sp_attributed {
             "plaid-sp-pi-fetch-lineage-report-v1"
         } else if sp_clock {
             "plaid-sp-pi-fetch-lineage-report-v0"
@@ -865,7 +1073,9 @@ fn replay_lineage<H: BufRead + Seek, F: BufRead + Seek, P>(
             "plaid-pi-fetch-lineage-report-v0"
         }
         .into(),
-        scope: if ledger.sp_attributed {
+        scope: if ledger.rsp_instructions > 0 {
+            "finite_observed_pi_ram_sp_cpu_rsp_consumption_without_mutation_census"
+        } else if ledger.sp_attributed {
             "finite_observed_pi_ram_sp_dma_byte_chains_without_mutation_census"
         } else if sp_clock {
             "finite_observed_pi_byte_chains_on_raw_sp_clock_without_mutation_census"
@@ -883,6 +1093,16 @@ fn replay_lineage<H: BufRead + Seek, F: BufRead + Seek, P>(
         contradicted_backing_bytes: ledger.contradictions,
         samples: ledger.samples.into_values().collect(),
         ordered_fetch_chains_sha256: format!("{:x}", ledger.digest.finalize()),
+        rsp_consumption: (ledger.rsp_instructions > 0).then(|| RspInstructionLineage {
+            instructions: ledger.rsp_instructions,
+            fully_attributed_instructions: ledger.rsp_full,
+            partially_attributed_instructions: ledger.rsp_partial,
+            unattributed_instructions: ledger.rsp_instructions
+                - ledger.rsp_full
+                - ledger.rsp_partial,
+            samples: ledger.rsp_samples.into_values().collect(),
+            ordered_instruction_chains_sha256: format!("{:x}", ledger.rsp_digest.finalize()),
+        }),
         mutation_coverage_certified: false,
         executable_lifetime_certified: false,
         native_complete: false,
