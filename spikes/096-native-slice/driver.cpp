@@ -39,9 +39,12 @@ int main(int argc, char** argv) {
   if(cpu.recompiler.enabled || rsp.recompiler.enabled) return 4;
   for(auto& reg : cpu.ipu.r) reg.u64 = 0;
   cpu.ipu.hi.u64 = cpu.ipu.lo.u64 = 0;
+  for(auto& reg : cpu.fpu.r) reg.s64 = 0;
   rdram.mapIdentity = 1;
   cpu.scc.status.errorLevel = 0;
   cpu.scc.status.exceptionLevel = 0;
+  cpu.scc.status.enable.coprocessor1 = 1;  // CU1 = 1, FR = 1 (ADR-0131)
+  cpu.scc.status.floatingPointMode = 1;
   cpu.context.setMode();
   auto file = std::fopen(argv[1], "rb");
   if(!file) return 5;
@@ -57,7 +60,9 @@ int main(int argc, char** argv) {
   if((u32)cpu.ipu.pc != exit || cpu.scc.cause.exceptionCode) return 6;
   std::printf("{\"pc\":%u,\"regs\":[", (u32)cpu.ipu.pc);
   for(int r = 0; r < 32; r++) std::printf("%s%llu", r ? "," : "", (unsigned long long)cpu.ipu.r[r].u64);
-  std::printf("],\"hi\":%llu,\"lo\":%llu,\"ram\":[", (unsigned long long)cpu.ipu.hi.u64, (unsigned long long)cpu.ipu.lo.u64);
+  std::printf("],\"hi\":%llu,\"lo\":%llu,\"fpr\":[", (unsigned long long)cpu.ipu.hi.u64, (unsigned long long)cpu.ipu.lo.u64);
+  for(int r = 0; r < 32; r++) std::printf("%s%llu", r ? "," : "", (unsigned long long)cpu.fpu.r[r].s64);
+  std::printf("],\"ram\":[");
   // CPU-coherent view through the write-back D-cache, without line fills.
   // The pinned core instantiates only the Byte debug read.
   for(u32 a = 0x1000; a < 0x1100; a += 4) {

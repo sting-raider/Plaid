@@ -3039,3 +3039,22 @@ discovered and coverage grows from 190 to 613 blocks. Guarded-scope blockers
 are 6: the boot function's return to the host, a `jalr` function-pointer call
 (`0x80000f10`), a computed `jr` (`0x80003acc`), and three COP1 data moves
 (`MTC1`, `SWC1`) in the thread entry.
+
+## ADR-0131: COP1 data moves with 64-bit FPRs
+
+Context: with ADR-0130, three of OoT's six guarded-scope blockers were COP1
+data moves (`MTC1`, `SWC1`) in the first thread.
+
+Decision: the guarded scope admits `MFC1 DMFC1 MTC1 DMTC1 LWC1 LDC1 SWC1
+SDC1`, adding the assumption that COP1 is usable with 64-bit FPRs
+(Status.CU1 = 1, Status.FR = 1) wherever they execute. That is the state IPL3
+leaves for commercial games and ares's reset default. The native state gains
+`u64 f[32]`. Following ares (`fgr_t`/`fgr_s` with FR = 1), 32-bit moves and
+loads replace only the low word, `MFC1` sign-extends it, and the D-forms move
+all 64 bits. FPU arithmetic, `CFC1`/`CTC1` and FR = 0 remain outside the scope.
+
+Result: spike096 now compares all 32 FPRs. The oracle pins CU1 and FR, and a
+new `fpu` program, which checks high-word preservation and an odd FPR,
+matches ares exactly. The OoT measurement falls to 3 guarded-scope blockers:
+the boot return, the `jalr` at `0x80000f10`, and the jump table at
+`0x80003acc`.

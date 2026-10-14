@@ -5,12 +5,12 @@ by an ordinary host compiler and run natively with exactly the reference
 interpreter's architectural results, with no guest decoder or interpreter in
 the artifact (ADR-0125, ADR-0126).
 
-`run.py` assembles nine synthetic programs (`alu`, `muldiv`, `loops`,
-`memory`, `transfers`, `wide`, `boundary`, `callback`, `calls`) at `0x80000000`, ending at the exit address
+`run.py` assembles ten synthetic programs (`alu`, `muldiv`, `loops`,
+`memory`, `transfers`, `wide`, `boundary`, `callback`, `fpu`, `calls`) at `0x80000000`, ending at the exit address
 `0x80000F00`. For each it runs `plaid lower-c` (discovery, then solve under
 `DeclaredStaticImagesGuardedRam`, then `crates/plaid-lower`), compiles the C
 with `-Wall -Werror` against `harness.c`, runs it, and compares all GPRs, HI,
-LO and the RAM window `0x1000..0x1100` with `driver.cpp` on the pinned ISC
+LO, all FPRs and the RAM window `0x1000..0x1100` with `driver.cpp` on the pinned ISC
 ares interpreter (recompiler disabled). The oracle reads RAM through the D-cache
 debug path, so both sides report the CPU-coherent view.
 
@@ -37,4 +37,5 @@ the compared RAM window (ADR-0127). `wide` covers the 64-bit integer subset,
 runs its guest body, while the native build never decodes it (its `SYNC` is
 outside the scope) and links `runtime.c` instead (ADR-0129). `callback` passes
 a guest function to a runtime `spawn`, which natively enters it through
-`plaid_enter` (ADR-0130).
+`plaid_enter` (ADR-0130). `fpu` covers COP1 data moves with FR = 1, which the
+oracle pins together with CU1 (ADR-0131).

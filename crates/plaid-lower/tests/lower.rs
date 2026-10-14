@@ -328,3 +328,31 @@ fn an_unproven_callback_argument_stays_open() {
             .any(|b| b.kind == "unresolved_runtime_callback")
     );
 }
+
+#[test]
+fn cop1_moves_lower_with_an_explicit_fr_assumption() {
+    use plaid_core::solver::{Scope, solve};
+    // lui t0,0x3f80; mtc1 t0,f0; j 0x10; nop; b .; nop
+    let words = [[0x3c08_3f80, 0x4488_0000, 0x0800_0004, 0].as_slice(), &HALT].concat();
+    let (map, image) = map_of(&words);
+    let r = solve(
+        &map,
+        std::slice::from_ref(&image),
+        Scope::DeclaredStaticImagesGuardedRam,
+    )
+    .unwrap();
+    assert!(r.assumptions.iter().any(|a| a.contains("Status.FR = 1")));
+    let r = solve(
+        &map,
+        std::slice::from_ref(&image),
+        Scope::DeclaredStaticImages,
+    )
+    .unwrap();
+    assert!(
+        r.blockers
+            .iter()
+            .any(|b| b.kind == "unsupported_scope_effect")
+    );
+    let c = lower_c(&map, &[image], GuestAddr(BASE), &[GuestAddr(0x8000_0010)]).unwrap();
+    assert!(c.contains("s->f[0] = (s->f[0] & 0xffffffff00000000ull) | (u32)s->r[8];"));
+}

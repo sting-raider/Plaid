@@ -47,6 +47,9 @@ dsllv, dsrlv, dsrav = map(vshift, (20, 22, 23))
 dmult, dmultu, ddiv, ddivu = map(hilo, (28, 29, 30, 31))
 addi = lambda rt, rs, imm: I(8, rt, rs, imm); daddi = lambda rt, rs, imm: I(24, rt, rs, imm)
 daddiu = lambda rt, rs, imm: I(25, rt, rs, imm)
+cop1 = lambda sub: (lambda rt, fs: 17 << 26 | sub << 21 | rt << 16 | fs << 11)
+mfc1, dmfc1, mtc1, dmtc1 = map(cop1, (0, 1, 4, 5))
+lwc1, ldc1, swc1, sdc1 = map(mem, (49, 53, 57, 61))
 beql = lambda rs, rt, l: B(20, rs, rt, l); bnel = lambda rs, rt, l: B(21, rs, rt, l)
 blezl = lambda rs, l: B(22, rs, 0, l); bgtzl = lambda rs, l: B(23, rs, 0, l)
 bltzl = lambda rs, l: B(1, rs, 2, l); bgezl = lambda rs, l: B(1, rs, 3, l)
@@ -143,6 +146,12 @@ PROGRAMS = {
         'cb', addu(v0, a0, a0), jr(ra), nop,
         'spawn', addiu(sp, sp, -8), sw(ra, 4, sp), addu(t9, a0, zero), addu(a0, a1, zero), jalr(ra, t9), nop,
         addiu(v0, v0, 1), lw(ra, 4, sp), R(15), jr(ra), addiu(sp, sp, 8)],
+    # COP1 data moves with 64-bit FPRs: 32-bit forms keep the high word (ADR-0131).
+    'fpu': [lui(gp, 0x8000), ori(gp, gp, 0x1000), lui(t0, 0x3F80), mtc1(t0, 0), swc1(0, 0, gp),
+        lui(t1, 0x1234), ori(t1, t1, 0x5678), dsll32(t1, t1, 0), ori(t1, t1, 0x9ABC),
+        dmtc1(t1, 2), sdc1(2, 8, gp), dmfc1(t2, 2), mfc1(t3, 2), mtc1(t0, 2), dmfc1(t4, 2),
+        lui(t5, 0x8765), ori(t5, t5, 0x4321), sw(t5, 16, gp), lwc1(4, 16, gp), mfc1(t6, 4),
+        ldc1(6, 8, gp), dmfc1(t7, 6), mtc1(t5, 1), dmfc1(s0, 1), sdc1(2, 24, gp), *DONE],
     # Nested, recursive, pointer and tail calls; frames live in the RAM window.
     'calls': [lui(sp, 0x8000), ori(sp, sp, 0x1100),
         addiu(a0, zero, 5), jal('fact'), nop, addu(s0, v0, zero),
