@@ -30,12 +30,13 @@ def inspect(history_path, fetch_path, source):
     history = rows(history_path, history_hash)
     fetched = rows(fetch_path, fetch_hash)
     header, paired_header = next(history), next(fetched)
-    assert header['format'] in ('plaid-ares-access-history-v2', 'plaid-ares-access-history-v3', 'plaid-ares-access-history-v5','plaid-ares-access-history-v6','plaid-ares-access-history-v7')
-    rsp_execution = header['format'] == 'plaid-ares-access-history-v7'
-    dmem_storage = header['format'] in ('plaid-ares-access-history-v6','plaid-ares-access-history-v7')
-    storage_clock = header['format'] in ('plaid-ares-access-history-v5','plaid-ares-access-history-v6','plaid-ares-access-history-v7')
+    assert header['format'] in ('plaid-ares-access-history-v2', 'plaid-ares-access-history-v3', 'plaid-ares-access-history-v5','plaid-ares-access-history-v6','plaid-ares-access-history-v7','plaid-ares-access-history-v8')
+    imem_storage = header['format'] == 'plaid-ares-access-history-v8'
+    rsp_execution = header['format'] in ('plaid-ares-access-history-v7','plaid-ares-access-history-v8')
+    dmem_storage = header['format'] in ('plaid-ares-access-history-v6','plaid-ares-access-history-v7','plaid-ares-access-history-v8')
+    storage_clock = header['format'] in ('plaid-ares-access-history-v5','plaid-ares-access-history-v6','plaid-ares-access-history-v7','plaid-ares-access-history-v8')
     if storage_clock:
-        assert header['policy'] == ('observed_storage_dmem_and_performed_rsp_instructions_with_pi_queue_sp_backing' if rsp_execution else 'observed_ordinary_storage_and_dmem_mutations_with_pi_queue_sp_backing' if dmem_storage else 'observed_ordinary_storage_mutations_and_pi_queue_sp_backing')
+        assert header['policy'] == ('observed_storage_dmem_imem_and_rsp_consumption_with_pi_queue_sp_backing' if imem_storage else 'observed_storage_dmem_and_performed_rsp_instructions_with_pi_queue_sp_backing' if rsp_execution else 'observed_ordinary_storage_and_dmem_mutations_with_pi_queue_sp_backing' if dmem_storage else 'observed_ordinary_storage_mutations_and_pi_queue_sp_backing')
     if header['format'] == 'plaid-ares-access-history-v3':
         assert header['policy'] == 'identity_ram_pi_queue_and_observed_sp_backing'
     assert header['lifecycle_policy'] == 'single_run_no_host_restore'
@@ -91,12 +92,19 @@ def inspect(history_path, fetch_path, source):
             continue
         ordinal += 1
         assert e['ordinal'] == ordinal <= 100000000
-        if kind not in ('storage_effect','sp_dma_store','rsp_dmem_effect') and not \
+        if kind not in ('storage_effect','sp_dma_store','rsp_dmem_effect','imem_storage_effect') and not \
             (kind=='scalar' and not e['write'] and e['device']==4):
             sp_receipts=[]
-        if kind not in ('rsp_instruction','rsp_imem_read','rsp_dmem_effect','sp_word','sp_dma_store','storage_effect') and rsp_active is None:
+        if kind not in ('rsp_instruction','rsp_imem_read','rsp_dmem_effect','imem_storage_effect','sp_word','sp_dma_store','storage_effect') and rsp_active is None:
             rsp_reads.clear()
-        if kind == 'rsp_imem_read':
+        if kind == 'imem_storage_effect':
+            assert imem_storage
+            if e['kind']==0:
+                assert e['bytes'] in (1,2,4) and e['offset']%e['bytes']==0
+                assert 0 <= e['offset'] <= 4096-e['bytes'] and 0 <= e['value'] < 1<<(8*e['bytes'])
+            else:assert e['kind'] in (1,2) and (e['offset'],e['bytes'],e['value'])==(0,4096,0)
+            for offset in range(e['offset'],e['offset']+e['bytes']):sp_memory.pop(4096+offset,None)
+        elif kind == 'rsp_imem_read':
             assert rsp_execution and active is None
             assert 0 <= e['address'] <= 4099 and e['offset']==e['address']&0xffc
             if rsp_active is None:

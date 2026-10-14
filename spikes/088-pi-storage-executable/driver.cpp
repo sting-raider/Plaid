@@ -20,6 +20,12 @@ static void add(const string& fields) {
 }
 #if PLAID_PI_STORAGE_SENSOR
 static void storage_effect(const void* object,u32 kind,u32 address,u32 bytes,u64 value) {
+#if defined(PLAID_PI_IMEM_CUT)
+  if(object == static_cast<Storage::Writable*>(&rsp.imem)) {
+    add({"\"record\":\"imem_storage_effect\",\"kind\":",kind,",\"offset\":",address,
+      ",\"bytes\":",bytes,",\"value\":",value});return;
+  }
+#endif
   if(object != static_cast<Storage::Writable*>(&rdram.ram)) return;
   add({"\"record\":\"storage_effect\",\"kind\":",kind,",\"address\":",address,
     ",\"bytes\":",bytes,",\"value\":",value});
@@ -188,6 +194,26 @@ int main(int argc,char** argv) {
       rsp.instruction();
       assert(rsp.status.halted && rsp.ipu.pc==0x408);
       snapshot("rsp_halt_dual_consumed");
+#if defined(PLAID_PI_IMEM_CUT)
+      auto reinstall=[&] {
+        rsp.writeWord(0x04040000,0x1000,cpu);rsp.writeWord(0x04040004,physical,cpu);
+        rsp.writeWord(0x04040008,0,cpu);rsp.dmaTransferStep();
+        assert(!rsp.dma.busy.any() && rsp.imem.read<Word>(0)==0x24100007);
+      };
+      auto consume=[&](const char* point) {
+        cpu.ipu.r[16].u64=0;cpu.pipeline.setPc(0xffffffffa4001000ull);cpu.instruction();
+        assert(cpu.ipu.r[16].u64==7);
+        rsp.imem.write<Word>(8,13);rsp.ipu.r[16].u32=0;
+        rsp.pipeline={};rsp.pipeline.singleIssue=true;rsp.branch.setPc(0);rsp.ipu.pc=0;rsp.status.halted=0;
+        for(u32 guard=0;guard<8 && !rsp.status.halted;guard++) rsp.instruction();
+        assert(rsp.status.halted && rsp.ipu.r[16].u32==7);snapshot(point);
+      };
+      reinstall();rsp.imem.write<Word>(0,0x24100007);snapshot("imem_equal_written");consume("imem_equal_consumed");
+      reinstall();rsp.imem.fill(0x24100007);snapshot("imem_filled");consume("imem_fill_consumed");
+      reinstall();auto imemFile=vfs::memory::create(12);
+      imemFile->writem(0x24100007,4);imemFile->writem(0,4);imemFile->writem(13,4);imemFile->seek(0);
+      rsp.imem.load(imemFile);snapshot("imem_loaded");consume("imem_load_consumed");
+#endif
 #endif
 #endif
 #endif

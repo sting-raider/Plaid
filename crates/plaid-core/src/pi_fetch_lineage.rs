@@ -547,6 +547,9 @@ impl<'a> Lineage<'a> {
     fn sp(&mut self, record: &sp_history::SpRecord) -> Result<(), String> {
         use sp_history::{CapturedSpByteWriter, CapturedSpWriterKind, SpRecord};
         match *record {
+            SpRecord::ImemStorageEffect { offset, bytes, .. } => {
+                self.sp.cut(1, offset, bytes);
+            }
             SpRecord::RspImemRead {
                 ordinal,
                 address,
@@ -662,7 +665,7 @@ impl<'a> Lineage<'a> {
                 }
             }
             SpRecord::RspDmemEffect { offset, bytes, .. } => {
-                self.sp.cut_dmem(offset, bytes);
+                self.sp.cut(0, offset, bytes);
             }
             SpRecord::SpWord {
                 ordinal,

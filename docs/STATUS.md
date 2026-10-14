@@ -1,5 +1,13 @@
 # Status
 
+Raw history v8 now cuts IMEM ancestry at completed lower scalar effects and
+whole-bank fill/load, including equal writes. It reuses the shared SP writer
+state and preserves CPU/RSP parents frozen at earlier reads; later DMA installs
+remain separate writers. The retained 342-event/40-checkpoint reference graph
+contains 42 effects, 56 reads and 42 performed instructions. The supplied 100k
+prefix adds 12,096 IMEM effects with unchanged controls and full independent
+replay. Restore/retirement still reject; all broad closure/native flags stay false.
+
 Raw v7 now connects PI/RAM/IMEM parents at an exact Word read to a separately
 performed RSP instruction occurrence. Logical PC, masked offset and read identity
 stay distinct; unused lookahead creates no execution root. The222-event/28-control

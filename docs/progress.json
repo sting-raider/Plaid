@@ -34,6 +34,7 @@
         {"name": "Bounded PI primitive-to-writer composition", "state": "verified"},
         {"name": "Bounded PI / SP DMA / CPU consumption chain", "state": "verified"},
         {"name": "Bounded lower-DMEM ancestry revocation", "state": "verified"},
+        {"name": "Bounded lower-IMEM ancestry revocation", "state": "verified"},
         {"name": "Exact IMEM-read / performed-RSP receipts", "state": "verified"},
         {"name": "Controlled D-cache export / executable chain", "state": "verified"},
         {"name": "Controlled mapping / cache / exception chain", "state": "verified"},
