@@ -21,6 +21,9 @@ pub struct ObservedPiByteChain {
     /// Ordinal of the successful scalar writer in the containing raw source.
     pub writer_ordinal: u64,
     pub transfer: u64,
+    /// Independently witnessed SP installation, after the captured RAM read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sp_writer: Option<sp_history::CapturedSpByteWriter>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -72,6 +75,8 @@ struct Resident {
 struct Access {
     reads: u64,
     read: Option<(u64, PhysicalAddr, u64)>,
+    bus: Option<PhysicalAddr>,
+    sp_origins: Option<[Option<ObservedPiByteChain>; 4]>,
 }
 struct StorageAttempt {
     ordinal: u64,
@@ -102,6 +107,11 @@ struct Lineage<'a> {
     buffer: [Option<u32>; 128],
     attempt_writer: Option<(u64, u32, u64)>,
     storage_attempt: Option<StorageAttempt>,
+    sp: sp_history::WriterLineage,
+    sp_origins: Vec<Option<ObservedPiByteChain>>,
+    dma_links: BTreeMap<u64, u64>,
+    dma_reads: BTreeMap<u64, Vec<Option<ObservedPiByteChain>>>,
+    sp_attributed: bool,
     samples: BTreeMap<SampleKey, ObservedPiFetch>,
     digest: Sha256,
     fetches: u64,
@@ -128,6 +138,11 @@ impl<'a> Lineage<'a> {
             buffer: [None; 128],
             attempt_writer: None,
             storage_attempt: None,
+            sp: sp_history::WriterLineage::new(),
+            sp_origins: vec![None; 8192],
+            dma_links: BTreeMap::new(),
+            dma_reads: BTreeMap::new(),
+            sp_attributed: false,
             samples: BTreeMap::new(),
             digest: Sha256::new(),
             fetches: 0,
@@ -253,6 +268,7 @@ impl<'a> Lineage<'a> {
                             rom_offset: RomOffset(u64::from(offset)),
                             writer_ordinal: writer,
                             transfer,
+                            sp_writer: None,
                         });
                         self.set(dram.0, origin)?;
                     } else if let Some((address, writer)) = storage {
@@ -262,6 +278,7 @@ impl<'a> Lineage<'a> {
                                 rom_offset: RomOffset(u64::from(offset)),
                                 writer_ordinal: writer,
                                 transfer,
+                                sp_writer: None,
                             }),
                         )?;
                     }
@@ -288,6 +305,24 @@ impl<'a> Lineage<'a> {
                     matches!(bytes, 1 | 2 | 4 | 8),
                     "lineage scalar width outside supported bound",
                 )?;
+                if !write && *device == 4 {
+                    let payload = value.to_be_bytes();
+                    let origins = if !write
+                        && *device == 4
+                        && address == aligned_address
+                        && aligned_address
+                            .0
+                            .checked_add(*bytes)
+                            .is_some_and(|end| end <= 8_388_608)
+                    {
+                        self.read(aligned_address.0, &payload[8 - *bytes as usize..])?
+                    } else {
+                        vec![None; *bytes as usize]
+                    };
+                    if self.dma_reads.contains_key(ordinal) {
+                        self.dma_reads.insert(*ordinal, origins);
+                    }
+                }
                 if *write {
                     for n in 0..*bytes {
                         self.set(
@@ -402,9 +437,83 @@ impl<'a> Lineage<'a> {
                     self.resident.remove(&slot);
                 }
             }
-            R::FetchBegin { .. } => self.active = Some(Access::default()),
+            R::FetchBegin { bus, .. } => {
+                self.active = Some(Access {
+                    bus: Some(*bus),
+                    ..Access::default()
+                })
+            }
             R::FetchEnd { .. } => self.pending = self.active.take(),
             _ => {}
+        }
+        Ok(())
+    }
+    fn sp(&mut self, record: &sp_history::SpRecord) -> Result<(), String> {
+        use sp_history::{CapturedSpByteWriter, CapturedSpWriterKind, SpRecord};
+        match *record {
+            SpRecord::SpWord {
+                ordinal,
+                write,
+                address,
+                bank,
+                offset,
+                value,
+                cpu,
+                ..
+            } => {
+                if write {
+                    self.sp.write(
+                        bank,
+                        offset,
+                        &value.to_be_bytes(),
+                        ordinal,
+                        CapturedSpWriterKind::WordSink { cpu },
+                    );
+                } else {
+                    let writers = self.sp.read(bank, offset, value);
+                    if let Some(active) = &mut self.active
+                        && cpu
+                        && active.bus == Some(address)
+                    {
+                        active.reads += 1;
+                        active.read = Some((ordinal, address, u64::from(value)));
+                        active.sp_origins = Some(std::array::from_fn(|n| {
+                            self.sp_origins[bank as usize * 4096 + offset as usize + n].filter(
+                                |parent| parent.sp_writer == writers[n] && writers[n].is_some(),
+                            )
+                        }));
+                    }
+                }
+            }
+            SpRecord::SpDmaStore {
+                ordinal,
+                dram,
+                bank,
+                offset,
+                bytes,
+                value,
+                ..
+            } => {
+                let read_ordinal = self.dma_links.remove(&ordinal);
+                let origins = read_ordinal.and_then(|r| self.dma_reads.remove(&r));
+                let payload = value.to_be_bytes();
+                let kind = CapturedSpWriterKind::DmaSink { dram, read_ordinal };
+                self.sp
+                    .write(bank, offset, &payload[8 - bytes as usize..], ordinal, kind);
+                for n in 0..bytes as usize {
+                    self.sp_origins[bank as usize * 4096 + offset as usize + n] = origins
+                        .as_ref()
+                        .and_then(|o| o.get(n).copied().flatten())
+                        .map(|mut parent| {
+                            parent.sp_writer = Some(CapturedSpByteWriter {
+                                write_ordinal: ordinal,
+                                byte_index: n as u8,
+                                kind,
+                            });
+                            parent
+                        });
+                }
+            }
         }
         Ok(())
     }
@@ -497,13 +606,20 @@ impl<'a> Lineage<'a> {
             && address == *physical
             && value == u64::from(*word)
         {
-            bytes = self
-                .read(physical.0, &word.to_be_bytes())?
-                .try_into()
-                .map_err(|_| "lineage fetched width")?;
-            read = Some(ordinal);
+            bytes = if let Some(origins) = access.sp_origins {
+                origins
+            } else {
+                self.read(physical.0, &word.to_be_bytes())?
+                    .try_into()
+                    .map_err(|_| "lineage fetched width")?
+            };
+            // Unused SP paths retain the legacy PI-only report and digest.
+            if access.sp_origins.is_none() || bytes.iter().any(Option::is_some) {
+                read = Some(ordinal);
+            }
         }
         let known = bytes.iter().flatten().count() as u64;
+        self.sp_attributed |= bytes.iter().flatten().any(|b| b.sp_writer.is_some());
         self.byte_fetches += known;
         self.full += u64::from(known == 4);
         self.partial += u64::from(known > 0 && known < 4);
@@ -534,6 +650,12 @@ impl<'a> Lineage<'a> {
                 self.digest.update(o.rom_offset.0.to_be_bytes());
                 self.digest.update(o.writer_ordinal.to_be_bytes());
                 self.digest.update(o.transfer.to_be_bytes());
+                if let Some(writer) = o.sp_writer {
+                    let encoded = serde_json::to_vec(&writer).map_err(|e| e.to_string())?;
+                    self.digest.update([0xff]);
+                    self.digest.update((encoded.len() as u32).to_be_bytes());
+                    self.digest.update(encoded);
+                }
             }
         }
         if known > 0 {
@@ -600,6 +722,7 @@ pub fn inspect_pi_fetch_lineage<H: BufRead + Seek, F: BufRead + Seek>(
         projection,
         (&hashes.0, &hashes.1),
         false,
+        BTreeMap::new(),
     )
 }
 
@@ -625,6 +748,15 @@ pub fn inspect_sp_pi_fetch_lineage<H: BufRead + Seek, F: BufRead + Seek>(
             && projection.projection.projection.projection.fetch_sha256 == expected_fetch_sha256,
         "SP/PI lineage source receipt mismatch",
     )?;
+    let dma_links = projection
+        .dma_store_receipts
+        .iter()
+        .filter_map(|receipt| {
+            receipt
+                .read_ordinal
+                .map(|read| (receipt.write_ordinal, read))
+        })
+        .collect();
     replay_lineage(
         history,
         fetched,
@@ -632,6 +764,7 @@ pub fn inspect_sp_pi_fetch_lineage<H: BufRead + Seek, F: BufRead + Seek>(
         projection,
         (expected_history_sha256, expected_fetch_sha256),
         true,
+        dma_links,
     )
 }
 
@@ -642,6 +775,7 @@ fn replay_lineage<H: BufRead + Seek, F: BufRead + Seek, P>(
     projection: P,
     source_hashes: (&str, &str),
     sp_clock: bool,
+    dma_links: BTreeMap<u64, u64>,
 ) -> Result<PiFetchLineageReport<P>, String> {
     history
         .seek(SeekFrom::Start(0))
@@ -650,6 +784,10 @@ fn replay_lineage<H: BufRead + Seek, F: BufRead + Seek, P>(
         .seek(SeekFrom::Start(0))
         .map_err(|e| e.to_string())?;
     let mut ledger = Lineage::new(rom.bytes());
+    ledger.dma_links = dma_links;
+    for read in ledger.dma_links.values() {
+        ledger.dma_reads.insert(*read, Vec::new());
+    }
     let (mut raw, mut fetch_raw) = (Vec::new(), Vec::new());
     let (mut hash, mut fetch_hash) = (Sha256::new(), Sha256::new());
     require(
@@ -670,7 +808,10 @@ fn replay_lineage<H: BufRead + Seek, F: BufRead + Seek, P>(
         let record = if sp_clock {
             match serde_json::from_slice::<sp_history::Wire>(&raw).map_err(|e| e.to_string())? {
                 sp_history::Wire::Legacy(r) => Some(r),
-                sp_history::Wire::Sp(_) => None,
+                sp_history::Wire::Sp(s) => {
+                    ledger.sp(&s)?;
+                    None
+                }
                 sp_history::Wire::Storage(s) => {
                     ledger.storage(&s)?;
                     None
@@ -713,13 +854,17 @@ fn replay_lineage<H: BufRead + Seek, F: BufRead + Seek, P>(
         "complete source changed between validation and lineage replay",
     )?;
     Ok(PiFetchLineageReport {
-        format: if sp_clock {
+        format: if ledger.sp_attributed {
+            "plaid-sp-pi-fetch-lineage-report-v1"
+        } else if sp_clock {
             "plaid-sp-pi-fetch-lineage-report-v0"
         } else {
             "plaid-pi-fetch-lineage-report-v0"
         }
         .into(),
-        scope: if sp_clock {
+        scope: if ledger.sp_attributed {
+            "finite_observed_pi_ram_sp_dma_byte_chains_without_mutation_census"
+        } else if sp_clock {
             "finite_observed_pi_byte_chains_on_raw_sp_clock_without_mutation_census"
         } else {
             "finite_observed_pi_byte_chains_without_mutation_census"
@@ -795,6 +940,7 @@ mod tests {
                         rom_offset: RomOffset(offset + u64::from(n)),
                         writer_ordinal: transfer * 100 + u64::from(n),
                         transfer,
+                        sp_writer: None,
                     }),
                 )
                 .unwrap();
