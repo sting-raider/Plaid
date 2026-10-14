@@ -638,6 +638,27 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             );
         }
     }
+    for image in images {
+        for c in crate::callbacks::callbacks(map, image) {
+            if !c.target.as_ref().is_some_and(|t| starts.contains(t)) {
+                let evidence = map
+                    .direct_edges
+                    .iter()
+                    .find(|e| e.site == c.site)
+                    .map(|e| e.evidence.clone())
+                    .unwrap_or_default();
+                add(
+                    "unresolved_runtime_callback",
+                    Some(c.site.clone()),
+                    &format!(
+                        "guest code passed to a runtime function in r{} has no proven target block",
+                        c.register
+                    ),
+                    evidence,
+                );
+            }
+        }
+    }
     let mut return_closure = false;
     for site in &map.indirect_sites {
         // Return certificates hold only under the guarded scope's checked
@@ -952,7 +973,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 .map(|f| f.name.as_str())
                 .collect();
             assumptions.push(format!(
-                "Declared runtime functions ({}) are host-provided: entered only by call or tail call at their entry, they follow the o32 ABI (preserving s0-s7, gp, sp and fp, and returning to $ra), never enter guest code (the artifact exposes no guest entry points to the runtime), and their guest bodies are neither analyzed nor lowered.",
+                "Declared runtime functions ({}) are host-provided: entered only by call or tail call at their entry, they follow the o32 ABI (preserving s0-s7, gp, sp and fp, and returning to $ra), enter guest code only at proven callback arguments through the artifact's fail-closed plaid_enter dispatch, and their guest bodies are neither analyzed nor lowered.",
                 names.join(", ")
             ));
         }

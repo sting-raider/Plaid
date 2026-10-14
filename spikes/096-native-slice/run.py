@@ -135,6 +135,14 @@ PROGRAMS = {
         'sum', addu(v0, zero, zero),
         'sl', lbu(t0, 0, a0), addu(v0, v0, t0), addiu(a0, a0, 1), addiu(a1, a1, -1), bgtz(a1, 'sl'), nop,
         R(15), jr(ra), nop],
+    # A runtime function entering guest code it is passed (ADR-0130). Only the
+    # proven callback reaches plaid_enter natively.
+    'callback': [lui(sp, 0x8000), ori(sp, sp, 0x2000),
+        lui(a0, 0x8000), LO(a0, a0, 'cb'), addiu(a1, zero, 21), jal('spawn'), nop, addu(s1, v0, zero),
+        or_(a0, zero, zero), or_(t9, zero, zero), *DONE,
+        'cb', addu(v0, a0, a0), jr(ra), nop,
+        'spawn', addiu(sp, sp, -8), sw(ra, 4, sp), addu(t9, a0, zero), addu(a0, a1, zero), jalr(ra, t9), nop,
+        addiu(v0, v0, 1), lw(ra, 4, sp), R(15), jr(ra), addiu(sp, sp, 8)],
     # Nested, recursive, pointer and tail calls; frames live in the RAM window.
     'calls': [lui(sp, 0x8000), ori(sp, sp, 0x1100),
         addiu(a0, zero, 5), jal('fact'), nop, addu(s0, v0, zero),
@@ -159,7 +167,7 @@ SELF_MODIFYING = [lui(s0, 0x8000), sw(zero, 8, s0), *DONE]
 BAD_RETURN = [jal('f'), nop, *DONE, 'f', addiu(ra, ra, 8), jr(ra), nop]
 # A trapping add that overflows raises on hardware; native code must fault 6.
 OVERFLOW = [lui(t0, 0x7FFF), ori(t0, t0, 0xFFFF), addi(t1, t0, 1), *DONE]
-RUNTIME = {'boundary': ['sum']}
+RUNTIME = {'boundary': [('sum', [])], 'callback': [('spawn', ['a0'])]}
 CACHE_ALIAS = [lui(s0, 0x8000), sw(s0, 0x1000, s0), lui(s1, 0xA000), lw(t0, 0x1000, s1), *DONE]
 
 def windows():
@@ -173,7 +181,7 @@ def windows():
         if name in RUNTIME:
             labels = label_pcs(items)
             decl = dict(format='plaid-runtime-functions-v0', source='spike096 synthetic declaration',
-                functions=[dict(entry=hex(labels[f]), name=f) for f in RUNTIME[name]])
+                functions=[dict(entry=hex(labels[f]), name=f, callbacks=cb) for f, cb in RUNTIME[name]])
             (OUT / f'{name}.runtime.json').write_text(json.dumps(decl))
             extra = [str(OUT / f'{name}.runtime.json')]
         subprocess.run([str(exe), 'lower-c', str(OUT / f'{name}.bin'), hex(BASE), hex(BASE), hex(EXIT), str(OUT / f'{name}.c'), *extra], check=True)

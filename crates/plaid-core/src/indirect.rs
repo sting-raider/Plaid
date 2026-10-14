@@ -64,11 +64,14 @@ pub(crate) fn transfer(word: u32, pc: GuestAddr, state: &mut [Option<u64>; 32]) 
     state[0] = Some(0);
 }
 
-fn certificate(
+/// Register values just before `site`, from a straight-line prefix that starts
+/// at the site's block and that no other control flow enters. Returns the
+/// block start, the state and the prefix bytes including the site word.
+pub(crate) fn prefix_state(
     map: &ProgramMap,
     image: &CodeImage,
     site: &CodeAddress,
-) -> Option<ConstantCertificate> {
+) -> Option<(CodeAddress, [Option<u64>; 32], Vec<u8>)> {
     if image.base.image != site.image || image.base.generation != site.generation {
         return None;
     }
@@ -116,21 +119,7 @@ fn certificate(
         }
         prefix.extend(word.to_be_bytes());
         if pc == site.pc {
-            if !matches!(i.opcode_name(), "jr" | "jalr") {
-                return None;
-            }
-            // Capture before the delay slot or JALR link write modifies rs.
-            let target = state[i.get_rs() as usize]?;
-            let low = target as u32;
-            if (target != u64::from(low) && target != signed_word(low)) || !low.is_multiple_of(4) {
-                return None;
-            }
-            return Some(ConstantCertificate {
-                block: block.start.clone(),
-                site: site.clone(),
-                target: image.address(GuestAddr(low)),
-                prefix_sha256: sha256(&prefix),
-            });
+            return Some((block.start.clone(), state, prefix));
         }
         if i.has_delay_slot() || pc.0 >= site.pc.0 {
             return None;
@@ -138,6 +127,32 @@ fn certificate(
         transfer(word, pc, &mut state);
         pc = GuestAddr(pc.0.checked_add(4)?);
     }
+}
+
+/// A 32-bit code address held in a 64-bit register, if it is one.
+pub(crate) fn code_pointer(value: u64) -> Option<u32> {
+    let low = value as u32;
+    ((value == u64::from(low) || value == signed_word(low)) && low.is_multiple_of(4)).then_some(low)
+}
+
+fn certificate(
+    map: &ProgramMap,
+    image: &CodeImage,
+    site: &CodeAddress,
+) -> Option<ConstantCertificate> {
+    let (block, state, prefix) = prefix_state(map, image, site)?;
+    let i = decode(image.word(site.pc)?, site.pc);
+    if !matches!(i.opcode_name(), "jr" | "jalr") {
+        return None;
+    }
+    // Capture before the delay slot or JALR link write modifies rs.
+    let low = code_pointer(state[i.get_rs() as usize]?)?;
+    Some(ConstantCertificate {
+        block,
+        site: site.clone(),
+        target: image.address(GuestAddr(low)),
+        prefix_sha256: sha256(&prefix),
+    })
 }
 
 /// Sets a closed local target only when a straight-line prefix dominates the site

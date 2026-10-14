@@ -13,3 +13,19 @@ int plaid_rt_sum(plaid_state *s) {
   s->r[2] = SX32((u32)total);
   return 0;
 }
+
+/* spawn(a0 = guest function, a1 = argument): v0 = fn(a1) + 1. The guest
+   function is entered through plaid_enter, which admits only proven callbacks. */
+int plaid_rt_spawn(plaid_state *s) {
+  const u64 host = 0xffffffffbfc00000ull; /* return sentinel outside guest code */
+  u64 ra = s->r[31];
+  u32 fn = (u32)s->r[4];
+  int r;
+  s->r[4] = s->r[5];
+  s->r[31] = host;
+  r = plaid_enter(s, fn, host);
+  if (r) return r;
+  s->r[31] = ra;
+  s->r[2] = SX32((u32)s->r[2] + 1);
+  return 0;
+}

@@ -194,7 +194,7 @@ fn trapping_adds_check_overflow_and_likely_slots_run_only_when_taken() {
     assert!(c.contains("{ int t = s->r[0] == s->r[0]; if (t) { s->r[10] = "));
 }
 
-fn runtime_map(words: &[u32], runtime: u32) -> (ProgramMap, CodeImage) {
+fn runtime_map(words: &[u32], runtime: u32, callbacks: Vec<u8>) -> (ProgramMap, CodeImage) {
     use plaid_core::{EvidenceKind, pipeline::discover_image_with_runtime};
     let image = CodeImage {
         base: CodeAddress {
@@ -216,7 +216,7 @@ fn runtime_map(words: &[u32], runtime: u32) -> (ProgramMap, CodeImage) {
         revision: "0".into(),
         detail: "declared".into(),
     };
-    let decl = [(GuestAddr(runtime), "sum".to_string())];
+    let decl = [(GuestAddr(runtime), "sum".to_string(), callbacks)];
     assert!(
         discover_image_with_runtime(rom.clone(), &image, &[GuestAddr(BASE)], &decl, None, 100)
             .is_err()
@@ -239,7 +239,7 @@ fn runtime_functions_are_called_not_decoded_and_close_only_under_the_guarded_sco
     // 0: jal 0x10; nop; j 0x20; nop; 0x10: sync; jr ra; nop; nop; 0x20: b .; nop
     let mut words = CALL;
     words[4] = 0x0000_000f;
-    let (map, image) = runtime_map(&words, 0x8000_0010);
+    let (map, image) = runtime_map(&words, 0x8000_0010, Vec::new());
     assert!(!map.blocks.iter().any(|b| b.start.pc.0 == 0x8000_0010));
     let r = solve(&map, std::slice::from_ref(&image), Scope::WholeRom).unwrap();
     assert!(
@@ -270,12 +270,61 @@ fn a_runtime_function_reached_by_a_branch_stays_open() {
     use plaid_core::solver::{ClosureStatus, Scope, solve};
     // beq zero,zero,0x10; nop; nop; nop; 0x10: b .; nop -- branches decode their target.
     let words = [[0x1000_0003, 0, 0, 0].as_slice(), &HALT].concat();
-    let (map, image) = runtime_map(&words, 0x8000_0010);
+    let (map, image) = runtime_map(&words, 0x8000_0010, Vec::new());
     let r = solve(&map, &[image], Scope::DeclaredStaticImagesGuardedRam).unwrap();
     assert_eq!(r.status, ClosureStatus::Open);
     assert!(
         r.blockers
             .iter()
             .any(|b| b.kind == "runtime_function_decoded")
+    );
+}
+
+// 0: lui a0,0x8000; jal 0x20; ori a0,a0,0x18 (delay slot); j 0x28; nop; nop
+// 0x18: cb: jr ra; nop; 0x20: runtime spawn (sync; jr ra); 0x28: b .; nop
+const SPAWN: [u32; 12] = [
+    0x3c04_8000,
+    0x0c00_0008,
+    0x3484_0018,
+    0x0800_000a,
+    0,
+    0,
+    0x03e0_0008,
+    0,
+    0x0000_000f,
+    0x03e0_0008,
+    0x1000_ffff,
+    0,
+];
+
+#[test]
+fn proven_callbacks_are_discovered_and_entered_only_through_plaid_enter() {
+    use plaid_core::solver::{ClosureStatus, Scope, solve};
+    let (map, image) = runtime_map(&SPAWN, 0x8000_0020, vec![4]);
+    assert!(map.blocks.iter().any(|b| b.start.pc.0 == 0x8000_0018));
+    let r = solve(
+        &map,
+        std::slice::from_ref(&image),
+        Scope::DeclaredStaticImagesGuardedRam,
+    )
+    .unwrap();
+    assert_eq!(r.status, ClosureStatus::Closed, "{:?}", r.blockers);
+    let c = lower_c(&map, &[image], GuestAddr(BASE), &[GuestAddr(0x8000_0028)]).unwrap();
+    assert!(c.contains("case 0x80000018u: return F_80000018(s, ret);"));
+    assert!(c.contains("if (t != ret) return plaid_fault(s, 0x80000018u, 5); return 0;"));
+}
+
+#[test]
+fn an_unproven_callback_argument_stays_open() {
+    use plaid_core::solver::{ClosureStatus, Scope, solve};
+    let mut words = SPAWN;
+    words[2] = 0x8c84_0100; // lw a0,0x100(a0): the code pointer comes from memory
+    let (map, image) = runtime_map(&words, 0x8000_0020, vec![4]);
+    let r = solve(&map, &[image], Scope::DeclaredStaticImagesGuardedRam).unwrap();
+    assert_eq!(r.status, ClosureStatus::Open);
+    assert!(
+        r.blockers
+            .iter()
+            .any(|b| b.kind == "unresolved_runtime_callback")
     );
 }

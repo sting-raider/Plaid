@@ -25,6 +25,10 @@ pub struct ReturnCertificate {
     pub functions: BTreeSet<CodeAddress>,
     /// Return continuations of every `$ra`-linking call into those functions.
     pub continuations: BTreeSet<CodeAddress>,
+    /// Some function is also a runtime callback (ADR-0130): returning to the
+    /// runtime that entered it is closed by the declared runtime boundary.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub runtime_entered: bool,
 }
 
 fn is_jr_ra(word: u32) -> bool {
@@ -111,7 +115,12 @@ pub fn certificate(
     }
     let block = block_of(map, site)?.start.clone();
     let calls = ra_calls(map, image);
-    let callees: BTreeSet<_> = calls.iter().map(|(_, t)| t.clone()).collect();
+    let entered = crate::callbacks::targets(map, image);
+    let callees: BTreeSet<_> = calls
+        .iter()
+        .map(|(_, t)| t.clone())
+        .chain(entered.iter().cloned())
+        .collect();
     // Entries reached only as constant-jump targets are interior blocks, not
     // host entries. Every other entry is host-entered with an unknown return.
     let jumped: BTreeSet<_> = map
@@ -141,13 +150,15 @@ pub fn certificate(
             ..c.clone()
         })
         .collect();
-    if functions.is_empty() || continuations.is_empty() {
+    let runtime_entered = functions.iter().any(|f| entered.contains(f));
+    if functions.is_empty() || (continuations.is_empty() && !runtime_entered) {
         return None;
     }
     Some(ReturnCertificate {
         site: site.clone(),
         functions,
         continuations,
+        runtime_entered,
     })
 }
 

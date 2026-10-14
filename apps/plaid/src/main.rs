@@ -874,7 +874,10 @@ fn main() -> ExitCode {
     }
 }
 
-type RuntimeDeclarations = (Vec<(GuestAddr, String)>, Option<(String, Evidence)>);
+type RuntimeDeclarations = (
+    Vec<(GuestAddr, String, Vec<u8>)>,
+    Option<(String, Evidence)>,
+);
 
 /// Read a `plaid-runtime-functions-v0` declaration (ADR-0129): host-provided
 /// guest functions that discovery records as call targets but never decodes.
@@ -898,7 +901,18 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
         let (Some(entry), Some(name)) = (f["entry"].as_str(), f["name"].as_str()) else {
             return Err("each runtime function needs entry and name strings".into());
         };
-        functions.push((GuestAddr(number32(entry)?), name.to_string()));
+        let mut callbacks = Vec::new();
+        for r in f["callbacks"].as_array().into_iter().flatten() {
+            let register = match r.as_str() {
+                Some("a0") => 4,
+                Some("a1") => 5,
+                Some("a2") => 6,
+                Some("a3") => 7,
+                _ => return Err("runtime callbacks are argument registers a0-a3".into()),
+            };
+            callbacks.push(register);
+        }
+        functions.push((GuestAddr(number32(entry)?), name.to_string(), callbacks));
     }
     let hash = plaid_core::rom::sha256(&bytes);
     let evidence = Evidence {
