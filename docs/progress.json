@@ -38,6 +38,7 @@
         {"name": "Exact IMEM-read / performed-RSP receipts", "state": "verified"},
         {"name": "Bounded scalar producer / executable-read join", "state": "verified"},
         {"name": "Bounded scalar store / executable backing", "state": "verified"},
+        {"name": "Bounded reverse-SP-DMA / RAM executable chain", "state": "verified"},
         {"name": "Controlled D-cache export / executable chain", "state": "verified"},
         {"name": "Controlled mapping / cache / exception chain", "state": "verified"},
         {"name": "CPU executable-store sensing", "state": "partial"},
@@ -119,10 +120,10 @@
       "source": "research/integration-receipts/20261014-storage-writer-fetch-primary.md"
     },
     {
-      "value": "69,513,732",
-      "label": "Ordered history records",
-      "detail": "Includes 3,027,381 storage effects",
-      "source": "docs/STATUS.md"
+      "value": "62",
+      "label": "OoT whole-ROM blockers",
+      "detail": "Local OoT baseline; 44 indirect sites",
+      "source": "research/integration-receipts/20261012-discovery-solve-primary-composition.md"
     },
     {
       "value": "2,472,203",

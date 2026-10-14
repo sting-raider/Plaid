@@ -79,7 +79,7 @@ def render_svg(data: dict) -> str:
     text(40, 38, "PLAID  /  ENGINEERING ATLAS", 13, "#78dcca", 700)
     text(1160, 38, f'Reviewed {data.get("updated", "unknown")}', 13, anchor="end")
     text(40, 84, "The path from ROM to native gameplay", 32, "#f4f7fc", 700)
-    text(40, 111, "Current frontier: executable provenance + closed-world proof", 16)
+    text(40, 111, "Current frontier: first commercial CLOSED scope (OoT blockers)", 16)
     for i, evidence in enumerate(data.get("evidence", [])):
         x = 40 + i * 286
         rect(x, 136, 262, 96, "#152538", 10, "#294052")

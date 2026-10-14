@@ -1,21 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1910" width="1200" height="1910" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1936" width="1200" height="1936" role="img" aria-labelledby="title desc">
 <title id="title">Plaid engineering progress atlas</title>
 <desc id="desc">Detailed integrated, partial and open milestones. Retained finite evidence does not establish whole-ROM closure or native completion.</desc>
 <defs><linearGradient id="header" x2="1" y2="1"><stop stop-color="#123247"/><stop offset="1" stop-color="#111a2b"/></linearGradient></defs>
-<rect width="1200" height="1910" rx="18" fill="#0b1320"/>
+<rect width="1200" height="1936" rx="18" fill="#0b1320"/>
 <rect width="1200" height="250" rx="18" fill="url(#header)"/>
 <text x="40" y="38" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">PLAID  /  ENGINEERING ATLAS</text>
 <text x="1160" y="38" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="400" text-anchor="end">Reviewed 2026-10-15</text>
 <text x="40" y="84" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="32" font-weight="700" text-anchor="start">The path from ROM to native gameplay</text>
-<text x="40" y="111" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="16" font-weight="400" text-anchor="start">Current frontier: executable provenance + closed-world proof</text>
+<text x="40" y="111" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="16" font-weight="400" text-anchor="start">Current frontier: first commercial CLOSED scope (OoT blockers)</text>
 <rect x="40" y="136" width="262" height="96" rx="10" fill="#152538" stroke="#294052"/>
 <text x="58" y="171" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="27" font-weight="700" text-anchor="start">20,000,000</text>
 <text x="58" y="194" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="600" text-anchor="start">Observed CPU fetches</text>
 <text x="58" y="214" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="11" font-weight="400" text-anchor="start">Retained commercial-ROM prefix</text>
 <rect x="326" y="136" width="262" height="96" rx="10" fill="#152538" stroke="#294052"/>
-<text x="344" y="171" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="27" font-weight="700" text-anchor="start">69,513,732</text>
-<text x="344" y="194" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="600" text-anchor="start">Ordered history records</text>
-<text x="344" y="214" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="11" font-weight="400" text-anchor="start">Includes 3,027,381 storage effects</text>
+<text x="344" y="171" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="27" font-weight="700" text-anchor="start">62</text>
+<text x="344" y="194" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="600" text-anchor="start">OoT whole-ROM blockers</text>
+<text x="344" y="214" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="11" font-weight="400" text-anchor="start">Local OoT baseline; 44 indirect sites</text>
 <rect x="612" y="136" width="262" height="96" rx="10" fill="#152538" stroke="#294052"/>
 <text x="630" y="171" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="27" font-weight="700" text-anchor="start">2,472,203</text>
 <text x="630" y="194" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="600" text-anchor="start">Full PI-byte fetch chains</text>
@@ -30,7 +30,7 @@
 <text x="427" y="274" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">PARTIAL · proof / coverage remains</text>
 <rect x="790" y="265" width="9" height="9" rx="2" fill="#a9b8ca" stroke="none"/>
 <text x="807" y="274" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">OPEN · not yet demonstrated</text>
-<rect x="40" y="304" width="548" height="652" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
+<rect x="40" y="304" width="548" height="678" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
 <text x="60" y="334" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">01</text>
 <text x="94" y="335" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Discovery &amp; ProgramMap</text>
 <text x="60" y="360" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">7 integrated   /   1 partial   /   2 open</text>
@@ -97,15 +97,15 @@
 <text x="83" y="637" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Commercial-ROM map validation</text>
 <text x="568" y="637" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
-<text x="60" y="912" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
-<text x="60" y="930" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Broader indirect targets and a complete commercial-ROM map.</text>
-<rect x="612" y="304" width="548" height="652" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
+<text x="60" y="938" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
+<text x="60" y="956" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Broader indirect targets and a complete commercial-ROM map.</text>
+<rect x="612" y="304" width="548" height="678" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
 <text x="632" y="334" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">02</text>
 <text x="666" y="335" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Executable Provenance</text>
-<text x="632" y="360" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">14 integrated   /   5 partial   /   1 open</text>
-<rect x="632" y="374" width="355.6" height="4" rx="0" fill="#58d5ab" stroke="none"/>
-<rect x="987.6" y="374" width="127.0" height="4" rx="0" fill="#ffc66d" stroke="none"/>
-<rect x="1114.6" y="374" width="25.4" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
+<text x="632" y="360" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">15 integrated   /   5 partial   /   1 open</text>
+<rect x="632" y="374" width="362.85714285714283" height="4" rx="0" fill="#58d5ab" stroke="none"/>
+<rect x="994.8571428571429" y="374" width="120.95238095238095" height="4" rx="0" fill="#ffc66d" stroke="none"/>
+<rect x="1115.8095238095239" y="374" width="24.19047619047619" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
 <g class="milestone">
 <title>Executable Provenance: Physical/cache fetch context (verified)</title>
 <text x="632" y="403" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">✓</text>
@@ -179,309 +179,315 @@
 <text x="1140" y="689" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
 </g>
 <g class="milestone">
-<title>Executable Provenance: Controlled D-cache export / executable chain (verified)</title>
+<title>Executable Provenance: Bounded reverse-SP-DMA / RAM executable chain (verified)</title>
 <text x="632" y="715" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">✓</text>
-<text x="655" y="715" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Controlled D-cache export / executable chain</text>
+<text x="655" y="715" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Bounded reverse-SP-DMA / RAM executable chain</text>
 <text x="1140" y="715" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
 </g>
 <g class="milestone">
-<title>Executable Provenance: Controlled mapping / cache / exception chain (verified)</title>
+<title>Executable Provenance: Controlled D-cache export / executable chain (verified)</title>
 <text x="632" y="741" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">✓</text>
-<text x="655" y="741" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Controlled mapping / cache / exception chain</text>
+<text x="655" y="741" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Controlled D-cache export / executable chain</text>
 <text x="1140" y="741" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
 </g>
 <g class="milestone">
-<title>Executable Provenance: CPU executable-store sensing (partial)</title>
-<text x="632" y="767" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
-<text x="655" y="767" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">CPU executable-store sensing</text>
-<text x="1140" y="767" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
+<title>Executable Provenance: Controlled mapping / cache / exception chain (verified)</title>
+<text x="632" y="767" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">✓</text>
+<text x="655" y="767" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Controlled mapping / cache / exception chain</text>
+<text x="1140" y="767" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
 </g>
 <g class="milestone">
-<title>Executable Provenance: CPU copy/transform lineage (partial)</title>
+<title>Executable Provenance: CPU executable-store sensing (partial)</title>
 <text x="632" y="793" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
-<text x="655" y="793" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">CPU copy/transform lineage</text>
+<text x="655" y="793" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">CPU executable-store sensing</text>
 <text x="1140" y="793" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
-<title>Executable Provenance: RSP writer/dataflow lineage (partial)</title>
+<title>Executable Provenance: CPU copy/transform lineage (partial)</title>
 <text x="632" y="819" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
-<text x="655" y="819" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">RSP writer/dataflow lineage</text>
+<text x="655" y="819" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">CPU copy/transform lineage</text>
 <text x="1140" y="819" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
-<title>Executable Provenance: Cache writeback/restore lineage (partial)</title>
+<title>Executable Provenance: RSP writer/dataflow lineage (partial)</title>
 <text x="632" y="845" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
-<text x="655" y="845" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Cache writeback/restore lineage</text>
+<text x="655" y="845" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">RSP writer/dataflow lineage</text>
 <text x="1140" y="845" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
-<title>Executable Provenance: Decompression/relocation lineage (partial)</title>
+<title>Executable Provenance: Cache writeback/restore lineage (partial)</title>
 <text x="632" y="871" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
-<text x="655" y="871" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Decompression/relocation lineage</text>
+<text x="655" y="871" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Cache writeback/restore lineage</text>
 <text x="1140" y="871" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
-<title>Executable Provenance: Complete mutation census (open)</title>
-<text x="632" y="897" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="897" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Complete mutation census</text>
-<text x="1140" y="897" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+<title>Executable Provenance: Decompression/relocation lineage (partial)</title>
+<text x="632" y="897" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
+<text x="655" y="897" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Decompression/relocation lineage</text>
+<text x="1140" y="897" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
-<text x="632" y="912" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
-<text x="632" y="930" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Complete writer census, producer ancestry and continuous lifetimes.</text>
-<rect x="40" y="980" width="548" height="392" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
-<text x="60" y="1010" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">03</text>
-<text x="94" y="1011" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Closed-World Proof</text>
-<text x="60" y="1036" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">3 integrated   /   6 partial   /   1 open</text>
-<rect x="60" y="1050" width="152.4" height="4" rx="0" fill="#58d5ab" stroke="none"/>
-<rect x="212.4" y="1050" width="304.8" height="4" rx="0" fill="#ffc66d" stroke="none"/>
-<rect x="517.2" y="1050" width="50.8" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
+<g class="milestone">
+<title>Executable Provenance: Complete mutation census (open)</title>
+<text x="632" y="923" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
+<text x="655" y="923" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Complete mutation census</text>
+<text x="1140" y="923" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+</g>
+<text x="632" y="938" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
+<text x="632" y="956" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Complete writer census, producer ancestry and continuous lifetimes.</text>
+<rect x="40" y="1006" width="548" height="392" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
+<text x="60" y="1036" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">03</text>
+<text x="94" y="1037" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Closed-World Proof</text>
+<text x="60" y="1062" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">3 integrated   /   6 partial   /   1 open</text>
+<rect x="60" y="1076" width="152.4" height="4" rx="0" fill="#58d5ab" stroke="none"/>
+<rect x="212.4" y="1076" width="304.8" height="4" rx="0" fill="#ffc66d" stroke="none"/>
+<rect x="517.2" y="1076" width="50.8" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
 <g class="milestone">
 <title>Closed-World Proof: Fail-closed solver &amp; diagnostics (verified)</title>
-<text x="60" y="1079" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">✓</text>
-<text x="83" y="1079" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Fail-closed solver &amp; diagnostics</text>
-<text x="568" y="1079" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
-</g>
-<g class="milestone">
-<title>Closed-World Proof: Source/certificate rechecking (verified)</title>
 <text x="60" y="1105" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">✓</text>
-<text x="83" y="1105" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Source/certificate rechecking</text>
+<text x="83" y="1105" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Fail-closed solver &amp; diagnostics</text>
 <text x="568" y="1105" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
 </g>
 <g class="milestone">
-<title>Closed-World Proof: Direct-control-flow closure (verified)</title>
+<title>Closed-World Proof: Source/certificate rechecking (verified)</title>
 <text x="60" y="1131" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">✓</text>
-<text x="83" y="1131" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Direct-control-flow closure</text>
+<text x="83" y="1131" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Source/certificate rechecking</text>
 <text x="568" y="1131" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
 </g>
 <g class="milestone">
-<title>Closed-World Proof: Finite indirect-target closure (partial)</title>
-<text x="60" y="1157" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
-<text x="83" y="1157" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Finite indirect-target closure</text>
-<text x="568" y="1157" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
+<title>Closed-World Proof: Direct-control-flow closure (verified)</title>
+<text x="60" y="1157" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">✓</text>
+<text x="83" y="1157" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Direct-control-flow closure</text>
+<text x="568" y="1157" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
 </g>
 <g class="milestone">
-<title>Closed-World Proof: Execution-root completeness (partial)</title>
+<title>Closed-World Proof: Finite indirect-target closure (partial)</title>
 <text x="60" y="1183" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
-<text x="83" y="1183" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Execution-root completeness</text>
+<text x="83" y="1183" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Finite indirect-target closure</text>
 <text x="568" y="1183" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
-<title>Closed-World Proof: TLB/context/cache composition (partial)</title>
+<title>Closed-World Proof: Execution-root completeness (partial)</title>
 <text x="60" y="1209" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
-<text x="83" y="1209" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">TLB/context/cache composition</text>
+<text x="83" y="1209" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Execution-root completeness</text>
 <text x="568" y="1209" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
-<title>Closed-World Proof: Pointer-table immutability proof (partial)</title>
+<title>Closed-World Proof: TLB/context/cache composition (partial)</title>
 <text x="60" y="1235" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
-<text x="83" y="1235" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Pointer-table immutability proof</text>
+<text x="83" y="1235" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">TLB/context/cache composition</text>
 <text x="568" y="1235" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
-<title>Closed-World Proof: Overlay/executable lifetimes (partial)</title>
+<title>Closed-World Proof: Pointer-table immutability proof (partial)</title>
 <text x="60" y="1261" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
-<text x="83" y="1261" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Overlay/executable lifetimes</text>
+<text x="83" y="1261" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Pointer-table immutability proof</text>
 <text x="568" y="1261" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
-<title>Closed-World Proof: RSP executable-universe proof (partial)</title>
+<title>Closed-World Proof: Overlay/executable lifetimes (partial)</title>
 <text x="60" y="1287" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
-<text x="83" y="1287" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">RSP executable-universe proof</text>
+<text x="83" y="1287" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Overlay/executable lifetimes</text>
 <text x="568" y="1287" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
-<title>Closed-World Proof: First ROM reaches CLOSED (open)</title>
-<text x="60" y="1313" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1313" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">First ROM reaches CLOSED</text>
-<text x="568" y="1313" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+<title>Closed-World Proof: RSP executable-universe proof (partial)</title>
+<text x="60" y="1313" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
+<text x="83" y="1313" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">RSP executable-universe proof</text>
+<text x="568" y="1313" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
-<text x="60" y="1328" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
-<text x="60" y="1346" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Compose exhaustive roots, targets and lifetimes into a CLOSED scope.</text>
-<rect x="612" y="980" width="548" height="392" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
-<text x="632" y="1010" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">04</text>
-<text x="666" y="1011" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Native AOT Compiler</text>
-<text x="632" y="1036" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">0 integrated   /   0 partial   /   8 open</text>
-<rect x="632.0" y="1050" width="508.0" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
+<g class="milestone">
+<title>Closed-World Proof: First ROM reaches CLOSED (open)</title>
+<text x="60" y="1339" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
+<text x="83" y="1339" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">First ROM reaches CLOSED</text>
+<text x="568" y="1339" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+</g>
+<text x="60" y="1354" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
+<text x="60" y="1372" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Compose exhaustive roots, targets and lifetimes into a CLOSED scope.</text>
+<rect x="612" y="1006" width="548" height="392" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
+<text x="632" y="1036" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">04</text>
+<text x="666" y="1037" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Native AOT Compiler</text>
+<text x="632" y="1062" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">0 integrated   /   0 partial   /   8 open</text>
+<rect x="632.0" y="1076" width="508.0" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
 <g class="milestone">
 <title>Native AOT Compiler: Architecture-neutral IR (open)</title>
-<text x="632" y="1079" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="1079" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Architecture-neutral IR</text>
-<text x="1140" y="1079" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
-</g>
-<g class="milestone">
-<title>Native AOT Compiler: Integer MIPS lowering (open)</title>
 <text x="632" y="1105" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="1105" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Integer MIPS lowering</text>
+<text x="655" y="1105" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Architecture-neutral IR</text>
 <text x="1140" y="1105" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native AOT Compiler: x86-64 object emission (open)</title>
+<title>Native AOT Compiler: Integer MIPS lowering (open)</title>
 <text x="632" y="1131" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="1131" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">x86-64 object emission</text>
+<text x="655" y="1131" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Integer MIPS lowering</text>
 <text x="1140" y="1131" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native AOT Compiler: ARM64 object emission (open)</title>
+<title>Native AOT Compiler: x86-64 object emission (open)</title>
 <text x="632" y="1157" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="1157" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">ARM64 object emission</text>
+<text x="655" y="1157" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">x86-64 object emission</text>
 <text x="1140" y="1157" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native AOT Compiler: Native direct calls (open)</title>
+<title>Native AOT Compiler: ARM64 object emission (open)</title>
 <text x="632" y="1183" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="1183" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Native direct calls</text>
+<text x="655" y="1183" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">ARM64 object emission</text>
 <text x="1140" y="1183" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native AOT Compiler: Finite native indirect dispatch (open)</title>
+<title>Native AOT Compiler: Native direct calls (open)</title>
 <text x="632" y="1209" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="1209" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Finite native indirect dispatch</text>
+<text x="655" y="1209" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Native direct calls</text>
 <text x="1140" y="1209" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native AOT Compiler: Native differential verifier (open)</title>
+<title>Native AOT Compiler: Finite native indirect dispatch (open)</title>
 <text x="632" y="1235" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="1235" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Native differential verifier</text>
+<text x="655" y="1235" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Finite native indirect dispatch</text>
 <text x="1140" y="1235" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native AOT Compiler: Link/package model (open)</title>
+<title>Native AOT Compiler: Native differential verifier (open)</title>
 <text x="632" y="1261" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="1261" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Link/package model</text>
+<text x="655" y="1261" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Native differential verifier</text>
 <text x="1140" y="1261" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
-<text x="632" y="1328" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
-<text x="632" y="1346" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">IR, verified lowering, host emission and native linking.</text>
-<rect x="40" y="1396" width="548" height="418" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
-<text x="60" y="1426" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">05</text>
-<text x="94" y="1427" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Native Runtime</text>
-<text x="60" y="1452" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">0 integrated   /   0 partial   /   8 open</text>
-<rect x="60.0" y="1466" width="508.0" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
+<g class="milestone">
+<title>Native AOT Compiler: Link/package model (open)</title>
+<text x="632" y="1287" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
+<text x="655" y="1287" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Link/package model</text>
+<text x="1140" y="1287" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+</g>
+<text x="632" y="1354" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
+<text x="632" y="1372" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">IR, verified lowering, host emission and native linking.</text>
+<rect x="40" y="1422" width="548" height="418" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
+<text x="60" y="1452" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">05</text>
+<text x="94" y="1453" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Native Runtime</text>
+<text x="60" y="1478" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">0 integrated   /   0 partial   /   8 open</text>
+<rect x="60.0" y="1492" width="508.0" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
 <g class="milestone">
 <title>Native Runtime: Guest memory/MMIO runtime (open)</title>
-<text x="60" y="1495" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1495" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Guest memory/MMIO runtime</text>
-<text x="568" y="1495" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
-</g>
-<g class="milestone">
-<title>Native Runtime: Interrupt/timing/event runtime (open)</title>
 <text x="60" y="1521" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1521" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Interrupt/timing/event runtime</text>
+<text x="83" y="1521" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Guest memory/MMIO runtime</text>
 <text x="568" y="1521" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Controller input (open)</title>
+<title>Native Runtime: Interrupt/timing/event runtime (open)</title>
 <text x="60" y="1547" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1547" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Controller input</text>
+<text x="83" y="1547" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Interrupt/timing/event runtime</text>
 <text x="568" y="1547" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Save devices (open)</title>
+<title>Native Runtime: Controller input (open)</title>
 <text x="60" y="1573" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1573" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Save devices</text>
+<text x="83" y="1573" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Controller input</text>
 <text x="568" y="1573" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Audio path (open)</title>
+<title>Native Runtime: Save devices (open)</title>
 <text x="60" y="1599" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1599" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Audio path</text>
+<text x="83" y="1599" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Save devices</text>
 <text x="568" y="1599" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: RSP runtime/native path (open)</title>
+<title>Native Runtime: Audio path (open)</title>
 <text x="60" y="1625" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1625" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">RSP runtime/native path</text>
+<text x="83" y="1625" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Audio path</text>
 <text x="568" y="1625" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Renderer integration (open)</title>
+<title>Native Runtime: RSP runtime/native path (open)</title>
 <text x="60" y="1651" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1651" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Renderer integration</text>
+<text x="83" y="1651" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">RSP runtime/native path</text>
 <text x="568" y="1651" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Native launch/cache packaging (open)</title>
+<title>Native Runtime: Renderer integration (open)</title>
 <text x="60" y="1677" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1677" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Native launch/cache packaging</text>
+<text x="83" y="1677" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Renderer integration</text>
 <text x="568" y="1677" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
-<text x="60" y="1770" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
-<text x="60" y="1788" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Memory, timing, devices, rendering and native RSP execution.</text>
-<rect x="612" y="1396" width="548" height="418" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
-<text x="632" y="1426" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">06</text>
-<text x="666" y="1427" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Compatibility</text>
-<text x="632" y="1452" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">3 integrated   /   1 partial   /   7 open</text>
-<rect x="632" y="1466" width="138.54545454545453" height="4" rx="0" fill="#58d5ab" stroke="none"/>
-<rect x="770.5454545454545" y="1466" width="46.18181818181818" height="4" rx="0" fill="#ffc66d" stroke="none"/>
-<rect x="816.7272727272726" y="1466" width="323.27272727272725" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
+<g class="milestone">
+<title>Native Runtime: Native launch/cache packaging (open)</title>
+<text x="60" y="1703" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
+<text x="83" y="1703" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Native launch/cache packaging</text>
+<text x="568" y="1703" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+</g>
+<text x="60" y="1796" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
+<text x="60" y="1814" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Memory, timing, devices, rendering and native RSP execution.</text>
+<rect x="612" y="1422" width="548" height="418" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
+<text x="632" y="1452" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">06</text>
+<text x="666" y="1453" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Compatibility</text>
+<text x="632" y="1478" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">3 integrated   /   1 partial   /   7 open</text>
+<rect x="632" y="1492" width="138.54545454545453" height="4" rx="0" fill="#58d5ab" stroke="none"/>
+<rect x="770.5454545454545" y="1492" width="46.18181818181818" height="4" rx="0" fill="#ffc66d" stroke="none"/>
+<rect x="816.7272727272726" y="1492" width="323.27272727272725" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
 <g class="milestone">
 <title>Compatibility: Synthetic discovery corpus (verified)</title>
-<text x="632" y="1495" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">✓</text>
-<text x="655" y="1495" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Synthetic discovery corpus</text>
-<text x="1140" y="1495" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
-</g>
-<g class="milestone">
-<title>Compatibility: Mupen/ares differential oracles (verified)</title>
 <text x="632" y="1521" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">✓</text>
-<text x="655" y="1521" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Mupen/ares differential oracles</text>
+<text x="655" y="1521" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Synthetic discovery corpus</text>
 <text x="1140" y="1521" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
 </g>
 <g class="milestone">
-<title>Compatibility: 20M-fetch commercial-prefix replay (verified)</title>
+<title>Compatibility: Mupen/ares differential oracles (verified)</title>
 <text x="632" y="1547" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">✓</text>
-<text x="655" y="1547" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">20M-fetch commercial-prefix replay</text>
+<text x="655" y="1547" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Mupen/ares differential oracles</text>
 <text x="1140" y="1547" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
 </g>
 <g class="milestone">
+<title>Compatibility: 20M-fetch commercial-prefix replay (verified)</title>
+<text x="632" y="1573" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">✓</text>
+<text x="655" y="1573" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">20M-fetch commercial-prefix replay</text>
+<text x="1140" y="1573" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
+</g>
+<g class="milestone">
 <title>Compatibility: n64-systemtest research corpus (partial)</title>
-<text x="632" y="1573" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
-<text x="655" y="1573" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">n64-systemtest research corpus</text>
-<text x="1140" y="1573" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
+<text x="632" y="1599" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
+<text x="655" y="1599" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">n64-systemtest research corpus</text>
+<text x="1140" y="1599" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
 <title>Compatibility: First commercial ROM mapped (open)</title>
-<text x="632" y="1599" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="1599" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">First commercial ROM mapped</text>
-<text x="1140" y="1599" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
-</g>
-<g class="milestone">
-<title>Compatibility: First commercial ROM CLOSED (open)</title>
 <text x="632" y="1625" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="1625" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">First commercial ROM CLOSED</text>
+<text x="655" y="1625" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">First commercial ROM mapped</text>
 <text x="1140" y="1625" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Compatibility: First native synthetic executable (open)</title>
+<title>Compatibility: First commercial ROM CLOSED (open)</title>
 <text x="632" y="1651" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="1651" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">First native synthetic executable</text>
+<text x="655" y="1651" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">First commercial ROM CLOSED</text>
 <text x="1140" y="1651" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Compatibility: First native commercial boot (open)</title>
+<title>Compatibility: First native synthetic executable (open)</title>
 <text x="632" y="1677" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="1677" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">First native commercial boot</text>
+<text x="655" y="1677" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">First native synthetic executable</text>
 <text x="1140" y="1677" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Compatibility: First native gameplay (open)</title>
+<title>Compatibility: First native commercial boot (open)</title>
 <text x="632" y="1703" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="1703" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">First native gameplay</text>
+<text x="655" y="1703" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">First native commercial boot</text>
 <text x="1140" y="1703" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Compatibility: Representative 25-game set (open)</title>
+<title>Compatibility: First native gameplay (open)</title>
 <text x="632" y="1729" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="1729" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Representative 25-game set</text>
+<text x="655" y="1729" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">First native gameplay</text>
 <text x="1140" y="1729" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Compatibility: 100-game campaign (open)</title>
+<title>Compatibility: Representative 25-game set (open)</title>
 <text x="632" y="1755" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="1755" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">100-game campaign</text>
+<text x="655" y="1755" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Representative 25-game set</text>
 <text x="1140" y="1755" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
-<text x="632" y="1770" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
-<text x="632" y="1788" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">First CLOSED ROM, native boot and reproducible gameplay.</text>
-<text x="40" y="1852" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="400" text-anchor="start">Evidence is finite. Milestones have different scope; these counts are not a completion percentage.</text>
-<text x="40" y="1876" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="600" text-anchor="start">FIRST COMMERCIAL CLOSED SCOPE: OPEN     /     WHOLE-ROM CLOSURE: OPEN     /     native_complete: false</text>
+<g class="milestone">
+<title>Compatibility: 100-game campaign (open)</title>
+<text x="632" y="1781" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
+<text x="655" y="1781" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">100-game campaign</text>
+<text x="1140" y="1781" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+</g>
+<text x="632" y="1796" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
+<text x="632" y="1814" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">First CLOSED ROM, native boot and reproducible gameplay.</text>
+<text x="40" y="1878" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="400" text-anchor="start">Evidence is finite. Milestones have different scope; these counts are not a completion percentage.</text>
+<text x="40" y="1902" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="600" text-anchor="start">FIRST COMMERCIAL CLOSED SCOPE: OPEN     /     WHOLE-ROM CLOSURE: OPEN     /     native_complete: false</text>
 </svg>

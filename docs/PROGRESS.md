@@ -17,7 +17,7 @@ Last progress-data update: **2026-10-15**.
 | Evidence | Observed scope | Source |
 | --- | --- | --- |
 | **20,000,000** Observed CPU fetches | Retained commercial-ROM prefix | [Receipt / status](../research/integration-receipts/20261014-storage-writer-fetch-primary.md) |
-| **69,513,732** Ordered history records | Includes 3,027,381 storage effects | [Receipt / status](STATUS.md) |
+| **62** OoT whole-ROM blockers | Local OoT baseline; 44 indirect sites | [Receipt / status](../research/integration-receipts/20261012-discovery-solve-primary-composition.md) |
 | **2,472,203** Full PI-byte fetch chains | Canonical + independent replay agree | [Receipt / status](STATUS.md) |
 | **0** Commercial ROMs CLOSED | Whole-ROM and native gates remain open | [Receipt / status](STATUS.md) |
 
@@ -56,6 +56,7 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Exact IMEM-read / performed-RSP receipts | ✅ verified |
 | Bounded scalar producer / executable-read join | ✅ verified |
 | Bounded scalar store / executable backing | ✅ verified |
+| Bounded reverse-SP-DMA / RAM executable chain | ✅ verified |
 | Controlled D-cache export / executable chain | ✅ verified |
 | Controlled mapping / cache / exception chain | ✅ verified |
 | CPU executable-store sensing | 🟨 partial |
