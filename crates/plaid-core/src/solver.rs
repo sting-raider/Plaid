@@ -674,6 +674,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         }
     }
     let mut return_closure = false;
+    let mut tables = BTreeSet::new();
     for site in &map.indirect_sites {
         // Return certificates hold only under the guarded scope's checked
         // call/return assumption; every other scope keeps such sites OPEN.
@@ -681,7 +682,16 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             && source(images, &site.site)
                 .is_some_and(|image| crate::returns::verify(map, image, site));
         return_closure |= returns;
+        // A verified jump table closes only under the guarded scope, whose
+        // native artifact store-protects table bytes (ADR-0132).
+        let table = scope == Scope::DeclaredStaticImagesGuardedRam
+            && source(images, &site.site)
+                .is_some_and(|image| crate::tables::verify(map, image, site));
+        if table {
+            tables.insert(site.site.clone());
+        }
         let proof_valid = returns
+            || table
             || source(images, &site.site).is_some_and(|image| verify_constant(map, image, site));
         if !proof_valid {
             add(
@@ -844,7 +854,13 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         }
     }
     for u in &map.unresolved {
-        if u.kind == "unmapped_target" && u.site.as_ref().is_some_and(|a| starts.contains(a)) {
+        let table_obligation = matches!(
+            u.kind.as_str(),
+            "pointer_table_immutability_unproven" | "pointer_table_target_identity_unproven"
+        ) && u.site.as_ref().is_some_and(|a| tables.contains(a));
+        if table_obligation
+            || (u.kind == "unmapped_target" && u.site.as_ref().is_some_and(|a| starts.contains(a)))
+        {
             discharged.insert(u.clone());
         } else {
             add(&u.kind, u.site.clone(), &u.detail, u.evidence.clone());
@@ -980,6 +996,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             "Data loads/stores are naturally aligned RDRAM accesses through KSEG0/KSEG1, never reach executable bytes, and use only one of KSEG0/KSEG1 per 16-byte line; a native artifact checks every store and access and aborts on violation, with no fallback execution."
                 .into(),
         );
+        if !tables.is_empty() {
+            assumptions.push(
+                "Recognized jump tables are read-only bytes of the declared image: a native artifact checks every store and aborts on a write to table bytes, and dispatches only to the table's snapshot targets."
+                    .into(),
+            );
+        }
         if uses_cop1 {
             assumptions.push(
                 "COP1 is usable with 64-bit FPRs (Status.CU1 = 1, Status.FR = 1) wherever COP1 data moves execute."

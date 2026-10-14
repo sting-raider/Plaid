@@ -3058,3 +3058,30 @@ new `fpu` program, which checks high-word preservation and an odd FPR,
 matches ares exactly. The OoT measurement falls to 3 guarded-scope blockers:
 the boot return, the `jalr` at `0x80000f10`, and the jump table at
 `0x80003acc`.
+
+## ADR-0132: Jump tables close under the guarded scope with store-protected bytes
+
+Context: the OoT jump table at `0x80003acc` was missed for two reasons. GCC
+schedules the index-scaling `SLL` in the bound check's delay slot, which the
+recognizer did not accept. And recognized table candidates could never close,
+because table immutability was unproven in every scope.
+
+Decision: `tables.rs` also accepts the scale `SLL` in the delay slot of a
+non-likely guard branch, since that slot runs on both paths. Analysis now
+attaches the table evidence as a closure claim when the snapshot is complete,
+aligned and the site has no other candidates. `tables::verify` rechecks it
+from the current CFG and bytes, and `indirect::verify_static` (constant or
+table) replaces `verify_constant` where function bodies and roots are
+computed. Only `DeclaredStaticImagesGuardedRam` accepts a verified table: it
+discharges the table immutability and identity obligations for that site and
+adds the assumption that table bytes are read-only. `plaid-lower` adds the
+table bytes to the store guard (fault 2) and dispatches over the snapshot
+targets only. Every other scope keeps tables OPEN, as before.
+
+Result: spike096 `table` (GCC-shaped table with in-bounds and default
+indices) matches pinned ares, and `table_write` (a store into the table)
+faults 2 natively. On the OoT measurement the table closes and its cases are
+discovered (628 blocks). Six blockers remain: the boot return, `0x80000f10`,
+and four `jalr t9` calls through a device-manager struct field in libultra's
+PI manager thread. That thread is reached only because the heuristic runtime
+declaration does not include `osCreatePiManager`, which N64Recomp reimplements.

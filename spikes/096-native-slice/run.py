@@ -73,6 +73,18 @@ def assemble(items):
     words += [0] * ((EXIT - pc) // 4) + [0x1000FFFF, 0]  # exit: b . ; nop
     return b''.join(w.to_bytes(4, 'big') for w in words)
 
+def jump_table(prefix):
+    # GCC shape: the index scale SLL sits in the bound check's delay slot.
+    return [*prefix, addiu(s1, zero, 0), addiu(t0, zero, 0),
+        'loop', sltiu(at, t0, 3), beq(at, zero, 'dflt'), sll(t1, t0, 2),
+        lui(at, 0x8000), addu(at, at, t1), lambda pc, L: I(35, t1, at, L['tbl']), jr(t1), nop,
+        'c0', addiu(s1, s1, 1), j('next'), nop,
+        'c1', addiu(s1, s1, 10), j('next'), nop,
+        'c2', addiu(s1, s1, 100), j('next'), nop,
+        'dflt', addiu(s1, s1, 1000),
+        'next', addiu(t0, t0, 1), slti(t2, t0, 4), bne(t2, zero, 'loop'), nop, *DONE,
+        'tbl', lambda pc, L: L['c0'], lambda pc, L: L['c1'], lambda pc, L: L['c2']]
+
 PROGRAMS = {
     'alu': [lui(t0, 0x8000), ori(t0, t0, 0x1234), addiu(t1, zero, -5),
         addu(t2, t0, t1), subu(t3, t1, t0), and_(t4, t0, t1), or_(t5, t0, t1), xor(t6, t0, t1), nor(t7, t0, t1),
@@ -152,6 +164,8 @@ PROGRAMS = {
         dmtc1(t1, 2), sdc1(2, 8, gp), dmfc1(t2, 2), mfc1(t3, 2), mtc1(t0, 2), dmfc1(t4, 2),
         lui(t5, 0x8765), ori(t5, t5, 0x4321), sw(t5, 16, gp), lwc1(4, 16, gp), mfc1(t6, 4),
         ldc1(6, 8, gp), dmfc1(t7, 6), mtc1(t5, 1), dmfc1(s0, 1), sdc1(2, 24, gp), *DONE],
+    # A bounded jump table, closed under the guarded scope (ADR-0132).
+    'table': jump_table([]),
     # Nested, recursive, pointer and tail calls; frames live in the RAM window.
     'calls': [lui(sp, 0x8000), ori(sp, sp, 0x1100),
         addiu(a0, zero, 5), jal('fact'), nop, addu(s0, v0, zero),
@@ -177,13 +191,15 @@ BAD_RETURN = [jal('f'), nop, *DONE, 'f', addiu(ra, ra, 8), jr(ra), nop]
 # A trapping add that overflows raises on hardware; native code must fault 6.
 OVERFLOW = [lui(t0, 0x7FFF), ori(t0, t0, 0xFFFF), addi(t1, t0, 1), *DONE]
 RUNTIME = {'boundary': [('sum', [])], 'callback': [('spawn', ['a0'])]}
+# Jump-table bytes are store-protected like code: a write must fault 2.
+TABLE_WRITE = jump_table([lui(s2, 0x8000), lambda pc, L: I(43, zero, s2, L['tbl'])])
 CACHE_ALIAS = [lui(s0, 0x8000), sw(s0, 0x1000, s0), lui(s1, 0xA000), lw(t0, 0x1000, s1), *DONE]
 
 def windows():
     exe = ROOT / 'target/debug/plaid.exe'
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
     OUT.mkdir(parents=True, exist_ok=True)
-    progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN, overflow=OVERFLOW)
+    progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN, overflow=OVERFLOW, table_write=TABLE_WRITE)
     for name, items in progs.items():
         (OUT / f'{name}.bin').write_bytes(assemble(items))
         extra = []
@@ -205,13 +221,13 @@ def windows():
         oracle = json.loads((OUT / f'{name}-oracle.json').read_text())
         assert json.loads(native.stdout) == oracle, (name, native.stdout, oracle)
         results[name] = hashlib.sha256(json.dumps(oracle, sort_keys=True).encode()).hexdigest()
-    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6)):
+    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2)):
         bad = subprocess.run([str(OUT / f'{name}-native.exe')], capture_output=True, text=True)
         assert bad.returncode == 6 and json.loads(bad.stdout)['fault'] == fault, (name, bad.stdout)
     receipt = dict(format='plaid-native-slice-receipt-v0', ares_revision=builder().REV, compiler=Path(cc).name,
-        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6), interpreter_linked=False, native_complete=False)
+        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2), interpreter_linked=False, native_complete=False)
     (OUT / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
-    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return and overflow programs fail closed')
+    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow and table-write programs fail closed')
     print(json.dumps(receipt, sort_keys=True))
 
 def builder():

@@ -32,12 +32,13 @@ Next concrete steps, in order:
    Done: runtime callbacks (ADR-0130). OoT now discovers its thread entry
    (613 blocks) and has 6 guarded-scope blockers.
    Done: COP1 data moves (ADR-0131); OoT is at 3 guarded-scope blockers.
-   **Next, from those blockers:** the jump table at `0x80003acc` (the
-   recognizer misses a scale `SLL` in the guard's delay slot, and table
-   candidates never close; close them under the guarded scope by protecting
-   table bytes like code); the memory-loaded `jalr` at `0x80000f10`; then
-   identification evidence (PR #50 n64sym, or a user-supplied symbol map) in
-   place of the heuristic runtime declaration.
+   Done: guarded jump tables (ADR-0132). The remaining OoT blockers are
+   memory-loaded function pointers inside libultra internals that the
+   heuristic declaration leaves as guest code.
+   **Next: identification evidence.** Declare runtime functions from
+   evidence instead of the heuristic: N64Recomp's reimplemented list by name,
+   matched through n64sym signatures (PR #50) or a user-supplied symbol map,
+   never promoted to proof.
 4. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
    boot-segment discovery from the real entry point, then a local-only recall
    score against the decomp map. Keep ROM bytes, maps and traces ignored.

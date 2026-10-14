@@ -218,7 +218,7 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
         .iter()
         .map(|old| {
             let mut site = old.clone();
-            if !verify_constant(&out, image, old) {
+            if !verify_static(&out, image, old) {
                 site.closed_proof = None;
             }
             site
@@ -226,6 +226,12 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
         .collect();
     out.validate()?;
     Ok(out)
+}
+
+/// A rechecked static target proof: a constant certificate or a verified jump
+/// table (ADR-0132). Scopes decide whether a table's immutability holds.
+pub fn verify_static(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> bool {
+    verify_constant(map, image, site) || crate::tables::verify(map, image, site)
 }
 
 /// Recompute the certificate using current CFG and bytes; producer labels alone

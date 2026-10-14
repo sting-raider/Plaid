@@ -5,8 +5,8 @@ by an ordinary host compiler and run natively with exactly the reference
 interpreter's architectural results, with no guest decoder or interpreter in
 the artifact (ADR-0125, ADR-0126).
 
-`run.py` assembles ten synthetic programs (`alu`, `muldiv`, `loops`,
-`memory`, `transfers`, `wide`, `boundary`, `callback`, `fpu`, `calls`) at `0x80000000`, ending at the exit address
+`run.py` assembles eleven synthetic programs (`alu`, `muldiv`, `loops`,
+`memory`, `transfers`, `wide`, `boundary`, `callback`, `fpu`, `table`, `calls`) at `0x80000000`, ending at the exit address
 `0x80000F00`. For each it runs `plaid lower-c` (discovery, then solve under
 `DeclaredStaticImagesGuardedRam`, then `crates/plaid-lower`), compiles the C
 with `-Wall -Werror` against `harness.c`, runs it, and compares all GPRs, HI,
@@ -14,10 +14,11 @@ LO, all FPRs and the RAM window `0x1000..0x1100` with `driver.cpp` on the pinned
 ares interpreter (recompiler disabled). The oracle reads RAM through the D-cache
 debug path, so both sides report the CPU-coherent view.
 
-Four programs must fail closed rather than match: `self_modifying` stores
+Five programs must fail closed rather than match: `self_modifying` stores
 into its own code (fault 2), `cache_alias` reads through KSEG1 a line it wrote
 through KSEG0 (fault 4), `bad_return` returns with a corrupted `$ra` (fault 5)
-and `overflow` overflows a trapping `addi` (fault 6). On hardware the latter's result depends on write-back
+`overflow` overflows a trapping `addi` (fault 6) and `table_write` stores into a
+jump table (fault 2). On hardware the latter's result depends on write-back
 D-cache state, which the coherent native memory model does not track.
 
 ```text
@@ -38,4 +39,5 @@ runs its guest body, while the native build never decodes it (its `SYNC` is
 outside the scope) and links `runtime.c` instead (ADR-0129). `callback` passes
 a guest function to a runtime `spawn`, which natively enters it through
 `plaid_enter` (ADR-0130). `fpu` covers COP1 data moves with FR = 1, which the
-oracle pins together with CU1 (ADR-0131).
+oracle pins together with CU1 (ADR-0131). `table` dispatches through a
+GCC-shaped bounded jump table (ADR-0132).
