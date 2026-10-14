@@ -2757,3 +2757,16 @@ check over all1,048,576 attempts, permitting reuse of its earlier result without
 another equivalent source replay. This shortcut rejects any newly selected
 physical-parent branch. No mutation census, guest mapping/root proof, hardware
 timing or native milestone follows.
+
+ADR-0124 SP composition follow-up: freeze PI RAM byte parents at the source read
+selected by the existing validated SP DMA receipt. Install those parents under
+the separate SP writer occurrence and reuse the shared SP writer selection and
+contradiction rules. Equal unscoped SP overwrites revoke attribution; later RAM
+mutations cannot alter a frozen read. Missing or ambiguous reads stay unknown.
+Consumed chains retain ROM/PI writer, RAM read, SP install and CPU SP backing-read
+identities. New optional fields/report-v1 appear only when that path contributes
+an attributed byte; unused paths retain legacy output and digests. The116-event,
+twelve-checkpoint pinned baseline/disabled/enabled/repeat contract and independent
+adversarial replay cover this finite join. Explicit host descriptor/mapping/DMA
+stepping controls do not establish guest MMIO, RSP execution or scheduler timing.
+No mutation census, executable lifetime, whole-ROM or native milestone follows.

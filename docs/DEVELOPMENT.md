@@ -6,6 +6,12 @@ The authoritative engineering state is still [`STATUS.md`](STATUS.md) and [`NEXT
 
 ## Toolchain
 
+Spike089 composes the existing PI RAM parents with captured SP DMA reads,
+installations and CPU SP consumption. Run its `test_consumer.py` after building
+the CLI, and `run.py --verify-existing` to recheck retained pinned controls.
+Its v1 SP/PI report adds `sp_writer` only for consumed chains; unused paths retain
+the old wire shape and digest. See its README for the precise CPU/reference scope.
+
 Spike088 exercises actual PI I/O requests, translated ordinary storage and CPU
 consumption, with independent baseline/disabled/repeated checks. Run its
 `test_consumer.py` and `test_retained.py`, and use `run.py --verify-existing` for

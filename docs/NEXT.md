@@ -1,5 +1,12 @@
 # Next
 
+The existing raw-clock PI consumer now composes RAM parents with validated SP DMA
+read/install occurrences and actual CPU SP consumption (spike089). Continue into
+actual RSP consumption and producer/register definitions using complete histories;
+this CPU path does not authenticate an RSP task or scheduler. Preserve frozen
+source-read parents, independent SP writer identity and equal-write revocation.
+Missing/ambiguous reads remain unknown; general census/lifetime/closure stay OPEN.
+
 Physical PI storage writers now compose with executable consumption. Extend
 other actual producer scopes while retaining original effect identity, separate
 mapping/root obligations and independent cache residency. The 110-event native

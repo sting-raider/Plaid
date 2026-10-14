@@ -1,5 +1,12 @@
 # Status
 
+PI RAM ancestry now passes through an exact captured DMA read and SP installation
+to actual CPU SP consumption. Shared SP writer selection cuts equal overwrites
+and contradictory reads; parents freeze at the RAM read, before later mutations.
+The pinned116-event/twelve-checkpoint control and independent adversarial replay
+pass. Fresh complete canonical/independent20M replays retain the prior reports
+byte-for-byte. Missing or ambiguous parents stay unknown; broad flags stay false.
+
 PI lineage now joins an immediate completed storage Byte inside its authenticated
 attempt to the actual physical writer, including successful translated writes
 without identity-wrapper receipts. Normal wrappers retain their own ordinals.

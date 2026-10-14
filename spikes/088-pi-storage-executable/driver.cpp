@@ -32,6 +32,16 @@ static void scalar_effect(bool write,u32 address,u32 bytes,u32 device,u64 value)
 static void rom_half(u32 offset,u16 value) {
   add({"\"record\":\"rom_half\",\"offset\":",offset,",\"value\":",value});
 }
+#if defined(PLAID_PI_SP_CONSUMPTION)
+static void sp_word(bool write,u32 address,u32 bank,u32 offset,u32 value,bool cpuOrigin) {
+  add({"\"record\":\"sp_word\",\"write\":",write ? "true" : "false",",\"address\":",address,
+    ",\"bank\":",bank,",\"offset\":",offset,",\"value\":",value,",\"cpu\":",cpuOrigin ? "true" : "false"});
+}
+static void sp_store(u32 dram,u32 bank,u32 offset,u32 bytes,u64 value) {
+  add({"\"record\":\"sp_dma_store\",\"dram\":",dram,",\"bank\":",bank,
+    ",\"offset\":",offset,",\"bytes\":",bytes,",\"value\":",value});
+}
+#endif
 #endif
 int main(int argc,char** argv) {
   if(argc!=2 || (strcmp(argv[1],"plain") && strcmp(argv[1],"traced"))) return 2;
@@ -58,6 +68,9 @@ int main(int argc,char** argv) {
     pi.detach(cartridge.romDevice);pi.attach(observer,0);
     Storage::plaidMemoryMutationObserver=storage_effect;
     plaidPiDmaObserver=pi_effect;plaidRdramScalarObserver=scalar_effect;plaidRomHalfObserver=rom_half;
+#if defined(PLAID_PI_SP_CONSUMPTION)
+    plaidSpWordObserver=sp_word;plaidSpDmaStoreObserver=sp_store;
+#endif
   }
 #else
   (void)traced;
@@ -74,7 +87,12 @@ int main(int argc,char** argv) {
       ",\"count\":",cpu.effectiveCount(),",\"exception\":",(u32)cpu.scc.cause.exceptionCode,
       ",\"epc\":",(u64)cpu.scc.epc,",\"regs\":["};
     for(u32 n=0;n<32;n++) row.append(n ? "," : "",cpu.ipu.r[n].u64);
-    row.append("]}");states.push_back(row);
+    row.append("]");
+#if defined(PLAID_PI_SP_CONSUMPTION)
+    row.append(",\"imem\":\"",nall::Hash::SHA256(std::span<const u8>{rsp.imem.data,rsp.imem.size}).digest(),
+      "\",\"dmem\":\"",nall::Hash::SHA256(std::span<const u8>{rsp.dmem.data,rsp.dmem.size}).digest(),"\"");
+#endif
+    row.append("}");states.push_back(row);
   };
   for(phase=0;phase<3;phase++) {
     ares::Nintendo64::queue.reset();pi.ioWrite(16,3);ri.io.error=0;
@@ -94,11 +112,25 @@ int main(int argc,char** argv) {
       cpu.instruction();
       assert(cpu.ipu.r[16].u64==7 && cpu.scc.cause.exceptionCode==0);
       snapshot("executed");
+#if defined(PLAID_PI_SP_CONSUMPTION)
+      rsp.writeWord(0x04040000,0x1000,cpu);rsp.writeWord(0x04040004,physical,cpu);
+      rsp.writeWord(0x04040008,0,cpu);
+      assert(rsp.dma.busy.read && rsp.dma.current.pbusRegion);
+      rsp.dmaTransferStep();
+      assert(!rsp.dma.busy.any() && rsp.imem.read<Word>(0)==0x24100007);
+      snapshot("sp_installed");
+      cpu.ipu.r[16].u64=0;cpu.pipeline.setPc(0xffffffffa4001000ull);cpu.instruction();
+      assert(cpu.ipu.r[16].u64==7 && cpu.scc.cause.exceptionCode==0);
+      snapshot("sp_executed");
+#endif
     } else assert(ri.io.error);
   }
 #if PLAID_PI_STORAGE_SENSOR
   Storage::plaidMemoryMutationObserver=nullptr;plaidPiDmaObserver=nullptr;
   plaidRdramScalarObserver=nullptr;plaidRomHalfObserver=nullptr;
+#if defined(PLAID_PI_SP_CONSUMPTION)
+  plaidSpWordObserver=nullptr;plaidSpDmaStoreObserver=nullptr;
+#endif
   if(traced) {pi.detach(observer);pi.attach(cartridge.romDevice,0);}
 #endif
   std::printf("{\"states\":[");

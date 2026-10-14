@@ -108,7 +108,7 @@ pub struct SpWriterFetchReport {
 }
 
 type WriterSampleKey = (SampleKey, [Option<CapturedSpByteWriter>; 4]);
-struct WriterLineage {
+pub(crate) struct WriterLineage {
     bytes: Vec<Option<(u8, CapturedSpByteWriter)>>,
     captured_writes: u64,
     contradictions: u64,
@@ -119,7 +119,7 @@ struct WriterLineage {
     ordered: Sha256,
 }
 impl WriterLineage {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             bytes: vec![None; 8192],
             captured_writes: 0,
@@ -131,7 +131,7 @@ impl WriterLineage {
             ordered: Sha256::new(),
         }
     }
-    fn write(
+    pub(crate) fn write(
         &mut self,
         bank: u32,
         offset: u32,
@@ -151,7 +151,12 @@ impl WriterLineage {
             ));
         }
     }
-    fn read(&mut self, bank: u32, offset: u32, word: u32) -> [Option<CapturedSpByteWriter>; 4] {
+    pub(crate) fn read(
+        &mut self,
+        bank: u32,
+        offset: u32,
+        word: u32,
+    ) -> [Option<CapturedSpByteWriter>; 4] {
         let mut writers = [None; 4];
         for (index, value) in word.to_be_bytes().into_iter().enumerate() {
             let candidate = &mut self.bytes[bank as usize * 4096 + offset as usize + index];

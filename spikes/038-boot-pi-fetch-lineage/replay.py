@@ -42,6 +42,8 @@ def inspect(history_path, fetch_path, source):
     ram, resident, samples = {}, {}, {}
     half = burst = last_fill = writer = active = pending = None
     storage_attempt = None
+    sp_memory,sp_receipts={},[]
+    active_bus=None
     buffer = [None]*128
     digest = hashlib.sha256()
     count = full = partial = byte_count = words = contradictions = ordinal = 0
@@ -60,6 +62,14 @@ def inspect(history_path, fetch_path, source):
             origins.append(origin)
         return origins
 
+    def origin_wire(origin):
+        result=dict(rom_offset=origin[0],writer_ordinal=origin[1],transfer=origin[2])
+        if len(origin)==4:
+            ordinal,index,dram,read=origin[3]
+            result['sp_writer']=dict(write_ordinal=ordinal,byte_index=index,
+                kind=dict(kind='dma_sink',dram=dram,read_ordinal=read))
+        return result
+
     for e in history:
         assert not ended
         kind = e['record']
@@ -69,6 +79,9 @@ def inspect(history_path, fetch_path, source):
             continue
         ordinal += 1
         assert e['ordinal'] == ordinal <= 100000000
+        if kind not in ('storage_effect','sp_dma_store') and not \
+            (kind=='scalar' and not e['write'] and e['device']==4):
+            sp_receipts=[]
         if kind == 'pi_rom_half':
             assert e['value'] == int.from_bytes(source[e['offset']:e['offset']+2], 'big')
             half = e
@@ -121,6 +134,11 @@ def inspect(history_path, fetch_path, source):
                 ram.clear()
         elif kind == 'scalar':
             assert e['bytes'] in (1,2,4,8)
+            if not e['write'] and e['device']==4:
+                values=e['value'].to_bytes(8,'big')[-e['bytes']:]
+                parents=backing(e['aligned_address'],values) if e['address']==e['aligned_address'] \
+                    and 0<=e['aligned_address']<=8388608-e['bytes'] else [None]*e['bytes']
+                sp_receipts.append((e,parents))
             if e['write']:
                 for a in range(e['aligned_address'], e['aligned_address']+e['bytes']): ram.pop(a,None)
                 if 'pi' in e: writer = e
@@ -148,7 +166,27 @@ def inspect(history_path, fetch_path, source):
             keep = r is not None and r['tag'] == e['after_tag'] and r['words'] == e['after_words'] \
                 and (nested_fill or (e['before_tag'] == e['after_tag'] and e['before_words'] == e['after_words']))
             if not keep: resident.pop(slot,None)
-        elif kind == 'fetch_begin': active = []
+        elif kind == 'sp_dma_store':
+            assert e['bank'] in (0,1) and e['bytes'] in (4,8)
+            candidates=[n for n,(r,_) in enumerate(sp_receipts) if
+                (r['pc'],r['address'],r['bytes'],r['value']) == (e['pc'],e['dram'],e['bytes'],e['value'])]
+            read,parents=(sp_receipts.pop(candidates[0]) if len(candidates)==1 else (None,[None]*e['bytes']))
+            values=e['value'].to_bytes(8,'big')[-e['bytes']:]
+            for n,value in enumerate(values):
+                parent=parents[n]
+                sp_memory[e['bank']*4096+e['offset']+n]=(value,None if parent is None else
+                    (*parent[:3],(ordinal,n,e['dram'],read['ordinal'])))
+        elif kind == 'sp_word':
+            assert e['bank'] in (0,1) and e['bytes']==4
+            parents=[]
+            for n,value in enumerate(e['value'].to_bytes(4,'big')):
+                address=e['bank']*4096+e['offset']+n
+                if e['write']: sp_memory[address]=(value,None)
+                elif address in sp_memory and sp_memory[address][0]!=value: sp_memory.pop(address)
+                parents.append(sp_memory.get(address,(0,None))[1])
+            if not e['write'] and e['cpu'] and active is not None and e['address']==active_bus:
+                active.append(dict(e,sp_origins=parents))
+        elif kind == 'fetch_begin': active,active_bus=[],e['bus']
         elif kind == 'fetch_end': pending, active = active, None
         elif kind == 'fetch':
             p = next(fetched)
@@ -164,7 +202,11 @@ def inspect(history_path, fetch_path, source):
                         origins = r['origins'][lane*4:lane*4+4]; fill = r['fill']
                     else: resident.pop(line['slot'])
             elif len(pending) == 1 and pending[0]['address'] == e['physical'] and pending[0]['value'] == e['word']:
-                origins = backing(e['physical'],e['word'].to_bytes(4,'big')); read = pending[0]['ordinal']
+                if 'sp_origins' in pending[0]:
+                    origins=pending[0]['sp_origins']
+                    if any(o is not None for o in origins): read=pending[0]['ordinal']
+                else:
+                    origins = backing(e['physical'],e['word'].to_bytes(4,'big')); read = pending[0]['ordinal']
             pending = None
             known = sum(o is not None for o in origins)
             byte_count += known; full += known == 4; partial += 0 < known < 4
@@ -174,14 +216,17 @@ def inspect(history_path, fetch_path, source):
                 fill if fill is not None else (1<<64)-1,read if read is not None else (1<<64)-1))
             for o in origins:
                 digest.update(bytes([o is not None]))
-                if o is not None: digest.update(struct.pack('>3Q',*o))
+                if o is not None:
+                    digest.update(struct.pack('>3Q',*o[:3]))
+                    if len(o)==4:
+                        encoded=json.dumps(origin_wire(o)['sp_writer'],separators=(',',':')).encode()
+                        digest.update(b'\xff'+struct.pack('>I',len(encoded))+encoded)
             if known:
                 key = (e['pc'],e['physical'],e['word'],e['cached'],fill if fill is not None else -1,
                     read if read is not None else -1,tuple(o if o is not None else (-1,-1,-1) for o in origins))
                 if key not in samples:
                     samples[key] = dict(pc=e['pc'],physical=e['physical'],word=e['word'],cached=e['cached'],
-                        fill_ordinal=fill,read_ordinal=read,bytes=[None if o is None else
-                            dict(rom_offset=o[0],writer_ordinal=o[1],transfer=o[2]) for o in origins],
+                        fill_ordinal=fill,read_ordinal=read,bytes=[None if o is None else origin_wire(o) for o in origins],
                         first_fetch=count,last_fetch=count,observations=0)
                 samples[key]['last_fetch'] = count; samples[key]['observations'] += 1
             count += 1
@@ -208,7 +253,7 @@ def main():
     rust = json.loads(args.rust_report.read_text(encoding='utf-8'),object_pairs_hook=unique)
     assert history_hash == rust['projection']['history_sha256']
     projection = rust['projection']
-    if rust['format'] == 'plaid-sp-pi-fetch-lineage-report-v0':
+    if rust['format'] in ('plaid-sp-pi-fetch-lineage-report-v0','plaid-sp-pi-fetch-lineage-report-v1'):
         projection = projection['projection']
     assert fetch_hash == projection['projection']['projection']['fetch_sha256']
     for key,value in result.items(): assert rust[key] == value,key
