@@ -18,6 +18,9 @@ pub const DMEM_STORAGE_POLICY: &str =
 pub const RSP_EXECUTION_FORMAT: &str = "plaid-ares-access-history-v7";
 pub const RSP_EXECUTION_POLICY: &str =
     "observed_storage_dmem_and_performed_rsp_instructions_with_pi_queue_sp_backing";
+pub const IMEM_STORAGE_FORMAT: &str = "plaid-ares-access-history-v8";
+pub const IMEM_STORAGE_POLICY: &str =
+    "observed_storage_dmem_imem_and_rsp_consumption_with_pi_queue_sp_backing";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -125,8 +128,9 @@ pub(crate) struct WriterLineage {
     ordered: Sha256,
 }
 impl WriterLineage {
-    pub(crate) fn cut_dmem(&mut self, offset: u32, bytes: u32) {
-        self.bytes[offset as usize..(offset + bytes) as usize].fill(None);
+    pub(crate) fn cut(&mut self, bank: u32, offset: u32, bytes: u32) {
+        let start = bank as usize * 4096 + offset as usize;
+        self.bytes[start..start + bytes as usize].fill(None);
     }
     pub(crate) fn new() -> Self {
         Self {
@@ -269,6 +273,15 @@ impl StorageRecord {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum SpRecord {
+    ImemStorageEffect {
+        ordinal: u64,
+        context: u64,
+        pc: GuestVirtualAddr,
+        kind: u32,
+        offset: u32,
+        bytes: u32,
+        value: u64,
+    },
     RspImemRead {
         ordinal: u64,
         context: u64,
@@ -334,6 +347,12 @@ impl Wire {
     }
     pub(crate) fn identity(&self) -> Option<(u64, u64, GuestVirtualAddr, &'static str)> {
         match self {
+            Self::Sp(SpRecord::ImemStorageEffect {
+                ordinal,
+                context,
+                pc,
+                ..
+            }) => Some((*ordinal, *context, *pc, "imem_storage_effect")),
             Self::Sp(SpRecord::RspImemRead {
                 ordinal,
                 context,
@@ -389,6 +408,9 @@ impl Wire {
                 ordinal, context, ..
             })
             | Self::Sp(SpRecord::RspImemRead {
+                ordinal, context, ..
+            })
+            | Self::Sp(SpRecord::ImemStorageEffect {
                 ordinal, context, ..
             }) => {
                 *ordinal = next;
@@ -450,6 +472,7 @@ struct Projection<H> {
     storage: bool,
     dmem_storage: bool,
     rsp_execution: bool,
+    imem_storage: bool,
     rsp_active: Option<(GuestVirtualAddr, u32, u64, u32)>,
     rsp_reads: BTreeMap<u64, RspReadReceipt>,
     ended: bool,
@@ -483,6 +506,7 @@ impl<H: BufRead> Projection<H> {
             storage: false,
             dmem_storage: false,
             rsp_execution: false,
+            imem_storage: false,
             rsp_active: None,
             rsp_reads: BTreeMap::new(),
             ended: false,
@@ -528,6 +552,43 @@ impl<H: BufRead> Projection<H> {
     fn sp(&mut self, row: SpRecord) -> Result<(), String> {
         require(!self.copying, "SP row inside buffered PI copy")?;
         match row {
+            SpRecord::ImemStorageEffect {
+                ordinal,
+                context,
+                pc,
+                kind,
+                offset,
+                bytes,
+                value,
+            } => {
+                require(
+                    self.imem_storage,
+                    "IMEM storage effect outside v8 source policy",
+                )?;
+                match kind {
+                    0 => require(
+                        matches!(bytes, 1 | 2 | 4)
+                            && offset.is_multiple_of(bytes)
+                            && offset.checked_add(bytes).is_some_and(|end| end <= 4096)
+                            && value < (1u64 << (bytes * 8)),
+                        "invalid completed IMEM storage effect",
+                    )?,
+                    1 | 2 => require(
+                        offset == 0 && bytes == 4096 && value == 0,
+                        "invalid whole-IMEM storage cut",
+                    )?,
+                    _ => {
+                        return Err(
+                            "IMEM restore/retirement needs an execution-epoch source contract"
+                                .into(),
+                        );
+                    }
+                }
+                self.identity(ordinal, context, pc, "imem_storage_effect")?;
+                if let Some(lineage) = &mut self.lineage {
+                    lineage.cut(1, offset, bytes);
+                }
+            }
             SpRecord::RspImemRead {
                 ordinal,
                 context,
@@ -631,7 +692,7 @@ impl<H: BufRead> Projection<H> {
                 )?;
                 self.identity(ordinal, context, pc, "rsp_dmem_effect")?;
                 if let Some(lineage) = &mut self.lineage {
-                    lineage.cut_dmem(offset, bytes);
+                    lineage.cut(0, offset, bytes);
                 }
             }
             SpRecord::SpWord {
@@ -769,7 +830,9 @@ impl<H: BufRead> Projection<H> {
             ..
         })) = &mut row
         {
-            let rsp_execution = format == RSP_EXECUTION_FORMAT && policy == RSP_EXECUTION_POLICY;
+            let imem_storage = format == IMEM_STORAGE_FORMAT && policy == IMEM_STORAGE_POLICY;
+            let rsp_execution =
+                (format == RSP_EXECUTION_FORMAT && policy == RSP_EXECUTION_POLICY) || imem_storage;
             let dmem_storage =
                 (format == DMEM_STORAGE_FORMAT && policy == DMEM_STORAGE_POLICY) || rsp_execution;
             let storage = (format == STORAGE_FORMAT && policy == STORAGE_POLICY) || dmem_storage;
@@ -783,6 +846,7 @@ impl<H: BufRead> Projection<H> {
             self.storage = storage;
             self.dmem_storage = dmem_storage;
             self.rsp_execution = rsp_execution;
+            self.imem_storage = imem_storage;
             *format = queue::FORMAT.into();
             *policy = queue::POLICY.into();
         } else if let queue::Wire::Legacy(pi_history::Wire::Base(R::End {
@@ -1047,7 +1111,9 @@ fn finish_report<H>(
     projection: queue::PiQueueHistoryReport,
 ) -> SpHistoryReport {
     SpHistoryReport {
-        format: if stream.rsp_execution {
+        format: if stream.imem_storage {
+            "plaid-observed-sp-backing-report-v4"
+        } else if stream.rsp_execution {
             "plaid-observed-sp-backing-report-v3"
         } else if stream.dmem_storage {
             "plaid-observed-sp-backing-report-v2"

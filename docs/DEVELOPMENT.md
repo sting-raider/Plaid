@@ -6,6 +6,15 @@ The authoritative engineering state is still [`STATUS.md`](STATUS.md) and [`NEXT
 
 ## Toolchain
 
+Spike092 composes lower IMEM scalar and bulk cuts with raw v8 executable
+consumption. Run `test_consumer.py` and `run.py --verify-existing`; capture with
+spike057's `--history storage-sp-exec`. Scalar/equal writes and whole-bank fill/
+load end affected writer ancestry without changing frozen earlier read parents.
+Unsupported restore/retirement rejects. Retained source receipts keep their
+original capture paths after moving the checkout; the default-shadow recheck
+normalizes only source/output root prefixes. Local user inputs now live under
+ignored `target/local-inputs/` when copied there by the user-authorized migration.
+
 Spike091 composes read-bound performed RSP instructions in raw v7. Run its
 consumer/prepare tests and retained reference recheck. Capture with spike057's
 `--history storage-rsp-exec`; the optional `rsp_instruction_fetch_access` recipe

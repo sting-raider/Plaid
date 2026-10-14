@@ -12,7 +12,7 @@ HERE=Path(__file__).resolve().parent
 OUTPUT=ROOT/'target/dmem-storage-cuts-primary'
 
 
-def verify_controls(results,checkpoints):
+def verify_controls(results,checkpoints,extra_cpu_imem_reads=0):
     states=results['baseline']['plain']['states'];assert len(states)==checkpoints
     assert all(result['states']==states for modes in results.values() for result in modes.values())
     assert all(not result['events'] for result in results['baseline'].values())
@@ -30,8 +30,9 @@ def verify_controls(results,checkpoints):
         for cut,install in zip(cuts[:2],installs,strict=True):
             assert cut['ordinal']+1==install['ordinal'] and cut['value']==install['value']
         fetches=[e for e in rows if e['record']=='sp_word']
-        assert [(e['address'],e['value']) for e in fetches]==[(0x04001000,0x24100007),
-            (0x04000000,0x24100007),(0x04000000,0x24100007),(0x04001000,0x24100007)]
+        expected_fetches=[(0x04001000,0x24100007),(0x04000000,0x24100007),
+            (0x04000000,0x24100007),(0x04001000,0x24100007)]+[(0x04001000,0x24100007)]*extra_cpu_imem_reads
+        assert [(e['address'],e['value']) for e in fetches]==expected_fetches
         assert fetches[1]['ordinal']<cuts[-1]['ordinal']<fetches[2]['ordinal']
     return states,source
 

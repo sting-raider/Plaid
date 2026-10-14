@@ -2,6 +2,7 @@
 from pathlib import Path
 import importlib.util
 import os
+import re
 import subprocess
 import tempfile
 
@@ -22,6 +23,9 @@ def main():
     sp=load('sp_shadow',ROOT/'spikes/039-ares-cpu-sp-fetch/prepare.py')
     rsp=load('rsp_shadow',ROOT/'spikes/042-ares-rsp-dmem-history/prepare.py')
     retained=ROOT/'target/dmem-storage-cuts-primary/sensor'
+    # Retained shadows keep their capture paths when the checkout is relocated.
+    recorded_root=re.search(r'^#include "(.*)/\.refs/ares/ares/n64/rsp/decoder\.cpp"$',
+        (retained/'rsp.cpp').read_text(),re.MULTILINE).group(1)
     with tempfile.TemporaryDirectory(dir=ROOT/'target',prefix='rsp-fetch-recipe-') as temporary:
         base=Path(temporary)
         for enabled in (False,True):
@@ -33,8 +37,8 @@ def main():
             if not enabled:
                 assert 'PlaidRspImemReadObserver' not in header and 'plaidInstructionRead' not in source
                 for path in ('include/n64/rsp/rsp.hpp','rsp.cpp'):
-                    actual=(output/path).read_text().replace(str(output),'<OUT>')
-                    expected=(retained/path).read_text().replace(str(retained),'<OUT>')
+                    actual=(output/path).read_text().replace(str(output),'<OUT>').replace(str(ROOT),'<ROOT>')
+                    expected=(retained/path).read_text().replace(recorded_root+'/target/dmem-storage-cuts-primary/sensor','<OUT>').replace(recorded_root,'<ROOT>')
                     assert actual==expected,path
             else:
                 assert source.count('imem.read<Word>(')==2

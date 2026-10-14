@@ -2796,3 +2796,16 @@ unknown roots and occurrence identity; old paths remain unchanged when unselecte
 The early supplied100k prefix retains its complete legacy body and independent
 consumer result. RSP register/task/hardware/census/lifetime and native obligations
 remain OPEN; no progress milestone or proof flag is promoted.
+
+ADR-0124 IMEM storage follow-up: extend the existing generic Memory::Writable
+sensor to the exact IMEM object on strict raw v8. Completed aligned Byte/Half/
+Word effects and whole-bank fill/load revoke shared SP ancestry, including
+same-value writes. An earlier captured CPU/RSP read retains its frozen parents;
+lower DMA effects occur before a separate higher installation with fresh writer
+identity. No producer parent is inferred from a sink effect. Restore/retirement
+still require an execution-epoch contract and reject. The retained pinned
+342-event/40-checkpoint control graph and independently replayed 100k prefix
+support only this bounded composition. Preserve old protocols when unselected,
+all broad false flags and immutable captured receipts. Make the default-shadow
+comparison portable across checkout relocation by normalizing only source/output
+root prefixes; compare all remaining source text exactly at the same pinned head.

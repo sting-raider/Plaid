@@ -52,6 +52,7 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Bounded PI primitive-to-writer composition | ✅ verified |
 | Bounded PI / SP DMA / CPU consumption chain | ✅ verified |
 | Bounded lower-DMEM ancestry revocation | ✅ verified |
+| Bounded lower-IMEM ancestry revocation | ✅ verified |
 | Exact IMEM-read / performed-RSP receipts | ✅ verified |
 | Controlled D-cache export / executable chain | ✅ verified |
 | Controlled mapping / cache / exception chain | ✅ verified |

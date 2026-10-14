@@ -1,5 +1,12 @@
 # Next
 
+Lower IMEM effects now compose with CPU/RSP executable consumption on raw v8
+(spike092). Continue actual register/data/task producer and execution-epoch
+composition. Equal-byte writes, fill/load and new installations must not revive
+ended parents; preserve reads frozen before those effects. Bulk cuts supply no
+producer lineage. Restore/retirement, raw-pointer/backend coverage, complete
+writer census, full lifetimes and whole-ROM/native closure remain OPEN.
+
 Performed RSP consumption now joins the existing raw PI/RAM/IMEM state through
 exact read receipts (spike091). Continue actual register/data/task producers and
 writer/epoch coverage; a fetched instruction's byte parents do not authenticate
