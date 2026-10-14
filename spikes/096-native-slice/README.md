@@ -5,8 +5,8 @@ by an ordinary host compiler and run natively with exactly the reference
 interpreter's architectural results, with no guest decoder or interpreter in
 the artifact (ADR-0125, ADR-0126).
 
-`run.py` assembles seven synthetic programs (`alu`, `muldiv`, `loops`,
-`memory`, `transfers`, `wide`, `calls`) at `0x80000000`, ending at the exit address
+`run.py` assembles eight synthetic programs (`alu`, `muldiv`, `loops`,
+`memory`, `transfers`, `wide`, `boundary`, `calls`) at `0x80000000`, ending at the exit address
 `0x80000F00`. For each it runs `plaid lower-c` (discovery, then solve under
 `DeclaredStaticImagesGuardedRam`, then `crates/plaid-lower`), compiles the C
 with `-Wall -Werror` against `harness.c`, runs it, and compares all GPRs, HI,
@@ -33,3 +33,6 @@ for the oracle build. Outputs and the receipt live under ignored
 twice, a `jalr` function-pointer call and a tail call, with stack frames inside
 the compared RAM window (ADR-0127). `wide` covers the 64-bit integer subset,
 128-bit HI/LO results stored through `SD`, and branch-likely slots (ADR-0128).
+`boundary` calls and tail-calls `sum`, declared as a runtime function: ares
+runs its guest body, while the native build never decodes it (its `SYNC` is
+outside the scope) and links `runtime.c` instead (ADR-0129).

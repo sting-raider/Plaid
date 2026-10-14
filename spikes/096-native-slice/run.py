@@ -53,11 +53,15 @@ bltzl = lambda rs, l: B(1, rs, 2, l); bgezl = lambda rs, l: B(1, rs, 3, l)
 nop = 0
 DONE = [j('exit'), nop]
 
-def assemble(items):
+def label_pcs(items):
     labels, pc = {'exit': EXIT}, BASE
     for x in items:
         if isinstance(x, str): labels[x] = pc
         else: pc += 4
+    return labels
+
+def assemble(items):
+    labels = label_pcs(items)
     words, pc = [], BASE
     for x in items:
         if isinstance(x, str): continue
@@ -118,6 +122,19 @@ PROGRAMS = {
         'l4', bltzl(t1, 'l5'), addiu(fp, fp, 300), addiu(fp, fp, 4000),
         'l5', bgezl(t1, 'l6'), addiu(fp, fp, 5000),
         'l6', *DONE],
+    # Calls and a tail call into a declared runtime function (ADR-0129). The
+    # guest body runs on ares; natively it is never decoded (its SYNC is outside
+    # the scope) and runtime.c provides it. Caller-saved registers the ABI
+    # leaves unspecified are cleared after each call.
+    'boundary': [lui(s0, 0x8000), ori(s0, s0, 0x1000),
+        lui(t0, 0x0102), ori(t0, t0, 0x0304), sw(t0, 0, s0), lui(t0, 0x05FE), ori(t0, t0, 0x0780), sw(t0, 4, s0),
+        addu(a0, s0, zero), addiu(a1, zero, 8), jal('sum'), nop, addu(s1, v0, zero),
+        addu(a0, s0, zero), addiu(a1, zero, 4), jal('wrap'), nop, addu(s2, v0, zero),
+        or_(a0, zero, zero), or_(a1, zero, zero), or_(t0, zero, zero), *DONE,
+        'wrap', addiu(a1, a1, 1), j('sum'), nop,
+        'sum', addu(v0, zero, zero),
+        'sl', lbu(t0, 0, a0), addu(v0, v0, t0), addiu(a0, a0, 1), addiu(a1, a1, -1), bgtz(a1, 'sl'), nop,
+        R(15), jr(ra), nop],
     # Nested, recursive, pointer and tail calls; frames live in the RAM window.
     'calls': [lui(sp, 0x8000), ori(sp, sp, 0x1100),
         addiu(a0, zero, 5), jal('fact'), nop, addu(s0, v0, zero),
@@ -142,6 +159,7 @@ SELF_MODIFYING = [lui(s0, 0x8000), sw(zero, 8, s0), *DONE]
 BAD_RETURN = [jal('f'), nop, *DONE, 'f', addiu(ra, ra, 8), jr(ra), nop]
 # A trapping add that overflows raises on hardware; native code must fault 6.
 OVERFLOW = [lui(t0, 0x7FFF), ori(t0, t0, 0xFFFF), addi(t1, t0, 1), *DONE]
+RUNTIME = {'boundary': ['sum']}
 CACHE_ALIAS = [lui(s0, 0x8000), sw(s0, 0x1000, s0), lui(s1, 0xA000), lw(t0, 0x1000, s1), *DONE]
 
 def windows():
@@ -151,7 +169,14 @@ def windows():
     progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN, overflow=OVERFLOW)
     for name, items in progs.items():
         (OUT / f'{name}.bin').write_bytes(assemble(items))
-        subprocess.run([str(exe), 'lower-c', str(OUT / f'{name}.bin'), hex(BASE), hex(BASE), hex(EXIT), str(OUT / f'{name}.c')], check=True)
+        extra = []
+        if name in RUNTIME:
+            labels = label_pcs(items)
+            decl = dict(format='plaid-runtime-functions-v0', source='spike096 synthetic declaration',
+                functions=[dict(entry=hex(labels[f]), name=f) for f in RUNTIME[name]])
+            (OUT / f'{name}.runtime.json').write_text(json.dumps(decl))
+            extra = [str(OUT / f'{name}.runtime.json')]
+        subprocess.run([str(exe), 'lower-c', str(OUT / f'{name}.bin'), hex(BASE), hex(BASE), hex(EXIT), str(OUT / f'{name}.c'), *extra], check=True)
         subprocess.run([cc, '-O2', '-std=c99', '-Wall', '-Werror', '-Wno-unused-label', f'-DPLAID_LOWERED="{name}.c"',
             '-I', str(OUT), str(HERE / 'harness.c'), '-o', str(OUT / f'{name}-native.exe')], check=True)
     script = subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(HERE / 'run.py')], text=True).strip()

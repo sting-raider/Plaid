@@ -363,55 +363,62 @@
 <rect x="40" y="1422" width="548" height="418" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
 <text x="60" y="1452" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">05</text>
 <text x="94" y="1453" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Native Runtime</text>
-<text x="60" y="1478" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">0 integrated   /   0 partial   /   8 open</text>
-<rect x="60.0" y="1492" width="508.0" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
+<text x="60" y="1478" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">0 integrated   /   1 partial   /   8 open</text>
+<rect x="60.0" y="1492" width="56.44444444444444" height="4" rx="0" fill="#ffc66d" stroke="none"/>
+<rect x="116.44444444444444" y="1492" width="451.55555555555554" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
 <g class="milestone">
-<title>Native Runtime: Guest memory/MMIO runtime (open)</title>
-<text x="60" y="1521" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1521" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Guest memory/MMIO runtime</text>
-<text x="568" y="1521" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+<title>Native Runtime: Declared runtime-function boundary (ADR-0129) (partial)</title>
+<text x="60" y="1521" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
+<text x="83" y="1521" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Declared runtime-function boundary (ADR-0129)</text>
+<text x="568" y="1521" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Interrupt/timing/event runtime (open)</title>
+<title>Native Runtime: Guest memory/MMIO runtime (open)</title>
 <text x="60" y="1547" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1547" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Interrupt/timing/event runtime</text>
+<text x="83" y="1547" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Guest memory/MMIO runtime</text>
 <text x="568" y="1547" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Controller input (open)</title>
+<title>Native Runtime: Interrupt/timing/event runtime (open)</title>
 <text x="60" y="1573" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1573" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Controller input</text>
+<text x="83" y="1573" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Interrupt/timing/event runtime</text>
 <text x="568" y="1573" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Save devices (open)</title>
+<title>Native Runtime: Controller input (open)</title>
 <text x="60" y="1599" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1599" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Save devices</text>
+<text x="83" y="1599" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Controller input</text>
 <text x="568" y="1599" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Audio path (open)</title>
+<title>Native Runtime: Save devices (open)</title>
 <text x="60" y="1625" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1625" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Audio path</text>
+<text x="83" y="1625" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Save devices</text>
 <text x="568" y="1625" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: RSP runtime/native path (open)</title>
+<title>Native Runtime: Audio path (open)</title>
 <text x="60" y="1651" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1651" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">RSP runtime/native path</text>
+<text x="83" y="1651" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Audio path</text>
 <text x="568" y="1651" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Renderer integration (open)</title>
+<title>Native Runtime: RSP runtime/native path (open)</title>
 <text x="60" y="1677" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1677" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Renderer integration</text>
+<text x="83" y="1677" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">RSP runtime/native path</text>
 <text x="568" y="1677" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Native launch/cache packaging (open)</title>
+<title>Native Runtime: Renderer integration (open)</title>
 <text x="60" y="1703" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="83" y="1703" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Native launch/cache packaging</text>
+<text x="83" y="1703" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Renderer integration</text>
 <text x="568" y="1703" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+</g>
+<g class="milestone">
+<title>Native Runtime: Native launch/cache packaging (open)</title>
+<text x="60" y="1729" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
+<text x="83" y="1729" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Native launch/cache packaging</text>
+<text x="568" y="1729" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <text x="60" y="1796" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
 <text x="60" y="1814" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Reuse N64ModernRuntime + RT64 (ADR-0126) and link lowered code.</text>

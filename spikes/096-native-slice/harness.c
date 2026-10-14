@@ -2,6 +2,7 @@
    same state as driver.cpp. PLAID_LOWERED names the generated C file. */
 #include <stdio.h>
 #include PLAID_LOWERED
+#include "runtime.c"
 
 static plaid_state s;
 

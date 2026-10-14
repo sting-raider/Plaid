@@ -2967,3 +2967,47 @@ Result: spike096's new `wide` program matches pinned ares exactly, and an
 overflowing `addi` faults 6 natively. OoT guarded-scope blockers fall from 143
 to 82. The rest are libultra system code (COP0, FPU context save, `CACHE`,
 compiler `BREAK` traps), which is the runtime boundary.
+
+## ADR-0129: Declared runtime functions are a discovery boundary
+
+Context: after ADR-0128 the OoT guarded-scope blockers were libultra system
+code (COP0, FPU context save, `CACHE`, `BREAK`). N64Recomp does not recompile
+such functions: it marks them reimplemented and calls the host runtime's
+version (`src/symbol_lists.cpp`, `src/main.cpp`). Its identification comes
+from ELF symbols. Plaid has to start from the ROM, so identification is
+evidence.
+
+Decision: a `plaid-runtime-functions-v0` declaration (`plaid discover ...
+[runtime.json]`, `plaid lower-c ... [runtime.json]`) names guest entries the
+host runtime provides. Discovery records calls and tail-call jumps into them
+but never decodes their bodies or adds their internal targets as roots; the
+map carries them as `runtime_functions`, each backed by evidence. The solver
+re-derives control flow with the same boundary. It accepts call and jump edges
+(and linked indirect candidates) into runtime functions only under
+`DeclaredStaticImagesGuardedRam`, adding an explicit ABI assumption that lists
+them. A runtime entry that is also decoded as guest code (for example because
+a branch reaches it) is a `runtime_function_decoded` blocker. Other scopes
+report `runtime_boundary_outside_scope`. `plaid-lower` emits calls to
+`int plaid_rt_<name>(plaid_state *)`. A tail call checks that the runtime
+returns to the expected `$ra` (fault 5). The artifact gives the runtime no
+guest entry points, so a runtime that tried to call back into guest code could
+not.
+
+Result: spike096 `boundary` calls and tail-calls a declared `sum` whose guest
+body (it contains `SYNC`, outside the scope) runs on ares and is never
+decoded natively; `spikes/096-native-slice/runtime.c` provides it, and the
+results match ares exactly. A local OoT measurement that declared every
+called function containing a system instruction (17 functions, chosen by a
+heuristic, not evidence) leaves **1** guarded-scope blocker: the boot
+function's own return to the host. That number is not closure. Coverage drops
+from 293 to 190 blocks because runtime bodies are no longer decoded, and the
+first thread's entry (`0x8000063c`, passed to `osCreateThread`) was never
+discovered, before or after the boundary.
+
+Consequences: the next gap is guest code that the runtime enters. Thread
+entries and interrupt or event handlers are passed to runtime functions as
+arguments, so a declaration must say which arguments are guest code
+pointers, and discovery must prove their values at each call site and treat
+them as host-entered functions. Identification evidence (PR #50 n64sym, or a
+user-supplied symbol map) must also replace the heuristic; it is never
+promoted to proof.

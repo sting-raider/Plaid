@@ -593,6 +593,18 @@ pub struct ProgramMap {
     pub executable_writes: BTreeSet<ExecutableWrite>,
     pub rsp_microcodes: BTreeSet<Microcode>,
     pub unresolved: BTreeSet<Unresolved>,
+    /// Declared runtime functions (ADR-0129): entered by call or tail call,
+    /// provided by the host runtime, never decoded.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", with = "pairs")]
+    pub runtime_functions: BTreeMap<CodeAddress, RuntimeFunction>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuntimeFunction {
+    /// C identifier suffix of the host implementation `plaid_rt_<name>`.
+    pub name: String,
+    pub evidence: EvidenceRefs,
 }
 
 fn fetch_summaries_realizable(fetch_count: u64, summaries: &[(u64, u64, u64)]) -> bool {
@@ -685,6 +697,7 @@ impl ProgramMap {
             executable_writes: BTreeSet::new(),
             rsp_microcodes: BTreeSet::new(),
             unresolved: BTreeSet::new(),
+            runtime_functions: BTreeMap::new(),
         }
     }
 
@@ -766,6 +779,23 @@ impl ProgramMap {
         for (a, e) in &self.entries {
             address(a)?;
             refs(e)?;
+        }
+        let mut names = BTreeSet::new();
+        for (a, f) in &self.runtime_functions {
+            address(a)?;
+            refs(&f.evidence)?;
+            let mut chars = f.name.chars();
+            if !chars
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+                || !chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+                || !names.insert(&f.name)
+            {
+                return Err(format!(
+                    "invalid or duplicate runtime function name {:?}",
+                    f.name
+                ));
+            }
         }
         for e in &self.direct_edges {
             address(&e.site)?;

@@ -231,6 +231,8 @@ struct Lowerer<'a> {
     returns: &'a BTreeSet<u32>,
     /// Function entries, each emitted as one C function.
     functions: &'a BTreeSet<u32>,
+    /// Declared runtime functions (ADR-0129): host-provided `plaid_rt_<name>`.
+    runtime: &'a BTreeMap<u32, String>,
 }
 
 impl Lowerer<'_> {
@@ -247,6 +249,12 @@ impl Lowerer<'_> {
     }
     /// A guest call: the callee returns 0 only after a checked return to `link`.
     fn call(&self, target: u32, link: u32, pc: u32) -> Result<String, String> {
+        if let Some(name) = self.runtime.get(&target) {
+            return Ok(format!(
+                "{{ int r = plaid_rt_{name}(s); if (r) return r; }} {}",
+                self.fallthrough(link, pc)
+            ));
+        }
         if !self.functions.contains(&target) {
             return Err(format!(
                 "{pc:08x}: call target {target:08x} is not a function"
@@ -317,6 +325,11 @@ impl Lowerer<'_> {
             (23, _, 0) => likely(format!("(s64){a} > 0")),
             (1, _, 0) => conditional(format!("(s64){a} < 0")),
             (1, _, 1) => conditional(format!("(s64){a} >= 0")),
+            // A tail call into the runtime returns to $ra, which must be ours.
+            (2, _, _) if self.runtime.contains_key(&jump) => Ok(format!(
+                "{slot} {{ int r = plaid_rt_{}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;",
+                self.runtime[&jump]
+            )),
             (2, _, _) => Ok(format!("{slot} {}", self.goto(jump)?)),
             (3, _, _) => Ok(format!(
                 "s->r[31] = {}; {slot} {}",
@@ -361,6 +374,11 @@ pub fn lower_c(
             .ok_or_else(|| format!("{pc:08x} has no supplied instruction word"))
     };
     let exits: BTreeSet<u32> = exits.iter().map(|e| e.0).collect();
+    let runtime: BTreeMap<u32, String> = map
+        .runtime_functions
+        .iter()
+        .map(|(a, f)| (a.pc.0, f.name.clone()))
+        .collect();
     let mut targets = BTreeMap::new();
     let mut returns = BTreeSet::new();
     let mut callees = vec![host.clone()];
@@ -396,6 +414,7 @@ pub fn lower_c(
             .filter(|e| e.kind == EdgeKind::Call)
             .map(|e| e.target.clone()),
     );
+    callees.retain(|f| !runtime.contains_key(&f.pc.0));
     let functions: BTreeSet<u32> = callees.iter().map(|f| f.pc.0).collect();
 
     let mut code = Vec::new();
@@ -425,6 +444,9 @@ pub fn lower_c(
         words.join(", "),
         words.len(),
     );
+    for name in runtime.values() {
+        out += &format!("int plaid_rt_{name}(plaid_state *s);\n");
+    }
     for f in &functions {
         out += &format!("static int F_{f:08x}(plaid_state *s, u64 ret);\n");
     }
@@ -436,6 +458,7 @@ pub fn lower_c(
             targets: &targets,
             returns: &returns,
             functions: &functions,
+            runtime: &runtime,
         };
         out += &format!(
             "static int F_{:08x}(plaid_state *s, u64 ret) {{\n  (void)ret;\n  goto L_{:08x};\n",
