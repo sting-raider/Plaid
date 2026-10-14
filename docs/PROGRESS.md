@@ -10,7 +10,7 @@ Legend:
 - 🟨 **Partial** — implemented or experimentally supported, but proof/coverage is incomplete.
 - ⬜ **Open** — not implemented or not yet demonstrated.
 
-Last progress-data update: **2026-10-15**.
+Last progress-data update: **2026-10-15**. Day-by-day numbers: [progress history](HISTORY.md).
 
 ## Retained evidence
 
