@@ -69,16 +69,16 @@
     {
       "name": "Native AOT Compiler",
       "milestones": [
-        {"name": "Architecture-neutral IR", "state": "open"},
-        {"name": "Integer MIPS lowering", "state": "open"},
-        {"name": "x86-64 object emission", "state": "open"},
-        {"name": "ARM64 object emission", "state": "open"},
-        {"name": "Native direct calls", "state": "open"},
-        {"name": "Finite native indirect dispatch", "state": "open"},
-        {"name": "Native differential verifier", "state": "open"},
-        {"name": "Link/package model", "state": "open"}
+        {"name": "MIPS -> C lowering (ADR-0126)", "state": "partial"},
+        {"name": "Integer MIPS lowering", "state": "partial"},
+        {"name": "x86-64 host build via C", "state": "partial"},
+        {"name": "ARM64 host build via C", "state": "open"},
+        {"name": "Return closure / function-level lowering", "state": "open"},
+        {"name": "Finite native indirect dispatch", "state": "partial"},
+        {"name": "Synthetic native differential verifier", "state": "verified"},
+        {"name": "Link with N64ModernRuntime", "state": "open"}
       ],
-      "remaining": "IR, verified lowering, host emission and native linking."
+      "remaining": "Return closure, function-level C, wider ISA, runtime link."
     },
     {
       "name": "Native Runtime",
@@ -92,7 +92,7 @@
         {"name": "Renderer integration", "state": "open"},
         {"name": "Native launch/cache packaging", "state": "open"}
       ],
-      "remaining": "Memory, timing, devices, rendering and native RSP execution."
+      "remaining": "Reuse N64ModernRuntime + RT64 (ADR-0126) and link lowered code."
     },
     {
       "name": "Compatibility",
@@ -103,7 +103,7 @@
         {"name": "n64-systemtest research corpus", "state": "partial"},
         {"name": "First commercial ROM mapped", "state": "open"},
         {"name": "First commercial ROM CLOSED", "state": "open"},
-        {"name": "First native synthetic executable", "state": "open"},
+        {"name": "First native synthetic executable", "state": "verified"},
         {"name": "First native commercial boot", "state": "open"},
         {"name": "First native gameplay", "state": "open"},
         {"name": "Representative 25-game set", "state": "open"},
@@ -129,7 +129,7 @@
       "value": "2,472,203",
       "label": "Full PI-byte fetch chains",
       "detail": "Canonical + independent replay agree",
-      "source": "docs/STATUS.md"
+      "source": "docs/STATUS-LOG.md"
     },
     {
       "value": "0",

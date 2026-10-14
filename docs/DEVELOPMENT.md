@@ -6,6 +6,12 @@ The authoritative engineering state is still [`STATUS.md`](STATUS.md) and [`NEXT
 
 ## Toolchain
 
+Spike096 is the synthetic native slice (milestone 1). `plaid lower-c
+<words.bin> <base> <entry> <exit> <out.c>` discovers, solves under
+`DeclaredStaticImagesGuardedRam` and emits C via `crates/plaid-lower`. Run
+`python spikes/096-native-slice/run.py` (add `--rebuild` after driver changes);
+it needs a C compiler on PATH (`gcc`, `clang` or `CC`) and WSL for the ares oracle.
+
 Spike095 adds raw v11 reverse-SP-DMA receipts. Run its `test_consumer.py`
 and `run.py` (pinned ares baseline/sensor build in WSL, or `--verify-existing`
 for retained outputs). The opt-in `sp_dma_egress_access` recipe observes DMEM

@@ -2866,3 +2866,53 @@ Unchanged: all AGENTS.md invariants, fail-closed semantics, exact-head CAS, no
 ROM-derived bytes in git, `native_complete` and every broad certification flag
 false. Commercial-ROM native lowering stays deferred until a commercial scope is
 CLOSED. See the "Direction reset" section at the top of NEXT.md.
+
+## ADR-0126: Reuse the N64Recomp ecosystem below discovery; lower through C
+
+Context: Plaid's novel contribution is automatic executable discovery and
+closure proof from an untouched ROM. N64Recomp (MIT) already lowers known
+MIPS functions to C; N64ModernRuntime (GPL-3.0) and RT64 (MIT) already provide
+the N64 runtime and RSP/RDP rendering that its shipped ports use. Rebuilding
+those would delay the first native boot by a long way without testing Plaid's
+claim.
+
+Decision:
+1. Lower through C. `crates/plaid-lower` emits one C translation unit from a
+   CLOSED map: blocks are labels, direct transfers are `goto`, indirect jumps
+   dispatch only over proven target sets, and anything outside the supported
+   integer subset rejects the program. No guest decoder or interpreter is
+   emitted. A host C compiler then produces x86-64 or ARM64 code. N64Recomp's
+   lowering stays a reference to consult, not a dependency, until its function
+   model is needed.
+2. Reuse N64ModernRuntime and RT64 at the runtime milestone instead of writing
+   a runtime/renderer. Licensing: a generated game application linked against
+   N64ModernRuntime is GPL-3.0, like existing N64Recomp ports. Plaid's own
+   compiler crates do not link it and keep their own (not yet chosen) license.
+   Plaid has no LICENSE file yet; the owner must choose one before release.
+3. First commercial target becomes Super Mario 64 (few code overlays, mostly
+   uncompressed code); OoT remains the second target and its blocker count
+   remains tracked. Decompilation-project symbol maps may be used locally
+   only as an evaluation oracle for discovery recall, never as an input to
+   discovery, and nothing derived from them is committed.
+4. Assumption-qualified closure is expressed as explicit solver scopes, never
+   by weakening an existing scope. New `DeclaredStaticImagesGuardedRam`
+   admits RDRAM data loads/stores and pure compare/HI-LO arithmetic, and adds
+   the assumptions that stores never reach executable bytes and that each
+   16-byte RDRAM line is accessed through only one of KSEG0/KSEG1. The native
+   artifact checks both at run time and aborts (faults 2 and 4) instead of
+   executing. The second assumption exists because KSEG0 goes through the
+   VR4300's write-back D-cache: mixed cached/uncached access to one line sees
+   stale data on hardware and in ares, which a coherent native memory model
+   would silently get wrong. The original
+   `DeclaredStaticImages` contract is unchanged. Whole-ROM `CLOSED` and
+   `native_complete` are unaffected.
+
+First result (spike096): five synthetic programs covering ALU, shifts,
+multiply/divide (including divide-by-zero and INT_MIN/-1), loops, all
+supported branch kinds, delay slots, JAL/JALR links, a proven computed jump
+and byte/half/word memory through KSEG0 and KSEG1 match the pinned ares
+interpreter exactly (all GPRs, HI, LO and a 256-byte CPU-coherent RAM
+window). A self-modifying store and a cached/uncached alias fault instead of
+running. The slice surfaced the first
+compiler requirement for discovery: `jr $ra` returns have no closure proof,
+so any program with a function return is still OPEN.
