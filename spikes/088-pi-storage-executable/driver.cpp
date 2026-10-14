@@ -15,6 +15,14 @@
 namespace Storage = ares::Nintendo64::Memory;
 static std::vector<string> events;
 static u32 phase;
+#if defined(PLAID_PI_RSP_OPERANDS)
+static constexpr u32 piProgramWord=0x34100007; // ORI s0,zero,7.
+static constexpr u32 piSecondWord=0x02108821; // ADDU s1,s0,s0.
+#else
+static constexpr u32 piProgramWord=0x24100007;
+static constexpr u32 piSecondWord=0;
+#endif
+
 static void add(const string& fields) {
   events.push_back({"{\"ordinal\":",events.size()+1,",\"phase\":",phase,",",fields,"}"});
 }
@@ -52,8 +60,14 @@ static u64 performed_rsp_read(u32 address,u32 offset,u32 word) {
   return events.size();
 }
 static void performed_rsp_instruction(bool begin,u32 pc,u64 read,u32 word,u32 next,bool halted) {
-  add({"\"record\":\"rsp_instruction\",\"begin\":",begin ? "true" : "false",",\"rsp_pc\":",pc,
-    ",\"read_ordinal\":",read,",\"word\":",word,",\"next_pc\":",next,",\"halted\":",halted ? "true" : "false"});
+  string row{"\"record\":\"rsp_instruction\",\"begin\":",begin ? "true" : "false",",\"rsp_pc\":",pc,
+    ",\"read_ordinal\":",read,",\"word\":",word,",\"next_pc\":",next,",\"halted\":",halted ? "true" : "false"};
+#if defined(PLAID_PI_RSP_OPERANDS)
+  row.append(",\"registers\":[");
+  for(u32 n=0;n<32;n++) row.append(n ? "," : "",rsp.ipu.r[n].u32);
+  row.append("]");
+#endif
+  add(row);
 }
 #endif
 #endif
@@ -67,13 +81,29 @@ static void sp_store(u32 dram,u32 bank,u32 offset,u32 bytes,u64 value) {
 }
 #endif
 #endif
+#if defined(PLAID_PI_RSP_OPERANDS)
+static u64 operandEpoch=0;
+static void operand_root(bool enabled) {
+#if PLAID_PI_STORAGE_SENSOR
+  if(!enabled) return;
+  string row{"\"record\":\"rsp_operand_root\",\"epoch\":",++operandEpoch,",\"rsp_pc\":",rsp.ipu.pc,",\"registers\":["};
+  for(u32 n=0;n<32;n++) row.append(n ? "," : "",rsp.ipu.r[n].u32);
+  add(row.append("]"));
+#else
+  (void)enabled;
+#endif
+}
+#endif
 int main(int argc,char** argv) {
   if(argc!=2 || (strcmp(argv[1],"plain") && strcmp(argv[1],"traced"))) return 2;
   bool traced=!strcmp(argv[1],"traced");
   Headless frontend; platform=&frontend;
   std::vector<u8> rom(16384);
   rom[0]=0x80;rom[1]=0x37;rom[2]=0x12;rom[3]=0x40;
-  rom[0x1000]=0x24;rom[0x1001]=0x10;rom[0x1003]=7; // ADDIU s0,zero,7; NOP.
+  for(u32 n=0;n<4;n++) {
+    rom[0x1000+n]=piProgramWord>>(24-n*8);
+    rom[0x1004+n]=piSecondWord>>(24-n*8);
+  }
   frontend.cartPak->setAttribute("title","Plaid original PI storage fixture");
   frontend.cartPak->setAttribute("region","NTSC");frontend.cartPak->setAttribute("cic","CIC-NUS-6102");
   frontend.cartPak->append("program.rom",std::span<const u8>{rom.data(),rom.size()});
@@ -140,7 +170,7 @@ int main(int argc,char** argv) {
       // Explicit host mapping control; no guest mapping-operation provenance claimed.
       rdram.mapIdentity=1;cpu.ipu.r[16].u64=0;
       u32 physical=phase==0 ? 0x1000 : 0x201000;
-      assert(static_cast<Storage::Writable&>(rdram.ram).read<Word>(physical)==0x24100007);
+      assert(static_cast<Storage::Writable&>(rdram.ram).read<Word>(physical)==piProgramWord);
       cpu.pipeline.setPc(0xffffffffa0000000ull|physical);
       cpu.instruction();
       assert(cpu.ipu.r[16].u64==7 && cpu.scc.cause.exceptionCode==0);
@@ -150,7 +180,7 @@ int main(int argc,char** argv) {
       rsp.writeWord(0x04040008,0,cpu);
       assert(rsp.dma.busy.read && rsp.dma.current.pbusRegion);
       rsp.dmaTransferStep();
-      assert(!rsp.dma.busy.any() && rsp.imem.read<Word>(0)==0x24100007);
+      assert(!rsp.dma.busy.any() && rsp.imem.read<Word>(0)==piProgramWord);
       snapshot("sp_installed");
       cpu.ipu.r[16].u64=0;cpu.pipeline.setPc(0xffffffffa4001000ull);cpu.instruction();
       assert(cpu.ipu.r[16].u64==7 && cpu.scc.cause.exceptionCode==0);
@@ -158,16 +188,19 @@ int main(int argc,char** argv) {
 #if defined(PLAID_PI_DMEM_CUT)
       rsp.writeWord(0x04040000,0,cpu);rsp.writeWord(0x04040004,physical,cpu);
       rsp.writeWord(0x04040008,0,cpu);rsp.dmaTransferStep();
-      assert(!rsp.dma.busy.any() && rsp.dmem.read<Word>(0)==0x24100007);
+      assert(!rsp.dma.busy.any() && rsp.dmem.read<Word>(0)==piProgramWord);
       snapshot("dmem_installed");
       cpu.ipu.r[16].u64=0;cpu.pipeline.setPc(0xffffffffa4000000ull);cpu.instruction();
       assert(cpu.ipu.r[16].u64==7);snapshot("dmem_executed");
       // Explicit opaque IMEM seed and RSP register controls; only the sink is claimed.
       rsp.imem.write<Word>(0x200,0xac220000);rsp.imem.write<Word>(0x204,0x0000000d);
-      rsp.ipu.r[1].u32=0;rsp.ipu.r[2].u32=0x24100007;
+      rsp.ipu.r[1].u32=0;rsp.ipu.r[2].u32=piProgramWord;
       rsp.pipeline={};rsp.branch.setPc(0x200);rsp.ipu.pc=0x200;rsp.status.halted=0;
+#if defined(PLAID_PI_RSP_OPERANDS)
+      operand_root(traced);
+#endif
       for(u32 guard=0;guard<8 && !rsp.status.halted;guard++) rsp.instruction();
-      assert(rsp.status.halted && rsp.dmem.read<Word>(0)==0x24100007 && rsp.imem.read<Word>(0)==0x24100007);
+      assert(rsp.status.halted && rsp.dmem.read<Word>(0)==piProgramWord && rsp.imem.read<Word>(0)==piProgramWord);
       snapshot("rsp_equal_store");
       cpu.ipu.r[16].u64=0;cpu.pipeline.setPc(0xffffffffa4000000ull);cpu.instruction();
       assert(cpu.ipu.r[16].u64==7);snapshot("dmem_consumed");
@@ -178,6 +211,9 @@ int main(int argc,char** argv) {
       rsp.imem.write<Word>(8,0x0000000d);rsp.ipu.r[16].u32=0;
       rsp.pipeline={};rsp.pipeline.singleIssue=true;
       rsp.branch.setPc(0);rsp.ipu.pc=0;rsp.status.halted=0;
+#if defined(PLAID_PI_RSP_OPERANDS)
+      operand_root(traced);
+#endif
       for(u32 guard=0;guard<8 && !rsp.status.halted;guard++) rsp.instruction();
       assert(rsp.status.halted && rsp.ipu.r[16].u32==7);
       snapshot("rsp_imem_consumed");
@@ -185,12 +221,18 @@ int main(int argc,char** argv) {
       rsp.imem.write<Word>(0x300,0x00200008);rsp.imem.write<Word>(0x304,0);
       rsp.ipu.r[1].u32=3;rsp.ipu.r[16].u32=0;
       rsp.pipeline={};rsp.branch.setPc(0x300);rsp.ipu.pc=0x300;rsp.status.halted=0;
+#if defined(PLAID_PI_RSP_OPERANDS)
+      operand_root(traced);
+#endif
       for(u32 guard=0;guard<16 && !rsp.status.halted;guard++) rsp.instruction();
       assert(rsp.status.halted && rsp.ipu.r[16].u32==7 && rsp.ipu.pc==15);
       snapshot("rsp_unaligned_consumed");
       // A paired VNOP is performed after MTC0 sets HALT in the same batch.
       rsp.imem.write<Word>(0x400,0x40822000);rsp.imem.write<Word>(0x404,0x4a000037);
       rsp.ipu.r[2].u32=2;rsp.pipeline={};rsp.branch.setPc(0x400);rsp.ipu.pc=0x400;rsp.status.halted=0;
+#if defined(PLAID_PI_RSP_OPERANDS)
+      operand_root(traced);
+#endif
       rsp.instruction();
       assert(rsp.status.halted && rsp.ipu.pc==0x408);
       snapshot("rsp_halt_dual_consumed");
@@ -198,20 +240,23 @@ int main(int argc,char** argv) {
       auto reinstall=[&] {
         rsp.writeWord(0x04040000,0x1000,cpu);rsp.writeWord(0x04040004,physical,cpu);
         rsp.writeWord(0x04040008,0,cpu);rsp.dmaTransferStep();
-        assert(!rsp.dma.busy.any() && rsp.imem.read<Word>(0)==0x24100007);
+        assert(!rsp.dma.busy.any() && rsp.imem.read<Word>(0)==piProgramWord);
       };
       auto consume=[&](const char* point) {
         cpu.ipu.r[16].u64=0;cpu.pipeline.setPc(0xffffffffa4001000ull);cpu.instruction();
         assert(cpu.ipu.r[16].u64==7);
         rsp.imem.write<Word>(8,13);rsp.ipu.r[16].u32=0;
         rsp.pipeline={};rsp.pipeline.singleIssue=true;rsp.branch.setPc(0);rsp.ipu.pc=0;rsp.status.halted=0;
-        for(u32 guard=0;guard<8 && !rsp.status.halted;guard++) rsp.instruction();
+  #if defined(PLAID_PI_RSP_OPERANDS)
+      operand_root(traced);
+#endif
+      for(u32 guard=0;guard<8 && !rsp.status.halted;guard++) rsp.instruction();
         assert(rsp.status.halted && rsp.ipu.r[16].u32==7);snapshot(point);
       };
-      reinstall();rsp.imem.write<Word>(0,0x24100007);snapshot("imem_equal_written");consume("imem_equal_consumed");
-      reinstall();rsp.imem.fill(0x24100007);snapshot("imem_filled");consume("imem_fill_consumed");
+      reinstall();rsp.imem.write<Word>(0,piProgramWord);snapshot("imem_equal_written");consume("imem_equal_consumed");
+      reinstall();rsp.imem.fill(piProgramWord);snapshot("imem_filled");consume("imem_fill_consumed");
       reinstall();auto imemFile=vfs::memory::create(12);
-      imemFile->writem(0x24100007,4);imemFile->writem(0,4);imemFile->writem(13,4);imemFile->seek(0);
+      imemFile->writem(piProgramWord,4);imemFile->writem(piSecondWord,4);imemFile->writem(13,4);imemFile->seek(0);
       rsp.imem.load(imemFile);snapshot("imem_loaded");consume("imem_load_consumed");
 #endif
 #endif

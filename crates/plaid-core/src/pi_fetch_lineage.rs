@@ -547,6 +547,9 @@ impl<'a> Lineage<'a> {
     fn sp(&mut self, record: &sp_history::SpRecord) -> Result<(), String> {
         use sp_history::{CapturedSpByteWriter, CapturedSpWriterKind, SpRecord};
         match *record {
+            // Operand roots cut register parents in the shared projection;
+            // they never change already frozen executable-byte reads.
+            SpRecord::RspOperandRoot { .. } => {}
             SpRecord::ImemStorageEffect { offset, bytes, .. } => {
                 self.sp.cut(1, offset, bytes);
             }

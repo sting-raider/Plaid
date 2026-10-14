@@ -10,7 +10,7 @@ Legend:
 - 🟨 **Partial** — implemented or experimentally supported, but proof/coverage is incomplete.
 - ⬜ **Open** — not implemented or not yet demonstrated.
 
-Last progress-data update: **2026-10-14**.
+Last progress-data update: **2026-10-15**.
 
 ## Retained evidence
 
@@ -54,6 +54,7 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Bounded lower-DMEM ancestry revocation | ✅ verified |
 | Bounded lower-IMEM ancestry revocation | ✅ verified |
 | Exact IMEM-read / performed-RSP receipts | ✅ verified |
+| Bounded scalar producer / executable-read join | ✅ verified |
 | Controlled D-cache export / executable chain | ✅ verified |
 | Controlled mapping / cache / exception chain | ✅ verified |
 | CPU executable-store sensing | 🟨 partial |

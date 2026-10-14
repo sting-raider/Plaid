@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-14",
+  "updated": "2026-10-15",
   "legend": {
     "verified": "Verified and integrated on main",
     "partial": "Implemented or evidenced, but proof/coverage is incomplete",
@@ -36,6 +36,7 @@
         {"name": "Bounded lower-DMEM ancestry revocation", "state": "verified"},
         {"name": "Bounded lower-IMEM ancestry revocation", "state": "verified"},
         {"name": "Exact IMEM-read / performed-RSP receipts", "state": "verified"},
+        {"name": "Bounded scalar producer / executable-read join", "state": "verified"},
         {"name": "Controlled D-cache export / executable chain", "state": "verified"},
         {"name": "Controlled mapping / cache / exception chain", "state": "verified"},
         {"name": "CPU executable-store sensing", "state": "partial"},

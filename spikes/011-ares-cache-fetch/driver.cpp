@@ -10,7 +10,9 @@
 #include <cstdlib>
 #include <nall/hash/sha256.hpp>
 #if defined(PLAID_ACCESS_BOOT)
-#if defined(PLAID_IMEM_STORAGE_ACCESS_BOOT)
+#if defined(PLAID_RSP_OPERAND_ACCESS_BOOT)
+#include "../093-rsp-scalar-executable/observer.hpp"
+#elif defined(PLAID_IMEM_STORAGE_ACCESS_BOOT)
 #include "../092-imem-storage-cuts/observer.hpp"
 #elif defined(PLAID_RSP_EXECUTION_ACCESS_BOOT)
 #include "../091-raw-rsp-executable-consumption/observer.hpp"
