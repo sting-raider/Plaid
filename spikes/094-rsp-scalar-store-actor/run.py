@@ -32,7 +32,7 @@ def main():
     assert results['sensor']['traced']==results['sensor']['repeat']
     events=results['sensor']['traced']['events']
     assert [r['ordinal'] for r in events]==list(range(1,len(events)+1))
-    facts=model.inspect(events)
+    facts=model.inspect(events,stores=True)
     active=None;scope=None;remaining=[];matched=0
     for row in events:
         if row['record']=='rsp_instruction':

@@ -61,6 +61,7 @@ pub mod pi_queue_history;
 pub mod pif_history;
 pub mod pipeline;
 pub mod program;
+mod raw_sp_dma_egress;
 pub mod reset_cache_lifetime;
 pub mod rom;
 pub mod root_policy;

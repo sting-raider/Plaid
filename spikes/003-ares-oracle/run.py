@@ -15,7 +15,7 @@ REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 OUTPUT = ROOT / "target/ares-oracle-spike"
 
 
-def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False, rdram_scalar_access=False, fetch_boundary_access=False, pi_dma_access=False, queue_access=False, sp_backing_access=False, pif_backing_access=False, rsp_dmem_access=False, cpu_instruction_access=False, rsp_word_read_access=False, rsp_dma_lifecycle_access=False, rsp_dma_pending_access=False, tlb_write_access=False, entryhi_write_access=False, entrylo_write_access=False, tlbr_load_access=False, dcache_access=False, memory_mutation_access=False, rsp_instruction_fetch_access=False,rsp_scalar_store_access=False):
+def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False, rdram_scalar_access=False, fetch_boundary_access=False, pi_dma_access=False, queue_access=False, sp_backing_access=False, pif_backing_access=False, rsp_dmem_access=False, cpu_instruction_access=False, rsp_word_read_access=False, rsp_dma_lifecycle_access=False, rsp_dma_pending_access=False, tlb_write_access=False, entryhi_write_access=False, entrylo_write_access=False, tlbr_load_access=False, dcache_access=False, memory_mutation_access=False, rsp_instruction_fetch_access=False,rsp_scalar_store_access=False,sp_dma_egress_access=False):
     if dcache_access: assert cpu_instruction_access and rdram_burst_access
     if cache_fill_access: assert raw_fetch_access and physical_fetch_access
     if cache_operation_access: assert raw_fetch_access and physical_fetch_access
@@ -25,6 +25,7 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
     if pi_dma_access: assert raw_fetch_access and physical_fetch_access
     if queue_access: assert raw_fetch_access and physical_fetch_access and pi_dma_access
     if sp_backing_access: assert raw_fetch_access and physical_fetch_access
+    if sp_dma_egress_access: assert sp_backing_access and rdram_scalar_access
     if pif_backing_access: assert raw_fetch_access and physical_fetch_access
     if cpu_instruction_access: assert raw_fetch_access and physical_fetch_access
     if entryhi_write_access: assert tlb_write_access
@@ -55,6 +56,7 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
         "queue_access":queue_access,
         "queue_recipe":hashlib.sha256((ROOT/"spikes/032-ares-queue-identity/prepare.py").read_bytes()).hexdigest() if queue_access else None,
         "sp_backing_access":sp_backing_access,
+        "sp_dma_egress_access":sp_dma_egress_access,
         "sp_recipe":hashlib.sha256((ROOT/"spikes/039-ares-cpu-sp-fetch/prepare.py").read_bytes()).hexdigest() if sp_backing_access else None,
         "pif_backing_access":pif_backing_access,
         "pif_recipe":hashlib.sha256((ROOT/"spikes/041-ares-boot-pif-history/prepare.py").read_bytes()).hexdigest() if pif_backing_access else None,
@@ -310,7 +312,7 @@ struct PlaidQueueDispatchScope {
         if sp_backing_access:
             spec = importlib.util.spec_from_file_location("plaid_sp_generation", ROOT/"spikes/039-ares-cpu-sp-fetch/prepare.py")
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
-            module.generate(REF, output)
+            module.generate(REF, output,egress=sp_dma_egress_access)
         else:
             (output / "include/n64/rsp/rsp.hpp").unlink(missing_ok=True)
         if pif_backing_access:

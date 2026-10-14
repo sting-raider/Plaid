@@ -25,6 +25,38 @@ pub struct ObservedPiByteChain {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sp_writer: Option<sp_history::CapturedSpByteWriter>,
 }
+/// A completed DMA copy of a captured SP writer. This is not ROM ancestry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ObservedSpDmaByteChain {
+    pub read_ordinal: u64,
+    pub write_ordinal: u64,
+    pub completion_ordinal: u64,
+    pub bank: u32,
+    pub source_offset: u32,
+    pub writer: sp_history::CapturedSpByteWriter,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ObservedSpDmaFetch {
+    pub fetch_seq: u64,
+    pub pc: GuestVirtualAddr,
+    pub physical: PhysicalAddr,
+    pub word: u32,
+    pub cached: bool,
+    pub read_ordinal: Option<u64>,
+    pub fill_ordinal: Option<u64>,
+    pub bytes: [Option<ObservedSpDmaByteChain>; 4],
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpDmaFetchLineage {
+    pub fully_compatible_fetches: u64,
+    pub partially_compatible_fetches: u64,
+    pub unknown_fetches: u64,
+    pub samples: Vec<ObservedSpDmaFetch>,
+    pub ordered_fetches_sha256: String,
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservedPiFetch {
@@ -125,6 +157,8 @@ pub struct PiFetchLineageReport<P = PiQueueHistoryReport> {
     pub ordered_fetch_chains_sha256: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rsp_consumption: Option<RspInstructionLineage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sp_dma_consumption: Option<SpDmaFetchLineage>,
     pub mutation_coverage_certified: bool,
     pub executable_lifetime_certified: bool,
     pub native_complete: bool,
@@ -140,6 +174,7 @@ struct Resident {
     words: [u32; 8],
     origins: [Option<ObservedPiByteChain>; 32],
     fill: Option<u64>,
+    computed: [Option<ObservedSpDmaByteChain>; 32],
 }
 #[derive(Default)]
 struct Access {
@@ -147,6 +182,7 @@ struct Access {
     read: Option<(u64, PhysicalAddr, u64)>,
     bus: Option<PhysicalAddr>,
     sp_origins: Option<[Option<ObservedPiByteChain>; 4]>,
+    computed: [Option<ObservedSpDmaByteChain>; 4],
 }
 struct StorageAttempt {
     ordinal: u64,
@@ -164,6 +200,7 @@ struct SampleKey {
     read: Option<u64>,
     bytes: [Option<ObservedPiByteChain>; 4],
 }
+type ComputedPage = Box<[Option<(u8, ObservedSpDmaByteChain)>; 4096]>;
 struct Lineage<'a> {
     source: &'a [u8],
     // Only touched RAM pages are allocated; the supported RAM domain is bounded.
@@ -184,6 +221,12 @@ struct Lineage<'a> {
     sp_attributed: bool,
     rsp_active: Option<PendingRspInstruction>,
     scalar_stores: Option<crate::rsp_cpu_imem::scalar::ScalarRspProducers>,
+    egress: Option<crate::raw_sp_dma_egress::Egress>,
+    computed_pages: BTreeMap<u32, ComputedPage>,
+    computed_samples: Vec<ObservedSpDmaFetch>,
+    computed_digest: Sha256,
+    computed_full: u64,
+    computed_partial: u64,
     rsp_reads: BTreeMap<u64, RspReadParents>,
     rsp_samples: BTreeMap<RspSampleKey, ObservedRspInstruction>,
     rsp_digest: Sha256,
@@ -203,6 +246,25 @@ fn require(ok: bool, message: &str) -> Result<(), String> {
     if ok { Ok(()) } else { Err(message.into()) }
 }
 impl<'a> Lineage<'a> {
+    fn read_computed(
+        &mut self,
+        address: u32,
+        values: &[u8],
+    ) -> Vec<Option<ObservedSpDmaByteChain>> {
+        values
+            .iter()
+            .enumerate()
+            .map(|(n, value)| {
+                let address = address.checked_add(n as u32)?;
+                let page = self.computed_pages.get_mut(&(address >> 12))?;
+                let origin = &mut page[(address & 4095) as usize];
+                if origin.is_some_and(|(captured, _)| captured != *value) {
+                    *origin = None;
+                }
+                origin.map(|(_, chain)| chain)
+            })
+            .collect()
+    }
     fn new(source: &'a [u8]) -> Self {
         Self {
             source,
@@ -223,6 +285,12 @@ impl<'a> Lineage<'a> {
             sp_attributed: false,
             rsp_active: None,
             scalar_stores: None,
+            egress: None,
+            computed_pages: BTreeMap::new(),
+            computed_samples: Vec::new(),
+            computed_digest: Sha256::new(),
+            computed_full: 0,
+            computed_partial: 0,
             rsp_reads: BTreeMap::new(),
             rsp_samples: BTreeMap::new(),
             rsp_digest: Sha256::new(),
@@ -241,6 +309,9 @@ impl<'a> Lineage<'a> {
     }
     fn set(&mut self, address: u32, origin: Option<ObservedPiByteChain>) -> Result<(), String> {
         require(address < 8_388_608, "lineage effect outside supported RAM")?;
+        if let Some(page) = self.computed_pages.get_mut(&(address >> 12)) {
+            page[(address & 4095) as usize] = None;
+        }
         let page = address >> 12;
         if origin.is_some() || self.pages.contains_key(&page) {
             self.pages
@@ -376,6 +447,9 @@ impl<'a> Lineage<'a> {
     }
     fn access(&mut self, record: &history::Record) -> Result<(), String> {
         use history::Record as R;
+        if let Some(egress) = &mut self.egress {
+            egress.observe(record);
+        }
         match record {
             R::Scalar {
                 ordinal,
@@ -419,12 +493,14 @@ impl<'a> Lineage<'a> {
                             None,
                         )?;
                     }
-                } else if *bytes == 4
-                    && *device == 3
-                    && let Some(a) = &mut self.active
-                {
-                    a.reads += 1;
-                    a.read = Some((*ordinal, *address, *value));
+                } else if *bytes == 4 && *device == 3 {
+                    let computed =
+                        self.read_computed(aligned_address.0, &(*value as u32).to_be_bytes());
+                    if let Some(a) = &mut self.active {
+                        a.reads += 1;
+                        a.read = Some((*ordinal, *address, *value));
+                        a.computed = computed.try_into().map_err(|_| "computed read width")?;
+                    }
                 }
             }
             R::Burst {
@@ -487,6 +563,14 @@ impl<'a> Lineage<'a> {
                 } else {
                     [None; 32]
                 };
+                let values: Vec<_> = words.iter().flat_map(|w| w.to_be_bytes()).collect();
+                let computed = if joined {
+                    self.read_computed(address, &values)
+                        .try_into()
+                        .map_err(|_| "computed fill width")?
+                } else {
+                    [None; 32]
+                };
                 self.resident.insert(
                     *slot,
                     Resident {
@@ -494,6 +578,7 @@ impl<'a> Lineage<'a> {
                         words: *words,
                         origins,
                         fill: joined.then_some(*ordinal),
+                        computed,
                     },
                 );
                 self.last_fill = Some((*ordinal, *slot));
@@ -549,6 +634,57 @@ impl<'a> Lineage<'a> {
     fn sp(&mut self, record: &sp_history::SpRecord) -> Result<(), String> {
         use sp_history::{CapturedSpByteWriter, CapturedSpWriterKind, SpRecord};
         match *record {
+            SpRecord::SpDmaEgressRead {
+                ordinal,
+                context,
+                pc,
+                dram,
+                bank,
+                offset,
+                bytes,
+                value,
+            } => {
+                let writers = self.sp.dma_read(bank, offset, bytes, value)?;
+                self.egress
+                    .as_mut()
+                    .ok_or("reverse DMA outside selected protocol")?
+                    .read(
+                        ordinal, context, pc, dram, bank, offset, bytes, value, writers,
+                    )?;
+            }
+            SpRecord::SpDmaEgressStore {
+                ordinal,
+                context,
+                pc,
+                read_ordinal,
+                write_ordinal,
+            } => {
+                let receipt = self
+                    .egress
+                    .as_mut()
+                    .ok_or("reverse DMA outside selected protocol")?
+                    .store(ordinal, context, pc, read_ordinal, write_ordinal)?;
+                let payload = receipt.value.to_be_bytes();
+                for (n, writer) in receipt.writers.iter().enumerate() {
+                    let address = receipt.dram.0 + n as u32;
+                    if let Some(writer) = writer {
+                        self.computed_pages
+                            .entry(address >> 12)
+                            .or_insert_with(|| Box::new([None; 4096]))
+                            [(address & 4095) as usize] = Some((
+                            payload[8 - receipt.bytes as usize + n],
+                            ObservedSpDmaByteChain {
+                                read_ordinal,
+                                write_ordinal,
+                                completion_ordinal: ordinal,
+                                bank: receipt.bank,
+                                source_offset: receipt.offset + n as u32,
+                                writer: *writer,
+                            },
+                        ));
+                    }
+                }
+            }
             // Operand roots cut register parents in the shared projection;
             // they never change already frozen executable-byte reads.
             SpRecord::RspOperandRoot {
@@ -817,6 +953,7 @@ impl<'a> Lineage<'a> {
             }
         } else {
             self.pages.clear();
+            self.computed_pages.clear();
         }
         // Ordinary backing mutations never refresh or retire surviving I-cache
         // generations. Restore/retirement reject before this state can change.
@@ -858,6 +995,8 @@ impl<'a> Lineage<'a> {
             .take()
             .ok_or("lineage fetch without completed access")?;
         let (mut bytes, mut fill, mut read) = ([None; 4], None, None);
+        let mut computed = [None; 4];
+        let mut computed_read = None;
         if *cached {
             if let Some(line) = cache_line
                 && let Some(r) = self.resident.get(&line.slot)
@@ -865,6 +1004,7 @@ impl<'a> Lineage<'a> {
                 if r.tag == line.tag_key && r.words == line.words {
                     let lane = ((physical.0 >> 2) & 7) as usize;
                     bytes.copy_from_slice(&r.origins[lane * 4..lane * 4 + 4]);
+                    computed.copy_from_slice(&r.computed[lane * 4..lane * 4 + 4]);
                     fill = r.fill;
                 } else {
                     self.resident.remove(&line.slot);
@@ -875,6 +1015,8 @@ impl<'a> Lineage<'a> {
             && address == *physical
             && value == u64::from(*word)
         {
+            computed = access.computed;
+            computed_read = Some(ordinal);
             bytes = if let Some(origins) = access.sp_origins {
                 origins
             } else {
@@ -888,6 +1030,27 @@ impl<'a> Lineage<'a> {
             }
         }
         let known = bytes.iter().flatten().count() as u64;
+        if self.egress.is_some() {
+            let count = computed.iter().flatten().count();
+            self.computed_full += u64::from(count == 4);
+            self.computed_partial += u64::from(count > 0 && count < 4);
+            let sample = ObservedSpDmaFetch {
+                fetch_seq: seq,
+                pc: *pc,
+                physical: *physical,
+                word: *word,
+                cached: *cached,
+                read_ordinal: computed_read,
+                fill_ordinal: fill,
+                bytes: computed,
+            };
+            self.computed_digest
+                .update(serde_json::to_vec(&sample).map_err(|e| e.to_string())?);
+            self.computed_digest.update(b"\n");
+            if count > 0 && self.computed_samples.len() < 64 {
+                self.computed_samples.push(sample);
+            }
+        }
         self.sp_attributed |= bytes.iter().flatten().any(|b| b.sp_writer.is_some());
         self.byte_fetches += known;
         self.full += u64::from(known == 4);
@@ -1102,10 +1265,16 @@ fn replay_lineage<H: BufRead + Seek, F: BufRead + Seek, P>(
                 }
                 pi_history::Wire::Base(r) => {
                     if let history::Record::Header { format, .. } = &r
-                        && format == sp_history::RSP_STORE_FORMAT
+                        && matches!(
+                            format.as_str(),
+                            sp_history::RSP_STORE_FORMAT | sp_history::SP_EGRESS_FORMAT
+                        )
                     {
                         ledger.scalar_stores =
                             Some(crate::rsp_cpu_imem::scalar::ScalarRspProducers::with_stores());
+                        if format == sp_history::SP_EGRESS_FORMAT {
+                            ledger.egress = Some(crate::raw_sp_dma_egress::Egress::default());
+                        }
                     }
                     ledger.access(&r)?;
                     if matches!(r, history::Record::Fetch { .. }) {
@@ -1128,7 +1297,20 @@ fn replay_lineage<H: BufRead + Seek, F: BufRead + Seek, P>(
             && format!("{:x}", fetch_hash.finalize()) == source_hashes.1,
         "complete source changed between validation and lineage replay",
     )?;
+    let sp_dma_consumption = if let Some(egress) = ledger.egress {
+        egress.finish()?;
+        Some(SpDmaFetchLineage {
+            fully_compatible_fetches: ledger.computed_full,
+            partially_compatible_fetches: ledger.computed_partial,
+            unknown_fetches: ledger.fetches - ledger.computed_full - ledger.computed_partial,
+            samples: ledger.computed_samples,
+            ordered_fetches_sha256: format!("{:x}", ledger.computed_digest.finalize()),
+        })
+    } else {
+        None
+    };
     Ok(PiFetchLineageReport {
+        sp_dma_consumption,
         format: if ledger.rsp_instructions > 0 {
             "plaid-sp-pi-fetch-lineage-report-v2"
         } else if ledger.sp_attributed {
