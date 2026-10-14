@@ -1,5 +1,12 @@
 # Next
 
+Lower DMEM storage cuts now compose on raw history v6, including equal primitive
+RSP writes that bypass CPU-window wrappers. Continue authenticating actual RSP
+instruction/register/task producers separately; a sink cut supplies no source
+parent. Preserve per-lane effects, IMEM independence and frozen DMA reads. Reuse
+authenticated old v3/v5 results where this added protocol is unselected; broader
+source, mutation, cache/mapping and execution-epoch coverage remains OPEN.
+
 The existing raw-clock PI consumer now composes RAM parents with validated SP DMA
 read/install occurrences and actual CPU SP consumption (spike089). Continue into
 actual RSP consumption and producer/register definitions using complete histories;

@@ -30,10 +30,11 @@ def inspect(history_path, fetch_path, source):
     history = rows(history_path, history_hash)
     fetched = rows(fetch_path, fetch_hash)
     header, paired_header = next(history), next(fetched)
-    assert header['format'] in ('plaid-ares-access-history-v2', 'plaid-ares-access-history-v3', 'plaid-ares-access-history-v5')
-    storage_clock = header['format'] == 'plaid-ares-access-history-v5'
+    assert header['format'] in ('plaid-ares-access-history-v2', 'plaid-ares-access-history-v3', 'plaid-ares-access-history-v5','plaid-ares-access-history-v6')
+    dmem_storage = header['format'] == 'plaid-ares-access-history-v6'
+    storage_clock = header['format'] in ('plaid-ares-access-history-v5','plaid-ares-access-history-v6')
     if storage_clock:
-        assert header['policy'] == 'observed_ordinary_storage_mutations_and_pi_queue_sp_backing'
+        assert header['policy'] == ('observed_ordinary_storage_and_dmem_mutations_with_pi_queue_sp_backing' if dmem_storage else 'observed_ordinary_storage_mutations_and_pi_queue_sp_backing')
     if header['format'] == 'plaid-ares-access-history-v3':
         assert header['policy'] == 'identity_ram_pi_queue_and_observed_sp_backing'
     assert header['lifecycle_policy'] == 'single_run_no_host_restore'
@@ -79,10 +80,15 @@ def inspect(history_path, fetch_path, source):
             continue
         ordinal += 1
         assert e['ordinal'] == ordinal <= 100000000
-        if kind not in ('storage_effect','sp_dma_store') and not \
+        if kind not in ('storage_effect','sp_dma_store','rsp_dmem_effect') and not \
             (kind=='scalar' and not e['write'] and e['device']==4):
             sp_receipts=[]
-        if kind == 'pi_rom_half':
+        if kind == 'rsp_dmem_effect':
+            assert dmem_storage and active is None
+            assert e['bytes'] in (1,2,4,8) and e['offset'] % e['bytes']==0
+            assert 0 <= e['offset'] <= 4096-e['bytes'] and 0 <= e['value'] < 1<<(8*e['bytes'])
+            for address in range(e['offset'],e['offset']+e['bytes']): sp_memory.pop(address,None)
+        elif kind == 'pi_rom_half':
             assert e['value'] == int.from_bytes(source[e['offset']:e['offset']+2], 'big')
             half = e
         elif kind == 'pi_dma':
