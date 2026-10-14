@@ -6,6 +6,13 @@ The authoritative engineering state is still [`STATUS.md`](STATUS.md) and [`NEXT
 
 ## Toolchain
 
+Spike088 exercises actual PI I/O requests, translated ordinary storage and CPU
+consumption, with independent baseline/disabled/repeated checks. Run its
+`test_consumer.py` and `test_retained.py`, and use `run.py --verify-existing` for
+retained reference controls. `check_retained.py` requires independently retained
+source and canonical-report digests; it only admits reuse when every added
+PI-storage rule preserves the earlier writer choice. It is not a source validator.
+
 The boot capture's `--history storage` uses the same original counter for
 ordinary storage and legacy PI/queue/SP/fetch facts. Existing
 `inspect-sp-pi-fetch-lineage` / `verify-sp-pi-fetch-lineage` commands admit strict

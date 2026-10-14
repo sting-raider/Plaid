@@ -1,5 +1,12 @@
 # Status
 
+PI lineage now joins an immediate completed storage Byte inside its authenticated
+attempt to the actual physical writer, including successful translated writes
+without identity-wrapper receipts. Normal wrappers retain their own ordinals.
+Actual PI requests and CPU consumption pass 110-event/eight-checkpoint controls;
+all 1,048,576 retained commercial-prefix attempts select their unchanged wrappers.
+Missing/ambiguous origins stay unknown or reject; no census/native flag changes.
+
 Boot history v5 now composes ordinary storage effects with the existing raw
 PI/SP/fetch clock. Equal/scalar writes revoke affected RAM parents, whole backing
 fill/load cuts clear them, and surviving I-cache ancestry remains separate.

@@ -2743,3 +2743,17 @@ for v5. Restore/retirement remain rejected under the uncut boot contract until
 execution-epoch evidence composes. Retained69,513,732 records include3,027,381
 additional effects with exact complete paired fetch/checkpoint/repeat controls.
 No future execution, complete mutation census, hardware or native claim follows.
+
+ADR-0124 physical-writer follow-up: a unique immediate Byte storage primitive
+inside an authenticated PI attempt may supply the actual physical sink and
+writer ordinal, using the existing returned ROM buffer parent. Validate PC,
+payload, width and original-clock adjacency; select only on return. A successful
+identity wrapper retains its own writer and must agree with the physical sink.
+Missing primitives/ROM parents stay unknown; malformed or ambiguous intervals
+reject. Legacy missing-identity-receipt counts do not refute translated success.
+Actual requests/CPU execution retain110 events/eight full backing checkpoints.
+The retained full commercial prefix passes a source/report-digest-bound delta
+check over all1,048,576 attempts, permitting reuse of its earlier result without
+another equivalent source replay. This shortcut rejects any newly selected
+physical-parent branch. No mutation census, guest mapping/root proof, hardware
+timing or native milestone follows.

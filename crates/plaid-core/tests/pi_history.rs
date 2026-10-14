@@ -1337,6 +1337,145 @@ mod queue {
                 assert_eq!(parent.unwrap().writer_ordinal, writers[n]);
             }
             verify(&report, &f).unwrap();
+            let mut inconsistent = f;
+            let effect = inconsistent
+                .history
+                .iter_mut()
+                .find(|r| r["record"] == "storage_effect")
+                .unwrap();
+            effect["address"] = json!(effect["address"].as_u64().unwrap() + 0x200000);
+            assert!(inspect(&inconsistent).is_err());
+        }
+
+        fn translated_storage_source() -> Fixture {
+            let mut f = source(false);
+            f.history[0]["format"] = json!(sp_history::STORAGE_FORMAT);
+            f.history[0]["policy"] = json!(sp_history::STORAGE_POLICY);
+            let mut rows = Vec::new();
+            for r in f.history {
+                if r["record"] == "scalar" && r["pi"]["transfer"] == 1 {
+                    let mut effect = row(json!({"record":"storage_effect","kind":0,
+                        "address":r["aligned_address"].as_u64().unwrap()+0x200000,
+                        "bytes":r["bytes"],"value":r["value"]}));
+                    effect["pc"] = r["pc"].clone();
+                    rows.push(effect);
+                } else {
+                    rows.push(r);
+                }
+            }
+            let begin = rows
+                .iter()
+                .rposition(|r| r["record"] == "fetch_begin")
+                .unwrap();
+            let pc = 0xffffffffa0201000u64;
+            for r in rows.iter_mut().skip(begin) {
+                if r["record"] == "end" {
+                    break;
+                }
+                r["pc"] = json!(pc);
+                if r["vaddr"].is_number() {
+                    r["vaddr"] = json!(pc);
+                }
+                for key in [
+                    "physical",
+                    "translated",
+                    "bus",
+                    "address",
+                    "aligned_address",
+                ] {
+                    if r[key].is_number() {
+                        r[key] = json!(0x201000);
+                    }
+                }
+            }
+            f.fetches[2]["pc"] = json!(pc);
+            f.fetches[2]["physical"] = json!(0x201000);
+            f.history = rows;
+            renumber(&mut f.history);
+            f
+        }
+
+        #[test]
+        fn completed_pi_storage_effects_supply_physical_writer_parents_without_identity_wrapper() {
+            let f = translated_storage_source();
+            let report = inspect(&f).unwrap();
+            assert_eq!(report.projection.event_counts["storage_effect"], 4);
+            assert_eq!(report.fully_attributed_fetches, 1);
+            let writers: Vec<_> = f
+                .history
+                .iter()
+                .filter(|r| r["record"] == "storage_effect")
+                .map(|r| r["ordinal"].as_u64().unwrap())
+                .collect();
+            for (parent, writer) in report.samples[0].bytes.iter().zip(writers) {
+                assert_eq!(parent.unwrap().writer_ordinal, writer);
+            }
+            verify(&report, &f).unwrap();
+        }
+
+        #[test]
+        fn pi_storage_parent_requires_one_matching_effect_inside_the_actual_attempt() {
+            for variant in 0..6 {
+                let mut f = translated_storage_source();
+                let at = f
+                    .history
+                    .iter()
+                    .position(|r| r["record"] == "storage_effect")
+                    .unwrap();
+                match variant {
+                    0 => {
+                        f.history[at]["value"] = json!(f.history[at]["value"].as_u64().unwrap() ^ 1)
+                    }
+                    1 => f.history[at]["bytes"] = json!(2),
+                    2 => f.history[at]["pc"] = json!(7),
+                    3 => f.history.insert(at, f.history[at].clone()),
+                    4 => {
+                        f.history[at]["kind"] = json!(1);
+                        f.history[at]["address"] = json!(0);
+                        f.history[at]["bytes"] = json!(8388608);
+                        f.history[at]["value"] = json!(0);
+                    }
+                    _ => {
+                        let extra = row(json!({"record":"storage_effect","kind":0,
+                            "address":8192,"bytes":1,"value":0}));
+                        f.history.insert(at, extra);
+                    }
+                }
+                renumber(&mut f.history);
+                assert!(inspect(&f).is_err(), "variant {variant}");
+            }
+            for variant in 0..4 {
+                let mut f = translated_storage_source();
+                let at = f
+                    .history
+                    .iter()
+                    .position(|r| r["record"] == "storage_effect")
+                    .unwrap();
+                match variant {
+                    0 => {
+                        f.history.remove(at);
+                    }
+                    1 => {
+                        let effect = f.history.remove(at);
+                        f.history.insert(at - 1, effect);
+                    }
+                    2 => f.history[at]["address"] = json!(4096),
+                    _ => f.history.retain(|r| r["record"] != "pi_rom_half"),
+                }
+                renumber(&mut f.history);
+                let report = inspect(&f).unwrap();
+                assert_eq!(report.fully_attributed_fetches, 0, "variant {variant}");
+                if variant < 3 {
+                    assert_eq!(report.partially_attributed_fetches, 1);
+                } else {
+                    assert!(report.samples.is_empty());
+                }
+                verify(&report, &f).unwrap();
+            }
+            let f = translated_storage_source();
+            let mut forged = inspect(&f).unwrap();
+            forged.samples[0].bytes[0].as_mut().unwrap().writer_ordinal += 1;
+            assert!(verify(&forged, &f).is_err());
         }
 
         #[test]
