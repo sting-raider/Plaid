@@ -16,6 +16,19 @@ use std::collections::{BTreeMap, BTreeSet};
 pub enum Scope {
     WholeRom,
     DeclaredStaticImages,
+    /// Declared static images plus RDRAM data loads/stores and pure HI/LO and
+    /// compare arithmetic. Stores must never reach executable bytes; a native
+    /// artifact checks every store and aborts on overlap (ADR-0126).
+    DeclaredStaticImagesGuardedRam,
+}
+
+impl Scope {
+    fn is_static(self) -> bool {
+        matches!(
+            self,
+            Scope::DeclaredStaticImages | Scope::DeclaredStaticImagesGuardedRam
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -250,7 +263,7 @@ fn static_identity_blockers(
         }
     }
 
-    if scope != Scope::DeclaredStaticImages {
+    if !scope.is_static() {
         return blockers;
     }
 
@@ -321,7 +334,7 @@ fn static_identity_blockers(
     blockers
 }
 
-fn allowed_static_effect(word: u32, pc: crate::GuestAddr) -> bool {
+fn allowed_static_effect(word: u32, pc: crate::GuestAddr, guarded_ram: bool) -> bool {
     let i = decode(word, pc);
     if !i.is_valid() || i.is_trap() || i.is_float() {
         return false;
@@ -331,6 +344,15 @@ fn allowed_static_effect(word: u32, pc: crate::GuestAddr) -> bool {
     }
     if i.is_jump() {
         return matches!(word >> 26, 2 | 3) || (word >> 26 == 0 && matches!(word & 63, 8 | 9));
+    }
+    if guarded_ram
+        && match word >> 26 {
+            0 => matches!(word & 63, 4 | 6 | 7 | 16..=19 | 24..=27 | 42 | 43),
+            10 | 11 | 32 | 33 | 35 | 36 | 37 | 40 | 41 | 43 => true,
+            _ => false,
+        }
+    {
+        return true;
     }
     match word >> 26 {
         9 | 12 | 13 | 14 | 15 | 25 => true,
@@ -455,7 +477,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 evidence,
             );
         }
-        if scope == Scope::DeclaredStaticImages && verification.generation != 0 {
+        if scope.is_static() && verification.generation != 0 {
             add(
                 "entry_verification_after_invalidation",
                 Some(verification.entry.clone()),
@@ -515,7 +537,9 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 );
                 continue;
             };
-            if scope == Scope::DeclaredStaticImages && !allowed_static_effect(word, pc) {
+            if scope.is_static()
+                && !allowed_static_effect(word, pc, scope == Scope::DeclaredStaticImagesGuardedRam)
+            {
                 add(
                     "unsupported_scope_effect",
                     Some(image.address(pc)),
@@ -796,7 +820,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             );
         }
     }
-    if scope == Scope::DeclaredStaticImages && !map.word_store_observations.is_empty() {
+    if scope.is_static() && !map.word_store_observations.is_empty() {
         add(
             "dynamic_effect_outside_scope",
             None,
@@ -807,7 +831,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 .collect(),
         );
     }
-    if scope == Scope::DeclaredStaticImages
+    if scope.is_static()
         && (!map.loads.is_empty()
             || !map.dma_observations.is_empty()
             || !map.rsp_microcodes.is_empty())
@@ -849,7 +873,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             add(kind, None, detail, EvidenceRefs::new());
         }
     }
-    let assumptions = if scope == Scope::DeclaredStaticImages {
+    let mut assumptions = if scope.is_static() {
         vec![
             "Only explicitly declared image entries execute; code bytes stay immutable.".into(),
             "Interrupts, exceptions, DMA, MMIO, overlays, RSP and external entry sources are excluded."
@@ -860,6 +884,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     } else {
         Vec::new()
     };
+    if scope == Scope::DeclaredStaticImagesGuardedRam {
+        assumptions.push(
+            "Data loads/stores are naturally aligned RDRAM accesses through KSEG0/KSEG1, never reach executable bytes, and use only one of KSEG0/KSEG1 per 16-byte line; a native artifact checks every store and access and aborts on violation, with no fallback execution."
+                .into(),
+        );
+    }
     Ok(SolveReport {
         schema_version: 0,
         scope,

@@ -150,6 +150,7 @@ name = "plaid"
 version = "0.0.1"
 dependencies = [
  "plaid-core",
+ "plaid-lower",
  "serde_json",
 ]
 
@@ -161,6 +162,13 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "plaid-lower"
+version = "0.0.1"
+dependencies = [
+ "plaid-core",
 ]
 
 [[package]]

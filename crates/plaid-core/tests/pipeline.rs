@@ -110,3 +110,33 @@ fn cross_block_target_traversal_and_solver_rechecking_work_together() {
             .any(|b| b.kind == "unresolved_indirect_site")
     );
 }
+
+#[test]
+fn guarded_ram_scope_admits_data_access_only_with_its_explicit_assumption() {
+    // lui t0,0x8000; lw t1,0x100(t0); j 0x80000010; nop; b .; nop
+    let i = image(vec![0x3c088000, 0x8d090100, 0x08000004, 0, 0x1000ffff, 0]);
+    let d = run(&i);
+    let base = solve(
+        &d.map,
+        std::slice::from_ref(&i),
+        Scope::DeclaredStaticImages,
+    )
+    .unwrap();
+    assert_eq!(base.status, ClosureStatus::Open);
+    assert!(
+        base.blockers
+            .iter()
+            .any(|b| b.kind == "unsupported_scope_effect")
+    );
+    let guarded = solve(&d.map, &[i], Scope::DeclaredStaticImagesGuardedRam).unwrap();
+    assert_eq!(guarded.status, ClosureStatus::Closed);
+    assert!(!guarded.native_complete);
+    assert_eq!(guarded.assumptions.len(), base.assumptions.len() + 1);
+    assert!(
+        guarded
+            .assumptions
+            .last()
+            .unwrap()
+            .contains("checks every store")
+    );
+}

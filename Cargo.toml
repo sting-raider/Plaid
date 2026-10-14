@@ -2,5 +2,6 @@
 resolver = "3"
 members = [
     "crates/plaid-core",
+    "crates/plaid-lower",
     "apps/plaid",
 ]
