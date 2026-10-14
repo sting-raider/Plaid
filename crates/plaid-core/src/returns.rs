@@ -9,7 +9,10 @@
 //! checks that assumption at every return. A site reachable from a host-entered
 //! entry, or from no function, receives no certificate.
 use crate::{
-    EvidenceKind, GuestAddr, discovery::CodeImage, indirect::verify_constant, program::*,
+    EvidenceKind, GuestAddr,
+    discovery::CodeImage,
+    indirect::{verify_constant, verify_static},
+    program::*,
     rom::sha256,
 };
 use serde::{Deserialize, Serialize};
@@ -95,7 +98,7 @@ pub fn function_body(
         for site in &map.indirect_sites {
             if site.link_register.is_none()
                 && in_block(block, &site.site)
-                && verify_constant(map, image, site)
+                && verify_static(map, image, site)
             {
                 pending.extend(site.candidates.keys().cloned());
             }
@@ -126,7 +129,7 @@ pub fn certificate(
     let jumped: BTreeSet<_> = map
         .indirect_sites
         .iter()
-        .filter(|s| verify_constant(map, image, s))
+        .filter(|s| verify_static(map, image, s))
         .flat_map(|s| s.candidates.keys().cloned())
         .collect();
     for host in map

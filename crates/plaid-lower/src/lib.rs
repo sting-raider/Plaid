@@ -458,6 +458,16 @@ pub fn lower_c(
             physical(end - 1)? + 1
         ));
     }
+    // Jump tables are store-protected like code (ADR-0132).
+    for site in &map.indirect_sites {
+        if let Some((start, count)) = plaid_core::tables::table_range(map, image, site) {
+            code.push(format!(
+                "{{{}, {}}}",
+                physical(start.0)?,
+                physical(start.0 + count * 4 - 1)? + 1
+            ));
+        }
+    }
     let mut out = String::from(PRELUDE);
     out += &format!(
         "static const plaid_range plaid_code[] = {{{}}};\n{HELPERS}",

@@ -32,7 +32,7 @@ fn map(i: &CodeImage) -> ProgramMap {
 }
 
 #[test]
-fn guarded_pointer_table_yields_candidates_with_snapshot_provenance_and_no_closure() {
+fn guarded_pointer_table_closes_only_under_the_guarded_scope() {
     let i = image();
     let m = analyze_indirect(&map(&i), &i).unwrap();
     let s = m.indirect_sites.first().unwrap();
@@ -40,7 +40,8 @@ fn guarded_pointer_table_yields_candidates_with_snapshot_provenance_and_no_closu
         s.candidates.keys().map(|a| a.pc.0).collect::<Vec<_>>(),
         [0x80000040, 0x80000050]
     );
-    assert!(s.closed_proof.is_none());
+    // The proof is a rechecked claim; only the guarded scope accepts it (ADR-0132).
+    assert!(plaid_core::tables::verify(&m, &i, s));
     assert!(
         s.candidates
             .values()
@@ -61,6 +62,23 @@ fn guarded_pointer_table_yields_candidates_with_snapshot_provenance_and_no_closu
     let d = discover_image(rom(), &i, &[i.base.pc], 1000).unwrap();
     assert!(d.map.blocks.iter().any(|b| b.start.pc.0 == 0x80000040));
     assert!(d.map.blocks.iter().any(|b| b.start.pc.0 == 0x80000050));
+    let guarded = solve(
+        &d.map,
+        std::slice::from_ref(&i),
+        Scope::DeclaredStaticImagesGuardedRam,
+    )
+    .unwrap();
+    assert!(
+        !guarded.blockers.iter().any(|b| {
+            b.kind == "unresolved_indirect_site" || b.kind.starts_with("pointer_table")
+        })
+    );
+    assert!(
+        guarded
+            .assumptions
+            .iter()
+            .any(|a| a.contains("jump tables"))
+    );
     let report = solve(&d.map, &[i], Scope::DeclaredStaticImages).unwrap();
     assert_eq!(report.status, ClosureStatus::Open);
     assert!(

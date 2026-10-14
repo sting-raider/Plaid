@@ -2,7 +2,7 @@
 use crate::{
     GuestAddr,
     discovery::{CodeImage, Discovery, direct_cfg_bounded},
-    indirect::{analyze_indirect, verify_constant},
+    indirect::{analyze_indirect, verify_static},
     program::*,
 };
 use std::collections::{BTreeMap, BTreeSet};
@@ -104,7 +104,7 @@ fn discover_bounded(
                 .iter()
                 .map(|s| {
                     let mut s = s.clone();
-                    if !verify_constant(&map, image, &s) {
+                    if !verify_static(&map, image, &s) {
                         s.closed_proof = None;
                     }
                     s

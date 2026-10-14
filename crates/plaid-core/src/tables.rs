@@ -41,34 +41,17 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
     let load = image.word(load_pc)?;
     let add_pc = GuestAddr(pc.0.checked_sub(8)?);
     let add = image.word(add_pc)?;
-    let shift_pc = GuestAddr(pc.0.checked_sub(12)?);
-    let shift = image.word(shift_pc)?;
     if load >> 26 != 35
         || field(load, 16) != field(jump, 21)
         || add >> 26 != 0
         || add & 63 != 33
         || field(add, 11) != field(load, 21)
-        || shift >> 26 != 0
-        || shift & 63 != 0
-        || (shift >> 6) & 31 != 2
     {
         return None;
     }
-    let index = field(shift, 16);
-    let scale = field(shift, 11);
-    if scale == 0 || index == 0 {
-        return None;
-    }
-    let base = if field(add, 21) == scale {
-        field(add, 16)
-    } else if field(add, 16) == scale {
-        field(add, 21)
-    } else {
-        return None;
+    let is_shift = |w: u32| {
+        w >> 26 == 0 && w & 63 == 0 && (w >> 6) & 31 == 2 && field(w, 11) != 0 && field(w, 16) != 0
     };
-    if base == scale {
-        return None;
-    }
     let blocks: Vec<_> = map
         .blocks
         .iter()
@@ -83,7 +66,7 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
                 .contains(pc)
         })
         .collect();
-    if blocks.len() != 1 || blocks[0].start.pc.0 > shift_pc.0 {
+    if blocks.len() != 1 || blocks[0].start.pc.0 > add_pc.0 {
         return None;
     }
     let block = blocks[0];
@@ -122,6 +105,34 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
     }
     let branch = image.word(edge.site.pc)?;
     let compare_pc = GuestAddr(edge.site.pc.0.checked_sub(4)?);
+    // The index scale is the SLL just before the add or, as GCC schedules it,
+    // the delay slot of a non-likely guard branch, which runs on both paths.
+    let adjacent = GuestAddr(add_pc.0.checked_sub(4)?);
+    let (shift_pc, in_slot) =
+        if adjacent.0 >= block.start.pc.0 && image.word(adjacent).is_some_and(is_shift) {
+            (adjacent, false)
+        } else if matches!(branch >> 26, 4 | 5)
+            && image
+                .word(GuestAddr(edge.site.pc.0.checked_add(4)?))
+                .is_some_and(is_shift)
+        {
+            (GuestAddr(edge.site.pc.0 + 4), true)
+        } else {
+            return None;
+        };
+    let shift = image.word(shift_pc)?;
+    let index = field(shift, 16);
+    let scale = field(shift, 11);
+    let base = if field(add, 21) == scale {
+        field(add, 16)
+    } else if field(add, 16) == scale {
+        field(add, 21)
+    } else {
+        return None;
+    };
+    if base == scale {
+        return None;
+    }
 
     // The table bound is established by the SLTIU immediately before this
     // branch. Alternate execution that enters the branch can reuse an
@@ -178,7 +189,7 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
     let mut prefix = Vec::new();
     prefix.extend(compare.to_be_bytes());
     prefix.extend(branch.to_be_bytes());
-    if edge.delay_slot != DelaySlot::None {
+    if edge.delay_slot != DelaySlot::None && !in_slot {
         let ds = GuestAddr(edge.site.pc.0.checked_add(4)?);
         let slot = image.word(ds)?;
         let instruction = decode(slot, ds);
@@ -194,14 +205,20 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
     }
     let mut values = [None; 32];
     values[0] = Some(0);
+    // Before the scale, the index must survive; after it, the scaled index.
+    let (end, kept) = if in_slot {
+        (add_pc, scale)
+    } else {
+        (shift_pc, index)
+    };
     let mut current = block.start.pc;
-    while current.0 < shift_pc.0 {
+    while current.0 < end.0 {
         let word = image.word(current)?;
         let instruction = decode(word, current);
         if !instruction.is_valid()
             || instruction.has_delay_slot()
             || instruction.is_trap()
-            || instruction.destination_gpr() == Some(u32::from(index))
+            || instruction.destination_gpr() == Some(u32::from(kept))
         {
             return None;
         }
@@ -239,30 +256,90 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
     })
 }
 
+pub const PRODUCER: &str = "plaid-pointer-table-candidates/v0";
+
+/// The recognized table, its snapshot words and the evidence detail.
+fn evidence(
+    map: &ProgramMap,
+    image: &CodeImage,
+    site: &IndirectSite,
+) -> Option<(TableEvidence, Option<Vec<u32>>, String)> {
+    let mut table = pattern(map, image, site)?;
+    let words: Option<Vec<_>> = (0..table.count)
+        .map(|n| image.word(GuestAddr(table.table_start.0 + n * 4)))
+        .collect();
+    if let Some(words) = &words {
+        table.snapshot_sha256 = Some(sha256(
+            &words
+                .iter()
+                .flat_map(|word| word.to_be_bytes())
+                .collect::<Vec<_>>(),
+        ));
+    }
+    let detail = serde_json::to_string(&table).ok()?;
+    Some((table, words, detail))
+}
+
+/// A table proof closes a site only when it is recomputed from the current CFG
+/// and bytes, its snapshot is complete and aligned, and the candidates are
+/// exactly the snapshot targets. Whether the table may be treated as
+/// immutable is a scope decision (ADR-0132), not part of this check.
+pub fn verify(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> bool {
+    let Some(e) = site
+        .closed_proof
+        .as_ref()
+        .and_then(|id| map.evidence.get(id))
+    else {
+        return false;
+    };
+    if e.kind != EvidenceKind::Static
+        || e.producer != PRODUCER
+        || site.link_register.is_some()
+        || site.delay_slot != DelaySlot::Always
+    {
+        return false;
+    }
+    let Some((_, Some(words), detail)) = evidence(map, image, site) else {
+        return false;
+    };
+    let targets: std::collections::BTreeSet<_> =
+        words.iter().map(|w| image.address(GuestAddr(*w))).collect();
+    detail == e.detail
+        && words.iter().all(|w| w.is_multiple_of(4))
+        && site
+            .candidates
+            .keys()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>()
+            == targets
+        && site.observed.keys().all(|a| targets.contains(a))
+}
+
+/// Guest bytes of a verified table, as (start, entry count).
+pub fn table_range(
+    map: &ProgramMap,
+    image: &CodeImage,
+    site: &IndirectSite,
+) -> Option<(GuestAddr, u32)> {
+    if !verify(map, image, site) {
+        return None;
+    }
+    let (table, _, _) = evidence(map, image, site)?;
+    Some((table.table_start, table.count))
+}
+
 pub(crate) fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap, String> {
     let mut out = map.clone();
     for old in &map.indirect_sites {
-        let Some(mut table) = pattern(map, image, old) else {
+        let Some((table, words, detail)) = evidence(map, image, old) else {
             continue;
         };
-        let words: Option<Vec<_>> = (0..table.count)
-            .map(|n| image.word(GuestAddr(table.table_start.0 + n * 4)))
-            .collect();
-        if let Some(words) = &words {
-            table.snapshot_sha256 = Some(sha256(
-                &words
-                    .iter()
-                    .flat_map(|word| word.to_be_bytes())
-                    .collect::<Vec<_>>(),
-            ));
-        }
-        let detail = serde_json::to_string(&table).map_err(|e| e.to_string())?;
         let id = format!("table-candidates:{}", sha256(detail.as_bytes()));
         out.evidence.insert(
             id.clone(),
             Evidence {
                 kind: EvidenceKind::Static,
-                producer: "plaid-pointer-table-candidates/v0".into(),
+                producer: PRODUCER.into(),
                 revision: "0".into(),
                 detail,
             },
@@ -271,6 +348,8 @@ pub(crate) fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap,
         if let Some(words) = words {
             let mut site = old.clone();
             out.indirect_sites.remove(old);
+            let fresh = site.candidates.is_empty() && site.closed_proof.is_none();
+            let aligned = words.iter().all(|w| w.is_multiple_of(4));
             for (n, target) in words.into_iter().enumerate() {
                 if target.is_multiple_of(4) {
                     site.candidates
@@ -287,6 +366,18 @@ pub(crate) fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap,
                         evidence: refs.clone(),
                     });
                 }
+            }
+            // Closing is only a claim; `verify` rechecks it and only the
+            // guarded scope accepts it.
+            if (fresh || site.closed_proof.as_deref() == Some(id.as_str()))
+                && aligned
+                && site.link_register.is_none()
+                && site
+                    .observed
+                    .keys()
+                    .all(|a| site.candidates.contains_key(a))
+            {
+                site.closed_proof = Some(id.clone());
             }
             out.indirect_sites.insert(site);
             out.unresolved.insert(Unresolved {
