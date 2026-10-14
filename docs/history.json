@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "points": [
+    {
+      "date": "2026-10-08",
+      "commit": "6cfbc6fb5946",
+      "isa_lowered": 0,
+      "isa_decoded": 209
+    },
+    {
+      "date": "2026-10-09",
+      "commit": "ae41bdba8299",
+      "isa_lowered": 0,
+      "isa_decoded": 209
+    },
+    {
+      "date": "2026-10-10",
+      "commit": "211176e7a489",
+      "milestones_verified": 15,
+      "milestones_partial": 11,
+      "milestones_declared": 56,
+      "isa_lowered": 0,
+      "isa_decoded": 209
+    },
+    {
+      "date": "2026-10-11",
+      "commit": "24b77c041b6b",
+      "milestones_verified": 16,
+      "milestones_partial": 13,
+      "milestones_declared": 56,
+      "isa_lowered": 0,
+      "isa_decoded": 209
+    },
+    {
+      "date": "2026-10-12",
+      "commit": "716cf64cc035",
+      "milestones_verified": 16,
+      "milestones_partial": 13,
+      "milestones_declared": 56,
+      "isa_lowered": 0,
+      "isa_decoded": 209
+    },
+    {
+      "date": "2026-10-13",
+      "commit": "424268a6c496",
+      "milestones_verified": 16,
+      "milestones_partial": 13,
+      "milestones_declared": 56,
+      "isa_lowered": 0,
+      "isa_decoded": 209
+    },
+    {
+      "date": "2026-10-14",
+      "commit": "c9e1bc994275",
+      "milestones_verified": 25,
+      "milestones_partial": 13,
+      "milestones_declared": 65,
+      "isa_lowered": 0,
+      "isa_decoded": 209
+    },
+    {
+      "date": "2026-10-15",
+      "isa_lowered": 85,
+      "isa_decoded": 209,
+      "milestones_verified": 30,
+      "milestones_partial": 19,
+      "milestones_declared": 69
+    }
+  ]
+}

@@ -2,125 +2,87 @@
 
 > Experimental Nintendo 64 ROM-to-native recompilation research.
 
-Plaid is exploring whether an **untouched N64 ROM** can be analyzed into a closed executable program, recompiled ahead of time, and packaged as a normal native application.
+Plaid analyzes an **untouched N64 ROM** into a closed executable program, lowers it ahead of time through C, and links it into a normal native application. Final gameplay must not contain a MIPS interpreter, a runtime JIT/dynarec, or any hidden instruction fallback; emulators are used only as analysis instruments and differential-test oracles.
 
-The end goal is deliberately strict: **final gameplay should not contain a MIPS interpreter, runtime MIPS JIT/dynarec, or hidden instruction fallback.** Emulators and dynarecs are allowed during analysis, instrumentation, and differential verification only.
+[Status](docs/STATUS.md), [next steps](docs/NEXT.md), [architecture](docs/ARCHITECTURE.md), [decisions](docs/DECISIONS.md), [development](docs/DEVELOPMENT.md), [progress map](docs/PROGRESS.md), [progress history](docs/HISTORY.md)
+
+## Status
+
+[![VR4300 lowered](docs/badges/isa.svg)](docs/HISTORY.md) [![milestones](docs/badges/milestones.svg)](docs/PROGRESS.md) [![commercial ROMs CLOSED](docs/badges/closed.svg)](docs/STATUS.md)
+
+[![Plaid progress history](docs/history.svg)](docs/HISTORY.md)
+
+[![Plaid engineering progress atlas](docs/progress.svg)](docs/PROGRESS.md)
+
+<sub>* **VR4300 lowered:** instruction forms the VR4300 implements (as decoded by the pinned decoder, pseudo-instructions and non-VR4300 forms excluded) that pass discovery, the guarded-scope solver and native lowering inside a test program, measured by `plaid isa-coverage`. Every lowered form is differential-tested against the pinned ares interpreter in [spike096](spikes/096-native-slice/). **Milestones:** states in [`docs/progress.json`](docs/progress.json); the total grows as milestones are added, so this is not a completion percentage. **Commercial ROMs CLOSED:** whole-ROM closure without assumptions.</sub>
+
+Unproven states fail closed. The solver reports `OPEN` for any unproven control transfer or effect, and assumption-qualified scopes list every assumption they make. Lowered code checks each assumption at run time and aborts with a fault code when one is violated (store into code or a jump table, a return to the wrong caller, an overflowing trapping add, and so on). There is no fallback to emulation.
+
+Current frontier: on a local Ocarina of Time boot window, discovery with declared runtime functions and proven thread-entry callbacks reaches 628 blocks with 6 blockers left under the guarded assumption scope. The runtime declarations are still chosen by a heuristic; identification evidence is next ([`docs/NEXT.md`](docs/NEXT.md)).
+
+## How it works
 
 ```text
 N64 ROM
   │
   ▼
-discover executable code + provenance
+discover executable code + provenance          (ProgramMap, evidence-backed)
   │
   ▼
-prove the executable universe is closed
+prove the executable universe is closed        (fail-closed solver, explicit scopes)
   │
   ▼
-MIPS/R4300 → native x86-64 / ARM64
+lower MIPS → C → native x86-64 / ARM64         (crates/plaid-lower, checked assumptions)
   │
   ▼
-N64 compatibility runtime
+link with the N64 runtime                      (N64ModernRuntime + RT64, ADR-0126)
   │
   ▼
 native host application
 ```
 
-> **Current status:** the discovery/provenance/closure foundation is substantial. Native lowering (MIPS -> C -> host code) works for synthetic `CLOSED` programs and matches the pinned ares interpreter exactly; there is no runtime yet. No commercial ROM has reached `CLOSED`, and `native_complete` remains `false`. See [`docs/STATUS.md`](docs/STATUS.md) and the milestone plan in [`docs/NEXT.md`](docs/NEXT.md).
+Plaid's own contribution is the first two steps: automatic discovery and closure proof from the ROM alone. Below that it reuses existing work. Declared runtime functions (libultra system code) become calls into the host runtime, as in N64Recomp, but each declaration is evidence-backed and checked by the solver.
 
-## Progress
-
-[![Plaid engineering progress atlas](docs/progress.svg)](docs/PROGRESS.md)
-
-The atlas shows every tracked milestone, each subsystem's remaining work, and retained evidence from the supplied commercial-ROM prefix. It includes the latest integrated RAM-storage, PI/SP/CPU, DMEM, exact RSP-read, cache and mapping compositions.
-
-- **Mint / DONE** — verified and integrated on `main` for the named bounded milestone.
-- **Amber / PARTIAL** — implemented or evidenced, with proof or coverage still incomplete.
-- **Slate / OPEN** — not implemented or not yet demonstrated.
-
-Counts describe milestone maturity, with different scopes and effort. They are **not an overall completion percentage**. The 20-million-fetch prefix is finite evidence; the first commercial `CLOSED` scope, whole-ROM closure and native gameplay remain open.
-
-The chart is generated from [`docs/progress.json`](docs/progress.json). See [`docs/PROGRESS.md`](docs/PROGRESS.md) for individual states and evidence sources.
-
-## Where the project actually stands
+## Where the project stands
 
 | Area | State | What exists on `main` | What is still missing |
 | --- | --- | --- | --- |
-| **Discovery & ProgramMap** | strong foundation | ROM normalization, deterministic ProgramMap, dynamic trace import, direct CFG recovery, evidence merge/conflict handling, bounded indirect proofs | broader jump-table proof, known-library evidence, commercial-ROM validation |
-| **Executable provenance** | active / partial | physical/cache fetch context, PI/SP/PIF source histories, CPU copy/transform receipts, RSP/CPU mutation evidence, bounded cache/TLB/root provenance | complete mutation census, general lifetimes, full transform/relocation coverage |
-| **Closed-world proof** | active / partial | fail-closed solver, source rechecking, static identity hardening, bounded indirect closure, root/TLB/cache proof primitives | complete root census, executable lifetimes, RSP universe closure, first ROM reaching `CLOSED` |
-| **Native AOT compiler** | started | `plaid-lower`: CLOSED map -> C, one C function per guest function with checked returns, proven-target dispatch and store guards; differential-tested against ares (spike096) | runtime boundary (COP0, FPU, cache), unaligned loads/stores, real-ROM scopes |
-| **Native runtime** | planned reuse | decision to reuse N64ModernRuntime + RT64 (ADR-0126) | integration with lowered code, packaging |
-| **Compatibility** | research only | synthetic corpus plus pinned Mupen/ares differential oracles | first commercial ROM mapped/closed, native boot/gameplay campaigns |
-
-The important distinction is that Plaid has made substantial progress on **proving what code exists and where it came from**, while the actual native code generator/runtime are intentionally deferred until that proof system is useful enough.
+| **Discovery & ProgramMap** | strong foundation | ROM normalization, deterministic ProgramMap, trace import, direct CFG, evidence merge, constant and cross-block indirect proofs, return certificates, jump tables, runtime-callback proofs | identification evidence for runtime functions, memory-loaded function pointers, overlays |
+| **Executable provenance** | partial, paused | PI/SP/PIF source histories, cache/TLB context, CPU copy and RSP mutation evidence | resumed when a milestone needs it (ADR-0125) |
+| **Closed-world proof** | active | fail-closed solver, source rechecking, `DeclaredStaticImages` and `DeclaredStaticImagesGuardedRam` assumption scopes | first commercial ROM `CLOSED` |
+| **Native AOT compiler** | working subset | `plaid-lower`: one C function per guest function, checked returns, proven-target and jump-table dispatch, 64-bit integer and COP1 data moves, runtime calls and callback dispatch; differential-tested against ares | FPU arithmetic, unaligned loads/stores, COP0 behind the runtime |
+| **Native runtime** | boundary only | declared runtime functions and fail-closed `plaid_enter` callbacks | linking N64ModernRuntime + RT64 |
+| **Compatibility** | research | synthetic corpus, pinned Mupen/ares oracles, local OoT measurements | first commercial ROM booting natively |
 
 ## Why this is hard
 
-A normal static recompiler starts with a known executable image. An N64 ROM can make that assumption fail in several ways:
+A normal static recompiler starts with a known executable image. An N64 ROM can break that assumption in several ways:
 
 - code can be copied or DMA'd into RAM before execution;
 - overlays can be loaded, relocated, replaced, or aliased;
 - indirect branches and pointer tables can depend on runtime state;
 - cached instructions can outlive current backing bytes;
-- TLB/context changes can reactivate previously resident code;
 - CPU, RSP, DMA, decompression, relocation, or patching can produce executable bytes;
 - exceptions, interrupts, reset/NMI, and RSP execution add additional roots.
 
-Plaid therefore treats **executable discovery and provenance as a proof problem**, not just a disassembly problem. If an obligation cannot be justified, the system should remain `OPEN` instead of quietly falling back to emulation.
-
-## Core design
-
-Plaid converges evidence from static analysis and instrumented reference implementations into an explicit `ProgramMap`.
-
-That map tracks things such as:
-
-```text
-ProgramMap
-  ROM / image identity
-  executable regions + generations
-  basic blocks + direct edges
-  indirect sites + target evidence
-  overlays + relocations
-  executable writes / copies
-  RSP microcode identities
-  unresolved proof obligations
-```
-
-The compiler may use emulators and dynarecs as discovery instruments and behavioral oracles, but those tools are **not** part of the final native gameplay path.
-
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full boundary.
-
-## What is already integrated
-
-The current `main` includes much more than the original M1–M3 prototype:
-
-- deterministic ProgramMap validation, conflict-aware merging, and substantially improved merge scalability;
-- pinned Mupen and ares instrumentation/oracles with source-bound replay and complete-source rechecking;
-- hardened fail-closed solver behavior for executable identity, raw evidence retention, fetch realizability, and guarded indirect dispatch;
-- bounded cross-block indirect-target proofs and pointer-table recovery;
-- PI/SP/PIF backing/source histories plus cache/TLB context evidence;
-- bounded CPU copy/transform, RSP IMEM/DMEM, and COP1 mutation provenance;
-- exception/root primitives including BEV/PIF, NMI, cached handler-generation, interrupt/watch-related proof obligations;
-- durable integration receipts documenting what each promoted research result proves and, just as importantly, what it does **not** prove.
-
-For exact engineering scope and remaining uncertainty, use [`docs/STATUS.md`](docs/STATUS.md), [`docs/NEXT.md`](docs/NEXT.md), and [`docs/DECISIONS.md`](docs/DECISIONS.md).
+Plaid therefore treats executable discovery as a proof problem, not just a disassembly problem. If an obligation cannot be justified, the result stays `OPEN` instead of quietly falling back to emulation.
 
 ## Repository layout
 
 | Path | Purpose |
 | --- | --- |
-| [`crates/plaid-core/`](crates/plaid-core/) | core ProgramMap, discovery, provenance, solver, and proof logic |
+| [`crates/plaid-core/`](crates/plaid-core/) | ProgramMap, discovery, provenance, solver and proof logic |
+| [`crates/plaid-lower/`](crates/plaid-lower/) | CLOSED ProgramMap → C lowering and ISA coverage measurement |
 | [`apps/plaid/`](apps/plaid/) | command-line interface |
-| [`docs/`](docs/) | architecture, status, decisions, roadmap, and progress data |
-| [`research/`](research/) | durable research notes and integration receipts |
-| [`spikes/`](spikes/) | bounded reference experiments and adversarial fixtures |
-| [`instruments/`](instruments/) | instrumentation kept separate from production logic |
-| [`experiments/`](experiments/) | independent models/oracles used to validate assumptions |
-| [`refs.lock.toml`](refs.lock.toml) | exact pinned external reference revisions |
+| [`docs/`](docs/) | status, decisions, roadmap, progress data and history |
+| [`research/`](research/) | research notes and integration receipts |
+| [`spikes/`](spikes/) | bounded reference experiments, including the native differential test (spike096) |
+| [`instruments/`](instruments/), [`experiments/`](experiments/) | instrumentation and independent models kept out of production logic |
+| [`refs.lock.toml`](refs.lock.toml) | pinned external reference revisions |
 
 ## Build and local verification
 
-Plaid is a Rust workspace. The canonical checks are intended to run **locally**:
+Plaid is a Rust workspace. The canonical checks run **locally**:
 
 ```bash
 cargo fmt --all -- --check
@@ -130,36 +92,21 @@ python scripts/test_cli.py
 python tools/progress.py --check
 ```
 
-GitHub Actions is kept **manual-only**; ordinary pushes do not need hosted CI.
-
-Reference experiments may require Linux/WSL, Python, GCC/Clang, NASM, and locally fetched pinned repositories under `.refs/`.
-
-Detailed setup, CLI commands, reference-lab notes, and research consumers live in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+`python spikes/096-native-slice/run.py` runs the native differential test against the pinned ares interpreter (needs a C compiler and WSL Ubuntu). `python tools/progress.py --record` measures the current tree into today's history point. GitHub Actions is manual-only. Setup and CLI details are in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 
 ## Ground rules
 
-- No ROMs, copyrighted game assets, firmware blobs, keys, or proprietary Nintendo code belong in git.
-- No hidden interpreter/JIT fallback is allowed in a claimed native-complete path.
-- Unknown provenance stays unknown.
-- Finite traces do not prove exhaustive coverage by themselves.
-- Equal bytes do not prove equal provenance or lifetime.
-- Game-specific hacks do not count as universal discovery.
-- Compiler transforms require independent verification.
-- `native_complete` must stay `false` until the required closure obligations are actually proven.
+- No ROMs, copyrighted game assets, firmware, keys, or proprietary Nintendo code in git.
+- No hidden interpreter/JIT fallback in a claimed native path.
+- Unknown provenance stays unknown; finite traces do not prove exhaustive coverage.
+- Game-specific hacks do not count as general discovery.
+- Every compiler transformation needs an independent verifier.
+- `native_complete` stays `false` until the closure obligations are proven.
 
-## Project documents
+## Disclaimer
 
-| Document | Use it for |
-| --- | --- |
-| [`docs/PROGRESS.md`](docs/PROGRESS.md) | auditable milestone states |
-| [`docs/STATUS.md`](docs/STATUS.md) | what is currently implemented |
-| [`docs/NEXT.md`](docs/NEXT.md) | current engineering priorities and open obligations |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | product/compiler/runtime boundary |
-| [`docs/PLAN.md`](docs/PLAN.md) | long-term development plan |
-| [`docs/DECISIONS.md`](docs/DECISIONS.md) | architecture decision log |
-| [`docs/SOURCES.md`](docs/SOURCES.md) | external references and provenance |
-| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | build, CLI, local validation, and reference-lab details |
-| [`AGENTS.md`](AGENTS.md) | implementation rules for automated workers |
-| [`ORCHESTRATION.md`](ORCHESTRATION.md) | swarm coordination and integration protocol |
+Plaid is intended for interoperability, research, and preservation. It does not include, distribute, or require copyrighted software, firmware, keys, or proprietary libraries. Users are responsible for obtaining and using any ROM in accordance with applicable laws.
 
-Plaid is still a research project. The interesting part is no longer “can we decode some MIPS?” It is whether the project can **earn a closed executable universe without cheating**, and only then turn that universe into a native program.
+## License
+
+No license has been chosen yet. Until one is, all rights are reserved by the author. Linking with N64ModernRuntime (GPL-3.0) will make native game builds GPL-3.0 (ADR-0126).
