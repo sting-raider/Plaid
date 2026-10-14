@@ -62,6 +62,29 @@ pub(crate) fn scalar_rsp_definition(
     })
 }
 
+/// Exact lower DMEM byte lanes for the existing scalar store contract.
+pub(crate) fn scalar_store_lanes(word: u32, registers: &[u32]) -> Option<Vec<(u16, u8)>> {
+    if registers.len() != 32 {
+        return None;
+    }
+    let width = match word >> 26 {
+        0x28 => 1,
+        0x29 => 2,
+        0x2b => 4,
+        _ => return None,
+    };
+    let address =
+        registers[((word >> 21) & 31) as usize].wrapping_add_signed(i32::from(word as i16));
+    let payload = registers[((word >> 16) & 31) as usize].to_be_bytes();
+    Some(
+        payload[4 - width..]
+            .iter()
+            .enumerate()
+            .map(|(lane, &value)| (((address.wrapping_add(lane as u32)) & 4095) as u16, value))
+            .collect(),
+    )
+}
+
 /// Scalar facts in an explicitly rooted observed register epoch. The enclosing
 /// source verifier owns exact IMEM-read/performed-instruction admission.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -83,6 +106,44 @@ pub struct ScalarRspProducerReport {
     /// Bounded samples; the digest commits every complete occurrence.
     pub samples: Vec<CapturedScalarRspProducer>,
     pub ordered_producers_sha256: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stores: Option<ScalarRspStoreReport>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CapturedScalarRspStore {
+    pub instruction_context: u64,
+    pub read_ordinal: u64,
+    pub epoch: u64,
+    pub scope_ordinal: u64,
+    pub scope_end_ordinal: u64,
+    pub register: u8,
+    pub value_source: RspRegisterParent,
+    pub address_source: RspRegisterParent,
+    pub effects: Vec<(u64, u16, u8)>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScalarRspStoreReport {
+    pub instructions: u64,
+    pub effects: u64,
+    pub samples: Vec<CapturedScalarRspStore>,
+}
+#[derive(Clone, Copy)]
+pub(crate) struct ScalarRspEffectWriter {
+    pub instruction_context: u64,
+    pub read_ordinal: u64,
+    pub epoch: u64,
+    pub scope_ordinal: u64,
+    pub register: u8,
+    pub source_definition: Option<u64>,
+}
+struct ScalarStorePending {
+    kind: u32,
+    lanes: Vec<(u16, u8)>,
+    report: CapturedScalarRspStore,
+    closed: bool,
 }
 
 struct ScalarRspPending {
@@ -92,6 +153,7 @@ struct ScalarRspPending {
     before: [u32; 32],
     expected: Option<[u32; 32]>,
     definition: Option<RspRegisterDefinition>,
+    store: Option<ScalarStorePending>,
 }
 
 pub(crate) struct ScalarRspProducers {
@@ -105,6 +167,7 @@ pub(crate) struct ScalarRspProducers {
     opaque: u64,
     samples: Vec<CapturedScalarRspProducer>,
     ordered: sha2::Sha256,
+    stores: Option<ScalarRspStoreReport>,
 }
 
 impl ScalarRspProducers {
@@ -120,7 +183,17 @@ impl ScalarRspProducers {
             opaque: 0,
             samples: Vec::new(),
             ordered: sha2::Sha256::new(),
+            stores: None,
         }
+    }
+    pub(crate) fn with_stores() -> Self {
+        let mut state = Self::new();
+        state.stores = Some(ScalarRspStoreReport {
+            instructions: 0,
+            effects: 0,
+            samples: Vec::new(),
+        });
+        state
     }
     pub(crate) fn root(
         &mut self,
@@ -162,7 +235,46 @@ impl ScalarRspProducers {
                 && registers[0] == 0,
             "RSP operands lack their unchanged explicit root/boundary",
         )?;
-        let scalar = is_definition(word);
+        let lanes = self
+            .stores
+            .as_ref()
+            .and_then(|_| scalar_store_lanes(word, &registers));
+        let scalar = is_definition(word) || (self.stores.is_some() && word == 0) || lanes.is_some();
+        let parent = |r: usize| {
+            if r == 0 {
+                RspRegisterParent::ArchitecturalZero
+            } else if let Some(context) = self.parents[r] {
+                RspRegisterParent::Definition { context }
+            } else {
+                RspRegisterParent::CapturedInput {
+                    register: r as u8,
+                    value: registers[r],
+                }
+            }
+        };
+        let store = lanes.map(|lanes| {
+            let register = ((word >> 16) & 31) as u8;
+            ScalarStorePending {
+                kind: match word >> 26 {
+                    0x28 => 0,
+                    0x29 => 1,
+                    _ => 2,
+                },
+                lanes,
+                report: CapturedScalarRspStore {
+                    instruction_context: ordinal,
+                    read_ordinal: read,
+                    epoch: self.epoch.unwrap(),
+                    scope_ordinal: 0,
+                    scope_end_ordinal: 0,
+                    register,
+                    value_source: parent(register as usize),
+                    address_source: parent(((word >> 21) & 31) as usize),
+                    effects: Vec::new(),
+                },
+                closed: false,
+            }
+        });
         let definition =
             scalar_rsp_definition(ordinal, 0, pc as u16, word, &registers, &self.parents);
         let expected = scalar.then(|| {
@@ -182,8 +294,108 @@ impl ScalarRspProducers {
             before: registers,
             expected,
             definition,
+            store,
         });
         Ok(())
+    }
+    pub(crate) fn store_scope(
+        &mut self,
+        ordinal: u64,
+        begin: bool,
+        kind: u32,
+        instruction: u64,
+        scope: u64,
+    ) -> Result<(), String> {
+        require(
+            self.stores.is_some(),
+            "scalar store scope outside selected source policy",
+        )?;
+        let pending = self
+            .pending
+            .as_mut()
+            .ok_or("scalar store scope lacks performed instruction")?;
+        let store = pending
+            .store
+            .as_mut()
+            .ok_or("store method contradicts decoded scalar opcode")?;
+        require(
+            instruction == pending.begin && kind == store.kind && !store.closed,
+            "scalar store scope changed owner or method",
+        )?;
+        if begin {
+            require(
+                store.report.scope_ordinal == 0 && scope == ordinal,
+                "nested or reused scalar store method scope",
+            )?;
+            store.report.scope_ordinal = ordinal;
+        } else {
+            require(
+                scope != 0
+                    && scope == store.report.scope_ordinal
+                    && store.report.effects.len() == store.lanes.len(),
+                "scalar store scope lacks its complete exact effects",
+            )?;
+            store.closed = true;
+            store.report.scope_end_ordinal = ordinal;
+        }
+        self.ordered.update(
+            serde_json::to_vec(&("store_scope", ordinal, begin, kind, instruction, scope))
+                .map_err(|e| e.to_string())?,
+        );
+        Ok(())
+    }
+    pub(crate) fn store_effect(
+        &mut self,
+        ordinal: u64,
+        scope: u64,
+        offset: u32,
+        bytes: u32,
+        value: u64,
+    ) -> Result<Option<ScalarRspEffectWriter>, String> {
+        require(
+            self.stores.is_some(),
+            "scalar store actor outside selected source policy",
+        )?;
+        if scope == 0 {
+            return Ok(None);
+        }
+        let pending = self
+            .pending
+            .as_mut()
+            .ok_or("scalar effect lacks performed instruction")?;
+        let store = pending
+            .store
+            .as_mut()
+            .ok_or("scalar effect contradicts decoded store opcode")?;
+        let index = store.report.effects.len();
+        require(
+            !store.closed
+                && scope == store.report.scope_ordinal
+                && bytes == 1
+                && store.lanes.get(index).copied() == Some((offset as u16, value as u8))
+                && offset < 4096
+                && value < 256,
+            "scalar effect does not identify its exact completed byte lane",
+        )?;
+        store
+            .report
+            .effects
+            .push((ordinal, offset as u16, value as u8));
+        self.ordered.update(
+            serde_json::to_vec(&("store_effect", ordinal, scope, offset, bytes, value))
+                .map_err(|e| e.to_string())?,
+        );
+        Ok(Some(ScalarRspEffectWriter {
+            instruction_context: pending.begin,
+            read_ordinal: pending.read,
+            epoch: store.report.epoch,
+            scope_ordinal: scope,
+            register: store.report.register,
+            source_definition: match store.report.value_source {
+                RspRegisterParent::Definition { context } => Some(context),
+                _ => None,
+            },
+        }))
     }
     pub(crate) fn end(
         &mut self,
@@ -200,6 +412,18 @@ impl ScalarRspProducers {
                     .is_none_or(|expected| expected == registers),
             "RSP scalar producer register transition mismatch",
         )?;
+        if let Some(store) = pending.store {
+            require(
+                store.closed,
+                "performed scalar store lacks its completed method scope",
+            )?;
+            let report = self.stores.as_mut().unwrap();
+            report.instructions += 1;
+            report.effects += store.report.effects.len() as u64;
+            if report.samples.len() < 64 {
+                report.samples.push(store.report);
+            }
+        }
         self.instructions += 1;
         self.opaque += u64::from(pending.expected.is_none());
         self.ordered.update(
@@ -241,6 +465,7 @@ impl ScalarRspProducers {
             opaque_instructions: self.opaque,
             samples: self.samples,
             ordered_producers_sha256: format!("{:x}", self.ordered.finalize()),
+            stores: self.stores,
         })
     }
 }
@@ -388,6 +613,82 @@ mod reference_regression {
         assert_eq!(
             report.ordered_producers_sha256,
             source["ordered_producers_sha256"].as_str().unwrap()
+        );
+    }
+}
+
+#[cfg(test)]
+mod store_reference_regression {
+    use super::*;
+    #[test]
+    fn actual_store_methods_and_every_completed_lane_replay_through_shared_state() {
+        let capture: serde_json::Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/rsp_scalar_store_reference.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            capture["revision"],
+            "9408cb43d4948fc3ea6e152a307a34348df3fe04"
+        );
+        assert_eq!(
+            capture["parent_source_sha256"],
+            "1917490dc6e59eaf4ee0e1ec9c9153bf6277d651cff523fab38438e70afde6f4"
+        );
+        let mut state = ScalarRspProducers::with_stores();
+        let mut reads = std::collections::BTreeMap::new();
+        for row in capture["events"].as_array().unwrap() {
+            let n = |key: &str| row[key].as_u64().unwrap();
+            let registers =
+                || serde_json::from_value::<[u32; 32]>(row["registers"].clone()).unwrap();
+            match row["record"].as_str().unwrap() {
+                "rsp_operand_root" => state
+                    .root(n("ordinal"), n("epoch"), n("rsp_pc") as u32, registers())
+                    .unwrap(),
+                "rsp_imem_read" => {
+                    reads.insert(n("ordinal"), (n("offset"), n("word")));
+                }
+                "rsp_instruction" if row["begin"].as_bool().unwrap() => {
+                    assert_eq!(reads[&n("read_ordinal")], (n("rsp_pc") & 0xffc, n("word")));
+                    state
+                        .begin(
+                            n("ordinal"),
+                            n("read_ordinal"),
+                            n("rsp_pc") as u32,
+                            n("word") as u32,
+                            registers(),
+                        )
+                        .unwrap();
+                }
+                "rsp_instruction" => state
+                    .end(n("ordinal"), n("next_pc") as u32, registers())
+                    .unwrap(),
+                "rsp_scalar_store_scope" => state
+                    .store_scope(
+                        n("ordinal"),
+                        row["begin"].as_bool().unwrap(),
+                        n("kind") as u32,
+                        n("instruction_context"),
+                        n("store_scope"),
+                    )
+                    .unwrap(),
+                "rsp_dmem_effect" => {
+                    let writer = state
+                        .store_effect(
+                            n("ordinal"),
+                            n("store_scope"),
+                            n("offset") as u32,
+                            n("bytes") as u32,
+                            n("value"),
+                        )
+                        .unwrap();
+                    assert_eq!(writer.is_some(), n("store_scope") != 0);
+                }
+                _ => panic!("unexpected actual scalar store row"),
+            }
+        }
+        assert_eq!(
+            serde_json::to_value(state.finish().unwrap()).unwrap(),
+            capture["expected"]
         );
     }
 }

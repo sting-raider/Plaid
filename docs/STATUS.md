@@ -1,5 +1,13 @@
 # Status
 
+Raw v10 now binds scalar SB/SH/SW method scopes and exact completed DMEM
+lanes to performed instructions, rooted operands and fresh shared SP writer IDs.
+CPU executable backing can select these writers; no computed value is relabelled
+PI/ROM byte ancestry. Equal external effects still revoke them. The actual
+360-event/40-checkpoint graph has two scoped SW calls/eight effects, matching
+shared Rust and independent replay. The early 100k prefix has no scoped stores;
+1,008 unowned effects remain cuts. General source/lifetime/native flags stay false.
+
 Raw v9 now connects exact read-bound RSP execution to rooted ORI/ADDU scalar
 producer definitions using the existing expression verifier. Complete before/
 after GPR snapshots bind the produced value; equal redefinitions select new

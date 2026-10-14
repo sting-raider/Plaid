@@ -27,8 +27,11 @@ use crate::{
 use serde::{Deserialize, Serialize};
 #[path = "rsp_scalar.rs"]
 pub(crate) mod scalar;
-pub use scalar::{CapturedScalarRspProducer, ScalarRspProducerReport};
-use scalar::{is_definition, scalar_rsp_definition};
+pub use scalar::{
+    CapturedScalarRspProducer, CapturedScalarRspStore, ScalarRspProducerReport,
+    ScalarRspStoreReport,
+};
+use scalar::{is_definition, scalar_rsp_definition, scalar_store_lanes};
 use std::collections::BTreeMap;
 
 #[path = "rsp_cpu_dcache.rs"]
@@ -2311,18 +2314,10 @@ fn rsp_lanes(row: &Row) -> Result<(Vec<(u16, u8)>, bool), String> {
     if row.word == 0 || row.word == 13 {
         return Ok((Vec::new(), row.word == 13));
     }
+    if let Some(lanes) = scalar_store_lanes(row.word, &row.rgpr) {
+        return Ok((lanes, false));
+    }
     let (address, data) = match op {
-        0x28 | 0x29 | 0x2b => {
-            let width = match op {
-                0x28 => 1,
-                0x29 => 2,
-                _ => 4,
-            };
-            (
-                row.rgpr[rs].wrapping_add_signed(i32::from(row.word as i16)),
-                payload(u64::from(row.rgpr[rt]) & ((1u64 << (width * 8)) - 1), width)?,
-            )
-        }
         0x3a => {
             require(
                 rt == 2 && (row.word >> 11) & 31 == 0 && (row.word >> 7) & 15 == 0,

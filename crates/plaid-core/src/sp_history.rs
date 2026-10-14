@@ -23,6 +23,9 @@ pub const IMEM_STORAGE_FORMAT: &str = "plaid-ares-access-history-v8";
 pub const IMEM_STORAGE_POLICY: &str =
     "observed_storage_dmem_imem_and_rsp_consumption_with_pi_queue_sp_backing";
 
+pub const RSP_STORE_FORMAT: &str = "plaid-ares-access-history-v10";
+pub const RSP_STORE_POLICY: &str =
+    "observed_instruction_scoped_scalar_rsp_stores_with_rooted_operands_and_pi_queue_sp_backing";
 pub const RSP_OPERAND_FORMAT: &str = "plaid-ares-access-history-v9";
 pub const RSP_OPERAND_POLICY: &str =
     "observed_storage_sp_execution_and_rooted_scalar_operands_with_pi_queue_sp_backing";
@@ -79,6 +82,14 @@ pub struct SpHistoryReport {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CapturedSpWriterKind {
+    RspScalarSink {
+        instruction_context: u64,
+        read_ordinal: u64,
+        epoch: u64,
+        scope_ordinal: u64,
+        register: u8,
+        source_definition: Option<u64>,
+    },
     WordSink {
         cpu: bool,
     },
@@ -86,6 +97,19 @@ pub enum CapturedSpWriterKind {
         dram: PhysicalAddr,
         read_ordinal: Option<u64>,
     },
+}
+
+impl From<crate::rsp_cpu_imem::scalar::ScalarRspEffectWriter> for CapturedSpWriterKind {
+    fn from(w: crate::rsp_cpu_imem::scalar::ScalarRspEffectWriter) -> Self {
+        Self::RspScalarSink {
+            instruction_context: w.instruction_context,
+            read_ordinal: w.read_ordinal,
+            epoch: w.epoch,
+            scope_ordinal: w.scope_ordinal,
+            register: w.register,
+            source_definition: w.source_definition,
+        }
+    }
 }
 
 /// Compatible latest *captured* writer, not ultimate byte ancestry. Ordinals
@@ -280,6 +304,15 @@ impl StorageRecord {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum SpRecord {
+    RspScalarStoreScope {
+        ordinal: u64,
+        context: u64,
+        pc: GuestVirtualAddr,
+        begin: bool,
+        kind: u32,
+        instruction_context: u64,
+        store_scope: u64,
+    },
     RspOperandRoot {
         ordinal: u64,
         context: u64,
@@ -325,6 +358,8 @@ pub(crate) enum SpRecord {
         offset: u32,
         bytes: u32,
         value: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        store_scope: Option<u64>,
     },
     SpWord {
         ordinal: u64,
@@ -364,6 +399,12 @@ impl Wire {
     }
     pub(crate) fn identity(&self) -> Option<(u64, u64, GuestVirtualAddr, &'static str)> {
         match self {
+            Self::Sp(SpRecord::RspScalarStoreScope {
+                ordinal,
+                context,
+                pc,
+                ..
+            }) => Some((*ordinal, *context, *pc, "rsp_scalar_store_scope")),
             Self::Sp(SpRecord::RspOperandRoot {
                 ordinal,
                 context,
@@ -436,6 +477,9 @@ impl Wire {
             | Self::Sp(SpRecord::ImemStorageEffect {
                 ordinal, context, ..
             })
+            | Self::Sp(SpRecord::RspScalarStoreScope {
+                ordinal, context, ..
+            })
             | Self::Sp(SpRecord::RspOperandRoot {
                 ordinal, context, ..
             }) => {
@@ -500,6 +544,7 @@ struct Projection<H> {
     rsp_execution: bool,
     imem_storage: bool,
     rsp_producers: Option<ScalarRspProducers>,
+    scalar_stores: bool,
     rsp_active: Option<(GuestVirtualAddr, u32, u64, u32)>,
     rsp_reads: BTreeMap<u64, RspReadReceipt>,
     ended: bool,
@@ -535,6 +580,7 @@ impl<H: BufRead> Projection<H> {
             rsp_execution: false,
             imem_storage: false,
             rsp_producers: None,
+            scalar_stores: false,
             rsp_active: None,
             rsp_reads: BTreeMap::new(),
             ended: false,
@@ -580,6 +626,28 @@ impl<H: BufRead> Projection<H> {
     fn sp(&mut self, row: SpRecord) -> Result<(), String> {
         require(!self.copying, "SP row inside buffered PI copy")?;
         match row {
+            SpRecord::RspScalarStoreScope {
+                ordinal,
+                context,
+                pc,
+                begin,
+                kind,
+                instruction_context,
+                store_scope,
+            } => {
+                require(
+                    self.scalar_stores && self.rsp_active.is_some(),
+                    "scalar store method scope outside v10/performed instruction",
+                )?;
+                self.identity(ordinal, context, pc, "rsp_scalar_store_scope")?;
+                self.rsp_producers.as_mut().unwrap().store_scope(
+                    ordinal,
+                    begin,
+                    kind,
+                    instruction_context,
+                    store_scope,
+                )?;
+            }
             SpRecord::RspOperandRoot {
                 ordinal,
                 context,
@@ -739,6 +807,7 @@ impl<H: BufRead> Projection<H> {
                 offset,
                 bytes,
                 value,
+                store_scope,
             } => {
                 require(
                     self.dmem_storage
@@ -749,9 +818,24 @@ impl<H: BufRead> Projection<H> {
                         && (bytes == 8 || value < (1u64 << (bytes * 8))),
                     "invalid or unsupported lower DMEM storage effect",
                 )?;
+                require(
+                    self.scalar_stores == store_scope.is_some(),
+                    "scalar store actor missing or outside v10 source",
+                )?;
                 self.identity(ordinal, context, pc, "rsp_dmem_effect")?;
+                let writer = if let Some(scope) = store_scope {
+                    self.rsp_producers
+                        .as_mut()
+                        .unwrap()
+                        .store_effect(ordinal, scope, offset, bytes, value)?
+                } else {
+                    None
+                };
                 if let Some(lineage) = &mut self.lineage {
                     lineage.cut(0, offset, bytes);
+                    if let Some(w) = writer {
+                        lineage.write(0, offset, &[value as u8], ordinal, w.into());
+                    }
                 }
             }
             SpRecord::SpWord {
@@ -889,11 +973,18 @@ impl<H: BufRead> Projection<H> {
             ..
         })) = &mut row
         {
-            let operands = format == RSP_OPERAND_FORMAT && policy == RSP_OPERAND_POLICY;
+            let scalar_stores = format == RSP_STORE_FORMAT && policy == RSP_STORE_POLICY;
+            let operands =
+                (format == RSP_OPERAND_FORMAT && policy == RSP_OPERAND_POLICY) || scalar_stores;
+            self.scalar_stores = scalar_stores;
             let imem_storage =
                 (format == IMEM_STORAGE_FORMAT && policy == IMEM_STORAGE_POLICY) || operands;
             if operands {
-                self.rsp_producers = Some(ScalarRspProducers::new());
+                self.rsp_producers = Some(if scalar_stores {
+                    ScalarRspProducers::with_stores()
+                } else {
+                    ScalarRspProducers::new()
+                });
             }
             let rsp_execution =
                 (format == RSP_EXECUTION_FORMAT && policy == RSP_EXECUTION_POLICY) || imem_storage;
@@ -1175,7 +1266,9 @@ fn finish_report<H>(
     projection: queue::PiQueueHistoryReport,
 ) -> Result<SpHistoryReport, String> {
     Ok(SpHistoryReport {
-        format: if stream.rsp_producers.is_some() {
+        format: if stream.scalar_stores {
+            "plaid-observed-sp-backing-report-v6"
+        } else if stream.rsp_producers.is_some() {
             "plaid-observed-sp-backing-report-v5"
         } else if stream.imem_storage {
             "plaid-observed-sp-backing-report-v4"

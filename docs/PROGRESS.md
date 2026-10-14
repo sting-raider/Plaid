@@ -55,6 +55,7 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Bounded lower-IMEM ancestry revocation | ✅ verified |
 | Exact IMEM-read / performed-RSP receipts | ✅ verified |
 | Bounded scalar producer / executable-read join | ✅ verified |
+| Bounded scalar store / executable backing | ✅ verified |
 | Controlled D-cache export / executable chain | ✅ verified |
 | Controlled mapping / cache / exception chain | ✅ verified |
 | CPU executable-store sensing | 🟨 partial |

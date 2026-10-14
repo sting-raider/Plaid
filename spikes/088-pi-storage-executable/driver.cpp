@@ -15,6 +15,10 @@
 namespace Storage = ares::Nintendo64::Memory;
 static std::vector<string> events;
 static u32 phase;
+#if defined(PLAID_PI_RSP_SCALAR_STORES)
+static u64 activeRspContext=0,activeStoreScope=0;
+static u32 activeStoreKind=0;
+#endif
 #if defined(PLAID_PI_RSP_OPERANDS)
 static constexpr u32 piProgramWord=0x34100007; // ORI s0,zero,7.
 static constexpr u32 piSecondWord=0x02108821; // ADDU s1,s0,s0.
@@ -52,7 +56,11 @@ static void rom_half(u32 offset,u16 value) {
 #if defined(PLAID_PI_SP_CONSUMPTION)
 #if defined(PLAID_PI_DMEM_CUT)
 static void lower_dmem_effect(u32 offset,u32 bytes,u64 value) {
-  add({"\"record\":\"rsp_dmem_effect\",\"offset\":",offset,",\"bytes\":",bytes,",\"value\":",value});
+  string row{"\"record\":\"rsp_dmem_effect\",\"offset\":",offset,",\"bytes\":",bytes,",\"value\":",value};
+#if defined(PLAID_PI_RSP_SCALAR_STORES)
+  row.append(",\"store_scope\":",activeStoreScope);
+#endif
+  add(row);
 }
 #if defined(PLAID_PI_RSP_CONSUMPTION)
 static u64 performed_rsp_read(u32 address,u32 offset,u32 word) {
@@ -68,7 +76,22 @@ static void performed_rsp_instruction(bool begin,u32 pc,u64 read,u32 word,u32 ne
   row.append("]");
 #endif
   add(row);
+#if defined(PLAID_PI_RSP_SCALAR_STORES)
+  if(activeStoreScope) std::abort();
+  if(begin) { if(activeRspContext) std::abort();activeRspContext=events.size(); }
+  else { if(!activeRspContext) std::abort();activeRspContext=0; }
+#endif
 }
+#if defined(PLAID_PI_RSP_SCALAR_STORES)
+static void scalar_store_scope(bool begin,u32 kind) {
+  if(!activeRspContext) return;
+  if(begin) {if(activeStoreScope) std::abort();activeStoreScope=events.size()+1;activeStoreKind=kind;}
+  else if(!activeStoreScope || kind!=activeStoreKind) std::abort();
+  add({"\"record\":\"rsp_scalar_store_scope\",\"begin\":",begin ? "true" : "false",",\"kind\":",kind,
+    ",\"instruction_context\":",activeRspContext,",\"store_scope\":",activeStoreScope});
+  if(!begin) activeStoreScope=0;
+}
+#endif
 #endif
 #endif
 static void sp_word(bool write,u32 address,u32 bank,u32 offset,u32 value,bool cpuOrigin) {
@@ -128,6 +151,9 @@ int main(int argc,char** argv) {
     plaidRspDmemObserver=lower_dmem_effect;
 #if defined(PLAID_PI_RSP_CONSUMPTION)
     plaidRspImemReadObserver=performed_rsp_read;plaidRspInstructionFetchObserver=performed_rsp_instruction;
+#if defined(PLAID_PI_RSP_SCALAR_STORES)
+    plaidRspScalarStoreObserver=scalar_store_scope;
+#endif
 #endif
 #endif
 #endif

@@ -26,7 +26,7 @@ def main():
     parser.add_argument('--cic', choices=('CIC-NUS-6102', 'CIC-NUS-6105'), required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--build', type=Path)
-    parser.add_argument('--history', choices=('sp','storage','storage-rsp','storage-rsp-exec','storage-sp-exec','storage-sp-operands'))
+    parser.add_argument('--history', choices=('sp','storage','storage-rsp','storage-rsp-exec','storage-sp-exec','storage-sp-operands','storage-sp-stores'))
     parser.add_argument('--baseline', type=Path)
     parser.add_argument('--budget', type=int, default=10000)
     parser.add_argument('--verify-existing', action='store_true')
@@ -83,24 +83,28 @@ def main():
         options.update(cache_fill_access=True, cache_operation_access=True, rdram_burst_access=True,
             rdram_scalar_access=True, fetch_boundary_access=True, pi_dma_access=True,
             queue_access=True, sp_backing_access=True)
-        if args.history in ('storage','storage-rsp','storage-rsp-exec','storage-sp-exec','storage-sp-operands'):
+        if args.history in ('storage','storage-rsp','storage-rsp-exec','storage-sp-exec','storage-sp-operands','storage-sp-stores'):
             driver = ROOT/'spikes/087-storage-writer-fetch-history/driver.cpp'
             sources.append(ROOT/'spikes/087-storage-writer-fetch-history/observer.hpp')
             options['memory_mutation_access'] = True
-        if args.history in ('storage-rsp','storage-rsp-exec','storage-sp-exec','storage-sp-operands'):
+        if args.history in ('storage-rsp','storage-rsp-exec','storage-sp-exec','storage-sp-operands','storage-sp-stores'):
             driver=ROOT/'spikes/090-rsp-dmem-storage-cuts/boot_driver.cpp'
             sources.append(ROOT/'spikes/090-rsp-dmem-storage-cuts/observer.hpp')
             options['rsp_dmem_access']=True
-        if args.history in ('storage-rsp-exec','storage-sp-exec','storage-sp-operands'):
+        if args.history in ('storage-rsp-exec','storage-sp-exec','storage-sp-operands','storage-sp-stores'):
             driver=ROOT/'spikes/091-raw-rsp-executable-consumption/boot_driver.cpp'
             sources.append(ROOT/'spikes/091-raw-rsp-executable-consumption/observer.hpp')
             options['rsp_instruction_fetch_access']=True
-        if args.history in ('storage-sp-exec','storage-sp-operands'):
+        if args.history in ('storage-sp-exec','storage-sp-operands','storage-sp-stores'):
             driver=ROOT/'spikes/092-imem-storage-cuts/boot_driver.cpp'
             sources.append(ROOT/'spikes/092-imem-storage-cuts/observer.hpp')
-        if args.history == 'storage-sp-operands':
+        if args.history in ('storage-sp-operands','storage-sp-stores'):
             driver=ROOT/'spikes/093-rsp-scalar-executable/boot_driver.cpp'
             sources.append(ROOT/'spikes/093-rsp-scalar-executable/observer.hpp')
+        if args.history == 'storage-sp-stores':
+            driver=ROOT/'spikes/094-rsp-scalar-store-actor/boot_driver.cpp'
+            sources.append(ROOT/'spikes/094-rsp-scalar-store-actor/observer.hpp')
+            options['rsp_scalar_store_access']=True
     if not args.verify_existing:
         exe = builder.build(driver, build, extra_sources=sources, **options)
         for mode in ('plain', 'traced', 'repeat'):
@@ -173,15 +177,16 @@ def main():
             first = json.loads(source.readline())
             source.seek(max(0, history.stat().st_size - 512))
             last = json.loads(source.read().splitlines()[-1])
-        storage = args.history in ('storage','storage-rsp','storage-rsp-exec','storage-sp-exec','storage-sp-operands')
-        dmem_storage = args.history in ('storage-rsp','storage-rsp-exec','storage-sp-exec','storage-sp-operands')
-        rsp_execution = args.history in ('storage-rsp-exec','storage-sp-exec','storage-sp-operands')
-        operands = args.history == 'storage-sp-operands'
-        imem_storage = args.history in ('storage-sp-exec','storage-sp-operands')
-        assert first == dict(record='header', format='plaid-ares-access-history-v9' if operands else 'plaid-ares-access-history-v8' if imem_storage else 'plaid-ares-access-history-v7' if rsp_execution else 'plaid-ares-access-history-v6' if dmem_storage else 'plaid-ares-access-history-v5' if storage else 'plaid-ares-access-history-v3',
+        storage = args.history in ('storage','storage-rsp','storage-rsp-exec','storage-sp-exec','storage-sp-operands','storage-sp-stores')
+        dmem_storage = args.history in ('storage-rsp','storage-rsp-exec','storage-sp-exec','storage-sp-operands','storage-sp-stores')
+        rsp_execution = args.history in ('storage-rsp-exec','storage-sp-exec','storage-sp-operands','storage-sp-stores')
+        scalar_stores = args.history == 'storage-sp-stores'
+        operands = args.history in ('storage-sp-operands','storage-sp-stores')
+        imem_storage = args.history in ('storage-sp-exec','storage-sp-operands','storage-sp-stores')
+        assert first == dict(record='header', format='plaid-ares-access-history-v10' if scalar_stores else 'plaid-ares-access-history-v9' if operands else 'plaid-ares-access-history-v8' if imem_storage else 'plaid-ares-access-history-v7' if rsp_execution else 'plaid-ares-access-history-v6' if dmem_storage else 'plaid-ares-access-history-v5' if storage else 'plaid-ares-access-history-v3',
             revision=builder.REV, rom_sha256=digest(args.rom), budget=args.budget,
             mapped_cartridge_size=len(data) & ~7, firmware_sha256=digest(FIRMWARE),
-            policy='observed_storage_sp_execution_and_rooted_scalar_operands_with_pi_queue_sp_backing' if operands else 'observed_storage_dmem_imem_and_rsp_consumption_with_pi_queue_sp_backing' if imem_storage else 'observed_storage_dmem_and_performed_rsp_instructions_with_pi_queue_sp_backing' if rsp_execution else 'observed_ordinary_storage_and_dmem_mutations_with_pi_queue_sp_backing' if dmem_storage else 'observed_ordinary_storage_mutations_and_pi_queue_sp_backing' if storage else 'identity_ram_pi_queue_and_observed_sp_backing',
+            policy='observed_instruction_scoped_scalar_rsp_stores_with_rooted_operands_and_pi_queue_sp_backing' if scalar_stores else 'observed_storage_sp_execution_and_rooted_scalar_operands_with_pi_queue_sp_backing' if operands else 'observed_storage_dmem_imem_and_rsp_consumption_with_pi_queue_sp_backing' if imem_storage else 'observed_storage_dmem_and_performed_rsp_instructions_with_pi_queue_sp_backing' if rsp_execution else 'observed_ordinary_storage_and_dmem_mutations_with_pi_queue_sp_backing' if dmem_storage else 'observed_ordinary_storage_mutations_and_pi_queue_sp_backing' if storage else 'identity_ram_pi_queue_and_observed_sp_backing',
             lifecycle_policy='single_run_no_host_restore', paired_fetch_format=header['format'])
         assert last['record'] == 'end' and last['fetch_count'] == count
         assert last['reason'] == 'instruction_call_budget'

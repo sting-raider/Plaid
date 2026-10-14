@@ -30,14 +30,15 @@ def inspect(history_path, fetch_path, source):
     history = rows(history_path, history_hash)
     fetched = rows(fetch_path, fetch_hash)
     header, paired_header = next(history), next(fetched)
-    assert header['format'] in ('plaid-ares-access-history-v2', 'plaid-ares-access-history-v3', 'plaid-ares-access-history-v5','plaid-ares-access-history-v6','plaid-ares-access-history-v7','plaid-ares-access-history-v8','plaid-ares-access-history-v9')
-    operands = header['format'] == 'plaid-ares-access-history-v9'
-    imem_storage = header['format'] in ('plaid-ares-access-history-v8','plaid-ares-access-history-v9')
-    rsp_execution = header['format'] in ('plaid-ares-access-history-v7','plaid-ares-access-history-v8','plaid-ares-access-history-v9')
-    dmem_storage = header['format'] in ('plaid-ares-access-history-v6','plaid-ares-access-history-v7','plaid-ares-access-history-v8','plaid-ares-access-history-v9')
-    storage_clock = header['format'] in ('plaid-ares-access-history-v5','plaid-ares-access-history-v6','plaid-ares-access-history-v7','plaid-ares-access-history-v8','plaid-ares-access-history-v9')
+    assert header['format'] in ('plaid-ares-access-history-v2', 'plaid-ares-access-history-v3', 'plaid-ares-access-history-v5','plaid-ares-access-history-v6','plaid-ares-access-history-v7','plaid-ares-access-history-v8','plaid-ares-access-history-v9','plaid-ares-access-history-v10')
+    scalar_stores = header['format'] == 'plaid-ares-access-history-v10'
+    operands = header['format'] in ('plaid-ares-access-history-v9','plaid-ares-access-history-v10')
+    imem_storage = header['format'] in ('plaid-ares-access-history-v8','plaid-ares-access-history-v9','plaid-ares-access-history-v10')
+    rsp_execution = header['format'] in ('plaid-ares-access-history-v7','plaid-ares-access-history-v8','plaid-ares-access-history-v9','plaid-ares-access-history-v10')
+    dmem_storage = header['format'] in ('plaid-ares-access-history-v6','plaid-ares-access-history-v7','plaid-ares-access-history-v8','plaid-ares-access-history-v9','plaid-ares-access-history-v10')
+    storage_clock = header['format'] in ('plaid-ares-access-history-v5','plaid-ares-access-history-v6','plaid-ares-access-history-v7','plaid-ares-access-history-v8','plaid-ares-access-history-v9','plaid-ares-access-history-v10')
     if storage_clock:
-        assert header['policy'] == ('observed_storage_sp_execution_and_rooted_scalar_operands_with_pi_queue_sp_backing' if operands else 'observed_storage_dmem_imem_and_rsp_consumption_with_pi_queue_sp_backing' if imem_storage else 'observed_storage_dmem_and_performed_rsp_instructions_with_pi_queue_sp_backing' if rsp_execution else 'observed_ordinary_storage_and_dmem_mutations_with_pi_queue_sp_backing' if dmem_storage else 'observed_ordinary_storage_mutations_and_pi_queue_sp_backing')
+        assert header['policy'] == ('observed_instruction_scoped_scalar_rsp_stores_with_rooted_operands_and_pi_queue_sp_backing' if scalar_stores else 'observed_storage_sp_execution_and_rooted_scalar_operands_with_pi_queue_sp_backing' if operands else 'observed_storage_dmem_imem_and_rsp_consumption_with_pi_queue_sp_backing' if imem_storage else 'observed_storage_dmem_and_performed_rsp_instructions_with_pi_queue_sp_backing' if rsp_execution else 'observed_ordinary_storage_and_dmem_mutations_with_pi_queue_sp_backing' if dmem_storage else 'observed_ordinary_storage_mutations_and_pi_queue_sp_backing')
     if header['format'] == 'plaid-ares-access-history-v3':
         assert header['policy'] == 'identity_ram_pi_queue_and_observed_sp_backing'
     assert header['lifecycle_policy'] == 'single_run_no_host_restore'
@@ -93,11 +94,14 @@ def inspect(history_path, fetch_path, source):
             continue
         ordinal += 1
         assert e['ordinal'] == ordinal <= 100000000
-        if kind not in ('storage_effect','sp_dma_store','rsp_dmem_effect','imem_storage_effect','rsp_operand_root') and not \
+        if kind not in ('storage_effect','sp_dma_store','rsp_dmem_effect','imem_storage_effect','rsp_operand_root','rsp_scalar_store_scope') and not \
             (kind=='scalar' and not e['write'] and e['device']==4):
             sp_receipts=[]
-        if kind not in ('rsp_instruction','rsp_imem_read','rsp_dmem_effect','imem_storage_effect','rsp_operand_root','sp_word','sp_dma_store','storage_effect') and rsp_active is None:
+        if kind not in ('rsp_instruction','rsp_imem_read','rsp_dmem_effect','imem_storage_effect','rsp_operand_root','rsp_scalar_store_scope','sp_word','sp_dma_store','storage_effect') and rsp_active is None:
             rsp_reads.clear()
+        if kind == 'rsp_scalar_store_scope':
+            assert scalar_stores and rsp_active is not None
+            continue
         if kind == 'rsp_operand_root':
             assert operands and rsp_active is None
             continue
