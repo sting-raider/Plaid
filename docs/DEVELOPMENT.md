@@ -6,6 +6,14 @@ The authoritative engineering state is still [`STATUS.md`](STATUS.md) and [`NEXT
 
 ## Toolchain
 
+Spike093 joins read-bound RSP execution to explicitly rooted scalar definitions.
+Run `test_consumer.py`, its retained `run.py --verify-existing`, and the shared
+Rust scalar/reference regressions. Spike057 accepts `--history storage-sp-operands`
+for raw v9. This initial boot recipe emits one opaque operand root; later PC/GPR
+discontinuities without a declared root fail rather than borrow an older epoch.
+The reference fixture supplies explicit opaque roots around host controls; these
+are not guest task/reset producer receipts. Unsupported producers remain opaque.
+
 Spike092 composes lower IMEM scalar and bulk cuts with raw v8 executable
 consumption. Run `test_consumer.py` and `run.py --verify-existing`; capture with
 spike057's `--history storage-sp-exec`. Scalar/equal writes and whole-bank fill/

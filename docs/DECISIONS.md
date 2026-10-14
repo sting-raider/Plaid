@@ -2809,3 +2809,20 @@ support only this bounded composition. Preserve old protocols when unselected,
 all broad false flags and immutable captured receipts. Make the default-shadow
 comparison portable across checkout relocation by normalizing only source/output
 root prefixes; compare all remaining source text exactly at the same pinned head.
+
+ADR-0124 scalar producer follow-up: share the existing ORI/ADDU expression
+implementation between controlled RSP composition and explicitly rooted raw v9.
+Keep original read/performed occurrence identity; attach computed definitions
+through their begin context and exact read ordinal. Full before/after scalar
+register snapshots verify the complete supported transition. Equal definitions
+have fresh identities. Explicit monotonically advancing operand roots and all
+unsupported producers cut held register candidates; captured root inputs remain
+opaque. The register root does not rewrite already frozen executable-byte reads.
+Commit every root and complete snapshot/definition occurrence to an ordered digest;
+bound samples at 64 without claiming that samples are exhaustive. Legacy policies
+reject operand fields/roots and preserve unselected outputs. The initial boot
+recipe emits one opaque root and rejects later undeclared discontinuities; guest
+task/control/reset composition remains necessary. The portable synthetic golden
+contains only captured scalar/read observations from the original reference
+fixture; its code byte origins remain unknown, and it does not stand in for the
+full authenticated capture or writer census. All broad proof flags remain false.

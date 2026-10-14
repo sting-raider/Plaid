@@ -1,5 +1,14 @@
 # Status
 
+Raw v9 now connects exact read-bound RSP execution to rooted ORI/ADDU scalar
+producer definitions using the existing expression verifier. Complete before/
+after GPR snapshots bind the produced value; equal redefinitions select new
+contexts, explicit roots cut held parents and unsupported producers stay opaque.
+The 356-event/40-checkpoint actual graph has 14 roots, 42 instructions and 20
+scalar definitions; its captured scalar projection replays through Rust too.
+The early 100k body stays exact and has no producer observations. Task/epoch/
+backend/census/lifetime/whole-ROM/native obligations remain OPEN; all flags false.
+
 Raw history v8 now cuts IMEM ancestry at completed lower scalar effects and
 whole-bank fill/load, including equal writes. It reuses the shared SP writer
 state and preserves CPU/RSP parents frozen at earlier reads; later DMA installs

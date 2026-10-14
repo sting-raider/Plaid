@@ -25,6 +25,10 @@ use crate::{
     tlb_history::TlbwiGeneration,
 };
 use serde::{Deserialize, Serialize};
+#[path = "rsp_scalar.rs"]
+pub(crate) mod scalar;
+pub use scalar::{CapturedScalarRspProducer, ScalarRspProducerReport};
+use scalar::{is_definition, scalar_rsp_definition};
 use std::collections::BTreeMap;
 
 #[path = "rsp_cpu_dcache.rs"]
@@ -2341,55 +2345,6 @@ fn rsp_lanes(row: &Row) -> Result<(Vec<(u16, u8)>, bool), String> {
     ))
 }
 
-fn is_definition(word: u32) -> bool {
-    word >> 26 == 0x0d || (word >> 26 == 0 && word & 63 == 0x21 && (word >> 6) & 31 == 0)
-}
-
-fn rsp_definition(row: &Row, registers: &[Option<u64>; 32]) -> Option<RspRegisterDefinition> {
-    let rs = ((row.word >> 21) & 31) as usize;
-    let rt = ((row.word >> 16) & 31) as usize;
-    let parent = |r: usize| {
-        if r == 0 {
-            RspRegisterParent::ArchitecturalZero
-        } else if let Some(context) = registers[r] {
-            RspRegisterParent::Definition { context }
-        } else {
-            RspRegisterParent::CapturedInput {
-                register: r as u8,
-                value: row.rgpr[r],
-            }
-        }
-    };
-    let (register, value, expression) = if row.word >> 26 == 0x0d {
-        (
-            rt,
-            row.rgpr[rs] | u32::from(row.word as u16),
-            RspDefinitionExpression::Ori {
-                source: parent(rs),
-                immediate: row.word as u16,
-            },
-        )
-    } else {
-        (
-            ((row.word >> 11) & 31) as usize,
-            row.rgpr[rs].wrapping_add(row.rgpr[rt]),
-            RspDefinitionExpression::Addu {
-                left: parent(rs),
-                right: parent(rt),
-            },
-        )
-    };
-    (register != 0).then_some(RspRegisterDefinition {
-        context: row.context,
-        phase: row.phase,
-        pc: row.pc as u16,
-        word: row.word,
-        register: register as u8,
-        value,
-        expression,
-    })
-}
-
 /// Verify a complete externally committed controlled chronology. No fixture
 /// phase numbers, fixed code PCs, payloads or certificate counts are assumed.
 pub fn inspect_rsp_cpu_imem_history(
@@ -3409,7 +3364,14 @@ pub fn inspect_rsp_cpu_imem_history(
                 let (lanes, breaking, definition) = if reads_enabled && row.word >> 26 == 0x23 {
                     (Vec::new(), false, None)
                 } else if definitions_enabled && is_definition(row.word) {
-                    let definition = rsp_definition(&row, &rsp_registers);
+                    let definition = scalar_rsp_definition(
+                        row.context,
+                        row.phase,
+                        row.pc as u16,
+                        row.word,
+                        &row.rgpr,
+                        &rsp_registers,
+                    );
                     if let Some(d) = &definition {
                         expected_gpr[d.register as usize] = d.value;
                     }

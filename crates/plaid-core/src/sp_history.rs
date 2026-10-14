@@ -1,5 +1,6 @@
 //! Actual CPU SP backing-read observations and completed normalized stores.
 //! Bank identity is not ultimate byte origin or a certified executable lifetime.
+use crate::rsp_cpu_imem::{ScalarRspProducerReport, scalar::ScalarRspProducers};
 use crate::{fetch, history, pi_history, pi_queue_history as queue, program::*, rom::CanonicalRom};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -21,6 +22,10 @@ pub const RSP_EXECUTION_POLICY: &str =
 pub const IMEM_STORAGE_FORMAT: &str = "plaid-ares-access-history-v8";
 pub const IMEM_STORAGE_POLICY: &str =
     "observed_storage_dmem_imem_and_rsp_consumption_with_pi_queue_sp_backing";
+
+pub const RSP_OPERAND_FORMAT: &str = "plaid-ares-access-history-v9";
+pub const RSP_OPERAND_POLICY: &str =
+    "observed_storage_sp_execution_and_rooted_scalar_operands_with_pi_queue_sp_backing";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -64,6 +69,8 @@ pub struct SpHistoryReport {
     pub dma_store_receipts: Vec<SpDmaStoreReceipt>,
     pub unconsumed_dma_read_receipts: u64,
     pub ordered_fetch_backing_sha256: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rsp_scalar_producers: Option<ScalarRspProducerReport>,
     pub mutation_coverage_certified: bool,
     pub executable_lifetime_certified: bool,
     pub native_complete: bool,
@@ -273,6 +280,14 @@ impl StorageRecord {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum SpRecord {
+    RspOperandRoot {
+        ordinal: u64,
+        context: u64,
+        pc: GuestVirtualAddr,
+        epoch: u64,
+        rsp_pc: u32,
+        registers: [u32; 32],
+    },
     ImemStorageEffect {
         ordinal: u64,
         context: u64,
@@ -300,6 +315,8 @@ pub(crate) enum SpRecord {
         word: u32,
         next_pc: u32,
         halted: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        registers: Option<[u32; 32]>,
     },
     RspDmemEffect {
         ordinal: u64,
@@ -347,6 +364,12 @@ impl Wire {
     }
     pub(crate) fn identity(&self) -> Option<(u64, u64, GuestVirtualAddr, &'static str)> {
         match self {
+            Self::Sp(SpRecord::RspOperandRoot {
+                ordinal,
+                context,
+                pc,
+                ..
+            }) => Some((*ordinal, *context, *pc, "rsp_operand_root")),
             Self::Sp(SpRecord::ImemStorageEffect {
                 ordinal,
                 context,
@@ -412,6 +435,9 @@ impl Wire {
             })
             | Self::Sp(SpRecord::ImemStorageEffect {
                 ordinal, context, ..
+            })
+            | Self::Sp(SpRecord::RspOperandRoot {
+                ordinal, context, ..
             }) => {
                 *ordinal = next;
                 *context = scope;
@@ -473,6 +499,7 @@ struct Projection<H> {
     dmem_storage: bool,
     rsp_execution: bool,
     imem_storage: bool,
+    rsp_producers: Option<ScalarRspProducers>,
     rsp_active: Option<(GuestVirtualAddr, u32, u64, u32)>,
     rsp_reads: BTreeMap<u64, RspReadReceipt>,
     ended: bool,
@@ -507,6 +534,7 @@ impl<H: BufRead> Projection<H> {
             dmem_storage: false,
             rsp_execution: false,
             imem_storage: false,
+            rsp_producers: None,
             rsp_active: None,
             rsp_reads: BTreeMap::new(),
             ended: false,
@@ -552,6 +580,26 @@ impl<H: BufRead> Projection<H> {
     fn sp(&mut self, row: SpRecord) -> Result<(), String> {
         require(!self.copying, "SP row inside buffered PI copy")?;
         match row {
+            SpRecord::RspOperandRoot {
+                ordinal,
+                context,
+                pc,
+                epoch,
+                rsp_pc,
+                registers,
+            } => {
+                require(
+                    self.rsp_producers.is_some()
+                        && self.rsp_active.is_none()
+                        && self.active.is_none(),
+                    "RSP operand root outside v9 or active instruction",
+                )?;
+                self.identity(ordinal, context, pc, "rsp_operand_root")?;
+                self.rsp_producers
+                    .as_mut()
+                    .unwrap()
+                    .root(ordinal, epoch, rsp_pc, registers)?;
+            }
             SpRecord::ImemStorageEffect {
                 ordinal,
                 context,
@@ -638,10 +686,15 @@ impl<H: BufRead> Projection<H> {
                 word,
                 next_pc,
                 halted: _,
+                registers,
             } => {
                 require(
                     self.rsp_execution && self.active.is_none() && rsp_pc < 4096 && next_pc < 4096,
                     "invalid or unsupported performed RSP instruction",
+                )?;
+                require(
+                    self.rsp_producers.is_some() == registers.is_some(),
+                    "RSP operand snapshots missing or outside v9 policy",
                 )?;
                 self.identity(ordinal, context, pc, "rsp_instruction")?;
                 self.unconsumed += self.receipts.len() as u64;
@@ -662,12 +715,18 @@ impl<H: BufRead> Projection<H> {
                             && read.offset == read.address & 0xffc,
                         "performed RSP instruction differs from its IMEM read",
                     )?;
+                    if let Some(producers) = &mut self.rsp_producers {
+                        producers.begin(ordinal, read_ordinal, rsp_pc, word, registers.unwrap())?;
+                    }
                     self.rsp_active = Some((pc, rsp_pc, read_ordinal, word));
                 } else {
                     require(
                         self.rsp_active.take() == Some((pc, rsp_pc, read_ordinal, word)),
                         "RSP instruction end lacks its exact begin",
                     )?;
+                    if let Some(producers) = &mut self.rsp_producers {
+                        producers.end(ordinal, next_pc, registers.unwrap())?;
+                    }
                     for read in self.rsp_reads.values_mut() {
                         read.logical_pc = Some(next_pc);
                     }
@@ -830,7 +889,12 @@ impl<H: BufRead> Projection<H> {
             ..
         })) = &mut row
         {
-            let imem_storage = format == IMEM_STORAGE_FORMAT && policy == IMEM_STORAGE_POLICY;
+            let operands = format == RSP_OPERAND_FORMAT && policy == RSP_OPERAND_POLICY;
+            let imem_storage =
+                (format == IMEM_STORAGE_FORMAT && policy == IMEM_STORAGE_POLICY) || operands;
+            if operands {
+                self.rsp_producers = Some(ScalarRspProducers::new());
+            }
             let rsp_execution =
                 (format == RSP_EXECUTION_FORMAT && policy == RSP_EXECUTION_POLICY) || imem_storage;
             let dmem_storage =
@@ -1103,15 +1167,17 @@ pub fn inspect_sp_boot_history<H: BufRead, F: BufRead + Seek>(
         stream.ended && stream.fill_buf().map_err(|e| e.to_string())?.is_empty(),
         "incomplete v3 source",
     )?;
-    Ok(finish_report(stream, projection))
+    finish_report(stream, projection)
 }
 
 fn finish_report<H>(
     stream: Projection<H>,
     projection: queue::PiQueueHistoryReport,
-) -> SpHistoryReport {
-    SpHistoryReport {
-        format: if stream.imem_storage {
+) -> Result<SpHistoryReport, String> {
+    Ok(SpHistoryReport {
+        format: if stream.rsp_producers.is_some() {
+            "plaid-observed-sp-backing-report-v5"
+        } else if stream.imem_storage {
             "plaid-observed-sp-backing-report-v4"
         } else if stream.rsp_execution {
             "plaid-observed-sp-backing-report-v3"
@@ -1141,10 +1207,14 @@ fn finish_report<H>(
         dma_store_receipts: stream.links,
         unconsumed_dma_read_receipts: stream.unconsumed + stream.receipts.len() as u64,
         ordered_fetch_backing_sha256: format!("{:x}", stream.ordered.finalize()),
+        rsp_scalar_producers: stream
+            .rsp_producers
+            .map(ScalarRspProducers::finish)
+            .transpose()?,
         mutation_coverage_certified: false,
         executable_lifetime_certified: false,
         native_complete: false,
-    }
+    })
 }
 
 /// Compose captured normalized SP writers with actual CPU executable backing
@@ -1167,7 +1237,7 @@ pub fn inspect_sp_writer_fetch_history<H: BufRead, F: BufRead + Seek>(
         "incomplete v3 source",
     )?;
     let lineage = stream.lineage.take().expect("requested writer lineage");
-    let projection = finish_report(stream, projection);
+    let projection = finish_report(stream, projection)?;
     require(
         projection.history_sha256 == expected_history_sha256
             && projection.projection.projection.projection.fetch_sha256 == expected_fetch_sha256,

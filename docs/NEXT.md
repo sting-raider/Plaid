@@ -1,5 +1,13 @@
 # Next
 
+Exact raw RSP consumption now feeds rooted scalar producer facts (spike093).
+Continue from these definitions through actual DMEM/RAM writers and executable
+consumption, and bind guest task/control/PC/reset producers to operand roots.
+The boot recipe emits only the first initial operand root; later discontinuities
+without a declared root reject. Captured inputs and unsupported instructions
+stay opaque, and roots must cut equal-value held definitions. Do not infer task,
+writer census, hardware or continuous lifetime completeness from these facts.
+
 Lower IMEM effects now compose with CPU/RSP executable consumption on raw v8
 (spike092). Continue actual register/data/task producer and execution-epoch
 composition. Equal-byte writes, fill/load and new installations must not revive
