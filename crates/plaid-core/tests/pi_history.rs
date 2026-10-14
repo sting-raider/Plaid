@@ -1193,6 +1193,152 @@ mod queue {
             )
         }
 
+        fn storage_source(cached: bool, kind: u32) -> Fixture {
+            let mut f = source(cached);
+            f.history[0]["format"] = json!(sp_history::STORAGE_FORMAT);
+            f.history[0]["policy"] = json!(sp_history::STORAGE_POLICY);
+            let index = if cached {
+                f.history
+                    .iter()
+                    .position(|r| r["record"] == "fill")
+                    .unwrap()
+                    + 1
+            } else {
+                f.history
+                    .iter()
+                    .rposition(|r| r["record"] == "fetch_begin")
+                    .unwrap()
+            };
+            f.history.insert(
+                index,
+                row(json!({"record":"storage_effect","kind":kind,
+                "address":if kind==0 {4099} else {0},
+                "bytes":if kind==0 {1} else {8388608},"value":if kind==0 {7} else {0}})),
+            );
+            if cached {
+                f.history[index]["pc"] = f.history[index - 1]["pc"].clone();
+            }
+            renumber(&mut f.history);
+            f
+        }
+
+        #[test]
+        fn storage_effects_revoke_backing_without_rewriting_surviving_cached_origins() {
+            for kind in [0, 1, 2] {
+                for cached in [false, true] {
+                    let f = storage_source(cached, kind);
+                    let report = inspect(&f).unwrap();
+                    assert_eq!(report.projection.event_counts["storage_effect"], 1);
+                    assert_eq!(
+                        report.projection.format,
+                        "plaid-observed-sp-backing-report-v1"
+                    );
+                    if cached {
+                        assert_eq!(report.fully_attributed_fetches, 1);
+                        assert!(report.samples[0].bytes.iter().all(Option::is_some));
+                    } else if kind == 0 {
+                        assert_eq!(report.partially_attributed_fetches, 1);
+                        assert!(report.samples[0].bytes[..3].iter().all(Option::is_some));
+                        assert!(report.samples[0].bytes[3].is_none());
+                    } else {
+                        assert_eq!(report.unattributed_fetches, 2);
+                        assert!(report.samples.is_empty());
+                    }
+                    verify(&report, &f).unwrap();
+                    assert!(
+                        !report.mutation_coverage_certified
+                            && !report.executable_lifetime_certified
+                            && !report.native_complete
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn storage_source_policy_and_unsupported_lifecycle_cannot_be_laundered() {
+            let original = storage_source(false, 0);
+            let effect = original
+                .history
+                .iter()
+                .position(|r| r["record"] == "storage_effect")
+                .unwrap();
+            for variant in 0..10 {
+                let mut f = storage_source(false, 0);
+                match variant {
+                    0 => {
+                        f.history[0]["format"] = json!(sp_history::FORMAT);
+                        f.history[0]["policy"] = json!(sp_history::POLICY);
+                    }
+                    1 => f.history[0]["policy"] = json!(sp_history::POLICY),
+                    2 => f.history[effect]["kind"] = json!(3),
+                    3 => f.history[effect]["kind"] = json!(4),
+                    4 => f.history[effect]["bytes"] = json!(8),
+                    5 => {
+                        f.history[effect]["bytes"] = json!(2);
+                        f.history[effect]["address"] = json!(4099);
+                    }
+                    6 => f.history[effect]["address"] = json!(8388608),
+                    7 => f.history[effect]["value"] = json!(256),
+                    8 => {
+                        f.history[effect]["kind"] = json!(1);
+                        f.history[effect]["address"] = json!(0);
+                        f.history[effect]["value"] = json!(0);
+                    }
+                    _ => f.history[effect]["extra_certificate"] = json!(true),
+                }
+                assert!(inspect(&f).is_err(), "variant {variant}");
+            }
+            let report = inspect(&original).unwrap();
+            let mut deleted = storage_source(false, 0);
+            deleted.history.remove(effect);
+            renumber(&mut deleted.history);
+            assert!(
+                inspect_sp_pi_fetch_lineage(
+                    Cursor::new(wire(&deleted.history)),
+                    Cursor::new(wire(&deleted.fetches)),
+                    &deleted.rom,
+                    &deleted.firmware,
+                    &sha256(&wire(&original.history)),
+                    &sha256(&wire(&original.fetches))
+                )
+                .is_err()
+            );
+            let mut forged = report.clone();
+            forged.samples[0].bytes[3] = forged.samples[0].bytes[2];
+            assert!(verify(&forged, &original).is_err());
+        }
+
+        #[test]
+        fn completed_pi_wrapper_writers_remain_distinct_from_earlier_storage_primitives() {
+            let mut f = source(false);
+            f.history[0]["format"] = json!(sp_history::STORAGE_FORMAT);
+            f.history[0]["policy"] = json!(sp_history::STORAGE_POLICY);
+            let mut rows = Vec::new();
+            for r in f.history {
+                if r["record"] == "scalar" && r["pi"]["transfer"] == 1 {
+                    let mut effect = row(json!({"record":"storage_effect","kind":0,
+                        "address":r["aligned_address"],"bytes":r["bytes"],"value":r["value"]}));
+                    effect["pc"] = r["pc"].clone();
+                    rows.push(effect);
+                }
+                rows.push(r);
+            }
+            f.history = rows;
+            renumber(&mut f.history);
+            let report = inspect(&f).unwrap();
+            assert_eq!(report.fully_attributed_fetches, 1);
+            let writers: Vec<_> = f
+                .history
+                .iter()
+                .filter(|r| r["record"] == "scalar" && r["pi"]["transfer"] == 1)
+                .map(|r| r["ordinal"].as_u64().unwrap())
+                .collect();
+            for (n, parent) in report.samples[0].bytes.iter().enumerate() {
+                assert_eq!(parent.unwrap().writer_ordinal, writers[n]);
+            }
+            verify(&report, &f).unwrap();
+        }
+
         #[test]
         fn raw_sp_clock_composes_rom_writers_with_uncached_and_full_line_consumption() {
             for cached in [false, true] {

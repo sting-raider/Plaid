@@ -1,5 +1,15 @@
 # Status
 
+Boot history v5 now composes ordinary storage effects with the existing raw
+PI/SP/fetch clock. Equal/scalar writes revoke affected RAM parents, whole backing
+fill/load cuts clear them, and surviving I-cache ancestry remains separate.
+The supplied twenty-million prefix retains69,513,732 records/3,027,381 additional
+effects with unchanged complete paired fetch/checkpoint/repeat controls. Complete
+canonical/independent replay agrees on 2,472,203 full PI-byte fetch chains; legacy
+history bytes and the nested PI/queue projection stay exact. V3
+contracts stay compatible; unsupported restore/retirement reject. Source/census/
+lifetime/whole-ROM/native remain OPEN and every broad proof flag stays false.
+
 Optional storage-level sensing now reaches ordinary/equal/base-class/EBus/
 translated writes below identity-only RAM callbacks, with explicit fill/load/
 restore/retirement cuts. Spike086's25 effects/20 complete RAM+hidden checkpoints
