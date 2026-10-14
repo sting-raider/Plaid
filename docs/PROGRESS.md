@@ -18,7 +18,7 @@ Last progress-data update: **2026-10-15**.
 | --- | --- | --- |
 | **20,000,000** Observed CPU fetches | Retained commercial-ROM prefix | [Receipt / status](../research/integration-receipts/20261014-storage-writer-fetch-primary.md) |
 | **62** OoT whole-ROM blockers | Local OoT baseline; 44 indirect sites | [Receipt / status](../research/integration-receipts/20261012-discovery-solve-primary-composition.md) |
-| **2,472,203** Full PI-byte fetch chains | Canonical + independent replay agree | [Receipt / status](STATUS.md) |
+| **2,472,203** Full PI-byte fetch chains | Canonical + independent replay agree | [Receipt / status](STATUS-LOG.md) |
 | **0** Commercial ROMs CLOSED | Whole-ROM and native gates remain open | [Receipt / status](STATUS.md) |
 
 These are finite observations, not exhaustive execution coverage or a CLOSED certificate.
@@ -89,16 +89,16 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 
 | Milestone | State |
 | --- | --- |
-| Architecture-neutral IR | ⬜ open |
-| Integer MIPS lowering | ⬜ open |
-| x86-64 object emission | ⬜ open |
-| ARM64 object emission | ⬜ open |
-| Native direct calls | ⬜ open |
-| Finite native indirect dispatch | ⬜ open |
-| Native differential verifier | ⬜ open |
-| Link/package model | ⬜ open |
+| MIPS -> C lowering (ADR-0126) | 🟨 partial |
+| Integer MIPS lowering | 🟨 partial |
+| x86-64 host build via C | 🟨 partial |
+| ARM64 host build via C | ⬜ open |
+| Return closure / function-level lowering | ⬜ open |
+| Finite native indirect dispatch | 🟨 partial |
+| Synthetic native differential verifier | ✅ verified |
+| Link with N64ModernRuntime | ⬜ open |
 
-**Remaining:** IR, verified lowering, host emission and native linking.
+**Remaining:** Return closure, function-level C, wider ISA, runtime link.
 
 ## Native Runtime
 
@@ -113,7 +113,7 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Renderer integration | ⬜ open |
 | Native launch/cache packaging | ⬜ open |
 
-**Remaining:** Memory, timing, devices, rendering and native RSP execution.
+**Remaining:** Reuse N64ModernRuntime + RT64 (ADR-0126) and link lowered code.
 
 ## Compatibility
 
@@ -125,7 +125,7 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | n64-systemtest research corpus | 🟨 partial |
 | First commercial ROM mapped | ⬜ open |
 | First commercial ROM CLOSED | ⬜ open |
-| First native synthetic executable | ⬜ open |
+| First native synthetic executable | ✅ verified |
 | First native commercial boot | ⬜ open |
 | First native gameplay | ⬜ open |
 | Representative 25-game set | ⬜ open |
@@ -137,4 +137,4 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 
 The status cells describe the maturity of explicitly named milestones, not title compatibility or the probability that an arbitrary ROM will work. A `partial` milestone stays partial until its remaining proof obligations are closed. Research branches do not turn a cell green until the relevant result is integrated and verified on `main`.
 
-The authoritative detailed engineering state remains [`docs/STATUS.md`](STATUS.md) and [`docs/NEXT.md`](NEXT.md).
+The current engineering state is [`docs/STATUS.md`](STATUS.md) (history in [`STATUS-LOG.md`](STATUS-LOG.md)) and [`docs/NEXT.md`](NEXT.md).

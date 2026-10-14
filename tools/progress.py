@@ -176,7 +176,7 @@ def render_details(data: dict) -> str:
         "its remaining proof obligations are closed. Research branches do not turn a cell green until "
         "the relevant result is integrated and verified on `main`.",
         "",
-        "The authoritative detailed engineering state remains [`docs/STATUS.md`](STATUS.md) and "
+        "The current engineering state is [`docs/STATUS.md`](STATUS.md) (history in [`STATUS-LOG.md`](STATUS-LOG.md)) and "
         "[`docs/NEXT.md`](NEXT.md).",
         "",
     ]

@@ -25,7 +25,7 @@ N64 compatibility runtime
 native host application
 ```
 
-> **Current status:** the discovery/provenance/closure foundation is active and increasingly productionized. The native AOT compiler and native runtime have **not** been implemented yet. No commercial ROM has reached `CLOSED`, and `native_complete` remains `false`.
+> **Current status:** the discovery/provenance/closure foundation is substantial. Native lowering (MIPS -> C -> host code) works for synthetic `CLOSED` programs and matches the pinned ares interpreter exactly; there is no runtime yet. No commercial ROM has reached `CLOSED`, and `native_complete` remains `false`. See [`docs/STATUS.md`](docs/STATUS.md) and the milestone plan in [`docs/NEXT.md`](docs/NEXT.md).
 
 ## Progress
 
@@ -48,8 +48,8 @@ The chart is generated from [`docs/progress.json`](docs/progress.json). See [`do
 | **Discovery & ProgramMap** | strong foundation | ROM normalization, deterministic ProgramMap, dynamic trace import, direct CFG recovery, evidence merge/conflict handling, bounded indirect proofs | broader jump-table proof, known-library evidence, commercial-ROM validation |
 | **Executable provenance** | active / partial | physical/cache fetch context, PI/SP/PIF source histories, CPU copy/transform receipts, RSP/CPU mutation evidence, bounded cache/TLB/root provenance | complete mutation census, general lifetimes, full transform/relocation coverage |
 | **Closed-world proof** | active / partial | fail-closed solver, source rechecking, static identity hardening, bounded indirect closure, root/TLB/cache proof primitives | complete root census, executable lifetimes, RSP universe closure, first ROM reaching `CLOSED` |
-| **Native AOT compiler** | open | design constraints only | IR, MIPS lowering, x86-64/ARM64 emission, native dispatch/linking |
-| **Native runtime** | open | architecture boundary only | memory/MMIO, timing/interrupts, input, saves, audio, RSP, rendering, packaging |
+| **Native AOT compiler** | started | `plaid-lower`: CLOSED map -> C with proven-target dispatch and a store guard; differential-tested against ares (spike096) | function-level lowering, return closure, 64-bit/unaligned/COP0/COP1 instructions |
+| **Native runtime** | planned reuse | decision to reuse N64ModernRuntime + RT64 (ADR-0126) | integration with lowered code, packaging |
 | **Compatibility** | research only | synthetic corpus plus pinned Mupen/ares differential oracles | first commercial ROM mapped/closed, native boot/gameplay campaigns |
 
 The important distinction is that Plaid has made substantial progress on **proving what code exists and where it came from**, while the actual native code generator/runtime are intentionally deferred until that proof system is useful enough.

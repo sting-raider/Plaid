@@ -1,51 +1,49 @@
 # Next
 
-## Direction reset (2026-10-15, ADR-0125) — read this first
+## Milestone plan (ADR-0125, ADR-0126) — read this first
 
-This section overrides the per-spike "continue X" paragraphs below wherever they
-conflict. Those paragraphs remain as the historical record of open obligations;
-they are not a queue to work through in order.
+This section overrides the per-cluster continuation notes below wherever they
+conflict. Those notes record open obligations; they are not a work queue.
 
-Diagnosis: spikes 080-095 each extended RSP/SP/DMEM/IMEM byte-provenance by
-one more composition step. Every step was correct and fail-closed, but none moved
-the first real ROM closer to `CLOSED`: the user-supplied Ocarina of Time baseline
-has stood at 293 blocks, 62 whole-ROM blockers and 44 unresolved indirect sites
-since 2026-10-12 (receipt 20261012-discovery-solve-primary-composition). RSP-
-computed bytes that later execute on the CPU are rare in commercial games, so
-that lane has no current consumer. Meanwhile the decompression (PR #28), runtime
-relocation (PR #31) and n64sym signature (PR #50) drafts — which commercial
-code-loading actually depends on — sit unmerged.
+Plaid's novelty is automatic discovery and closure proof from an untouched ROM.
+Below that, reuse: lower through C (`crates/plaid-lower`), then link generated
+code with N64ModernRuntime (GPL-3.0, so linked game apps are GPL-3.0) and RT64.
+Every claim in issue #4 must name the milestone it advances and report the
+effect in its receipt.
 
-New rule: **work is pulled by a named consumer.** Every claim in issue #4 must
-name which of the following it advances, and the receipt must report the change:
+| # | Milestone | Done when | State |
+| --- | --- | --- | --- |
+| 1 | Synthetic ROM -> C -> native | spike096 programs match pinned ares exactly; self-modifying store faults | **done** (spike096) |
+| 2 | SM64 discovery recall | >= 99% of real functions found, scored locally against a decomp symbol map used only as an oracle | open (needs a user-supplied SM64 ROM in `target/local-inputs/`) |
+| 3 | SM64 closed under declared assumptions | solver CLOSED in an explicit assumption scope; every assumption listed and checked | open |
+| 4 | SM64 boots natively to title | lowered code linked with N64ModernRuntime + RT64; no interpreter linked | open |
+| 5 | Retire assumptions; OoT | assumptions discharged one by one; OoT via Yaz0 (PR #28) and relocation (PR #31) | open |
 
-1. **OoT blocker count (primary metric).** Re-run the local OoT discovery solve
-   and record blocks / whole-ROM blockers / unresolved indirect sites in each
-   receipt that could affect them. Pick the next cluster from the largest
-   remaining blocker class, not from the next provenance edge. Expected order:
-   boot-segment and `code`-segment discovery from actual PI DMA, then Yaz0
-   decompression lineage (revive PR #28 onto current `main`), then overlay
-   relocation (revive PR #31), then function-pointer/jump-table closure for the
-   remaining indirect sites. Keep ROM bytes, maps and traces local and ignored.
-2. **Native vertical slice (gate item 7 below is relaxed for this scope only).**
-   Narrow native lowering is now permitted for *synthetic, already-CLOSED*
-   programs: a tiny integer MIPS subset lowered to host code, a minimal memory
-   model, and differential tests against the pinned ares oracle (register state,
-   PC/control flow, memory writes, exceptions). Its purpose is to learn which
-   proof facts the compiler actually consumes. No interpreter or JIT fallback may
-   be linked; `native_complete` stays `false`; commercial-ROM lowering stays
-   deferred until a commercial scope is `CLOSED`.
-3. **Known-library evidence.** Revive PR #50 (n64sym) as provenance-bearing
-   candidate evidence; it must never auto-promote to proof.
+Next concrete steps, in order:
 
-Paused until a consumer above needs them: further RSP scalar/vector producer,
-task/reset-root, DMEM/IMEM lane and reverse-DMA composition beyond spike095.
-Resume one only when an OoT blocker or the native slice is shown to require it,
-and cite that blocker in the claim.
+1. **Return closure.** Milestone 1 showed that `jr $ra` has no closure proof,
+   so every program with a function return is OPEN. Add a call/return proof:
+   a `jr $ra` whose `$ra` provably still holds the link written by the calls
+   that reach it closes over those calls' return continuations. Then extend
+   spike096 with nested calls and differential-test it.
+2. **Function-level lowering.** Emit one C function per proven function
+   (calls become C calls, returns become `return`) as N64Recomp does, which
+   N64ModernRuntime expects. Keep fail-closed dispatch for anything unproven.
+3. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
+   boot-segment discovery from the real entry point, then a local-only recall
+   score against the decomp map. Keep ROM bytes, maps and traces ignored.
+4. **Lowered subset growth** pulled by SM64: 64-bit integer ops, LWL/LWR/
+   SWL/SWR, likely branches, then COP0/COP1 as the runtime boundary requires.
+5. **Known-library evidence** (PR #50 n64sym) as candidate evidence for libultra
+   boundaries; never auto-promoted to proof.
 
-Unchanged: every fail-closed invariant in AGENTS.md, exact-head CAS, no ROMs or
-game-derived bytes in git, no GitHub Actions, and all broad proof flags `false`
-until the proofs exist.
+Paused until a milestone needs them: RSP/SP lane, producer, task-root and
+reverse-DMA provenance beyond spike095.
+
+Unchanged: every AGENTS.md invariant, fail-closed semantics, exact-head CAS,
+no ROMs or game-derived bytes in git, no GitHub Actions, and `native_complete`
+plus every broad certification flag `false` until proven. Assumption scopes are
+added as new scopes; existing scopes are never weakened.
 
 ## Historical per-cluster continuation notes
 
@@ -324,8 +322,8 @@ need. No new research lane. See `research/integration-harvest-20261011.md`.
    size/cost before making scalability claims.
 7. Begin tiny native integer lowering only after discovery beyond the current
    synthetic scope is demonstrably useful, with reference differential tests.
-   ADR-0125 exception: a synthetic-only native vertical slice is permitted now
-   (see "Direction reset" at the top of this file).
+   ADR-0125/0126: the synthetic native slice is done (spike096); see the
+   milestone plan at the top of this file.
 
 Commercial-ROM native lowering remains deferred until a commercial scope is
 CLOSED; the ADR-0125 synthetic vertical slice is the only exception.
