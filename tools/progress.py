@@ -466,8 +466,10 @@ def render_coverage_svg(coverage: dict, data: dict) -> str:
     state = {"verified": "done", "partial": "partial", "open": "open"}
     ms = {a["name"]: [(m["name"], state[m["state"]]) for m in a["milestones"]] for a in data["areas"]}
     counts = milestone_counts(data)
-    width, height, gap, top = 1220, 392, 20, 34
-    map_w, map_h = (width - gap) / 2, height - top
+    # stacked, one full-width map per row, so labels stay readable at README width
+    width, map_h, top, gap = 840, 300, 30, 26
+    map_w, second = width, top + map_h + gap + top
+    height = second + map_h
     out = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" '
         f'height="{height}" role="img" aria-label="Plaid coverage maps">',
@@ -477,12 +479,12 @@ def render_coverage_svg(coverage: dict, data: dict) -> str:
         '@media (prefers-color-scheme:dark){.title{fill:#e6edf3}}</style>',
         f'<text x="2" y="22" class="title">VR4300 instructions*: '
         f'{pct(coverage["lowered"], coverage["decoded"])} ({coverage["lowered"]}/{coverage["decoded"]})</text>',
-        f'<text x="{map_w + gap + 2:.0f}" y="22" class="title">Milestones*: '
+        f'<text x="2" y="{second - 8}" class="title">Milestones*: '
         f'{counts["milestones_verified"]} verified, {counts["milestones_partial"]} partial '
         f'({counts["milestones_declared"]})</text>',
     ]
     out += treemap(isa, 0, top, map_w, map_h)
-    out += treemap(ms, map_w + gap, top, map_w, map_h)
+    out += treemap(ms, 0, second, map_w, map_h)
     out.append("</svg>")
     return "\n".join(out) + "\n"
 
