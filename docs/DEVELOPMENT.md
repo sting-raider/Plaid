@@ -6,6 +6,12 @@ The authoritative engineering state is still [`STATUS.md`](STATUS.md) and [`NEXT
 
 ## Toolchain
 
+Spike091 composes read-bound performed RSP instructions in raw v7. Run its
+consumer/prepare tests and retained reference recheck. Capture with spike057's
+`--history storage-rsp-exec`; the optional `rsp_instruction_fetch_access` recipe
+requires the existing RSP sensor. It records the actual reads once, not extra
+peeks. Read IDs bind performed instructions; unused lookahead stays separate.
+
 Spike090 binds the existing lower DMEM primitive sensor to raw history v6.
 Run its consumer test and retained reference recheck; local discovery accepts
 `--history storage-rsp` through spike057. The new source rejects malformed lanes

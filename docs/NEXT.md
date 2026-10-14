@@ -1,5 +1,12 @@
 # Next
 
+Performed RSP consumption now joins the existing raw PI/RAM/IMEM state through
+exact read receipts (spike091). Continue actual register/data/task producers and
+writer/epoch coverage; a fetched instruction's byte parents do not authenticate
+its operands or close its future target set. Preserve logical PC versus actual
+masked read address, frozen read parents and unperformed lookahead independently.
+RSP hardware consensus, full lifetime and whole-ROM/native closure remain OPEN.
+
 Lower DMEM storage cuts now compose on raw history v6, including equal primitive
 RSP writes that bypass CPU-window wrappers. Continue authenticating actual RSP
 instruction/register/task producers separately; a sink cut supplies no source

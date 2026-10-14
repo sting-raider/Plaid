@@ -2782,3 +2782,17 @@ The supplied100k prefix adds1,008 effects with unchanged complete fetch/checkpoi
 controls and canonical/independent agreement. V3/v5 behavior remains unchanged;
 the new record rejects there. Complete census, other backends, lifecycle, hardware
 and native obligations remain OPEN. ISC shadows/notices stay in ignored builds.
+
+ADR-0124 RSP read/consumption follow-up: bind performed instructions to the exact
+returned IMEM Word read, using original raw-clock IDs and shared SP writer/PI
+parents frozen at that read. Reject the initial PC-only join: the pin preserves
+JR/JALR low PC bits while masking Word addresses. Capture unused lookahead without
+minting an execution occurrence, and retain begin-HALT state when a paired
+instruction is actually performed. No extra guest read or reference object field
+is added; default generated shadows remain exact. The222-event/28-checkpoint
+baseline/disabled/enabled/repeat graph retains32 reads/24 performed instructions
+and8 unused lookaheads. V7 source/optional RSP consumption report fields preserve
+unknown roots and occurrence identity; old paths remain unchanged when unselected.
+The early supplied100k prefix retains its complete legacy body and independent
+consumer result. RSP register/task/hardware/census/lifetime and native obligations
+remain OPEN; no progress milestone or proof flag is promoted.

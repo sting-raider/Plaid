@@ -40,6 +40,16 @@ static void rom_half(u32 offset,u16 value) {
 static void lower_dmem_effect(u32 offset,u32 bytes,u64 value) {
   add({"\"record\":\"rsp_dmem_effect\",\"offset\":",offset,",\"bytes\":",bytes,",\"value\":",value});
 }
+#if defined(PLAID_PI_RSP_CONSUMPTION)
+static u64 performed_rsp_read(u32 address,u32 offset,u32 word) {
+  add({"\"record\":\"rsp_imem_read\",\"address\":",address,",\"offset\":",offset,",\"word\":",word});
+  return events.size();
+}
+static void performed_rsp_instruction(bool begin,u32 pc,u64 read,u32 word,u32 next,bool halted) {
+  add({"\"record\":\"rsp_instruction\",\"begin\":",begin ? "true" : "false",",\"rsp_pc\":",pc,
+    ",\"read_ordinal\":",read,",\"word\":",word,",\"next_pc\":",next,",\"halted\":",halted ? "true" : "false"});
+}
+#endif
 #endif
 static void sp_word(bool write,u32 address,u32 bank,u32 offset,u32 value,bool cpuOrigin) {
   add({"\"record\":\"sp_word\",\"write\":",write ? "true" : "false",",\"address\":",address,
@@ -80,6 +90,9 @@ int main(int argc,char** argv) {
     plaidSpWordObserver=sp_word;plaidSpDmaStoreObserver=sp_store;
 #if defined(PLAID_PI_DMEM_CUT)
     plaidRspDmemObserver=lower_dmem_effect;
+#if defined(PLAID_PI_RSP_CONSUMPTION)
+    plaidRspImemReadObserver=performed_rsp_read;plaidRspInstructionFetchObserver=performed_rsp_instruction;
+#endif
 #endif
 #endif
   }
@@ -154,6 +167,28 @@ int main(int argc,char** argv) {
       assert(cpu.ipu.r[16].u64==7);snapshot("dmem_consumed");
       cpu.ipu.r[16].u64=0;cpu.pipeline.setPc(0xffffffffa4001000ull);cpu.instruction();
       assert(cpu.ipu.r[16].u64==7);snapshot("imem_consumed");
+#if defined(PLAID_PI_RSP_CONSUMPTION)
+      // Execute the installed PI words; the explicit BREAK seed is an opaque root.
+      rsp.imem.write<Word>(8,0x0000000d);rsp.ipu.r[16].u32=0;
+      rsp.pipeline={};rsp.pipeline.singleIssue=true;
+      rsp.branch.setPc(0);rsp.ipu.pc=0;rsp.status.halted=0;
+      for(u32 guard=0;guard<8 && !rsp.status.halted;guard++) rsp.instruction();
+      assert(rsp.status.halted && rsp.ipu.r[16].u32==7);
+      snapshot("rsp_imem_consumed");
+      // The pin retains JR low PC bits while the actual Word read masks them.
+      rsp.imem.write<Word>(0x300,0x00200008);rsp.imem.write<Word>(0x304,0);
+      rsp.ipu.r[1].u32=3;rsp.ipu.r[16].u32=0;
+      rsp.pipeline={};rsp.branch.setPc(0x300);rsp.ipu.pc=0x300;rsp.status.halted=0;
+      for(u32 guard=0;guard<16 && !rsp.status.halted;guard++) rsp.instruction();
+      assert(rsp.status.halted && rsp.ipu.r[16].u32==7 && rsp.ipu.pc==15);
+      snapshot("rsp_unaligned_consumed");
+      // A paired VNOP is performed after MTC0 sets HALT in the same batch.
+      rsp.imem.write<Word>(0x400,0x40822000);rsp.imem.write<Word>(0x404,0x4a000037);
+      rsp.ipu.r[2].u32=2;rsp.pipeline={};rsp.branch.setPc(0x400);rsp.ipu.pc=0x400;rsp.status.halted=0;
+      rsp.instruction();
+      assert(rsp.status.halted && rsp.ipu.pc==0x408);
+      snapshot("rsp_halt_dual_consumed");
+#endif
 #endif
 #endif
     } else assert(ri.io.error);
@@ -165,6 +200,9 @@ int main(int argc,char** argv) {
   plaidSpWordObserver=nullptr;plaidSpDmaStoreObserver=nullptr;
 #if defined(PLAID_PI_DMEM_CUT)
   plaidRspDmemObserver=nullptr;
+#if defined(PLAID_PI_RSP_CONSUMPTION)
+  plaidRspImemReadObserver=nullptr;plaidRspInstructionFetchObserver=nullptr;
+#endif
 #endif
 #endif
   if(traced) {pi.detach(observer);pi.attach(cartridge.romDevice,0);}
