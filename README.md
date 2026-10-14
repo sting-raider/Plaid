@@ -29,15 +29,17 @@ native host application
 
 ## Progress
 
-[![Plaid progress map](docs/progress.svg)](docs/PROGRESS.md)
+[![Plaid engineering progress atlas](docs/progress.svg)](docs/PROGRESS.md)
 
-The map tracks **milestone maturity**, not a single overall completion percentage.
+The atlas shows every tracked milestone, each subsystem's remaining work, and retained evidence from the supplied commercial-ROM prefix. It includes the latest integrated RAM-storage, PI/SP/CPU, DMEM, exact RSP-read, cache and mapping compositions.
 
-- **Green** — verified and integrated on `main` for the named bounded milestone.
-- **Amber** — implemented or experimentally supported, but important proof/coverage remains.
-- **Gray** — not implemented or not yet demonstrated.
+- **Mint / DONE** — verified and integrated on `main` for the named bounded milestone.
+- **Amber / PARTIAL** — implemented or evidenced, with proof or coverage still incomplete.
+- **Slate / OPEN** — not implemented or not yet demonstrated.
 
-The detailed source of truth is [`docs/progress.json`](docs/progress.json), with the generated milestone table in [`docs/PROGRESS.md`](docs/PROGRESS.md).
+Counts describe milestone maturity, with different scopes and effort. They are **not an overall completion percentage**. The 20-million-fetch prefix is finite evidence; the first commercial `CLOSED` scope, whole-ROM closure and native gameplay remain open.
+
+The chart is generated from [`docs/progress.json`](docs/progress.json). See [`docs/PROGRESS.md`](docs/PROGRESS.md) for individual states and evidence sources.
 
 ## Where the project actually stands
 

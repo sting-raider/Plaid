@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-11",
+  "updated": "2026-10-14",
   "legend": {
     "verified": "Verified and integrated on main",
     "partial": "Implemented or evidenced, but proof/coverage is incomplete",
@@ -20,7 +20,8 @@
         {"name": "Jump/pointer-table recovery", "state": "partial"},
         {"name": "Known-library/signature evidence", "state": "open"},
         {"name": "Commercial-ROM map validation", "state": "open"}
-      ]
+      ],
+      "remaining": "Broader indirect targets and a complete commercial-ROM map."
     },
     {
       "name": "Executable Provenance",
@@ -29,13 +30,21 @@
         {"name": "I-cache snapshots/fill outcomes", "state": "verified"},
         {"name": "PI request/queue/source history", "state": "verified"},
         {"name": "SP/PIF backing witnesses", "state": "verified"},
+        {"name": "Bounded original-clock RAM mutation cuts", "state": "verified"},
+        {"name": "Bounded PI primitive-to-writer composition", "state": "verified"},
+        {"name": "Bounded PI / SP DMA / CPU consumption chain", "state": "verified"},
+        {"name": "Bounded lower-DMEM ancestry revocation", "state": "verified"},
+        {"name": "Exact IMEM-read / performed-RSP receipts", "state": "verified"},
+        {"name": "Controlled D-cache export / executable chain", "state": "verified"},
+        {"name": "Controlled mapping / cache / exception chain", "state": "verified"},
         {"name": "CPU executable-store sensing", "state": "partial"},
         {"name": "CPU copy/transform lineage", "state": "partial"},
         {"name": "RSP writer/dataflow lineage", "state": "partial"},
         {"name": "Cache writeback/restore lineage", "state": "partial"},
         {"name": "Decompression/relocation lineage", "state": "partial"},
         {"name": "Complete mutation census", "state": "open"}
-      ]
+      ],
+      "remaining": "Complete writer census, producer ancestry and continuous lifetimes."
     },
     {
       "name": "Closed-World Proof",
@@ -50,7 +59,8 @@
         {"name": "Overlay/executable lifetimes", "state": "partial"},
         {"name": "RSP executable-universe proof", "state": "partial"},
         {"name": "First ROM reaches CLOSED", "state": "open"}
-      ]
+      ],
+      "remaining": "Compose exhaustive roots, targets and lifetimes into a CLOSED scope."
     },
     {
       "name": "Native AOT Compiler",
@@ -63,7 +73,8 @@
         {"name": "Finite native indirect dispatch", "state": "open"},
         {"name": "Native differential verifier", "state": "open"},
         {"name": "Link/package model", "state": "open"}
-      ]
+      ],
+      "remaining": "IR, verified lowering, host emission and native linking."
     },
     {
       "name": "Native Runtime",
@@ -76,13 +87,15 @@
         {"name": "RSP runtime/native path", "state": "open"},
         {"name": "Renderer integration", "state": "open"},
         {"name": "Native launch/cache packaging", "state": "open"}
-      ]
+      ],
+      "remaining": "Memory, timing, devices, rendering and native RSP execution."
     },
     {
       "name": "Compatibility",
       "milestones": [
         {"name": "Synthetic discovery corpus", "state": "verified"},
         {"name": "Mupen/ares differential oracles", "state": "verified"},
+        {"name": "20M-fetch commercial-prefix replay", "state": "verified"},
         {"name": "n64-systemtest research corpus", "state": "partial"},
         {"name": "First commercial ROM mapped", "state": "open"},
         {"name": "First commercial ROM CLOSED", "state": "open"},
@@ -91,7 +104,34 @@
         {"name": "First native gameplay", "state": "open"},
         {"name": "Representative 25-game set", "state": "open"},
         {"name": "100-game campaign", "state": "open"}
-      ]
+      ],
+      "remaining": "First CLOSED ROM, native boot and reproducible gameplay."
+    }
+  ],
+  "evidence": [
+    {
+      "value": "20,000,000",
+      "label": "Observed CPU fetches",
+      "detail": "Retained commercial-ROM prefix",
+      "source": "research/integration-receipts/20261014-storage-writer-fetch-primary.md"
+    },
+    {
+      "value": "69,513,732",
+      "label": "Ordered history records",
+      "detail": "Includes 3,027,381 storage effects",
+      "source": "docs/STATUS.md"
+    },
+    {
+      "value": "2,472,203",
+      "label": "Full PI-byte fetch chains",
+      "detail": "Canonical + independent replay agree",
+      "source": "docs/STATUS.md"
+    },
+    {
+      "value": "0",
+      "label": "Commercial ROMs CLOSED",
+      "detail": "Whole-ROM and native gates remain open",
+      "source": "docs/STATUS.md"
     }
   ]
 }
