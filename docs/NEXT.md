@@ -24,10 +24,13 @@ Next concrete steps, in order:
 1. Done: return closure and function-level lowering (ADR-0127). Calls are C
    calls; every return checks `$ra` against its call's continuation. On OoT,
    43 of the 44 unresolved indirect sites are now certified returns.
-2. **Real code under the assumption scope.** Solve OoT boot code under
-   `DeclaredStaticImagesGuardedRam` and turn its blocker list into the next
-   lowering and scope work (unsupported instructions, the remaining indirect
-   site, DMA).
+2. Done: `plaid solve <rom> <map> --guarded-ram` and the 64-bit integer
+   subset (ADR-0128). OoT guarded-scope blockers: 143 -> 82.
+   **Next: the runtime boundary.** The remaining OoT blockers are libultra
+   system code (COP0 interrupt/exception handling, FPU context save, `CACHE`,
+   compiler `BREAK` traps). Decide how identified libultra functions become
+   N64ModernRuntime calls instead of lowered code (N64Recomp's model), with
+   identification as evidence (PR #50 n64sym), never as proof.
 3. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
    boot-segment discovery from the real entry point, then a local-only recall
    score against the decomp map. Keep ROM bytes, maps and traces ignored.

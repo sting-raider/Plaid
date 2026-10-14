@@ -131,12 +131,17 @@ fn guarded_ram_scope_admits_data_access_only_with_its_explicit_assumption() {
     let guarded = solve(&d.map, &[i], Scope::DeclaredStaticImagesGuardedRam).unwrap();
     assert_eq!(guarded.status, ClosureStatus::Closed);
     assert!(!guarded.native_complete);
-    assert_eq!(guarded.assumptions.len(), base.assumptions.len() + 1);
+    assert_eq!(guarded.assumptions.len(), base.assumptions.len() + 2);
     assert!(
         guarded
             .assumptions
-            .last()
-            .unwrap()
-            .contains("checks every store")
+            .iter()
+            .any(|a| a.contains("never overflow"))
+    );
+    assert!(
+        guarded
+            .assumptions
+            .iter()
+            .any(|a| a.contains("checks every store"))
     );
 }

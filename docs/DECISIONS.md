@@ -2944,3 +2944,26 @@ interpreter exactly, and a corrupted-`$ra` return faults 5 natively. On the
 local OoT conditional baseline, 43 of the 44 unresolved indirect sites are
 returns that now carry certificates; one non-return site remains. The
 whole-ROM blocker count is unchanged (62), as intended for that scope.
+
+## ADR-0128: 64-bit integer subset and checked overflow traps
+
+Context: solving the OoT conditional window under
+`DeclaredStaticImagesGuardedRam` (new `plaid solve <rom> <map> --guarded-ram`)
+gave 143 blockers, 130 of them instructions outside the scope, led by
+`LD`/`SD` and the doubleword shifts, multiplies and divides that libultra and
+GCC emit.
+
+Decision: the guarded scope also admits the VR4300 doubleword integer ops
+(`DADD DADDU DSUB DSUBU DADDI DADDIU DSLL DSRL DSRA DSLL32 DSRL32 DSRA32 DSLLV
+DSRLV DSRAV DMULT DMULTU DDIV DDIVU LD SD`) and the overflow-trapping
+`ADD ADDI SUB`, under one more explicit assumption: trapping adds never
+overflow. `plaid-lower` lowers them with ares's exact semantics (128-bit
+products, `INT64_MIN / -1`, divide-by-zero results) and checks each trapping
+add, aborting with fault 6 rather than raising a guest exception. Branch-likely
+instructions, already admitted, now lower with the delay slot executed only
+when taken.
+
+Result: spike096's new `wide` program matches pinned ares exactly, and an
+overflowing `addi` faults 6 natively. OoT guarded-scope blockers fall from 143
+to 82. The rest are libultra system code (COP0, FPU context save, `CACHE`,
+compiler `BREAK` traps), which is the runtime boundary.
