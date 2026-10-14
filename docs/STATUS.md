@@ -1,5 +1,14 @@
 # Status
 
+Raw v11 carries computed SP writers through exact reverse-SP-DMA source reads
+and their completed identity-RAM sinks into later CPU executable reads and fills.
+Reads freeze SP parents; later RAM effects, including equal values, revoke them.
+Computed bytes never become PI/ROM origins. Pinned ares controls and the
+independent replay agree (spike095). Under ADR-0125 this RSP/SP lane is now
+paused: priorities are pulled by the local OoT blocker count (62 whole-ROM
+blockers, 44 unresolved indirect sites) and a synthetic native vertical slice.
+All broad proof flags remain false.
+
 Raw v10 now binds scalar SB/SH/SW method scopes and exact completed DMEM
 lanes to performed instructions, rooted operands and fresh shared SP writer IDs.
 CPU executable backing can select these writers; no computed value is relabelled

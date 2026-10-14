@@ -50,6 +50,17 @@ static void scalar_effect(bool write,u32 address,u32 bytes,u32 device,u64 value)
   add({"\"record\":\"scalar\",\"write\":",write ? "true" : "false",
     ",\"address\":",address,",\"bytes\":",bytes,",\"device\":",device,",\"value\":",value});
 }
+#if defined(PLAID_PI_SP_EGRESS)
+static u64 sp_egress_read(u32 dram,u32 bank,u32 offset,u32 bytes,u64 value) {
+  add({"\"record\":\"sp_dma_egress_read\",\"dram\":",dram,",\"bank\":",bank,
+    ",\"offset\":",offset,",\"bytes\":",bytes,",\"value\":",value});
+  return events.size();
+}
+static void sp_egress_store(u64 read) {
+  u64 writer=events.size();
+  add({"\"record\":\"sp_dma_egress_store\",\"read_ordinal\":",read,",\"write_ordinal\":",writer});
+}
+#endif
 static void rom_half(u32 offset,u16 value) {
   add({"\"record\":\"rom_half\",\"offset\":",offset,",\"value\":",value});
 }
@@ -145,6 +156,9 @@ int main(int argc,char** argv) {
     pi.detach(cartridge.romDevice);pi.attach(observer,0);
     Storage::plaidMemoryMutationObserver=storage_effect;
     plaidPiDmaObserver=pi_effect;plaidRdramScalarObserver=scalar_effect;plaidRomHalfObserver=rom_half;
+#if defined(PLAID_PI_SP_EGRESS)
+    plaidSpDmaEgressReadObserver=sp_egress_read;plaidSpDmaEgressStoreObserver=sp_egress_store;
+#endif
 #if defined(PLAID_PI_SP_CONSUMPTION)
     plaidSpWordObserver=sp_word;plaidSpDmaStoreObserver=sp_store;
 #if defined(PLAID_PI_DMEM_CUT)
@@ -228,6 +242,18 @@ int main(int argc,char** argv) {
       for(u32 guard=0;guard<8 && !rsp.status.halted;guard++) rsp.instruction();
       assert(rsp.status.halted && rsp.dmem.read<Word>(0)==piProgramWord && rsp.imem.read<Word>(0)==piProgramWord);
       snapshot("rsp_equal_store");
+#if defined(PLAID_PI_SP_EGRESS)
+      rsp.writeWord(0x04040000,0,cpu);rsp.writeWord(0x04040004,0x3000,cpu);
+      rsp.writeWord(0x0404000c,0,cpu);rsp.dmaTransferStep();
+      assert(!rsp.dma.busy.any() && rdram.ram.ares::Nintendo64::Memory::Writable::read<Word>(0x3000)==piProgramWord);
+      snapshot("rsp_dmem_exported");
+      cpu.ipu.r[16].u64=0;cpu.pipeline.setPc(0xffffffffa0003000ull);cpu.instruction();
+      assert(cpu.ipu.r[16].u64==7);snapshot("rsp_dmem_export_consumed");
+      rsp.writeWord(0x04040000,0x1000,cpu);rsp.writeWord(0x04040004,0x3020,cpu);
+      rsp.writeWord(0x0404000c,0,cpu);rsp.dmaTransferStep();
+      assert(!rsp.dma.busy.any() && rdram.ram.ares::Nintendo64::Memory::Writable::read<Word>(0x3020)==piProgramWord);
+      snapshot("imem_exported");
+#endif
       cpu.ipu.r[16].u64=0;cpu.pipeline.setPc(0xffffffffa4000000ull);cpu.instruction();
       assert(cpu.ipu.r[16].u64==7);snapshot("dmem_consumed");
       cpu.ipu.r[16].u64=0;cpu.pipeline.setPc(0xffffffffa4001000ull);cpu.instruction();

@@ -1,5 +1,7 @@
 //! Actual CPU SP backing-read observations and completed normalized stores.
 //! Bank identity is not ultimate byte origin or a certified executable lifetime.
+use crate::raw_sp_dma_egress::Egress;
+pub use crate::raw_sp_dma_egress::{SpDmaEgressReceipt, SpDmaEgressReport};
 use crate::rsp_cpu_imem::{ScalarRspProducerReport, scalar::ScalarRspProducers};
 use crate::{fetch, history, pi_history, pi_queue_history as queue, program::*, rom::CanonicalRom};
 use serde::{Deserialize, Serialize};
@@ -24,6 +26,9 @@ pub const IMEM_STORAGE_POLICY: &str =
     "observed_storage_dmem_imem_and_rsp_consumption_with_pi_queue_sp_backing";
 
 pub const RSP_STORE_FORMAT: &str = "plaid-ares-access-history-v10";
+pub const SP_EGRESS_FORMAT: &str = "plaid-ares-access-history-v11";
+pub const SP_EGRESS_POLICY: &str =
+    "observed_scalar_rsp_stores_and_exact_reverse_sp_dma_with_pi_queue_sp_backing";
 pub const RSP_STORE_POLICY: &str =
     "observed_instruction_scoped_scalar_rsp_stores_with_rooted_operands_and_pi_queue_sp_backing";
 pub const RSP_OPERAND_FORMAT: &str = "plaid-ares-access-history-v9";
@@ -74,6 +79,8 @@ pub struct SpHistoryReport {
     pub ordered_fetch_backing_sha256: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rsp_scalar_producers: Option<ScalarRspProducerReport>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dma_egress: Option<SpDmaEgressReport>,
     pub mutation_coverage_certified: bool,
     pub executable_lifetime_certified: bool,
     pub native_complete: bool,
@@ -159,6 +166,27 @@ pub(crate) struct WriterLineage {
     ordered: Sha256,
 }
 impl WriterLineage {
+    pub(crate) fn dma_read(
+        &mut self,
+        bank: u32,
+        offset: u32,
+        bytes: u32,
+        value: u64,
+    ) -> Result<Vec<Option<CapturedSpByteWriter>>, String> {
+        require(
+            matches!((bank, bytes), (0, 4) | (1, 8))
+                && offset.is_multiple_of(bytes)
+                && offset.checked_add(bytes).is_some_and(|end| end <= 4096)
+                && (bytes == 8 || value <= u32::MAX as u64),
+            "invalid SP DMA read lanes",
+        )?;
+        if bytes == 4 {
+            return Ok(self.read(bank, offset, value as u32).to_vec());
+        }
+        let mut result = self.read(bank, offset, (value >> 32) as u32).to_vec();
+        result.extend(self.read(bank, offset + 4, value as u32));
+        Ok(result)
+    }
     pub(crate) fn cut(&mut self, bank: u32, offset: u32, bytes: u32) {
         let start = bank as usize * 4096 + offset as usize;
         self.bytes[start..start + bytes as usize].fill(None);
@@ -304,6 +332,23 @@ impl StorageRecord {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum SpRecord {
+    SpDmaEgressRead {
+        ordinal: u64,
+        context: u64,
+        pc: GuestVirtualAddr,
+        dram: PhysicalAddr,
+        bank: u32,
+        offset: u32,
+        bytes: u32,
+        value: u64,
+    },
+    SpDmaEgressStore {
+        ordinal: u64,
+        context: u64,
+        pc: GuestVirtualAddr,
+        read_ordinal: u64,
+        write_ordinal: u64,
+    },
     RspScalarStoreScope {
         ordinal: u64,
         context: u64,
@@ -399,6 +444,18 @@ impl Wire {
     }
     pub(crate) fn identity(&self) -> Option<(u64, u64, GuestVirtualAddr, &'static str)> {
         match self {
+            Self::Sp(SpRecord::SpDmaEgressRead {
+                ordinal,
+                context,
+                pc,
+                ..
+            }) => Some((*ordinal, *context, *pc, "sp_dma_egress_read")),
+            Self::Sp(SpRecord::SpDmaEgressStore {
+                ordinal,
+                context,
+                pc,
+                ..
+            }) => Some((*ordinal, *context, *pc, "sp_dma_egress_store")),
             Self::Sp(SpRecord::RspScalarStoreScope {
                 ordinal,
                 context,
@@ -459,6 +516,15 @@ impl Wire {
     }
     pub(crate) fn renumber(&mut self, next: u64, scope: u64) {
         match self {
+            Self::Sp(SpRecord::SpDmaEgressRead {
+                ordinal, context, ..
+            })
+            | Self::Sp(SpRecord::SpDmaEgressStore {
+                ordinal, context, ..
+            }) => {
+                *ordinal = next;
+                *context = scope;
+            }
             Self::Sp(SpRecord::SpWord {
                 ordinal, context, ..
             })
@@ -545,6 +611,7 @@ struct Projection<H> {
     imem_storage: bool,
     rsp_producers: Option<ScalarRspProducers>,
     scalar_stores: bool,
+    egress: Option<Egress>,
     rsp_active: Option<(GuestVirtualAddr, u32, u64, u32)>,
     rsp_reads: BTreeMap<u64, RspReadReceipt>,
     ended: bool,
@@ -581,6 +648,7 @@ impl<H: BufRead> Projection<H> {
             imem_storage: false,
             rsp_producers: None,
             scalar_stores: false,
+            egress: None,
             rsp_active: None,
             rsp_reads: BTreeMap::new(),
             ended: false,
@@ -626,6 +694,50 @@ impl<H: BufRead> Projection<H> {
     fn sp(&mut self, row: SpRecord) -> Result<(), String> {
         require(!self.copying, "SP row inside buffered PI copy")?;
         match row {
+            SpRecord::SpDmaEgressRead {
+                ordinal,
+                context,
+                pc,
+                dram,
+                bank,
+                offset,
+                bytes,
+                value,
+            } => {
+                require(
+                    self.egress.is_some() && self.active.is_none() && self.rsp_active.is_none(),
+                    "reverse DMA read outside v11/idle scope",
+                )?;
+                self.identity(ordinal, context, pc, "sp_dma_egress_read")?;
+                let writers = self
+                    .lineage
+                    .as_mut()
+                    .unwrap()
+                    .dma_read(bank, offset, bytes, value)?;
+                self.egress.as_mut().unwrap().read(
+                    ordinal, context, pc, dram, bank, offset, bytes, value, writers,
+                )?;
+            }
+            SpRecord::SpDmaEgressStore {
+                ordinal,
+                context,
+                pc,
+                read_ordinal,
+                write_ordinal,
+            } => {
+                require(
+                    self.egress.is_some() && self.active.is_none() && self.rsp_active.is_none(),
+                    "reverse DMA store outside v11/idle scope",
+                )?;
+                self.identity(ordinal, context, pc, "sp_dma_egress_store")?;
+                self.egress.as_mut().unwrap().store(
+                    ordinal,
+                    context,
+                    pc,
+                    read_ordinal,
+                    write_ordinal,
+                )?;
+            }
             SpRecord::RspScalarStoreScope {
                 ordinal,
                 context,
@@ -952,6 +1064,11 @@ impl<H: BufRead> Projection<H> {
     }
     fn legacy(&mut self, mut row: queue::Wire) -> Result<(), String> {
         use history::Record as R;
+        if let Some(egress) = &mut self.egress
+            && let queue::Wire::Legacy(pi_history::Wire::Base(r)) = &row
+        {
+            egress.observe(r);
+        }
         if self.rsp_active.is_none() {
             self.rsp_reads.clear();
         }
@@ -973,7 +1090,15 @@ impl<H: BufRead> Projection<H> {
             ..
         })) = &mut row
         {
-            let scalar_stores = format == RSP_STORE_FORMAT && policy == RSP_STORE_POLICY;
+            let egress = format == SP_EGRESS_FORMAT && policy == SP_EGRESS_POLICY;
+            if egress {
+                self.egress = Some(Egress::default());
+                if self.lineage.is_none() {
+                    self.lineage = Some(WriterLineage::new());
+                }
+            }
+            let scalar_stores =
+                (format == RSP_STORE_FORMAT && policy == RSP_STORE_POLICY) || egress;
             let operands =
                 (format == RSP_OPERAND_FORMAT && policy == RSP_OPERAND_POLICY) || scalar_stores;
             self.scalar_stores = scalar_stores;
@@ -1266,7 +1391,9 @@ fn finish_report<H>(
     projection: queue::PiQueueHistoryReport,
 ) -> Result<SpHistoryReport, String> {
     Ok(SpHistoryReport {
-        format: if stream.scalar_stores {
+        format: if stream.egress.is_some() {
+            "plaid-observed-sp-backing-report-v7"
+        } else if stream.scalar_stores {
             "plaid-observed-sp-backing-report-v6"
         } else if stream.rsp_producers.is_some() {
             "plaid-observed-sp-backing-report-v5"
@@ -1304,6 +1431,7 @@ fn finish_report<H>(
             .rsp_producers
             .map(ScalarRspProducers::finish)
             .transpose()?,
+        dma_egress: stream.egress.map(Egress::finish).transpose()?,
         mutation_coverage_certified: false,
         executable_lifetime_certified: false,
         native_complete: false,

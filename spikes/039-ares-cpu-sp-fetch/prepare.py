@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 
 
-def generate(ref, out):
+def generate(ref, out, egress=False):
     ref, out = Path(ref), Path(out)
     header = (ref/'ares/n64/rsp/rsp.hpp').read_text(encoding='utf-8')
     declarations = '''// Original research callbacks; no reference object fields.
@@ -11,6 +11,12 @@ using PlaidSpWordObserver = void (*)(bool,u32,u32,u32,u32,bool);
 using PlaidSpDmaStoreObserver = void (*)(u32,u32,u32,u32,u64);
 inline PlaidSpWordObserver plaidSpWordObserver = nullptr;
 inline PlaidSpDmaStoreObserver plaidSpDmaStoreObserver = nullptr;
+'''
+    if egress:
+        declarations += '''using PlaidSpDmaEgressReadObserver = u64 (*)(u32,u32,u32,u32,u64);
+using PlaidSpDmaEgressStoreObserver = void (*)(u64);
+inline PlaidSpDmaEgressReadObserver plaidSpDmaEgressReadObserver = nullptr;
+inline PlaidSpDmaEgressStoreObserver plaidSpDmaEgressStoreObserver = nullptr;
 '''
     destination = out/'include/n64/rsp/rsp.hpp'
     destination.parent.mkdir(parents=True,exist_ok=True)
@@ -31,6 +37,23 @@ inline PlaidSpDmaStoreObserver plaidSpDmaStoreObserver = nullptr;
     assert io.count(before)==1;io=io.replace(before,after)
     io_path=out/'rsp_io.cpp';io_path.write_text(io,encoding='utf-8',newline='\n')
     dma=(ref/'ares/n64/rsp/dma.cpp').read_text(encoding='utf-8')
+    if egress:
+        for marker, extra in [
+            ('        u64 data = imem.read<Dual>(dma.current.pbusAddress);',
+             '        u64 plaidRead = plaidSpDmaEgressReadObserver ? plaidSpDmaEgressReadObserver(dma.current.dramAddress,1,dma.current.pbusAddress&0xff8,8,data) : 0;'),
+            ('        u32 dataLo = dmem.read<Word>(dma.current.pbusAddress + 0);',
+             '        u64 plaidReadLo = plaidSpDmaEgressReadObserver ? plaidSpDmaEgressReadObserver(dma.current.dramAddress,0,dma.current.pbusAddress&0xffc,4,dataLo) : 0;'),
+            ('        u32 dataHi = dmem.read<Word>(dma.current.pbusAddress + 4);',
+             '        u64 plaidReadHi = plaidSpDmaEgressReadObserver ? plaidSpDmaEgressReadObserver(dma.current.dramAddress+4,0,(dma.current.pbusAddress+4)&0xffc,4,dataHi) : 0;'),
+            ('        rdram.ram.write<Dual>(dma.current.dramAddress, data, RBusDevice::SP_DMA);',
+             '        if(plaidSpDmaEgressStoreObserver) plaidSpDmaEgressStoreObserver(plaidRead);'),
+            ('        rdram.ram.write<Word>(dma.current.dramAddress + 0, dataLo, RBusDevice::SP_DMA);',
+             '        if(plaidSpDmaEgressStoreObserver) plaidSpDmaEgressStoreObserver(plaidReadLo);'),
+            ('        rdram.ram.write<Word>(dma.current.dramAddress + 4, dataHi, RBusDevice::SP_DMA);',
+             '        if(plaidSpDmaEgressStoreObserver) plaidSpDmaEgressStoreObserver(plaidReadHi);'),
+        ]:
+            assert dma.count(marker)==1
+            dma=dma.replace(marker,marker+'\n'+extra)
     for marker,extra in [
         ('        imem.write<Dual>(dma.current.pbusAddress, data);',
          '        if(plaidSpDmaStoreObserver) plaidSpDmaStoreObserver(dma.current.dramAddress,1,dma.current.pbusAddress&0xff8,8,data);'),

@@ -5,7 +5,7 @@ ROOT=Path(__file__).resolve().parents[2]
 def load(name,p):
  s=importlib.util.spec_from_file_location(name,p);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);return m
 
-def main():
+def source():
  prior=load('prior',ROOT/'spikes/091-raw-rsp-executable-consumption/test_consumer.py');clock=load('clock',ROOT/'spikes/087-storage-writer-fetch-history/test_consumer.py')
  scalar=load('scalar',ROOT/'spikes/093-rsp-scalar-executable/verify.py');model=load('pi_model',ROOT/'spikes/038-boot-pi-fetch-lineage/replay.py')
  data,fw,rows,fetch=prior.source();rows[0].update(format='plaid-ares-access-history-v10',policy='observed_instruction_scoped_scalar_rsp_stores_with_rooted_operands_and_pi_queue_sp_backing')
@@ -31,6 +31,14 @@ def main():
   elif r['record']=='fetch':r.update(physical=0x04000000,word=0x1111)
   elif r['record'] in ('fetch_begin','fetch_end'):r.update(vaddr=0xffffffffa4000000,translated=0x04000000,bus=0x04000000);r.update(value=0x1111) if r['record']=='fetch_end' else None
  fetch[2].update(pc=0xffffffffa4000000,physical=0x04000000,word=0x1111)
+ return data,fw,rows,fetch
+
+def main():
+ data,fw,rows,fetch=source()
+ pc=next(r['pc'] for r in rows if r['record']=='rsp_imem_read')
+ clock=load('clock',ROOT/'spikes/087-storage-writer-fetch-history/test_consumer.py')
+ scalar=load('scalar',ROOT/'spikes/093-rsp-scalar-executable/verify.py')
+ model=load('pi_model',ROOT/'spikes/038-boot-pi-fetch-lineage/replay.py')
  exe=ROOT/('target/debug/plaid.exe' if os.name=='nt' else 'target/debug/plaid')
  with tempfile.TemporaryDirectory(dir=ROOT/'target',prefix='rsp-store-') as temp:
   p=Path(temp);rom=p/'rom.z64';firmware=p/'firmware.bin';history=p/'history.ndjson';fetched=p/'fetch.ndjson';report=p/'report.json';rom.write_bytes(data);firmware.write_bytes(fw)

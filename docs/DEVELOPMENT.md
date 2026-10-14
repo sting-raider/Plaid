@@ -6,6 +6,11 @@ The authoritative engineering state is still [`STATUS.md`](STATUS.md) and [`NEXT
 
 ## Toolchain
 
+Spike095 adds raw v11 reverse-SP-DMA receipts. Run its `test_consumer.py`
+and `run.py` (pinned ares baseline/sensor build in WSL, or `--verify-existing`
+for retained outputs). The opt-in `sp_dma_egress_access` recipe observes DMEM
+and IMEM reverse-DMA reads and their RAM sinks without extra guest accesses.
+
 Spike094 binds direct scalar store method scopes to their exact RSP instruction
 and completed byte effects. Run its consumer/prepare tests and retained reference
 recheck. Spike057 accepts `--history storage-sp-stores` for raw v10; its opt-in
