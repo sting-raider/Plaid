@@ -347,8 +347,11 @@ fn allowed_static_effect(word: u32, pc: crate::GuestAddr, guarded_ram: bool) -> 
     }
     if guarded_ram
         && match word >> 26 {
-            0 => matches!(word & 63, 4 | 6 | 7 | 16..=19 | 24..=27 | 42 | 43),
-            10 | 11 | 32 | 33 | 35 | 36 | 37 | 40 | 41 | 43 => true,
+            0 => matches!(
+                word & 63,
+                4 | 6 | 7 | 16..=20 | 22..=32 | 34 | 42..=44 | 46 | 47 | 56 | 58..=60 | 62 | 63
+            ),
+            8 | 10 | 11 | 24 | 32 | 33 | 35 | 36 | 37 | 40 | 41 | 43 | 55 | 63 => true,
             _ => false,
         }
     {
@@ -900,6 +903,10 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     if scope == Scope::DeclaredStaticImagesGuardedRam {
         assumptions.push(
             "Data loads/stores are naturally aligned RDRAM accesses through KSEG0/KSEG1, never reach executable bytes, and use only one of KSEG0/KSEG1 per 16-byte line; a native artifact checks every store and access and aborts on violation, with no fallback execution."
+                .into(),
+        );
+        assumptions.push(
+            "Overflow-trapping ADD/ADDI/SUB/DADD/DADDI/DSUB never overflow; a native artifact checks each one and aborts on overflow, with no fallback execution."
                 .into(),
         );
     }

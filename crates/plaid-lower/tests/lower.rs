@@ -54,8 +54,8 @@ fn open_programs_are_rejected() {
 
 #[test]
 fn instructions_outside_the_lowered_subset_are_rejected() {
-    // daddiu t0,t0,1 is admitted by the scope but not lowered; never emulated.
-    let words = [[0x6508_0001, 0x0800_0004, 0, 0].as_slice(), &HALT].concat();
+    // bltzal zero,0x10 is admitted by the scope but not lowered; never emulated.
+    let words = [[0x0410_0003, 0, 0, 0].as_slice(), &HALT].concat();
     let err = lower(&words, 0x8000_0010).unwrap_err();
     assert!(err.contains("outside the lowered subset"), "{err}");
 }
@@ -183,4 +183,13 @@ fn a_return_reachable_from_the_host_entry_stays_open() {
     let (map, image) = map_of(&[0x03e0_0008, 0]);
     let err = lower_c(&map, &[image], GuestAddr(BASE), &[]).unwrap_err();
     assert!(err.contains("not CLOSED"), "{err}");
+}
+
+#[test]
+fn trapping_adds_check_overflow_and_likely_slots_run_only_when_taken() {
+    // addi t1,t0,1; beql zero,zero,0x10; addiu t2,t2,1; nop; b .; nop
+    let words = [[0x2109_0001, 0x5000_0002, 0x254a_0001, 0].as_slice(), &HALT].concat();
+    let c = lower(&words, 0x8000_0010).unwrap();
+    assert!(c.contains("return plaid_fault(s, 0x80000000u, 6);"));
+    assert!(c.contains("{ int t = s->r[0] == s->r[0]; if (t) { s->r[10] = "));
 }

@@ -39,6 +39,17 @@ beq = lambda rs, rt, l: B(4, rs, rt, l); bne = lambda rs, rt, l: B(5, rs, rt, l)
 blez = lambda rs, l: B(6, rs, 0, l); bgtz = lambda rs, l: B(7, rs, 0, l)
 bltz = lambda rs, l: B(1, rs, 0, l); bgez = lambda rs, l: B(1, rs, 1, l)
 j = lambda l: J(2, l); jal = lambda l: J(3, l)
+gp, k0, k1, fp = 28, 26, 27, 30
+ld, sd = mem(55), mem(63)
+daddu, dsubu, dadd, dsub, add, sub = map(alu, (45, 47, 44, 46, 32, 34))
+dsll, dsrl, dsra, dsll32, dsrl32, dsra32 = map(shift, (56, 58, 59, 60, 62, 63))
+dsllv, dsrlv, dsrav = map(vshift, (20, 22, 23))
+dmult, dmultu, ddiv, ddivu = map(hilo, (28, 29, 30, 31))
+addi = lambda rt, rs, imm: I(8, rt, rs, imm); daddi = lambda rt, rs, imm: I(24, rt, rs, imm)
+daddiu = lambda rt, rs, imm: I(25, rt, rs, imm)
+beql = lambda rs, rt, l: B(20, rs, rt, l); bnel = lambda rs, rt, l: B(21, rs, rt, l)
+blezl = lambda rs, l: B(22, rs, 0, l); bgtzl = lambda rs, l: B(23, rs, 0, l)
+bltzl = lambda rs, l: B(1, rs, 2, l); bgezl = lambda rs, l: B(1, rs, 3, l)
 nop = 0
 DONE = [j('exit'), nop]
 
@@ -85,6 +96,28 @@ PROGRAMS = {
         'c', lui(t5, 0x8000), LO(t5, t5, 'd'), jr(t5), addiu(t6, zero, 3),
         'd', addiu(t7, zero, 4), lui(a0, 0x8000), LO(a0, a0, 'e'), jalr(a1, a0), nop,
         'e', addu(a2, a1, zero), *DONE],
+    # 64-bit ALU, shifts, 128-bit HI/LO, LD/SD, trapping adds that do not trap,
+    # and branch-likely slots (taken and nullified).
+    'wide': [lui(gp, 0x8000), ori(gp, gp, 0x1000), lui(t0, 0x8000), ori(t0, t0, 0x1234),
+        dsll32(t1, t0, 0), dsrl32(t2, t1, 4), dsra32(t3, t1, 4), dsll(t4, t0, 12), dsrl(t5, t1, 8), dsra(t6, t1, 8),
+        addiu(a0, zero, 40), dsllv(t7, t0, a0), dsrlv(s0, t1, a0), dsrav(s1, t1, a0),
+        daddu(s2, t1, t0), dsubu(s3, t0, t1), daddiu(s4, t1, -1), dadd(s5, t0, t0), dsub(s6, t1, t0), daddi(s7, t1, -1),
+        add(t8, a0, a0), sub(t9, a0, t0), addi(v0, a0, -50),
+        dmult(t1, t0), mfhi(a1), mflo(a2), sd(a1, 0, gp), sd(a2, 8, gp),
+        dmultu(t1, t0), mfhi(a1), mflo(a2), sd(a1, 16, gp), sd(a2, 24, gp),
+        ddiv(t1, t0), mfhi(a1), mflo(a2), sd(a1, 32, gp), sd(a2, 40, gp),
+        ddivu(t1, t0), mfhi(a1), mflo(a2), sd(a1, 48, gp), sd(a2, 56, gp),
+        ddiv(t1, zero), mfhi(a1), mflo(a2), sd(a1, 64, gp), sd(a2, 72, gp),
+        ddivu(t0, zero), mfhi(a1), mflo(a2), sd(a1, 80, gp), sd(a2, 88, gp),
+        lui(a3, 0x8000), dsll32(a3, a3, 0), daddiu(v1, zero, -1),
+        ddiv(a3, v1), mfhi(a1), mflo(a2), sd(a1, 96, gp), sd(a2, 104, gp), ld(k0, 8, gp),
+        addiu(k1, zero, 0), beql(zero, zero, 'l1'), addiu(k1, k1, 1), addiu(k1, k1, 100),
+        'l1', bnel(zero, zero, 'l2'), addiu(k1, k1, 10), addiu(k1, k1, 1000),
+        'l2', blezl(zero, 'l3'), addiu(fp, zero, 7), addiu(fp, fp, 1),
+        'l3', bgtzl(zero, 'l4'), addiu(fp, fp, 20),
+        'l4', bltzl(t1, 'l5'), addiu(fp, fp, 300), addiu(fp, fp, 4000),
+        'l5', bgezl(t1, 'l6'), addiu(fp, fp, 5000),
+        'l6', *DONE],
     # Nested, recursive, pointer and tail calls; frames live in the RAM window.
     'calls': [lui(sp, 0x8000), ori(sp, sp, 0x1100),
         addiu(a0, zero, 5), jal('fact'), nop, addu(s0, v0, zero),
@@ -107,13 +140,15 @@ SELF_MODIFYING = [lui(s0, 0x8000), sw(zero, 8, s0), *DONE]
 # native code must fail closed (fault 4) rather than guess.
 # A return whose $ra is not its call's continuation must fault 5 natively.
 BAD_RETURN = [jal('f'), nop, *DONE, 'f', addiu(ra, ra, 8), jr(ra), nop]
+# A trapping add that overflows raises on hardware; native code must fault 6.
+OVERFLOW = [lui(t0, 0x7FFF), ori(t0, t0, 0xFFFF), addi(t1, t0, 1), *DONE]
 CACHE_ALIAS = [lui(s0, 0x8000), sw(s0, 0x1000, s0), lui(s1, 0xA000), lw(t0, 0x1000, s1), *DONE]
 
 def windows():
     exe = ROOT / 'target/debug/plaid.exe'
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
     OUT.mkdir(parents=True, exist_ok=True)
-    progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN)
+    progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN, overflow=OVERFLOW)
     for name, items in progs.items():
         (OUT / f'{name}.bin').write_bytes(assemble(items))
         subprocess.run([str(exe), 'lower-c', str(OUT / f'{name}.bin'), hex(BASE), hex(BASE), hex(EXIT), str(OUT / f'{name}.c')], check=True)
@@ -128,13 +163,13 @@ def windows():
         oracle = json.loads((OUT / f'{name}-oracle.json').read_text())
         assert json.loads(native.stdout) == oracle, (name, native.stdout, oracle)
         results[name] = hashlib.sha256(json.dumps(oracle, sort_keys=True).encode()).hexdigest()
-    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5)):
+    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6)):
         bad = subprocess.run([str(OUT / f'{name}-native.exe')], capture_output=True, text=True)
         assert bad.returncode == 6 and json.loads(bad.stdout)['fault'] == fault, (name, bad.stdout)
     receipt = dict(format='plaid-native-slice-receipt-v0', ares_revision=builder().REV, compiler=Path(cc).name,
-        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5), interpreter_linked=False, native_complete=False)
+        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6), interpreter_linked=False, native_complete=False)
     (OUT / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
-    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias and bad-return programs fail closed')
+    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return and overflow programs fail closed')
     print(json.dumps(receipt, sort_keys=True))
 
 def builder():

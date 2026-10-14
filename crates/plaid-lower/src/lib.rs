@@ -30,7 +30,8 @@ typedef struct { u32 start, end; } plaid_range;
    4: one RDRAM line accessed through both KSEG0 and KSEG1, whose result
    depends on write-back D-cache state this coherent model does not track;
    5: a return whose $ra is not the continuation of the call that entered
-   its function (the checked call/return assumption). */
+   its function (the checked call/return assumption);
+   6: an overflow-trapping add/subtract that would raise an exception. */
 static inline int plaid_fault(plaid_state *s, u32 pc, u32 code) {
   s->fault = code; s->fault_pc = pc; return 1;
 }
@@ -111,6 +112,14 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
     };
     let store =
         |size: u32| format!("if (plaid_store(s, {addr}, {size}, {b}, 0x{pc:08x}u)) return 1;");
+    // Overflow-trapping add/sub: abort (fault 6) where the VR4300 would raise.
+    let trap = |ty: &str, y: String, sub: bool, sign: &str, d: u32, wrap: &str| {
+        let (op, flip) = if sub { ("-", "") } else { ("+", "~") };
+        format!(
+            "{{ {ty} x = ({ty}){a}, y = ({ty}){y}, z = x {op} y; if ({flip}(x ^ y) & (x ^ z) & {sign}) return plaid_fault(s, 0x{pc:08x}u, 6); {} }}",
+            set(d, wrap.into())
+        )
+    };
     Ok(match (word >> 26, word & 63) {
         (0, 0) => set(rd, format!("SX32((u32){b} << {sa})")),
         (0, 2) => set(rd, format!("SX32((u32){b} >> {sa})")),
@@ -118,6 +127,9 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
         (0, 4) => set(rd, format!("SX32((u32){b} << ({a} & 31))")),
         (0, 6) => set(rd, format!("SX32((u32){b} >> ({a} & 31))")),
         (0, 7) => set(rd, format!("SX32((s64){b} >> ({a} & 31))")),
+        (0, 20) => set(rd, format!("{b} << ({a} & 63)")),
+        (0, 22) => set(rd, format!("{b} >> ({a} & 63)")),
+        (0, 23) => set(rd, format!("(u64)((s64){b} >> ({a} & 63))")),
         (0, 16) => set(rd, "s->hi".into()),
         (0, 17) => format!("s->hi = {a};"),
         (0, 18) => set(rd, "s->lo".into()),
@@ -135,6 +147,50 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
         (0, 27) => format!(
             "{{ u32 n = (u32){a}, d = (u32){b}; if (d) {{ s->lo = SX32(n / d); s->hi = SX32(n % d); }} else {{ s->lo = ~0ull; s->hi = SX32(n); }} }}"
         ),
+        // 128-bit products and quotients follow ares (GCC/Clang __int128).
+        (0, 28) => format!(
+            "{{ unsigned __int128 m = (unsigned __int128)((__int128)(s64){a} * (s64){b}); s->lo = (u64)m; s->hi = (u64)(m >> 64); }}"
+        ),
+        (0, 29) => format!(
+            "{{ unsigned __int128 m = (unsigned __int128){a} * {b}; s->lo = (u64)m; s->hi = (u64)(m >> 64); }}"
+        ),
+        (0, 30) => format!(
+            "{{ s64 n = (s64){a}, d = (s64){b}; if (!d) {{ s->lo = n < 0 ? 1 : ~0ull; s->hi = (u64)n; }} else if (d == -1 && n == -0x7fffffffffffffffll - 1) {{ s->lo = (u64)n; s->hi = 0; }} else {{ s->lo = (u64)(n / d); s->hi = (u64)(n % d); }} }}"
+        ),
+        (0, 31) => format!(
+            "{{ u64 n = {a}, d = {b}; if (d) {{ s->lo = n / d; s->hi = n % d; }} else {{ s->lo = ~0ull; s->hi = n; }} }}"
+        ),
+        (0, 32) => trap("u32", b.clone(), false, "0x80000000u", rd, "SX32(z)"),
+        (0, 34) => trap("u32", b.clone(), true, "0x80000000u", rd, "SX32(z)"),
+        (0, 44) => trap("u64", b.clone(), false, "(1ull << 63)", rd, "z"),
+        (0, 46) => trap("u64", b.clone(), true, "(1ull << 63)", rd, "z"),
+        (0, 45) => set(rd, format!("{a} + {b}")),
+        (0, 47) => set(rd, format!("{a} - {b}")),
+        (0, 56) => set(rd, format!("{b} << {sa}")),
+        (0, 58) => set(rd, format!("{b} >> {sa}")),
+        (0, 59) => set(rd, format!("(u64)((s64){b} >> {sa})")),
+        (0, 60) => set(rd, format!("{b} << {}", sa + 32)),
+        (0, 62) => set(rd, format!("{b} >> {}", sa + 32)),
+        (0, 63) => set(rd, format!("(u64)((s64){b} >> {})", sa + 32)),
+        (8, _) => trap(
+            "u32",
+            format!("(s32){simm}"),
+            false,
+            "0x80000000u",
+            rt,
+            "SX32(z)",
+        ),
+        (24, _) => trap(
+            "u64",
+            format!("(s64){simm}"),
+            false,
+            "(1ull << 63)",
+            rt,
+            "z",
+        ),
+        (25, _) => set(rt, format!("{a} + (u64)(s64){simm}")),
+        (55, _) => load(8, "s64"),
+        (63, _) => store(8),
         (0, 33) => set(rd, format!("SX32((u32){a} + (u32){b})")),
         (0, 35) => set(rd, format!("SX32((u32){a} - (u32){b})")),
         (0, 36) => set(rd, format!("{a} & {b}")),
@@ -217,6 +273,14 @@ impl Lowerer<'_> {
                 self.fallthrough(after, pc)
             ))
         };
+        // Branch likely: the delay slot executes only when the branch is taken.
+        let likely = |cond: String| -> Result<String, String> {
+            Ok(format!(
+                "{{ int t = {cond}; if (t) {{ {slot} {} }} }} {}",
+                self.goto(branch)?,
+                self.fallthrough(after, pc)
+            ))
+        };
         let proven = || {
             self.targets
                 .get(&pc)
@@ -245,6 +309,12 @@ impl Lowerer<'_> {
                     set(rd, sx(after))
                 ))
             }
+            (1, _, 2) => likely(format!("(s64){a} < 0")),
+            (1, _, 3) => likely(format!("(s64){a} >= 0")),
+            (20, _, _) => likely(format!("{a} == {b}")),
+            (21, _, _) => likely(format!("{a} != {b}")),
+            (22, _, 0) => likely(format!("(s64){a} <= 0")),
+            (23, _, 0) => likely(format!("(s64){a} > 0")),
             (1, _, 0) => conditional(format!("(s64){a} < 0")),
             (1, _, 1) => conditional(format!("(s64){a} >= 0")),
             (2, _, _) => Ok(format!("{slot} {}", self.goto(jump)?)),
