@@ -13,7 +13,7 @@ effect in its receipt.
 
 | # | Milestone | Done when | State |
 | --- | --- | --- | --- |
-| 1 | Synthetic ROM -> C -> native | spike096 programs match pinned ares exactly; self-modifying store faults | **done** (spike096) |
+| 1 | Synthetic ROM -> C -> native | spike096 programs, including nested/recursive calls, match pinned ares exactly; fail-closed cases fault | **done** (spike096, ADR-0127) |
 | 2 | SM64 discovery recall | >= 99% of real functions found, scored locally against a decomp symbol map used only as an oracle | open (needs a user-supplied SM64 ROM in `target/local-inputs/`) |
 | 3 | SM64 closed under declared assumptions | solver CLOSED in an explicit assumption scope; every assumption listed and checked | open |
 | 4 | SM64 boots natively to title | lowered code linked with N64ModernRuntime + RT64; no interpreter linked | open |
@@ -21,14 +21,13 @@ effect in its receipt.
 
 Next concrete steps, in order:
 
-1. **Return closure.** Milestone 1 showed that `jr $ra` has no closure proof,
-   so every program with a function return is OPEN. Add a call/return proof:
-   a `jr $ra` whose `$ra` provably still holds the link written by the calls
-   that reach it closes over those calls' return continuations. Then extend
-   spike096 with nested calls and differential-test it.
-2. **Function-level lowering.** Emit one C function per proven function
-   (calls become C calls, returns become `return`) as N64Recomp does, which
-   N64ModernRuntime expects. Keep fail-closed dispatch for anything unproven.
+1. Done: return closure and function-level lowering (ADR-0127). Calls are C
+   calls; every return checks `$ra` against its call's continuation. On OoT,
+   43 of the 44 unresolved indirect sites are now certified returns.
+2. **Real code under the assumption scope.** Solve OoT boot code under
+   `DeclaredStaticImagesGuardedRam` and turn its blocker list into the next
+   lowering and scope work (unsupported instructions, the remaining indirect
+   site, DMA).
 3. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
    boot-segment discovery from the real entry point, then a local-only recall
    score against the decomp map. Keep ROM bytes, maps and traces ignored.

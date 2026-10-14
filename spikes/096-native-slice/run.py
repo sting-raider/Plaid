@@ -17,7 +17,7 @@ def J(op, label): return lambda pc, L: op << 26 | (L[label] >> 2) & 0x3FFFFFF
 def LO(rt, rs, label): return lambda pc, L: I(13, rt, rs, L[label])
 zero, at, v0, v1, a0, a1, a2, a3 = range(8)
 t0, t1, t2, t3, t4, t5, t6, t7, s0, s1, s2, s3, s4, s5, s6, s7, t8, t9 = range(8, 26)
-ra = 31
+sp, ra = 29, 31
 lui = lambda rt, imm: I(15, rt, 0, imm); ori = lambda rt, rs, imm: I(13, rt, rs, imm)
 addiu = lambda rt, rs, imm: I(9, rt, rs, imm); slti = lambda rt, rs, imm: I(10, rt, rs, imm)
 sltiu = lambda rt, rs, imm: I(11, rt, rs, imm); andi = lambda rt, rs, imm: I(12, rt, rs, imm)
@@ -85,19 +85,35 @@ PROGRAMS = {
         'c', lui(t5, 0x8000), LO(t5, t5, 'd'), jr(t5), addiu(t6, zero, 3),
         'd', addiu(t7, zero, 4), lui(a0, 0x8000), LO(a0, a0, 'e'), jalr(a1, a0), nop,
         'e', addu(a2, a1, zero), *DONE],
+    # Nested, recursive, pointer and tail calls; frames live in the RAM window.
+    'calls': [lui(sp, 0x8000), ori(sp, sp, 0x1100),
+        addiu(a0, zero, 5), jal('fact'), nop, addu(s0, v0, zero),
+        addiu(a0, zero, 3), jal('twice'), nop, addu(s1, v0, zero),
+        lui(t0, 0x8000), LO(t0, t0, 'inc'), addiu(a0, zero, 40), jalr(ra, t0), nop, addu(s2, v0, zero),
+        addiu(a0, zero, 7), jal('tail'), nop, addu(s3, v0, zero), *DONE,
+        'inc', addiu(v0, a0, 1), jr(ra), nop,
+        'twice', addiu(sp, sp, -8), sw(ra, 4, sp), jal('inc'), nop, addu(a0, v0, zero), jal('inc'), nop,
+        lw(ra, 4, sp), jr(ra), addiu(sp, sp, 8),
+        'tail', addiu(a0, a0, 100), j('inc'), nop,
+        'fact', addiu(sp, sp, -16), sw(ra, 12, sp), sw(a0, 8, sp), slti(t0, a0, 2), beq(t0, zero, 'rec'), nop,
+        addiu(v0, zero, 1), j('out'), nop,
+        'rec', addiu(a0, a0, -1), jal('fact'), nop, lw(a0, 8, sp), mult(v0, a0), mflo(v0),
+        'out', lw(ra, 12, sp), jr(ra), addiu(sp, sp, 16)],
 }
 # Stores into executed bytes violate the declared-immutability assumption:
 # native code must fail closed (fault 2) even though the reference runs it.
 SELF_MODIFYING = [lui(s0, 0x8000), sw(zero, 8, s0), *DONE]
 # Cached and uncached access to one line depends on write-back D-cache state:
 # native code must fail closed (fault 4) rather than guess.
+# A return whose $ra is not its call's continuation must fault 5 natively.
+BAD_RETURN = [jal('f'), nop, *DONE, 'f', addiu(ra, ra, 8), jr(ra), nop]
 CACHE_ALIAS = [lui(s0, 0x8000), sw(s0, 0x1000, s0), lui(s1, 0xA000), lw(t0, 0x1000, s1), *DONE]
 
 def windows():
     exe = ROOT / 'target/debug/plaid.exe'
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
     OUT.mkdir(parents=True, exist_ok=True)
-    progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS)
+    progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN)
     for name, items in progs.items():
         (OUT / f'{name}.bin').write_bytes(assemble(items))
         subprocess.run([str(exe), 'lower-c', str(OUT / f'{name}.bin'), hex(BASE), hex(BASE), hex(EXIT), str(OUT / f'{name}.c')], check=True)
@@ -112,13 +128,13 @@ def windows():
         oracle = json.loads((OUT / f'{name}-oracle.json').read_text())
         assert json.loads(native.stdout) == oracle, (name, native.stdout, oracle)
         results[name] = hashlib.sha256(json.dumps(oracle, sort_keys=True).encode()).hexdigest()
-    for name, fault in (('self_modifying', 2), ('cache_alias', 4)):
+    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5)):
         bad = subprocess.run([str(OUT / f'{name}-native.exe')], capture_output=True, text=True)
         assert bad.returncode == 6 and json.loads(bad.stdout)['fault'] == fault, (name, bad.stdout)
     receipt = dict(format='plaid-native-slice-receipt-v0', ares_revision=builder().REV, compiler=Path(cc).name,
-        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4), interpreter_linked=False, native_complete=False)
+        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5), interpreter_linked=False, native_complete=False)
     (OUT / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
-    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying and cache-alias accesses fail closed')
+    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias and bad-return programs fail closed')
     print(json.dumps(receipt, sort_keys=True))
 
 def builder():

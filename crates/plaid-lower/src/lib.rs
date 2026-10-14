@@ -8,7 +8,8 @@
 use plaid_core::{
     GuestAddr,
     discovery::CodeImage,
-    program::ProgramMap,
+    program::{EdgeKind, ProgramMap},
+    returns,
     solver::{ClosureStatus, Scope, solve},
 };
 use std::collections::{BTreeMap, BTreeSet};
@@ -27,7 +28,9 @@ typedef struct { u32 start, end; } plaid_range;
 /* fault 1: address/alignment outside the supported model; 2: store to
    executable bytes (declared immutable); 3: transfer without a proven target;
    4: one RDRAM line accessed through both KSEG0 and KSEG1, whose result
-   depends on write-back D-cache state this coherent model does not track. */
+   depends on write-back D-cache state this coherent model does not track;
+   5: a return whose $ra is not the continuation of the call that entered
+   its function (the checked call/return assumption). */
 static inline int plaid_fault(plaid_state *s, u32 pc, u32 code) {
   s->fault = code; s->fault_pc = pc; return 1;
 }
@@ -164,8 +167,14 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
 }
 
 struct Lowerer<'a> {
+    /// Block starts of the function being emitted (exits included).
     labels: BTreeSet<u32>,
-    targets: BTreeMap<u32, &'a BTreeSet<u32>>,
+    /// Constant-proven indirect targets by site.
+    targets: &'a BTreeMap<u32, BTreeSet<u32>>,
+    /// `jr $ra` sites closed by a return certificate: lowered as checked returns.
+    returns: &'a BTreeSet<u32>,
+    /// Function entries, each emitted as one C function.
+    functions: &'a BTreeSet<u32>,
 }
 
 impl Lowerer<'_> {
@@ -179,6 +188,19 @@ impl Lowerer<'_> {
     fn fallthrough(&self, next: u32, pc: u32) -> String {
         self.goto(next)
             .unwrap_or_else(|_| format!("return plaid_fault(s, 0x{pc:08x}u, 3);"))
+    }
+    /// A guest call: the callee returns 0 only after a checked return to `link`.
+    fn call(&self, target: u32, link: u32, pc: u32) -> Result<String, String> {
+        if !self.functions.contains(&target) {
+            return Err(format!(
+                "{pc:08x}: call target {target:08x} is not a function"
+            ));
+        }
+        Ok(format!(
+            "{{ int r = F_{target:08x}(s, {}); if (r) return r; }} {}",
+            sx(link),
+            self.fallthrough(link, pc)
+        ))
     }
     fn control(&self, word: u32, pc: u32, slot: &str) -> Result<String, String> {
         let (rs, rt, rd) = ((word >> 21) & 31, (word >> 16) & 31, (word >> 11) & 31);
@@ -195,23 +217,32 @@ impl Lowerer<'_> {
                 self.fallthrough(after, pc)
             ))
         };
+        let proven = || {
+            self.targets
+                .get(&pc)
+                .ok_or_else(|| format!("{pc:08x}: indirect site lacks a proven target set"))
+        };
         match (word >> 26, word & 63, rt) {
-            (0, 8 | 9, _) => {
-                let link = if word & 63 == 9 {
-                    set(rd, sx(after))
-                } else {
-                    String::new()
-                };
-                let set = self
-                    .targets
-                    .get(&pc)
-                    .ok_or_else(|| format!("{pc:08x}: indirect site lacks a proven target set"))?;
+            (0, 8, _) if self.returns.contains(&pc) => Ok(format!(
+                "{{ u64 t = {a}; {slot} if (t != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0; }}"
+            )),
+            (0, 8, _) => {
                 let mut cases = String::new();
-                for &t in set.iter() {
+                for &t in proven()? {
                     cases += &format!(" case {}: {}", sx(t), self.goto(t)?);
                 }
                 Ok(format!(
-                    "{{ u64 t = {a}; {link} {slot} switch (t) {{{cases} }} return plaid_fault(s, 0x{pc:08x}u, 3); }}"
+                    "{{ u64 t = {a}; {slot} switch (t) {{{cases} }} return plaid_fault(s, 0x{pc:08x}u, 3); }}"
+                ))
+            }
+            (0, 9, _) => {
+                let mut cases = String::new();
+                for &t in proven()? {
+                    cases += &format!(" case {}: {}", sx(t), self.call(t, after, pc)?);
+                }
+                Ok(format!(
+                    "{{ u64 t = {a}; {} {slot} switch (t) {{{cases} }} return plaid_fault(s, 0x{pc:08x}u, 3); }}",
+                    set(rd, sx(after))
                 ))
             }
             (1, _, 0) => conditional(format!("(s64){a} < 0")),
@@ -220,7 +251,7 @@ impl Lowerer<'_> {
             (3, _, _) => Ok(format!(
                 "s->r[31] = {}; {slot} {}",
                 sx(after),
-                self.goto(jump)?
+                self.call(jump, after, pc)?
             )),
             (4, _, _) => conditional(format!("{a} == {b}")),
             (5, _, _) => conditional(format!("{a} != {b}")),
@@ -233,8 +264,9 @@ impl Lowerer<'_> {
     }
 }
 
-/// Lower a program CLOSED under the guarded-RAM declared-static scope to C. `exits` are host-boundary
-/// addresses: reaching one returns 0 from `plaid_run` with `s->pc` set.
+/// Lower a program CLOSED under the guarded-RAM declared-static scope to C,
+/// one C function per guest function. `exits` are host-boundary addresses:
+/// reaching one makes `plaid_run` return 0 with `s->pc` set.
 pub fn lower_c(
     map: &ProgramMap,
     images: &[CodeImage],
@@ -246,24 +278,39 @@ pub fn lower_c(
         let kinds: BTreeSet<_> = report.blockers.iter().map(|b| b.kind.as_str()).collect();
         return Err(format!("program is not CLOSED: {kinds:?}"));
     }
+    let [image] = images else {
+        return Err("exactly one code image is supported".into());
+    };
     // Proven indirect targets also become map entries; the host enters only here.
-    if !map.entries.keys().any(|e| e.pc == entry) {
+    let Some(host) = map.entries.keys().find(|e| e.pc == entry) else {
         return Err(format!("{:08x} is not a map entry", entry.0));
-    }
+    };
     let word = |pc: u32| -> Result<u32, String> {
-        images
-            .iter()
-            .find_map(|i| i.word(GuestAddr(pc)))
+        image
+            .word(GuestAddr(pc))
             .ok_or_else(|| format!("{pc:08x} has no supplied instruction word"))
     };
     let exits: BTreeSet<u32> = exits.iter().map(|e| e.0).collect();
     let mut targets = BTreeMap::new();
+    let mut returns = BTreeSet::new();
+    let mut callees = vec![host.clone()];
     for site in &map.indirect_sites {
-        if site.closed_proof.is_none() {
+        let Some(proof) = site
+            .closed_proof
+            .as_ref()
+            .and_then(|id| map.evidence.get(id))
+        else {
             return Err(format!(
                 "{:08x}: indirect site has no closure proof",
                 site.site.pc.0
             ));
+        };
+        if proof.producer == returns::PRODUCER {
+            returns.insert(site.site.pc.0);
+            continue;
+        }
+        if site.link_register.is_some() {
+            callees.extend(site.candidates.keys().cloned());
         }
         targets.insert(
             site.site.pc.0,
@@ -273,10 +320,13 @@ pub fn lower_c(
                 .collect::<BTreeSet<_>>(),
         );
     }
-    let targets = targets.iter().map(|(pc, set)| (*pc, set)).collect();
-    let mut labels: BTreeSet<u32> = map.blocks.iter().map(|b| b.start.pc.0).collect();
-    labels.extend(&exits);
-    let lowerer = Lowerer { labels, targets };
+    callees.extend(
+        map.direct_edges
+            .iter()
+            .filter(|e| e.kind == EdgeKind::Call)
+            .map(|e| e.target.clone()),
+    );
+    let functions: BTreeSet<u32> = callees.iter().map(|f| f.pc.0).collect();
 
     let mut code = Vec::new();
     for block in &map.blocks {
@@ -298,51 +348,66 @@ pub fn lower_c(
         "static const plaid_range plaid_code[] = {{{}}};\n{HELPERS}",
         code.join(", ")
     );
-    out += "static inline void plaid_load_images(plaid_state *s) {\n  u32 i;\n";
-    for (n, image) in images.iter().enumerate() {
-        let words: Vec<_> = image.words.iter().map(|w| format!("0x{w:08x}u")).collect();
+    let base = physical(image.base.pc.0)?;
+    let words: Vec<_> = image.words.iter().map(|w| format!("0x{w:08x}u")).collect();
+    out += &format!(
+        "static inline void plaid_load_images(plaid_state *s) {{\n  static const u32 w[] = {{{}}};\n  u32 i;\n  for (i = 0; i < {}; i++) {{ s->ram[0x{base:x} + 4 * i] = (u8)(w[i] >> 24); s->ram[0x{base:x} + 4 * i + 1] = (u8)(w[i] >> 16); s->ram[0x{base:x} + 4 * i + 2] = (u8)(w[i] >> 8); s->ram[0x{base:x} + 4 * i + 3] = (u8)w[i]; }}\n}}\n",
+        words.join(", "),
+        words.len(),
+    );
+    for f in &functions {
+        out += &format!("static int F_{f:08x}(plaid_state *s, u64 ret);\n");
+    }
+    let mut seen = BTreeSet::new();
+    for f in callees.iter().filter(|f| seen.insert(f.pc.0)) {
+        let body = returns::function_body(map, image, f);
+        let lowerer = Lowerer {
+            labels: body.iter().map(|b| b.pc.0).collect(),
+            targets: &targets,
+            returns: &returns,
+            functions: &functions,
+        };
         out += &format!(
-            "  {{ static const u32 w{n}[] = {{{}}};\n    for (i = 0; i < {}; i++) {{ s->ram[0x{:x} + 4 * i] = (u8)(w{n}[i] >> 24); s->ram[0x{:x} + 4 * i + 1] = (u8)(w{n}[i] >> 16); s->ram[0x{:x} + 4 * i + 2] = (u8)(w{n}[i] >> 8); s->ram[0x{:x} + 4 * i + 3] = (u8)w{n}[i]; }} }}\n",
-            words.join(", "),
-            words.len(),
-            physical(image.base.pc.0)?,
-            physical(image.base.pc.0)?,
-            physical(image.base.pc.0)?,
-            physical(image.base.pc.0)?,
+            "static int F_{:08x}(plaid_state *s, u64 ret) {{\n  (void)ret;\n  goto L_{:08x};\n",
+            f.pc.0, f.pc.0
         );
-    }
-    out += "}\nstatic int plaid_run(plaid_state *s) {\n";
-    out += &format!("  {}\n", lowerer.goto(entry.0)?);
-    for &exit in &exits {
-        out += &format!("L_{exit:08x}: s->pc = 0x{exit:08x}u; return 0;\n");
-    }
-    for block in map.blocks.iter().filter(|b| !exits.contains(&b.start.pc.0)) {
-        let (start, end) = (block.start.pc.0, block.start.pc.0.wrapping_add(block.size));
-        out += &format!("L_{start:08x}:\n");
-        let mut pc = start;
-        let mut transferred = false;
-        while pc < end {
-            let w = word(pc)?;
-            if is_control(w) {
-                let slot = simple(word(pc + 4)?, pc + 4)?;
-                out += &format!("  {}\n", lowerer.control(w, pc, &slot)?);
-                pc += 8;
-                transferred = true;
-                if pc != end {
-                    return Err(format!("{start:08x}: block continues past its transfer"));
+        for block in map.blocks.iter().filter(|b| body.contains(&b.start)) {
+            let (start, end) = (block.start.pc.0, block.start.pc.0.wrapping_add(block.size));
+            if exits.contains(&start) {
+                out += &format!("L_{start:08x}: s->pc = 0x{start:08x}u; return 2;\n");
+                continue;
+            }
+            out += &format!("L_{start:08x}:\n");
+            let mut pc = start;
+            let mut transferred = false;
+            while pc < end {
+                let w = word(pc)?;
+                if is_control(w) {
+                    let slot = simple(word(pc + 4)?, pc + 4)?;
+                    out += &format!("  {}\n", lowerer.control(w, pc, &slot)?);
+                    pc += 8;
+                    transferred = true;
+                    if pc != end {
+                        return Err(format!("{start:08x}: block continues past its transfer"));
+                    }
+                } else {
+                    let s = simple(w, pc)?;
+                    if !s.is_empty() {
+                        out += &format!("  {s}\n");
+                    }
+                    pc += 4;
                 }
-            } else {
-                let s = simple(w, pc)?;
-                if !s.is_empty() {
-                    out += &format!("  {s}\n");
-                }
-                pc += 4;
+            }
+            if !transferred {
+                out += &format!("  {}\n", lowerer.fallthrough(end, end - 4));
             }
         }
-        if !transferred {
-            out += &format!("  {}\n", lowerer.fallthrough(end, end - 4));
-        }
+        out += "}\n";
     }
-    out += "}\n";
+    // 2: an exit was reached; 0: the host entry returned, which leaves the program.
+    out += &format!(
+        "static int plaid_run(plaid_state *s) {{\n  int r = F_{:08x}(s, s->r[31]);\n  if (r == 2) return 0;\n  return r ? r : plaid_fault(s, 0x{:08x}u, 5);\n}}\n",
+        entry.0, entry.0
+    );
     Ok(out)
 }

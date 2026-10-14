@@ -13,17 +13,17 @@ no runtime yet. `native_complete` is `false` everywhere.
 
 | Layer | State | Main gap | Evidence |
 | --- | --- | --- | --- |
-| Discovery (ROM -> ProgramMap) | ROM normalization, direct CFG, local and cross-block indirect proofs, trace import, conflict-aware merge | `jr $ra` returns have no closure proof; no function model | `crates/plaid-core/tests/` |
+| Discovery (ROM -> ProgramMap) | ROM normalization, direct CFG, local and cross-block indirect proofs, function partitioning and return certificates (ADR-0127), trace import, conflict-aware merge | Jump tables beyond the bounded recognizer; overlays and DMA | `crates/plaid-core/tests/`, `crates/plaid-lower/tests/` |
 | Closure proof (solver) | Fail-closed whole-ROM solver; assumption scopes `DeclaredStaticImages` and `DeclaredStaticImagesGuardedRam` reach CLOSED for synthetic programs | No commercial scope reaches CLOSED | `tests/pipeline.rs`, ADR-0126 |
 | Executable provenance | PI/SP/PIF/cache/TLB/RSP byte lineage over pinned ares histories; 20M-fetch commercial boot prefix retained locally | Paused by ADR-0125 until a milestone needs it | [`STATUS-LOG.md`](STATUS-LOG.md) |
-| Native lowering | `crates/plaid-lower`: CLOSED map -> one C unit; proven-target dispatch only; runtime store guard; no interpreter | Integer subset only; one C function per program, not per guest function | spike096 |
+| Native lowering | `crates/plaid-lower`: CLOSED map -> C, one C function per guest function; calls are C calls and returns are checked (fault 5); proven-target dispatch only; runtime store and cache-alias guards; no interpreter | Integer subset only | spike096 |
 | Runtime and rendering | None | Planned reuse of N64ModernRuntime + RT64 (ADR-0126) | — |
 
 ## Real-ROM numbers
 
 | ROM (local, never committed) | Result |
 | --- | --- |
-| Ocarina of Time US 1.2, conditional window `0x1000..0x101000` at `0x80000400` | 293 blocks, 45 indirect sites, **62 whole-ROM blockers** (44 unresolved indirect sites, 8 unsupported instructions, 4 other site-level blockers, 6 global model obligations) |
+| Ocarina of Time US 1.2, conditional window `0x1000..0x101000` at `0x80000400` | 293 blocks, 45 indirect sites, **62 whole-ROM blockers** (44 unresolved indirect sites, 8 unsupported instructions, 4 other site-level blockers, 6 global model obligations). 43 of the 44 unresolved indirect sites are returns with ADR-0127 certificates, which count only in the assumption scope |
 | Super Mario 64 | Not run yet: no local ROM supplied |
 | Commercial ROMs CLOSED | **0** |
 
@@ -33,14 +33,14 @@ Reproduce the OoT numbers with `plaid discover <rom> 0x1000 0x80000400
 ## Native lowering subset (spike096)
 
 Matches the pinned ares interpreter exactly (all GPRs, HI, LO, a 256-byte RAM
-window) on five synthetic programs:
+window) on six synthetic programs:
 
 - ALU and shifts: `LUI ORI ADDIU ANDI XORI SLTI SLTIU ADDU SUBU AND OR XOR NOR SLT SLTU SLL SRL SRA SLLV SRLV SRAV`
 - HI/LO: `MULT MULTU DIV DIVU MFHI MFLO MTHI MTLO`, including divide-by-zero and INT_MIN/-1
 - Memory: `LB LBU LH LHU LW SB SH SW` through KSEG0 and KSEG1
-- Control: `BEQ BNE BLEZ BGTZ BLTZ BGEZ J JAL JR JALR` with delay slots; indirect jumps only over proven targets
+- Control: `BEQ BNE BLEZ BGTZ BLTZ BGEZ J JAL JR JALR` with delay slots; indirect jumps only over proven targets; nested, recursive, pointer and tail calls with checked returns
 
 Anything else rejects the whole program. A store into executable bytes (fault
 2) or cached and uncached access to the same 16-byte line (fault 4, because the
 write-back D-cache makes the result state-dependent) aborts instead of
-executing.
+executing, as does a return whose `$ra` is not its call's continuation (fault 5).

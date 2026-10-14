@@ -93,12 +93,12 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Integer MIPS lowering | 🟨 partial |
 | x86-64 host build via C | 🟨 partial |
 | ARM64 host build via C | ⬜ open |
-| Return closure / function-level lowering | ⬜ open |
+| Return closure / function-level lowering | 🟨 partial |
 | Finite native indirect dispatch | 🟨 partial |
 | Synthetic native differential verifier | ✅ verified |
 | Link with N64ModernRuntime | ⬜ open |
 
-**Remaining:** Return closure, function-level C, wider ISA, runtime link.
+**Remaining:** Return closure outside the assumption scope, wider ISA, runtime link.
 
 ## Native Runtime
 

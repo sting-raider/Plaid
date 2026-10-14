@@ -604,9 +604,16 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             );
         }
     }
+    let mut return_closure = false;
     for site in &map.indirect_sites {
-        let proof_valid =
-            source(images, &site.site).is_some_and(|image| verify_constant(map, image, site));
+        // Return certificates hold only under the guarded scope's checked
+        // call/return assumption; every other scope keeps such sites OPEN.
+        let returns = scope == Scope::DeclaredStaticImagesGuardedRam
+            && source(images, &site.site)
+                .is_some_and(|image| crate::returns::verify(map, image, site));
+        return_closure |= returns;
+        let proof_valid = returns
+            || source(images, &site.site).is_some_and(|image| verify_constant(map, image, site));
         if !proof_valid {
             add(
                 "unresolved_indirect_site",
@@ -884,6 +891,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     } else {
         Vec::new()
     };
+    if return_closure {
+        assumptions.push(
+            "Each jr $ra returns to the continuation of the call that entered its function; a native artifact checks the return address at every return and aborts on mismatch."
+                .into(),
+        );
+    }
     if scope == Scope::DeclaredStaticImagesGuardedRam {
         assumptions.push(
             "Data loads/stores are naturally aligned RDRAM accesses through KSEG0/KSEG1, never reach executable bytes, and use only one of KSEG0/KSEG1 per 16-byte line; a native artifact checks every store and access and aborts on violation, with no fallback execution."

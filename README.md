@@ -48,7 +48,7 @@ The chart is generated from [`docs/progress.json`](docs/progress.json). See [`do
 | **Discovery & ProgramMap** | strong foundation | ROM normalization, deterministic ProgramMap, dynamic trace import, direct CFG recovery, evidence merge/conflict handling, bounded indirect proofs | broader jump-table proof, known-library evidence, commercial-ROM validation |
 | **Executable provenance** | active / partial | physical/cache fetch context, PI/SP/PIF source histories, CPU copy/transform receipts, RSP/CPU mutation evidence, bounded cache/TLB/root provenance | complete mutation census, general lifetimes, full transform/relocation coverage |
 | **Closed-world proof** | active / partial | fail-closed solver, source rechecking, static identity hardening, bounded indirect closure, root/TLB/cache proof primitives | complete root census, executable lifetimes, RSP universe closure, first ROM reaching `CLOSED` |
-| **Native AOT compiler** | started | `plaid-lower`: CLOSED map -> C with proven-target dispatch and a store guard; differential-tested against ares (spike096) | function-level lowering, return closure, 64-bit/unaligned/COP0/COP1 instructions |
+| **Native AOT compiler** | started | `plaid-lower`: CLOSED map -> C, one C function per guest function with checked returns, proven-target dispatch and store guards; differential-tested against ares (spike096) | 64-bit/unaligned/COP0/COP1 instructions, real-ROM scopes |
 | **Native runtime** | planned reuse | decision to reuse N64ModernRuntime + RT64 (ADR-0126) | integration with lowered code, packaging |
 | **Compatibility** | research only | synthetic corpus plus pinned Mupen/ares differential oracles | first commercial ROM mapped/closed, native boot/gameplay campaigns |
 

@@ -73,6 +73,8 @@ pub fn discover_image(
         map.validate()?;
         discovery.map = map.clone();
         if roots.len() == old_count {
+            // Return certificates only label the fixed point; they add no roots.
+            discovery.map = crate::returns::annotate(&discovery.map, image)?;
             return Ok(discovery);
         }
         history = Some(map);
