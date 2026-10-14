@@ -12,6 +12,7 @@ import argparse
 import datetime
 import html
 import json
+import math
 import os
 import subprocess
 import textwrap
@@ -25,6 +26,8 @@ HISTORY = ROOT / "docs" / "history.json"
 HISTORY_SVG = ROOT / "docs" / "history.svg"
 HISTORY_MD = ROOT / "docs" / "HISTORY.md"
 BADGES = ROOT / "docs" / "badges"
+COVERAGE = ROOT / "docs" / "isa-coverage.json"
+COVERAGE_SVG = ROOT / "docs" / "coverage.svg"
 
 STATE_LABEL = {
     "verified": "verified",
@@ -215,6 +218,7 @@ def measure_isa() -> dict:
     coverage = json.loads(subprocess.check_output([exe, "isa-coverage"], text=True))
     if coverage.get("format") != "plaid-isa-coverage-v0":
         raise SystemExit("unexpected isa-coverage output")
+    COVERAGE.write_text(json.dumps(coverage, indent=2) + "\n", encoding="utf-8")
     return {"isa_lowered": coverage["lowered"], "isa_decoded": coverage["decoded"]}
 
 
@@ -365,16 +369,140 @@ def render_history_md(history: dict) -> str:
     return "\n".join(lines)
 
 
+def isa_group(name: str) -> str:
+    if name.startswith("c."):
+        return "FPU compare"
+    if name.startswith(("cvt.", "round.", "trunc.", "ceil.", "floor.")):
+        return "FPU convert"
+    if "." in name:
+        return "FPU arith"
+    if name in ("mfc1", "mtc1", "dmfc1", "dmtc1", "cfc1", "ctc1", "lwc1", "swc1", "ldc1", "sdc1") \
+            or name.startswith("bc1"):
+        return "COP1 move"
+    if name in ("mfc0", "mtc0", "dmfc0", "dmtc0", "cfc0", "ctc0", "eret", "cache", "sync",
+                "syscall", "break") or name.startswith("tlb"):
+        return "COP0/system"
+    if name[0] == "t":
+        return "Trap"
+    if name in ("j", "jal", "jr", "jalr") or name.startswith("b"):
+        return "Branch/jump"
+    if name in ("mult", "multu", "div", "divu", "dmult", "dmultu", "ddiv", "ddivu",
+                "mfhi", "mflo", "mthi", "mtlo"):
+        return "Mul/div"
+    if name[0] in "ls" and name not in ("lui", "sll", "sllv", "slt", "slti", "sltiu", "sltu", "sra",
+                                         "srav", "srl", "srlv", "sub", "subu"):
+        return "Load/store"
+    if name.startswith("d"):
+        return "64-bit ALU"
+    return "ALU"
+
+
+def squarify(items: list, x: float, y: float, w: float, h: float) -> list:
+    """Squarified treemap: items are (key, area) sorted by area, descending."""
+    out, items = [], list(items)
+    while items:
+        short = min(w, h)
+
+        def worst(row):
+            total = sum(a for _, a in row)
+            return max(max(short * short * a / total ** 2, total ** 2 / (short * short * a))
+                       for _, a in row)
+
+        row, rest = [items[0]], items[1:]
+        while rest and worst(row + [rest[0]]) <= worst(row):
+            row.append(rest.pop(0))
+        total = sum(a for _, a in row)
+        if w >= h:
+            rw, cy = total / h, y
+            for key, a in row:
+                out.append((key, x, cy, rw, a / rw))
+                cy += a / rw
+            x, w = x + rw, w - rw
+        else:
+            rh, cx = total / w, x
+            for key, a in row:
+                out.append((key, cx, y, a / rh, rh))
+                cx += a / rh
+            y, h = y + rh, h - rh
+        items = rest
+    return out
+
+
+CELL = {"done": "#2ea043", "partial": "#bf8700", "open": "#6e7681"}
+
+
+def treemap(groups: dict, x0: float, y0: float, w: float, h: float) -> list:
+    """groups: name -> [(item, state)]; one cell per item, done first."""
+    order = sorted(groups, key=lambda g: (-len(groups[g]), g))
+    total = sum(len(groups[g]) for g in order)
+    rects = squarify([(g, len(groups[g]) * w * h / total) for g in order], x0, y0, w, h)
+    rank = {"done": 0, "partial": 1, "open": 2}
+    out = []
+    for g, gx, gy, gw, gh in rects:
+        items = sorted(groups[g], key=lambda it: (rank[it[1]], it[0]))
+        cols = max(1, round(math.sqrt(len(items) * gw / gh)))
+        rows = math.ceil(len(items) / cols)
+        cw, ch = gw / cols, gh / rows
+        last = len(items) - (rows - 1) * cols  # the last row stretches to fill
+        for n, (item, state) in enumerate(items):
+            row, col = divmod(n, cols)
+            w_ = cw if row < rows - 1 else gw / last
+            cx, cy = gx + col * w_, gy + row * ch
+            out.append(f'<rect x="{cx:.1f}" y="{cy:.1f}" width="{w_:.1f}" height="{ch:.1f}" '
+                       f'fill="{CELL[state]}" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6">'
+                       f'<title>{esc(g)}: {esc(item)} ({state})</title></rect>')
+        out.append(f'<rect x="{gx:.1f}" y="{gy:.1f}" width="{gw:.1f}" height="{gh:.1f}" '
+                   f'fill="none" stroke="#0d1117" stroke-width="2"/>')
+        label = g if len(g) * 6.6 < gw - 6 else g[:max(0, int((gw - 6) / 6.6) - 1)] + "…"
+        if gw > 24 and gh > 16 and len(label) > 1:
+            out.append(f'<text x="{gx + 4:.1f}" y="{gy + 13:.1f}" class="cell">{esc(label)}</text>')
+    return out
+
+
+def render_coverage_svg(coverage: dict, data: dict) -> str:
+    isa = {}
+    for name, lowered in coverage["mnemonics"].items():
+        isa.setdefault(isa_group(name), []).append((name, "done" if lowered else "open"))
+    state = {"verified": "done", "partial": "partial", "open": "open"}
+    ms = {a["name"]: [(m["name"], state[m["state"]]) for m in a["milestones"]] for a in data["areas"]}
+    counts = milestone_counts(data)
+    width, height, gap, top = 1220, 392, 20, 34
+    map_w, map_h = (width - gap) / 2, height - top
+    out = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" '
+        f'height="{height}" role="img" aria-label="Plaid coverage maps">',
+        '<style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}'
+        '.title{font-size:17px;fill:#1f2328}.cell{font-size:12px;fill:#fff;'
+        'paint-order:stroke;stroke:#0d1117;stroke-width:2px;stroke-opacity:.45}'
+        '@media (prefers-color-scheme:dark){.title{fill:#e6edf3}}</style>',
+        f'<text x="2" y="22" class="title">VR4300 instructions*: '
+        f'{pct(coverage["lowered"], coverage["decoded"])} ({coverage["lowered"]}/{coverage["decoded"]})</text>',
+        f'<text x="{map_w + gap + 2:.0f}" y="22" class="title">Milestones*: '
+        f'{counts["milestones_verified"]} verified, {counts["milestones_partial"]} partial '
+        f'({counts["milestones_declared"]})</text>',
+    ]
+    out += treemap(isa, 0, top, map_w, map_h)
+    out += treemap(ms, map_w + gap, top, map_w, map_h)
+    out.append("</svg>")
+    return "\n".join(out) + "\n"
+
+
+def shield_color(fraction: float) -> str:
+    for limit, color in ((0.9, "#4c1"), (0.75, "#97ca00"), (0.5, "#a4a61d"), (0.25, "#dfb317")):
+        if fraction >= limit:
+            return color
+    return "#e05d44"
+
+
 def render_badge(label: str, value: str, color: str) -> str:
-    lw, vw = 12 + 7 * len(label), 12 + 7 * len(value)
+    lw, vw = 10 + round(6.5 * len(label)), 10 + round(6.5 * len(value))
     w = lw + vw
     font = 'font-family="Verdana,DejaVu Sans,sans-serif" font-size="11"'
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="20" role="img" '
         f'aria-label="{esc(label)}: {esc(value)}"><title>{esc(label)}: {esc(value)}</title>'
-        f'<rect width="{w}" height="20" rx="3" fill="#555"/>'
-        f'<rect x="{lw}" width="{vw}" height="20" rx="3" fill="{color}"/>'
-        f'<rect x="{lw}" width="4" height="20" fill="{color}"/>'
+        f'<rect width="{lw}" height="20" fill="#555"/>'
+        f'<rect x="{lw}" width="{vw}" height="20" fill="{color}"/>'
         f'<text x="{lw / 2}" y="14" fill="#fff" {font} text-anchor="middle">{esc(label)}</text>'
         f'<text x="{lw + vw / 2}" y="14" fill="#fff" {font} text-anchor="middle">{esc(value)}</text></svg>\n'
     )
@@ -387,12 +515,13 @@ def badges(history: dict, data: dict) -> dict:
     m = milestone_counts(data)
     out = {
         "milestones.svg": render_badge(
-            "milestones", f"{m['milestones_verified']} verified / {m['milestones_declared']}", "#2e9e7c"),
-        "closed.svg": render_badge("commercial ROMs CLOSED", str(closed), "#c0392b" if closed == "0" else "#2e9e7c"),
+            "milestones*", f"{m['milestones_verified']}/{m['milestones_declared']}",
+            shield_color(m["milestones_verified"] / m["milestones_declared"])),
+        "closed.svg": render_badge("ROMs CLOSED", str(closed), "#e05d44" if closed == "0" else "#4c1"),
     }
     if latest.get("isa_lowered") is not None:
-        out["isa.svg"] = render_badge(
-            "VR4300 lowered", f"{latest['isa_lowered']}/{latest['isa_decoded']}", "#3b7dd8")
+        lowered, decoded = latest["isa_lowered"], latest["isa_decoded"]
+        out["isa.svg"] = render_badge("VR4300*", pct(lowered, decoded), shield_color(lowered / decoded))
     return out
 
 
@@ -434,6 +563,9 @@ def main() -> int:
     ok &= write_or_check(HISTORY_MD, render_history_md(history), args.check)
     if not args.check:
         BADGES.mkdir(exist_ok=True)
+    if COVERAGE.exists():
+        coverage = json.loads(COVERAGE.read_text(encoding="utf-8"))
+        ok &= write_or_check(COVERAGE_SVG, render_coverage_svg(coverage, data), args.check)
     for name, content in badges(history, data).items():
         ok &= write_or_check(BADGES / name, content, args.check)
     return 0 if ok else 1
