@@ -19,7 +19,7 @@ typedef uint8_t u8; typedef uint32_t u32; typedef int32_t s32;
 typedef uint64_t u64; typedef int64_t s64;
 #define PLAID_RAM_SIZE 0x800000u
 typedef struct {
-  u64 r[32]; u64 hi, lo; u32 pc; u32 fault; u32 fault_pc;
+  u64 r[32]; u64 hi, lo; u64 f[32]; u32 pc; u32 fault; u32 fault_pc;
   u8 ram[PLAID_RAM_SIZE];
   u8 line_segment[PLAID_RAM_SIZE / 16]; /* 0 untouched, 1 KSEG0, 2 KSEG1 */
 } plaid_state;
@@ -190,6 +190,30 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
         ),
         (25, _) => set(rt, format!("{a} + (u64)(s64){simm}")),
         (55, _) => load(8, "s64"),
+        // COP1 data moves with 64-bit FPRs (Status.FR = 1): 32-bit forms
+        // replace only the low word, as on the VR4300 (ADR-0131).
+        (17, _) if word & 0x7ff == 0 => {
+            let f = format!("s->f[{rd}]");
+            match rs {
+                0 => set(rt, format!("SX32((u32){f})")),
+                1 => set(rt, f),
+                4 => format!("{f} = ({f} & 0xffffffff00000000ull) | (u32){b};"),
+                5 => format!("{f} = {b};"),
+                _ => {
+                    return Err(format!(
+                        "{pc:08x}: instruction {word:08x} is outside the lowered subset"
+                    ));
+                }
+            }
+        }
+        (49, _) => format!(
+            "{{ u64 v; if (plaid_load(s, {addr}, 4, 0x{pc:08x}u, &v)) return 1; s->f[{rt}] = (s->f[{rt}] & 0xffffffff00000000ull) | v; }}"
+        ),
+        (53, _) => format!("if (plaid_load(s, {addr}, 8, 0x{pc:08x}u, &s->f[{rt}])) return 1;"),
+        (57, _) => {
+            format!("if (plaid_store(s, {addr}, 4, (u32)s->f[{rt}], 0x{pc:08x}u)) return 1;")
+        }
+        (61, _) => format!("if (plaid_store(s, {addr}, 8, s->f[{rt}], 0x{pc:08x}u)) return 1;"),
         (63, _) => store(8),
         (0, 33) => set(rd, format!("SX32((u32){a} + (u32){b})")),
         (0, 35) => set(rd, format!("SX32((u32){a} - (u32){b})")),

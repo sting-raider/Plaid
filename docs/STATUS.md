@@ -23,7 +23,7 @@ no runtime yet. `native_complete` is `false` everywhere.
 
 | ROM (local, never committed) | Result |
 | --- | --- |
-| Ocarina of Time US 1.2, conditional window `0x1000..0x101000` at `0x80000400` | 293 blocks, 45 indirect sites, **62 whole-ROM blockers** (44 unresolved indirect sites, 8 unsupported instructions, 4 other site-level blockers, 6 global model obligations). 43 of the 44 unresolved indirect sites are returns with ADR-0127 certificates, which count only in the assumption scope. Under `--guarded-ram`: **82 blockers**, 69 of them libultra system instructions (ADR-0128). With heuristic runtime declarations and the `osCreateThread` callback (ADR-0129/0130): **613 blocks, 6 blockers** (host return, one `jalr`, one computed `jr`, three COP1 moves) |
+| Ocarina of Time US 1.2, conditional window `0x1000..0x101000` at `0x80000400` | 293 blocks, 45 indirect sites, **62 whole-ROM blockers** (44 unresolved indirect sites, 8 unsupported instructions, 4 other site-level blockers, 6 global model obligations). 43 of the 44 unresolved indirect sites are returns with ADR-0127 certificates, which count only in the assumption scope. Under `--guarded-ram`: **82 blockers**, 69 of them libultra system instructions (ADR-0128). With heuristic runtime declarations and the `osCreateThread` callback (ADR-0129/0130): **613 blocks, 3 blockers** (host return, one memory-loaded `jalr`, one jump table) after COP1 moves (ADR-0131) |
 | Super Mario 64 | Not run yet: no local ROM supplied |
 | Commercial ROMs CLOSED | **0** |
 
@@ -33,12 +33,13 @@ Reproduce the OoT numbers with `plaid discover <rom> 0x1000 0x80000400
 ## Native lowering subset (spike096)
 
 Matches the pinned ares interpreter exactly (all GPRs, HI, LO, a 256-byte RAM
-window) on nine synthetic programs:
+window) on ten synthetic programs (also comparing all 32 FPRs):
 
 - ALU and shifts: `LUI ORI ADDIU ANDI XORI SLTI SLTIU ADDU SUBU AND OR XOR NOR SLT SLTU SLL SRL SRA SLLV SRLV SRAV`
 - HI/LO: `MULT MULTU DIV DIVU MFHI MFLO MTHI MTLO`, including divide-by-zero and INT_MIN/-1
 - 64-bit: `DADD DADDU DSUB DSUBU DADDI DADDIU DSLL DSRL DSRA DSLL32 DSRL32 DSRA32 DSLLV DSRLV DSRAV DMULT DMULTU DDIV DDIVU LD SD`, plus trapping `ADD ADDI SUB` with an overflow check
 - Memory: `LB LBU LH LHU LW SB SH SW` through KSEG0 and KSEG1
+- COP1 data moves (FR = 1): `MFC1 DMFC1 MTC1 DMTC1 LWC1 LDC1 SWC1 SDC1`
 - Control: `BEQ BNE BLEZ BGTZ BLTZ BGEZ J JAL JR JALR` and the branch-likely forms, with delay slots; indirect jumps only over proven targets; nested, recursive, pointer and tail calls with checked returns
 
 Anything else rejects the whole program. A store into executable bytes (fault

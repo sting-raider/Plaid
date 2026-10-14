@@ -334,7 +334,19 @@ fn static_identity_blockers(
     blockers
 }
 
+/// COP1 data moves: MFC1 DMFC1 MTC1 DMTC1 LWC1 LDC1 SWC1 SDC1 (ADR-0131).
+pub fn is_cop1_move(word: u32) -> bool {
+    match word >> 26 {
+        17 => matches!((word >> 21) & 31, 0 | 1 | 4 | 5) && word & 0x7ff == 0,
+        49 | 53 | 57 | 61 => true,
+        _ => false,
+    }
+}
+
 fn allowed_static_effect(word: u32, pc: crate::GuestAddr, guarded_ram: bool) -> bool {
+    if guarded_ram && is_cop1_move(word) {
+        return true;
+    }
     let i = decode(word, pc);
     if !i.is_valid() || i.is_trap() || i.is_float() {
         return false;
@@ -507,6 +519,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             );
         }
     }
+    let mut uses_cop1 = false;
     for b in &map.blocks {
         if b.delay_slot_entry {
             add(
@@ -540,6 +553,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 );
                 continue;
             };
+            uses_cop1 |= is_cop1_move(word);
             if scope.is_static()
                 && !allowed_static_effect(word, pc, scope == Scope::DeclaredStaticImagesGuardedRam)
             {
@@ -966,6 +980,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             "Data loads/stores are naturally aligned RDRAM accesses through KSEG0/KSEG1, never reach executable bytes, and use only one of KSEG0/KSEG1 per 16-byte line; a native artifact checks every store and access and aborts on violation, with no fallback execution."
                 .into(),
         );
+        if uses_cop1 {
+            assumptions.push(
+                "COP1 is usable with 64-bit FPRs (Status.CU1 = 1, Status.FR = 1) wherever COP1 data moves execute."
+                    .into(),
+            );
+        }
         if !map.runtime_functions.is_empty() {
             let names: Vec<_> = map
                 .runtime_functions

@@ -31,9 +31,11 @@ Next concrete steps, in order:
    blocker, but the first thread entry was never discovered.
    Done: runtime callbacks (ADR-0130). OoT now discovers its thread entry
    (613 blocks) and has 6 guarded-scope blockers.
-   **Next, from those blockers:** COP1 data moves (`MTC1`/`MFC1`/`LWC1`/
-   `SWC1`, then `LDC1`/`SDC1`) with an FPR file in the native state; the
-   `jalr` at `0x80000f10` and the computed `jr` at `0x80003acc`; then
+   Done: COP1 data moves (ADR-0131); OoT is at 3 guarded-scope blockers.
+   **Next, from those blockers:** the jump table at `0x80003acc` (the
+   recognizer misses a scale `SLL` in the guard's delay slot, and table
+   candidates never close; close them under the guarded scope by protecting
+   table bytes like code); the memory-loaded `jalr` at `0x80000f10`; then
    identification evidence (PR #50 n64sym, or a user-supplied symbol map) in
    place of the heuristic runtime declaration.
 4. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
