@@ -73,6 +73,12 @@ struct Access {
     reads: u64,
     read: Option<(u64, PhysicalAddr, u64)>,
 }
+struct StorageAttempt {
+    ordinal: u64,
+    pc: GuestVirtualAddr,
+    value: u64,
+    effect: Option<(PhysicalAddr, u64)>,
+}
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct SampleKey {
     pc: GuestVirtualAddr,
@@ -95,6 +101,7 @@ struct Lineage<'a> {
     half: Option<(u64, u64, u32, u32, u16)>,
     buffer: [Option<u32>; 128],
     attempt_writer: Option<(u64, u32, u64)>,
+    storage_attempt: Option<StorageAttempt>,
     samples: BTreeMap<SampleKey, ObservedPiFetch>,
     digest: Sha256,
     fetches: u64,
@@ -120,6 +127,7 @@ impl<'a> Lineage<'a> {
             half: None,
             buffer: [None; 128],
             attempt_writer: None,
+            storage_attempt: None,
             samples: BTreeMap::new(),
             digest: Sha256::new(),
             fetches: 0,
@@ -190,6 +198,7 @@ impl<'a> Lineage<'a> {
                 pbus,
                 dram,
                 value,
+                pc,
                 ..
             } => match event {
                 2 => self.buffer.fill(None),
@@ -212,24 +221,49 @@ impl<'a> Lineage<'a> {
                     self.buffer[lane as usize] = offset;
                     self.buffer[lane as usize + 1] = offset.and_then(|o| o.checked_add(1));
                 }
-                4 => self.attempt_writer = None,
+                4 => {
+                    self.attempt_writer = None;
+                    self.storage_attempt = Some(StorageAttempt {
+                        ordinal,
+                        pc,
+                        value: u64::from(value),
+                        effect: None,
+                    });
+                }
                 5 => {
-                    if let Some((id, l, writer)) = self.attempt_writer.take() {
+                    // Validated PI copies forbid intervening fetches; select the
+                    // completed physical sink only after its attempt returns.
+                    let storage = self.storage_attempt.take().and_then(|a| a.effect);
+                    let scalar = self.attempt_writer.take();
+                    if let Some((address, writer)) = storage {
+                        require(
+                            writer.checked_add(if scalar.is_some() { 2 } else { 1 })
+                                == Some(ordinal)
+                                && (scalar.is_none() || address == dram),
+                            "PI storage effect/return or wrapper sink mismatch",
+                        )?;
+                    }
+                    let origin = self.buffer.get(lane as usize).copied().flatten();
+                    if let Some((id, l, writer)) = scalar {
                         require(
                             id == transfer && l == lane,
                             "lineage PI scalar/return mismatch",
                         )?;
-                        let origin =
-                            self.buffer
-                                .get(lane as usize)
-                                .copied()
-                                .flatten()
-                                .map(|offset| ObservedPiByteChain {
-                                    rom_offset: RomOffset(u64::from(offset)),
-                                    writer_ordinal: writer,
-                                    transfer,
-                                });
+                        let origin = origin.map(|offset| ObservedPiByteChain {
+                            rom_offset: RomOffset(u64::from(offset)),
+                            writer_ordinal: writer,
+                            transfer,
+                        });
                         self.set(dram.0, origin)?;
+                    } else if let Some((address, writer)) = storage {
+                        self.set(
+                            address.0,
+                            origin.map(|offset| ObservedPiByteChain {
+                                rom_offset: RomOffset(u64::from(offset)),
+                                writer_ordinal: writer,
+                                transfer,
+                            }),
+                        )?;
                     }
                 }
                 _ => {}
@@ -377,11 +411,28 @@ impl<'a> Lineage<'a> {
     fn storage(&mut self, record: &sp_history::StorageRecord) -> Result<(), String> {
         record.validate()?;
         let sp_history::StorageRecord::StorageEffect {
+            ordinal,
+            context,
+            pc,
             kind,
             address,
             bytes,
-            ..
+            value,
         } = record;
+        if let Some(attempt) = &mut self.storage_attempt {
+            require(
+                *kind == 0
+                    && *bytes == 1
+                    && *context == 0
+                    && *pc == attempt.pc
+                    && *value == attempt.value
+                    && attempt.ordinal.checked_add(1) == Some(*ordinal)
+                    && attempt.effect.is_none()
+                    && self.attempt_writer.is_none(),
+                "PI byte attempt lacks one immediate matching storage primitive",
+            )?;
+            attempt.effect = Some((*address, *ordinal));
+        }
         if *kind == 0 {
             for n in 0..*bytes {
                 self.set(address.0 + n, None)?;

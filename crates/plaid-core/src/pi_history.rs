@@ -27,6 +27,8 @@ pub struct PiHistoryReport {
     pub successful_pi_writes: u64,
     pub canonical_rom_byte_origins: u64,
     pub unknown_pi_byte_origins: u64,
+    /// Attempts without an identity-RDRAM scalar receipt; translated storage
+    /// success may be independently witnessed by a wider source contract.
     pub failed_destination_witnesses: u64,
     pub returned_transfers: u64,
     pub completion_status_transitions: u64,

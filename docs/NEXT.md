@@ -1,5 +1,12 @@
 # Next
 
+Physical PI storage writers now compose with executable consumption. Extend
+other actual producer scopes while retaining original effect identity, separate
+mapping/root obligations and independent cache residency. The 110-event native
+reference fixture uses explicit host descriptor/mapping controls; it does not
+prove guest MMIO or mapping ancestry. Reuse the authenticated commercial-prefix
+report only when a complete delta check proves all writer selections unchanged.
+
 The v5 boot source now places ordinary storage effects on the original PI/SP/
 fetch clock. Continue actual producer/cached operand/mapping/root composition
 from its retained69,513,732-record twenty-million prefix. Scalar/equal storage

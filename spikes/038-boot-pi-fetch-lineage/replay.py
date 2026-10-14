@@ -41,6 +41,7 @@ def inspect(history_path, fetch_path, source):
     assert header['firmware_sha256'] == paired_header['boot_inputs']['firmware_sha256']
     ram, resident, samples = {}, {}, {}
     half = burst = last_fill = writer = active = pending = None
+    storage_attempt = None
     buffer = [None]*128
     digest = hashlib.sha256()
     count = full = partial = byte_count = words = contradictions = ordinal = 0
@@ -83,19 +84,34 @@ def inspect(history_path, fetch_path, source):
                 offset = half['offset'] if joined else None
                 buffer[lane:lane+2] = [offset, offset+1 if offset is not None else None]
                 half = None
-            elif event == 4: writer = None
-            elif event == 5 and writer is not None:
-                assert (writer['pi']['transfer'],writer['pi']['lane'],writer['address'],writer['value']) \
-                    == (e['transfer'],e['lane'],e['dram'],e['value'])
-                offset = buffer[e['lane']]
-                if offset is not None:
-                    assert source[offset] == e['value']
-                    ram[e['dram']] = (offset,writer['ordinal'],e['transfer'])
-                else: ram.pop(e['dram'],None)
+            elif event == 4:
                 writer = None
+                storage_attempt = dict(begin=e,effect=None)
+            elif event == 5:
+                effect = None if storage_attempt is None else storage_attempt['effect']
+                if effect is not None:
+                    assert effect['ordinal']+(2 if writer is not None else 1) == ordinal
+                    assert writer is None or effect['address'] == e['dram']
+                sink = writer if writer is not None else effect
+                if writer is not None:
+                    assert (writer['pi']['transfer'],writer['pi']['lane'],writer['address'],writer['value']) \
+                        == (e['transfer'],e['lane'],e['dram'],e['value'])
+                if sink is not None:
+                    offset = buffer[e['lane']]
+                    if offset is not None:
+                        assert source[offset] == e['value']
+                        ram[sink['address']] = (offset,sink['ordinal'],e['transfer'])
+                    else: ram.pop(sink['address'],None)
+                writer = storage_attempt = None
         elif kind == 'storage_effect':
             assert storage_clock
             assert set(e) == {'record','ordinal','context','pc','kind','address','bytes','value'}
+            if storage_attempt is not None:
+                begin = storage_attempt['begin']
+                assert (e['kind'],e['bytes'],e['context'],e['pc'],e['value'],e['ordinal']) \
+                    == (0,1,0,begin['pc'],begin['value'],begin['ordinal']+1)
+                assert storage_attempt['effect'] is None and writer is None
+                storage_attempt['effect'] = e
             if e['kind'] == 0:
                 assert e['bytes'] in (1,2,4) and e['address'] % e['bytes'] == 0
                 assert 0 <= e['address'] <= 8388608-e['bytes'] and 0 <= e['value'] < 1 << (8*e['bytes'])
