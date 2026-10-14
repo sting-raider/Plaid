@@ -6,4 +6,5 @@ publish = false
 
 [dependencies]
 plaid-core = { path = "../../crates/plaid-core" }
+plaid-lower = { path = "../../crates/plaid-lower" }
 serde_json = "1"
