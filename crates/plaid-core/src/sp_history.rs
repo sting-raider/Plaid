@@ -10,6 +10,8 @@ use std::{
 
 pub const FORMAT: &str = "plaid-ares-access-history-v3";
 pub const POLICY: &str = "identity_ram_pi_queue_and_observed_sp_backing";
+pub const STORAGE_FORMAT: &str = "plaid-ares-access-history-v5";
+pub const STORAGE_POLICY: &str = "observed_ordinary_storage_mutations_and_pi_queue_sp_backing";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -206,7 +208,49 @@ impl WriterLineage {
 #[serde(untagged)]
 pub(crate) enum Wire {
     Sp(SpRecord),
+    Storage(StorageRecord),
     Legacy(queue::Wire),
+}
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
+pub(crate) enum StorageRecord {
+    StorageEffect {
+        ordinal: u64,
+        context: u64,
+        pc: GuestVirtualAddr,
+        kind: u32,
+        address: PhysicalAddr,
+        bytes: u32,
+        value: u64,
+    },
+}
+impl StorageRecord {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        let Self::StorageEffect {
+            kind,
+            address,
+            bytes,
+            value,
+            ..
+        } = self;
+        match *kind {
+            0 => require(
+                matches!(bytes, 1 | 2 | 4)
+                    && address.0.is_multiple_of(*bytes)
+                    && address
+                        .0
+                        .checked_add(*bytes)
+                        .is_some_and(|end| end <= 8_388_608)
+                    && *value < (1u64 << (*bytes * 8)),
+                "invalid completed ordinary storage effect",
+            ),
+            1 | 2 => require(
+                address.0 == 0 && *bytes == 8_388_608 && *value == 0,
+                "invalid whole-RAM storage cut",
+            ),
+            _ => Err("storage restore/retirement needs an execution-epoch source contract".into()),
+        }
+    }
 }
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
@@ -261,6 +305,12 @@ impl Wire {
                 pc,
                 ..
             }) => Some((*ordinal, *context, *pc, "sp_dma_store")),
+            Self::Storage(StorageRecord::StorageEffect {
+                ordinal,
+                context,
+                pc,
+                ..
+            }) => Some((*ordinal, *context, *pc, "storage_effect")),
             Self::Legacy(queue::Wire::Schedule(s)) => Some(s.identity()),
             Self::Legacy(queue::Wire::Legacy(r)) => r.identity(),
         }
@@ -271,6 +321,12 @@ impl Wire {
                 ordinal, context, ..
             })
             | Self::Sp(SpRecord::SpDmaStore {
+                ordinal, context, ..
+            }) => {
+                *ordinal = next;
+                *context = scope;
+            }
+            Self::Storage(StorageRecord::StorageEffect {
                 ordinal, context, ..
             }) => {
                 *ordinal = next;
@@ -316,6 +372,7 @@ struct Projection<H> {
     hash: Sha256,
     ordered: Sha256,
     header: bool,
+    storage: bool,
     ended: bool,
     records: u64,
     projected: u64,
@@ -344,6 +401,7 @@ impl<H: BufRead> Projection<H> {
             hash: Sha256::new(),
             ordered: Sha256::new(),
             header: false,
+            storage: false,
             ended: false,
             records: 0,
             projected: 0,
@@ -519,14 +577,15 @@ impl<H: BufRead> Projection<H> {
             ..
         })) = &mut row
         {
+            let storage = format == STORAGE_FORMAT && policy == STORAGE_POLICY;
             require(
                 !self.header
-                    && format == FORMAT
-                    && policy == POLICY
+                    && ((format == FORMAT && policy == POLICY) || storage)
                     && lifecycle_policy == history::LIFECYCLE_POLICY,
                 "unsupported/repeated v3 header",
             )?;
             self.header = true;
+            self.storage = storage;
             *format = queue::FORMAT.into();
             *policy = queue::POLICY.into();
         } else if let queue::Wire::Legacy(pi_history::Wire::Base(R::End {
@@ -725,6 +784,17 @@ impl<H: BufRead> Projection<H> {
             self.hash.update(&self.raw);
             match serde_json::from_slice::<Wire>(&self.raw).map_err(|e| e.to_string())? {
                 Wire::Sp(s) => self.sp(s)?,
+                Wire::Storage(s) => {
+                    require(self.storage, "storage effect outside v5 source policy")?;
+                    s.validate()?;
+                    let StorageRecord::StorageEffect {
+                        ordinal,
+                        context,
+                        pc,
+                        ..
+                    } = s;
+                    self.identity(ordinal, context, pc, "storage_effect")?;
+                }
                 Wire::Legacy(r) => {
                     self.legacy(r)?;
                     return Ok(true);
@@ -776,8 +846,18 @@ fn finish_report<H>(
     projection: queue::PiQueueHistoryReport,
 ) -> SpHistoryReport {
     SpHistoryReport {
-        format: "plaid-observed-sp-backing-report-v0".into(),
-        scope: "finite_actual_cpu_sp_reads_and_observed_stores".into(),
+        format: if stream.storage {
+            "plaid-observed-sp-backing-report-v1"
+        } else {
+            "plaid-observed-sp-backing-report-v0"
+        }
+        .into(),
+        scope: if stream.storage {
+            "finite_actual_sp_backing_with_observed_ordinary_storage_effects"
+        } else {
+            "finite_actual_cpu_sp_reads_and_observed_stores"
+        }
+        .into(),
         history_sha256: format!("{:x}", stream.hash.finalize()),
         projection,
         records: stream.records,

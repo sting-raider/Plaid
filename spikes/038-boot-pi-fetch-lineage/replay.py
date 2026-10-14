@@ -30,7 +30,10 @@ def inspect(history_path, fetch_path, source):
     history = rows(history_path, history_hash)
     fetched = rows(fetch_path, fetch_hash)
     header, paired_header = next(history), next(fetched)
-    assert header['format'] in ('plaid-ares-access-history-v2', 'plaid-ares-access-history-v3')
+    assert header['format'] in ('plaid-ares-access-history-v2', 'plaid-ares-access-history-v3', 'plaid-ares-access-history-v5')
+    storage_clock = header['format'] == 'plaid-ares-access-history-v5'
+    if storage_clock:
+        assert header['policy'] == 'observed_ordinary_storage_mutations_and_pi_queue_sp_backing'
     if header['format'] == 'plaid-ares-access-history-v3':
         assert header['policy'] == 'identity_ram_pi_queue_and_observed_sp_backing'
     assert header['lifecycle_policy'] == 'single_run_no_host_restore'
@@ -90,6 +93,16 @@ def inspect(history_path, fetch_path, source):
                     ram[e['dram']] = (offset,writer['ordinal'],e['transfer'])
                 else: ram.pop(e['dram'],None)
                 writer = None
+        elif kind == 'storage_effect':
+            assert storage_clock
+            assert set(e) == {'record','ordinal','context','pc','kind','address','bytes','value'}
+            if e['kind'] == 0:
+                assert e['bytes'] in (1,2,4) and e['address'] % e['bytes'] == 0
+                assert 0 <= e['address'] <= 8388608-e['bytes'] and 0 <= e['value'] < 1 << (8*e['bytes'])
+                for a in range(e['address'],e['address']+e['bytes']): ram.pop(a,None)
+            else:
+                assert e['kind'] in (1,2) and (e['address'],e['bytes'],e['value']) == (0,8388608,0)
+                ram.clear()
         elif kind == 'scalar':
             assert e['bytes'] in (1,2,4,8)
             if e['write']:

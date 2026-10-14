@@ -2731,3 +2731,15 @@ and actual producer scopes. Requestor-labeled component calls do not authenticat
 DMA tasks or guest execution. Hidden-RAM effects, raw pointer/JIT/Vulkan writes,
 all lifecycle/scheduler paths and complete mutation coverage remain independent
 obligations. No certificate, native flag or progress milestone is promoted.
+
+ADR-0124 original-clock follow-up: history v5 retains ordinary storage effects
+on the same counter/context as existing PI/queue/SP/fetch facts. Reuse the current
+source projection and PI lineage state; scalar/equal effects revoke backing
+parents, full fill/load cuts clear them, and no backing mutation refreshes a
+surviving I-cache generation. Successful PI wrapper writer occurrences remain
+distinct from preceding storage primitives. Source digests cover all added rows;
+V3 source/report behavior stays unchanged, with new SP projection report-v1 only
+for v5. Restore/retirement remain rejected under the uncut boot contract until
+execution-epoch evidence composes. Retained69,513,732 records include3,027,381
+additional effects with exact complete paired fetch/checkpoint/repeat controls.
+No future execution, complete mutation census, hardware or native claim follows.

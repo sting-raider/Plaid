@@ -57,7 +57,7 @@ pub struct PiFetchLineageReport<P = PiQueueHistoryReport> {
     pub native_complete: bool,
 }
 
-/// Byte-chain ordinals belong to the complete raw v3 source, not its renumbered
+/// Byte-chain ordinals belong to the complete raw v3/v5 source, not its renumbered
 /// v2 projection. SP observations are validated but supply no RAM byte origins.
 pub type SpPiFetchLineageReport = PiFetchLineageReport<SpHistoryReport>;
 
@@ -374,6 +374,25 @@ impl<'a> Lineage<'a> {
         }
         Ok(())
     }
+    fn storage(&mut self, record: &sp_history::StorageRecord) -> Result<(), String> {
+        record.validate()?;
+        let sp_history::StorageRecord::StorageEffect {
+            kind,
+            address,
+            bytes,
+            ..
+        } = record;
+        if *kind == 0 {
+            for n in 0..*bytes {
+                self.set(address.0 + n, None)?;
+            }
+        } else {
+            self.pages.clear();
+        }
+        // Ordinary backing mutations never refresh or retire surviving I-cache
+        // generations. Restore/retirement reject before this state can change.
+        Ok(())
+    }
     fn fetched(&mut self, record: &history::Record, paired: fetch::Record) -> Result<(), String> {
         let history::Record::Fetch {
             fetch_seq,
@@ -533,7 +552,7 @@ pub fn inspect_pi_fetch_lineage<H: BufRead + Seek, F: BufRead + Seek>(
     )
 }
 
-/// Compose the existing PI writer/fill/fetch consumer with complete v3 source
+/// Compose the existing PI writer/fill/fetch consumer with complete v3/v5 source
 /// validation. Require independent receipts and retain original event ordinals.
 /// Compatible finite chains never certify a complete mutation census/lifetime.
 pub fn inspect_sp_pi_fetch_lineage<H: BufRead + Seek, F: BufRead + Seek>(
@@ -601,6 +620,10 @@ fn replay_lineage<H: BufRead + Seek, F: BufRead + Seek, P>(
             match serde_json::from_slice::<sp_history::Wire>(&raw).map_err(|e| e.to_string())? {
                 sp_history::Wire::Legacy(r) => Some(r),
                 sp_history::Wire::Sp(_) => None,
+                sp_history::Wire::Storage(s) => {
+                    ledger.storage(&s)?;
+                    None
+                }
             }
         } else {
             Some(

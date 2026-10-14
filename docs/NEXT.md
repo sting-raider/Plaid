@@ -1,7 +1,14 @@
 # Next
 
-Compose the opt-in storage mutation sensor (spike086) on the existing original
-fetch/writer clock. It reaches ordinary Memory::Writable effects beneath RAM
+The v5 boot source now places ordinary storage effects on the original PI/SP/
+fetch clock. Continue actual producer/cached operand/mapping/root composition
+from its retained69,513,732-record twenty-million prefix. Scalar/equal storage
+writes and full backing fill/load cuts revoke RAM parents; surviving I-cache
+generations stay independent. Restore/retirement still reject without execution-
+epoch evidence. Preserve raw writer identities and externally retained digests;
+finite sensor records do not establish mutation completeness or future closure.
+
+The opt-in storage mutation sensor (spike086) reaches ordinary Memory::Writable effects beneath RAM
 wrappers, including translated/EBus writes and explicit bulk/restore/retirement
 cuts. Preserve actual component splits and unknown parents; bind actual producer
 contexts separately. The25-effect/20-checkpoint contract does not cover raw-pointer

@@ -6,6 +6,14 @@ The authoritative engineering state is still [`STATUS.md`](STATUS.md) and [`NEXT
 
 ## Toolchain
 
+The boot capture's `--history storage` uses the same original counter for
+ordinary storage and legacy PI/queue/SP/fetch facts. Existing
+`inspect-sp-pi-fetch-lineage` / `verify-sp-pi-fetch-lineage` commands admit strict
+v5 sources with independently retained full source/fetch digests. Run spike087's
+`test_consumer.py` after building the CLI for source deletion, unknown-writer
+revocation, cached survival and independent-model coverage. See its README for
+the rejected epoch operations and remaining census obligations.
+
 For storage mutation coverage groundwork, spike086 exposes an opt-in passive
 `memory_mutation_access` reference build. Its recipe guards exact source hashes
 and shadow-header reuse; its actual baseline compares full backing checkpoints.

@@ -10,7 +10,9 @@
 #include <cstdlib>
 #include <nall/hash/sha256.hpp>
 #if defined(PLAID_ACCESS_BOOT)
-#if defined(PLAID_PIF_ACCESS_BOOT)
+#if defined(PLAID_STORAGE_ACCESS_BOOT)
+#include "../087-storage-writer-fetch-history/observer.hpp"
+#elif defined(PLAID_PIF_ACCESS_BOOT)
 #include "../041-ares-boot-pif-history/observer.hpp"
 #elif defined(PLAID_SP_ACCESS_BOOT)
 #include "../040-ares-boot-sp-history/observer.hpp"
