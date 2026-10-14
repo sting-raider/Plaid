@@ -90,6 +90,18 @@ pub fn direct_cfg(
     entries: &[GuestAddr],
     budget: usize,
 ) -> Result<Discovery, String> {
+    direct_cfg_bounded(rom, image, entries, budget, &BTreeSet::new())
+}
+
+/// Direct discovery that records calls and jumps into `runtime` entries but
+/// never decodes them (ADR-0129).
+pub fn direct_cfg_bounded(
+    rom: RomIdentity,
+    image: &CodeImage,
+    entries: &[GuestAddr],
+    budget: usize,
+    runtime: &BTreeSet<GuestAddr>,
+) -> Result<Discovery, String> {
     let size = image.size()?;
     GuestRange {
         start: image.base.pc,
@@ -232,8 +244,10 @@ pub fn direct_cfg(
                     delay_slot: delay,
                     evidence: evidence.clone(),
                 });
-                leaders.insert(target);
-                pending.insert(target);
+                if !(runtime.contains(&target) && kind != EdgeKind::Branch) {
+                    leaders.insert(target);
+                    pending.insert(target);
+                }
             } else {
                 map.indirect_sites.insert(IndirectSite {
                     site: site.clone(),

@@ -83,6 +83,7 @@
     {
       "name": "Native Runtime",
       "milestones": [
+        {"name": "Declared runtime-function boundary (ADR-0129)", "state": "partial"},
         {"name": "Guest memory/MMIO runtime", "state": "open"},
         {"name": "Interrupt/timing/event runtime", "state": "open"},
         {"name": "Controller input", "state": "open"},

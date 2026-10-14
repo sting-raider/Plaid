@@ -193,3 +193,89 @@ fn trapping_adds_check_overflow_and_likely_slots_run_only_when_taken() {
     assert!(c.contains("return plaid_fault(s, 0x80000000u, 6);"));
     assert!(c.contains("{ int t = s->r[0] == s->r[0]; if (t) { s->r[10] = "));
 }
+
+fn runtime_map(words: &[u32], runtime: u32) -> (ProgramMap, CodeImage) {
+    use plaid_core::{EvidenceKind, pipeline::discover_image_with_runtime};
+    let image = CodeImage {
+        base: CodeAddress {
+            pc: GuestAddr(BASE),
+            image: "lower".into(),
+            generation: 0,
+        },
+        words: words.to_vec(),
+        rom_offset: None,
+        physical_start: None,
+    };
+    let rom = RomIdentity {
+        sha256: "b".repeat(64),
+        size: 4096,
+    };
+    let evidence = Evidence {
+        kind: EvidenceKind::Signature,
+        producer: "test".into(),
+        revision: "0".into(),
+        detail: "declared".into(),
+    };
+    let decl = [(GuestAddr(runtime), "sum".to_string())];
+    assert!(
+        discover_image_with_runtime(rom.clone(), &image, &[GuestAddr(BASE)], &decl, None, 100)
+            .is_err()
+    );
+    let d = discover_image_with_runtime(
+        rom,
+        &image,
+        &[GuestAddr(BASE)],
+        &decl,
+        Some(("runtime:test".into(), evidence)),
+        100,
+    )
+    .unwrap();
+    (d.map, image)
+}
+
+#[test]
+fn runtime_functions_are_called_not_decoded_and_close_only_under_the_guarded_scope() {
+    use plaid_core::solver::{ClosureStatus, Scope, solve};
+    // 0: jal 0x10; nop; j 0x20; nop; 0x10: sync; jr ra; nop; nop; 0x20: b .; nop
+    let mut words = CALL;
+    words[4] = 0x0000_000f;
+    let (map, image) = runtime_map(&words, 0x8000_0010);
+    assert!(!map.blocks.iter().any(|b| b.start.pc.0 == 0x8000_0010));
+    let r = solve(&map, std::slice::from_ref(&image), Scope::WholeRom).unwrap();
+    assert!(
+        r.blockers
+            .iter()
+            .any(|b| b.kind == "runtime_boundary_outside_scope")
+    );
+    let r = solve(
+        &map,
+        std::slice::from_ref(&image),
+        Scope::DeclaredStaticImagesGuardedRam,
+    )
+    .unwrap();
+    assert_eq!(r.status, ClosureStatus::Closed);
+    assert!(
+        r.assumptions
+            .iter()
+            .any(|a| a.contains("(sum) are host-provided"))
+    );
+    let c = lower_c(&map, &[image], GuestAddr(BASE), &[GuestAddr(0x8000_0020)]).unwrap();
+    assert!(c.contains("int plaid_rt_sum(plaid_state *s);"));
+    assert!(c.contains("{ int r = plaid_rt_sum(s); if (r) return r; } goto L_80000008;"));
+    assert!(!c.contains("F_80000010"));
+}
+
+#[test]
+fn a_runtime_function_reached_by_a_branch_stays_open() {
+    use plaid_core::solver::{ClosureStatus, Scope, solve};
+    // beq zero,zero,0x10; nop; nop; nop; 0x10: b .; nop -- branches decode their target.
+    let words = [[0x1000_0003, 0, 0, 0].as_slice(), &HALT].concat();
+    let (map, image) = runtime_map(&words, 0x8000_0010);
+    let r = solve(&map, &[image], Scope::DeclaredStaticImagesGuardedRam).unwrap();
+    assert_eq!(r.status, ClosureStatus::Open);
+    assert!(
+        r.blockers
+            .iter()
+            .any(|b| b.kind == "runtime_function_decoded")
+    );
+}

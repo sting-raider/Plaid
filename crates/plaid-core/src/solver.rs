@@ -1,6 +1,6 @@
 //! Closure of a declared finite CFG is distinct from whole-ROM native readiness.
 use crate::{
-    discovery::{CodeImage, decode, direct_cfg},
+    discovery::{CodeImage, decode, direct_cfg_bounded},
     evidence_manifest::DiscoveryTraceManifestSet,
     indirect::verify_constant,
     program::*,
@@ -598,12 +598,43 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 edge.evidence.clone(),
             );
         }
-        if !starts.contains(&edge.target) {
+        let into_runtime = matches!(edge.kind, EdgeKind::Call | EdgeKind::Jump)
+            && map.runtime_functions.contains_key(&edge.target);
+        if !starts.contains(&edge.target) && !into_runtime {
             add(
                 "unresolved_direct_target",
                 Some(edge.site.clone()),
                 &format!("no decoded block at target {:?}", edge.target),
                 edge.evidence.clone(),
+            );
+        }
+    }
+    // Declared runtime functions (ADR-0129) close calls into them only under the
+    // guarded scope's explicit ABI assumption; their bodies must stay undecoded.
+    let runtime_ok = scope == Scope::DeclaredStaticImagesGuardedRam;
+    for (a, f) in &map.runtime_functions {
+        if !runtime_ok {
+            add(
+                "runtime_boundary_outside_scope",
+                Some(a.clone()),
+                "declared runtime functions are accepted only under the guarded assumption scope",
+                f.evidence.clone(),
+            );
+        }
+        if map.blocks.iter().any(|b| {
+            b.start.image == a.image
+                && b.start.generation == a.generation
+                && GuestRange {
+                    start: b.start.pc,
+                    size: b.size,
+                }
+                .contains(a.pc)
+        }) {
+            add(
+                "runtime_function_decoded",
+                Some(a.clone()),
+                "a declared runtime function's bytes are also decoded as guest code",
+                f.evidence.clone(),
             );
         }
     }
@@ -626,7 +657,9 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             );
         }
         for target in site.candidates.keys().chain(site.observed.keys()) {
-            if !starts.contains(target) {
+            if !starts.contains(target)
+                && !(site.link_register.is_some() && map.runtime_functions.contains_key(target))
+            {
                 add(
                     "unresolved_indirect_target",
                     Some(site.site.clone()),
@@ -668,11 +701,18 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         if roots.is_empty() {
             continue;
         }
-        let expected = direct_cfg(
+        let boundary: BTreeSet<_> = map
+            .runtime_functions
+            .keys()
+            .filter(|a| a.image == image.base.image && a.generation == image.base.generation)
+            .map(|a| a.pc)
+            .collect();
+        let expected = direct_cfg_bounded(
             map.rom.clone(),
             image,
             &roots.into_iter().collect::<Vec<_>>(),
             image.words.len(),
+            &boundary,
         )?
         .map;
         let provenance: EvidenceRefs = map
@@ -905,6 +945,17 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             "Data loads/stores are naturally aligned RDRAM accesses through KSEG0/KSEG1, never reach executable bytes, and use only one of KSEG0/KSEG1 per 16-byte line; a native artifact checks every store and access and aborts on violation, with no fallback execution."
                 .into(),
         );
+        if !map.runtime_functions.is_empty() {
+            let names: Vec<_> = map
+                .runtime_functions
+                .values()
+                .map(|f| f.name.as_str())
+                .collect();
+            assumptions.push(format!(
+                "Declared runtime functions ({}) are host-provided: entered only by call or tail call at their entry, they follow the o32 ABI (preserving s0-s7, gp, sp and fp, and returning to $ra), never enter guest code (the artifact exposes no guest entry points to the runtime), and their guest bodies are neither analyzed nor lowered.",
+                names.join(", ")
+            ));
+        }
         assumptions.push(
             "Overflow-trapping ADD/ADDI/SUB/DADD/DADDI/DSUB never overflow; a native artifact checks each one and aborts on overflow, with no fallback execution."
                 .into(),

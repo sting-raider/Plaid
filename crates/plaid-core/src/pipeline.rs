@@ -1,7 +1,7 @@
 //! Bounded fixed point between direct discovery and local target inference.
 use crate::{
     GuestAddr,
-    discovery::{CodeImage, Discovery, direct_cfg},
+    discovery::{CodeImage, Discovery, direct_cfg_bounded},
     indirect::{analyze_indirect, verify_constant},
     program::*,
 };
@@ -13,15 +13,59 @@ pub fn discover_image(
     entries: &[GuestAddr],
     budget: usize,
 ) -> Result<Discovery, String> {
+    discover_image_with_runtime(rom, image, entries, &[], None, budget)
+}
+
+/// Discovery that stops at declared runtime functions (ADR-0129). `evidence`
+/// backs every declaration and is required when `runtime` is non-empty.
+pub fn discover_image_with_runtime(
+    rom: RomIdentity,
+    image: &CodeImage,
+    entries: &[GuestAddr],
+    runtime: &[(GuestAddr, String)],
+    evidence: Option<(String, Evidence)>,
+    budget: usize,
+) -> Result<Discovery, String> {
+    let boundary: BTreeSet<GuestAddr> = runtime.iter().map(|(a, _)| *a).collect();
+    let mut discovery = discover_bounded(rom, image, entries, &boundary, budget)?;
+    if runtime.is_empty() {
+        return Ok(discovery);
+    }
+    let Some((id, evidence)) = evidence else {
+        return Err("runtime declarations need evidence".into());
+    };
+    let map = &mut discovery.map;
+    map.evidence.insert(id.clone(), evidence);
+    for (a, name) in runtime {
+        map.runtime_functions.insert(
+            image.address(*a),
+            RuntimeFunction {
+                name: name.clone(),
+                evidence: [id.clone()].into(),
+            },
+        );
+    }
+    map.validate()?;
+    Ok(discovery)
+}
+
+fn discover_bounded(
+    rom: RomIdentity,
+    image: &CodeImage,
+    entries: &[GuestAddr],
+    boundary: &BTreeSet<GuestAddr>,
+    budget: usize,
+) -> Result<Discovery, String> {
     let mut roots: BTreeSet<_> = entries.iter().copied().collect();
     let mut history: Option<ProgramMap> = None;
     let mut last = None;
     for _ in 0..budget.clamp(1, 512) {
-        let mut discovery = direct_cfg(
+        let mut discovery = direct_cfg_bounded(
             rom.clone(),
             image,
             &roots.iter().copied().collect::<Vec<_>>(),
             budget,
+            boundary,
         )?;
         let mut map = analyze_indirect(&discovery.map, image)?;
         if let Some(previous) = &history {
@@ -65,6 +109,7 @@ pub fn discover_image(
                 if target.image == image.base.image
                     && target.generation == image.base.generation
                     && image.word(target.pc).is_some()
+                    && !boundary.contains(&target.pc)
                 {
                     roots.insert(target.pc);
                 }

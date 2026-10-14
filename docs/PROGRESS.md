@@ -104,6 +104,7 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 
 | Milestone | State |
 | --- | --- |
+| Declared runtime-function boundary (ADR-0129) | 🟨 partial |
 | Guest memory/MMIO runtime | ⬜ open |
 | Interrupt/timing/event runtime | ⬜ open |
 | Controller input | ⬜ open |

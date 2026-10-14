@@ -88,6 +88,22 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
     out.executable_writes = union(&left.executable_writes, &right.executable_writes);
     out.rsp_microcodes = union(&left.rsp_microcodes, &right.rsp_microcodes);
     out.unresolved = union(&left.unresolved, &right.unresolved);
+    for (a, f) in &right.runtime_functions {
+        if out
+            .runtime_functions
+            .get(a)
+            .is_some_and(|old| old.name != f.name)
+        {
+            return Err(format!(
+                "conflicting runtime function name at {:08x}",
+                a.pc.0
+            ));
+        }
+        out.runtime_functions
+            .entry(a.clone())
+            .and_modify(|old| old.evidence.extend(f.evidence.clone()))
+            .or_insert_with(|| f.clone());
+    }
     for (a, refs) in &right.entries {
         out.entries
             .entry(a.clone())

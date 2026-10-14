@@ -26,17 +26,20 @@ Next concrete steps, in order:
    43 of the 44 unresolved indirect sites are now certified returns.
 2. Done: `plaid solve <rom> <map> --guarded-ram` and the 64-bit integer
    subset (ADR-0128). OoT guarded-scope blockers: 143 -> 82.
-   **Next: the runtime boundary.** The remaining OoT blockers are libultra
-   system code (COP0 interrupt/exception handling, FPU context save, `CACHE`,
-   compiler `BREAK` traps). Decide how identified libultra functions become
-   N64ModernRuntime calls instead of lowered code (N64Recomp's model), with
-   identification as evidence (PR #50 n64sym), never as proof.
-3. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
+3. Done: declared runtime functions as a discovery boundary (ADR-0129). On
+   OoT a heuristic declaration of 17 system functions leaves 1 guarded-scope
+   blocker, but the first thread entry was never discovered.
+   **Next: runtime callbacks.** Let a declaration mark guest-code-pointer
+   arguments (thread entry, handlers), prove their values at each call site
+   with the existing value analysis, and discover them as host-entered
+   functions. Then replace the heuristic with identification evidence (PR #50
+   n64sym, or a user-supplied symbol map).
+4. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
    boot-segment discovery from the real entry point, then a local-only recall
    score against the decomp map. Keep ROM bytes, maps and traces ignored.
-4. **Lowered subset growth** pulled by SM64: 64-bit integer ops, LWL/LWR/
-   SWL/SWR, likely branches, then COP0/COP1 as the runtime boundary requires.
-5. **Known-library evidence** (PR #50 n64sym) as candidate evidence for libultra
+5. **Lowered subset growth** pulled by SM64: LWL/LWR/SWL/SWR, then COP1
+   arithmetic; COP0 stays behind the runtime boundary.
+6. **Known-library evidence** (PR #50 n64sym) as candidate evidence for libultra
    boundaries; never auto-promoted to proof.
 
 Paused until a milestone needs them: RSP/SP lane, producer, task-root and
