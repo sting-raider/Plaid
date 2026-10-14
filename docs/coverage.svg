@@ -1,317 +1,317 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1220 392" width="1220" height="392" role="img" aria-label="Plaid coverage maps">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 686" width="840" height="686" role="img" aria-label="Plaid coverage maps">
 <style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}.title{font-size:17px;fill:#1f2328}.cell{font-size:12px;fill:#fff;paint-order:stroke;stroke:#0d1117;stroke-width:2px;stroke-opacity:.45}@media (prefers-color-scheme:dark){.title{fill:#e6edf3}}</style>
 <text x="2" y="22" class="title">VR4300 instructions*: 40.7% (85/209)</text>
-<text x="622" y="22" class="title">Milestones*: 30 verified, 19 partial (69)</text>
-<rect x="0.0" y="34.0" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.df.d (open)</title></rect>
-<rect x="33.3" y="34.0" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.d (open)</title></rect>
-<rect x="66.6" y="34.0" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.s (open)</title></rect>
-<rect x="99.9" y="34.0" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.f.d (open)</title></rect>
-<rect x="133.2" y="34.0" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.f.s (open)</title></rect>
-<rect x="0.0" y="62.2" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.le.d (open)</title></rect>
-<rect x="33.3" y="62.2" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.le.s (open)</title></rect>
-<rect x="66.6" y="62.2" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.lt.d (open)</title></rect>
-<rect x="99.9" y="62.2" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.lt.s (open)</title></rect>
-<rect x="133.2" y="62.2" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.nge.d (open)</title></rect>
-<rect x="0.0" y="90.4" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.nge.s (open)</title></rect>
-<rect x="33.3" y="90.4" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngl.d (open)</title></rect>
-<rect x="66.6" y="90.4" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngl.s (open)</title></rect>
-<rect x="99.9" y="90.4" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngle.d (open)</title></rect>
-<rect x="133.2" y="90.4" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngle.s (open)</title></rect>
-<rect x="0.0" y="118.7" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngt.d (open)</title></rect>
-<rect x="33.3" y="118.7" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngt.s (open)</title></rect>
-<rect x="66.6" y="118.7" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ole.d (open)</title></rect>
-<rect x="99.9" y="118.7" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ole.s (open)</title></rect>
-<rect x="133.2" y="118.7" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.olt.d (open)</title></rect>
-<rect x="0.0" y="146.9" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.olt.s (open)</title></rect>
-<rect x="33.3" y="146.9" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.seq.d (open)</title></rect>
-<rect x="66.6" y="146.9" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.seq.s (open)</title></rect>
-<rect x="99.9" y="146.9" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.sf.s (open)</title></rect>
-<rect x="133.2" y="146.9" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ueq.d (open)</title></rect>
-<rect x="0.0" y="175.1" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ueq.s (open)</title></rect>
-<rect x="33.3" y="175.1" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ule.d (open)</title></rect>
-<rect x="66.6" y="175.1" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ule.s (open)</title></rect>
-<rect x="99.9" y="175.1" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ult.d (open)</title></rect>
-<rect x="133.2" y="175.1" width="33.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ult.s (open)</title></rect>
-<rect x="0.0" y="203.3" width="83.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.un.d (open)</title></rect>
-<rect x="83.3" y="203.3" width="83.3" height="28.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.un.s (open)</title></rect>
-<rect x="0.0" y="34.0" width="166.5" height="197.5" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="4.0" y="47.0" class="cell">FPU compare</text>
-<rect x="0.0" y="231.5" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.l.d (open)</title></rect>
-<rect x="33.3" y="231.5" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.l.s (open)</title></rect>
-<rect x="66.6" y="231.5" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.w.d (open)</title></rect>
-<rect x="99.9" y="231.5" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.w.s (open)</title></rect>
-<rect x="133.2" y="231.5" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.d.l (open)</title></rect>
-<rect x="0.0" y="258.3" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.d.s (open)</title></rect>
-<rect x="33.3" y="258.3" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.d.w (open)</title></rect>
-<rect x="66.6" y="258.3" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.l.d (open)</title></rect>
-<rect x="99.9" y="258.3" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.l.s (open)</title></rect>
-<rect x="133.2" y="258.3" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.s.d (open)</title></rect>
-<rect x="0.0" y="285.0" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.s.l (open)</title></rect>
-<rect x="33.3" y="285.0" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.s.w (open)</title></rect>
-<rect x="66.6" y="285.0" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.w.d (open)</title></rect>
-<rect x="99.9" y="285.0" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.w.s (open)</title></rect>
-<rect x="133.2" y="285.0" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: floor.l.d (open)</title></rect>
-<rect x="0.0" y="311.8" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: floor.l.s (open)</title></rect>
-<rect x="33.3" y="311.8" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: floor.w.d (open)</title></rect>
-<rect x="66.6" y="311.8" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: floor.w.s (open)</title></rect>
-<rect x="99.9" y="311.8" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: round.l.d (open)</title></rect>
-<rect x="133.2" y="311.8" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: round.l.s (open)</title></rect>
-<rect x="0.0" y="338.5" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: round.w.d (open)</title></rect>
-<rect x="33.3" y="338.5" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: round.w.s (open)</title></rect>
-<rect x="66.6" y="338.5" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: trunc.l.d (open)</title></rect>
-<rect x="99.9" y="338.5" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: trunc.l.s (open)</title></rect>
-<rect x="133.2" y="338.5" width="33.3" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: trunc.w.d (open)</title></rect>
-<rect x="0.0" y="365.3" width="166.5" height="26.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: trunc.w.s (open)</title></rect>
-<rect x="0.0" y="231.5" width="166.5" height="160.5" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="4.0" y="244.5" class="cell">FPU convert</text>
-<rect x="166.5" y="34.0" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: add (done)</title></rect>
-<rect x="200.2" y="34.0" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: addi (done)</title></rect>
-<rect x="234.0" y="34.0" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: addiu (done)</title></rect>
-<rect x="267.7" y="34.0" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: addu (done)</title></rect>
-<rect x="166.5" y="64.5" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: and (done)</title></rect>
-<rect x="200.2" y="64.5" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: andi (done)</title></rect>
-<rect x="234.0" y="64.5" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: lui (done)</title></rect>
-<rect x="267.7" y="64.5" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: nor (done)</title></rect>
-<rect x="166.5" y="94.9" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: or (done)</title></rect>
-<rect x="200.2" y="94.9" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: ori (done)</title></rect>
-<rect x="234.0" y="94.9" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: sll (done)</title></rect>
-<rect x="267.7" y="94.9" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: sllv (done)</title></rect>
-<rect x="166.5" y="125.4" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: slt (done)</title></rect>
-<rect x="200.2" y="125.4" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: slti (done)</title></rect>
-<rect x="234.0" y="125.4" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: sltiu (done)</title></rect>
-<rect x="267.7" y="125.4" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: sltu (done)</title></rect>
-<rect x="166.5" y="155.9" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: sra (done)</title></rect>
-<rect x="200.2" y="155.9" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: srav (done)</title></rect>
-<rect x="234.0" y="155.9" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: srl (done)</title></rect>
-<rect x="267.7" y="155.9" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: srlv (done)</title></rect>
-<rect x="166.5" y="186.3" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: sub (done)</title></rect>
-<rect x="200.2" y="186.3" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: subu (done)</title></rect>
-<rect x="234.0" y="186.3" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: xor (done)</title></rect>
-<rect x="267.7" y="186.3" width="33.7" height="30.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: xori (done)</title></rect>
-<rect x="166.5" y="34.0" width="134.9" height="182.8" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="170.5" y="47.0" class="cell">ALU</text>
-<rect x="166.5" y="216.8" width="33.7" height="29.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lb (done)</title></rect>
-<rect x="200.2" y="216.8" width="33.7" height="29.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lbu (done)</title></rect>
-<rect x="234.0" y="216.8" width="33.7" height="29.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ld (done)</title></rect>
-<rect x="267.7" y="216.8" width="33.7" height="29.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lh (done)</title></rect>
-<rect x="166.5" y="246.0" width="33.7" height="29.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lhu (done)</title></rect>
-<rect x="200.2" y="246.0" width="33.7" height="29.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lw (done)</title></rect>
-<rect x="234.0" y="246.0" width="33.7" height="29.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sb (done)</title></rect>
-<rect x="267.7" y="246.0" width="33.7" height="29.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sd (done)</title></rect>
-<rect x="166.5" y="275.2" width="33.7" height="29.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sh (done)</title></rect>
-<rect x="200.2" y="275.2" width="33.7" height="29.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sw (done)</title></rect>
-<rect x="234.0" y="275.2" width="33.7" height="29.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ldl (open)</title></rect>
-<rect x="267.7" y="275.2" width="33.7" height="29.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ldr (open)</title></rect>
-<rect x="166.5" y="304.4" width="33.7" height="29.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ll (open)</title></rect>
-<rect x="200.2" y="304.4" width="33.7" height="29.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lld (open)</title></rect>
-<rect x="234.0" y="304.4" width="33.7" height="29.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwl (open)</title></rect>
-<rect x="267.7" y="304.4" width="33.7" height="29.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwr (open)</title></rect>
-<rect x="166.5" y="333.6" width="33.7" height="29.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwu (open)</title></rect>
-<rect x="200.2" y="333.6" width="33.7" height="29.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sc (open)</title></rect>
-<rect x="234.0" y="333.6" width="33.7" height="29.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: scd (open)</title></rect>
-<rect x="267.7" y="333.6" width="33.7" height="29.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sdl (open)</title></rect>
-<rect x="166.5" y="362.8" width="45.0" height="29.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sdr (open)</title></rect>
-<rect x="211.5" y="362.8" width="45.0" height="29.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: swl (open)</title></rect>
-<rect x="256.5" y="362.8" width="45.0" height="29.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: swr (open)</title></rect>
-<rect x="166.5" y="216.8" width="134.9" height="175.2" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="170.5" y="229.8" class="cell">Load/store</text>
-<rect x="301.4" y="34.0" width="33.2" height="31.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: beq (done)</title></rect>
-<rect x="334.6" y="34.0" width="33.2" height="31.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: beql (done)</title></rect>
-<rect x="367.8" y="34.0" width="33.2" height="31.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgez (done)</title></rect>
-<rect x="401.0" y="34.0" width="33.2" height="31.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgezl (done)</title></rect>
-<rect x="434.1" y="34.0" width="33.2" height="31.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgtz (done)</title></rect>
-<rect x="301.4" y="65.0" width="33.2" height="31.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgtzl (done)</title></rect>
-<rect x="334.6" y="65.0" width="33.2" height="31.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: blez (done)</title></rect>
-<rect x="367.8" y="65.0" width="33.2" height="31.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: blezl (done)</title></rect>
-<rect x="401.0" y="65.0" width="33.2" height="31.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltz (done)</title></rect>
-<rect x="434.1" y="65.0" width="33.2" height="31.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltzl (done)</title></rect>
-<rect x="301.4" y="96.0" width="33.2" height="31.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bne (done)</title></rect>
-<rect x="334.6" y="96.0" width="33.2" height="31.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bnel (done)</title></rect>
-<rect x="367.8" y="96.0" width="33.2" height="31.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: j (done)</title></rect>
-<rect x="401.0" y="96.0" width="33.2" height="31.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: jal (done)</title></rect>
-<rect x="434.1" y="96.0" width="33.2" height="31.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: jalr (done)</title></rect>
-<rect x="301.4" y="126.9" width="33.2" height="31.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: jr (done)</title></rect>
-<rect x="334.6" y="126.9" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgezal (open)</title></rect>
-<rect x="367.8" y="126.9" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgezall (open)</title></rect>
-<rect x="401.0" y="126.9" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltzal (open)</title></rect>
-<rect x="434.1" y="126.9" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltzall (open)</title></rect>
-<rect x="301.4" y="34.0" width="165.9" height="123.9" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="305.4" y="47.0" class="cell">Branch/jump</text>
-<rect x="467.3" y="34.0" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: abs.d (open)</title></rect>
-<rect x="500.5" y="34.0" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: abs.s (open)</title></rect>
-<rect x="533.7" y="34.0" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: add.d (open)</title></rect>
-<rect x="566.8" y="34.0" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: add.s (open)</title></rect>
-<rect x="467.3" y="65.0" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: div.d (open)</title></rect>
-<rect x="500.5" y="65.0" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: div.s (open)</title></rect>
-<rect x="533.7" y="65.0" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: mov.d (open)</title></rect>
-<rect x="566.8" y="65.0" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: mov.s (open)</title></rect>
-<rect x="467.3" y="96.0" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: mul.d (open)</title></rect>
-<rect x="500.5" y="96.0" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: mul.s (open)</title></rect>
-<rect x="533.7" y="96.0" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: neg.d (open)</title></rect>
-<rect x="566.8" y="96.0" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: neg.s (open)</title></rect>
-<rect x="467.3" y="126.9" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: sqrt.d (open)</title></rect>
-<rect x="500.5" y="126.9" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: sqrt.s (open)</title></rect>
-<rect x="533.7" y="126.9" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: sub.d (open)</title></rect>
-<rect x="566.8" y="126.9" width="33.2" height="31.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: sub.s (open)</title></rect>
-<rect x="467.3" y="34.0" width="132.7" height="123.9" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="471.3" y="47.0" class="cell">FPU arith</text>
-<rect x="301.4" y="157.9" width="32.9" height="29.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dadd (done)</title></rect>
-<rect x="334.4" y="157.9" width="32.9" height="29.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: daddi (done)</title></rect>
-<rect x="367.3" y="157.9" width="32.9" height="29.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: daddiu (done)</title></rect>
-<rect x="400.2" y="157.9" width="32.9" height="29.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: daddu (done)</title></rect>
-<rect x="301.4" y="187.2" width="32.9" height="29.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsll (done)</title></rect>
-<rect x="334.4" y="187.2" width="32.9" height="29.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsll32 (done)</title></rect>
-<rect x="367.3" y="187.2" width="32.9" height="29.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsllv (done)</title></rect>
-<rect x="400.2" y="187.2" width="32.9" height="29.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsra (done)</title></rect>
-<rect x="301.4" y="216.4" width="32.9" height="29.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsra32 (done)</title></rect>
-<rect x="334.4" y="216.4" width="32.9" height="29.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsrav (done)</title></rect>
-<rect x="367.3" y="216.4" width="32.9" height="29.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsrl (done)</title></rect>
-<rect x="400.2" y="216.4" width="32.9" height="29.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsrl32 (done)</title></rect>
-<rect x="301.4" y="245.7" width="43.9" height="29.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsrlv (done)</title></rect>
-<rect x="345.3" y="245.7" width="43.9" height="29.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsub (done)</title></rect>
-<rect x="389.2" y="245.7" width="43.9" height="29.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsubu (done)</title></rect>
-<rect x="301.4" y="157.9" width="131.7" height="117.0" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="305.4" y="170.9" class="cell">64-bit ALU</text>
-<rect x="301.4" y="275.0" width="32.9" height="29.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: break (open)</title></rect>
-<rect x="334.4" y="275.0" width="32.9" height="29.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: cache (open)</title></rect>
-<rect x="367.3" y="275.0" width="32.9" height="29.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: cfc0 (open)</title></rect>
-<rect x="400.2" y="275.0" width="32.9" height="29.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: ctc0 (open)</title></rect>
-<rect x="301.4" y="304.2" width="32.9" height="29.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: dmfc0 (open)</title></rect>
-<rect x="334.4" y="304.2" width="32.9" height="29.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: dmtc0 (open)</title></rect>
-<rect x="367.3" y="304.2" width="32.9" height="29.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: eret (open)</title></rect>
-<rect x="400.2" y="304.2" width="32.9" height="29.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: mfc0 (open)</title></rect>
-<rect x="301.4" y="333.5" width="32.9" height="29.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: mtc0 (open)</title></rect>
-<rect x="334.4" y="333.5" width="32.9" height="29.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: sync (open)</title></rect>
-<rect x="367.3" y="333.5" width="32.9" height="29.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: syscall (open)</title></rect>
-<rect x="400.2" y="333.5" width="32.9" height="29.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: tlbp (open)</title></rect>
-<rect x="301.4" y="362.7" width="43.9" height="29.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: tlbr (open)</title></rect>
-<rect x="345.3" y="362.7" width="43.9" height="29.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: tlbwi (open)</title></rect>
-<rect x="389.2" y="362.7" width="43.9" height="29.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: tlbwr (open)</title></rect>
-<rect x="301.4" y="275.0" width="131.7" height="117.0" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="305.4" y="288.0" class="cell">COP0/system</text>
-<rect x="433.2" y="157.9" width="33.4" height="28.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: dmfc1 (done)</title></rect>
-<rect x="466.5" y="157.9" width="33.4" height="28.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: dmtc1 (done)</title></rect>
-<rect x="499.9" y="157.9" width="33.4" height="28.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: ldc1 (done)</title></rect>
-<rect x="533.3" y="157.9" width="33.4" height="28.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: lwc1 (done)</title></rect>
-<rect x="566.6" y="157.9" width="33.4" height="28.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: mfc1 (done)</title></rect>
-<rect x="433.2" y="186.7" width="33.4" height="28.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: mtc1 (done)</title></rect>
-<rect x="466.5" y="186.7" width="33.4" height="28.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: sdc1 (done)</title></rect>
-<rect x="499.9" y="186.7" width="33.4" height="28.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: swc1 (done)</title></rect>
-<rect x="533.3" y="186.7" width="33.4" height="28.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: bc1f (open)</title></rect>
-<rect x="566.6" y="186.7" width="33.4" height="28.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: bc1fl (open)</title></rect>
-<rect x="433.2" y="215.4" width="41.7" height="28.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: bc1t (open)</title></rect>
-<rect x="474.9" y="215.4" width="41.7" height="28.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: bc1tl (open)</title></rect>
-<rect x="516.6" y="215.4" width="41.7" height="28.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: cfc1 (open)</title></rect>
-<rect x="558.3" y="215.4" width="41.7" height="28.7" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: ctc1 (open)</title></rect>
-<rect x="433.2" y="157.9" width="166.8" height="86.2" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="437.2" y="170.9" class="cell">COP1 move</text>
-<rect x="433.2" y="244.2" width="27.8" height="37.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: ddiv (done)</title></rect>
-<rect x="461.0" y="244.2" width="27.8" height="37.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: ddivu (done)</title></rect>
-<rect x="488.8" y="244.2" width="27.8" height="37.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: div (done)</title></rect>
-<rect x="433.2" y="281.1" width="27.8" height="37.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: divu (done)</title></rect>
-<rect x="461.0" y="281.1" width="27.8" height="37.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: dmult (done)</title></rect>
-<rect x="488.8" y="281.1" width="27.8" height="37.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: dmultu (done)</title></rect>
-<rect x="433.2" y="318.1" width="27.8" height="37.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: mfhi (done)</title></rect>
-<rect x="461.0" y="318.1" width="27.8" height="37.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: mflo (done)</title></rect>
-<rect x="488.8" y="318.1" width="27.8" height="37.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: mthi (done)</title></rect>
-<rect x="433.2" y="355.0" width="27.8" height="37.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: mtlo (done)</title></rect>
-<rect x="461.0" y="355.0" width="27.8" height="37.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: mult (done)</title></rect>
-<rect x="488.8" y="355.0" width="27.8" height="37.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: multu (done)</title></rect>
-<rect x="433.2" y="244.2" width="83.4" height="147.8" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="437.2" y="257.2" class="cell">Mul/div</text>
-<rect x="516.6" y="244.2" width="27.8" height="37.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: teq (open)</title></rect>
-<rect x="544.4" y="244.2" width="27.8" height="37.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: teqi (open)</title></rect>
-<rect x="572.2" y="244.2" width="27.8" height="37.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tge (open)</title></rect>
-<rect x="516.6" y="281.1" width="27.8" height="37.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tgei (open)</title></rect>
-<rect x="544.4" y="281.1" width="27.8" height="37.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tgeiu (open)</title></rect>
-<rect x="572.2" y="281.1" width="27.8" height="37.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tgeu (open)</title></rect>
-<rect x="516.6" y="318.1" width="27.8" height="37.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tlt (open)</title></rect>
-<rect x="544.4" y="318.1" width="27.8" height="37.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tlti (open)</title></rect>
-<rect x="572.2" y="318.1" width="27.8" height="37.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tltiu (open)</title></rect>
-<rect x="516.6" y="355.0" width="27.8" height="37.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tltu (open)</title></rect>
-<rect x="544.4" y="355.0" width="27.8" height="37.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tne (open)</title></rect>
-<rect x="572.2" y="355.0" width="27.8" height="37.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tnei (open)</title></rect>
-<rect x="516.6" y="244.2" width="83.4" height="147.8" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="520.6" y="257.2" class="cell">Trap</text>
-<rect x="620.0" y="34.0" width="60.9" height="51.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded PI / SP DMA / CPU consumption chain (done)</title></rect>
-<rect x="680.9" y="34.0" width="60.9" height="51.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded PI primitive-to-writer composition (done)</title></rect>
-<rect x="741.7" y="34.0" width="60.9" height="51.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded lower-DMEM ancestry revocation (done)</title></rect>
-<rect x="620.0" y="85.1" width="60.9" height="51.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded lower-IMEM ancestry revocation (done)</title></rect>
-<rect x="680.9" y="85.1" width="60.9" height="51.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded original-clock RAM mutation cuts (done)</title></rect>
-<rect x="741.7" y="85.1" width="60.9" height="51.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded reverse-SP-DMA / RAM executable chain (done)</title></rect>
-<rect x="620.0" y="136.3" width="60.9" height="51.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded scalar producer / executable-read join (done)</title></rect>
-<rect x="680.9" y="136.3" width="60.9" height="51.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded scalar store / executable backing (done)</title></rect>
-<rect x="741.7" y="136.3" width="60.9" height="51.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Controlled D-cache export / executable chain (done)</title></rect>
-<rect x="620.0" y="187.4" width="60.9" height="51.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Controlled mapping / cache / exception chain (done)</title></rect>
-<rect x="680.9" y="187.4" width="60.9" height="51.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Exact IMEM-read / performed-RSP receipts (done)</title></rect>
-<rect x="741.7" y="187.4" width="60.9" height="51.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: I-cache snapshots/fill outcomes (done)</title></rect>
-<rect x="620.0" y="238.6" width="60.9" height="51.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: PI request/queue/source history (done)</title></rect>
-<rect x="680.9" y="238.6" width="60.9" height="51.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Physical/cache fetch context (done)</title></rect>
-<rect x="741.7" y="238.6" width="60.9" height="51.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: SP/PIF backing witnesses (done)</title></rect>
-<rect x="620.0" y="289.7" width="60.9" height="51.1" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: CPU copy/transform lineage (partial)</title></rect>
-<rect x="680.9" y="289.7" width="60.9" height="51.1" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: CPU executable-store sensing (partial)</title></rect>
-<rect x="741.7" y="289.7" width="60.9" height="51.1" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Cache writeback/restore lineage (partial)</title></rect>
-<rect x="620.0" y="340.9" width="60.9" height="51.1" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Decompression/relocation lineage (partial)</title></rect>
-<rect x="680.9" y="340.9" width="60.9" height="51.1" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: RSP writer/dataflow lineage (partial)</title></rect>
-<rect x="741.7" y="340.9" width="60.9" height="51.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Complete mutation census (open)</title></rect>
-<rect x="620.0" y="34.0" width="182.6" height="358.0" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="624.0" y="47.0" class="cell">Executable Provenance</text>
-<rect x="802.6" y="34.0" width="60.9" height="46.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: 20M-fetch commercial-prefix replay (done)</title></rect>
-<rect x="863.5" y="34.0" width="60.9" height="46.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First native synthetic executable (done)</title></rect>
-<rect x="924.3" y="34.0" width="60.9" height="46.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: Mupen/ares differential oracles (done)</title></rect>
-<rect x="802.6" y="80.9" width="60.9" height="46.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: Synthetic discovery corpus (done)</title></rect>
-<rect x="863.5" y="80.9" width="60.9" height="46.9" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: n64-systemtest research corpus (partial)</title></rect>
-<rect x="924.3" y="80.9" width="60.9" height="46.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: 100-game campaign (open)</title></rect>
-<rect x="802.6" y="127.8" width="60.9" height="46.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First commercial ROM CLOSED (open)</title></rect>
-<rect x="863.5" y="127.8" width="60.9" height="46.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First commercial ROM mapped (open)</title></rect>
-<rect x="924.3" y="127.8" width="60.9" height="46.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First native commercial boot (open)</title></rect>
-<rect x="802.6" y="174.6" width="91.3" height="46.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First native gameplay (open)</title></rect>
-<rect x="893.9" y="174.6" width="91.3" height="46.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: Representative 25-game set (open)</title></rect>
-<rect x="802.6" y="34.0" width="182.6" height="187.5" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="806.6" y="47.0" class="cell">Compatibility</text>
-<rect x="802.6" y="221.5" width="60.9" height="42.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Direct-control-flow closure (done)</title></rect>
-<rect x="863.5" y="221.5" width="60.9" height="42.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Fail-closed solver &amp; diagnostics (done)</title></rect>
-<rect x="924.3" y="221.5" width="60.9" height="42.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Source/certificate rechecking (done)</title></rect>
-<rect x="802.6" y="264.1" width="60.9" height="42.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Execution-root completeness (partial)</title></rect>
-<rect x="863.5" y="264.1" width="60.9" height="42.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Finite indirect-target closure (partial)</title></rect>
-<rect x="924.3" y="264.1" width="60.9" height="42.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Overlay/executable lifetimes (partial)</title></rect>
-<rect x="802.6" y="306.8" width="60.9" height="42.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Pointer-table immutability proof (partial)</title></rect>
-<rect x="863.5" y="306.8" width="60.9" height="42.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: RSP executable-universe proof (partial)</title></rect>
-<rect x="924.3" y="306.8" width="60.9" height="42.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: TLB/context/cache composition (partial)</title></rect>
-<rect x="802.6" y="349.4" width="182.6" height="42.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: First ROM reaches CLOSED (open)</title></rect>
-<rect x="802.6" y="221.5" width="182.6" height="170.5" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="806.6" y="234.5" class="cell">Closed-World Proof</text>
-<rect x="985.2" y="34.0" width="58.7" height="44.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Bounded cross-block indirect proofs (done)</title></rect>
-<rect x="1043.9" y="34.0" width="58.7" height="44.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Direct CFG recovery (done)</title></rect>
-<rect x="1102.6" y="34.0" width="58.7" height="44.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Dynamic trace import (done)</title></rect>
-<rect x="1161.3" y="34.0" width="58.7" height="44.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Evidence merge &amp; conflicts (done)</title></rect>
-<rect x="985.2" y="78.2" width="58.7" height="44.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Local indirect certificates (done)</title></rect>
-<rect x="1043.9" y="78.2" width="58.7" height="44.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: ProgramMap schema &amp; validation (done)</title></rect>
-<rect x="1102.6" y="78.2" width="58.7" height="44.2" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: ROM normalization &amp; identity (done)</title></rect>
-<rect x="1161.3" y="78.2" width="58.7" height="44.2" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Jump/pointer-table recovery (partial)</title></rect>
-<rect x="985.2" y="122.4" width="117.4" height="44.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Commercial-ROM map validation (open)</title></rect>
-<rect x="1102.6" y="122.4" width="117.4" height="44.2" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Known-library/signature evidence (open)</title></rect>
-<rect x="985.2" y="34.0" width="234.8" height="132.6" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="989.2" y="47.0" class="cell">Discovery &amp; ProgramMap</text>
-<rect x="985.2" y="166.6" width="62.1" height="45.1" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Declared runtime-function boundary (ADR-0129) (partial)</title></rect>
-<rect x="1047.4" y="166.6" width="62.1" height="45.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Audio path (open)</title></rect>
-<rect x="985.2" y="211.7" width="62.1" height="45.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Controller input (open)</title></rect>
-<rect x="1047.4" y="211.7" width="62.1" height="45.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Guest memory/MMIO runtime (open)</title></rect>
-<rect x="985.2" y="256.8" width="62.1" height="45.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Interrupt/timing/event runtime (open)</title></rect>
-<rect x="1047.4" y="256.8" width="62.1" height="45.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Native launch/cache packaging (open)</title></rect>
-<rect x="985.2" y="301.8" width="62.1" height="45.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: RSP runtime/native path (open)</title></rect>
-<rect x="1047.4" y="301.8" width="62.1" height="45.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Renderer integration (open)</title></rect>
-<rect x="985.2" y="346.9" width="124.3" height="45.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Save devices (open)</title></rect>
-<rect x="985.2" y="166.6" width="124.3" height="225.4" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="989.2" y="179.6" class="cell">Native Runtime</text>
-<rect x="1109.5" y="166.6" width="55.2" height="56.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Synthetic native differential verifier (done)</title></rect>
-<rect x="1164.8" y="166.6" width="55.2" height="56.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Finite native indirect dispatch (partial)</title></rect>
-<rect x="1109.5" y="222.9" width="55.2" height="56.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Integer MIPS lowering (partial)</title></rect>
-<rect x="1164.8" y="222.9" width="55.2" height="56.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: MIPS -&gt; C lowering (ADR-0126) (partial)</title></rect>
-<rect x="1109.5" y="279.3" width="55.2" height="56.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Return closure / function-level lowering (partial)</title></rect>
-<rect x="1164.8" y="279.3" width="55.2" height="56.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: x86-64 host build via C (partial)</title></rect>
-<rect x="1109.5" y="335.6" width="55.2" height="56.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: ARM64 host build via C (open)</title></rect>
-<rect x="1164.8" y="335.6" width="55.2" height="56.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Link with N64ModernRuntime (open)</title></rect>
-<rect x="1109.5" y="166.6" width="110.5" height="225.4" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="1113.5" y="179.6" class="cell">Native AOT Com…</text>
+<text x="2" y="378" class="title">Milestones*: 30 verified, 19 partial (69)</text>
+<rect x="0.0" y="30.0" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.df.d (open)</title></rect>
+<rect x="33.3" y="30.0" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.d (open)</title></rect>
+<rect x="66.6" y="30.0" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.s (open)</title></rect>
+<rect x="99.9" y="30.0" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.f.d (open)</title></rect>
+<rect x="133.2" y="30.0" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.f.s (open)</title></rect>
+<rect x="166.5" y="30.0" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.le.d (open)</title></rect>
+<rect x="199.8" y="30.0" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.le.s (open)</title></rect>
+<rect x="0.0" y="63.1" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.lt.d (open)</title></rect>
+<rect x="33.3" y="63.1" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.lt.s (open)</title></rect>
+<rect x="66.6" y="63.1" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.nge.d (open)</title></rect>
+<rect x="99.9" y="63.1" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.nge.s (open)</title></rect>
+<rect x="133.2" y="63.1" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngl.d (open)</title></rect>
+<rect x="166.5" y="63.1" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngl.s (open)</title></rect>
+<rect x="199.8" y="63.1" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngle.d (open)</title></rect>
+<rect x="0.0" y="96.2" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngle.s (open)</title></rect>
+<rect x="33.3" y="96.2" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngt.d (open)</title></rect>
+<rect x="66.6" y="96.2" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngt.s (open)</title></rect>
+<rect x="99.9" y="96.2" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ole.d (open)</title></rect>
+<rect x="133.2" y="96.2" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ole.s (open)</title></rect>
+<rect x="166.5" y="96.2" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.olt.d (open)</title></rect>
+<rect x="199.8" y="96.2" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.olt.s (open)</title></rect>
+<rect x="0.0" y="129.3" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.seq.d (open)</title></rect>
+<rect x="33.3" y="129.3" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.seq.s (open)</title></rect>
+<rect x="66.6" y="129.3" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.sf.s (open)</title></rect>
+<rect x="99.9" y="129.3" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ueq.d (open)</title></rect>
+<rect x="133.2" y="129.3" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ueq.s (open)</title></rect>
+<rect x="166.5" y="129.3" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ule.d (open)</title></rect>
+<rect x="199.8" y="129.3" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ule.s (open)</title></rect>
+<rect x="0.0" y="162.4" width="58.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ult.d (open)</title></rect>
+<rect x="58.3" y="162.4" width="58.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ult.s (open)</title></rect>
+<rect x="116.6" y="162.4" width="58.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.un.d (open)</title></rect>
+<rect x="174.8" y="162.4" width="58.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.un.s (open)</title></rect>
+<rect x="0.0" y="30.0" width="233.1" height="165.5" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="4.0" y="43.0" class="cell">FPU compare</text>
+<rect x="0.0" y="195.5" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.l.d (open)</title></rect>
+<rect x="33.3" y="195.5" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.l.s (open)</title></rect>
+<rect x="66.6" y="195.5" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.w.d (open)</title></rect>
+<rect x="99.9" y="195.5" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.w.s (open)</title></rect>
+<rect x="133.2" y="195.5" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.d.l (open)</title></rect>
+<rect x="166.5" y="195.5" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.d.s (open)</title></rect>
+<rect x="199.8" y="195.5" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.d.w (open)</title></rect>
+<rect x="0.0" y="229.1" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.l.d (open)</title></rect>
+<rect x="33.3" y="229.1" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.l.s (open)</title></rect>
+<rect x="66.6" y="229.1" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.s.d (open)</title></rect>
+<rect x="99.9" y="229.1" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.s.l (open)</title></rect>
+<rect x="133.2" y="229.1" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.s.w (open)</title></rect>
+<rect x="166.5" y="229.1" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.w.d (open)</title></rect>
+<rect x="199.8" y="229.1" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.w.s (open)</title></rect>
+<rect x="0.0" y="262.8" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: floor.l.d (open)</title></rect>
+<rect x="33.3" y="262.8" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: floor.l.s (open)</title></rect>
+<rect x="66.6" y="262.8" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: floor.w.d (open)</title></rect>
+<rect x="99.9" y="262.8" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: floor.w.s (open)</title></rect>
+<rect x="133.2" y="262.8" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: round.l.d (open)</title></rect>
+<rect x="166.5" y="262.8" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: round.l.s (open)</title></rect>
+<rect x="199.8" y="262.8" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: round.w.d (open)</title></rect>
+<rect x="0.0" y="296.4" width="46.6" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: round.w.s (open)</title></rect>
+<rect x="46.6" y="296.4" width="46.6" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: trunc.l.d (open)</title></rect>
+<rect x="93.2" y="296.4" width="46.6" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: trunc.l.s (open)</title></rect>
+<rect x="139.9" y="296.4" width="46.6" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: trunc.w.d (open)</title></rect>
+<rect x="186.5" y="296.4" width="46.6" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: trunc.w.s (open)</title></rect>
+<rect x="0.0" y="195.5" width="233.1" height="134.5" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="4.0" y="208.5" class="cell">FPU convert</text>
+<rect x="233.1" y="30.0" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: add (done)</title></rect>
+<rect x="270.9" y="30.0" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: addi (done)</title></rect>
+<rect x="308.7" y="30.0" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: addiu (done)</title></rect>
+<rect x="346.4" y="30.0" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: addu (done)</title></rect>
+<rect x="384.2" y="30.0" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: and (done)</title></rect>
+<rect x="233.1" y="60.6" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: andi (done)</title></rect>
+<rect x="270.9" y="60.6" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: lui (done)</title></rect>
+<rect x="308.7" y="60.6" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: nor (done)</title></rect>
+<rect x="346.4" y="60.6" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: or (done)</title></rect>
+<rect x="384.2" y="60.6" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: ori (done)</title></rect>
+<rect x="233.1" y="91.3" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: sll (done)</title></rect>
+<rect x="270.9" y="91.3" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: sllv (done)</title></rect>
+<rect x="308.7" y="91.3" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: slt (done)</title></rect>
+<rect x="346.4" y="91.3" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: slti (done)</title></rect>
+<rect x="384.2" y="91.3" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: sltiu (done)</title></rect>
+<rect x="233.1" y="121.9" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: sltu (done)</title></rect>
+<rect x="270.9" y="121.9" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: sra (done)</title></rect>
+<rect x="308.7" y="121.9" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: srav (done)</title></rect>
+<rect x="346.4" y="121.9" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: srl (done)</title></rect>
+<rect x="384.2" y="121.9" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: srlv (done)</title></rect>
+<rect x="233.1" y="152.6" width="47.2" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: sub (done)</title></rect>
+<rect x="280.3" y="152.6" width="47.2" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: subu (done)</title></rect>
+<rect x="327.6" y="152.6" width="47.2" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: xor (done)</title></rect>
+<rect x="374.8" y="152.6" width="47.2" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: xori (done)</title></rect>
+<rect x="233.1" y="30.0" width="188.9" height="153.2" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="237.1" y="43.0" class="cell">ALU</text>
+<rect x="233.1" y="183.2" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lb (done)</title></rect>
+<rect x="270.9" y="183.2" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lbu (done)</title></rect>
+<rect x="308.7" y="183.2" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ld (done)</title></rect>
+<rect x="346.4" y="183.2" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lh (done)</title></rect>
+<rect x="384.2" y="183.2" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lhu (done)</title></rect>
+<rect x="233.1" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lw (done)</title></rect>
+<rect x="270.9" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sb (done)</title></rect>
+<rect x="308.7" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sd (done)</title></rect>
+<rect x="346.4" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sh (done)</title></rect>
+<rect x="384.2" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sw (done)</title></rect>
+<rect x="233.1" y="241.9" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ldl (open)</title></rect>
+<rect x="270.9" y="241.9" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ldr (open)</title></rect>
+<rect x="308.7" y="241.9" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ll (open)</title></rect>
+<rect x="346.4" y="241.9" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lld (open)</title></rect>
+<rect x="384.2" y="241.9" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwl (open)</title></rect>
+<rect x="233.1" y="271.3" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwr (open)</title></rect>
+<rect x="270.9" y="271.3" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwu (open)</title></rect>
+<rect x="308.7" y="271.3" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sc (open)</title></rect>
+<rect x="346.4" y="271.3" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: scd (open)</title></rect>
+<rect x="384.2" y="271.3" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sdl (open)</title></rect>
+<rect x="233.1" y="300.6" width="63.0" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sdr (open)</title></rect>
+<rect x="296.1" y="300.6" width="63.0" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: swl (open)</title></rect>
+<rect x="359.0" y="300.6" width="63.0" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: swr (open)</title></rect>
+<rect x="233.1" y="183.2" width="188.9" height="146.8" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="237.1" y="196.2" class="cell">Load/store</text>
+<rect x="422.0" y="30.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: beq (done)</title></rect>
+<rect x="458.2" y="30.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: beql (done)</title></rect>
+<rect x="494.4" y="30.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgez (done)</title></rect>
+<rect x="530.5" y="30.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgezl (done)</title></rect>
+<rect x="422.0" y="63.3" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgtz (done)</title></rect>
+<rect x="458.2" y="63.3" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgtzl (done)</title></rect>
+<rect x="494.4" y="63.3" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: blez (done)</title></rect>
+<rect x="530.5" y="63.3" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: blezl (done)</title></rect>
+<rect x="422.0" y="96.7" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltz (done)</title></rect>
+<rect x="458.2" y="96.7" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltzl (done)</title></rect>
+<rect x="494.4" y="96.7" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bne (done)</title></rect>
+<rect x="530.5" y="96.7" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bnel (done)</title></rect>
+<rect x="422.0" y="130.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: j (done)</title></rect>
+<rect x="458.2" y="130.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: jal (done)</title></rect>
+<rect x="494.4" y="130.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: jalr (done)</title></rect>
+<rect x="530.5" y="130.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: jr (done)</title></rect>
+<rect x="422.0" y="163.3" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgezal (open)</title></rect>
+<rect x="458.2" y="163.3" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgezall (open)</title></rect>
+<rect x="494.4" y="163.3" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltzal (open)</title></rect>
+<rect x="530.5" y="163.3" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltzall (open)</title></rect>
+<rect x="422.0" y="30.0" width="144.7" height="166.7" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="426.0" y="43.0" class="cell">Branch/jump</text>
+<rect x="422.0" y="196.7" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: abs.d (open)</title></rect>
+<rect x="458.2" y="196.7" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: abs.s (open)</title></rect>
+<rect x="494.4" y="196.7" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: add.d (open)</title></rect>
+<rect x="530.5" y="196.7" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: add.s (open)</title></rect>
+<rect x="422.0" y="230.0" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: div.d (open)</title></rect>
+<rect x="458.2" y="230.0" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: div.s (open)</title></rect>
+<rect x="494.4" y="230.0" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: mov.d (open)</title></rect>
+<rect x="530.5" y="230.0" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: mov.s (open)</title></rect>
+<rect x="422.0" y="263.3" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: mul.d (open)</title></rect>
+<rect x="458.2" y="263.3" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: mul.s (open)</title></rect>
+<rect x="494.4" y="263.3" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: neg.d (open)</title></rect>
+<rect x="530.5" y="263.3" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: neg.s (open)</title></rect>
+<rect x="422.0" y="296.7" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: sqrt.d (open)</title></rect>
+<rect x="458.2" y="296.7" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: sqrt.s (open)</title></rect>
+<rect x="494.4" y="296.7" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: sub.d (open)</title></rect>
+<rect x="530.5" y="296.7" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: sub.s (open)</title></rect>
+<rect x="422.0" y="196.7" width="144.7" height="133.3" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="426.0" y="209.7" class="cell">FPU arith</text>
+<rect x="566.7" y="30.0" width="34.2" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dadd (done)</title></rect>
+<rect x="600.9" y="30.0" width="34.2" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: daddi (done)</title></rect>
+<rect x="635.0" y="30.0" width="34.2" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: daddiu (done)</title></rect>
+<rect x="669.2" y="30.0" width="34.2" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: daddu (done)</title></rect>
+<rect x="566.7" y="63.1" width="34.2" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsll (done)</title></rect>
+<rect x="600.9" y="63.1" width="34.2" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsll32 (done)</title></rect>
+<rect x="635.0" y="63.1" width="34.2" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsllv (done)</title></rect>
+<rect x="669.2" y="63.1" width="34.2" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsra (done)</title></rect>
+<rect x="566.7" y="96.2" width="34.2" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsra32 (done)</title></rect>
+<rect x="600.9" y="96.2" width="34.2" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsrav (done)</title></rect>
+<rect x="635.0" y="96.2" width="34.2" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsrl (done)</title></rect>
+<rect x="669.2" y="96.2" width="34.2" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsrl32 (done)</title></rect>
+<rect x="566.7" y="129.3" width="45.6" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsrlv (done)</title></rect>
+<rect x="612.2" y="129.3" width="45.6" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsub (done)</title></rect>
+<rect x="657.8" y="129.3" width="45.6" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>64-bit ALU: dsubu (done)</title></rect>
+<rect x="566.7" y="30.0" width="136.7" height="132.4" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="570.7" y="43.0" class="cell">64-bit ALU</text>
+<rect x="703.3" y="30.0" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: break (open)</title></rect>
+<rect x="737.5" y="30.0" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: cache (open)</title></rect>
+<rect x="771.7" y="30.0" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: cfc0 (open)</title></rect>
+<rect x="805.8" y="30.0" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: ctc0 (open)</title></rect>
+<rect x="703.3" y="63.1" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: dmfc0 (open)</title></rect>
+<rect x="737.5" y="63.1" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: dmtc0 (open)</title></rect>
+<rect x="771.7" y="63.1" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: eret (open)</title></rect>
+<rect x="805.8" y="63.1" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: mfc0 (open)</title></rect>
+<rect x="703.3" y="96.2" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: mtc0 (open)</title></rect>
+<rect x="737.5" y="96.2" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: sync (open)</title></rect>
+<rect x="771.7" y="96.2" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: syscall (open)</title></rect>
+<rect x="805.8" y="96.2" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: tlbp (open)</title></rect>
+<rect x="703.3" y="129.3" width="45.6" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: tlbr (open)</title></rect>
+<rect x="748.9" y="129.3" width="45.6" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: tlbwi (open)</title></rect>
+<rect x="794.4" y="129.3" width="45.6" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: tlbwr (open)</title></rect>
+<rect x="703.3" y="30.0" width="136.7" height="132.4" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="707.3" y="43.0" class="cell">COP0/system</text>
+<rect x="566.7" y="162.4" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: dmfc1 (done)</title></rect>
+<rect x="600.3" y="162.4" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: dmtc1 (done)</title></rect>
+<rect x="633.8" y="162.4" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: ldc1 (done)</title></rect>
+<rect x="566.7" y="195.9" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: lwc1 (done)</title></rect>
+<rect x="600.3" y="195.9" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: mfc1 (done)</title></rect>
+<rect x="633.8" y="195.9" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: mtc1 (done)</title></rect>
+<rect x="566.7" y="229.4" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: sdc1 (done)</title></rect>
+<rect x="600.3" y="229.4" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: swc1 (done)</title></rect>
+<rect x="633.8" y="229.4" width="33.6" height="33.5" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: bc1f (open)</title></rect>
+<rect x="566.7" y="262.9" width="33.6" height="33.5" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: bc1fl (open)</title></rect>
+<rect x="600.3" y="262.9" width="33.6" height="33.5" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: bc1t (open)</title></rect>
+<rect x="633.8" y="262.9" width="33.6" height="33.5" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: bc1tl (open)</title></rect>
+<rect x="566.7" y="296.5" width="50.3" height="33.5" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: cfc1 (open)</title></rect>
+<rect x="617.0" y="296.5" width="50.3" height="33.5" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: ctc1 (open)</title></rect>
+<rect x="566.7" y="162.4" width="100.7" height="167.6" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="570.7" y="175.4" class="cell">COP1 move</text>
+<rect x="667.4" y="162.4" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: ddiv (done)</title></rect>
+<rect x="710.5" y="162.4" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: ddivu (done)</title></rect>
+<rect x="667.4" y="190.3" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: div (done)</title></rect>
+<rect x="710.5" y="190.3" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: divu (done)</title></rect>
+<rect x="667.4" y="218.2" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: dmult (done)</title></rect>
+<rect x="710.5" y="218.2" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: dmultu (done)</title></rect>
+<rect x="667.4" y="246.2" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: mfhi (done)</title></rect>
+<rect x="710.5" y="246.2" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: mflo (done)</title></rect>
+<rect x="667.4" y="274.1" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: mthi (done)</title></rect>
+<rect x="710.5" y="274.1" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: mtlo (done)</title></rect>
+<rect x="667.4" y="302.1" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: mult (done)</title></rect>
+<rect x="710.5" y="302.1" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: multu (done)</title></rect>
+<rect x="667.4" y="162.4" width="86.3" height="167.6" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="671.4" y="175.4" class="cell">Mul/div</text>
+<rect x="753.7" y="162.4" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: teq (open)</title></rect>
+<rect x="796.8" y="162.4" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: teqi (open)</title></rect>
+<rect x="753.7" y="190.3" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tge (open)</title></rect>
+<rect x="796.8" y="190.3" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tgei (open)</title></rect>
+<rect x="753.7" y="218.2" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tgeiu (open)</title></rect>
+<rect x="796.8" y="218.2" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tgeu (open)</title></rect>
+<rect x="753.7" y="246.2" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tlt (open)</title></rect>
+<rect x="796.8" y="246.2" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tlti (open)</title></rect>
+<rect x="753.7" y="274.1" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tltiu (open)</title></rect>
+<rect x="796.8" y="274.1" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tltu (open)</title></rect>
+<rect x="753.7" y="302.1" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tne (open)</title></rect>
+<rect x="796.8" y="302.1" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tnei (open)</title></rect>
+<rect x="753.7" y="162.4" width="86.3" height="167.6" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="757.7" y="175.4" class="cell">Trap</text>
+<rect x="0.0" y="386.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded PI / SP DMA / CPU consumption chain (done)</title></rect>
+<rect x="63.9" y="386.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded PI primitive-to-writer composition (done)</title></rect>
+<rect x="127.8" y="386.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded lower-DMEM ancestry revocation (done)</title></rect>
+<rect x="191.7" y="386.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded lower-IMEM ancestry revocation (done)</title></rect>
+<rect x="0.0" y="436.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded original-clock RAM mutation cuts (done)</title></rect>
+<rect x="63.9" y="436.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded reverse-SP-DMA / RAM executable chain (done)</title></rect>
+<rect x="127.8" y="436.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded scalar producer / executable-read join (done)</title></rect>
+<rect x="191.7" y="436.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded scalar store / executable backing (done)</title></rect>
+<rect x="0.0" y="486.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Controlled D-cache export / executable chain (done)</title></rect>
+<rect x="63.9" y="486.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Controlled mapping / cache / exception chain (done)</title></rect>
+<rect x="127.8" y="486.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Exact IMEM-read / performed-RSP receipts (done)</title></rect>
+<rect x="191.7" y="486.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: I-cache snapshots/fill outcomes (done)</title></rect>
+<rect x="0.0" y="536.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: PI request/queue/source history (done)</title></rect>
+<rect x="63.9" y="536.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Physical/cache fetch context (done)</title></rect>
+<rect x="127.8" y="536.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: SP/PIF backing witnesses (done)</title></rect>
+<rect x="191.7" y="536.0" width="63.9" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: CPU copy/transform lineage (partial)</title></rect>
+<rect x="0.0" y="586.0" width="63.9" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: CPU executable-store sensing (partial)</title></rect>
+<rect x="63.9" y="586.0" width="63.9" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Cache writeback/restore lineage (partial)</title></rect>
+<rect x="127.8" y="586.0" width="63.9" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Decompression/relocation lineage (partial)</title></rect>
+<rect x="191.7" y="586.0" width="63.9" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: RSP writer/dataflow lineage (partial)</title></rect>
+<rect x="0.0" y="636.0" width="255.7" height="50.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Complete mutation census (open)</title></rect>
+<rect x="0.0" y="386.0" width="255.7" height="300.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="4.0" y="399.0" class="cell">Executable Provenance</text>
+<rect x="255.7" y="386.0" width="63.9" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: 20M-fetch commercial-prefix replay (done)</title></rect>
+<rect x="319.6" y="386.0" width="63.9" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First native synthetic executable (done)</title></rect>
+<rect x="383.5" y="386.0" width="63.9" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: Mupen/ares differential oracles (done)</title></rect>
+<rect x="447.4" y="386.0" width="63.9" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: Synthetic discovery corpus (done)</title></rect>
+<rect x="255.7" y="438.4" width="63.9" height="52.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: n64-systemtest research corpus (partial)</title></rect>
+<rect x="319.6" y="438.4" width="63.9" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: 100-game campaign (open)</title></rect>
+<rect x="383.5" y="438.4" width="63.9" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First commercial ROM CLOSED (open)</title></rect>
+<rect x="447.4" y="438.4" width="63.9" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First commercial ROM mapped (open)</title></rect>
+<rect x="255.7" y="490.8" width="85.2" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First native commercial boot (open)</title></rect>
+<rect x="340.9" y="490.8" width="85.2" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First native gameplay (open)</title></rect>
+<rect x="426.1" y="490.8" width="85.2" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: Representative 25-game set (open)</title></rect>
+<rect x="255.7" y="386.0" width="255.7" height="157.1" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="259.7" y="399.0" class="cell">Compatibility</text>
+<rect x="255.7" y="543.1" width="63.9" height="47.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Direct-control-flow closure (done)</title></rect>
+<rect x="319.6" y="543.1" width="63.9" height="47.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Fail-closed solver &amp; diagnostics (done)</title></rect>
+<rect x="383.5" y="543.1" width="63.9" height="47.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Source/certificate rechecking (done)</title></rect>
+<rect x="447.4" y="543.1" width="63.9" height="47.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Execution-root completeness (partial)</title></rect>
+<rect x="255.7" y="590.8" width="63.9" height="47.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Finite indirect-target closure (partial)</title></rect>
+<rect x="319.6" y="590.8" width="63.9" height="47.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Overlay/executable lifetimes (partial)</title></rect>
+<rect x="383.5" y="590.8" width="63.9" height="47.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Pointer-table immutability proof (partial)</title></rect>
+<rect x="447.4" y="590.8" width="63.9" height="47.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: RSP executable-universe proof (partial)</title></rect>
+<rect x="255.7" y="638.4" width="127.8" height="47.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: TLB/context/cache composition (partial)</title></rect>
+<rect x="383.5" y="638.4" width="127.8" height="47.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: First ROM reaches CLOSED (open)</title></rect>
+<rect x="255.7" y="543.1" width="255.7" height="142.9" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="259.7" y="556.1" class="cell">Closed-World Proof</text>
+<rect x="511.3" y="386.0" width="57.8" height="52.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Bounded cross-block indirect proofs (done)</title></rect>
+<rect x="569.1" y="386.0" width="57.8" height="52.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Direct CFG recovery (done)</title></rect>
+<rect x="627.0" y="386.0" width="57.8" height="52.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Dynamic trace import (done)</title></rect>
+<rect x="684.8" y="386.0" width="57.8" height="52.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Evidence merge &amp; conflicts (done)</title></rect>
+<rect x="511.3" y="438.6" width="57.8" height="52.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Local indirect certificates (done)</title></rect>
+<rect x="569.1" y="438.6" width="57.8" height="52.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: ProgramMap schema &amp; validation (done)</title></rect>
+<rect x="627.0" y="438.6" width="57.8" height="52.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: ROM normalization &amp; identity (done)</title></rect>
+<rect x="684.8" y="438.6" width="57.8" height="52.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Jump/pointer-table recovery (partial)</title></rect>
+<rect x="511.3" y="491.3" width="115.7" height="52.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Commercial-ROM map validation (open)</title></rect>
+<rect x="627.0" y="491.3" width="115.7" height="52.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Known-library/signature evidence (open)</title></rect>
+<rect x="511.3" y="386.0" width="231.3" height="157.9" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="515.3" y="399.0" class="cell">Discovery &amp; ProgramMap</text>
+<rect x="511.3" y="543.9" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Declared runtime-function boundary (ADR-0129) (partial)</title></rect>
+<rect x="569.1" y="543.9" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Audio path (open)</title></rect>
+<rect x="627.0" y="543.9" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Controller input (open)</title></rect>
+<rect x="684.8" y="543.9" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Guest memory/MMIO runtime (open)</title></rect>
+<rect x="511.3" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Interrupt/timing/event runtime (open)</title></rect>
+<rect x="569.1" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Native launch/cache packaging (open)</title></rect>
+<rect x="627.0" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: RSP runtime/native path (open)</title></rect>
+<rect x="684.8" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Renderer integration (open)</title></rect>
+<rect x="511.3" y="638.6" width="231.3" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Save devices (open)</title></rect>
+<rect x="511.3" y="543.9" width="231.3" height="142.1" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="515.3" y="556.9" class="cell">Native Runtime</text>
+<rect x="742.6" y="386.0" width="48.7" height="75.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Synthetic native differential verifier (done)</title></rect>
+<rect x="791.3" y="386.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Finite native indirect dispatch (partial)</title></rect>
+<rect x="742.6" y="461.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Integer MIPS lowering (partial)</title></rect>
+<rect x="791.3" y="461.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: MIPS -&gt; C lowering (ADR-0126) (partial)</title></rect>
+<rect x="742.6" y="536.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Return closure / function-level lowering (partial)</title></rect>
+<rect x="791.3" y="536.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: x86-64 host build via C (partial)</title></rect>
+<rect x="742.6" y="611.0" width="48.7" height="75.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: ARM64 host build via C (open)</title></rect>
+<rect x="791.3" y="611.0" width="48.7" height="75.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Link with N64ModernRuntime (open)</title></rect>
+<rect x="742.6" y="386.0" width="97.4" height="300.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="746.6" y="399.0" class="cell">Native AOT C…</text>
 </svg>
