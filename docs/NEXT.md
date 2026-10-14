@@ -1,5 +1,54 @@
 # Next
 
+## Direction reset (2026-10-15, ADR-0125) — read this first
+
+This section overrides the per-spike "continue X" paragraphs below wherever they
+conflict. Those paragraphs remain as the historical record of open obligations;
+they are not a queue to work through in order.
+
+Diagnosis: spikes 080-095 each extended RSP/SP/DMEM/IMEM byte-provenance by
+one more composition step. Every step was correct and fail-closed, but none moved
+the first real ROM closer to `CLOSED`: the user-supplied Ocarina of Time baseline
+has stood at 293 blocks, 62 whole-ROM blockers and 44 unresolved indirect sites
+since 2026-10-12 (receipt 20261012-discovery-solve-primary-composition). RSP-
+computed bytes that later execute on the CPU are rare in commercial games, so
+that lane has no current consumer. Meanwhile the decompression (PR #28), runtime
+relocation (PR #31) and n64sym signature (PR #50) drafts — which commercial
+code-loading actually depends on — sit unmerged.
+
+New rule: **work is pulled by a named consumer.** Every claim in issue #4 must
+name which of the following it advances, and the receipt must report the change:
+
+1. **OoT blocker count (primary metric).** Re-run the local OoT discovery solve
+   and record blocks / whole-ROM blockers / unresolved indirect sites in each
+   receipt that could affect them. Pick the next cluster from the largest
+   remaining blocker class, not from the next provenance edge. Expected order:
+   boot-segment and `code`-segment discovery from actual PI DMA, then Yaz0
+   decompression lineage (revive PR #28 onto current `main`), then overlay
+   relocation (revive PR #31), then function-pointer/jump-table closure for the
+   remaining indirect sites. Keep ROM bytes, maps and traces local and ignored.
+2. **Native vertical slice (gate item 7 below is relaxed for this scope only).**
+   Narrow native lowering is now permitted for *synthetic, already-CLOSED*
+   programs: a tiny integer MIPS subset lowered to host code, a minimal memory
+   model, and differential tests against the pinned ares oracle (register state,
+   PC/control flow, memory writes, exceptions). Its purpose is to learn which
+   proof facts the compiler actually consumes. No interpreter or JIT fallback may
+   be linked; `native_complete` stays `false`; commercial-ROM lowering stays
+   deferred until a commercial scope is `CLOSED`.
+3. **Known-library evidence.** Revive PR #50 (n64sym) as provenance-bearing
+   candidate evidence; it must never auto-promote to proof.
+
+Paused until a consumer above needs them: further RSP scalar/vector producer,
+task/reset-root, DMEM/IMEM lane and reverse-DMA composition beyond spike095.
+Resume one only when an OoT blocker or the native slice is shown to require it,
+and cite that blocker in the claim.
+
+Unchanged: every fail-closed invariant in AGENTS.md, exact-head CAS, no ROMs or
+game-derived bytes in git, no GitHub Actions, and all broad proof flags `false`
+until the proofs exist.
+
+## Historical per-cluster continuation notes
+
 Scoped scalar RSP stores now connect rooted operand facts to DMEM writers and
 CPU executable backing (spike094). Continue the graph through DMA/RAM/copy and
 computed executable-byte origins, keeping code-read, operand, method and byte-
@@ -275,8 +324,11 @@ need. No new research lane. See `research/integration-harvest-20261011.md`.
    size/cost before making scalability claims.
 7. Begin tiny native integer lowering only after discovery beyond the current
    synthetic scope is demonstrably useful, with reference differential tests.
+   ADR-0125 exception: a synthetic-only native vertical slice is permitted now
+   (see "Direction reset" at the top of this file).
 
-Native lowering remains deferred until discovery is demonstrably useful.
+Commercial-ROM native lowering remains deferred until a commercial scope is
+CLOSED; the ADR-0125 synthetic vertical slice is the only exception.
 
 Source-preserving discovery solve admission now rechecks external expectations,
 raw primitives, ROM-aware installed entries and compiled roots before emitting a

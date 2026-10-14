@@ -2842,3 +2842,27 @@ producers remain opaque. Scope and all completed effects join the ordered digest
 Bounded samples do not certify completeness. Task/control/reset, DMA/RAM computed
 origin composition, writer/backend census, hardware/lifetimes and native closure
 remain OPEN with all broad proof flags false.
+
+## ADR-0125: Consumer-pulled priorities; synthetic native vertical slice permitted
+
+Context: spikes 080-095 extended RSP/SP/DMEM/IMEM byte provenance one
+composition step at a time. Each step was validated and fail-closed, but the
+only real-ROM metric (the local Ocarina of Time conditional baseline: 293
+blocks, 62 whole-ROM blockers, 44 unresolved indirect sites, recorded
+2026-10-12) did not move. The provenance graph had no downstream consumer to
+say how much precision is required, and decompression/relocation/signature
+drafts (PRs #28, #31, #50) that commercial code loading depends on stayed
+unmerged.
+
+Decision: (1) every new cluster must name the consumer it advances: the OoT
+blocker count, the synthetic native vertical slice, or known-library evidence,
+and its receipt reports the effect; (2) RSP/SP lane, producer, task-root and
+reverse-DMA composition beyond spike095 is paused until one of those consumers
+is shown to need it; (3) narrow native lowering is permitted for synthetic,
+already-CLOSED programs only, with ares differential tests and no interpreter or
+JIT linked, to discover which proof facts the compiler consumes.
+
+Unchanged: all AGENTS.md invariants, fail-closed semantics, exact-head CAS, no
+ROM-derived bytes in git, `native_complete` and every broad certification flag
+false. Commercial-ROM native lowering stays deferred until a commercial scope is
+CLOSED. See the "Direction reset" section at the top of NEXT.md.
