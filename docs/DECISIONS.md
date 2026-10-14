@@ -2916,3 +2916,31 @@ window). A self-modifying store and a cached/uncached alias fault instead of
 running. The slice surfaced the first
 compiler requirement for discovery: `jr $ra` returns have no closure proof,
 so any program with a function return is still OPEN.
+
+## ADR-0127: Returns close under a runtime-checked call/return assumption
+
+Context: milestone 1 showed that `jr $ra` had no closure proof, so no program
+with a function return could reach CLOSED. Proving statically that `$ra` holds
+the caller's link at every return needs stack-slot and callee-frame reasoning
+that real code (`sw ra` / `lw ra` around calls) makes expensive, and a static
+proof alone would still leave the lowered code unable to map returns to C.
+
+Decision: `crates/plaid-core/src/returns.rs` partitions the program into
+functions (call targets) and bodies (blocks reachable without entering a
+call). A `jr $ra` site's certificate lists the functions whose bodies contain
+it and the return continuations of every `$ra`-linking call into them; it is
+recomputed from the map and bytes when rechecked. A site reachable from a
+host-entered entry, or from no function, gets no certificate. The solver
+accepts the certificate only in `DeclaredStaticImagesGuardedRam`, and only
+with the added assumption that each return goes to the continuation of the
+call that entered its function. Native code enforces it: each guest function
+is one C function that receives its expected return address, and every
+`jr $ra` compares `$ra` with it and aborts (fault 5) on mismatch. Whole-ROM
+and `DeclaredStaticImages` scopes keep such sites OPEN.
+
+Result: spike096 adds recursive, non-leaf, function-pointer and tail calls
+with stack frames in the compared RAM window; all match the pinned ares
+interpreter exactly, and a corrupted-`$ra` return faults 5 natively. On the
+local OoT conditional baseline, 43 of the 44 unresolved indirect sites are
+returns that now carry certificates; one non-return site remains. The
+whole-ROM blocker count is unchanged (62), as intended for that scope.

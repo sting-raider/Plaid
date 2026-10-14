@@ -73,12 +73,12 @@
         {"name": "Integer MIPS lowering", "state": "partial"},
         {"name": "x86-64 host build via C", "state": "partial"},
         {"name": "ARM64 host build via C", "state": "open"},
-        {"name": "Return closure / function-level lowering", "state": "open"},
+        {"name": "Return closure / function-level lowering", "state": "partial"},
         {"name": "Finite native indirect dispatch", "state": "partial"},
         {"name": "Synthetic native differential verifier", "state": "verified"},
         {"name": "Link with N64ModernRuntime", "state": "open"}
       ],
-      "remaining": "Return closure, function-level C, wider ISA, runtime link."
+      "remaining": "Return closure outside the assumption scope, wider ISA, runtime link."
     },
     {
       "name": "Native Runtime",

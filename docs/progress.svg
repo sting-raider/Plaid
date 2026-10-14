@@ -306,10 +306,10 @@
 <rect x="612" y="1006" width="548" height="392" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
 <text x="632" y="1036" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">04</text>
 <text x="666" y="1037" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Native AOT Compiler</text>
-<text x="632" y="1062" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">1 integrated   /   4 partial   /   3 open</text>
+<text x="632" y="1062" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">1 integrated   /   5 partial   /   2 open</text>
 <rect x="632" y="1076" width="63.5" height="4" rx="0" fill="#58d5ab" stroke="none"/>
-<rect x="695.5" y="1076" width="254.0" height="4" rx="0" fill="#ffc66d" stroke="none"/>
-<rect x="949.5" y="1076" width="190.5" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
+<rect x="695.5" y="1076" width="317.5" height="4" rx="0" fill="#ffc66d" stroke="none"/>
+<rect x="1013.0" y="1076" width="127.0" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
 <g class="milestone">
 <title>Native AOT Compiler: MIPS -&gt; C lowering (ADR-0126) (partial)</title>
 <text x="632" y="1105" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
@@ -335,10 +335,10 @@
 <text x="1140" y="1183" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native AOT Compiler: Return closure / function-level lowering (open)</title>
-<text x="632" y="1209" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
+<title>Native AOT Compiler: Return closure / function-level lowering (partial)</title>
+<text x="632" y="1209" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
 <text x="655" y="1209" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Return closure / function-level lowering</text>
-<text x="1140" y="1209" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+<text x="1140" y="1209" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
 <title>Native AOT Compiler: Finite native indirect dispatch (partial)</title>
@@ -359,7 +359,7 @@
 <text x="1140" y="1287" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <text x="632" y="1354" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
-<text x="632" y="1372" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Return closure, function-level C, wider ISA, runtime link.</text>
+<text x="632" y="1372" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Return closure outside the assumption scope, wider ISA, runtime link.</text>
 <rect x="40" y="1422" width="548" height="418" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
 <text x="60" y="1452" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">05</text>
 <text x="94" y="1453" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Native Runtime</text>

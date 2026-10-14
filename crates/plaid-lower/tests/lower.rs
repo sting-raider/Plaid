@@ -31,7 +31,7 @@ fn closed_program_lowers_deterministically_with_guarded_stores() {
     assert_eq!(c, lower(&words, 0x8000_0010).unwrap());
     assert!(c.contains("plaid_store(s, s->r[8] + (u64)(s64)256, 4, s->r[9]"));
     assert!(c.contains("goto L_80000010;"));
-    assert!(c.contains("L_80000010: s->pc = 0x80000010u; return 0;"));
+    assert!(c.contains("L_80000010: s->pc = 0x80000010u; return 2;"));
     // Executable bytes are registered for the runtime store guard.
     assert!(c.contains("plaid_code[] = {{0, 16}, {16, 24}}"));
 }
@@ -86,4 +86,101 @@ fn unlisted_entries_are_rejected() {
     )
     .unwrap_err();
     assert!(err.contains("not a map entry"), "{err}");
+}
+
+fn map_of(words: &[u32]) -> (ProgramMap, CodeImage) {
+    let image = CodeImage {
+        base: CodeAddress {
+            pc: GuestAddr(BASE),
+            image: "lower".into(),
+            generation: 0,
+        },
+        words: words.to_vec(),
+        rom_offset: None,
+        physical_start: None,
+    };
+    let rom = RomIdentity {
+        sha256: "b".repeat(64),
+        size: 4096,
+    };
+    (
+        discover_image(rom, &image, &[GuestAddr(BASE)], 100)
+            .unwrap()
+            .map,
+        image,
+    )
+}
+
+// 0: jal 0x10; nop; j 0x20; nop; 0x10: addiu v0,v0,1; jr ra; nop; nop; 0x20: b .; nop
+const CALL: [u32; 10] = [
+    0x0c00_0004,
+    0,
+    0x0800_0008,
+    0,
+    0x2442_0001,
+    0x03e0_0008,
+    0,
+    0,
+    0x1000_ffff,
+    0,
+];
+
+#[test]
+fn returns_close_only_under_the_checked_call_return_assumption() {
+    use plaid_core::solver::{ClosureStatus, Scope, solve};
+    let (map, image) = map_of(&CALL);
+    let site = map
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == 0x8000_0014)
+        .unwrap();
+    assert_eq!(
+        site.candidates.keys().map(|c| c.pc.0).collect::<Vec<_>>(),
+        [0x8000_0008]
+    );
+    for scope in [Scope::WholeRom, Scope::DeclaredStaticImages] {
+        let r = solve(&map, std::slice::from_ref(&image), scope).unwrap();
+        assert!(
+            r.blockers
+                .iter()
+                .any(|b| b.kind == "unresolved_indirect_site")
+        );
+    }
+    let r = solve(
+        &map,
+        std::slice::from_ref(&image),
+        Scope::DeclaredStaticImagesGuardedRam,
+    )
+    .unwrap();
+    assert_eq!(r.status, ClosureStatus::Closed);
+    assert!(r.assumptions.iter().any(|a| a.contains("jr $ra returns")));
+    // An edited target set no longer matches the recomputed certificate.
+    let mut edited = map.clone();
+    let mut s = edited.indirect_sites.pop_first().unwrap();
+    assert_eq!(s.site.pc.0, 0x8000_0014);
+    let refs = s.candidates.values().next().unwrap().clone();
+    s.candidates
+        .insert(edited.entries.keys().next().unwrap().clone(), refs);
+    edited.indirect_sites.insert(s);
+    let r = solve(&edited, &[image], Scope::DeclaredStaticImagesGuardedRam).unwrap();
+    assert_eq!(r.status, ClosureStatus::Open);
+}
+
+#[test]
+fn calls_lower_to_c_functions_with_checked_returns() {
+    let (map, image) = map_of(&CALL);
+    let c = lower_c(&map, &[image], GuestAddr(BASE), &[GuestAddr(0x8000_0020)]).unwrap();
+    assert!(c.contains("static int F_80000010(plaid_state *s, u64 ret);"));
+    assert!(c.contains(
+        "{ int r = F_80000010(s, 0xffffffff80000008ull); if (r) return r; } goto L_80000008;"
+    ));
+    assert!(c.contains("if (t != ret) return plaid_fault(s, 0x80000014u, 5); return 0;"));
+}
+
+#[test]
+fn a_return_reachable_from_the_host_entry_stays_open() {
+    // 0: jr ra; nop  -- returns to the unknown host caller.
+    let (map, image) = map_of(&[0x03e0_0008, 0]);
+    let err = lower_c(&map, &[image], GuestAddr(BASE), &[]).unwrap_err();
+    assert!(err.contains("not CLOSED"), "{err}");
 }
