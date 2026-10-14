@@ -1,5 +1,13 @@
 # Next
 
+Scoped scalar RSP stores now connect rooted operand facts to DMEM writers and
+CPU executable backing (spike094). Continue the graph through DMA/RAM/copy and
+computed executable-byte origins, keeping code-read, operand, method and byte-
+effect identities separate. Do not infer a writer from temporal overlap or equal
+values. External/DMA effects remain cuts unless their own origins are proven.
+Task/reset/control roots, general/vector producers, complete writer/backend
+coverage, continuous lifetimes and whole-ROM/native closure remain OPEN.
+
 Exact raw RSP consumption now feeds rooted scalar producer facts (spike093).
 Continue from these definitions through actual DMEM/RAM writers and executable
 consumption, and bind guest task/control/PC/reset producers to operand roots.

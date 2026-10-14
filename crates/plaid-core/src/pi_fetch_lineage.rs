@@ -183,6 +183,7 @@ struct Lineage<'a> {
     dma_reads: BTreeMap<u64, Vec<Option<ObservedPiByteChain>>>,
     sp_attributed: bool,
     rsp_active: Option<PendingRspInstruction>,
+    scalar_stores: Option<crate::rsp_cpu_imem::scalar::ScalarRspProducers>,
     rsp_reads: BTreeMap<u64, RspReadParents>,
     rsp_samples: BTreeMap<RspSampleKey, ObservedRspInstruction>,
     rsp_digest: Sha256,
@@ -221,6 +222,7 @@ impl<'a> Lineage<'a> {
             dma_reads: BTreeMap::new(),
             sp_attributed: false,
             rsp_active: None,
+            scalar_stores: None,
             rsp_reads: BTreeMap::new(),
             rsp_samples: BTreeMap::new(),
             rsp_digest: Sha256::new(),
@@ -549,7 +551,30 @@ impl<'a> Lineage<'a> {
         match *record {
             // Operand roots cut register parents in the shared projection;
             // they never change already frozen executable-byte reads.
-            SpRecord::RspOperandRoot { .. } => {}
+            SpRecord::RspOperandRoot {
+                ordinal,
+                epoch,
+                rsp_pc,
+                registers,
+                ..
+            } => {
+                if let Some(state) = &mut self.scalar_stores {
+                    state.root(ordinal, epoch, rsp_pc, registers)?;
+                }
+            }
+            SpRecord::RspScalarStoreScope {
+                ordinal,
+                begin,
+                kind,
+                instruction_context,
+                store_scope,
+                ..
+            } => {
+                self.scalar_stores
+                    .as_mut()
+                    .ok_or("scalar scope lacks selected source policy")?
+                    .store_scope(ordinal, begin, kind, instruction_context, store_scope)?;
+            }
             SpRecord::ImemStorageEffect { offset, bytes, .. } => {
                 self.sp.cut(1, offset, bytes);
             }
@@ -582,8 +607,18 @@ impl<'a> Lineage<'a> {
                 word,
                 next_pc,
                 halted,
+                registers,
                 ..
             } => {
+                if let Some(state) = &mut self.scalar_stores {
+                    let registers =
+                        registers.ok_or("scalar stores lack exact operand snapshots")?;
+                    if begin {
+                        state.begin(ordinal, read_ordinal, rsp_pc, word, registers)?;
+                    } else {
+                        state.end(ordinal, next_pc, registers)?;
+                    }
+                }
                 if begin {
                     let read = self
                         .rsp_reads
@@ -667,8 +702,27 @@ impl<'a> Lineage<'a> {
                     sample.observations += 1;
                 }
             }
-            SpRecord::RspDmemEffect { offset, bytes, .. } => {
+            SpRecord::RspDmemEffect {
+                ordinal,
+                offset,
+                bytes,
+                value,
+                store_scope,
+                ..
+            } => {
                 self.sp.cut(0, offset, bytes);
+                if let Some(state) = &mut self.scalar_stores
+                    && let Some(writer) = state.store_effect(
+                        ordinal,
+                        store_scope.ok_or("scalar sink lacks explicit actor")?,
+                        offset,
+                        bytes,
+                        value,
+                    )?
+                {
+                    self.sp
+                        .write(0, offset, &[value as u8], ordinal, writer.into());
+                }
             }
             SpRecord::SpWord {
                 ordinal,
@@ -1047,6 +1101,12 @@ fn replay_lineage<H: BufRead + Seek, F: BufRead + Seek, P>(
                     ledger.attempt_writer = Some((transfer, lane, record_identity(&s.access())?));
                 }
                 pi_history::Wire::Base(r) => {
+                    if let history::Record::Header { format, .. } = &r
+                        && format == sp_history::RSP_STORE_FORMAT
+                    {
+                        ledger.scalar_stores =
+                            Some(crate::rsp_cpu_imem::scalar::ScalarRspProducers::with_stores());
+                    }
                     ledger.access(&r)?;
                     if matches!(r, history::Record::Fetch { .. }) {
                         let p = paired(&mut fetched, &mut fetch_raw, &mut fetch_hash)?;

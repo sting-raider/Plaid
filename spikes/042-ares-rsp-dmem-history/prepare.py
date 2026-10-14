@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 
 
-def generate(ref,out,sp_backing=False,word_reads=False,dma_lifecycle=False,dma_pending=False,instruction_fetches=False):
+def generate(ref,out,sp_backing=False,word_reads=False,dma_lifecycle=False,dma_pending=False,instruction_fetches=False,scalar_stores=False):
     assert not dma_pending or dma_lifecycle
     ref,out=Path(ref),Path(out)
     destination=out/'include/n64/rsp/rsp.hpp'
@@ -14,6 +14,19 @@ using PlaidRspDmemObserver = void (*)(u32,u32,u64);
 inline PlaidRspInstructionObserver plaidRspInstructionObserver = nullptr;
 inline PlaidRspDmemObserver plaidRspDmemObserver = nullptr;
 '''
+    if scalar_stores:
+        declarations += """using PlaidRspScalarStoreObserver = void (*)(bool,u32);
+inline PlaidRspScalarStoreObserver plaidRspScalarStoreObserver = nullptr;
+struct PlaidRspScalarStoreScope {
+  u32 kind;
+  explicit PlaidRspScalarStoreScope(u32 kind) : kind(kind) {
+    if(plaidRspScalarStoreObserver) plaidRspScalarStoreObserver(true,kind);
+  }
+  ~PlaidRspScalarStoreScope() {
+    if(plaidRspScalarStoreObserver) plaidRspScalarStoreObserver(false,kind);
+  }
+};
+"""
     if word_reads:
         declarations += '''using PlaidRspWordReadObserver = void (*)(u32,u32);
 inline PlaidRspWordReadObserver plaidRspWordReadObserver = nullptr;
@@ -85,18 +98,24 @@ inline PlaidRspDmaPendingObserver plaidRspDmaPendingObserver = nullptr;
     instructionEpilogue<0>(0);'''
         assert rsp.count(final)==1
         rsp=rsp.replace(final,final+'''\n    if(plaidRspInstructionFetchObserver) plaidRspInstructionFetchObserver(false,plaidInstructionPc,plaidInstructionRead,plaidInstructionWord,ipu.pc,status.halted);''')
-    if word_reads:
+    if word_reads or scalar_stores:
         ipu=(ref/'ares/n64/rsp/interpreter-ipu.cpp').read_text(encoding='utf-8')
-        marker='''auto RSP::LW(r32& rt, cr32& rs, s16 imm) -> void {
+        if word_reads:
+            marker='''auto RSP::LW(r32& rt, cr32& rs, s16 imm) -> void {
   rt.u32 = dmem.readUnaligned<Word>(rs.u32 + imm);
 }'''
-        assert ipu.count(marker)==1
-        ipu=ipu.replace(marker,'''auto RSP::LW(r32& rt, cr32& rs, s16 imm) -> void {
+            assert ipu.count(marker)==1
+            ipu=ipu.replace(marker,'''auto RSP::LW(r32& rt, cr32& rs, s16 imm) -> void {
   u32 plaidAddress=rs.u32 + imm;
   auto plaidValue=dmem.readUnaligned<Word>(plaidAddress);
   if(plaidRspWordReadObserver) plaidRspWordReadObserver(plaidAddress,u32(plaidValue));
   rt.u32=plaidValue;
 }''')
+        if scalar_stores:
+            for kind,name in enumerate(('SB','SH','SW')):
+                marker=f'auto RSP::{name}(cr32& rt, cr32& rs, s16 imm) -> void {{'
+                assert ipu.count(marker)==1
+                ipu=ipu.replace(marker,marker+f'\n  PlaidRspScalarStoreScope plaidStoreScope({kind});')
         patched=out/'rsp-interpreter-ipu.cpp'
         patched.write_text(ipu,encoding='utf-8',newline='\n')
         marker=f'#include "{ref/"ares/n64/rsp/interpreter-ipu.cpp"}"'

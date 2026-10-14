@@ -37,6 +37,7 @@
         {"name": "Bounded lower-IMEM ancestry revocation", "state": "verified"},
         {"name": "Exact IMEM-read / performed-RSP receipts", "state": "verified"},
         {"name": "Bounded scalar producer / executable-read join", "state": "verified"},
+        {"name": "Bounded scalar store / executable backing", "state": "verified"},
         {"name": "Controlled D-cache export / executable chain", "state": "verified"},
         {"name": "Controlled mapping / cache / exception chain", "state": "verified"},
         {"name": "CPU executable-store sensing", "state": "partial"},

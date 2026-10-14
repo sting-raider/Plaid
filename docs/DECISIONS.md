@@ -2826,3 +2826,19 @@ task/control/reset composition remains necessary. The portable synthetic golden
 contains only captured scalar/read observations from the original reference
 fixture; its code byte origins remain unknown, and it does not stand in for the
 full authenticated capture or writer census. All broad proof flags remain false.
+
+ADR-0124 scalar sink follow-up: direct observed SB/SH/SW method scopes identify
+actual RSP actors; temporal overlap alone is insufficient. Reuse the existing
+scalar byte-lane verifier, check before/after GPR continuity and every completed
+lane, and require exact decoded method/instruction ownership. Fresh shared SP
+writer occurrences carry their read/instruction/root/method/register-definition
+identities into CPU executable backing. Code bytes frozen before a register root
+remain independent. A zero-scoped external effect always cuts ancestry, even
+inside the method interval or with equal bits. Computed stores do not acquire
+PI/ROM byte ancestry from equal values. Raw v10/report-v6 is explicit; old policy
+semantics, serialized shapes and default reference shadows stay unchanged.
+NOP/store register preservation is enabled only in v10; unsupported/vector
+producers remain opaque. Scope and all completed effects join the ordered digest.
+Bounded samples do not certify completeness. Task/control/reset, DMA/RAM computed
+origin composition, writer/backend census, hardware/lifetimes and native closure
+remain OPEN with all broad proof flags false.

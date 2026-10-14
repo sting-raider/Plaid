@@ -6,6 +6,13 @@ The authoritative engineering state is still [`STATUS.md`](STATUS.md) and [`NEXT
 
 ## Toolchain
 
+Spike094 binds direct scalar store method scopes to their exact RSP instruction
+and completed byte effects. Run its consumer/prepare tests and retained reference
+recheck. Spike057 accepts `--history storage-sp-stores` for raw v10; its opt-in
+`rsp_scalar_store_access` recipe annotates SB/SH/SW without extra guest accesses
+or reference object fields. The shared store-lane verifier predicts every byte.
+Unowned effects carry scope zero and remain cuts, including equal writes.
+
 Spike093 joins read-bound RSP execution to explicitly rooted scalar definitions.
 Run `test_consumer.py`, its retained `run.py --verify-existing`, and the shared
 Rust scalar/reference regressions. Spike057 accepts `--history storage-sp-operands`
