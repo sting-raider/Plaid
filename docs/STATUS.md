@@ -17,13 +17,13 @@ no runtime yet. `native_complete` is `false` everywhere.
 | Closure proof (solver) | Fail-closed whole-ROM solver; assumption scopes `DeclaredStaticImages` and `DeclaredStaticImagesGuardedRam` reach CLOSED for synthetic programs | No commercial scope reaches CLOSED | `tests/pipeline.rs`, ADR-0126 |
 | Executable provenance | PI/SP/PIF/cache/TLB/RSP byte lineage over pinned ares histories; 20M-fetch commercial boot prefix retained locally | Paused by ADR-0125 until a milestone needs it | [`STATUS-LOG.md`](STATUS-LOG.md) |
 | Native lowering | `crates/plaid-lower`: CLOSED map -> C, one C function per guest function; declared runtime functions become `plaid_rt_<name>` calls (ADR-0129); calls are C calls and returns are checked (fault 5); proven-target dispatch only; runtime store and cache-alias guards; no interpreter | Integer subset only | spike096 |
-| Runtime and rendering | Runtime boundary only: declared host functions with an ABI assumption (ADR-0129) | Runtime callbacks into guest code (thread entries); N64ModernRuntime + RT64 link (ADR-0126) | spike096 `boundary` |
+| Runtime and rendering | Runtime boundary: declared host functions with an ABI assumption (ADR-0129) and proven callbacks entered through `plaid_enter` (ADR-0130) | Identification evidence for declarations; N64ModernRuntime + RT64 link (ADR-0126) | spike096 `boundary`, `callback` |
 
 ## Real-ROM numbers
 
 | ROM (local, never committed) | Result |
 | --- | --- |
-| Ocarina of Time US 1.2, conditional window `0x1000..0x101000` at `0x80000400` | 293 blocks, 45 indirect sites, **62 whole-ROM blockers** (44 unresolved indirect sites, 8 unsupported instructions, 4 other site-level blockers, 6 global model obligations). 43 of the 44 unresolved indirect sites are returns with ADR-0127 certificates, which count only in the assumption scope. Under `--guarded-ram`: **82 blockers**, 69 of them libultra system instructions (ADR-0128). With 17 system functions declared as runtime by a local heuristic: 1 blocker, but coverage drops to 190 blocks and thread entries are undiscovered (ADR-0129) |
+| Ocarina of Time US 1.2, conditional window `0x1000..0x101000` at `0x80000400` | 293 blocks, 45 indirect sites, **62 whole-ROM blockers** (44 unresolved indirect sites, 8 unsupported instructions, 4 other site-level blockers, 6 global model obligations). 43 of the 44 unresolved indirect sites are returns with ADR-0127 certificates, which count only in the assumption scope. Under `--guarded-ram`: **82 blockers**, 69 of them libultra system instructions (ADR-0128). With heuristic runtime declarations and the `osCreateThread` callback (ADR-0129/0130): **613 blocks, 6 blockers** (host return, one `jalr`, one computed `jr`, three COP1 moves) |
 | Super Mario 64 | Not run yet: no local ROM supplied |
 | Commercial ROMs CLOSED | **0** |
 
@@ -33,7 +33,7 @@ Reproduce the OoT numbers with `plaid discover <rom> 0x1000 0x80000400
 ## Native lowering subset (spike096)
 
 Matches the pinned ares interpreter exactly (all GPRs, HI, LO, a 256-byte RAM
-window) on eight synthetic programs:
+window) on nine synthetic programs:
 
 - ALU and shifts: `LUI ORI ADDIU ANDI XORI SLTI SLTIU ADDU SUBU AND OR XOR NOR SLT SLTU SLL SRL SRA SLLV SRLV SRAV`
 - HI/LO: `MULT MULTU DIV DIVU MFHI MFLO MTHI MTLO`, including divide-by-zero and INT_MIN/-1

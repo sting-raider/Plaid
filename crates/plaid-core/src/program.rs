@@ -605,6 +605,10 @@ pub struct RuntimeFunction {
     /// C identifier suffix of the host implementation `plaid_rt_<name>`.
     pub name: String,
     pub evidence: EvidenceRefs,
+    /// Argument registers (a0-a3) carrying guest code the runtime enters
+    /// (ADR-0130).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub callbacks: Vec<u8>,
 }
 
 fn fetch_summaries_realizable(fetch_count: u64, summaries: &[(u64, u64, u64)]) -> bool {
@@ -790,6 +794,7 @@ impl ProgramMap {
                 .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
                 || !chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
                 || !names.insert(&f.name)
+                || f.callbacks.iter().any(|r| !(4..=7).contains(r))
             {
                 return Err(format!(
                     "invalid or duplicate runtime function name {:?}",

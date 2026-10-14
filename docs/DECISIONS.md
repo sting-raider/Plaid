@@ -3011,3 +3011,31 @@ pointers, and discovery must prove their values at each call site and treat
 them as host-entered functions. Identification evidence (PR #50 n64sym, or a
 user-supplied symbol map) must also replace the heuristic; it is never
 promoted to proof.
+
+## ADR-0130: Runtime callbacks are proven code-pointer arguments
+
+Context: ADR-0129 left the first OoT thread entry undiscovered. Its address is
+an argument to `osCreateThread`, and a runtime that provides `osCreateThread`
+must later enter that guest code.
+
+Decision: a runtime declaration may list argument registers (`a0`-`a3`) that
+carry guest code (`"callbacks": ["a2"]`). At every call or tail jump into the
+function, `crates/plaid-core/src/callbacks.rs` proves the register's value
+after the delay slot. It uses the local straight-line-prefix rule already used
+for constant indirect targets (`indirect::prefix_state`). Proven targets become
+discovery roots and functions the runtime enters. Their `jr $ra` returns get
+certificates marked `runtime_entered`, because returning to the runtime is
+closed by the declared boundary. An unproven argument, or a target without a
+block, is an `unresolved_runtime_callback` blocker. `plaid-lower` emits
+`plaid_enter(s, entry, ret)`, which switches only over proven callback targets
+and faults 3 otherwise. It is the only way the runtime can enter guest code.
+
+Result: spike096 `callback` passes a guest function to a runtime `spawn`.
+Ares runs the guest `spawn` body; natively `runtime.c` calls back through
+`plaid_enter`. The results match exactly. On OoT (local measurement; runtime
+functions still chosen by heuristic, and `0x800030e0` identified as
+`osCreateThread` by its call shape), the thread entry `0x8000063c` is
+discovered and coverage grows from 190 to 613 blocks. Guarded-scope blockers
+are 6: the boot function's return to the host, a `jalr` function-pointer call
+(`0x80000f10`), a computed `jr` (`0x80003acc`), and three COP1 data moves
+(`MTC1`, `SWC1`) in the thread entry.

@@ -414,6 +414,8 @@ pub fn lower_c(
             .filter(|e| e.kind == EdgeKind::Call)
             .map(|e| e.target.clone()),
     );
+    let entered = plaid_core::callbacks::targets(map, image);
+    callees.extend(entered.iter().cloned());
     callees.retain(|f| !runtime.contains_key(&f.pc.0));
     let functions: BTreeSet<u32> = callees.iter().map(|f| f.pc.0).collect();
 
@@ -450,6 +452,12 @@ pub fn lower_c(
     for f in &functions {
         out += &format!("static int F_{f:08x}(plaid_state *s, u64 ret);\n");
     }
+    // The runtime enters guest code only here, and only at proven callbacks.
+    out += "int plaid_enter(plaid_state *s, u32 entry, u64 ret) {\n  switch (entry) {\n";
+    for t in &entered {
+        out += &format!("  case 0x{0:08x}u: return F_{0:08x}(s, ret);\n", t.pc.0);
+    }
+    out += "  }\n  return plaid_fault(s, entry, 3);\n}\n";
     let mut seen = BTreeSet::new();
     for f in callees.iter().filter(|f| seen.insert(f.pc.0)) {
         let body = returns::function_body(map, image, f);

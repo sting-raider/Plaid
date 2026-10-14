@@ -29,11 +29,13 @@ Next concrete steps, in order:
 3. Done: declared runtime functions as a discovery boundary (ADR-0129). On
    OoT a heuristic declaration of 17 system functions leaves 1 guarded-scope
    blocker, but the first thread entry was never discovered.
-   **Next: runtime callbacks.** Let a declaration mark guest-code-pointer
-   arguments (thread entry, handlers), prove their values at each call site
-   with the existing value analysis, and discover them as host-entered
-   functions. Then replace the heuristic with identification evidence (PR #50
-   n64sym, or a user-supplied symbol map).
+   Done: runtime callbacks (ADR-0130). OoT now discovers its thread entry
+   (613 blocks) and has 6 guarded-scope blockers.
+   **Next, from those blockers:** COP1 data moves (`MTC1`/`MFC1`/`LWC1`/
+   `SWC1`, then `LDC1`/`SDC1`) with an FPR file in the native state; the
+   `jalr` at `0x80000f10` and the computed `jr` at `0x80003acc`; then
+   identification evidence (PR #50 n64sym, or a user-supplied symbol map) in
+   place of the heuristic runtime declaration.
 4. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
    boot-segment discovery from the real entry point, then a local-only recall
    score against the decomp map. Keep ROM bytes, maps and traces ignored.

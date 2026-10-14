@@ -5,7 +5,7 @@ use crate::{
     indirect::{analyze_indirect, verify_constant},
     program::*,
 };
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub fn discover_image(
     rom: RomIdentity,
@@ -22,40 +22,44 @@ pub fn discover_image_with_runtime(
     rom: RomIdentity,
     image: &CodeImage,
     entries: &[GuestAddr],
-    runtime: &[(GuestAddr, String)],
+    runtime: &[(GuestAddr, String, Vec<u8>)],
     evidence: Option<(String, Evidence)>,
     budget: usize,
 ) -> Result<Discovery, String> {
-    let boundary: BTreeSet<GuestAddr> = runtime.iter().map(|(a, _)| *a).collect();
-    let mut discovery = discover_bounded(rom, image, entries, &boundary, budget)?;
-    if runtime.is_empty() {
-        return Ok(discovery);
-    }
-    let Some((id, evidence)) = evidence else {
-        return Err("runtime declarations need evidence".into());
+    let declared = match (runtime.is_empty(), evidence) {
+        (true, _) => None,
+        (false, None) => return Err("runtime declarations need evidence".into()),
+        (false, Some((id, evidence))) => {
+            let functions = runtime
+                .iter()
+                .map(|(a, name, callbacks)| {
+                    let f = RuntimeFunction {
+                        name: name.clone(),
+                        evidence: [id.clone()].into(),
+                        callbacks: callbacks.clone(),
+                    };
+                    (image.address(*a), f)
+                })
+                .collect();
+            Some((id, evidence, functions))
+        }
     };
-    let map = &mut discovery.map;
-    map.evidence.insert(id.clone(), evidence);
-    for (a, name) in runtime {
-        map.runtime_functions.insert(
-            image.address(*a),
-            RuntimeFunction {
-                name: name.clone(),
-                evidence: [id.clone()].into(),
-            },
-        );
-    }
-    map.validate()?;
-    Ok(discovery)
+    discover_bounded(rom, image, entries, declared.as_ref(), budget)
 }
+
+type Declared = (String, Evidence, BTreeMap<CodeAddress, RuntimeFunction>);
 
 fn discover_bounded(
     rom: RomIdentity,
     image: &CodeImage,
     entries: &[GuestAddr],
-    boundary: &BTreeSet<GuestAddr>,
+    declared: Option<&Declared>,
     budget: usize,
 ) -> Result<Discovery, String> {
+    let boundary: BTreeSet<GuestAddr> = declared
+        .map(|(_, _, f)| f.keys().map(|a| a.pc).collect())
+        .unwrap_or_default();
+    let boundary = &boundary;
     let mut roots: BTreeSet<_> = entries.iter().copied().collect();
     let mut history: Option<ProgramMap> = None;
     let mut last = None;
@@ -67,6 +71,10 @@ fn discover_bounded(
             budget,
             boundary,
         )?;
+        if let Some((id, evidence, functions)) = declared {
+            discovery.map.evidence.insert(id.clone(), evidence.clone());
+            discovery.map.runtime_functions = functions.clone();
+        }
         let mut map = analyze_indirect(&discovery.map, image)?;
         if let Some(previous) = &history {
             // Repartitioning replaces block shapes, but inferred possible targets
@@ -104,6 +112,12 @@ fn discover_bounded(
                 .collect();
         }
         let old_count = roots.len();
+        // Proven callback arguments are functions the runtime enters (ADR-0130).
+        for target in crate::callbacks::targets(&map, image) {
+            if image.word(target.pc).is_some() {
+                roots.insert(target.pc);
+            }
+        }
         for site in &map.indirect_sites {
             for target in site.candidates.keys() {
                 if target.image == image.base.image
