@@ -9,6 +9,9 @@
 #include "../006-ares-rom-source/driver.cpp"
 #include <cassert>
 #include <nall/hash/sha256.hpp>
+#if defined(PLAID_PI_DMEM_CUT)
+#include "../042-ares-rsp-dmem-history/observer.hpp"
+#endif
 namespace Storage = ares::Nintendo64::Memory;
 static std::vector<string> events;
 static u32 phase;
@@ -33,6 +36,11 @@ static void rom_half(u32 offset,u16 value) {
   add({"\"record\":\"rom_half\",\"offset\":",offset,",\"value\":",value});
 }
 #if defined(PLAID_PI_SP_CONSUMPTION)
+#if defined(PLAID_PI_DMEM_CUT)
+static void lower_dmem_effect(u32 offset,u32 bytes,u64 value) {
+  add({"\"record\":\"rsp_dmem_effect\",\"offset\":",offset,",\"bytes\":",bytes,",\"value\":",value});
+}
+#endif
 static void sp_word(bool write,u32 address,u32 bank,u32 offset,u32 value,bool cpuOrigin) {
   add({"\"record\":\"sp_word\",\"write\":",write ? "true" : "false",",\"address\":",address,
     ",\"bank\":",bank,",\"offset\":",offset,",\"value\":",value,",\"cpu\":",cpuOrigin ? "true" : "false"});
@@ -70,6 +78,9 @@ int main(int argc,char** argv) {
     plaidPiDmaObserver=pi_effect;plaidRdramScalarObserver=scalar_effect;plaidRomHalfObserver=rom_half;
 #if defined(PLAID_PI_SP_CONSUMPTION)
     plaidSpWordObserver=sp_word;plaidSpDmaStoreObserver=sp_store;
+#if defined(PLAID_PI_DMEM_CUT)
+    plaidRspDmemObserver=lower_dmem_effect;
+#endif
 #endif
   }
 #else
@@ -91,6 +102,9 @@ int main(int argc,char** argv) {
 #if defined(PLAID_PI_SP_CONSUMPTION)
     row.append(",\"imem\":\"",nall::Hash::SHA256(std::span<const u8>{rsp.imem.data,rsp.imem.size}).digest(),
       "\",\"dmem\":\"",nall::Hash::SHA256(std::span<const u8>{rsp.dmem.data,rsp.dmem.size}).digest(),"\"");
+#endif
+#if defined(PLAID_PI_DMEM_CUT)
+    row.append(",\"machine\":\"",rsp_machine_digest(),"\"");
 #endif
     row.append("}");states.push_back(row);
   };
@@ -122,6 +136,25 @@ int main(int argc,char** argv) {
       cpu.ipu.r[16].u64=0;cpu.pipeline.setPc(0xffffffffa4001000ull);cpu.instruction();
       assert(cpu.ipu.r[16].u64==7 && cpu.scc.cause.exceptionCode==0);
       snapshot("sp_executed");
+#if defined(PLAID_PI_DMEM_CUT)
+      rsp.writeWord(0x04040000,0,cpu);rsp.writeWord(0x04040004,physical,cpu);
+      rsp.writeWord(0x04040008,0,cpu);rsp.dmaTransferStep();
+      assert(!rsp.dma.busy.any() && rsp.dmem.read<Word>(0)==0x24100007);
+      snapshot("dmem_installed");
+      cpu.ipu.r[16].u64=0;cpu.pipeline.setPc(0xffffffffa4000000ull);cpu.instruction();
+      assert(cpu.ipu.r[16].u64==7);snapshot("dmem_executed");
+      // Explicit opaque IMEM seed and RSP register controls; only the sink is claimed.
+      rsp.imem.write<Word>(0x200,0xac220000);rsp.imem.write<Word>(0x204,0x0000000d);
+      rsp.ipu.r[1].u32=0;rsp.ipu.r[2].u32=0x24100007;
+      rsp.pipeline={};rsp.branch.setPc(0x200);rsp.ipu.pc=0x200;rsp.status.halted=0;
+      for(u32 guard=0;guard<8 && !rsp.status.halted;guard++) rsp.instruction();
+      assert(rsp.status.halted && rsp.dmem.read<Word>(0)==0x24100007 && rsp.imem.read<Word>(0)==0x24100007);
+      snapshot("rsp_equal_store");
+      cpu.ipu.r[16].u64=0;cpu.pipeline.setPc(0xffffffffa4000000ull);cpu.instruction();
+      assert(cpu.ipu.r[16].u64==7);snapshot("dmem_consumed");
+      cpu.ipu.r[16].u64=0;cpu.pipeline.setPc(0xffffffffa4001000ull);cpu.instruction();
+      assert(cpu.ipu.r[16].u64==7);snapshot("imem_consumed");
+#endif
 #endif
     } else assert(ri.io.error);
   }
@@ -130,6 +163,9 @@ int main(int argc,char** argv) {
   plaidRdramScalarObserver=nullptr;plaidRomHalfObserver=nullptr;
 #if defined(PLAID_PI_SP_CONSUMPTION)
   plaidSpWordObserver=nullptr;plaidSpDmaStoreObserver=nullptr;
+#if defined(PLAID_PI_DMEM_CUT)
+  plaidRspDmemObserver=nullptr;
+#endif
 #endif
   if(traced) {pi.detach(observer);pi.attach(cartridge.romDevice,0);}
 #endif

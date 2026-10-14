@@ -55,7 +55,8 @@ def main():
         assert (fetches[0]['write'],fetches[0]['cpu'],fetches[0]['address'],fetches[0]['value']) \
             == (False,True,0x04001000,0x24100007)
         assert not any(e['record']=='storage_effect' for e in trace['events'][at+1:trace['events'].index(fetches[0])])
-    hashes={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in OUTPUT.glob('*.json') if p.name!='receipt.json'}
+    hashes={f'{name}-{mode}.json':hashlib.sha256((OUTPUT/f'{name}-{mode}.json').read_bytes()).hexdigest()
+        for name in ('baseline','sensor') for mode in ('plain','traced','repeat')}
     for name in ('baseline','sensor'):
         for filename in ('oracle','build.json'):
             path=OUTPUT/name/filename;hashes[str(path.relative_to(OUTPUT))]=hashlib.sha256(path.read_bytes()).hexdigest()

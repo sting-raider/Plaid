@@ -12,6 +12,9 @@ pub const FORMAT: &str = "plaid-ares-access-history-v3";
 pub const POLICY: &str = "identity_ram_pi_queue_and_observed_sp_backing";
 pub const STORAGE_FORMAT: &str = "plaid-ares-access-history-v5";
 pub const STORAGE_POLICY: &str = "observed_ordinary_storage_mutations_and_pi_queue_sp_backing";
+pub const DMEM_STORAGE_FORMAT: &str = "plaid-ares-access-history-v6";
+pub const DMEM_STORAGE_POLICY: &str =
+    "observed_ordinary_storage_and_dmem_mutations_with_pi_queue_sp_backing";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -119,6 +122,9 @@ pub(crate) struct WriterLineage {
     ordered: Sha256,
 }
 impl WriterLineage {
+    pub(crate) fn cut_dmem(&mut self, offset: u32, bytes: u32) {
+        self.bytes[offset as usize..(offset + bytes) as usize].fill(None);
+    }
     pub(crate) fn new() -> Self {
         Self {
             bytes: vec![None; 8192],
@@ -260,6 +266,14 @@ impl StorageRecord {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "record", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum SpRecord {
+    RspDmemEffect {
+        ordinal: u64,
+        context: u64,
+        pc: GuestVirtualAddr,
+        offset: u32,
+        bytes: u32,
+        value: u64,
+    },
     SpWord {
         ordinal: u64,
         context: u64,
@@ -298,6 +312,12 @@ impl Wire {
     }
     pub(crate) fn identity(&self) -> Option<(u64, u64, GuestVirtualAddr, &'static str)> {
         match self {
+            Self::Sp(SpRecord::RspDmemEffect {
+                ordinal,
+                context,
+                pc,
+                ..
+            }) => Some((*ordinal, *context, *pc, "rsp_dmem_effect")),
             Self::Sp(SpRecord::SpWord {
                 ordinal,
                 context,
@@ -326,6 +346,9 @@ impl Wire {
                 ordinal, context, ..
             })
             | Self::Sp(SpRecord::SpDmaStore {
+                ordinal, context, ..
+            })
+            | Self::Sp(SpRecord::RspDmemEffect {
                 ordinal, context, ..
             }) => {
                 *ordinal = next;
@@ -378,6 +401,7 @@ struct Projection<H> {
     ordered: Sha256,
     header: bool,
     storage: bool,
+    dmem_storage: bool,
     ended: bool,
     records: u64,
     projected: u64,
@@ -407,6 +431,7 @@ impl<H: BufRead> Projection<H> {
             ordered: Sha256::new(),
             header: false,
             storage: false,
+            dmem_storage: false,
             ended: false,
             records: 0,
             projected: 0,
@@ -450,6 +475,28 @@ impl<H: BufRead> Projection<H> {
     fn sp(&mut self, row: SpRecord) -> Result<(), String> {
         require(!self.copying, "SP row inside buffered PI copy")?;
         match row {
+            SpRecord::RspDmemEffect {
+                ordinal,
+                context,
+                pc,
+                offset,
+                bytes,
+                value,
+            } => {
+                require(
+                    self.dmem_storage
+                        && self.active.is_none()
+                        && matches!(bytes, 1 | 2 | 4 | 8)
+                        && offset.is_multiple_of(bytes)
+                        && offset.checked_add(bytes).is_some_and(|end| end <= 4096)
+                        && (bytes == 8 || value < (1u64 << (bytes * 8))),
+                    "invalid or unsupported lower DMEM storage effect",
+                )?;
+                self.identity(ordinal, context, pc, "rsp_dmem_effect")?;
+                if let Some(lineage) = &mut self.lineage {
+                    lineage.cut_dmem(offset, bytes);
+                }
+            }
             SpRecord::SpWord {
                 ordinal,
                 context,
@@ -582,7 +629,8 @@ impl<H: BufRead> Projection<H> {
             ..
         })) = &mut row
         {
-            let storage = format == STORAGE_FORMAT && policy == STORAGE_POLICY;
+            let dmem_storage = format == DMEM_STORAGE_FORMAT && policy == DMEM_STORAGE_POLICY;
+            let storage = (format == STORAGE_FORMAT && policy == STORAGE_POLICY) || dmem_storage;
             require(
                 !self.header
                     && ((format == FORMAT && policy == POLICY) || storage)
@@ -591,6 +639,7 @@ impl<H: BufRead> Projection<H> {
             )?;
             self.header = true;
             self.storage = storage;
+            self.dmem_storage = dmem_storage;
             *format = queue::FORMAT.into();
             *policy = queue::POLICY.into();
         } else if let queue::Wire::Legacy(pi_history::Wire::Base(R::End {
@@ -851,7 +900,9 @@ fn finish_report<H>(
     projection: queue::PiQueueHistoryReport,
 ) -> SpHistoryReport {
     SpHistoryReport {
-        format: if stream.storage {
+        format: if stream.dmem_storage {
+            "plaid-observed-sp-backing-report-v2"
+        } else if stream.storage {
             "plaid-observed-sp-backing-report-v1"
         } else {
             "plaid-observed-sp-backing-report-v0"

@@ -1,5 +1,12 @@
 # Status
 
+Raw history v6 now cuts SP ancestry at actual lower DMEM storage effects,
+including equal RSP Byte lanes, through the shared writer state. IMEM remains
+independent; lower DMA effects preserve frozen source-read/install association.
+The142-event/22-checkpoint actual composition passes; the supplied100k prefix
+retains1,008 effects with unchanged fetch/checkpoint controls and independent
+replay. Legacy v3/v5 contracts and all broad proof flags remain unchanged.
+
 PI RAM ancestry now passes through an exact captured DMA read and SP installation
 to actual CPU SP consumption. Shared SP writer selection cuts equal overwrites
 and contradictory reads; parents freeze at the RAM read, before later mutations.

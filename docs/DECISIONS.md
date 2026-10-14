@@ -2770,3 +2770,15 @@ twelve-checkpoint pinned baseline/disabled/enabled/repeat contract and independe
 adversarial replay cover this finite join. Explicit host descriptor/mapping/DMA
 stepping controls do not establish guest MMIO, RSP execution or scheduler timing.
 No mutation census, executable lifetime, whole-ROM or native milestone follows.
+
+ADR-0124 DMEM follow-up: extend the existing raw clock with completed lower DMEM
+primitive effects in strict v6. Reuse the shared SP writer state to revoke only
+the affected byte parents, even for equal writes; keep IMEM independent. Preserve
+frozen DMA read receipts across their lower DMEM effects, before the separately
+captured higher installation. No RSP register/task parent is inferred from a
+sink callback. The pin's aligned RSP SW splits into four Byte effects, including
+zero; the actual142-event/22-checkpoint control retains those measured lanes.
+The supplied100k prefix adds1,008 effects with unchanged complete fetch/checkpoint
+controls and canonical/independent agreement. V3/v5 behavior remains unchanged;
+the new record rejects there. Complete census, other backends, lifecycle, hardware
+and native obligations remain OPEN. ISC shadows/notices stay in ignored builds.

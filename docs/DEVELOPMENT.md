@@ -6,6 +6,11 @@ The authoritative engineering state is still [`STATUS.md`](STATUS.md) and [`NEXT
 
 ## Toolchain
 
+Spike090 binds the existing lower DMEM primitive sensor to raw history v6.
+Run its consumer test and retained reference recheck; local discovery accepts
+`--history storage-rsp` through spike057. The new source rejects malformed lanes
+and does not grant RSP producer ancestry. V3/v5 admission remains separate.
+
 Spike089 composes the existing PI RAM parents with captured SP DMA reads,
 installations and CPU SP consumption. Run its `test_consumer.py` after building
 the CLI, and `run.py --verify-existing` to recheck retained pinned controls.
