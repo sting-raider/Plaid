@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-15",
+  "updated": "2026-10-16",
   "legend": {
     "verified": "Verified and integrated on main",
     "partial": "Implemented or evidenced, but proof/coverage is incomplete",
@@ -22,7 +22,7 @@
         {"name": "Commercial-ROM map validation", "state": "verified"},
         {"name": "Declared executable loads (ADR-0136)", "state": "verified"}
       ],
-      "remaining": "General jump tables, automatic load discovery, overlays."
+      "remaining": "Overlay candidates discovered; checked native overlay execution remains."
     },
     {
       "name": "Executable Provenance",
@@ -143,5 +143,5 @@
       "source": "docs/STATUS.md"
     }
   ],
-  "frontier": "retire SM64’s declared assumptions (milestone 5)"
+  "frontier": "retire SM64â€™s declared assumptions (milestone 5)"
 }

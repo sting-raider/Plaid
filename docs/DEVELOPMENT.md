@@ -6,6 +6,13 @@ The authoritative engineering state is still [`STATUS.md`](STATUS.md) and [`NEXT
 
 ## Toolchain
 
+`plaid inspect-overlays <rom> <map.json> <out.json>` rebuilds the map's
+source images and discovers Zelda64-format overlay tables from their bytes
+(ADR-0172). It emits candidate metadata, not lowered code or a closure
+certificate. Keep the catalog in ignored local output. The recognizer and
+relocator use synthetic unit tests and `python scripts/test_overlays.py`,
+which also runs inside the CLI gate.
+
 Spike096 is the synthetic native slice (milestone 1). `plaid lower-c
 <words.bin> <base> <entry> <exit> <out.c>` discovers, solves under
 `DeclaredStaticImagesGuardedRam` and emits C via `crates/plaid-lower`. Run

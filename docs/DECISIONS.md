@@ -4645,3 +4645,55 @@ segment) gives 9764 blocks and 13 blockers:
 
 OoT's game states and actors are relocatable overlays loaded at heap
 addresses, which no scope covers yet. That is the next milestone 5 piece.
+
+## ADR-0172: ROM-owned relocatable overlays with checked load bindings
+
+Milestone 5. The fixed OoT image excludes heap-loaded game states, actors and
+effects. A native overlay must retain its link-time identity while executing
+with the actual load address. Finding a table is not a closure certificate.
+
+Design:
+- Discover descriptions from the ROM's own file and overlay tables, with no
+  title, actor ID, ROM offset or table address in the recognizer. The initial
+  format profile is Zelda64's 16-byte file table and section-relative MIPS
+  relocation trailer. Other formats require their own explicit profiles.
+- Lower each executable overlay at its link address. Relocated immediates and
+  links use a checked section binding, following N64Recomp's section-address
+  model at pinned MIT revision `ffb39cdad1da5de07eaaa48bd1db4a89a7986771`.
+- A runtime binding must identify one candidate and its real RAM address,
+  compare relocated executable bytes before first entry, and reject mismatch
+  or ambiguity. Writes revoke a binding; an active overlay cannot modify its
+  own protected code. Returns, indirect targets and pointer tables must use
+  that binding's generation. This extends ADR-0136/0161, not a general claim
+  that arbitrary heap bytes are executable.
+- Relocation semantics and relocated execution need independent synthetic
+  checks against ares before the runtime path can be accepted. No decoder or
+  MIPS fallback belongs in that path.
+
+Implemented first stage:
+- `inspect-overlays <rom> <map.json> <out.json>` rebuilds the map's source
+  images from the ROM and emits candidates bound to those image identities.
+- The file table must be unique, sorted, terminated and contained in its own
+  uncompressed file entry. Decoding is bounded by the declared file size.
+- Overlay tuples must agree with an actual file and its text/data/rodata,
+  relocation trailer and BSS span. The trailer precedes BSS in RAM; a
+  zero-text data overlay is valid but supplies no executable text.
+- MIPS 32/26/HI16/LO16 sites are checked for bounds, alignment, duplicates,
+  supported encodings and register-matched pairs. Segmented data pointers
+  retain their bytes. Relocation targets outside the declared overlay reject.
+  The model materializes relocated bytes at an explicit load address; it does
+  not replace the guest loader or establish a runtime binding.
+
+Format/behavior references: N64Recomp's `cgenerator.cpp` and `recomp.h`, and
+the [documented Zelda64 trailer](https://github.com/zeldaret/oot/blob/8a3634ca774a9b58d822cbc2cc09309f31eac6a4/tools/fado/z64_relocation_section_format.md)
+and [loader behavior](https://github.com/zeldaret/oot/blob/8a3634ca774a9b58d822cbc2cc09309f31eac6a4/src/libu64/loadfragment2_n64.c).
+These are references; no upstream implementation or game code is imported.
+
+The local OoT image contains 469 structurally matching overlays, 468 with
+nonempty text, and 52,643 relocation records. The catalog and decoded bytes
+remain ignored. This does not close any of its fixed-image blockers.
+
+Still pending: link-address overlay lowering, verified runtime registration,
+rebinding/invalidation and ares differential execution; then OoT fixed-code
+closure, native title and its RSP snapshot/audio campaign. ADR-0172 is not
+complete until those overlay execution checks pass.

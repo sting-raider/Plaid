@@ -1,23 +1,29 @@
 # Status
 
-Last updated 2026-10-15. This page is the current state in one screen. The
+Last updated 2026-10-16. This page is the current state in one screen. The
 per-cluster history it replaces (spikes 001-095, every receipt summary) is
 preserved verbatim in [`STATUS-LOG.md`](STATUS-LOG.md). Priorities live in
 [`NEXT.md`](NEXT.md); decisions in [`DECISIONS.md`](DECISIONS.md).
 
-**Summary:** the discovery and proof foundation is substantial; native lowering
-works for synthetic CLOSED programs only; no commercial ROM is CLOSED; there is
-no runtime yet. `native_complete` is `false` everywhere.
+**Summary:** SM64 is CLOSED under the declared address-taken scope and runs
+natively with RT64 graphics, input, EEPROM saves and live native RSP audio
+(ADR-0153..0170). Three runtime function names still use a reference map
+(ADR-0171). Whole-ROM closure without assumptions remains unproved.
+
+OoT's fixed image has 9,764 blocks and 13 address-taken-scope blockers. ADR-0172
+stage 1 discovers 469 ROM-owned overlay candidates (468 with executable text)
+and validates their relocation structure. Link-address lowering, checked RAM
+bindings and native OoT boot are pending; the catalog does not close blockers.
 
 ## By layer
 
 | Layer | State | Main gap | Evidence |
 | --- | --- | --- | --- |
 | Discovery (ROM -> ProgramMap) | ROM normalization, direct CFG, local and cross-block indirect proofs, function partitioning and return certificates (ADR-0127), trace import, conflict-aware merge | Jump tables beyond the bounded recognizer; overlays and DMA | `crates/plaid-core/tests/`, `crates/plaid-lower/tests/` |
-| Closure proof (solver) | Fail-closed whole-ROM solver; assumption scopes `DeclaredStaticImages` and `DeclaredStaticImagesGuardedRam` reach CLOSED for synthetic programs | No commercial scope reaches CLOSED | `tests/pipeline.rs`, ADR-0126 |
+| Closure proof (solver) | Fail-closed whole-ROM solver; assumption scopes `DeclaredStaticImages` and `DeclaredStaticImagesGuardedRam` reach CLOSED for synthetic programs | Whole-ROM closure without assumptions remains open | `tests/pipeline.rs`, ADR-0126 |
 | Executable provenance | PI/SP/PIF/cache/TLB/RSP byte lineage over pinned ares histories; 20M-fetch commercial boot prefix retained locally | Paused by ADR-0125 until a milestone needs it | [`STATUS-LOG.md`](STATUS-LOG.md) |
-| Native lowering | `crates/plaid-lower`: CLOSED map -> C, one C function per guest function; declared runtime functions become `plaid_rt_<name>` calls (ADR-0129); calls are C calls and returns are checked (fault 5); proven-target dispatch only; runtime store and cache-alias guards; no interpreter | Integer subset, COP1 moves and compares | spike096 |
-| Runtime and rendering | Runtime boundary: declared host functions with an ABI assumption (ADR-0129) and proven callbacks entered through `plaid_enter` (ADR-0130) | Identification evidence for declarations; N64ModernRuntime + RT64 link (ADR-0126) | spike096 `boundary`, `callback` |
+| Native lowering | CLOSED map -> C; integer, COP1, checked calls/returns and native RSP scalar/vector code | Relocatable overlay execution and remaining system instructions | spikes096/097/098; ADR-0157..0169 |
+| Runtime and rendering | Plaid runtime + RT64: threads, timing, input, saves, native RSP tasks and live audio | Verified dynamic overlay binding; remaining runtime ABI assumptions | `runtime/test_runtime.py`; ADR-0158..0171 |
 
 ## Real-ROM numbers
 
@@ -26,7 +32,7 @@ no runtime yet. `native_complete` is `false` everywhere.
 | Ocarina of Time US 1.2, conditional window `0x1000..0x101000` at `0x80000400` | 293 blocks, 45 indirect sites, **62 whole-ROM blockers** (44 unresolved indirect sites, 8 unsupported instructions, 4 other site-level blockers, 6 global model obligations). 43 of the 44 unresolved indirect sites are returns with ADR-0127 certificates, which count only in the assumption scope. Under `--guarded-ram`: **82 blockers**, 69 of them libultra system instructions (ADR-0128). With heuristic runtime declarations and the `osCreateThread` callback (ADR-0129/0130): **628 blocks, 6 blockers** after COP1 moves and guarded jump tables (ADR-0131/0132). With n64sym-identified declarations (ADR-0133, 39 functions): **320 blocks, 16 blockers** after unaligned access and COP1 compares (ADR-0134/0135): in boot code only the host return and one pointer call. With the Yaz0 `code` segment declared as a load (ADR-0136): **7451 blocks, 566 blockers** after `BREAK` became a checked abort (ADR-0138), then **42 blockers** after COP1 arithmetic, conversions and FCSR access (ADR-0139). Recognizing GCC's scheduled jump-table shapes (ADR-0140) closes all 12 remaining tables and extends discovery to **8082 blocks, 31 blockers**: 22 unresolved indirect sites (9 `jalr s4` output callbacks in one `_Printf`-shaped function, 12 struct function-pointer calls, the boot return), 4 unresolved direct targets, 3 unmapped targets, one `COP0` and one `CACHE` instruction. Identifying runtime functions over the composite image as well (ADR-0141, 59 functions) leaves **7684 blocks, 29 blockers**: the 22 indirect sites and 7 calls into the 64DD driver segment at `0x801c7740..`, each behind a "64DD present" flag test. No instruction-scope blocker remains. A points-to census for the 21 function-pointer `jalr` sites is recorded as unsound; they stay open (ADR-0142). Host-entry returns (ADR-0146) remove the boot return: **28 blockers**, the 21 function-pointer sites and 7 calls into the 64DD driver, which is not on the cartridge |
 | Super Mario 64 USA, main segment `0x1000..0xf5580` at `0x80246000`, plus the engine and goddard segments as declared loads | Decomp-map identification (ADR-0148, 54 functions), forwarded callbacks (ADR-0149) and disjoint loads (ADR-0150): IDO slot-bound jump tables (ADR-0151): **5580 blocks, 523 indirect sites, 10 guarded blockers**: 7 render and geo callbacks, the level command table, 1 audio dispatch and the goddard vblank pointer. With `--data-roots` (ADR-0152): 47976 blocks and milestone 2 recall **99.03%** (3795/3832), which **meets the target** against the matching decomp map. Under the address-taken scope (ADR-0153..0156): 45419 blocks, 1341 address-taken functions, **`closed`** with 0 blockers (milestone 3; closed under declared assumptions, not whole-ROM). Lowered with `lower-map` and linked with Plaid's runtime (ADR-0159, FR = 0 per ADR-0160), it runs natively without a fault and, through RT64 (ADR-0163), **boots to its title screen** and, with input (ADR-0164), into gameplay at full speed (59.9 VI/s, ADR-0166); EEPROM saves persist (ADR-0165); its audio tasks run the game's own RSP microcode lowered to C, from two IMEM snapshots found by running it, and match ares exactly (ADR-0167..0169, spike098), and play live through SDL with AI DMA timing (ADR-0170) (`research/sm64-first-measurement.md`) |
 | Mario Party 2 USA, window `0x1000..0x101000` at `0x80000400` | 51 n64sym-identified runtime functions; 712 blocks, 92 indirect sites; under `--guarded-ram` **29 blockers**: 27 libultra system instructions behind an `osInitialize` whose SDK build n64sym lacks, and 2 memory-loaded function-pointer calls (ADR-0148, `research/mario-party-2-boot-window.md`). `identify --symbols` can name runtime functions from a reference map instead |
-| Commercial ROMs CLOSED | **0** |
+| Commercial ROMs CLOSED without assumptions | **0**; SM64 is CLOSED under the declared address-taken scope |
 
 Reproduce the OoT numbers with `plaid discover <rom> 0x1000 0x80000400
 0x100000 0x80000400 map.json`, then `plaid solve <rom> map.json`.

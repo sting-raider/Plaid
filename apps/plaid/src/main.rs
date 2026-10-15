@@ -950,6 +950,38 @@ fn run() -> Result<(), String> {
                 println!("  stub {why}");
             }
         }
+        [command, rom_path, map_path, output] if command == "inspect-overlays" => {
+            if let Ok(destination) = fs::canonicalize(output) {
+                for input in [rom_path, map_path] {
+                    if destination == fs::canonicalize(input).map_err(|e| e.to_string())? {
+                        return Err("overlay output would overwrite an input".into());
+                    }
+                }
+            }
+            let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
+            let map =
+                ProgramMap::from_json(&fs::read_to_string(map_path).map_err(|e| e.to_string())?)?;
+            if map.rom != rom.identity {
+                return Err("map does not match canonical ROM".into());
+            }
+            let mut catalogs = Vec::new();
+            for image in rom_images(&rom, &map)? {
+                let bytes: Vec<_> = image.words.iter().flat_map(|w| w.to_be_bytes()).collect();
+                let overlays = plaid_core::overlays::discover(rom.bytes(), &bytes)?;
+                println!(
+                    "{} overlay candidates in {}",
+                    overlays.len(),
+                    image.base.image
+                );
+                catalogs.push(serde_json::json!({"table_image":image.base,"overlays":overlays}));
+            }
+            let report = serde_json::json!({"format":"plaid-overlay-candidates-v0","rom":rom.identity,"images":catalogs});
+            fs::write(
+                output,
+                serde_json::to_vec_pretty(&report).map_err(|e| e.to_string())?,
+            )
+            .map_err(|e| e.to_string())?;
+        }
         [command, rom_path, map_path, entry, exit, output] if command == "lower-map" => {
             // A discovered ROM map (ADR-0157): its images are rebuilt from the
             // ROM as `solve` does, and the host preloads the base window.
