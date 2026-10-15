@@ -70,6 +70,7 @@ pub mod root_policy;
 pub mod root_provenance;
 pub mod rsp_cpu_imem;
 pub mod rsp_cpu_tlb;
+pub mod signatures;
 pub mod software_interrupt;
 pub mod solver;
 pub mod sp_dma_egress;
