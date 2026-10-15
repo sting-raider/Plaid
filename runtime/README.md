@@ -33,6 +33,8 @@ gcc -O1 -std=gnu11 -DPLAID_SAFEPOINTS -DPLAID_LOWERED='"game.c"' -I . runtime/pl
 - **Controller 1.** `--press <buttons>@<vi>:<frames>` scripts, ORed with the
   RT64 window's keyboard (ADR-0164): X/C/Z = A/B/Z, Enter = START, Q/E = L/R,
   I/K/J/L = C, W/S/A/D = D-pad, arrows = stick.
+- **EEPROM.** 4 Kbit. With `--save <file>`, it is loaded at start and written
+  back after every write, through `<file>.tmp` (ADR-0165).
 - **Audio tasks.** These still complete immediately.
 
 ## Rendering with RT64
@@ -57,4 +59,5 @@ The executable must sit next to `plaid_rt64.dll`, `SDL2.dll`,
 `python runtime/test_runtime.py` runs a synthetic multi-thread program and
 checks libultra's scheduling order, including VI preemption of a spinning
 thread. It also checks the renderer bridge against a stub, without a GPU:
-the VI registers and the task addresses the runtime hands over.
+the VI registers and the task addresses the runtime hands over. It also
+checks controller input and an EEPROM save kept across two runs.

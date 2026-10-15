@@ -103,8 +103,9 @@ Next concrete steps, in order:
      to its title screen.**
    - Done: controller 1 from `--press` scripts and the window keyboard
      (ADR-0164). SM64 gets past the title into the castle-grounds intro.
-   - Next: audio through the host, EEPROM persistence, then speed against
-     the ADR-0163 baseline (33 VI/s).
+   - Done: EEPROM persistence with `--save` (ADR-0165).
+   - Next: speed against the ADR-0163 baseline (33 VI/s), then audio (the
+     RSP audio microcode).
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user

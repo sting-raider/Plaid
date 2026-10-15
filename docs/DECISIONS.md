@@ -4285,3 +4285,25 @@ Result:
   letter, then Lakitu over the castle grounds. A 60-second run has no fault:
   2014 VI frames, 994 graphics tasks and 3360 PI DMAs. That is 33.5 VI/s,
   the same speed as the ADR-0163 baseline.
+
+## ADR-0165: The EEPROM persists in a save file
+
+Context: the runtime's 4 Kbit EEPROM lived only in memory, so a native game
+lost its save when it exited.
+
+Decision: `--save <file>` names a 512-byte EEPROM image.
+- **Loading.** The image is loaded at start. A missing file means a blank
+  EEPROM. A file of any other size is refused (exit 2) and never
+  overwritten.
+- **Writing.** After every `osEepromWrite` or `osEepromLongWrite` the image
+  is written to `<file>.tmp` and then renamed over `<file>`. An interrupted
+  write therefore leaves either the previous save or the complete new one.
+- **Recovery.** If only `<file>.tmp` exists, because the run stopped between
+  removing the old file and renaming the new one, it is loaded instead.
+
+Result: `runtime/test_runtime.py` runs a program that reads EEPROM block 1,
+increments a counter and writes it back.
+- Two runs read 0 and then 1.
+- The file holds exactly the expected 512 bytes.
+- No temporary file is left behind.
+- A 100-byte file is refused and left unchanged.

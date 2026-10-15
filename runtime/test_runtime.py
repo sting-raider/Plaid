@@ -11,7 +11,8 @@ A second program checks the renderer bridge (ADR-0163) without a GPU: a stub
 plaid_gfx_* records the VI registers the runtime derives from an OSViMode and
 framebuffer, and the graphics task addresses and RAM it hands over. It also
 checks controller 1 (ADR-0164): a scripted --press merged with the stub
-window's stick.
+window's stick. A third program checks that --save keeps the EEPROM across
+runs (ADR-0165).
 """
 import importlib.util
 import json
@@ -138,6 +139,21 @@ uint32_t plaid_gfx_input(void) { return 0x10F0; } /* stick 16, -16 */
 '''
 
 
+# Reads EEPROM block 1, increments its first word and writes it back.
+READ, DATA = 0x80004300, 0x80004310
+SAVE_RUNTIME = ['osEepromRead', 'osEepromWrite']
+SAVE_PROGRAM = [
+    *li(A.sp, 0x80007F00),
+    *call('osEepromRead', 0, 1, READ),
+    *li(A.t0, READ), A.lw(A.t1, 0, A.t0), A.addiu(A.t1, A.t1, 1), *li(A.t0, DATA), A.sw(A.t1, 0, A.t0),
+    *li(A.t1, 0xA5A5A5A5), A.sw(A.t1, 4, A.t0),
+    *call('osEepromWrite', 0, 1, DATA),
+    *A.DONE,
+]
+for name in SAVE_RUNTIME:
+    SAVE_PROGRAM += [name, A.jr(A.ra), A.nop]
+
+
 def build(exe, cc, name, program, runtime, extra=()):
     (OUT / f'{name}.bin').write_bytes(A.assemble(program))
     labels = A.label_pcs(program)
@@ -175,6 +191,26 @@ def graphics_bridge(exe, cc):
           'controller 1 from scripted presses and the window')
 
 
+def save_file(exe, cc):
+    native = build(exe, cc, 'save', SAVE_PROGRAM, SAVE_RUNTIME)
+    save = OUT / 'save.eep'
+    for leftover in (save, OUT / 'save.eep.tmp'):
+        leftover.unlink(missing_ok=True)
+    for count in (0, 1):
+        run = subprocess.run([str(native), '--save', str(save), '--dump', hex(READ), '2'],
+                             capture_output=True, text=True, timeout=30)
+        lines = {k: v for line in run.stdout.splitlines() if line.startswith('{') for k, v in json.loads(line).items()}
+        assert run.returncode == 0 and lines.get('stop') == 'exit', (run.returncode, run.stdout, run.stderr)
+        assert lines['words'] == [count, 0xA5A5A5A5 if count else 0], [hex(w) for w in lines['words']]
+    data = save.read_bytes()
+    assert data == bytes(8) + bytes([0, 0, 0, 2]) + b'\xa5' * 4 + bytes(512 - 16), data[:16]
+    assert not (OUT / 'save.eep.tmp').exists()
+    save.write_bytes(bytes(100))  # not an EEPROM image: refused, never overwritten
+    run = subprocess.run([str(native), '--save', str(save)], capture_output=True, text=True, timeout=30)
+    assert run.returncode == 2 and save.read_bytes() == bytes(100), (run.returncode, run.stderr)
+    print('EEPROM save: kept across runs, replaced through a temporary file, a malformed save refused')
+
+
 def main():
     exe = ROOT / 'target/debug/plaid.exe'
     if not exe.exists():
@@ -193,6 +229,7 @@ def main():
     print('runtime scheduling: start/send preemption, blocking receive, priority drop and VI preemption '
           'of a spinning thread match libultra order', json.dumps(dump))
     graphics_bridge(exe, cc)
+    save_file(exe, cc)
 
 
 if __name__ == '__main__':
