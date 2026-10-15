@@ -20,7 +20,7 @@ Libultra system functions are declared as runtime functions and become calls int
 
 ## Real ROMs
 
-On a local Ocarina of Time boot window, 39 libultra functions are identified by n64sym signature and discovery reaches 320 blocks with 21 blockers under the guarded assumption scope: 7 in boot code, 14 past the code segment it loads by DMA. No commercial ROM is `CLOSED` yet. Per-ROM numbers and how to reproduce them are in [`docs/STATUS.md`](docs/STATUS.md).
+On a local Ocarina of Time boot window, 39 libultra functions are identified by n64sym signature and discovery reaches 320 blocks with 20 blockers under the guarded assumption scope: 6 in boot code, 14 past the code segment it loads by DMA. No commercial ROM is `CLOSED` yet. Per-ROM numbers and how to reproduce them are in [`docs/STATUS.md`](docs/STATUS.md).
 
 ## Build
 

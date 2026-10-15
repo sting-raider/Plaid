@@ -53,6 +53,7 @@ lwc1, ldc1, swc1, sdc1 = map(mem, (49, 53, 57, 61))
 beql = lambda rs, rt, l: B(20, rs, rt, l); bnel = lambda rs, rt, l: B(21, rs, rt, l)
 blezl = lambda rs, l: B(22, rs, 0, l); bgtzl = lambda rs, l: B(23, rs, 0, l)
 bltzl = lambda rs, l: B(1, rs, 2, l); bgezl = lambda rs, l: B(1, rs, 3, l)
+lwl, lwr, ldl, ldr, lwu, swl, swr, sdl, sdr = map(mem, (34, 38, 26, 27, 39, 42, 46, 44, 45))
 nop = 0
 DONE = [j('exit'), nop]
 
@@ -109,6 +110,19 @@ PROGRAMS = {
         lw(t1, 0, s0), lh(t2, 0, s0), lhu(t3, 0, s0), lb(t4, 0, s0), lbu(t5, 0, s0), lh(t6, 2, s0), lb(t7, 3, s0),
         addiu(t8, zero, -2), sw(t8, 12, s1), lw(t9, 12, s1), sh(t8, 16, s1), lw(a0, 16, s1), lbu(a1, 17, s1),
         sw(t0, 0x20, s0), lb(a2, 0x21, s0), *DONE],
+    # LWL/LWR/LDL/LDR/LWU and SWL/SWR/SDL/SDR at every misalignment; v0 has a
+    # non-sign-extended upper word to expose LWR's upper-word rule.
+    'unaligned': [lui(s0, 0x8000), ori(s0, s0, 0x1000), lui(t0, 0x89AB), ori(t0, t0, 0xCDEF),
+        lui(t1, 0x0123), ori(t1, t1, 0x4567), sw(t0, 0, s0), sw(t1, 4, s0), sw(t1, 8, s0), sw(t0, 12, s0),
+        *[sw(t0, o, s0) for o in (0x40, 0x44, 0x48, 0x4C, 0x60, 0x64, 0x68, 0x6C)], sw(t1, 0x50, s0), sw(t1, 0x54, s0),
+        lui(v0, 0x1234), ori(v0, v0, 0x5678), dsll32(v0, v0, 0), ori(v0, v0, 0x5678),
+        lwl(t2, 1, s0), lwr(t2, 4, s0),
+        *[x for r, o in ((t3, 0), (t4, 1), (t5, 2), (t6, 3)) for x in (daddu(r, v0, zero), lwl(r, o, s0))],
+        *[x for r, o in ((t7, 0), (t8, 1), (t9, 2), (s1, 3)) for x in (daddu(r, v0, zero), lwr(r, o, s0))],
+        *[x for r, op, o in ((s2, ldl, 3), (s3, ldl, 10), (s4, ldr, 3), (s5, ldr, 10)) for x in (daddu(r, v0, zero), op(r, o, s0))],
+        lwu(s6, 0, s0),
+        swl(t1, 0x41, s0), swr(t1, 0x46, s0), swl(t1, 0x48, s0), swr(t1, 0x4F, s0), swl(t1, 0x4F, s0), swr(t1, 0x4C, s0),
+        swl(t0, 0x51, s0), swr(t0, 0x54, s0), sdl(v0, 0x63, s0), sdr(v0, 0x6D, s0), *DONE],
     'transfers': [addiu(t0, zero, 1), beq(t0, t0, 'a'), addiu(t0, zero, 5), addiu(t1, zero, 99),
         'a', bne(t0, zero, 'b'), addiu(t2, t0, 1),
         'b', jal('c'), addu(t3, ra, zero), addiu(t4, zero, 7), *DONE,

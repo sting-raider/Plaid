@@ -3122,3 +3122,31 @@ calls at `0x80000624` and `0x80000d94` into addresses that, at that point,
 hold stale ROM bytes from the IPL3 copy, because the game DMAs its code
 segment over them first. Those calls need the executable-DMA model, not
 better identification.
+
+## ADR-0134: Unaligned loads and stores follow ares, starting from N64Recomp's helpers
+
+Context: the OoT boot code uses `SWL`, and libultra and GCC use
+`LWL`/`LWR` pairs for unaligned copies. N64Recomp already implements these
+as `do_lwl`/`do_swl`-style helpers (`include/recomp.h`, MIT, Copyright (c)
+2024 Wiseguy).
+
+Decision: `plaid-lower` adds `plaid_load_left/right` and
+`plaid_store_left/right`, covering `LWL LWR LDL LDR SWL SWR SDL SDR`, plus
+`LWU`. The merge arithmetic follows N64Recomp's helpers. Where they
+disagree with the pinned ares interpreter, the oracle wins. ares sign-extends
+`LWR` only when it loads bit 31 (misalignment 3) and otherwise keeps rt's
+upper word; N64Recomp always sign-extends. The two agree for the usual
+`LWL`+`LWR` pair and differ for a lone `LWR`. Loads read the containing
+aligned word or doubleword through the existing checked access. Stores
+write only the bytes they cover, like ares, so a partial store next to
+executable bytes is not mistaken for a code write (fault 2), and one that
+overlaps them still faults. `DeclaredStaticImagesGuardedRam` admits these
+opcodes and states the access rule in its memory assumption. Other scopes
+are unchanged.
+
+Result: spike096 `unaligned` covers every misalignment of each form, lone
+`LWR` on a register whose upper word is not a sign extension, and partial
+stores into prefilled memory. It matches pinned ares. Replacing the `LWR`
+rule with N64Recomp's always-sign-extend makes the program fail. Measured
+ISA coverage rises from 85 to 94 of 209 forms. On OoT the `SWL` blocker at
+`0x80003058` closes, leaving 20 guarded blockers, 6 of them in boot code.

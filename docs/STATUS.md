@@ -23,7 +23,7 @@ no runtime yet. `native_complete` is `false` everywhere.
 
 | ROM (local, never committed) | Result |
 | --- | --- |
-| Ocarina of Time US 1.2, conditional window `0x1000..0x101000` at `0x80000400` | 293 blocks, 45 indirect sites, **62 whole-ROM blockers** (44 unresolved indirect sites, 8 unsupported instructions, 4 other site-level blockers, 6 global model obligations). 43 of the 44 unresolved indirect sites are returns with ADR-0127 certificates, which count only in the assumption scope. Under `--guarded-ram`: **82 blockers**, 69 of them libultra system instructions (ADR-0128). With heuristic runtime declarations and the `osCreateThread` callback (ADR-0129/0130): **628 blocks, 6 blockers** after COP1 moves and guarded jump tables (ADR-0131/0132). With n64sym-identified declarations (ADR-0133, 39 functions): **320 blocks, 21 blockers**, 7 in boot code (host return, one pointer call, four FPU compare/branch sites, one `SWL`) and 14 from calls into the area the code segment is later DMA'd over |
+| Ocarina of Time US 1.2, conditional window `0x1000..0x101000` at `0x80000400` | 293 blocks, 45 indirect sites, **62 whole-ROM blockers** (44 unresolved indirect sites, 8 unsupported instructions, 4 other site-level blockers, 6 global model obligations). 43 of the 44 unresolved indirect sites are returns with ADR-0127 certificates, which count only in the assumption scope. Under `--guarded-ram`: **82 blockers**, 69 of them libultra system instructions (ADR-0128). With heuristic runtime declarations and the `osCreateThread` callback (ADR-0129/0130): **628 blocks, 6 blockers** after COP1 moves and guarded jump tables (ADR-0131/0132). With n64sym-identified declarations (ADR-0133, 39 functions): **320 blocks, 20 blockers** after unaligned access (ADR-0134), 6 in boot code (host return, one pointer call, four FPU compare/branch sites) and 14 from calls into the area the code segment is later DMA'd over |
 | Super Mario 64 | Not run yet: no local ROM supplied |
 | Commercial ROMs CLOSED | **0** |
 
@@ -38,7 +38,7 @@ window) on eleven synthetic programs (also comparing all 32 FPRs):
 - ALU and shifts: `LUI ORI ADDIU ANDI XORI SLTI SLTIU ADDU SUBU AND OR XOR NOR SLT SLTU SLL SRL SRA SLLV SRLV SRAV`
 - HI/LO: `MULT MULTU DIV DIVU MFHI MFLO MTHI MTLO`, including divide-by-zero and INT_MIN/-1
 - 64-bit: `DADD DADDU DSUB DSUBU DADDI DADDIU DSLL DSRL DSRA DSLL32 DSRL32 DSRA32 DSLLV DSRLV DSRAV DMULT DMULTU DDIV DDIVU LD SD`, plus trapping `ADD ADDI SUB` with an overflow check
-- Memory: `LB LBU LH LHU LW SB SH SW` through KSEG0 and KSEG1
+- Memory: `LB LBU LH LHU LW LWU SB SH SW` through KSEG0 and KSEG1, and the unaligned `LWL LWR LDL LDR SWL SWR SDL SDR` (ADR-0134)
 - COP1 data moves (FR = 1): `MFC1 DMFC1 MTC1 DMTC1 LWC1 LDC1 SWC1 SDC1`
 - Control: `BEQ BNE BLEZ BGTZ BLTZ BGEZ J JAL JR JALR` and the branch-likely forms, with delay slots; indirect jumps only over proven targets, including bounded jump tables (ADR-0132); nested, recursive, pointer and tail calls with checked returns
 

@@ -65,6 +65,34 @@ static inline int plaid_store(plaid_state *s, u64 va, u32 size, u64 value, u32 p
   for (i = 0; i < size; i++) s->ram[p + i] = (u8)(value >> (8 * (size - 1 - i)));
   return 0;
 }
+/* LWL/LWR/LDL/LDR and SWL/SWR/SDL/SDR, big-endian, as pinned ares: loads
+   merge the containing aligned word; stores write only the bytes they cover. */
+static inline int plaid_load_left(plaid_state *s, u64 va, u32 size, u32 pc, u64 *rt) {
+  u64 w, x; u32 sh = 8 * ((u32)va & (size - 1));
+  if (plaid_load(s, va & ~(u64)(size - 1), size, pc, &w)) return 1;
+  x = w << sh | (*rt & ((1ull << sh) - 1));
+  *rt = size == 4 ? SX32(x) : x; return 0;
+}
+static inline int plaid_load_right(plaid_state *s, u64 va, u32 size, u32 pc, u64 *rt) {
+  u64 w, all = size == 4 ? 0xffffffffull : ~0ull; u32 m = (u32)va & (size - 1), sh = 8 * (size - 1 - m);
+  u64 x;
+  if (plaid_load(s, va & ~(u64)(size - 1), size, pc, &w)) return 1;
+  x = (*rt & all & ~(all >> sh)) | w >> sh;
+  /* LWR sign-extends only when it loads bit 31; otherwise the upper word stays */
+  *rt = size == 8 ? x : m == 3 ? SX32(x) : (*rt & 0xffffffff00000000ull) | x; return 0;
+}
+static inline int plaid_store_left(plaid_state *s, u64 va, u32 size, u64 v, u32 pc) {
+  u32 j, m = (u32)va & (size - 1);
+  for (j = 0; j < size - m; j++)
+    if (plaid_store(s, va + j, 1, v >> (8 * (size - 1 - j)), pc)) return 1;
+  return 0;
+}
+static inline int plaid_store_right(plaid_state *s, u64 va, u32 size, u64 v, u32 pc) {
+  u32 j, m = (u32)va & (size - 1);
+  for (j = 0; j <= m; j++)
+    if (plaid_store(s, va - j, 1, v >> (8 * j), pc)) return 1;
+  return 0;
+}
 "#;
 
 fn physical(pc: u32) -> Result<u32, String> {
@@ -114,6 +142,15 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
     };
     let store =
         |size: u32| format!("if (plaid_store(s, {addr}, {size}, {b}, 0x{pc:08x}u)) return 1;");
+    let partial_load = |side: &str, size: u32| {
+        format!(
+            "{{ u64 v = {b}; if (plaid_load_{side}(s, {addr}, {size}, 0x{pc:08x}u, &v)) return 1; {} }}",
+            set(rt, "v".into())
+        )
+    };
+    let partial_store = |side: &str, size: u32| {
+        format!("if (plaid_store_{side}(s, {addr}, {size}, {b}, 0x{pc:08x}u)) return 1;")
+    };
     // Overflow-trapping add/sub: abort (fault 6) where the VR4300 would raise.
     let trap = |ty: &str, y: String, sub: bool, sign: &str, d: u32, wrap: &str| {
         let (op, flip) = if sub { ("-", "") } else { ("+", "~") };
@@ -237,6 +274,15 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
         (35, _) => load(4, "s32"),
         (36, _) => load(1, "u8"),
         (37, _) => load(2, "uint16_t"),
+        (39, _) => load(4, "u32"),
+        (34, _) => partial_load("left", 4),
+        (38, _) => partial_load("right", 4),
+        (26, _) => partial_load("left", 8),
+        (27, _) => partial_load("right", 8),
+        (42, _) => partial_store("left", 4),
+        (46, _) => partial_store("right", 4),
+        (44, _) => partial_store("left", 8),
+        (45, _) => partial_store("right", 8),
         (40, _) => store(1),
         (41, _) => store(2),
         (43, _) => store(4),
