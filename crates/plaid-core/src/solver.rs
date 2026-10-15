@@ -343,6 +343,22 @@ pub fn is_cop1_move(word: u32) -> bool {
     }
 }
 
+/// COP1 arithmetic, conversions and FCSR access lowered under the guarded
+/// scope (ADR-0139): ADD SUB MUL DIV SQRT ABS MOV NEG .S/.D, CVT.W and
+/// TRUNC.W from S/D, CVT.S from D/W/L, CVT.D from S/W/L, CFC1, CTC1.
+pub fn is_cop1_arith(word: u32) -> bool {
+    let (fmt, f) = ((word >> 21) & 31, word & 63);
+    word >> 26 == 17
+        && match fmt {
+            2 | 6 => word & 0x7ff == 0,
+            16 | 17 => {
+                matches!(f, 0..=7 | 13 | 36) || (f == 32 && fmt == 17) || (f == 33 && fmt == 16)
+            }
+            20 | 21 => matches!(f, 32 | 33),
+            _ => false,
+        }
+}
+
 /// `BREAK` (ADR-0138): a checked abort in the guarded scope.
 pub fn is_break(word: u32) -> bool {
     word >> 26 == 0 && word & 63 == 13
@@ -360,7 +376,11 @@ pub fn is_cop1_branch(word: u32) -> bool {
 
 fn allowed_static_effect(word: u32, pc: crate::GuestAddr, guarded_ram: bool) -> bool {
     if guarded_ram
-        && (is_cop1_move(word) || is_cop1_compare(word) || is_cop1_branch(word) || is_break(word))
+        && (is_cop1_move(word)
+            || is_cop1_compare(word)
+            || is_cop1_branch(word)
+            || is_cop1_arith(word)
+            || is_break(word))
     {
         return true;
     }
@@ -580,8 +600,11 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 );
                 continue;
             };
-            uses_compare |= is_cop1_compare(word);
-            uses_cop1 |= is_cop1_move(word) || is_cop1_compare(word) || is_cop1_branch(word);
+            uses_compare |= is_cop1_compare(word) || is_cop1_arith(word);
+            uses_cop1 |= is_cop1_move(word)
+                || is_cop1_compare(word)
+                || is_cop1_branch(word)
+                || is_cop1_arith(word);
             if scope.is_static()
                 && !allowed_static_effect(word, pc, scope == Scope::DeclaredStaticImagesGuardedRam)
             {
@@ -1082,7 +1105,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         }
         if uses_compare {
             assumptions.push(
-                "COP1 compares never see a NaN operand, whose result depends on the unmodeled FCSR Invalid Operation enable; a native artifact checks every compare and aborts on a NaN, with no fallback execution."
+                "COP1 operations stay inside the modeled subset: no NaN compare operand, no NaN or subnormal arithmetic operand, no out-of-range conversion and no enabled FPU exception (FCSR is modeled as pinned ares: rounding mode on the host FPU, cause and sticky flags, FS flushing); a native artifact checks each operation and aborts otherwise, with no fallback execution."
                     .into(),
             );
         }

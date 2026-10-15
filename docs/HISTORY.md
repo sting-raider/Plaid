@@ -9,7 +9,7 @@ One point per day, generated from [`history.json`](history.json) by [`tools/prog
 
 | Date | VR4300 forms lowered | % | Milestones verified | partial | declared |
 | --- | --- | --- | --- | --- | --- |
-| 2026-10-15 | 131/209 | 62.7% | 30 | 19 | 69 |
+| 2026-10-15 | 159/209 | 76.1% | 30 | 19 | 69 |
 | 2026-10-14 | 0/209 | 0.0% | 25 | 13 | 65 |
 | 2026-10-13 | 0/209 | 0.0% | 16 | 13 | 56 |
 | 2026-10-12 | 0/209 | 0.0% | 16 | 13 | 56 |

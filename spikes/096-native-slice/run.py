@@ -85,6 +85,56 @@ def fcompare():
             out += [fcmp(fmt, 2)(1, 2), bc1f(f'f{n}'), ori(v0, v0, 1 << n), ori(v1, v1, 1 << n), f'f{n}']
     return out + DONE
 
+fop = lambda fmt, f: (lambda fd, fs, ft=0: 17 << 26 | fmt << 21 | ft << 16 | fs << 11 | fd << 6 | f)
+cfc1, ctc1 = cop1(2), cop1(6)
+
+def farith():
+    # COP1 arithmetic, conversions and FCSR (ADR-0139): results and FCSR
+    # snapshots go to RAM; each rounding mode drives CVT.W and a division.
+    import struct
+    S = lambda x: struct.unpack('>I', struct.pack('>f', x))[0]
+    D = lambda x: struct.unpack('>Q', struct.pack('>d', x))[0]
+    def c32(f, v): return [lui(t0, v >> 16), ori(t0, t0, v & 0xFFFF), mtc1(t0, f)]
+    def c64(f, v):
+        return [lui(t0, v >> 48 & 0xFFFF), ori(t0, t0, v >> 32 & 0xFFFF), dsll32(t0, t0, 0),
+                lui(at, v >> 16 & 0xFFFF), dsll32(at, at, 0), dsrl32(at, at, 0), or_(t0, t0, at),
+                ori(t0, t0, v & 0xFFFF), dmtc1(t0, f)]
+    out, off = [lui(gp, 0x8000), ori(gp, gp, 0x1000)], [0]
+    def keep(f, wide=False):
+        o = off[0] = (off[0] + 7) & ~7 if wide else off[0]
+        off[0] += 8 if wide else 4
+        return [(sdc1 if wide else swc1)(f, o, gp)]
+    def fcsr():
+        o = off[0]; off[0] += 4
+        return [cfc1(t1, 31), sw(t1, o, gp)]
+    s_, d_ = (lambda f: fop(16, f)), (lambda f: fop(17, f))
+    out += c32(1, S(1.0)) + c32(2, S(3.0)) + [mtc1(zero, 4)] + c32(6, S(1e30)) + c32(8, S(-1.0))
+    out += [s_(3)(3, 1, 2), *keep(3), *fcsr(), s_(0)(3, 1, 2), *keep(3), *fcsr(),
+            s_(1)(3, 1, 2), *keep(3), s_(2)(3, 2, 2), *keep(3),
+            s_(3)(5, 1, 4), *keep(5), *fcsr(), s_(4)(5, 2), *keep(5), *fcsr(),
+            s_(4)(5, 8), *keep(5), *fcsr(), s_(2)(7, 6, 6), *keep(7), *fcsr(),
+            s_(7)(9, 2), s_(5)(10, 8), s_(6)(11, 6)]
+    out += c64(12, D(1.0)) + c64(14, D(3.0))
+    out += [d_(3)(16, 12, 14), *keep(16, True), d_(0)(18, 12, 14), d_(1)(20, 12, 14),
+            d_(2)(22, 14, 14), d_(4)(24, 14), *keep(24, True), d_(7)(26, 14), d_(5)(26, 26), *fcsr()]
+    # conversions
+    out += [s_(3)(3, 1, 2), s_(33)(13, 3), d_(32)(15, 16), *fcsr(), addiu(t2, zero, 7), mtc1(t2, 17),
+            fop(20, 32)(17, 17), addiu(t2, zero, -5), mtc1(t2, 19), fop(20, 33)(19, 19)]
+    out += c64(21, 0x0000123456789ABC) + [fop(21, 32)(23, 21), fop(21, 33)(25, 21), *fcsr()]
+    out += c32(27, S(2.5)) + c32(28, S(-2.5)) + c64(29, D(-2.7))
+    regs = [s0, s1, s2, s3, s4, s5, s6, s7]
+    for rm in range(4):
+        out += [addiu(t1, zero, rm), ctc1(t1, 31), s_(36)(30, 27), mfc1(regs[2 * rm], 30),
+                s_(36)(30, 28), mfc1(regs[2 * rm + 1], 30), s_(3)(31, 1, 2), *keep(31), *fcsr()]
+    out += [s_(13)(30, 28), mfc1(t8, 30), d_(13)(30, 29), mfc1(t9, 30), d_(36)(30, 29), mfc1(v0, 30), *fcsr()]
+    # FS flushes an underflowing result per rounding mode
+    out += c32(0, S(1e-30)) + c32(30, S(1e-10))
+    for rm in (0, 2):
+        out += [lui(t1, 0x0100), ori(t1, t1, rm), ctc1(t1, 31), s_(2)(31, 0, 30), *keep(31), *fcsr()]
+    out += [cfc1(v1, 0), ctc1(zero, 31), *fcsr()]
+    assert off[0] <= 0x100
+    return out + DONE
+
 def label_pcs(items):
     labels, pc = {'exit': EXIT}, BASE
     for x in items:
@@ -169,6 +219,7 @@ PROGRAMS = {
         swl(t1, 0x41, s0), swr(t1, 0x46, s0), swl(t1, 0x48, s0), swr(t1, 0x4F, s0), swl(t1, 0x4F, s0), swr(t1, 0x4C, s0),
         swl(t0, 0x51, s0), swr(t0, 0x54, s0), sdl(v0, 0x63, s0), sdr(v0, 0x6D, s0), *DONE],
     'fcompare': fcompare(),
+    'farith': farith(),
     'load': load_program(),
     # GCC's divide check: BREAK 7 guarded by a divisor test that is not taken.
     'divcheck': [addiu(t0, zero, 21), addiu(t1, zero, 4), div(t0, t1), bne(t1, zero, 'ok'), nop,
@@ -260,7 +311,11 @@ LOADS = {'load': load_program(), 'load_early': load_program(early=True), 'load_p
 TABLE_WRITE = jump_table([lui(s2, 0x8000), lambda pc, L: I(43, zero, s2, L['tbl'])])
 # A reached BREAK raises an unmodeled exception: fault 9.
 BREAK = [addiu(t1, zero, 0), bne(t1, zero, 'ok'), nop, R(13, 0, 0, 0, 7), 'ok', *DONE]
-# A compare with a NaN operand depends on unmodeled FCSR enables: fault 7.
+# An enabled FPU exception (inexact on 1/3) and an out-of-range CVT.W: fault 7.
+FPU_ENABLED = [lui(t0, 0x3F80), mtc1(t0, 1), lui(t0, 0x4040), mtc1(t0, 2), addiu(t1, zero, 0x80),
+    ctc1(t1, 31), fop(16, 3)(3, 1, 2), *DONE]
+FPU_RANGE = [lui(t0, 0x4F00), mtc1(t0, 1), fop(16, 36)(2, 1), *DONE]
+# A compare with a NaN operand is outside the modeled COP1 subset: fault 7.
 FPU_NAN = [lui(t0, 0x7FC0), mtc1(t0, 1), fcmp(16, 2)(1, 1), *DONE]
 CACHE_ALIAS = [lui(s0, 0x8000), sw(s0, 0x1000, s0), lui(s1, 0xA000), lw(t0, 0x1000, s1), *DONE]
 
@@ -269,7 +324,7 @@ def windows():
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
     OUT.mkdir(parents=True, exist_ok=True)
     progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN, overflow=OVERFLOW, table_write=TABLE_WRITE, fpu_nan=FPU_NAN,
-        load_early=LOADS['load_early'], load_patch=LOADS['load_patch'], break_reached=BREAK)
+        fpu_enabled=FPU_ENABLED, fpu_range=FPU_RANGE, load_early=LOADS['load_early'], load_patch=LOADS['load_patch'], break_reached=BREAK)
     for name, items in progs.items():
         (OUT / f'{name}.bin').write_bytes(assemble(items))
         extra = []
@@ -297,13 +352,13 @@ def windows():
         oracle = json.loads((OUT / f'{name}-oracle.json').read_text())
         assert json.loads(native.stdout) == oracle, (name, native.stdout, oracle)
         results[name] = hashlib.sha256(json.dumps(oracle, sort_keys=True).encode()).hexdigest()
-    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('load_early', 8), ('load_patch', 2), ('break_reached', 9)):
+    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('fpu_enabled', 7), ('fpu_range', 7), ('load_early', 8), ('load_patch', 2), ('break_reached', 9)):
         bad = subprocess.run([str(OUT / f'{name}-native.exe')], capture_output=True, text=True)
         assert bad.returncode == 6 and json.loads(bad.stdout)['fault'] == fault, (name, bad.stdout)
     receipt = dict(format='plaid-native-slice-receipt-v0', ares_revision=builder().REV, compiler=Path(cc).name,
-        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, load_early=8, load_patch=2, break_reached=9), interpreter_linked=False, native_complete=False)
+        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, fpu_enabled=7, fpu_range=7, load_early=8, load_patch=2, break_reached=9), interpreter_linked=False, native_complete=False)
     (OUT / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
-    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, early-load, loaded-code-store and BREAK programs fail closed')
+    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, enabled-FPU-exception, out-of-range-conversion, early-load, loaded-code-store and BREAK programs fail closed')
     print(json.dumps(receipt, sort_keys=True))
 
 def builder():

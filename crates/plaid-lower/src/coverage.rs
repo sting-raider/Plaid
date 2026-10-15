@@ -125,7 +125,8 @@ mod tests {
         assert!(c["addu"] && c["jr"] && c["ld"] && c["mtc1"]);
         assert!(c["lwl"] && c["sdr"] && c["lwu"]);
         assert!(c["c.eq.s"] && c["c.ngt.d"] && c["bc1tl"]);
-        assert!(!c["eret"] && !c["add.s"] && !c["cvt.s.w"]);
+        assert!(c["add.s"] && c["cvt.s.w"] && c["trunc.w.d"] && c["ctc1"]);
+        assert!(!c["eret"] && !c["round.w.s"] && !c["cvt.l.s"]);
         assert!(!c.contains_key("nop") && !c.contains_key("movn"));
     }
 }
