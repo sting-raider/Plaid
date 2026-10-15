@@ -36,7 +36,7 @@ Milestone 4 is running Super Mario 64 natively to its title screen. The lowered 
 | Stuck at "PRESS START" | controller always idle | keyboard and scripted input (ADR-0164) |
 | Half speed (33 VI/s) | Windows rounds 1 ms sleeps up to 15.6 ms | high-resolution timer and fixed VI deadlines (ADR-0166) |
 
-**SM64 now runs natively at full speed into gameplay** (59.9 VI/s, 30 fps): RT64 draws it (ADR-0163), the keyboard or a `--press` script controls it (ADR-0164), and `--save` keeps the EEPROM (ADR-0165). Audio is still to come: RSP microcode, vector unit included, now lowers to C and matches ares (ADR-0167/0168), and SM64's audio microcode lowers completely. Running its audio tasks is next. The latest run is in [`research/sm64-first-measurement.md`](research/sm64-first-measurement.md), and what comes next is in [`docs/NEXT.md`](docs/NEXT.md).
+**SM64 now runs natively at full speed into gameplay** (59.9 VI/s, 30 fps): RT64 draws it (ADR-0163), the keyboard or a `--press` script controls it (ADR-0164), and `--save` keeps the EEPROM (ADR-0165). Its audio tasks run natively too: the game's own RSP microcode, lowered to C, mixes the sound and matches ares exactly (ADR-0167..0169). `--wav` records it; live playback is next. The latest run is in [`research/sm64-first-measurement.md`](research/sm64-first-measurement.md), and what comes next is in [`docs/NEXT.md`](docs/NEXT.md).
 
 ## Per-game inputs and known gaps
 
@@ -52,7 +52,7 @@ Known gaps for other games:
 - Compressed or relocated code segments, as in Ocarina of Time (Yaz0 and overlay relocations), are not lowered yet. Load discovery is manual.
 - The runtime covers the libultra functions that SM64 calls. A game that calls a declared function the runtime lacks fails to link.
 - Saves are 4 Kbit EEPROM only (no 16 Kbit EEPROM, SRAM, Flash or Controller Pak). Only controller 1 works, and there is no rumble.
-- There is no audio yet. Microcode will be found from each task's own microcode address and size, and its bytes checked before it runs, so nothing about it is per-game.
+- RSP microcode comes from running the game, not from ROM offsets: `--rsp-dump` saves each IMEM image no lowered code holds, and `runtime/rsp_texts.py` lowers it for the next build. A new game needs one or more of these runs. Graphics tasks go to RT64, not lowered microcode. Audio is written to a WAV file; it does not play live yet.
 - Only Windows has been tested with RT64.
 
 ## Build

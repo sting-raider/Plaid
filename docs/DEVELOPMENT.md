@@ -17,6 +17,11 @@ Spike097 is the same check for RSP microcode, scalar and vector (ADR-0167/0168).
 Run `python spikes/097-rsp-slice/run.py` (add `--rebuild` after its
 `driver.cpp` changes); it needs the same compiler and WSL.
 
+Spike098 checks one real RSP task (ADR-0169). Build the runtime with
+`-DPLAID_RSP`, run the game with `--rsp-capture <n> <dir>`, then run
+`python spikes/098-rsp-task/run.py <dir>` (add `--rebuild` after its
+`driver.cpp` changes). Captures hold game data and stay local.
+
 Spike095 adds raw v11 reverse-SP-DMA receipts. Run its `test_consumer.py`
 and `run.py` (pinned ares baseline/sensor build in WSL, or `--verify-existing`
 for retained outputs). The opt-in `sp_dma_egress_access` recipe observes DMEM

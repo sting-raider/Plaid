@@ -7,7 +7,12 @@
          runtime/plaid_rt.c -pthread -o game
      game [--rom <rom.z64>] [--stop-at gfx|none] [--gfx-tasks N] [--seconds S]
           [--press <buttons>@<vi>:<frames>]... [--save <eeprom file>]
-          [--dump <guest address> <words>]
+          [--wav <file>] [--dump <guest address> <words>]
+          with -DPLAID_RSP: [--rsp-dump <dir>] [--rsp-capture <task> <dir>]
+
+   With -DPLAID_RSP (and -I crates/plaid-lower/src), RSP tasks other than
+   graphics run lowered microcode: link the texts and the registry that
+   runtime/rsp_texts.py writes (ADR-0169).
 
    Each declared runtime function (plaid_rt_<name>) implements a libultra
    function under the o32 ABI: arguments in a0-a3 and the caller's stack at
@@ -98,6 +103,18 @@ void plaid_gfx_screen(const u32 *regs);
 int plaid_gfx_closed(void);
 u32 plaid_gfx_input(void); /* buttons << 16 | stick x << 8 | stick y */
 #endif
+#ifdef PLAID_RSP
+/* RSP tasks run lowered microcode (ADR-0169): the IMEM texts that
+   runtime/rsp_texts.py lists, null-terminated. */
+#include "rsp_state.h"
+extern const plaid_rsp_text *const plaid_rsp_texts[];
+static plaid_rsp rsp;
+static const char *rsp_dump_dir, *rsp_capture_dir;
+static long rsp_capture;
+#endif
+/* --wav: AI buffers as 16-bit stereo PCM, the header rewritten at exit */
+static FILE *wav;
+static u32 wav_rate = 32000, wav_bytes;
 static unsigned long vi_count, gfx_tasks, audio_tasks, dma_count;
 static long stop_gfx = 1; /* stop after this many graphics tasks (0: never) */
 static double run_seconds = 0;
@@ -105,8 +122,18 @@ static u32 dump_at, dump_words;
 
 /* ---- reporting ---------------------------------------------------------- */
 
+static void wav_header(void) {
+  u8 h[44] = "RIFF\0\0\0\0WAVEfmt \x10\0\0\0\x01\0\x02\0\0\0\0\0\0\0\0\0\x04\0\x10\0data";
+  u32 v[3] = {36 + wav_bytes, wav_rate, wav_rate * 4}, at[3] = {4, 24, 28}, i, k;
+  for (k = 0; k < 3; k++)
+    for (i = 0; i < 4; i++) h[at[k] + i] = (u8)(v[k] >> (8 * i));
+  for (i = 0; i < 4; i++) h[40 + i] = (u8)(wav_bytes >> (8 * i));
+  fseek(wav, 0, SEEK_SET);
+  fwrite(h, 1, 44, wav);
+}
 static void finish(int code, const char *why) {
   u32 i, p;
+  if (wav) { wav_header(); fclose(wav); wav = NULL; }
   if (dump_words) {
     printf("{\"dump\":\"%08x\",\"words\":[", dump_at);
     for (i = 0; i < dump_words; i++) {
@@ -551,12 +578,13 @@ static void vi_update(void) {
 RT(osViSetMode) { vi_mode = arg(0); vi_update(); return 0; }
 RT(osViBlack) { vi_black = arg(0) & 0xff; vi_update(); return 0; }
 RT(osViSwapBuffer) { frame_buffer = arg(0); vi_update(); return 0; }
-RT(osVirtualToPhysical) {
-  u32 a = arg(0), p;
+static u32 v2p(u32 a) {
+  u32 p;
   u8 seg;
-  if (a >= 0x80000000u && a < 0xc0000000u) return ret(a & 0x1fffffffu);
-  return ret(plaid_tlb(S, a, 0, &p, &seg) ? 0xffffffffu : p);
+  if (a >= 0x80000000u && a < 0xc0000000u) return a & 0x1fffffffu;
+  return plaid_tlb(S, a, 0, &p, &seg) ? 0xffffffffu : p;
 }
+RT(osVirtualToPhysical) { return ret(v2p(arg(0))); }
 RT(__osSetFpcCsr) {
   u32 was = S->fcsr | S->fcc << 23;
   if (plaid_ctc1(S, arg(0), (u32)S->r[31])) return 1;
@@ -587,9 +615,120 @@ static void report_gfx_task(u32 task) {
   for (i = 0; i < 8; i++) printf("%s\"%08x%08x\"", i ? "," : "", rd32(dl + 8 * i), rd32(dl + 8 * i + 4));
   printf("]}\n");
 }
-RT(osSpTaskLoad) { return 0; }
-/* The renderer (RT64) consumes graphics tasks here in a later step; until then
-   a task completes at once: SP, then DP for graphics. */
+#ifdef PLAID_RSP
+/* RSP DMA into RDRAM obeys the same write checks as the CPU's runtime writes */
+static int rsp_rdram_write(u32 p, u32 size) { return plaid_runtime_write(S, p, size, 0); }
+/* Run lowered code from pc until the RSP halts (0) or faults (1); -1 when no
+   lowered text holds the word IMEM has at pc. A text that leaves at a pc
+   (its copy of the word there, or of the delay slot, is stale) is not chosen
+   for that pc again until IMEM changes. */
+static int rsp_run(u32 pc) {
+  u32 xpc = ~0u, xgen = 0;
+  u64 xmask = 0;
+  for (;;) {
+    const plaid_rsp_text *t = NULL;
+    int i, rc;
+    for (i = 0; plaid_rsp_texts[i] && i < 64; i++) {
+      const plaid_rsp_text *c = plaid_rsp_texts[i];
+      if (pc == xpc && rsp.imem_gen == xgen && (xmask >> i & 1)) continue;
+      if (pc < c->start || pc + 4 > c->start + c->size) continue;
+      if (!memcmp(rsp.imem + pc, c->bytes + (pc - c->start), 4)) { t = c; break; }
+    }
+    if (!t) { rsp.pc = pc; return -1; }
+    rc = t->run(&rsp, pc);
+    if (rc != 2) return rc;
+    if (rsp.pc != xpc || rsp.imem_gen != xgen) { xpc = rsp.pc; xgen = rsp.imem_gen; xmask = 0; }
+    xmask |= (u64)1 << i;
+    pc = rsp.pc;
+  }
+}
+static void rsp_file(const char *dir, const char *name, const void *bytes, size_t size) {
+  char path[1024];
+  FILE *f;
+  snprintf(path, sizeof path, "%s/%s", dir, name);
+  f = fopen(path, "wb");
+  if (!f || fwrite(bytes, 1, size, f) != size || fclose(f)) finish(1, "cannot write an RSP file");
+}
+/* --rsp-capture: the whole RSP-visible state, as spike098 loads it into ares */
+static void rsp_save(const char *tag) {
+  char name[64], json[16384];
+  int n = 0, i, k;
+  snprintf(name, sizeof name, "%s-rdram.bin", tag); rsp_file(rsp_capture_dir, name, S->ram, PLAID_RAM_SIZE);
+  snprintf(name, sizeof name, "%s-imem.bin", tag); rsp_file(rsp_capture_dir, name, rsp.imem, 4096);
+  snprintf(name, sizeof name, "%s-dmem.bin", tag); rsp_file(rsp_capture_dir, name, rsp.dmem, 4096);
+  n += snprintf(json + n, sizeof json - n, "{\"pc\":%u,\"halted\":%u,\"broken\":%u,\"regs\":[", rsp.pc, rsp.halted,
+                rsp.broken);
+  for (i = 0; i < 32; i++) n += snprintf(json + n, sizeof json - n, "%s%u", i ? "," : "", rsp.r[i]);
+  n += snprintf(json + n, sizeof json - n, "],\"vu\":\"");
+  for (i = 0; i < 35; i++) {
+    const plaid_v *v = i < 32 ? &rsp.v[i] : i == 32 ? &rsp.acch : i == 33 ? &rsp.accm : &rsp.accl;
+    for (k = 0; k < 8; k++) n += snprintf(json + n, sizeof json - n, "%04x", v->e[k]);
+  }
+  {
+    u32 f[3] = {0, 0, 0};
+    for (k = 0; k < 8; k++) {
+      f[0] |= (u32)(rsp.vcol.e[k] != 0) << k | (u32)(rsp.vcoh.e[k] != 0) << (8 + k);
+      f[1] |= (u32)(rsp.vccl.e[k] != 0) << k | (u32)(rsp.vcch.e[k] != 0) << (8 + k);
+      f[2] |= (u32)(rsp.vce.e[k] != 0) << k;
+    }
+    n += snprintf(json + n, sizeof json - n, "\",\"vflags\":[%u,%u,%u,%u,%u,%u],\"signals\":[", f[0], f[1], f[2],
+                  (u32)(u16)rsp.divin, (u32)(u16)rsp.divout, (u32)rsp.divdp);
+  }
+  for (i = 0; i < 8; i++) n += snprintf(json + n, sizeof json - n, "%s%u", i ? "," : "", rsp.signal[i]);
+  n += snprintf(json + n, sizeof json - n, "],\"semaphore\":%u,\"interrupt_on_break\":%u}\n", rsp.semaphore,
+                rsp.interrupt_on_break);
+  snprintf(name, sizeof name, "%s-state.json", tag); rsp_file(rsp_capture_dir, name, json, (size_t)n);
+}
+static void rsp_task(void) {
+  int rc, capture = rsp_capture_dir && (long)audio_tasks == rsp_capture;
+  /* osSpTaskStartGo: SET_INTR_ON_BREAK | CLEAR_SSTEP | CLEAR_BROKE | CLEAR_HALT */
+  rsp.interrupt_on_break = 1; rsp.single_step = 0; rsp.broken = 0; rsp.halted = 0;
+  if (capture) rsp_save("before");
+  rc = rsp_run(rsp.pc);
+  if (capture) { rsp_save("after"); finish(0, "RSP task captured"); }
+  if (rc < 0) {
+    char name[64];
+    u32 h = 2166136261u, i;
+    for (i = 0; i < 4096; i++) h = (h ^ rsp.imem[i]) * 16777619u;
+    snprintf(name, sizeof name, "imem-%03x-%08x.bin", rsp.pc, h);
+    if (rsp_dump_dir) rsp_file(rsp_dump_dir, name, rsp.imem, 4096);
+    fprintf(stderr, "no lowered RSP code for IMEM %03x; %s %s (runtime/rsp_texts.py lowers it)\n", rsp.pc,
+            rsp_dump_dir ? "saved" : "--rsp-dump <dir> would save", name);
+    finish(1, "unlowered RSP code");
+  }
+  if (rc) {
+    fprintf(stderr, "RSP fault %u at IMEM %03x\n", rsp.fault, rsp.fault_pc);
+    finish(1, "RSP fault");
+  }
+}
+#endif
+/* osSpTaskLoad as libultra does it for the RSP: the task, with its pointers
+   made physical, at DMEM 0xfc0; the boot microcode at IMEM 0; signals 0-2
+   cleared; PC 0. Graphics tasks go to the renderer instead. */
+RT(osSpTaskLoad) {
+#ifdef PLAID_RSP
+  static const int pointers[] = {4, 6, 8, 10, 11, 12, 14}; /* ucode .. yield_data_ptr */
+  u32 task = arg(0), t[16], boot, n, i;
+  for (i = 0; i < 16; i++) t[i] = rd32(task + 4 * i);
+  if (t[0] == 1) return 0;
+  if (t[1] & 1) finish(1, "yielded RSP task"); /* OS_TASK_YIELDED: only graphics tasks yield */
+  for (i = 0; i < 7; i++)
+    if (t[pointers[i]]) t[pointers[i]] = v2p(t[pointers[i]]);
+  for (i = 0; i < 64; i++) rsp.dmem[0xfc0 + i] = (u8)(t[i / 4] >> (24 - 8 * (i % 4)));
+  boot = v2p(t[2]);
+  n = t[3] ? ((t[3] - 1) | 7) + 1 : 0; /* the DMA moves whole doublewords */
+  if (n > 0x1000 || boot > PLAID_RAM_SIZE || n > PLAID_RAM_SIZE - boot) finish(1, "RSP boot microcode outside RAM");
+  memcpy(rsp.imem, S->ram + boot, n);
+  rsp.imem_gen++;
+  rsp.signal[0] = rsp.signal[1] = rsp.signal[2] = 0;
+  rsp.interrupt_on_break = 1;
+  rsp.pc = 0;
+  rsp.rdram = S->ram; rsp.rdram_size = PLAID_RAM_SIZE; rsp.rdram_write = rsp_rdram_write;
+#endif
+  return 0;
+}
+/* Graphics tasks go to the renderer (RT64); with PLAID_RSP other tasks run
+   their lowered microcode, otherwise they complete at once. */
 RT(osSpTaskStartGo) {
   u32 task = arg(0), type = rd32(task);
   if (type == 1) {
@@ -603,6 +742,9 @@ RT(osSpTaskStartGo) {
     post(EV_DP);
   } else {
     audio_tasks++;
+#ifdef PLAID_RSP
+    rsp_task();
+#endif
     post(EV_SP);
   }
   return 0;
@@ -610,9 +752,23 @@ RT(osSpTaskStartGo) {
 
 /* ---- audio --------------------------------------------------------------- */
 
-RT(osAiSetFrequency) { return ret(arg(0)); }
+/* libultra's rate from the NTSC VI clock: the DAC divides 48681812 Hz */
+RT(osAiSetFrequency) {
+  u32 dac = (u32)((float)48681812u / (float)arg(0) + .5f);
+  if (dac < 132) return ret(0xffffffffu);
+  wav_rate = 48681812u / dac;
+  return ret(wav_rate);
+}
 RT(osAiGetLength) { return ret(0); }
-RT(osAiSetNextBuffer) { return ret(0); }
+RT(osAiSetNextBuffer) {
+  u32 p = v2p(arg(0)), n = arg(1) & ~3u, i;
+  if (wav) {
+    if (p > PLAID_RAM_SIZE || n > PLAID_RAM_SIZE - p) finish(1, "AI buffer outside RAM");
+    for (i = 0; i < n; i += 2) { fputc(S->ram[p + i + 1], wav); fputc(S->ram[p + i], wav); }
+    wav_bytes += n;
+  }
+  return ret(0);
+}
 
 /* ---- SI: controllers and EEPROM ------------------------------------------ */
 
@@ -730,11 +886,22 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--gfx-tasks") && i + 1 < argc) stop_gfx = atol(argv[++i]);
     else if (!strcmp(argv[i], "--seconds") && i + 1 < argc) run_seconds = atof(argv[++i]);
     else if (!strcmp(argv[i], "--save") && i + 1 < argc) save_path = argv[++i];
+    else if (!strcmp(argv[i], "--wav") && i + 1 < argc) {
+      if (!(wav = fopen(argv[++i], "wb"))) { perror(argv[i]); return 2; }
+      wav_header();
+    }
+#ifdef PLAID_RSP
+    else if (!strcmp(argv[i], "--rsp-dump") && i + 1 < argc) rsp_dump_dir = argv[++i];
+    else if (!strcmp(argv[i], "--rsp-capture") && i + 2 < argc) {
+      rsp_capture = atol(argv[++i]);
+      rsp_capture_dir = argv[++i];
+    }
+#endif
     else if (!strcmp(argv[i], "--press") && i + 1 < argc && n_presses < MAX_PRESSES &&
              sscanf(argv[++i], "%i@%u:%u", (int *)&presses[n_presses].buttons, &presses[n_presses].at,
                     &presses[n_presses].frames) == 3) n_presses++;
     else {
-      fprintf(stderr, "usage: %s [--rom <rom.z64>] [--stop-at gfx|none] [--gfx-tasks N] [--seconds S] [--press <buttons>@<vi>:<frames>] [--save <eeprom file>] [--dump <addr> <words>]\n", argv[0]);
+      fprintf(stderr, "usage: %s [--rom <rom.z64>] [--stop-at gfx|none] [--gfx-tasks N] [--seconds S] [--press <buttons>@<vi>:<frames>] [--save <eeprom file>] [--wav <file>] [--rsp-dump <dir>] [--rsp-capture <task> <dir>] [--dump <addr> <words>]\n", argv[0]);
       return 2;
     }
   }

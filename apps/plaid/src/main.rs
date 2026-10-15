@@ -902,9 +902,16 @@ fn run() -> Result<(), String> {
             let text = bytes
                 .get(offset..offset + size)
                 .ok_or("microcode text is outside the file")?;
-            let c = plaid_lower::rsp::lower_rsp(text, number32(imem)?, name)?;
-            fs::write(output, c).map_err(|e| e.to_string())?;
-            println!("lowered {} RSP instructions", size / 4);
+            let lowered = plaid_lower::rsp::lower_rsp(text, number32(imem)?, name)?;
+            fs::write(output, lowered.c).map_err(|e| e.to_string())?;
+            println!(
+                "lowered {} RSP words, {} as fault stubs",
+                size / 4,
+                lowered.stubs.len()
+            );
+            for why in lowered.stubs.iter().take(8) {
+                println!("  stub {why}");
+            }
         }
         [command, rom_path, map_path, entry, exit, output] if command == "lower-map" => {
             // A discovered ROM map (ADR-0157): its images are rebuilt from the

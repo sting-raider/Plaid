@@ -77,6 +77,8 @@ int main(int argc, char** argv) {
   for(int r = 0; r < 32; r++) std::printf("%s%u", r ? "," : "", rsp.ipu.r[r].u32);
   std::printf("],\"dmem\":\"");
   for(u32 a = 0; a < 4096; a++) std::printf("%02x", (u32)rsp.dmem.read<Byte>(a));
+  std::printf("\",\"imem\":\"");
+  for(u32 a = 0; a < 4096; a++) std::printf("%02x", (u32)rsp.imem.read<Byte>(a));
   std::printf("\",\"rdram\":\"");
   for(u32 a = 0; a < 0x2000; a += 4) std::printf("%08x", (u32)rdram.ram.read<Word>(a, RBusDevice::ARES_DEBUGGER));
   // vector unit (ADR-0168): 32 registers then ACCH, ACCM, ACCL, as halfwords

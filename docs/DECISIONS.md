@@ -4443,3 +4443,82 @@ encodings.
 SM64's audio microcode (`plaid lower-rsp` at ROM 0xe7740, 0xe20 bytes, IMEM
 0x080) now lowers completely: 904 instructions. The result compiles with
 `-Wall -Wextra` without warnings. Running audio tasks with it is ADR-0169.
+
+## ADR-0169: RSP tasks run lowered IMEM snapshots
+
+Context: ADR-0167 and ADR-0168 lower RSP code from a ROM offset that someone
+has to find for each game. On hardware, libultra loads only a small boot
+microcode into IMEM. The boot code then DMAs the task's real microcode over
+IMEM, including the words it is running from. Those load addresses and
+sizes are game data: SM64 passes `ucode_size` 0x800 with a note that it is
+ignored. Lowering per ROM offset would not carry over to another game.
+
+Decision: IMEM is plain bytes, and DMA can write it (fault 2 is gone). A
+lowered text is a 4 KiB IMEM snapshot, located by running the game, not by a
+ROM offset:
+- **Liveness.** Every text carries its bytes. On entry, and after any mtc0
+  that DMAed into IMEM, it marks which of its words IMEM still holds. Each
+  word it no longer holds, and each transfer whose delay slot it no longer
+  holds, leaves the text (return 2, with `r->pc`). So does every target
+  outside the text, and the register-jump dispatch default.
+- **Selection.** The runtime runs a registered text that covers the PC and
+  whose word at the PC matches IMEM. A text that left at a PC is not chosen
+  again for that PC until IMEM changes.
+- **Fail closed.** When no text holds the word, the task stops with
+  "unlowered RSP code". With `--rsp-dump <dir>` the runtime saves IMEM as
+  `imem-<pc>-<fnv32>.bin` first. `runtime/rsp_texts.py` lowers each
+  snapshot whole and writes the registry, so the next build runs further.
+  Words a whole snapshot cannot lower, such as leftover data, become fault-6
+  stubs instead of lowering errors, and are reported.
+- **Task start.** `osSpTaskLoad` does libultra's work for tasks other than
+  graphics:
+  - it copies the task to DMEM 0xfc0 with its seven pointers made physical;
+  - it puts `ucode_boot` in IMEM 0.
+  `osSpTaskStartGo` runs from PC 0 until the RSP halts, then posts the SP
+  event. Yielded tasks other than graphics fail.
+- **RDRAM writes.** RSP DMA into RDRAM goes through `plaid_runtime_write`,
+  with the CPU's write checks.
+- **DPC_STATUS.** Reads return 0x80, an idle RDP, ready. Graphics tasks have
+  completed whenever another task runs here, and ares reads the same at
+  power. The other RDP registers still fault 4.
+- **Audio out.** `osAiSetFrequency` follows libultra's divider. `--wav
+  <file>` writes each `osAiSetNextBuffer` buffer as 16-bit stereo PCM.
+  `osAiGetLength` returns 0, which means no host playback timing yet.
+
+Nothing in this is specific to SM64: the boot code, the microcode and its
+location all come from the game at run time.
+
+Verification:
+- spike097 against ares 9408cb43:
+  - `dma_imem` DMAs into IMEM and reads it back;
+  - `dpc_status` reads the idle RDP;
+  - `imem_stale` faults after running code that a DMA overwrote, when no
+    text holds the new bytes.
+- `runtime/test_runtime.py` runs a boot-plus-ucode task, shaped like
+  rspboot, through the snapshot protocol:
+  - two runs save the boot and ucode snapshots;
+  - the third run computes and DMAs out the expected RDRAM words and the
+    vector sums, and posts the SP event.
+- spike098 (new) loads a captured task (`--rsp-capture <n> <dir>`) into
+  ares: all of RDRAM, IMEM and DMEM plus the scalar, vector and status
+  state. It runs the task to halt and compares everything with the native
+  result.
+
+Result: SM64 needs two snapshots:
+
+| Snapshot | Contents | Fault stubs |
+| --- | --- | --- |
+| IMEM 000 | rspboot | none |
+| IMEM 080 | aspMain | 26, all in leftover bytes past the microcode |
+
+With them, SM64 runs 20 seconds with 1190 audio tasks and no fault. A 30
+second WAV at 32006 Hz carries the intro and title audio; the user listened
+to it and confirmed it sounds right. spike098 matches
+pinned ares exactly on two real tasks:
+- task 1: 6478 instructions;
+- task 600: 94150 instructions, 2972 RDRAM bytes of mixed audio.
+
+Captures, snapshots, lowered C and the WAV are game-derived and stay local.
+
+Next: ADR-0170 plays the samples on the host in real time, with AI length
+timing.

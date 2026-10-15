@@ -3,31 +3,12 @@
    interpreter-scc.cpp, interpreter-vpu.cpp, rsp.cpp, io.cpp, dma.cpp;
    ISC license, Copyright (c) 2004-2021 ares team, Near et al).
 
-   DMEM and RDRAM are big-endian byte arrays. DMA completes when it is
-   started, so SP_DMA_BUSY and SP_DMA_FULL read 0: the result equals ares for
-   microcode that waits for its DMA before using the bytes. Faults:
-   1 DMA outside RDRAM, 2 DMA into IMEM (lowered code is fixed),
-   3 transfer outside the lowered text or misaligned, 4 RDP command register. */
-#include <stdint.h>
-#include <string.h>
-typedef uint8_t u8; typedef uint16_t u16; typedef uint32_t u32; typedef uint64_t u64;
-typedef int8_t s8; typedef int16_t s16; typedef int32_t s32; typedef int64_t s64;
-typedef struct {
-  u32 r[32];
-  u8 dmem[4096];
-  u8 *rdram; u32 rdram_size;
-  u32 pc, fault, fault_pc;
-  /* SP DMA: the last started transfer's registers, as ares reads them back */
-  u32 dma_mem, dma_dram, dma_length, dma_count, dma_skip;
-  u32 pending_mem, pending_dram;
-  u8 halted, broken, semaphore, single_step, interrupt_on_break, intr;
-  u8 signal[8];
-  /* vector unit: element 0 is the most significant halfword; flags are 0 or 0xffff */
-  struct plaid_v { u16 e[8]; } v[32], acch, accm, accl, vcoh, vcol, vcch, vccl, vce;
-  s16 divin, divout;
-  u8 divdp;
-} plaid_rsp;
-typedef struct plaid_v plaid_v;
+   IMEM, DMEM and RDRAM are big-endian byte arrays (state in rsp_state.h).
+   DMA completes when it is started, so SP_DMA_BUSY and SP_DMA_FULL read 0:
+   the result equals ares for microcode that waits for its DMA before using
+   the bytes. Faults: 1 DMA outside RDRAM or refused by the host, 3 misaligned
+   register jump, 4 RDP command register, 6 an instruction that was not
+   lowered (unsupported, or a transfer without a plain delay slot). */
 
 static int plaid_rsp_fault(plaid_rsp *r, u32 pc, u32 code) {
   r->fault = code; r->fault_pc = pc; r->halted = 1;
@@ -47,31 +28,35 @@ static inline void plaid_rsp_st(plaid_rsp *r, u32 a, u32 size, u32 v) {
    rows, skip bytes between rows in RDRAM. */
 static int plaid_rsp_dma(plaid_rsp *r, u32 value, int to_rdram, u32 pc) {
   u32 length = value & 0xff8, count = (value >> 12) & 0xff, skip = (value >> 20) & 0xff8;
-  u32 mem = r->pending_mem & 0xff8, dram = r->pending_dram & 0xfffff8, row, i;
-  if (r->pending_mem & 0x1000) return plaid_rsp_fault(r, pc, 2);
+  u32 mem = r->pending_mem & 0xff8, dram = r->pending_dram & 0xfffff8, row, i, j;
+  u32 region = r->pending_mem & 0x1000;
+  u8 *sp = region ? r->imem : r->dmem;
   for (row = 0; row <= count; row++) {
     for (i = 0; i <= length; i += 8) {
       if (dram + 8 > r->rdram_size) return plaid_rsp_fault(r, pc, 1);
       if (to_rdram) {
-        u32 j;
-        for (j = 0; j < 8; j++) r->rdram[dram + j] = r->dmem[(mem + j) & 0xfff];
+        if (r->rdram_write && r->rdram_write(dram, 8)) return plaid_rsp_fault(r, pc, 1);
+        for (j = 0; j < 8; j++) r->rdram[dram + j] = sp[(mem + j) & 0xfff];
       } else {
-        u32 j;
-        for (j = 0; j < 8; j++) r->dmem[(mem + j) & 0xfff] = r->rdram[dram + j];
+        for (j = 0; j < 8; j++) sp[(mem + j) & 0xfff] = r->rdram[dram + j];
       }
       dram = (dram + 8) & 0xffffff;
       mem = (mem + 8) & 0xfff;
     }
     if (row < count) dram = (dram + skip) & 0xffffff;
   }
-  r->dma_mem = mem; r->dma_dram = dram; r->dma_length = 0xff8; r->dma_count = 0; r->dma_skip = skip;
+  if (region && !to_rdram) { r->imem_written = 1; r->imem_gen++; }
+  r->dma_mem = region | mem; r->dma_dram = dram; r->dma_length = 0xff8; r->dma_count = 0; r->dma_skip = skip;
   return 0;
 }
 static inline int plaid_rsp_mfc0(plaid_rsp *r, u32 rd, u32 *out, u32 pc) {
   u32 i, v = 0;
+  /* DPC_STATUS reads an idle RDP (ready): graphics tasks have completed
+     whenever the RSP runs another task here. Other RDP registers fail. */
+  if (rd == 11) { *out = 0x80; return 0; }
   if (rd & 8) return plaid_rsp_fault(r, pc, 4);
   switch (rd & 7) {
-  case 0: v = r->dma_mem & 0xfff; break; /* SP_MEM_ADDR: DMEM region */
+  case 0: v = r->dma_mem & 0x1fff; break; /* SP_MEM_ADDR, bit 12: IMEM */
   case 1: v = r->dma_dram & 0xffffff; break;
   case 2: case 3: v = r->dma_length | r->dma_count << 12 | r->dma_skip << 20; break;
   case 4:
@@ -113,3 +98,18 @@ static inline int plaid_rsp_mtc0(plaid_rsp *r, u32 rd, u32 v, u32 pc) {
   }
   return 0;
 }
+
+/* ADR-0169: which words of a lowered text IMEM still holds */
+static void plaid_rsp_verify(plaid_rsp *r, const u8 *text, u32 start, u32 size) {
+  u32 a;
+  r->stale = 0;
+  memset(r->ok, 0, sizeof r->ok);
+  for (a = start; a < start + size; a += 4) {
+    r->ok[a >> 2] = !memcmp(r->imem + a, text + (a - start), 4);
+    r->stale |= !r->ok[a >> 2];
+  }
+}
+static int plaid_rsp_leave(plaid_rsp *r, u32 pc) { r->pc = pc; return 2; }
+/* before each instruction: leave if IMEM no longer holds it (and its delay slot) */
+#define PLAID_RSP_LIVE(pc) if (r->stale && !r->ok[(pc) >> 2]) return plaid_rsp_leave(r, pc);
+#define PLAID_RSP_LIVE2(pc)   if (r->stale && !(r->ok[(pc) >> 2] && r->ok[((pc) + 4) >> 2 & 1023])) return plaid_rsp_leave(r, pc);

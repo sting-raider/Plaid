@@ -109,7 +109,7 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Interrupt/timing/event runtime | 🟨 partial |
 | Controller input | 🟨 partial |
 | Save devices | 🟨 partial |
-| Audio path | ⬜ open |
+| Audio path | 🟨 partial |
 | RSP runtime/native path | 🟨 partial |
 | Renderer integration | 🟨 partial |
 | Native launch/cache packaging | ⬜ open |
