@@ -134,14 +134,36 @@ pub fn plausible(image: &CodeImage, pc: GuestAddr) -> bool {
 
 /// Address-taken roots from data (ADR-0153): aligned words of `bytes` that
 /// name a function start in `image` whose body can be CPU code.
+/// A decodable Yaz0 stream contributes its decoded words instead of its
+/// compressed bytes, which are not data (ADR-0175).
 pub fn rom_words(bytes: &[u8], image: &CodeImage) -> BTreeSet<GuestAddr> {
-    bytes
-        .as_chunks::<4>()
-        .0
-        .iter()
-        .map(|w| GuestAddr(u32::from_be_bytes(*w)))
-        .filter(|&pc| plausible(image, pc))
-        .collect()
+    let mut out = BTreeSet::new();
+    let mut take = |words: &[u8]| {
+        out.extend(
+            words
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|w| GuestAddr(u32::from_be_bytes(*w)))
+                .filter(|&pc| plausible(image, pc)),
+        )
+    };
+    let mut at = 0;
+    let mut raw = 0;
+    while at + 4 <= bytes.len() {
+        if bytes[at..].starts_with(b"Yaz0")
+            && let Ok((decoded, used)) = crate::declared_loads::yaz0_stream(&bytes[at..])
+        {
+            take(&bytes[raw..at]);
+            take(&decoded);
+            at += used.next_multiple_of(4);
+            raw = at.min(bytes.len());
+        } else {
+            at += 4;
+        }
+    }
+    take(&bytes[raw..]);
+    out
 }
 
 /// Address constants (`lui r, hi` then `addiu`/`ori` from `r`) built inside
@@ -328,6 +350,46 @@ mod tests {
                 GuestAddr(0x8000_000c),
                 GuestAddr(0x8000_0020)
             ])
+        );
+    }
+
+    #[test]
+    fn yaz0_streams_contribute_decoded_words_not_compressed_bytes() {
+        let image = CodeImage {
+            base: CodeAddress {
+                pc: GuestAddr(0x8000_0000),
+                image: "roots".into(),
+                generation: 0,
+            },
+            words: vec![
+                0x27bd_ffe8,
+                JR_RA,
+                0x27bd_0018,
+                0x2402_0001,
+                0x2402_0002,
+                JR_RA,
+                0,
+                0,
+                0x2402_0003,
+                JR_RA,
+                0,
+            ],
+            rom_offset: None,
+            physical_start: None,
+            holes: Vec::new(),
+        };
+        let mut rom = b"Yaz0".to_vec();
+        rom.extend(16u32.to_be_bytes());
+        rom.extend([0; 8]);
+        // the aligned compressed word at 20 reads 0x80000000; decoded, it is not data
+        rom.extend([0xff, 0, 0, 0, 0x80, 0, 0, 0, 0]);
+        // decoded word 2 is 0x80000020, which sits unaligned in the stream
+        rom.extend([0xff, 0x80, 0, 0, 0x20, 0, 0, 0, 0]);
+        rom.extend([0, 0]); // the 34-byte stream ends; scanning resumes at 36
+        rom.extend(0x8000_000cu32.to_be_bytes());
+        assert_eq!(
+            rom_words(&rom, &image),
+            BTreeSet::from([GuestAddr(0x8000_000c), GuestAddr(0x8000_0020)])
         );
     }
 

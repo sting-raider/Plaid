@@ -45,10 +45,22 @@ pub struct LoadImage {
 /// Decode one Yaz0 stream (header `Yaz0`, big-endian decoded size, 8 reserved
 /// bytes, then flag-byte groups of literals and back-references).
 pub fn yaz0(data: &[u8]) -> Result<Vec<u8>, String> {
+    yaz0_stream(data).map(|(out, _)| out)
+}
+
+/// The largest decoded size accepted, so a stray header cannot demand an
+/// arbitrary allocation; it exceeds any N64 cartridge.
+const YAZ0_MAX: usize = 64 << 20;
+
+/// [`yaz0`] and the number of stream bytes it consumed.
+pub fn yaz0_stream(data: &[u8]) -> Result<(Vec<u8>, usize), String> {
     if data.len() < 16 || &data[..4] != b"Yaz0" {
         return Err("not a Yaz0 stream".into());
     }
     let size = u32::from_be_bytes([data[4], data[5], data[6], data[7]]) as usize;
+    if size > YAZ0_MAX {
+        return Err("Yaz0 decoded size exceeds 64 MiB".into());
+    }
     let mut out = Vec::with_capacity(size);
     let mut at = 16;
     let next = |at: &mut usize| -> Result<u8, String> {
@@ -80,7 +92,7 @@ pub fn yaz0(data: &[u8]) -> Result<Vec<u8>, String> {
             }
         }
     }
-    Ok(out)
+    Ok((out, at))
 }
 
 fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {

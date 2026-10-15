@@ -5,7 +5,7 @@ libultra functions as runtime functions, is lowered with `plaid lower-c` and
 linked with runtime/plaid_rt.c. Its threads append to a log in guest RAM; the
 log order checks libultra scheduling: a higher-priority thread preempts on
 start and on a message send, a blocked receive yields, lowering a priority
-yields, and a VI retrace preempts a spinning thread at a loop safepoint.
+yields, osYieldThread queues behind an equal priority, and a VI retrace preempts a spinning thread at a loop safepoint.
 
 A second program checks the renderer bridge (ADR-0163) without a GPU: a stub
 plaid_gfx_* records the VI registers the runtime derives from an OSViMode and
@@ -30,7 +30,7 @@ spec.loader.exec_module(A)
 OUT = ROOT / 'target/runtime-test'
 
 Q, BUF, Q2, BUF2, SLOT = 0x80002000, 0x80002020, 0x80002040, 0x80002060, 0x80002080
-T1, T2, T4 = 0x80002100, 0x80002300, 0x80002500
+T1, T2, T4, T5 = 0x80002100, 0x80002300, 0x80002500, 0x80002700
 LOG, INDEX = 0x80003000, 0x80003100
 
 
@@ -60,7 +60,7 @@ def log_word(address):
 
 
 RUNTIME = ['osCreateMesgQueue', 'osCreateThread', 'osStartThread', 'osSendMesg', 'osRecvMesg',
-           'osSetThreadPri', 'osViSetEvent']
+           'osSetThreadPri', 'osViSetEvent', 'osYieldThread']
 PROGRAM = [
     *li(A.sp, 0x80007F00),
     *call('osCreateMesgQueue', Q, BUF, 4),
@@ -79,6 +79,11 @@ PROGRAM = [
     *call('osCreateThread', T4, 4, 't4', 0, 0x8001FF00, 30),
     *call('osStartThread', T4),  # runs, blocks on the VI queue
     *log(5),
+    *call('osCreateThread', T5, 5, 't5', 0, 0x80027F00, 10),
+    *call('osStartThread', T5),  # equal priority: queued behind t1
+    *log(6),
+    *call('osYieldThread'),  # t5 runs first
+    *log(8),
     'spin', A.beq(A.zero, A.zero, 'spin'), A.nop,  # preempted only at its safepoint
     't2',
     *log(2),
@@ -87,6 +92,11 @@ PROGRAM = [
     *call('osSetThreadPri', 0, 5),  # below t1: yields for good
     *log(0xDEAD),
     'spin2', A.beq(A.zero, A.zero, 'spin2'), A.nop,
+    't5',
+    *log(0x10),
+    *call('osYieldThread'),  # back to t1, queued first
+    *log(0xDEAD),
+    'spin3', A.beq(A.zero, A.zero, 'spin3'), A.nop,
     't4',
     *call('osRecvMesg', Q2, SLOT + 4, 1),
     *log_word(SLOT + 4),
@@ -94,7 +104,7 @@ PROGRAM = [
 ]
 for name in RUNTIME:  # declared runtime functions: never decoded
     PROGRAM += [name, A.jr(A.ra), A.nop]
-EXPECTED = [1, 2, 3, 7, 4, 5, 0x99]
+EXPECTED = [1, 2, 3, 7, 4, 5, 6, 0x10, 8, 0x99]
 
 # An NTSC LAN1-like OSViMode: comRegs at +4, fldRegs[0] at +0x28.
 MODE, TASK, DL, FB, PADS = 0x80004000, 0x80004100, 0x80006000, 0x80100000, 0x80004200
@@ -388,7 +398,7 @@ def main():
     assert run.returncode == 0 and stop['stop'] == 'exit', (run.returncode, run.stdout, run.stderr)
     assert dump == EXPECTED + [0], ([hex(w) for w in dump], EXPECTED)
     assert stop['vi'] >= 1
-    print('runtime scheduling: start/send preemption, blocking receive, priority drop and VI preemption '
+    print('runtime scheduling: start/send preemption, blocking receive, priority drop, yield and VI preemption '
           'of a spinning thread match libultra order', json.dumps(dump))
     graphics_bridge(exe, cc)
     save_file(exe, cc)

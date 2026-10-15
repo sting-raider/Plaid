@@ -483,6 +483,14 @@ RT(osSetThreadPri) {
   }
   return 0;
 }
+/* The caller queues behind the runnable threads of its own priority. */
+RT(osYieldThread) {
+  rt_thread *self = running, *b;
+  deliver_pending();
+  b = best_runnable();
+  if (self && b && b->pri >= self->pri) { make_runnable(self); yield_from(self); }
+  return 0;
+}
 RT(osGetThreadPri) { rt_thread *t = thread_of(arg(0)); return ret(t ? (u32)t->pri : 0); }
 RT(osCreateMesgQueue) {
   u32 mq = arg(0);
