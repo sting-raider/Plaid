@@ -273,3 +273,14 @@ sm64-rt64 --rom R --stop-at none --seconds 60 --press 0x1000@600:6 --press 0x800
 | Step | Result |
 | --- | --- |
 | scripted START, then three A presses | past the title and file select into the intro: Peach's letter, then Lakitu over the castle grounds; 60 s, no fault, 2014 VI frames, 994 graphics tasks, 3360 PI DMAs (33.5 VI/s) |
+
+## Update: VI pacing (ADR-0166)
+
+Same command as the ADR-0164 run.
+
+| Step | Result |
+| --- | --- |
+| high-resolution timer and fixed VI deadlines | **3596 VI frames in 60 s (59.9 VI/s), 1784 graphics tasks (29.7 fps)**, no fault; gameplay reached, with Mario in the castle grounds and the HUD up |
+
+The earlier 33 VI/s came from the 15.6 ms Windows sleep tick, not from the
+lowered code or RT64.

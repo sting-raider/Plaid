@@ -4307,3 +4307,37 @@ increments a counter and writes it back.
 - The file holds exactly the expected 512 bytes.
 - No temporary file is left behind.
 - A 100-byte file is refused and left unchanged.
+
+## ADR-0166: VI retraces at NTSC rate on Windows
+
+Context: native SM64 produced 32.7 VI frames per second, with or without
+RT64 (2939 in 90 s; 818 in 25 s). That runs the game at about half speed.
+The cause was timing, not rendering:
+- On Windows, mingw's `nanosleep` rounds 1 ms up to the ~15.6 ms system
+  timer tick (measured 15.64 ms on average).
+- The event pump posted a VI only once 16.68 ms had passed since the last
+  one, so it posted on every second tick, about every 31 ms.
+
+The timers and the delivery to blocked threads had the same 15.6 ms
+granularity.
+
+Decision:
+- **Sleep.** On Windows the pump sleeps on a high-resolution waitable timer
+  (`CREATE_WAITABLE_TIMER_HIGH_RESOLUTION`; measured 1.66 ms for a 1 ms
+  wait). Elsewhere, or if that timer is unavailable, it uses `nanosleep`.
+- **VI deadlines.** Retraces fall on fixed deadlines of 16 683 350 ns
+  (60000/1001 Hz), so sleep jitter no longer stretches the period. A host
+  stall longer than a frame drops the missed retraces rather than bursting
+  them.
+
+This changes no guest-visible semantics; it restores the intended VI rate.
+ADR-0163's 33 VI/s baseline was measured with this bug.
+
+Result:
+- `runtime/test_runtime.py` asserts 54 to 62 retraces in one second. Three
+  runs gave 60, 60 and 61.
+- **SM64 runs at full speed.** A 60-second RT64 run with the ADR-0164 script
+  gives 3596 VI frames (59.9 VI/s) and 1784 graphics tasks (29.7 fps, the
+  game's own rate), with no fault. The game reaches gameplay: Mario in the
+  castle grounds with the HUD up. The native code keeps up without any
+  tuning.

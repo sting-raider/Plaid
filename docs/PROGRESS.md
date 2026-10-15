@@ -128,7 +128,7 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | First commercial ROM CLOSED | ⬜ open |
 | First native synthetic executable | ✅ verified |
 | First native commercial boot | 🟨 partial |
-| First native gameplay | ⬜ open |
+| First native gameplay | 🟨 partial |
 | Representative 25-game set | ⬜ open |
 | 100-game campaign | ⬜ open |
 
