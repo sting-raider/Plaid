@@ -6,7 +6,7 @@
      gcc -std=gnu11 -DPLAID_SAFEPOINTS -DPLAID_LOWERED='"game.c"' -I<dir> \
          runtime/plaid_rt.c -pthread -o game
      game [--rom <rom.z64>] [--stop-at gfx|none] [--gfx-tasks N] [--seconds S]
-          [--dump <guest address> <words>]
+          [--press <buttons>@<vi>:<frames>]... [--dump <guest address> <words>]
 
    Each declared runtime function (plaid_rt_<name>) implements a libultra
    function under the o32 ABI: arguments in a0-a3 and the caller's stack at
@@ -89,6 +89,7 @@ int plaid_gfx_open(const u8 *rom_header);
 void plaid_gfx_task(const u8 *ram, u32 ucode, u32 ucode_data, u32 data_ptr);
 void plaid_gfx_screen(const u32 *regs);
 int plaid_gfx_closed(void);
+u32 plaid_gfx_input(void); /* buttons << 16 | stick x << 8 | stick y */
 #endif
 static unsigned long vi_count, gfx_tasks, audio_tasks, dma_count;
 static long stop_gfx = 1; /* stop after this many graphics tasks (0: never) */
@@ -603,10 +604,23 @@ RT(osContInit) {
   return ret(0);
 }
 RT(osContStartReadData) { post(EV_SI); return ret(0); }
+/* Controller 1: scripted presses (--press, by VI frame) OR the renderer
+   window's keyboard. shortcut: scripts set buttons only, not the stick. */
+#define MAX_PRESSES 32
+static struct { u32 buttons, at, frames; } presses[MAX_PRESSES];
+static int n_presses;
 RT(osContGetReadData) {
+  u32 b = 0, stick = 0;
   int i;
-  for (i = 0; i < 4; i++) {
+  for (i = 0; i < n_presses; i++)
+    if (vi_count >= presses[i].at && vi_count - presses[i].at < presses[i].frames) b |= presses[i].buttons;
+#ifdef PLAID_RT64
+  stick = plaid_gfx_input();
+  b |= stick >> 16;
+#endif
+  for (i = 0; i < 4; i++) { /* OSContPad: button, stick_x, stick_y, errno */
     u8 pad[6] = {0, 0, 0, 0, i == 0 ? 0 : 8, 0};
+    if (i == 0) { pad[0] = (u8)(b >> 8); pad[1] = (u8)b; pad[2] = (u8)(stick >> 8); pad[3] = (u8)stick; }
     wr(arg(0) + 6 * i, pad, 6);
   }
   return 0;
@@ -663,8 +677,11 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[i], "--stop-at") && i + 1 < argc) stop_gfx = strcmp(argv[++i], "none") ? 1 : 0;
     else if (!strcmp(argv[i], "--gfx-tasks") && i + 1 < argc) stop_gfx = atol(argv[++i]);
     else if (!strcmp(argv[i], "--seconds") && i + 1 < argc) run_seconds = atof(argv[++i]);
+    else if (!strcmp(argv[i], "--press") && i + 1 < argc && n_presses < MAX_PRESSES &&
+             sscanf(argv[++i], "%i@%u:%u", (int *)&presses[n_presses].buttons, &presses[n_presses].at,
+                    &presses[n_presses].frames) == 3) n_presses++;
     else {
-      fprintf(stderr, "usage: %s [--rom <rom.z64>] [--stop-at gfx|none] [--gfx-tasks N] [--seconds S] [--dump <addr> <words>]\n", argv[0]);
+      fprintf(stderr, "usage: %s [--rom <rom.z64>] [--stop-at gfx|none] [--gfx-tasks N] [--seconds S] [--press <buttons>@<vi>:<frames>] [--dump <addr> <words>]\n", argv[0]);
       return 2;
     }
   }

@@ -263,3 +263,13 @@ sm64-rt64 --rom R --stop-at none --seconds 25
 | RT64 bridge, D3D12 on an RTX 3060 Laptop GPU | **title screen**: the goddard Mario head animates over the "SUPER MARIO 64" backdrop with "PRESS START"; 25 s, no fault, 404 graphics tasks, 818 VI frames (about 33 VI/s, the speed baseline) |
 
 The screen captures stay local, since they are game output.
+
+## Update: controller input (ADR-0164)
+
+```
+sm64-rt64 --rom R --stop-at none --seconds 60 --press 0x1000@600:6 --press 0x8000@800:6 --press 0x8000@950:6 --press 0x8000@1100:6
+```
+
+| Step | Result |
+| --- | --- |
+| scripted START, then three A presses | past the title and file select into the intro: Peach's letter, then Lakitu over the castle grounds; 60 s, no fault, 2014 VI frames, 994 graphics tasks, 3360 PI DMAs (33.5 VI/s) |

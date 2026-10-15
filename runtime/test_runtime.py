@@ -9,7 +9,9 @@ yields, and a VI retrace preempts a spinning thread at a loop safepoint.
 
 A second program checks the renderer bridge (ADR-0163) without a GPU: a stub
 plaid_gfx_* records the VI registers the runtime derives from an OSViMode and
-framebuffer, and the graphics task addresses and RAM it hands over.
+framebuffer, and the graphics task addresses and RAM it hands over. It also
+checks controller 1 (ADR-0164): a scripted --press merged with the stub
+window's stick.
 """
 import importlib.util
 import json
@@ -93,10 +95,10 @@ for name in RUNTIME:  # declared runtime functions: never decoded
 EXPECTED = [1, 2, 3, 7, 4, 5, 0x99]
 
 # An NTSC LAN1-like OSViMode: comRegs at +4, fldRegs[0] at +0x28.
-MODE, TASK, DL, FB = 0x80004000, 0x80004100, 0x80006000, 0x80100000
+MODE, TASK, DL, FB, PADS = 0x80004000, 0x80004100, 0x80006000, 0x80100000, 0x80004200
 COM = [0x311E, 320, 0x03E52239, 0x20D, 0xC15, 0x0C150C15, 0x006C02EC, 0x200, 0]
 FLD = [0x280, 0x400, 0x002501FF, 0x000E0204, 2]
-GFX_RUNTIME = ['osViSetMode', 'osViSwapBuffer', 'osSpTaskStartGo']
+GFX_RUNTIME = ['osViSetMode', 'osViSwapBuffer', 'osSpTaskStartGo', 'osContGetReadData']
 
 
 def poke(address, value):
@@ -110,6 +112,7 @@ GFX_PROGRAM = [
     *poke(TASK, 1), *poke(TASK + 0x10, 0x80005000), *poke(TASK + 0x18, 0x80005800), *poke(TASK + 0x30, DL),
     *poke(DL, 0xB8000000),
     *call('osViSetMode', MODE), *call('osViSwapBuffer', FB), *call('osSpTaskStartGo', TASK),
+    *call('osContGetReadData', PADS),
     'spin', A.beq(A.zero, A.zero, 'spin'), A.nop,  # until the time limit
 ]
 for name in GFX_RUNTIME:
@@ -131,6 +134,7 @@ void plaid_gfx_screen(const uint32_t *r) {
   printf("]}\n");
 }
 int plaid_gfx_closed(void) { return 0; }
+uint32_t plaid_gfx_input(void) { return 0x10F0; } /* stick 16, -16 */
 '''
 
 
@@ -155,7 +159,8 @@ def graphics_bridge(exe, cc):
     rom = OUT / 'stub.z64'
     rom.write_bytes(bytes([0x80, 0x37, 0x12, 0x40]) + bytes(0x1000))
     native = build(exe, cc, 'gfx', GFX_PROGRAM, GFX_RUNTIME, ['-DPLAID_RT64', str(OUT / 'stub.c')])
-    run = subprocess.run([str(native), '--rom', str(rom), '--stop-at', 'none', '--seconds', '0.5'],
+    run = subprocess.run([str(native), '--rom', str(rom), '--stop-at', 'none', '--seconds', '0.5',
+                          '--press', '0x9000@0:100000', '--press', '0x0010@100000:1', '--dump', hex(PADS), '3'],
                          capture_output=True, text=True, timeout=30)
     lines = {k: v for line in run.stdout.splitlines() if line.startswith('{') for k, v in json.loads(line).items()}
     assert run.returncode == 0 and lines.get('stop') == 'time limit', (run.returncode, run.stdout, run.stderr)
@@ -164,7 +169,10 @@ def graphics_bridge(exe, cc):
     screen = [COM[0], (FB & 0x1FFFFFFF) + FLD[0], COM[1], FLD[4], 0, COM[2], COM[3], COM[4], COM[5], COM[6],
               FLD[2], FLD[3], COM[7], FLD[1]]
     assert lines['stub_screen'] == screen, (lines['stub_screen'], screen)
-    print('renderer bridge: VI registers from OSViMode and framebuffer, graphics task addresses and big-endian RAM')
+    # pad 1: A|START (the later R press is not yet due), stick 16, -16; pad 2: errno 8 (absent)
+    assert lines['words'] == [0x900010F0, 0, 0x00000800], [hex(w) for w in lines['words']]
+    print('renderer bridge: VI registers from OSViMode and framebuffer, graphics task addresses and big-endian RAM, '
+          'controller 1 from scripted presses and the window')
 
 
 def main():

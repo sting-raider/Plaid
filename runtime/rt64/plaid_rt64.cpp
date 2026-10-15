@@ -13,6 +13,7 @@
 
 #include <SDL.h>
 
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <cstring>
@@ -33,6 +34,7 @@ std::mutex lock;
 std::condition_variable wake;
 std::function<void()> job;
 bool idle = true, ready = false, opened = false, closed = false;
+std::atomic<uint32_t> input{0};  // buttons << 16 | stick x << 8 | stick y
 
 // Runs f on the renderer thread and waits for it.
 void run(std::function<void()> f) {
@@ -95,6 +97,19 @@ void renderer() {
                 closed = true;
             }
         }
+        // Keyboard as controller 1: X/C/Z = A/B/Z, Enter = START, Q/E = L/R,
+        // I/K/J/L = C buttons, W/S/A/D = D-pad, arrows = stick.
+        static const struct { SDL_Scancode key; uint32_t bit; } map[] = {
+            {SDL_SCANCODE_X, 0x8000}, {SDL_SCANCODE_C, 0x4000}, {SDL_SCANCODE_Z, 0x2000},
+            {SDL_SCANCODE_RETURN, 0x1000}, {SDL_SCANCODE_W, 0x0800}, {SDL_SCANCODE_S, 0x0400},
+            {SDL_SCANCODE_A, 0x0200}, {SDL_SCANCODE_D, 0x0100}, {SDL_SCANCODE_Q, 0x0020},
+            {SDL_SCANCODE_E, 0x0010}, {SDL_SCANCODE_I, 0x0008}, {SDL_SCANCODE_K, 0x0004},
+            {SDL_SCANCODE_J, 0x0002}, {SDL_SCANCODE_L, 0x0001}};
+        const Uint8 *k = SDL_GetKeyboardState(nullptr);
+        uint32_t b = 0;
+        for (const auto &m : map) b |= k[m.key] ? m.bit : 0;
+        int x = (k[SDL_SCANCODE_RIGHT] - k[SDL_SCANCODE_LEFT]) * 80, y = (k[SDL_SCANCODE_UP] - k[SDL_SCANCODE_DOWN]) * 80;
+        input = b << 16 | uint32_t(uint8_t(x)) << 8 | uint8_t(y);
     }
 }
 
@@ -137,6 +152,9 @@ __declspec(dllexport) void plaid_gfx_screen(const uint32_t *regs) {
         app->updateScreen();
     });
 }
+
+// Controller 1 from the window's keyboard: buttons << 16 | stick x << 8 | stick y.
+__declspec(dllexport) uint32_t plaid_gfx_input(void) { return input; }
 
 // 1 once the user has closed the window.
 __declspec(dllexport) int plaid_gfx_closed(void) {
