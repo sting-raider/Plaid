@@ -21,7 +21,7 @@ Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. 
 | 1 | Synthetic ROM to C to native, matching ares exactly | **done** (spike096) |
 | 2 | SM64 discovery finds at least 99% of its functions | **done**: 99.03%, scored against a local decomp map (ADR-0152) |
 | 3 | SM64 `CLOSED` under declared assumptions | **done**: 45419 blocks, every assumption listed (ADR-0153..0156) |
-| 4 | SM64 boots natively to its title screen | **done**, and further: gameplay at full speed, with input, saves and native audio (ADR-0159..0169) |
+| 4 | SM64 boots natively to its title screen | **done**, and further: gameplay at full speed, with input, saves and native audio (ADR-0159..0170) |
 | 5 | Retire the assumptions one by one, then Ocarina of Time | next |
 
 ## How it works
@@ -77,8 +77,9 @@ Milestone 4 ran Super Mario 64 natively: the lowered game is linked with the run
 | Silence | audio tasks completed without running | RSP scalar and vector microcode lowered to C (ADR-0167/0168) |
 | "unlowered RSP code" | the boot microcode loads the audio microcode at run time | lowered IMEM snapshots, saved by running the game (ADR-0169) |
 | Audio microcode, fault 4 | it reads the RDP status register | an idle-RDP read, checked against ares (ADR-0169) |
+| Audio ran 4% fast | `osAiGetLength` always read 0 | AI DMA timed as ares models it, played through SDL (ADR-0170) |
 
-**SM64 now runs natively at full speed into gameplay** (59.9 VI/s, 30 fps): RT64 draws it (ADR-0163), the keyboard or a `--press` script controls it (ADR-0164), and `--save` keeps the EEPROM (ADR-0165). Its audio comes from the game's own RSP microcode, lowered to C; on real audio tasks it matches ares in every byte (ADR-0169). `--wav` records the audio; live playback is next (ADR-0170). The latest run is in [`research/sm64-first-measurement.md`](research/sm64-first-measurement.md), and what comes next is in [`docs/NEXT.md`](docs/NEXT.md).
+**SM64 now runs natively at full speed into gameplay** (59.9 VI/s, 30 fps): RT64 draws it (ADR-0163), the keyboard or a `--press` script controls it (ADR-0164), and `--save` keeps the EEPROM (ADR-0165). Its audio comes from the game's own RSP microcode, lowered to C; on real audio tasks it matches ares in every byte (ADR-0169). It plays live through SDL, paced by a model of the AI's DMA timing, and `--wav` records it (ADR-0170). The latest run is in [`research/sm64-first-measurement.md`](research/sm64-first-measurement.md), and what comes next is in [`docs/NEXT.md`](docs/NEXT.md).
 
 ## Per-game inputs and known gaps
 
@@ -94,7 +95,7 @@ Known gaps for other games:
 - Compressed or relocated code segments, as in Ocarina of Time (Yaz0 and overlay relocations), are not lowered yet. Load discovery is manual.
 - The runtime covers the libultra functions that SM64 calls. A game that calls a declared function the runtime lacks fails to link.
 - Saves are 4 Kbit EEPROM only (no 16 Kbit EEPROM, SRAM, Flash or Controller Pak). Only controller 1 works, and there is no rumble.
-- RSP microcode comes from running the game, not from ROM offsets: `--rsp-dump` saves each IMEM image no lowered code holds, and `runtime/rsp_texts.py` lowers it for the next build. A new game needs one or more of these runs. Graphics tasks go to RT64, not lowered microcode. Audio is written to a WAV file; it does not play live yet.
+- RSP microcode comes from running the game, not from ROM offsets: `--rsp-dump` saves each IMEM image no lowered code holds, and `runtime/rsp_texts.py` lowers it for the next build. A new game needs one or more of these runs. Graphics tasks go to RT64, not lowered microcode. Audio plays through SDL with RT64, or goes to a WAV file.
 - Only Windows has been tested with RT64.
 
 ## Build

@@ -58,9 +58,15 @@ python runtime/rsp_texts.py target/debug/plaid snapshots/ texts/   # prints the 
   the CPU's runtime writes. `--rsp-capture <n> <dir>` saves the state before
   and after the n-th RSP task, for the ares comparison in
   `spikes/098-rsp-task`. Without `PLAID_RSP`, these tasks complete at once.
-- **Audio out.** `--wav <file>` writes each `osAiSetNextBuffer` buffer as
-  16-bit stereo PCM at the rate `osAiSetFrequency` set, as libultra derives
-  it from the NTSC VI clock.
+- **Audio out** (ADR-0170). The AI is modelled as ares models it:
+  - a two-buffer DMA FIFO drains one sample per DAC period on the host
+    clock, at the rate `osAiSetFrequency` set from the NTSC VI clock;
+  - `osAiGetLength` and `osAiGetStatus` report what the hardware would;
+  - a third buffer is refused;
+  - each buffer start raises the AI event.
+
+  So a game paces its own audio as on hardware. With RT64, each buffer also
+  plays through SDL. `--wav <file>` writes the buffers as 16-bit stereo PCM.
 
 ## Rendering with RT64
 
@@ -89,3 +95,9 @@ checks controller input, an EEPROM save kept across two runs, and an RSP
 task run through the snapshot protocol: two runs save the boot and ucode
 snapshots, and the third runs the task natively and checks its RDRAM output
 and the SP event.
+
+It also checks AI DMA against a host-audio stub:
+- the FIFO refuses a third buffer;
+- the status bits are right;
+- the second buffer starts one buffer of DAC time after the first;
+- the WAV file and the host get the right samples.

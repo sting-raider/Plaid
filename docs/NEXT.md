@@ -114,8 +114,9 @@ Next concrete steps, in order:
      boot code loads its microcode; no per-game offsets. SM64's audio
      tasks run natively and match ares exactly (spike098); `--wav` writes
      the samples.
-   - Next (ADR-0170): play the samples on the host in real time, with AI
-     length timing.
+   - Done: AI DMA timing as ares models it, and live playback through SDL
+     (ADR-0170). SM64's audio keeps pace with the run.
+   - Next: milestone 5, retiring the declared assumptions.
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user

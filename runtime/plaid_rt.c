@@ -102,6 +102,7 @@ void plaid_gfx_task(const u8 *ram, u32 ucode, u32 ucode_data, u32 data_ptr);
 void plaid_gfx_screen(const u32 *regs);
 int plaid_gfx_closed(void);
 u32 plaid_gfx_input(void); /* buttons << 16 | stick x << 8 | stick y */
+void plaid_audio_play(const u8 *samples, u32 bytes, u32 rate); /* big-endian s16 stereo */
 #endif
 #ifdef PLAID_RSP
 /* RSP tasks run lowered microcode (ADR-0169): the IMEM texts that
@@ -114,7 +115,11 @@ static long rsp_capture;
 #endif
 /* --wav: AI buffers as 16-bit stereo PCM, the header rewritten at exit */
 static FILE *wav;
-static u32 wav_rate = 32000, wav_bytes;
+static u32 wav_bytes;
+/* AI DMA (ADR-0170), as ares models it: a two-entry FIFO whose head drains
+   one 4-byte sample per DAC period, here on the host clock. */
+static struct { u32 len[2], count, on, rate; u64 start_ns; } ai = {{0, 0}, 0, 0, 32000, 0};
+static void ai_update(void);
 static unsigned long vi_count, gfx_tasks, audio_tasks, dma_count;
 static long stop_gfx = 1; /* stop after this many graphics tasks (0: never) */
 static double run_seconds = 0;
@@ -124,7 +129,7 @@ static u32 dump_at, dump_words;
 
 static void wav_header(void) {
   u8 h[44] = "RIFF\0\0\0\0WAVEfmt \x10\0\0\0\x01\0\x02\0\0\0\0\0\0\0\0\0\x04\0\x10\0data";
-  u32 v[3] = {36 + wav_bytes, wav_rate, wav_rate * 4}, at[3] = {4, 24, 28}, i, k;
+  u32 v[3] = {36 + wav_bytes, ai.rate, ai.rate * 4}, at[3] = {4, 24, 28}, i, k;
   for (k = 0; k < 3; k++)
     for (i = 0; i < 4; i++) h[at[k] + i] = (u8)(v[k] >> (8 * i));
   for (i = 0; i < 4; i++) h[40 + i] = (u8)(wav_bytes >> (8 * i));
@@ -375,6 +380,7 @@ static void *event_pump(void *unused) {
       if (plaid_gfx_closed()) finish(0, "window closed");
 #endif
     }
+    ai_update(); /* posts the AI event when the next buffer starts */
     plaid_preempt = 1; /* timers are checked at delivery */
     if (run_seconds > 0 && now_ns() > (u64)(run_seconds * 1e9)) finish(0, "time limit");
     if (!running) { /* every guest thread is blocked: deliver here */
@@ -752,21 +758,58 @@ RT(osSpTaskStartGo) {
 
 /* ---- audio --------------------------------------------------------------- */
 
-/* libultra's rate from the NTSC VI clock: the DAC divides 48681812 Hz */
+/* Retires the buffers the DAC has finished by now. The next buffer starts
+   where the last ended, and its start raises the AI interrupt. */
+static void ai_update(void) {
+  u64 now = now_ns(), end;
+  while (ai.on && ai.count) {
+    end = ai.start_ns + (u64)(ai.len[0] / 4) * 1000000000ull / ai.rate;
+    if (now < end) break;
+    ai.start_ns = end;
+    ai.len[0] = ai.len[1];
+    if (--ai.count) post(EV_AI);
+  }
+}
+/* bytes left in the playing buffer, in whole samples */
+static u32 ai_length(void) {
+  u64 played;
+  if (!ai.count) return 0;
+  if (!ai.on) return ai.len[0];
+  played = (now_ns() - ai.start_ns) * ai.rate / 1000000000ull * 4;
+  return played < ai.len[0] ? ai.len[0] - (u32)played : 0;
+}
+/* libultra's rate from the NTSC VI clock: the DAC divides 48681812 Hz. It
+   also turns AI DMA on. */
 RT(osAiSetFrequency) {
   u32 dac = (u32)((float)48681812u / (float)arg(0) + .5f);
   if (dac < 132) return ret(0xffffffffu);
-  wav_rate = 48681812u / dac;
-  return ret(wav_rate);
+  ai_update();
+  ai.rate = 48681812u / dac;
+  if (!ai.on) { ai.on = 1; ai.start_ns = now_ns(); }
+  return ret(ai.rate);
 }
-RT(osAiGetLength) { return ret(0); }
+RT(osAiGetLength) { ai_update(); return ret(ai_length()); }
+/* full (bit 31 and bit 0), busy (bit 30), DMA on (bit 25); bits 24 and 20
+   read as set (ares) */
+RT(osAiGetStatus) {
+  ai_update();
+  return ret((ai.count > 1 ? 0x80000001u : 0) | (ai.count ? 0x40000000u : 0) | ai.on << 25 | 1u << 24 | 1u << 20);
+}
+/* -1 while the FIFO is full, as libultra's __osAiDeviceBusy check */
 RT(osAiSetNextBuffer) {
-  u32 p = v2p(arg(0)), n = arg(1) & ~3u, i;
+  u32 p = v2p(arg(0)), n = arg(1) & 0x3fff8u, i;
+  ai_update();
+  if (ai.count == 2) return ret(0xffffffffu);
+  if (p > PLAID_RAM_SIZE || n > PLAID_RAM_SIZE - p) finish(1, "AI buffer outside RAM");
+  if (!ai.count) { ai.start_ns = now_ns(); post(EV_AI); }
+  ai.len[ai.count++] = n;
   if (wav) {
-    if (p > PLAID_RAM_SIZE || n > PLAID_RAM_SIZE - p) finish(1, "AI buffer outside RAM");
     for (i = 0; i < n; i += 2) { fputc(S->ram[p + i + 1], wav); fputc(S->ram[p + i], wav); }
     wav_bytes += n;
   }
+#ifdef PLAID_RT64
+  plaid_audio_play(S->ram + p, n, ai.rate);
+#endif
   return ret(0);
 }
 
