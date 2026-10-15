@@ -34,8 +34,9 @@ Milestone 4 is running Super Mario 64 natively to its title screen. The lowered 
 | goddard dynlists, fault 1 | data read through `osMapTLB` mappings | TLB-mapped data, with D-cache index aliasing (ADR-0162) |
 | No picture | graphics tasks were only reported | RT64 bridge (ADR-0163) |
 | Stuck at "PRESS START" | controller always idle | keyboard and scripted input (ADR-0164) |
+| Half speed (33 VI/s) | Windows rounds 1 ms sleeps up to 15.6 ms | high-resolution timer and fixed VI deadlines (ADR-0166) |
 
-**SM64 now boots natively to its title screen,** drawn by RT64 (ADR-0163). With controller input (ADR-0164, keyboard or scripted `--press`) it goes past the file select into the game's intro. With `--save` the EEPROM persists (ADR-0165). Still to come: audio and speed (the current build runs at about 33 of 60 VI per second). The latest run is in [`research/sm64-first-measurement.md`](research/sm64-first-measurement.md), and what comes next is in [`docs/NEXT.md`](docs/NEXT.md).
+**SM64 now runs natively at full speed into gameplay** (59.9 VI/s, 30 fps): RT64 draws it (ADR-0163), the keyboard or a `--press` script controls it (ADR-0164), and `--save` keeps the EEPROM (ADR-0165). Audio is still to come. The latest run is in [`research/sm64-first-measurement.md`](research/sm64-first-measurement.md), and what comes next is in [`docs/NEXT.md`](docs/NEXT.md).
 
 ## Build
 

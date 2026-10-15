@@ -104,8 +104,11 @@ Next concrete steps, in order:
    - Done: controller 1 from `--press` scripts and the window keyboard
      (ADR-0164). SM64 gets past the title into the castle-grounds intro.
    - Done: EEPROM persistence with `--save` (ADR-0165).
-   - Next: speed against the ADR-0163 baseline (33 VI/s), then audio (the
-     RSP audio microcode).
+   - Done: VI at NTSC rate on Windows (ADR-0166). SM64 runs at full speed
+     (59.9 VI/s, 30 fps) into gameplay.
+   - Next: audio. Lower the RSP audio microcode the way the CPU is lowered:
+     the RSP scalar subset plus the vector unit, with semantics ported from
+     ares (ISC) and differential tests against ares's RSP.
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user

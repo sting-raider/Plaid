@@ -175,12 +175,13 @@ def graphics_bridge(exe, cc):
     rom = OUT / 'stub.z64'
     rom.write_bytes(bytes([0x80, 0x37, 0x12, 0x40]) + bytes(0x1000))
     native = build(exe, cc, 'gfx', GFX_PROGRAM, GFX_RUNTIME, ['-DPLAID_RT64', str(OUT / 'stub.c')])
-    run = subprocess.run([str(native), '--rom', str(rom), '--stop-at', 'none', '--seconds', '0.5',
+    run = subprocess.run([str(native), '--rom', str(rom), '--stop-at', 'none', '--seconds', '1',
                           '--press', '0x9000@0:100000', '--press', '0x0010@100000:1', '--dump', hex(PADS), '3'],
                          capture_output=True, text=True, timeout=30)
     lines = {k: v for line in run.stdout.splitlines() if line.startswith('{') for k, v in json.loads(line).items()}
     assert run.returncode == 0 and lines.get('stop') == 'time limit', (run.returncode, run.stdout, run.stderr)
     assert lines['stub_open'] == 0x80
+    assert 54 <= lines['vi'] <= 62, lines['vi']  # NTSC retraces in one second (ADR-0166)
     assert lines['stub_task'] == [0x80005000, 0x80005800, DL, 0xB8000000], lines['stub_task']
     screen = [COM[0], (FB & 0x1FFFFFFF) + FLD[0], COM[1], FLD[4], 0, COM[2], COM[3], COM[4], COM[5], COM[6],
               FLD[2], FLD[3], COM[7], FLD[1]]
@@ -188,7 +189,7 @@ def graphics_bridge(exe, cc):
     # pad 1: A|START (the later R press is not yet due), stick 16, -16; pad 2: errno 8 (absent)
     assert lines['words'] == [0x900010F0, 0, 0x00000800], [hex(w) for w in lines['words']]
     print('renderer bridge: VI registers from OSViMode and framebuffer, graphics task addresses and big-endian RAM, '
-          'controller 1 from scripted presses and the window')
+          'controller 1 from scripted presses and the window,', lines['vi'], 'VI retraces in one second')
 
 
 def save_file(exe, cc):

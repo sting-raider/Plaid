@@ -38,6 +38,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#include <windows.h>
+#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x2
+#endif
+#endif
 
 #define MAX_THREADS 64
 #define MAX_TIMERS 64
@@ -309,15 +315,32 @@ static void deliver_pending(void) {
   }
 }
 /* Host thread: VI retrace at 60 Hz, timers, and delivery while all block. */
+/* About 1 ms. Windows rounds nanosleep up to its ~15.6 ms timer tick, which
+   held VI to 33 Hz (ADR-0166); a high-resolution waitable timer does not. */
+static void tick_sleep(void) {
+  struct timespec d = {0, 1000000};
+#ifdef _WIN32
+  static HANDLE timer;
+  LARGE_INTEGER due;
+  if (!timer) timer = CreateWaitableTimerExW(NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+  due.QuadPart = -10000; /* relative, in 100 ns units */
+  if (timer && SetWaitableTimer(timer, &due, 0, NULL, NULL, 0) && WaitForSingleObject(timer, INFINITE) == WAIT_OBJECT_0)
+    return;
+#endif
+  nanosleep(&d, NULL);
+}
+#define VI_PERIOD_NS 16683350ull /* NTSC: 60000/1001 Hz */
 static void *event_pump(void *unused) {
-  u64 next_vi = 0;
+  u64 next_vi = 0, now;
   (void)unused;
   for (;;) {
-    struct timespec d = {0, 1000000};
-    nanosleep(&d, NULL);
+    tick_sleep();
     pthread_mutex_lock(&big);
-    if (now_ns() >= next_vi) {
-      next_vi = now_ns() + 16683350ull;
+    now = now_ns();
+    if (now >= next_vi) {
+      /* fixed deadlines, so sleep jitter does not stretch the period; a host
+         stall longer than a frame drops the missed retraces */
+      next_vi = now - next_vi < VI_PERIOD_NS ? next_vi + VI_PERIOD_NS : now + VI_PERIOD_NS;
       vi_count++;
       post(EV_VI);
 #ifdef PLAID_RT64

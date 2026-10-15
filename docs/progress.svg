@@ -426,10 +426,10 @@
 <rect x="612" y="1422" width="548" height="418" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
 <text x="632" y="1452" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">06</text>
 <text x="666" y="1453" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Compatibility</text>
-<text x="632" y="1478" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">4 integrated   /   2 partial   /   5 open</text>
+<text x="632" y="1478" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">4 integrated   /   3 partial   /   4 open</text>
 <rect x="632" y="1492" width="184.72727272727272" height="4" rx="0" fill="#58d5ab" stroke="none"/>
-<rect x="816.7272727272727" y="1492" width="92.36363636363636" height="4" rx="0" fill="#ffc66d" stroke="none"/>
-<rect x="909.0909090909091" y="1492" width="230.9090909090909" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
+<rect x="816.7272727272727" y="1492" width="138.54545454545453" height="4" rx="0" fill="#ffc66d" stroke="none"/>
+<rect x="955.2727272727273" y="1492" width="184.72727272727272" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
 <g class="milestone">
 <title>Compatibility: Synthetic discovery corpus (verified)</title>
 <text x="632" y="1521" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">✓</text>
@@ -479,10 +479,10 @@
 <text x="1140" y="1703" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
-<title>Compatibility: First native gameplay (open)</title>
-<text x="632" y="1729" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
+<title>Compatibility: First native gameplay (partial)</title>
+<text x="632" y="1729" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
 <text x="655" y="1729" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">First native gameplay</text>
-<text x="1140" y="1729" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+<text x="1140" y="1729" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
 <title>Compatibility: Representative 25-game set (open)</title>
