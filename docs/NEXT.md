@@ -39,9 +39,10 @@ Next concrete steps, in order:
    N64Recomp's reimplemented functions from n64sym signature matches. OoT:
    320 blocks, 21 guarded blockers (7 in boot code; 14 from calls into the
    region its code segment is later DMA'd over).
-   **Next:** lower `C.cond.fmt`/`BC1x` and `LWL/LWR/SWL/SWR` (port the
-   semantics from N64Recomp `operations.cpp` and the N64ModernRuntime
-   helpers, then differential-test against ares). After that, the
+   Done: unaligned loads and stores (ADR-0134).
+   **Next:** lower `C.cond.fmt`/`BC1x` from the MIPS condition rule (N64Recomp
+   marks its unordered compares TODO; they are wrong for NaN), checked
+   against ares. After that, the
    executable-DMA boundary for the OoT code segment.
 4. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
    boot-segment discovery from the real entry point, then a local-only recall

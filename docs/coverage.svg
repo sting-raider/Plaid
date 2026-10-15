@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 686" width="840" height="686" role="img" aria-label="Plaid coverage maps">
 <style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}.title{font-size:17px;fill:#1f2328}.cell{font-size:12px;fill:#fff;paint-order:stroke;stroke:#0d1117;stroke-width:2px;stroke-opacity:.45}@media (prefers-color-scheme:dark){.title{fill:#e6edf3}}</style>
-<text x="2" y="22" class="title">VR4300 instructions*: 40.7% (85/209)</text>
+<text x="2" y="22" class="title">VR4300 instructions*: 45.0% (94/209)</text>
 <text x="2" y="378" class="title">Milestones*: 30 verified, 19 partial (69)</text>
 <rect x="0.0" y="30.0" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.df.d (open)</title></rect>
 <rect x="33.3" y="30.0" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.d (open)</title></rect>
@@ -93,26 +93,26 @@
 <rect x="233.1" y="183.2" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lb (done)</title></rect>
 <rect x="270.9" y="183.2" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lbu (done)</title></rect>
 <rect x="308.7" y="183.2" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ld (done)</title></rect>
-<rect x="346.4" y="183.2" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lh (done)</title></rect>
-<rect x="384.2" y="183.2" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lhu (done)</title></rect>
-<rect x="233.1" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lw (done)</title></rect>
-<rect x="270.9" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sb (done)</title></rect>
-<rect x="308.7" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sd (done)</title></rect>
-<rect x="346.4" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sh (done)</title></rect>
-<rect x="384.2" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sw (done)</title></rect>
-<rect x="233.1" y="241.9" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ldl (open)</title></rect>
-<rect x="270.9" y="241.9" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ldr (open)</title></rect>
-<rect x="308.7" y="241.9" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ll (open)</title></rect>
-<rect x="346.4" y="241.9" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lld (open)</title></rect>
-<rect x="384.2" y="241.9" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwl (open)</title></rect>
-<rect x="233.1" y="271.3" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwr (open)</title></rect>
-<rect x="270.9" y="271.3" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwu (open)</title></rect>
-<rect x="308.7" y="271.3" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sc (open)</title></rect>
-<rect x="346.4" y="271.3" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: scd (open)</title></rect>
-<rect x="384.2" y="271.3" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sdl (open)</title></rect>
-<rect x="233.1" y="300.6" width="63.0" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sdr (open)</title></rect>
-<rect x="296.1" y="300.6" width="63.0" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: swl (open)</title></rect>
-<rect x="359.0" y="300.6" width="63.0" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: swr (open)</title></rect>
+<rect x="346.4" y="183.2" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ldl (done)</title></rect>
+<rect x="384.2" y="183.2" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ldr (done)</title></rect>
+<rect x="233.1" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lh (done)</title></rect>
+<rect x="270.9" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lhu (done)</title></rect>
+<rect x="308.7" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lw (done)</title></rect>
+<rect x="346.4" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwl (done)</title></rect>
+<rect x="384.2" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwr (done)</title></rect>
+<rect x="233.1" y="241.9" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwu (done)</title></rect>
+<rect x="270.9" y="241.9" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sb (done)</title></rect>
+<rect x="308.7" y="241.9" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sd (done)</title></rect>
+<rect x="346.4" y="241.9" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sdl (done)</title></rect>
+<rect x="384.2" y="241.9" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sdr (done)</title></rect>
+<rect x="233.1" y="271.3" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sh (done)</title></rect>
+<rect x="270.9" y="271.3" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sw (done)</title></rect>
+<rect x="308.7" y="271.3" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: swl (done)</title></rect>
+<rect x="346.4" y="271.3" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: swr (done)</title></rect>
+<rect x="384.2" y="271.3" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ll (open)</title></rect>
+<rect x="233.1" y="300.6" width="63.0" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lld (open)</title></rect>
+<rect x="296.1" y="300.6" width="63.0" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sc (open)</title></rect>
+<rect x="359.0" y="300.6" width="63.0" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: scd (open)</title></rect>
 <rect x="233.1" y="183.2" width="188.9" height="146.8" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="237.1" y="196.2" class="cell">Load/store</text>
 <rect x="422.0" y="30.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: beq (done)</title></rect>

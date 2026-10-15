@@ -363,7 +363,7 @@ fn allowed_static_effect(word: u32, pc: crate::GuestAddr, guarded_ram: bool) -> 
                 word & 63,
                 4 | 6 | 7 | 16..=20 | 22..=32 | 34 | 42..=44 | 46 | 47 | 56 | 58..=60 | 62 | 63
             ),
-            8 | 10 | 11 | 24 | 32 | 33 | 35 | 36 | 37 | 40 | 41 | 43 | 55 | 63 => true,
+            8 | 10 | 11 | 24 | 26 | 27 | 32..=39 | 40..=46 | 55 | 63 => true,
             _ => false,
         }
     {
@@ -993,7 +993,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     }
     if scope == Scope::DeclaredStaticImagesGuardedRam {
         assumptions.push(
-            "Data loads/stores are naturally aligned RDRAM accesses through KSEG0/KSEG1, never reach executable bytes, and use only one of KSEG0/KSEG1 per 16-byte line; a native artifact checks every store and access and aborts on violation, with no fallback execution."
+            "Data loads/stores are naturally aligned RDRAM accesses through KSEG0/KSEG1 (unaligned LWL/LWR/LDL/LDR read their containing aligned word, and SWL/SWR/SDL/SDR write single bytes), never reach executable bytes, and use only one of KSEG0/KSEG1 per 16-byte line; a native artifact checks every store and access and aborts on violation, with no fallback execution."
                 .into(),
         );
         if !tables.is_empty() {

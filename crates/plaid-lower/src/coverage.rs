@@ -123,7 +123,8 @@ mod tests {
     fn coverage_counts_real_vr4300_forms_and_lowers_the_integer_core() {
         let c = super::isa_coverage();
         assert!(c["addu"] && c["jr"] && c["ld"] && c["mtc1"]);
-        assert!(!c["eret"] && !c["add.s"] && !c["lwl"]);
+        assert!(c["lwl"] && c["sdr"] && c["lwu"]);
+        assert!(!c["eret"] && !c["add.s"] && !c["c.eq.s"]);
         assert!(!c.contains_key("nop") && !c.contains_key("movn"));
     }
 }
