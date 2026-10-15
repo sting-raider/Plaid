@@ -4341,3 +4341,54 @@ Result:
   game's own rate), with no fault. The game reaches gameplay: Mario in the
   castle grounds with the HUD up. The native code keeps up without any
   tuning.
+
+## ADR-0167: RSP scalar microcode lowers to C
+
+Context: SM64 is silent. Its audio thread sends RSP audio tasks, and the
+runtime completes them at once without running them. The RSP runs
+microcode that the game ships, so audio needs that microcode as native
+code, the same way the CPU code is native. SM64's audio microcode
+(`rspAspMainStart`, 0xe20 bytes at IMEM 0x080) has 489 scalar, 37 COP0
+and 211 vector-unit (COP2) instructions, plus 108 LWC2 and 59 SWC2.
+
+Decision: `plaid lower-rsp <rom> <offset> <size> <imem> <name> <out.c>
+[--raw]` lowers a microcode text to `int plaid_rsp_<name>(plaid_rsp *r, u32
+pc)`. It runs from `pc` until the microcode halts (returns 0) or faults
+(returns 1). This ADR covers the scalar unit and COP0; any other
+instruction, the vector unit included, is a lowering error.
+- **Closed control flow by construction.** IMEM is 4 KiB and its text is
+  fixed: DMA into IMEM faults. So every text word gets a label, and
+  `jr`/`jalr` dispatch through a switch over exactly those labels. A target
+  outside the text, a misaligned target, or running off the end faults 3. A
+  transfer in a delay slot is a lowering error.
+- **Semantics from pinned ares** (ISC, `ares/n64/rsp`): 32-bit registers,
+  ADD/SUB without overflow traps, DMEM accesses byte-wise big-endian with
+  each byte address wrapping at 4 KiB, and 12-bit link and branch
+  addresses. BREAK sets broken and halted.
+- **COP0** follows ares `io.cpp`: DMA addresses and lengths, SP_STATUS with
+  its signals and halt, and the semaphore. Writing halt stops the
+  microcode. DMA completes as soon as it is started, so the busy and full
+  bits read 0. DMA into IMEM faults 2, DMA outside RDRAM faults 1, and the
+  RDP command registers (COP0 8..15) fault 4 until a microcode needs them.
+
+The host runs the lowered function on the RSP state that the task names.
+No RSP interpreter is linked.
+
+Result: `spikes/097-rsp-slice` assembles microcode at IMEM 0x080. Each
+program is lowered, compiled, and run on pinned ares (9408cb43) from the
+same IMEM, DMEM and RDRAM images. The final PC, the broken flag, all 32
+registers, all of DMEM and RDRAM 0..0x2000 match for five programs:
+- **alu**: every scalar ALU and shift form, writes to `$zero`, and
+  sign-extended SLTIU.
+- **mem**: every load and store width, unaligned addresses, and DMEM wrap.
+- **branch**: every branch kind taken and not taken, links, J/JAL,
+  JR/JALR through computed addresses, and a loop.
+- **dma**: row DMA with a skip in both directions, the DMA registers read
+  back, the semaphore, and SP_STATUS signals set and cleared.
+- **halt**: the microcode halts itself through SP_STATUS.
+
+A jump outside the text faults 3, DMA into IMEM faults 2, DMA beyond RDRAM
+faults 1, and an RDP register faults 4. Unit tests cover the closed
+dispatch, refusing vector and unknown instructions, and delay-slot errors.
+On SM64's audio microcode the lowering stops at the first vector
+instruction, a `vxor` at IMEM 0x1f0. The vector unit is ADR-0168.
