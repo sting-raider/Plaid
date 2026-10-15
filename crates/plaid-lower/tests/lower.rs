@@ -53,11 +53,11 @@ fn open_programs_are_rejected() {
 }
 
 #[test]
-fn instructions_outside_the_lowered_subset_are_rejected() {
-    // bltzal zero,0x10 is admitted by the scope but not lowered; never emulated.
-    let words = [[0x0410_0003, 0, 0, 0].as_slice(), &HALT].concat();
+fn instructions_outside_the_model_are_rejected() {
+    // mtc0 a0,Compare stays behind the runtime boundary; never emulated.
+    let words = [[0x4084_5800, 0, 0, 0].as_slice(), &HALT].concat();
     let err = lower(&words, 0x8000_0010).unwrap_err();
-    assert!(err.contains("outside the lowered subset"), "{err}");
+    assert!(err.contains("not CLOSED"), "{err}");
 }
 
 #[test]

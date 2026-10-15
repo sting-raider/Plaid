@@ -23,8 +23,8 @@
 <text x="770.9" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-14</text>
 <text x="890.0" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-15</text>
 <path d="M56.0,80.5 L175.1,80.5 L294.3,80.5 L413.4,80.5 L532.6,80.5 L651.7,80.5 L770.9,80.5 L890.0,80.5" fill="none" stroke="#8b9bb0" stroke-width="1.5" stroke-dasharray="5 4"/>
-<path d="M56.0,348.0 L175.1,348.0 L294.3,348.0 L413.4,348.0 L532.6,348.0 L651.7,348.0 L770.9,348.0 L890.0,124.0 L890.0,348.0 L56.0,348.0 Z" fill="#4f9cf7" fill-opacity="0.12"/>
-<path d="M56.0,348.0 L175.1,348.0 L294.3,348.0 L413.4,348.0 L532.6,348.0 L651.7,348.0 L770.9,348.0 L890.0,124.0" fill="none" stroke="#4f9cf7" stroke-width="2.5"/>
+<path d="M56.0,348.0 L175.1,348.0 L294.3,348.0 L413.4,348.0 L532.6,348.0 L651.7,348.0 L770.9,348.0 L890.0,97.1 L890.0,348.0 L56.0,348.0 Z" fill="#4f9cf7" fill-opacity="0.12"/>
+<path d="M56.0,348.0 L175.1,348.0 L294.3,348.0 L413.4,348.0 L532.6,348.0 L651.7,348.0 L770.9,348.0 L890.0,97.1" fill="none" stroke="#4f9cf7" stroke-width="2.5"/>
 <circle cx="56.0" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-08: Lowered to native C 0</title></circle>
 <circle cx="175.1" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-09: Lowered to native C 0</title></circle>
 <circle cx="294.3" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-10: Lowered to native C 0</title></circle>
@@ -32,7 +32,7 @@
 <circle cx="532.6" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-12: Lowered to native C 0</title></circle>
 <circle cx="651.7" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-13: Lowered to native C 0</title></circle>
 <circle cx="770.9" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-14: Lowered to native C 0</title></circle>
-<circle cx="890.0" cy="124.0" r="3.5" fill="#4f9cf7"><title>2026-10-15: Lowered to native C 175</title></circle>
+<circle cx="890.0" cy="97.1" r="3.5" fill="#4f9cf7"><title>2026-10-15: Lowered to native C 196</title></circle>
 <path d="M294.3,276.3 L413.4,276.3 L532.6,276.3 L651.7,276.3 L770.9,264.8 L890.0,259.7" fill="none" stroke="#3f8f74" stroke-width="1.5" stroke-dasharray="5 4"/>
 <path d="M294.3,328.8 L413.4,327.5 L532.6,327.5 L651.7,327.5 L770.9,316.0 L890.0,309.6 L890.0,348.0 L294.3,348.0 Z" fill="#58d5ab" fill-opacity="0.12"/>
 <path d="M294.3,328.8 L413.4,327.5 L532.6,327.5 L651.7,327.5 L770.9,316.0 L890.0,309.6" fill="none" stroke="#58d5ab" stroke-width="2.5"/>
@@ -43,7 +43,7 @@
 <circle cx="770.9" cy="316.0" r="3.5" fill="#58d5ab"><title>2026-10-14: Milestones verified 25</title></circle>
 <circle cx="890.0" cy="309.6" r="3.5" fill="#58d5ab"><title>2026-10-15: Milestones verified 30</title></circle>
 <text x="900" y="84.5" fill="#8b9bb0" font-size="13" font-weight="600" font-family="Segoe UI,Arial,sans-serif">VR4300 forms decoded 209</text>
-<text x="900" y="128.0" fill="#4f9cf7" font-size="13" font-weight="600" font-family="Segoe UI,Arial,sans-serif">Lowered to native C 175</text>
+<text x="900" y="101.1" fill="#4f9cf7" font-size="13" font-weight="600" font-family="Segoe UI,Arial,sans-serif">Lowered to native C 196</text>
 <text x="900" y="263.7" fill="#3f8f74" font-size="13" font-weight="600" font-family="Segoe UI,Arial,sans-serif">Milestones declared 69</text>
 <text x="900" y="313.6" fill="#58d5ab" font-size="13" font-weight="600" font-family="Segoe UI,Arial,sans-serif">Milestones verified 30</text>
 </svg>

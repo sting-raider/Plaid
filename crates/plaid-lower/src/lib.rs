@@ -23,7 +23,7 @@ typedef uint8_t u8; typedef uint32_t u32; typedef int32_t s32;
 typedef uint64_t u64; typedef int64_t s64;
 #define PLAID_RAM_SIZE 0x800000u
 typedef struct {
-  u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 fcsr; u32 pc; u32 fault; u32 fault_pc;
+  u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 fcsr; u32 llbit; u32 pc; u32 fault; u32 fault_pc;
   u8 ram[PLAID_RAM_SIZE];
   u8 line_segment[PLAID_RAM_SIZE / 16]; /* 0 untouched, 1 KSEG0, 2 KSEG1 */
   u8 load_ok[64]; /* declared load verified in RAM (ADR-0136) */
@@ -42,7 +42,8 @@ typedef struct { u32 start, end; int load; } plaid_range;
       operand, an out-of-range conversion, or an enabled FPU exception;
    8: code of a declared load entered while RAM does not hold its declared
       bytes. Executable bytes of a load not yet verified may be written;
-   9: a BREAK was reached (its exception handler is not modeled). */
+   9: a BREAK was reached (its exception handler is not modeled);
+   10: a conditional trap was taken (its exception handler is not modeled). */
 static inline int plaid_fault(plaid_state *s, u32 pc, u32 code) {
   s->fault = code; s->fault_pc = pc; return 1;
 }
@@ -299,7 +300,9 @@ fn set(d: u32, expr: String) -> String {
 fn is_control(word: u32) -> bool {
     match word >> 26 {
         0 => matches!(word & 63, 8 | 9),
-        1..=7 | 20..=23 => true,
+        // REGIMM: branches and branch-and-link; the traps are not control.
+        1 => matches!((word >> 16) & 31, 0..=3 | 16..=19),
+        2..=7 | 20..=23 => true,
         17 => (word >> 21) & 31 == 8,
         _ => false,
     }
@@ -341,7 +344,44 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
             set(d, wrap.into())
         )
     };
+    // Conditional traps abort (fault 10) where the VR4300 would raise.
+    let cond_trap = |cond: String| format!("if ({cond}) return plaid_fault(s, 0x{pc:08x}u, 10);");
+    let ll = |size: u32, ext: &str| {
+        format!(
+            "{{ u64 v; if (plaid_load(s, {addr}, {size}, 0x{pc:08x}u, &v)) return 1; {} s->llbit = 1; }}",
+            set(rt, format!("(u64)(s64)({ext})v"))
+        )
+    };
+    let sc = |size: u32| {
+        format!(
+            "if (s->llbit) {{ if (plaid_store(s, {addr}, {size}, {b}, 0x{pc:08x}u)) return 1; {} }} else {{ {} }}",
+            set(rt, "1".into()),
+            set(rt, "0".into())
+        )
+    };
     Ok(match (word >> 26, word & 63) {
+        (0, 15) => String::new(),
+        (0, 48) => cond_trap(format!("(s64){a} >= (s64){b}")),
+        (0, 49) => cond_trap(format!("{a} >= {b}")),
+        (0, 50) => cond_trap(format!("(s64){a} < (s64){b}")),
+        (0, 51) => cond_trap(format!("{a} < {b}")),
+        (0, 52) => cond_trap(format!("{a} == {b}")),
+        (0, 54) => cond_trap(format!("{a} != {b}")),
+        (1, _) if matches!(rt, 8..=12 | 14) => {
+            let (x, y) = (format!("(s64){a}"), format!("(s64){simm}"));
+            cond_trap(match rt {
+                8 => format!("{x} >= {y}"),
+                9 => format!("{a} >= (u64){y}"),
+                10 => format!("{x} < {y}"),
+                11 => format!("{a} < (u64){y}"),
+                12 => format!("{x} == {y}"),
+                _ => format!("{x} != {y}"),
+            })
+        }
+        (48, _) => ll(4, "s32"),
+        (52, _) => ll(8, "s64"),
+        (56, _) => sc(4),
+        (60, _) => sc(8),
         (0, 0) => set(rd, format!("SX32((u32){b} << {sa})")),
         (0, 2) => set(rd, format!("SX32((u32){b} >> {sa})")),
         (0, 3) => set(rd, format!("SX32((s64){b} >> {sa})")),
@@ -649,6 +689,23 @@ impl Lowerer<'_> {
             )),
             (1, _, 0) => conditional(format!("(s64){a} < 0")),
             (1, _, 1) => conditional(format!("(s64){a} >= 0")),
+            // BLTZAL BGEZAL (likely: 18, 19) link first, then test rs, as ares.
+            (1, _, 16..=19) => {
+                let test = format!("(s64){a} {} 0", if rt & 1 == 0 { "<" } else { ">=" });
+                let call = self.call(branch, after, pc)?;
+                let link = set(31, sx(after));
+                Ok(if rt & 2 == 0 {
+                    format!(
+                        "{{ {link} int t = {test}; {slot} if (t) {{ {call} }} }} {}",
+                        self.fallthrough(after, pc)
+                    )
+                } else {
+                    format!(
+                        "{{ {link} int t = {test}; if (t) {{ {slot} {call} }} }} {}",
+                        self.fallthrough(after, pc)
+                    )
+                })
+            }
             // A tail call into the runtime returns to $ra, which must be ours.
             (2, _, _) if self.runtime.contains_key(&jump) => Ok(format!(
                 "{slot} {{ int r = plaid_rt_{}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;",

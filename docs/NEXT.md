@@ -63,8 +63,9 @@ Next concrete steps, in order:
    against a locally built decomp map. Keep ROM bytes, maps and traces
    ignored.
 5. **Lowered subset growth** pulled by SM64: done for `ROUND/CEIL/FLOOR`
-   and the `.L` conversions (ADR-0143; 175 of 209 forms). The rest are
-   COP0, traps, `SYSCALL/ERET`, `LL/SC` and `CACHE`, which stay behind the
+   and the `.L` conversions (ADR-0143), then branch-and-link, `LL/SC`,
+   `SYNC` and conditional traps (ADR-0145): 196 of 209 forms. The other 13
+   are COP0, TLB, `ERET`, `SYSCALL` and `CACHE`, which stay behind the
    runtime boundary unless a ROM needs them in guest code.
 6. **Known-library evidence**: done for runtime boundaries (ADR-0133); PR #50's
    source-bound candidate model is still open for other uses.

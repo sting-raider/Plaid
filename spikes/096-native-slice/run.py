@@ -162,6 +162,28 @@ def fround():
     assert off[0] <= 0x100
     return out + DONE
 
+ll, lld, sc, scd = map(mem, (48, 52, 56, 60))
+
+def system():
+    # LL/SC, SYNC, untaken conditional traps and REGIMM branch-and-link (ADR-0145).
+    rt_trap = lambda f: (lambda rs, rt: R(f, 0, rs, rt))
+    tge, tgeu, tlt, tltu, teq, tne = map(rt_trap, (48, 49, 50, 51, 52, 54))
+    im_trap = lambda k: (lambda rs, imm: I(1, k, rs, imm))
+    tgei, tgeiu, tlti, tltiu, teqi, tnei = map(im_trap, (8, 9, 10, 11, 12, 14))
+    link = lambda k: (lambda rs, l: B(1, rs, k, l))
+    bltzal, bgezal, bltzall, bgezall = map(link, (16, 17, 18, 19))
+    return [lui(gp, 0x8000), ori(gp, gp, 0x1000), addiu(t0, zero, 7), sw(t0, 0, gp),
+        addiu(t2, zero, 99), sc(t2, 0, gp),
+        ll(t3, 0, gp), addiu(t3, t3, 1), sc(t3, 0, gp),
+        addiu(t4, zero, -3), sd(t4, 8, gp), lld(t5, 8, gp), daddiu(t5, t5, 10), scd(t5, 8, gp), R(15),
+        addiu(s0, zero, 1), addiu(s1, zero, 2), addiu(s2, zero, -1),
+        tge(s0, s1), tgeu(s0, s1), tlt(s1, s0), tltu(s1, s0), teq(s0, s1), tne(s0, s0),
+        lui(s3, 1), tgei(s0, 5), tgeiu(s0, -1), tgeiu(s3, -1), tlti(s0, -4), tltiu(s0, 0), tltiu(s2, -1), teqi(s0, 3), tnei(s0, 1),
+        bgezal(zero, 'f'), nop, mfhi(t6), bltzal(s0, 'f'), addiu(t7, t7, 1), addu(t8, ra, zero),
+        bgezall(s2, 'f'), addiu(v1, v1, 100), bltzall(s2, 'f'), addiu(v1, v1, 1),
+        bgezal(s0, 'f'), addiu(v1, v1, 10), *DONE,
+        'f', addiu(v0, v0, 1), jr(ra), nop]
+
 def label_pcs(items):
     labels, pc = {'exit': EXIT}, BASE
     for x in items:
@@ -262,6 +284,7 @@ PROGRAMS = {
     'fcompare': fcompare(),
     'farith': farith(),
     'fround': fround(),
+    'system': system(),
     'load': load_program(),
     # GCC's divide check: BREAK 7 guarded by a divisor test that is not taken.
     'divcheck': [addiu(t0, zero, 21), addiu(t1, zero, 4), div(t0, t1), bne(t1, zero, 'ok'), nop,
@@ -352,6 +375,8 @@ RUNTIME = {'boundary': [('sum', [])], 'callback': [('spawn', ['a0'])]}
 LOADS = {'load': load_program(), 'load_early': load_program(early=True), 'load_patch': load_program(patch=True)}
 # Jump-table bytes are store-protected like code: a write must fault 2.
 TABLE_WRITE = jump_table([lui(s2, 0x8000), lambda pc, L: I(43, zero, s2, L['tbl'])])
+# A taken conditional trap raises an unmodeled exception: fault 10.
+TRAP = [addiu(t0, zero, 0), R(52, 0, t0, zero), *DONE]
 # A reached BREAK raises an unmodeled exception: fault 9.
 BREAK = [addiu(t1, zero, 0), bne(t1, zero, 'ok'), nop, R(13, 0, 0, 0, 7), 'ok', *DONE]
 # An enabled FPU exception (inexact on 1/3) and an out-of-range CVT.W: fault 7.
@@ -370,7 +395,7 @@ def windows():
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
     OUT.mkdir(parents=True, exist_ok=True)
     progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN, overflow=OVERFLOW, table_write=TABLE_WRITE, fpu_nan=FPU_NAN,
-        fpu_enabled=FPU_ENABLED, fpu_range=FPU_RANGE, fpu_round_range=FPU_ROUND_RANGE, load_early=LOADS['load_early'], load_patch=LOADS['load_patch'], break_reached=BREAK)
+        fpu_enabled=FPU_ENABLED, fpu_range=FPU_RANGE, fpu_round_range=FPU_ROUND_RANGE, load_early=LOADS['load_early'], load_patch=LOADS['load_patch'], break_reached=BREAK, trap_taken=TRAP)
     for name, items in progs.items():
         (OUT / f'{name}.bin').write_bytes(assemble(items))
         extra = []
@@ -398,13 +423,13 @@ def windows():
         oracle = json.loads((OUT / f'{name}-oracle.json').read_text())
         assert json.loads(native.stdout) == oracle, (name, native.stdout, oracle)
         results[name] = hashlib.sha256(json.dumps(oracle, sort_keys=True).encode()).hexdigest()
-    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('fpu_enabled', 7), ('fpu_range', 7), ('fpu_round_range', 7), ('load_early', 8), ('load_patch', 2), ('break_reached', 9)):
+    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('fpu_enabled', 7), ('fpu_range', 7), ('fpu_round_range', 7), ('load_early', 8), ('load_patch', 2), ('break_reached', 9), ('trap_taken', 10)):
         bad = subprocess.run([str(OUT / f'{name}-native.exe')], capture_output=True, text=True)
         assert bad.returncode == 6 and json.loads(bad.stdout)['fault'] == fault, (name, bad.stdout)
     receipt = dict(format='plaid-native-slice-receipt-v0', ares_revision=builder().REV, compiler=Path(cc).name,
-        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, fpu_enabled=7, fpu_range=7, fpu_round_range=7, load_early=8, load_patch=2, break_reached=9), interpreter_linked=False, native_complete=False)
+        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, fpu_enabled=7, fpu_range=7, fpu_round_range=7, load_early=8, load_patch=2, break_reached=9, trap_taken=10), interpreter_linked=False, native_complete=False)
     (OUT / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
-    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, enabled-FPU-exception, out-of-range-conversion, out-of-range-rounding, early-load, loaded-code-store and BREAK programs fail closed')
+    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, enabled-FPU-exception, out-of-range-conversion, out-of-range-rounding, early-load, loaded-code-store, BREAK and trap programs fail closed')
     print(json.dumps(receipt, sort_keys=True))
 
 def builder():

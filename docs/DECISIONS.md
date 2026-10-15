@@ -3479,3 +3479,43 @@ scores a synthetic map with one function never discovered: recall is 2/3,
 the target is missed and the missed name is reported. Restricting the range
 excludes that function and meets the target. An input with no code symbols
 is rejected.
+
+## ADR-0145: Branch-and-link, LL/SC, SYNC and conditional traps
+
+Context: 21 of the 34 unlowered forms are ordinary guest-CPU instructions,
+not runtime-boundary ones: `BLTZAL BGEZAL` and their likely forms, `LL LLD
+SC SCD`, `SYNC`, and the twelve conditional traps (`TGE TGEU TLT TLTU TEQ
+TNE` and their immediate forms).
+
+Decision, following pinned ares:
+
+- Branch-and-link writes `$ra` = pc + 8 whether or not the branch is taken,
+  then tests `rs`, so an `rs` of `$ra` sees the new value. A taken branch is
+  a call with the ADR-0127 return closure. The likely forms run the delay
+  slot only when the branch is taken. Discovery and the solver already
+  handled these forms as calls; only lowering was missing.
+- `LL`/`LLD` load and set an LLbit in the native state. `SC`/`SCD` store and
+  write 1 only when the LLbit is set, and otherwise write 0 and store
+  nothing. Only `ERET` clears the bit in ares, and `ERET` is outside the
+  model. The address that ares records for `LL` is visible only through
+  COP0 `LLAddr`, which is also outside the model. The guarded scope admits
+  these as guarded memory accesses.
+- `SYNC` is a no-op.
+- Conditional traps are discharged under the guarded scope like `BREAK`
+  (ADR-0138), with their own assumption: they are never taken. Native code
+  checks each one and aborts with the new fault 10. Discovery now continues
+  past a conditional trap, because its not-taken path falls through. The
+  `exception_or_unsupported_instruction` fact is still recorded, so other
+  scopes stay blocked. The immediate unsigned forms compare against the
+  sign-extended immediate.
+
+Result: spike096 `system` matches pinned ares. It covers `SC` before any
+`LL`, an `LL/SC` pair, `LLD/SCD`, `SYNC`, every trap form untaken, and five
+branch-and-link cases: `bal`, untaken but linking, likely untaken with its
+slot skipped, likely taken, and conditional taken. `trap_taken` faults 10.
+Four mutations each fail spike096: `SC` ignoring the LLbit, a
+zero-extended `TGEIU` immediate, the likely slot always run, and no link
+when untaken. `tests/traps.rs` checks the fallthrough and that only the
+guarded scope discharges the trap. ISA coverage is 196 of 209. The 13
+forms left are COP0, TLB, `ERET`, `SYSCALL` and `CACHE`. OoT is unchanged
+at 29 guarded blockers.
