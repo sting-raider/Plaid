@@ -26,7 +26,7 @@ typedef uint64_t u64; typedef int64_t s64;
 #define PLAID_RAM_SIZE 0x800000u
 /* one TLB entry as TLBWI writes it: PageMask, EntryHi, EntryLo0/1 (ADR-0162) */
 typedef struct { u32 mask, hi, lo[2]; } plaid_tlb_entry;
-typedef struct {
+typedef struct plaid_state_s {
   u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 fcsr; u32 llbit; u32 pc; u32 fault; u32 fault_pc;
   u8 ram[PLAID_RAM_SIZE];
   /* per 16-byte line: 0 untouched, 1 cached at its physical index (KSEG0),
@@ -37,6 +37,10 @@ typedef struct {
      bytes of declared load n; built once before the first guarded write */
   u8 prot[PLAID_RAM_SIZE / 4]; u8 prot_ready;
   plaid_tlb_entry tlb[32]; /* written by the runtime's osMapTLB family */
+  /* uncached access to RCP memory, registers and the PI buses (physical
+     0x04000000-0x1fffffff), set by the runtime: 0 done, else fault 1;
+     NULL leaves them all faulting (ADR-0177) */
+  int (*io)(struct plaid_state_s *s, u32 p, u32 size, int write, u64 *value);
 } plaid_state;
 /* A host runtime with preemptive scheduling builds with PLAID_SAFEPOINTS and
    defines both names; every loop header checks plaid_preempt (ADR-0159). */
@@ -52,8 +56,9 @@ typedef struct { u32 start, end; int load; } plaid_range;
 #define SX32(v) ((u64)(s64)(s32)(u32)(v))
 /* fault 1: address/alignment outside the supported model; 2: store to
    executable bytes (declared immutable); 3: transfer without a proven target;
-   4: one RDRAM line accessed through both KSEG0 and KSEG1, whose result
-   depends on write-back D-cache state this coherent model does not track;
+   4: one RDRAM line accessed uncached (KSEG1) after a cached access, or
+   cached at two virtual indexes, whose result depends on write-back
+   D-cache state this coherent model does not track;
    5: a return whose $ra is not the continuation of the call that entered
    its function (the checked call/return assumption);
    6: an overflow-trapping add/subtract that would raise an exception;
@@ -131,8 +136,14 @@ static inline int plaid_addr(plaid_state *s, u64 va, u32 size, u32 pc, int write
   } else if (plaid_tlb(s, v, write, &p, &seg)) {
     return plaid_fault(s, pc, 1);
   }
-  if (p > PLAID_RAM_SIZE - size) return plaid_fault(s, pc, 1);
-  if (s->line_segment[p >> 4] && s->line_segment[p >> 4] != seg) return plaid_fault(s, pc, 4);
+  if (p > PLAID_RAM_SIZE - size) {
+    if (s->io && seg == 2 && p >= 0x04000000u && p < 0x20000000u) { *out = p; return 2; }
+    return plaid_fault(s, pc, 1);
+  }
+  /* only cached accesses fill the D-cache, so a line used only uncached so
+     far may become cached; once cached, any other class faults (ADR-0176) */
+  if (s->line_segment[p >> 4] && s->line_segment[p >> 4] != seg && s->line_segment[p >> 4] != 2)
+    return plaid_fault(s, pc, 4);
   s->line_segment[p >> 4] = seg;
   if (write && plaid_protected(s, p, size, pc)) return plaid_fault(s, pc, 2);
   *out = p; return 0;
@@ -309,13 +320,17 @@ int plaid_runtime_write(plaid_state *s, u32 p, u32 size, u32 pc) {
 
 const HELPERS_TAIL: &str = r#"static inline int plaid_load(plaid_state *s, u64 va, u32 size, u32 pc, u64 *value) {
   u32 p, i; u64 x = 0;
-  if (plaid_addr(s, va, size, pc, 0, &p)) return 1;
+  int r = plaid_addr(s, va, size, pc, 0, &p);
+  if (r == 2) return s->io(s, p, size, 0, value) ? plaid_fault(s, pc, 1) : 0;
+  if (r) return 1;
   for (i = 0; i < size; i++) x = x << 8 | s->ram[p + i];
   *value = x; return 0;
 }
 static inline int plaid_store(plaid_state *s, u64 va, u32 size, u64 value, u32 pc) {
   u32 p, i;
-  if (plaid_addr(s, va, size, pc, 1, &p)) return 1;
+  int r = plaid_addr(s, va, size, pc, 1, &p);
+  if (r == 2) return s->io(s, p, size, 1, &value) ? plaid_fault(s, pc, 1) : 0;
+  if (r) return 1;
   for (i = 0; i < size; i++) s->ram[p + i] = (u8)(value >> (8 * (size - 1 - i)));
   return 0;
 }

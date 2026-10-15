@@ -325,6 +325,38 @@ def audio_dma(exe, cc):
           'raises the AI event per buffer start, and feeds the WAV file and host audio')
 
 
+IO_PROGRAM = [
+    *li(A.sp, 0x80007F00),
+    *log_word(0xA4000040),  # DMEM holds ROM 0x40-0xfff after boot
+    *log_word(0xA4600010),  # PI_STATUS: idle
+    *log_word(0xA4600014),  # PI_BSD_DOM1_LAT from the header
+    *poke(0xA460001C, 0x1FF), *log_word(0xA460001C),  # PI_BSD_DOM1_PGS keeps four bits
+    *poke(0xA4000100, 0x12345678), *log_word(0xA4000100),
+    *log_word(0xA6001010),  # no 64DD: open bus
+    *log_word(0xB0000040),  # cartridge ROM
+    *log_word(0xA8000000),  # SRAM is not modelled: fault 1
+    *A.DONE,
+]
+CACHED_IO_PROGRAM = [*li(A.sp, 0x80007F00), *log_word(0x84000040), *A.DONE]
+
+
+def rcp_io(exe, cc):
+    """Uncached CPU words reach SP memory and the PI as pinned ares answers
+    them (ADR-0177); unmodelled devices and cached access fail closed."""
+    rom = OUT / 'io.z64'
+    rom.write_bytes(bytes([0x80, 0x37, 0x12, 0x40]) + bytes(0x3C) + bytes([0xCA, 0xFE, 0xF0, 0x0D]) + bytes(0xFBC))
+    for name, program, words in (('io', IO_PROGRAM, [0xCAFEF00D, 0, 0x40, 0xF, 0x12345678, 0x10101010, 0xCAFEF00D, 0]),
+                                 ('io_cached', CACHED_IO_PROGRAM, [0])):
+        native = build(exe, cc, name, program, [])
+        run = subprocess.run([str(native), '--rom', str(rom), '--dump', hex(LOG), str(len(words))],
+                             capture_output=True, text=True, timeout=30)
+        lines = {k: v for line in run.stdout.splitlines() if line.startswith('{') for k, v in json.loads(line).items()}
+        assert lines.get('stop') == 'guest fault' and lines['fault'] == 1, (run.stdout, run.stderr)
+        assert lines.get('words', []) == words, [hex(w) for w in lines.get('words', [])]
+    print('RCP I/O: DMEM boot bytes, idle PI status, masked PI timing, open bus and ROM words as ares; '
+          'SRAM and cached RCP access fail closed')
+
+
 def build(exe, cc, name, program, runtime, extra=()):
     (OUT / f'{name}.bin').write_bytes(A.assemble(program))
     labels = A.label_pcs(program)
@@ -404,6 +436,7 @@ def main():
     save_file(exe, cc)
     rsp_tasks(exe, cc)
     audio_dma(exe, cc)
+    rcp_io(exe, cc)
     from test_overlays import main as overlay_verifiers
     overlay_verifiers()
 

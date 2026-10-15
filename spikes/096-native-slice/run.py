@@ -298,6 +298,10 @@ PROGRAMS = {
         lw(t1, 0, s0), lh(t2, 0, s0), lhu(t3, 0, s0), lb(t4, 0, s0), lbu(t5, 0, s0), lh(t6, 2, s0), lb(t7, 3, s0),
         addiu(t8, zero, -2), sw(t8, 12, s1), lw(t9, 12, s1), sh(t8, 16, s1), lw(a0, 16, s1), lbu(a1, 17, s1),
         sw(t0, 0x20, s0), lb(a2, 0x21, s0), *DONE],
+    # A line used only uncached so far is not cached: its first cached access
+    # is coherent (ADR-0176); the reverse order still faults (cache_alias).
+    'uncached_first': [lui(s1, 0xA000), ori(s1, s1, 0x1040), addiu(t0, zero, 0x55), sw(t0, 0, s1), lw(t1, 4, s1),
+        lui(s0, 0x8000), ori(s0, s0, 0x1040), lw(t2, 0, s0), addiu(t3, zero, 0x66), sw(t3, 4, s0), lw(t4, 4, s0), *DONE],
     # LWL/LWR/LDL/LDR/LWU and SWL/SWR/SDL/SDR at every misalignment; v0 has a
     # non-sign-extended upper word to expose LWR's upper-word rule.
     'unaligned': [lui(s0, 0x8000), ori(s0, s0, 0x1000), lui(t0, 0x89AB), ori(t0, t0, 0xCDEF),

@@ -17,8 +17,11 @@ and 0 blockers (ADR-0175). This needed three fixes:
 - the cartridge's 64DD driver segment is a declared load;
 - `osYieldThread` is a runtime function.
 
-It lowers to C and compiles in 31 s; the link still needs 13 runtime
-functions. ADR-0172 stage 1 discovers 469 ROM-owned overlay candidates (468 with executable text)
+It lowers to C and compiles in 31 s. Natively, with its RSP task as lowered
+microcode, boot runs to its first game-state overlay and stops fail-closed
+there (ADR-0176). It uses no symbol map. CPU access to SP memory and the PI
+is modelled as hardware, so unnamed library variants work (ADR-0177).
+ADR-0172 stage 1 discovers 469 ROM-owned overlay candidates (468 with executable text)
 and validates their relocation structure. Generated native byte verifiers pass
 synthetic corruption/bounds checks. Link-address lowering, checked RAM
 bindings and native OoT boot are pending; the catalog does not close blockers.
