@@ -3298,3 +3298,45 @@ Result: spike096 `divcheck` (a GCC-shaped `div` with an untaken divisor
 check) matches pinned ares, and `break_reached` faults 9. OoT, with its
 declared `code` segment, drops from 748 to 566 guarded blockers. ISA
 coverage is 131 of 209 forms.
+
+## ADR-0139: COP1 arithmetic and FCSR under the guarded scope
+
+Context: with BREAK admitted, 526 of OoT's 566 guarded blockers are COP1
+arithmetic, conversions and FCSR access (`mul.s` 121, `cvt.s.w` 60, `div.s`
+51, `cfc1`/`ctc1` 49, ...). The values these produce depend on the FCSR
+rounding mode, and their exceptions depend on its enables.
+
+Decision: the guarded scope admits `ADD SUB MUL DIV SQRT ABS MOV NEG` in
+`.S` and `.D`, `CVT.S` from D/W/L, `CVT.D` from S/W/L, `CVT.W` and `TRUNC.W`
+from S/D, and `CFC1`/`CTC1`. `plaid-lower` models FCSR as pinned ares does:
+
+- `CTC1 $31` sets the rounding mode on the host FPU (`fesetround`), and each
+  operation reads host exception flags into the cause and sticky bits.
+- Every operation except `MOV`, `CFC1` and `CTC1` clears the cause bits
+  first. This now includes compares and `BC1`.
+- When FS is set, a subnormal result is flushed by rounding mode. A NaN
+  result becomes ares's default NaN.
+- `CVT.W` and `TRUNC.W` round explicitly in integer arithmetic, without
+  libm, so a build's `rint` cannot change them.
+- `CFC1 $0` reads revision `0x0a00`.
+
+What ares raises as an exception faults 7 natively. Fault 7 now means "COP1
+operation outside the modeled subset": a NaN or subnormal input, an
+out-of-range conversion, an enabled cause, or an unimplemented-operation
+case. The scope's COP1 assumption says so. A signalling-NaN input, which
+ares lets through when Invalid is disabled, also faults: the fail-closed
+side. `ROUND/CEIL/FLOOR` and the `.L` destination conversions stay
+unsupported: ares computes them with SSE4.1 or libm depending on the build.
+
+Reuse: the semantics follow pinned ares (ISC) as the oracle. N64Recomp's
+helpers were not copied. Where they differ, for example in FCSR cause
+handling, ares decides.
+
+Result: spike096 `farith` matches pinned ares. It covers every new form,
+the four rounding modes on `CVT.W` and division, sticky flags, overflow,
+divide by zero, invalid `sqrt`, FS flushing under RN and RP, and `CFC1 $0`.
+FCSR is now compared too. `fpu_enabled` (inexact enabled) and `fpu_range`
+(`CVT.W` of 2^31) fault 7. Five lowering mutations each fail `farith`:
+no cause reset, a wrong tie rule, no `fesetround`, a wrong RP flush, and no
+sticky flags. OoT, with its declared `code` segment, drops from 566 to 42
+guarded blockers. ISA coverage is 159 of 209 forms.

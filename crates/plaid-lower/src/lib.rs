@@ -18,11 +18,12 @@ pub mod coverage;
 
 const PRELUDE: &str = r#"#include <stdint.h>
 #include <string.h>
+#include <fenv.h>
 typedef uint8_t u8; typedef uint32_t u32; typedef int32_t s32;
 typedef uint64_t u64; typedef int64_t s64;
 #define PLAID_RAM_SIZE 0x800000u
 typedef struct {
-  u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 pc; u32 fault; u32 fault_pc;
+  u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 fcsr; u32 pc; u32 fault; u32 fault_pc;
   u8 ram[PLAID_RAM_SIZE];
   u8 line_segment[PLAID_RAM_SIZE / 16]; /* 0 untouched, 1 KSEG0, 2 KSEG1 */
   u8 load_ok[64]; /* declared load verified in RAM (ADR-0136) */
@@ -37,7 +38,8 @@ typedef struct { u32 start, end; int load; } plaid_range;
    5: a return whose $ra is not the continuation of the call that entered
    its function (the checked call/return assumption);
    6: an overflow-trapping add/subtract that would raise an exception;
-   7: a COP1 compare with a NaN operand (FCSR enables are not modeled);
+   7: a COP1 operation outside the modeled subset: a NaN or subnormal
+      operand, an out-of-range conversion, or an enabled FPU exception;
    8: code of a declared load entered while RAM does not hold its declared
       bytes. Executable bytes of a load not yet verified may be written;
    9: a BREAK was reached (its exception handler is not modeled). */
@@ -61,6 +63,162 @@ const HELPERS: &str = r#"static inline int plaid_addr(plaid_state *s, u64 va, u3
           (plaid_code[i].load < 0 || s->load_ok[plaid_code[i].load]))
         return plaid_fault(s, pc, 2);
   *out = p; return 0;
+}
+/* COP1 arithmetic (ADR-0139), following pinned ares: fcsr holds FCSR bits
+   0-17 and 24 (bit 23 is fcc); the host FPU rounds by FCSR.RM. */
+#define PLAID_FS (1u << 24)
+static inline int plaid_f32_bad(u32 b) {
+  u32 e = b & 0x7f800000u, m = b & 0x7fffffu;
+  return m && (e == 0x7f800000u || e == 0);
+}
+static inline int plaid_f64_bad(u64 b) {
+  u64 e = b & 0x7ff0000000000000ull, m = b & 0xfffffffffffffull;
+  return m && (e == 0x7ff0000000000000ull || e == 0);
+}
+static inline float plaid_f32(u32 b) { float f; memcpy(&f, &b, 4); return f; }
+static inline double plaid_f64(u64 b) { double d; memcpy(&d, &b, 8); return d; }
+static inline u32 plaid_b32(float f) { u32 b; memcpy(&b, &f, 4); return b; }
+static inline u64 plaid_b64(double d) { u64 b; memcpy(&b, &d, 8); return b; }
+/* host exception flags -> FCSR cause and sticky flags (ares checkFPUExceptions) */
+static inline int plaid_fpe(plaid_state *s, int e, u32 pc) {
+  u32 cause = 0;
+  if (!e) return 0;
+  if ((e & FE_UNDERFLOW) && (!(s->fcsr & PLAID_FS) || (s->fcsr & 0x180u))) return plaid_fault(s, pc, 7);
+  if (e & FE_INEXACT) cause |= 1u << 12;
+  if (e & FE_UNDERFLOW) cause |= 1u << 13;
+  if (e & FE_OVERFLOW) cause |= 1u << 14;
+  if (e & FE_DIVBYZERO) cause |= 1u << 15;
+  if (e & FE_INVALID) cause |= 1u << 16;
+  s->fcsr |= cause;
+  if (cause & (s->fcsr << 5)) return plaid_fault(s, pc, 7); /* enables 7-11 */
+  s->fcsr |= cause >> 10;
+  return 0;
+}
+/* subnormal results flush per FCSR.RM when FS is set; NaN becomes ares's default NaN */
+static inline int plaid_out32(plaid_state *s, u32 *b, u32 pc) {
+  if (!(*b & 0x7f800000u) && (*b & 0x7fffffu)) {
+    if (!(s->fcsr & PLAID_FS) || (s->fcsr & 0x180u)) return plaid_fault(s, pc, 7);
+    s->fcsr |= 0x3000u | (0x3000u >> 10);
+    switch (s->fcsr & 3) {
+    case 2: *b = *b >> 31 ? 0x80000000u : 0x00800000u; break;
+    case 3: *b = *b >> 31 ? 0x80800000u : 0; break;
+    default: *b &= 0x80000000u;
+    }
+  } else if ((*b & 0x7f800000u) == 0x7f800000u && (*b & 0x7fffffu)) *b = 0x7fbfffffu;
+  return 0;
+}
+static inline int plaid_out64(plaid_state *s, u64 *b, u32 pc) {
+  if (!(*b & 0x7ff0000000000000ull) && (*b & 0xfffffffffffffull)) {
+    if (!(s->fcsr & PLAID_FS) || (s->fcsr & 0x180u)) return plaid_fault(s, pc, 7);
+    s->fcsr |= 0x3000u | (0x3000u >> 10);
+    switch (s->fcsr & 3) {
+    case 2: *b = *b >> 63 ? 0x8000000000000000ull : 0x0010000000000000ull; break;
+    case 3: *b = *b >> 63 ? 0x8010000000000000ull : 0; break;
+    default: *b &= 0x8000000000000000ull;
+    }
+  } else if ((*b & 0x7ff0000000000000ull) == 0x7ff0000000000000ull && (*b & 0xfffffffffffffull))
+    *b = 0x7ff7ffffffffffffull;
+  return 0;
+}
+/* ADD SUB MUL DIV SQRT ABS NEG .S (op = function field); writes clear the upper word */
+static inline int plaid_arith_s(plaid_state *s, u32 op, u32 fd, u32 fs, u32 ft, u32 pc) {
+  u32 x = (u32)s->f[fs], y = (u32)s->f[ft], r; int e = 0;
+  volatile float a, b, z;
+  s->fcsr &= ~0x3f000u;
+  if (plaid_f32_bad(x) || (op < 4 && plaid_f32_bad(y))) return plaid_fault(s, pc, 7);
+  if (op == 5 || op == 7) { s->f[fd] = op == 5 ? x & 0x7fffffffu : x ^ 0x80000000u; return 0; }
+  a = plaid_f32(x); b = plaid_f32(y);
+  feclearexcept(FE_ALL_EXCEPT);
+  switch (op) {
+  case 0: z = a + b; break;
+  case 1: z = a - b; break;
+  case 2: z = a * b; break;
+  case 3: z = a / b; break;
+  default: if (a < 0) { z = plaid_f32(0x7fc00000u); e = FE_INVALID; } else z = __builtin_sqrtf(a);
+  }
+  e |= fetestexcept(FE_ALL_EXCEPT);
+  r = plaid_b32(z);
+  if (plaid_fpe(s, e, pc) || plaid_out32(s, &r, pc)) return 1;
+  s->f[fd] = r; return 0;
+}
+static inline int plaid_arith_d(plaid_state *s, u32 op, u32 fd, u32 fs, u32 ft, u32 pc) {
+  u64 x = s->f[fs], y = s->f[ft], r; int e = 0;
+  volatile double a, b, z;
+  s->fcsr &= ~0x3f000u;
+  if (plaid_f64_bad(x) || (op < 4 && plaid_f64_bad(y))) return plaid_fault(s, pc, 7);
+  if (op == 5 || op == 7) { s->f[fd] = op == 5 ? x & ~(1ull << 63) : x ^ (1ull << 63); return 0; }
+  a = plaid_f64(x); b = plaid_f64(y);
+  feclearexcept(FE_ALL_EXCEPT);
+  switch (op) {
+  case 0: z = a + b; break;
+  case 1: z = a - b; break;
+  case 2: z = a * b; break;
+  case 3: z = a / b; break;
+  default: if (a < 0) { z = plaid_f64(0x7ff8000000000000ull); e = FE_INVALID; } else z = __builtin_sqrt(a);
+  }
+  e |= fetestexcept(FE_ALL_EXCEPT);
+  r = plaid_b64(z);
+  if (plaid_fpe(s, e, pc) || plaid_out64(s, &r, pc)) return 1;
+  s->f[fd] = r; return 0;
+}
+/* CVT.W and TRUNC.W (rm 1): exact, without libm; inexact iff a fraction remains */
+static inline int plaid_to_w(plaid_state *s, double x, int bad, u32 rm, u32 fd, u32 pc) {
+  long long t; double frac;
+  s->fcsr &= ~0x3f000u;
+  if (bad || !(x < 2147483648.0 && x >= -2147483648.0)) return plaid_fault(s, pc, 7);
+  t = (long long)x; frac = x - (double)t;
+  switch (rm) {
+  case 0: if (frac > 0.5 || (frac == 0.5 && (t & 1))) t++; else if (frac < -0.5 || (frac == -0.5 && (t & 1))) t--; break;
+  case 2: if (frac > 0) t++; break;
+  case 3: if (frac < 0) t--; break;
+  }
+  if (t > 2147483647ll || t < -2147483647ll - 1) return plaid_fault(s, pc, 7);
+  if (frac != 0) {
+    s->fcsr |= 1u << 12;
+    if (s->fcsr & (1u << 7)) return plaid_fault(s, pc, 7);
+    s->fcsr |= 1u << 2;
+  }
+  s->f[fd] = (u32)t; return 0;
+}
+/* CVT.S and CVT.D from W, L (range-checked as ares), S or D */
+static inline int plaid_to_s(plaid_state *s, u32 fmt, u32 fd, u32 fs, u32 pc) {
+  u64 v = s->f[fs]; u32 r; int e; volatile float z;
+  s->fcsr &= ~0x3f000u;
+  if ((fmt == 17 && plaid_f64_bad(v)) ||
+      (fmt == 21 && ((s64)v >= 0x0080000000000000ll || (s64)v < -0x0080000000000000ll)))
+    return plaid_fault(s, pc, 7);
+  feclearexcept(FE_ALL_EXCEPT);
+  if (fmt == 17) z = (float)plaid_f64(v);
+  else if (fmt == 20) z = (float)(s32)(u32)v;
+  else z = (float)(s64)v;
+  e = fetestexcept(FE_ALL_EXCEPT);
+  r = plaid_b32(z);
+  if (plaid_fpe(s, e, pc) || plaid_out32(s, &r, pc)) return 1;
+  s->f[fd] = r; return 0;
+}
+static inline int plaid_to_d(plaid_state *s, u32 fmt, u32 fd, u32 fs, u32 pc) {
+  u64 v = s->f[fs], r; int e; volatile double z;
+  s->fcsr &= ~0x3f000u;
+  if ((fmt == 16 && plaid_f32_bad((u32)v)) ||
+      (fmt == 21 && ((s64)v >= 0x0080000000000000ll || (s64)v < -0x0080000000000000ll)))
+    return plaid_fault(s, pc, 7);
+  feclearexcept(FE_ALL_EXCEPT);
+  if (fmt == 16) z = (double)plaid_f32((u32)v);
+  else if (fmt == 20) z = (double)(s32)(u32)v;
+  else z = (double)(s64)v;
+  e = fetestexcept(FE_ALL_EXCEPT);
+  r = plaid_b64(z);
+  if (plaid_fpe(s, e, pc) || plaid_out64(s, &r, pc)) return 1;
+  s->f[fd] = r; return 0;
+}
+/* CTC1 $31: rounding mode, flags, enables, cause, FS; a cause with its enable
+   (or unimplemented) raises at once in ares, so it faults here */
+static inline int plaid_ctc1(plaid_state *s, u32 v, u32 pc) {
+  static const int modes[4] = {FE_TONEAREST, FE_TOWARDZERO, FE_UPWARD, FE_DOWNWARD};
+  s->fcsr = v & 0x0103ffffu; s->fcc = v >> 23 & 1;
+  fesetround(modes[v & 3]);
+  if (((v >> 12) & (v >> 7) & 0x1fu) || (v & (1u << 17))) return plaid_fault(s, pc, 7);
+  return 0;
 }
 /* Host runtime functions call this before writing guest RAM at physical p. */
 int plaid_runtime_write(plaid_state *s, u32 p, u32 size, u32 pc) {
@@ -259,6 +417,19 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
                 1 => set(rt, f),
                 4 => format!("{f} = ({f} & 0xffffffff00000000ull) | (u32){b};"),
                 5 => format!("{f} = {b};"),
+                // CFC1/CTC1 (ADR-0139): FCR31 is the FCSR, FCR0 the revision.
+                2 => set(
+                    rt,
+                    match rd {
+                        31 => "SX32(s->fcsr | s->fcc << 23)".into(),
+                        0 => "0xa00u".into(),
+                        _ => "0".into(),
+                    },
+                ),
+                6 if rd == 31 => {
+                    format!("if (plaid_ctc1(s, (u32){b}, 0x{pc:08x}u)) return 1;")
+                }
+                6 => String::new(),
                 _ => {
                     return Err(format!(
                         "{pc:08x}: instruction {word:08x} is outside the lowered subset"
@@ -275,10 +446,41 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
                 ("double", "u64", "")
             };
             format!(
-                "{{ {ty} x, y; {bits} xb = {lane}s->f[{rd}], yb = {lane}s->f[{rt}]; memcpy(&x, &xb, sizeof x); memcpy(&y, &yb, sizeof y); if (x != x || y != y) return plaid_fault(s, 0x{pc:08x}u, 7); s->fcc = ({} && x < y) || ({} && x == y); }}",
+                "{{ {ty} x, y; {bits} xb = {lane}s->f[{rd}], yb = {lane}s->f[{rt}]; memcpy(&x, &xb, sizeof x); memcpy(&y, &yb, sizeof y); s->fcsr &= ~0x3f000u; if (x != x || y != y) return plaid_fault(s, 0x{pc:08x}u, 7); s->fcc = ({} && x < y) || ({} && x == y); }}",
                 f >> 2 & 1,
                 f >> 1 & 1
             )
+        }
+        // COP1 arithmetic and conversions (ADR-0139); fd is the sa field.
+        (17, f) if matches!(rs, 16 | 17) && matches!(f, 0..=5 | 7) => {
+            let kind = if rs == 16 { "s" } else { "d" };
+            format!("if (plaid_arith_{kind}(s, {f}, {sa}, {rd}, {rt}, 0x{pc:08x}u)) return 1;")
+        }
+        (17, 6) if matches!(rs, 16 | 17) => format!("s->f[{sa}] = s->f[{rd}];"),
+        (17, f @ (13 | 36)) if matches!(rs, 16 | 17) => {
+            let (x, bad) = if rs == 16 {
+                (
+                    format!("(double)plaid_f32((u32)s->f[{rd}])"),
+                    format!("plaid_f32_bad((u32)s->f[{rd}])"),
+                )
+            } else {
+                (
+                    format!("plaid_f64(s->f[{rd}])"),
+                    format!("plaid_f64_bad(s->f[{rd}])"),
+                )
+            };
+            let rm = if f == 13 {
+                "1".into()
+            } else {
+                "s->fcsr & 3".to_string()
+            };
+            format!("if (plaid_to_w(s, {x}, {bad}, {rm}, {sa}, 0x{pc:08x}u)) return 1;")
+        }
+        (17, 32) if matches!(rs, 17 | 20 | 21) => {
+            format!("if (plaid_to_s(s, {rs}, {sa}, {rd}, 0x{pc:08x}u)) return 1;")
+        }
+        (17, 33) if matches!(rs, 16 | 20 | 21) => {
+            format!("if (plaid_to_d(s, {rs}, {sa}, {rd}, 0x{pc:08x}u)) return 1;")
         }
         (49, _) => format!(
             "{{ u64 v; if (plaid_load(s, {addr}, 4, 0x{pc:08x}u, &v)) return 1; s->f[{rt}] = (s->f[{rt}] & 0xffffffff00000000ull) | v; }}"
@@ -430,12 +632,15 @@ impl Lowerer<'_> {
             (21, _, _) => likely(format!("{a} != {b}")),
             (22, _, 0) => likely(format!("(s64){a} <= 0")),
             (23, _, 0) => likely(format!("(s64){a} > 0")),
-            (17, _, _) if rs == 8 && rt & 2 != 0 => {
-                likely(format!("{}s->fcc", if rt & 1 == 0 { "!" } else { "" }))
-            }
-            (17, _, _) if rs == 8 => {
-                conditional(format!("{}s->fcc", if rt & 1 == 0 { "!" } else { "" }))
-            }
+            // BC1 clears the FCSR cause bits first, as pinned ares does.
+            (17, _, _) if rs == 8 && rt & 2 != 0 => likely(format!(
+                "(s->fcsr &= ~0x3f000u, {}s->fcc)",
+                if rt & 1 == 0 { "!" } else { "" }
+            )),
+            (17, _, _) if rs == 8 => conditional(format!(
+                "(s->fcsr &= ~0x3f000u, {}s->fcc)",
+                if rt & 1 == 0 { "!" } else { "" }
+            )),
             (1, _, 0) => conditional(format!("(s64){a} < 0")),
             (1, _, 1) => conditional(format!("(s64){a} >= 0")),
             // A tail call into the runtime returns to $ra, which must be ours.

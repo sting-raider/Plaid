@@ -45,14 +45,17 @@ Next concrete steps, in order:
    shared return-closure context (ADR-0137). OoT with its `code` segment
    declared: 7451 blocks, 748 guarded blockers.
    Done: `BREAK` as a checked abort (ADR-0138); OoT at 566 guarded blockers.
-   **Next:** COP1 arithmetic, conversions and FCSR access (about 450 OoT
-   sites), reusing N64Recomp semantics where pinned ares agrees. After that, the
-   executable-DMA boundary for the OoT code segment.
+   Done: COP1 arithmetic, conversions and FCSR access (ADR-0139); OoT at
+   42 guarded blockers.
+   **Next:** the 33 unresolved OoT indirect sites (classify them: jump
+   tables, function-pointer calls, returns without a certificate), then the
+   4 unresolved direct and 3 unmapped targets.
 4. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
    boot-segment discovery from the real entry point, then a local-only recall
    score against the decomp map. Keep ROM bytes, maps and traces ignored.
-5. **Lowered subset growth** pulled by SM64: LWL/LWR/SWL/SWR, then COP1
-   arithmetic; COP0 stays behind the runtime boundary.
+5. **Lowered subset growth** pulled by SM64: `ROUND/CEIL/FLOOR` and the
+   `.L` conversions (build-dependent in ares, so they need a second oracle
+   first); COP0 stays behind the runtime boundary.
 6. **Known-library evidence**: done for runtime boundaries (ADR-0133); PR #50's
    source-bound candidate model is still open for other uses.
 
