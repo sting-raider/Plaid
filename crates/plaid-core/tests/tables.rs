@@ -238,3 +238,28 @@ fn ido_bound_in_a_previous_branch_slot_closes_only_when_it_always_runs() {
     // a branch-likely's fallthrough skips its slot, so the bound may be stale
     assert_eq!(table_targets(&ido(true)), None);
 }
+
+/// IDO's unscheduled shape: `lw; <gap>; jr` with `gap` a load-delay `nop`.
+fn delay_nop(gap: u32) -> CodeImage {
+    let mut i = image();
+    i.words.fill(0);
+    i.words[..14].copy_from_slice(&[
+        0x2c810003, 0x1020000a, 0, 0x00045080, 0x3c018000, 0x002a0821, 0x8c2a0100, gap, 0x01400008,
+        0, 0, 0, 0x0800000c, 0,
+    ]);
+    for offset in [0x40, 0x50] {
+        i.words[offset / 4] = 0x08000000 | (offset as u32 / 4);
+    }
+    i.words[64..].copy_from_slice(&[0x80000040, 0x80000050, 0x80000040]);
+    i
+}
+
+#[test]
+fn a_load_delay_nop_before_the_jump_still_closes_the_table() {
+    assert_eq!(
+        table_targets(&delay_nop(0)),
+        Some(vec![0x80000040, 0x80000050])
+    );
+    // anything else between the load and the jump can change the target
+    assert_eq!(table_targets(&delay_nop(0x254a0004)), None); // addiu t2, t2, 4
+}

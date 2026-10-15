@@ -147,3 +147,23 @@ The 32 remaining blockers:
 Rejecting COP2 bodies and counting only constants inside decoded blocks
 removed the earlier `eret` (`__osException`, taken as a constant inside
 `osInitialize`) and most of the RSP microcode impostor.
+
+## Update: goddard tables, TLB functions, in-image bodies (ADR-0154, ADR-0155)
+
+Re-running `identify --symbols --loads` now names 56 runtime functions,
+adding `osMapTLB` and `osUnmapTLBAll`. Discovery with `--address-taken`
+reaches 45388 blocks, 4385 indirect sites and 1341 address-taken functions
+(12 minutes, release build).
+
+| Scope | Blockers |
+| --- | --- |
+| guarded RAM | 92, all register calls |
+| guarded RAM plus address-taken dispatch | **1** |
+
+The last blocker is `audio_signal_game_loop_tick+0x4e0`:
+`sltiu at, s4, 10` is followed by a taken `bnez t9` to `beqz at` (whose slot
+is the scale), and then the dispatch block. The bound's interval crosses a
+branch, so the linear walk in ADR-0140 stops.
+
+Recall on this map is 90.2%. It has no layout pass; the milestone 2 figure
+is measured with `--data-roots`.

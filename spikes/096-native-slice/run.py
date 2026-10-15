@@ -387,6 +387,16 @@ PROGRAMS = {
         'dflt', addiu(s1, s1, 1000),
         'next', addiu(t0, t0, 1), slti(t2, t0, 4), bne(t2, zero, 'loop'), nop, *DONE,
         'tbl', lambda pc, L: L['c0'], lambda pc, L: L['c1'], lambda pc, L: L['c2']],
+    # IDO's unscheduled shape (ADR-0154): a load-delay nop before the jump.
+    'delay_table': [addiu(s1, zero, 0), addiu(t0, zero, 0),
+        'loop', sltiu(at, t0, 3), beq(at, zero, 'dflt'), nop, sll(t1, t0, 2),
+        lui(at, 0x8000), addu(at, at, t1), lambda pc, L: I(35, t1, at, L['tbl']), nop, jr(t1), nop,
+        'c0', addiu(s1, s1, 1), j('next'), nop,
+        'c1', addiu(s1, s1, 10), j('next'), nop,
+        'c2', addiu(s1, s1, 100), j('next'), nop,
+        'dflt', addiu(s1, s1, 1000),
+        'next', addiu(t0, t0, 1), slti(t2, t0, 4), bne(t2, zero, 'loop'), nop, *DONE,
+        'tbl', lambda pc, L: L['c0'], lambda pc, L: L['c1'], lambda pc, L: L['c2']],
     # Nested, recursive, pointer and tail calls; frames live in the RAM window.
     'calls': [lui(sp, 0x8000), ori(sp, sp, 0x1100),
         addiu(a0, zero, 5), jal('fact'), nop, addu(s0, v0, zero),

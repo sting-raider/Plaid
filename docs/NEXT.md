@@ -82,11 +82,11 @@ Next concrete steps, in order:
    dispatch over the 1313 functions whose addresses appear as data or code
    constants, and native code faults otherwise. SM64 is at 32 blockers
    under `--address-taken`.
-   **Next for SM64 (milestone 3):**
-   - 11 goddard `switch` tables and 1 audio table, whose `lw` and `jr` are
-     separated by a load-delay `nop`;
-   - declare `osMapTLB` and `osUnmapTLBAll` as runtime functions;
-   - remove the junk direct target into `rspF3DBootStart`.
+   Done: load-delay `nop` tables (ADR-0154), TLB runtime functions and
+   in-image address-taken bodies (ADR-0155). SM64 is at **1 blocker**
+   under `--address-taken`.
+   **Next for SM64 (milestone 3):** the `audio_signal_game_loop_tick`
+   table, whose bound comes before a taken `bnez` to the guard.
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user

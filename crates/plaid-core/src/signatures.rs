@@ -12,7 +12,8 @@ use crate::{GuestAddr, discovery::CodeImage};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 /// Functions N64Recomp's runtime reimplements (`reimplemented_funcs` in
-/// N64Recomp `src/symbol_lists.cpp`, MIT, Copyright (c) 2024 Wiseguy).
+/// N64Recomp `src/symbol_lists.cpp`, MIT, Copyright (c) 2024 Wiseguy), plus
+/// its ignored TLB functions.
 #[rustfmt::skip]
 pub const RUNTIME_FUNCTIONS: &[&str] = &[
     "__osInitialize_common", "osInitialize", "osGetMemSize",
@@ -48,6 +49,9 @@ pub const RUNTIME_FUNCTIONS: &[&str] = &[
     "is_proutSyncPrintf", "__checkHardware_msp", "__checkHardware_kmc", "__checkHardware_isv",
     "__osInitialize_msp", "__osInitialize_kmc", "__osInitialize_isv", "__osRdbSend",
     "__ull_div", "__ll_div", "__ll_mul", "__ull_rem", "__ull_to_d", "__ull_to_f",
+    // TLB functions N64Recomp ignores instead (`ignored_funcs`); the host
+    // runtime owns the TLB (ADR-0155)
+    "osMapTLB", "osUnmapTLB", "osUnmapTLBAll", "osSetTLBASID",
 ];
 
 /// Argument registers of a runtime function that carry guest code pointers.
