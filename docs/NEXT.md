@@ -14,7 +14,7 @@ effect in its receipt.
 | # | Milestone | Done when | State |
 | --- | --- | --- | --- |
 | 1 | Synthetic ROM -> C -> native | spike096 programs, including nested/recursive calls, match pinned ares exactly; fail-closed cases fault | **done** (spike096, ADR-0127) |
-| 2 | SM64 discovery recall | >= 99% of real functions found, scored locally against a decomp symbol map used only as an oracle | open: 11.5% (442/3832, ADR-0151) |
+| 2 | SM64 discovery recall | >= 99% of real functions found, scored locally against a decomp symbol map used only as an oracle | **done: 99.03%** (3795/3832, ADR-0152, `--data-roots`) |
 | 3 | SM64 closed under declared assumptions | solver CLOSED in an explicit assumption scope; every assumption listed and checked | open |
 | 4 | SM64 boots natively to title | lowered code linked with N64ModernRuntime + RT64; no interpreter linked | open |
 | 5 | Retire assumptions; OoT | assumptions discharged one by one; OoT via Yaz0 (PR #28) and relocation (PR #31) | open |
@@ -76,11 +76,13 @@ Next concrete steps, in order:
    function-pointer calls loaded from memory. Recall is 11.4%.
    Done: IDO's slot-bound jump tables (ADR-0151); SM64 is at 5580 blocks
    and 10 guarded blockers.
-   **Next for SM64:**
-   - Data-referenced function pointers: geo, behavior and level-script
-     callbacks are about 983 of the 3832 reference functions.
-   - The level command table.
-   - The last audio dispatch.
+   Done: heuristic data-pointer and layout roots (ADR-0152). **Milestone 2 is
+   met:** SM64 whole-map recall is 99.03%.
+   **Next for SM64 (milestone 3):** closing the function-pointer calls through
+   memory needs a decision on address-taken dispatch. That would be a new
+   assumption scope: an indirect call targets only functions whose addresses
+   appear as data or code constants, and native code faults otherwise. Also
+   open: the level command table and the last audio dispatch.
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user

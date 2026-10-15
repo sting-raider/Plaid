@@ -42,7 +42,8 @@ the map's `_mainSegment*` symbols.
 | `--symbols` identification (54 functions, ADR-0148) | 13 | 1: `create_thread`'s forwarded entry | 1.9% |
 | plus forwarded callbacks (ADR-0149) | 2936 | 8 | 8.1% (245/3029) |
 | plus engine and goddard loads (ADR-0150) | 5337 | 12 | 11.4% (435/3832, whole map) |
-| plus IDO slot-bound tables (ADR-0151) | **5580** | **10** | **11.5%** (442/3832) |
+| plus IDO slot-bound tables (ADR-0151) | 5580 | 10 | 11.5% (442/3832) |
+| plus `--data-roots` (ADR-0152) | **47976** | 227 (rooted code) | **99.03%** (3795/3832) |
 
 n64sym misses SM64's `osInitialize`: 5 variants match its crcA and none its
 crcB, as on Mario Party 2. Its cache and COP0 callees then show up as 10
@@ -100,3 +101,19 @@ memory:
 
 Recall is 11.4% over all segments (3832 reference functions) and 13.6% over
 the main segment alone.
+
+## Update: milestone 2 met (ADR-0152)
+
+`plaid discover ... --loads sm64-loads.json --data-roots`, followed by
+`plaid recall map.json sm64.us.map`, gives 3795 of 3832 functions (99.03%,
+`meets_target: true`).
+
+| Roots added | Recall | Not in reference |
+| --- | --- | --- |
+| ROM data words | 78.1% | 1625 |
+| plus code `lui`/`addiu` constants | 88.8% | 1636 |
+| plus the layout pass, excluding dead `jr ra` epilogues | 99.03% | 1760 |
+
+The "not in reference" count is mostly `static` functions (502 are direct
+call targets) and jump-table case labels, which recall counts through map
+entries. The layout pass contributes 124 of them.

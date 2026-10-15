@@ -163,6 +163,10 @@ def main():
         runtime_map=directory/'runtime-map.json'
         run("discover",rom,"64","0x80000000","40","0x80000000",runtime_map,declared)
         assert len(json.loads(runtime_map.read_bytes())['runtime_functions'])==1
+        # heuristic data-pointer roots only add discovery roots (ADR-0152)
+        rooted=directory/'rooted-map.json'
+        run("discover",rom,"64","0x80000000","40","0x80000000",rooted,"--data-roots")
+        assert len(json.loads(rooted.read_bytes())['blocks'])>=len(json.loads(runtime_map.read_bytes())['blocks'])
         # declared loads (ADR-0136): the composite is rebuilt by solve
         loads=directory/'loads.json'
         def declare(destination):
