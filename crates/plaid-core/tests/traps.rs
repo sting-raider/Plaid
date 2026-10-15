@@ -16,6 +16,7 @@ fn image(words: &[u32]) -> CodeImage {
         words: words.to_vec(),
         rom_offset: Some(RomOffset(64)),
         physical_start: Some(PhysicalAddr(0)),
+        holes: Vec::new(),
     }
 }
 

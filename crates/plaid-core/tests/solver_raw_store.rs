@@ -11,6 +11,7 @@ fn image(physical_start: Option<PhysicalAddr>) -> CodeImage {
         words: vec![0x08000000, 0],
         rom_offset: None,
         physical_start,
+        holes: Vec::new(),
     }
 }
 

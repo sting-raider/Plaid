@@ -23,6 +23,7 @@ fn fragment(base: u32, image: &str, generation: u64, words: Vec<u32>) -> CodeIma
         words,
         rom_offset: None,
         physical_start: None,
+        holes: Vec::new(),
     }
 }
 

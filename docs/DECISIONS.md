@@ -3655,3 +3655,43 @@ spike096's new `forwarded` program enters both callbacks natively and
 matches pinned ares exactly. On SM64 (`research/sm64-first-measurement.md`),
 discovery grows from 13 blocks to 2936, with 8 guarded blockers and 8.1%
 recall. OoT stays at 28 and Mario Party 2 at 29.
+
+## ADR-0150: Disjoint declared loads leave holes in the composite
+
+Context: SM64 loads its engine segment to `0x80378800` and goddard to
+`0x8016f000`, both away from the main segment at `0x80246000`. ADR-0136
+composes declared loads into one contiguous image and rejected any gap, so 4
+of SM64's 8 guarded blockers were calls into code that could not be
+declared. Filling a gap with bytes would put BSS and heap inside the image,
+where code or table recognition could read them.
+
+Decision: `compose` accepts loads that do not touch the base window or each
+other. The composite spans all of them, and every byte that neither the base
+window nor a load supplies is a `CodeImage` hole. `CodeImage::word` returns
+nothing in a hole, so:
+- discovery reports control that reaches a hole as `unmapped_target`;
+- table recognition and signature or symbol identification cannot read hole
+  bytes.
+
+The image identity covers the hole layout as well as the bytes, through the
+new `CodeImage::content_identity`, which the solver's identity check shares.
+Loads must still be word-aligned and must not overlap each other.
+
+Natively nothing changes: the artifact preloads only the base window, and
+each declared load is verified by content when its code is first entered
+(fault 8).
+
+Result:
+- `declared_loads` unit tests cover hole layout and word lookup.
+- `tests/load_holes.rs` shows that a jump into a hole stays OPEN, while the
+  same jump into the declared load decodes and closes.
+- The CLI test now discovers and solves a gapped load.
+- spike096's new `load_gap` program copies its payload past a gap, calls it,
+  and matches pinned ares exactly.
+
+On SM64, declaring the engine and goddard segments grows discovery from 2936
+to **5337 blocks**. There are 12 guarded blockers, all function-pointer
+calls: render and geo node callbacks, `level_script_execute`'s command
+table, the 3 audio dispatches and the goddard vblank pointer. Whole-map
+recall is **11.4%** (435/3832). OoT (28) and Mario Party 2 (29) are
+unchanged.

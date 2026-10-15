@@ -104,8 +104,8 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
 }
 
 /// Build the base image and the composite image of `spec` from ROM bytes.
-/// Loads must be word-aligned, must not overlap each other, and together with
-/// the base window must cover one contiguous range.
+/// Loads must be word-aligned and must not overlap each other. Gaps between
+/// them and the base window become holes in the composite (ADR-0150).
 pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage), String> {
     spec.base.validate(true)?;
     let begin = usize::try_from(spec.base_offset.0).map_err(|_| "base offset too large")?;
@@ -126,12 +126,12 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
             .collect(),
         rom_offset,
         physical_start: None,
+        holes: Vec::new(),
     };
     let base = image(spec.base.start, base_bytes, Some(spec.base_offset));
     if spec.loads.is_empty() {
         return Err("a load image needs at least one declared load".into());
     }
-    let (mut lo, mut hi) = (u64::from(spec.base.start.0), spec.base.end());
     let mut previous_end = 0;
     for load in &spec.loads {
         load.destination.validate(true)?;
@@ -140,22 +140,26 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
         }
         previous_end = load.destination.end();
     }
-    // Grow the covered range until no load can join it; any left over is a gap.
-    let mut pending: Vec<&DeclaredLoad> = spec.loads.iter().collect();
-    while !pending.is_empty() {
-        let before = pending.len();
-        pending.retain(|l| {
-            let (s, e) = (u64::from(l.destination.start.0), l.destination.end());
-            if s <= hi && e >= lo {
-                (lo, hi) = (lo.min(s), hi.max(e));
-                false
-            } else {
-                true
-            }
-        });
-        if pending.len() == before {
-            return Err("declared loads leave a gap next to the base window".into());
+    // The composite spans the base and every load; bytes no load or base
+    // window supplies are holes (ADR-0150), never code or table bytes.
+    let mut covered: Vec<(u64, u64)> = spec
+        .loads
+        .iter()
+        .map(|l| (u64::from(l.destination.start.0), l.destination.end()))
+        .chain([(u64::from(spec.base.start.0), spec.base.end())])
+        .collect();
+    covered.sort_unstable();
+    let (lo, hi) = (covered[0].0, covered.iter().map(|c| c.1).max().unwrap_or(0));
+    let mut holes = Vec::new();
+    let mut reached = lo;
+    for (s, e) in &covered {
+        if *s > reached {
+            holes.push(GuestRange {
+                start: GuestAddr(reached as u32),
+                size: (s - reached) as u32,
+            });
         }
+        reached = reached.max(*e);
     }
     let mut composite = vec![0u8; (hi - lo) as usize];
     let at = |a: u64| (a - lo) as usize;
@@ -164,7 +168,12 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
         composite[at(u64::from(load.destination.start.0))..at(load.destination.end())]
             .copy_from_slice(&decoded(bytes, load)?);
     }
-    Ok((base, image(GuestAddr(lo as u32), &composite, None)))
+    let mut out = image(GuestAddr(lo as u32), &composite, None);
+    if !holes.is_empty() {
+        out.holes = holes;
+        out.base.image = out.content_identity();
+    }
+    Ok((base, out))
 }
 
 #[cfg(test)]
@@ -211,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn compose_patches_extends_and_rejects_gaps_and_overlaps() {
+    fn compose_patches_extends_leaves_holes_and_rejects_overlaps() {
         let rom: Vec<u8> = (0..64u8).collect();
         let spec = |loads| LoadImage {
             base_offset: RomOffset(0),
@@ -240,13 +249,25 @@ mod tests {
             ]
         );
         assert_ne!(base.base.image, composite.base.image);
-        assert!(
-            compose(
-                &rom,
-                &spec(vec![load(0x8000_0020, 32, 8, LoadEncoding::Raw)])
-            )
-            .is_err()
+        assert!(composite.holes.is_empty());
+        // a disjoint load leaves a hole that supplies no words (ADR-0150)
+        let (_, gapped) = compose(
+            &rom,
+            &spec(vec![load(0x8000_0020, 32, 8, LoadEncoding::Raw)]),
+        )
+        .unwrap();
+        assert_eq!(
+            gapped.holes,
+            vec![GuestRange {
+                start: GuestAddr(0x8000_0010),
+                size: 16
+            }]
         );
+        assert_eq!(gapped.word(GuestAddr(0x8000_000c)), Some(0x0c0d_0e0f));
+        assert_eq!(gapped.word(GuestAddr(0x8000_0010)), None);
+        assert_eq!(gapped.word(GuestAddr(0x8000_001c)), None);
+        assert_eq!(gapped.word(GuestAddr(0x8000_0020)), Some(0x2021_2223));
+
         assert!(
             compose(
                 &rom,

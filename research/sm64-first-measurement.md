@@ -40,7 +40,8 @@ the map's `_mainSegment*` symbols.
 | --- | --- | --- | --- |
 | n64sym identification (49 functions; `osInitialize` missed) | 68 | 11 | 2.0% |
 | `--symbols` identification (54 functions, ADR-0148) | 13 | 1: `create_thread`'s forwarded entry | 1.9% |
-| plus forwarded callbacks (ADR-0149) | **2936** | **8** | **8.1%** (245/3029) |
+| plus forwarded callbacks (ADR-0149) | 2936 | 8 | 8.1% (245/3029) |
+| plus engine and goddard loads (ADR-0150) | **5337** | **12** | **11.4%** (435/3832, whole map) |
 
 n64sym misses SM64's `osInitialize`: 5 variants match its crcA and none its
 crcB, as on Mario Party 2. Its cache and COP0 callees then show up as 10
@@ -76,3 +77,25 @@ through data: behavior scripts, geo layouts, level scripts and the level
 command table, which all hold function pointers. Milestone 2's 99% target
 needs discovery roots from those data structures, and the engine segment
 holds the script interpreters.
+
+## Update: disjoint loads (ADR-0150)
+
+`sm64-loads.json` declares two raw loads:
+- the engine segment, ROM `0xf5580` to `0x80378800`, `0x13490` bytes
+  (`load_engine_code_segment`);
+- goddard, ROM `0x21f4c0` to `0x8016f000`, `0x4a9e0` bytes (the intro and
+  menu `FIXED_LOAD`).
+
+Run it with `plaid identify ... --symbols --loads` and `plaid discover ...
+--loads`. Discovery reaches 5337 blocks and 515 indirect sites.
+
+The 12 guarded blockers are all calls through function pointers loaded from
+memory:
+- 5 in `render_game` and 2 in `geo_process_held_object` (geo node and render
+  callbacks);
+- `level_script_execute+0x54`, which calls through the level command table;
+- the 3 audio dispatches;
+- the goddard vblank callback.
+
+Recall is 11.4% over all segments (3832 reference functions) and 13.6% over
+the main segment alone.

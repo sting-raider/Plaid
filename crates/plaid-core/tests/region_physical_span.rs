@@ -10,6 +10,7 @@ fn image() -> CodeImage {
         words: vec![0x08000000, 0],
         rom_offset: None,
         physical_start: None,
+        holes: Vec::new(),
     }
 }
 

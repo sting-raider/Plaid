@@ -29,6 +29,7 @@ fn supplied_image(words: [u32; 2], rom_offset: Option<RomOffset>) -> CodeImage {
         words: words.to_vec(),
         rom_offset,
         physical_start: None,
+        holes: Vec::new(),
     }
 }
 

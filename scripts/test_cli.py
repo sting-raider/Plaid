@@ -174,8 +174,11 @@ def main():
         assert len(json.loads(load_map.read_bytes())['load_images'])==1
         guarded=json.loads(run("solve",rom,load_map,"--guarded-ram"))
         assert any('declared load' in a for a in guarded['assumptions'])
+        # a disjoint load leaves a hole in the composite (ADR-0150)
         declare('0x80000040')
-        run("discover",rom,"64","0x80000000","40","0x80000000",load_map,"--loads",loads,ok=False)
+        run("discover",rom,"64","0x80000000","40","0x80000000",load_map,"--loads",loads)
+        assert len(json.loads(load_map.read_bytes())['load_images'])==1
+        json.loads(run("solve",rom,load_map,"--guarded-ram"))
         run("solve",rom,load_map,"--loads",loads,ok=False)
         # a reference symbol map can name runtime functions instead (ADR-0148)
         symbol_ref=directory/'symbols.txt'

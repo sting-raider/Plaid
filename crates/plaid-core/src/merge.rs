@@ -493,6 +493,7 @@ fn import(
                         None
                     },
                     physical_start: state.1,
+                    holes: Vec::new(),
                 };
                 let refs: EvidenceRefs = evidence.union(&state.5).cloned().collect();
                 let mut imported = ProgramMap::new(out.rom.clone());
