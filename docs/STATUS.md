@@ -40,7 +40,7 @@ window) on eleven synthetic programs (also comparing all 32 FPRs):
 - 64-bit: `DADD DADDU DSUB DSUBU DADDI DADDIU DSLL DSRL DSRA DSLL32 DSRL32 DSRA32 DSLLV DSRLV DSRAV DMULT DMULTU DDIV DDIVU LD SD`, plus trapping `ADD ADDI SUB` with an overflow check
 - Memory: `LB LBU LH LHU LW LWU SB SH SW` through KSEG0 and KSEG1, and the unaligned `LWL LWR LDL LDR SWL SWR SDL SDR` (ADR-0134)
 - COP1 data moves (FR = 1): `MFC1 DMFC1 MTC1 DMTC1 LWC1 LDC1 SWC1 SDC1`; all 32 `C.cond.S/D` compares and `BC1F BC1T BC1FL BC1TL`, with NaN operands faulting 7 (ADR-0135)
-- COP1 arithmetic (ADR-0139): `ADD SUB MUL DIV SQRT ABS MOV NEG` in `.S` and `.D`, `CVT.S` from D/W/L, `CVT.D` from S/W/L, `CVT.W` and `TRUNC.W` from S/D, `CFC1 CTC1`, with FCSR rounding modes, cause and sticky flags and FS flushing as pinned ares
+- COP1 arithmetic (ADR-0139): `ADD SUB MUL DIV SQRT ABS MOV NEG` in `.S` and `.D`, `CVT.S` from D/W/L, `CVT.D` from S/W/L, `CVT/ROUND/TRUNC/CEIL/FLOOR` to W and L from S/D (ADR-0143), `CFC1 CTC1`, with FCSR rounding modes, cause and sticky flags and FS flushing as pinned ares
 - Control: `BEQ BNE BLEZ BGTZ BLTZ BGEZ J JAL JR JALR` and the branch-likely forms, with delay slots; indirect jumps only over proven targets, including bounded jump tables in GCC's scheduled shapes (ADR-0132/0140); nested, recursive, pointer and tail calls with checked returns
 
 Anything else rejects the whole program. A store into executable bytes (fault

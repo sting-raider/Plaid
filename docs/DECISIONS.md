@@ -3418,3 +3418,33 @@ its machinery. Revisit it if SM64 shows such cells as a blocker class.
 
 Result: the 21 sites stay unresolved. The OoT measurement is unchanged at
 7684 blocks and 29 guarded blockers, and `native_complete` stays false.
+
+## ADR-0143: ROUND, CEIL, FLOOR and the .L conversions
+
+Context: ADR-0139 left `ROUND/CEIL/FLOOR.W` and every conversion to L
+unsupported, because pinned ares computes them in a build-dependent way.
+With SSE4.1 it uses `_mm_round`. Without it, it uses `round`, `ceil` and
+`floor`. `round` rounds ties away from zero, whereas the VR4300 rounds them
+to even.
+
+Decision: the oracle is the pinned ares built as spike 003 builds it, with
+`-msse4.1`. That is the SSE4.1 path, which agrees with hardware ties-to-even;
+`CEIL/FLOOR` give the same values on both paths. The guarded scope admits
+`ROUND/TRUNC/CEIL/FLOOR.W`, the same four `.L` forms, and `CVT.L` from S/D.
+
+`plaid-lower` extends ADR-0139's exact integer rounding:
+
+- The rounding mode comes from the function field (ties to even, toward
+  zero, up, down). `CVT` uses FCSR.RM.
+- Inputs follow ares's ranges: |x| < 2^31 for W, |x| < 2^53 for L. A W
+  result that rounds out of range faults 7.
+- Inexact is set exactly when a fraction remains.
+- An L result writes all 64 bits of the FPR.
+
+Result: spike096 `fround` matches pinned ares. It covers ties of both signs,
+-0.5, a 1.75 fraction, -3.5 as a double, 2^40 + 0.5 through the four L
+forms, and `CVT.L` under RP and RM. `fpu_round_range` (`CEIL.W` of
+2^31 - 0.5) faults 7. Three mutations each fail spike096: L results written
+as 32 bits, the wrong mode taken from the function field, and ties rounded
+away from zero. ISA coverage is 175 of 209 forms. OoT is unchanged at 29
+guarded blockers, since its reachable code uses none of these forms.

@@ -60,9 +60,10 @@ Next concrete steps, in order:
 4. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
    boot-segment discovery from the real entry point, then a local-only recall
    score against the decomp map. Keep ROM bytes, maps and traces ignored.
-5. **Lowered subset growth** pulled by SM64: `ROUND/CEIL/FLOOR` and the
-   `.L` conversions (build-dependent in ares, so they need a second oracle
-   first); COP0 stays behind the runtime boundary.
+5. **Lowered subset growth** pulled by SM64: done for `ROUND/CEIL/FLOOR`
+   and the `.L` conversions (ADR-0143; 175 of 209 forms). The rest are
+   COP0, traps, `SYSCALL/ERET`, `LL/SC` and `CACHE`, which stay behind the
+   runtime boundary unless a ROM needs them in guest code.
 6. **Known-library evidence**: done for runtime boundaries (ADR-0133); PR #50's
    source-bound candidate model is still open for other uses.
 
