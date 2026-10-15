@@ -246,3 +246,20 @@ in goddard, called from `0x801a72b4` just after the `osMapTLB` loop: this is
 goddard's dynlists are read through its 64 KiB mappings at `0x04000000`.
 The run ends only at the time limit. Nothing is drawn yet, so which screen
 the game is on is not observed; RT64 is next (ADR-0163).
+
+## Update: RT64 rendering (ADR-0163)
+
+```
+cmake -S runtime/rt64 -B target/rt64-shim -G "Visual Studio 17 2022" -A x64 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  -DCMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES="<DirectX-Headers>/include/directx;<DirectX-Headers>/include"
+cmake --build target/rt64-shim --config Release --target plaid_rt64
+gcc -O1 -std=gnu11 -DPLAID_SAFEPOINTS -DPLAID_RT64 -DPLAID_LOWERED='"sm64.c"' -I . -c runtime/plaid_rt.c -o sm64-rt64.o
+gcc sm64-rt64.o target/rt64-shim/Release/plaid_rt64.dll -pthread -o target/rt64-shim/Release/sm64-rt64.exe
+sm64-rt64 --rom R --stop-at none --seconds 25
+```
+
+| Step | Result |
+| --- | --- |
+| RT64 bridge, D3D12 on an RTX 3060 Laptop GPU | **title screen**: the goddard Mario head animates over the "SUPER MARIO 64" backdrop with "PRESS START"; 25 s, no fault, 404 graphics tasks, 818 VI frames (about 33 VI/s, the speed baseline) |
+
+The screen captures stay local, since they are game output.

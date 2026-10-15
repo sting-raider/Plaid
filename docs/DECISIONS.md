@@ -4206,3 +4206,51 @@ Result:
   after 2939 VI frames, 1459 graphics tasks (30 fps), 2931 audio tasks and
   9861 PI DMAs, with no fault. Display lists are reported but not drawn
   until RT64 is attached.
+
+## ADR-0163: Graphics tasks go to RT64 through a C ABI bridge
+
+Context: after ADR-0162, SM64 ran natively without faults, but its graphics
+tasks were only reported. ADR-0158 chose RT64 (MIT, pinned 4337374) for
+rendering.
+
+Decision:
+- **Bridge.** `runtime/rt64/plaid_rt64.cpp` (MIT OR Apache-2.0) builds
+  `plaid_rt64.dll`: RT64 as a static library behind four C functions,
+  `plaid_gfx_open`, `plaid_gfx_task`, `plaid_gfx_screen` and
+  `plaid_gfx_closed`. So the gcc-built runtime and the MSVC-built renderer
+  share only a C ABI. `runtime/rt64/CMakeLists.txt` builds it from the
+  pinned checkout.
+- **One renderer thread.** It owns the RT64 application and its SDL window,
+  runs every RT64 call and pumps window events. Callers wait for each job.
+- **RAM layout.** Plaid's guest RAM is big-endian, while RT64 reads RDRAM as
+  host-order 32-bit words. Before each task the bridge copies in, swapped,
+  only the words the guest changed since the previous task. So bytes RT64
+  itself wrote to RDRAM, such as resolved framebuffers, survive unless the
+  guest overwrote them.
+- **Tasks.** `osSpTaskStartGo` hands a graphics task to the bridge. The
+  bridge selects RT64's microcode from the task's `ucode` and `ucode_data`
+  and interprets `data_ptr` as an HLE display list. SP and DP completion are
+  still posted by the runtime.
+- **VI registers.** The runtime derives them the way libultra's retrace
+  handler does: from the `OSViMode` passed to `osViSetMode`, the framebuffer
+  passed to `osViSwapBuffer`, and the `osViBlack` flag. It presents them on
+  every VI retrace. Special features and the second interlace field are not
+  modeled (a commented shortcut; SM64's non-interlaced mode needs neither).
+- **Build.** `-DPLAID_RT64` turns the bridge on. Without it the runtime is
+  unchanged. Building RT64 needs D3D12 headers newer than Windows SDK 22621,
+  taken locally from Microsoft's DirectX-Headers (MIT) under `target/`.
+
+Result:
+- `runtime/test_runtime.py` adds a renderer-bridge check that needs no GPU.
+  A stub `plaid_gfx_*` records the VI registers derived from a synthetic
+  `OSViMode` and framebuffer, the task's ucode, data and display-list
+  addresses, and the display-list word read from the big-endian RAM handed
+  over.
+- **SM64 boots natively to its title screen.** On an RTX 3060 under D3D12,
+  RT64 draws the animated goddard Mario head over the "SUPER MARIO 64"
+  backdrop with "PRESS START". This was checked by local screen captures,
+  which stay out of git.
+- In a 25-second run there is no fault: 404 graphics tasks and 818 VI
+  frames. That is about 33 VI per second rather than 60, so the build runs
+  slow. This is the speed baseline (`-O1`, a synchronous bridge with an
+  8 MiB compare per task); no tuning is done before it is recorded.

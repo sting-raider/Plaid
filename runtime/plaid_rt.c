@@ -82,6 +82,14 @@ static u8 eeprom[2048];
 static struct timespec t0;
 static u64 time_base; /* osSetTime offset in count ticks */
 static u32 frame_buffer;
+static u32 vi_mode, vi_black, vi_regs[14]; /* see vi_update */
+/* With PLAID_RT64 the runtime links plaid_rt64.dll (runtime/rt64, ADR-0163). */
+#ifdef PLAID_RT64
+int plaid_gfx_open(const u8 *rom_header);
+void plaid_gfx_task(const u8 *ram, u32 ucode, u32 ucode_data, u32 data_ptr);
+void plaid_gfx_screen(const u32 *regs);
+int plaid_gfx_closed(void);
+#endif
 static unsigned long vi_count, gfx_tasks, audio_tasks, dma_count;
 static long stop_gfx = 1; /* stop after this many graphics tasks (0: never) */
 static double run_seconds = 0;
@@ -310,6 +318,10 @@ static void *event_pump(void *unused) {
       next_vi = now_ns() + 16683350ull;
       vi_count++;
       post(EV_VI);
+#ifdef PLAID_RT64
+      if (vi_mode) plaid_gfx_screen(vi_regs);
+      if (plaid_gfx_closed()) finish(0, "window closed");
+#endif
     }
     plaid_preempt = 1; /* timers are checked at delivery */
     if (run_seconds > 0 && now_ns() > (u64)(run_seconds * 1e9)) finish(0, "time limit");
@@ -468,7 +480,7 @@ RT(osInitialize) {
 }
 static int nop(void) { return 0; }
 #define NOP(name) RT(name) { return nop(); }
-NOP(osCreateViManager) NOP(osViSetMode) NOP(osViBlack) NOP(osViSetSpecialFeatures)
+NOP(osCreateViManager) NOP(osViSetSpecialFeatures)
 NOP(osCreatePiManager) NOP(osInvalDCache) NOP(osInvalICache) NOP(osWritebackDCache)
 NOP(osWritebackDCacheAll) NOP(osSpTaskYield)
 /* The TLB as libultra's osMapTLB writes it (ADR-0162): 4 KiB-aligned even
@@ -488,7 +500,32 @@ RT(osUnmapTLBAll) { /* EntryHi in KSEG0 never matches a mapped address */
 }
 RT(osSpTaskYielded) { return ret(0); }
 RT(__osSpSetPc) { return ret(0); }
-RT(osViSwapBuffer) { frame_buffer = arg(0); return 0; }
+/* VI registers as libultra's retrace handler writes them from the OSViMode
+   (comRegs at +4, fldRegs[0] at +0x28), the next framebuffer and the black
+   flag. shortcut: field 0 only and no special features (gamma, dither), which
+   SM64's non-interlaced LAN1 mode does not need; interlaced modes would
+   alternate fields. */
+static void vi_update(void) {
+  u32 m = vi_mode, f = m + 0x28;
+  if (!m) return;
+  vi_regs[0] = rd32(m + 0x04);
+  vi_regs[1] = (frame_buffer & 0x1fffffffu) + rd32(f);
+  vi_regs[2] = rd32(m + 0x08);
+  vi_regs[3] = rd32(f + 0x10);
+  vi_regs[4] = 0;
+  vi_regs[5] = rd32(m + 0x0c);
+  vi_regs[6] = rd32(m + 0x10);
+  vi_regs[7] = rd32(m + 0x14);
+  vi_regs[8] = rd32(m + 0x18);
+  vi_regs[9] = vi_black ? 0 : rd32(m + 0x1c);
+  vi_regs[10] = rd32(f + 0x08);
+  vi_regs[11] = rd32(f + 0x0c);
+  vi_regs[12] = rd32(m + 0x20);
+  vi_regs[13] = rd32(f + 0x04);
+}
+RT(osViSetMode) { vi_mode = arg(0); vi_update(); return 0; }
+RT(osViBlack) { vi_black = arg(0) & 0xff; vi_update(); return 0; }
+RT(osViSwapBuffer) { frame_buffer = arg(0); vi_update(); return 0; }
 RT(osVirtualToPhysical) {
   u32 a = arg(0), p;
   u8 seg;
@@ -534,6 +571,9 @@ RT(osSpTaskStartGo) {
     gfx_tasks++;
     report_gfx_task(task);
     if (stop_gfx && (long)gfx_tasks >= stop_gfx) finish(0, "graphics task");
+#ifdef PLAID_RT64
+    plaid_gfx_task(S->ram, rd32(task + 0x10), rd32(task + 0x18), rd32(task + 0x30));
+#endif
     post(EV_SP);
     post(EV_DP);
   } else {
@@ -639,6 +679,9 @@ int main(int argc, char **argv) {
   }
   S = calloc(1, sizeof *S);
   if (!S) return 2;
+#ifdef PLAID_RT64
+  if (!rom || plaid_gfx_open(rom)) { fprintf(stderr, "the renderer needs --rom and a working GPU\n"); return 2; }
+#endif
   clock_gettime(CLOCK_MONOTONIC, &t0);
   plaid_load_images(S);
   pthread_mutex_lock(&big);

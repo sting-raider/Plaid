@@ -16,7 +16,7 @@ Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. 
 
 Unproven states fail closed: the solver reports `OPEN`, and lowered code checks every declared assumption at run time and aborts with a fault code when one is violated. There is no fallback to emulation.
 
-Libultra system functions are declared as runtime functions and become calls into Plaid's own C runtime ([`runtime/`](runtime/), ADR-0158/0159): threads, message queues, events, timers, PI DMA, controllers and EEPROM. Graphics will go through [RT64](https://github.com/rt64/rt64) (MIT). Thread entries and other callbacks are proven per call site.
+Libultra system functions are declared as runtime functions and become calls into Plaid's own C runtime ([`runtime/`](runtime/), ADR-0158/0159): threads, message queues, events, timers, PI DMA, controllers and EEPROM. Graphics go through [RT64](https://github.com/rt64/rt64) (MIT, [`runtime/rt64/`](runtime/rt64/)). Thread entries and other callbacks are proven per call site.
 
 ## Real ROMs
 
@@ -32,8 +32,9 @@ Milestone 4 is running Super Mario 64 natively to its title screen. The lowered 
 | `mtxf_lookat` fault 7 | libultra runs COP1 with Status.FR = 0 | FR = 0 register pairs (ADR-0160) |
 | goddard reload, fault 2 | a reloaded segment was protected for good | loads re-verify after a write (ADR-0161) |
 | goddard dynlists, fault 1 | data read through `osMapTLB` mappings | TLB-mapped data, with D-cache index aliasing (ADR-0162) |
+| No picture | graphics tasks were only reported | RT64 bridge (ADR-0163) |
 
-SM64 now runs natively for a full 90-second test without a fault, at the game's own 30 fps (1459 graphics tasks), but its display lists are not yet drawn. Still to come: RT64 rendering, audio, input and save data. The latest run is in [`research/sm64-first-measurement.md`](research/sm64-first-measurement.md), and what comes next is in [`docs/NEXT.md`](docs/NEXT.md).
+**SM64 now boots natively to its title screen,** with the animated Mario head drawn by RT64 (ADR-0163). Still to come: controller input, audio, save data and speed (the current build runs at about 33 of 60 VI per second). The latest run is in [`research/sm64-first-measurement.md`](research/sm64-first-measurement.md), and what comes next is in [`docs/NEXT.md`](docs/NEXT.md).
 
 ## Build
 

@@ -306,10 +306,10 @@
 <rect x="612" y="1006" width="548" height="392" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
 <text x="632" y="1036" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">04</text>
 <text x="666" y="1037" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Native AOT Compiler</text>
-<text x="632" y="1062" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">1 integrated   /   5 partial   /   2 open</text>
+<text x="632" y="1062" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">1 integrated   /   6 partial   /   1 open</text>
 <rect x="632" y="1076" width="63.5" height="4" rx="0" fill="#58d5ab" stroke="none"/>
-<rect x="695.5" y="1076" width="317.5" height="4" rx="0" fill="#ffc66d" stroke="none"/>
-<rect x="1013.0" y="1076" width="127.0" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
+<rect x="695.5" y="1076" width="381.0" height="4" rx="0" fill="#ffc66d" stroke="none"/>
+<rect x="1076.5" y="1076" width="63.5" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
 <g class="milestone">
 <title>Native AOT Compiler: MIPS -&gt; C lowering (ADR-0126) (partial)</title>
 <text x="632" y="1105" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
@@ -353,19 +353,19 @@
 <text x="1140" y="1261" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
 </g>
 <g class="milestone">
-<title>Native AOT Compiler: Link with N64ModernRuntime (open)</title>
-<text x="632" y="1287" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
-<text x="655" y="1287" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Link with N64ModernRuntime</text>
-<text x="1140" y="1287" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+<title>Native AOT Compiler: Link with the Plaid runtime (ADR-0158) (partial)</title>
+<text x="632" y="1287" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
+<text x="655" y="1287" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Link with the Plaid runtime (ADR-0158)</text>
+<text x="1140" y="1287" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <text x="632" y="1354" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
 <text x="632" y="1372" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Return closure outside the assumption scope, wider ISA, runtime link.</text>
 <rect x="40" y="1422" width="548" height="418" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
 <text x="60" y="1452" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">05</text>
 <text x="94" y="1453" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Native Runtime</text>
-<text x="60" y="1478" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">0 integrated   /   1 partial   /   8 open</text>
-<rect x="60.0" y="1492" width="56.44444444444444" height="4" rx="0" fill="#ffc66d" stroke="none"/>
-<rect x="116.44444444444444" y="1492" width="451.55555555555554" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
+<text x="60" y="1478" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">0 integrated   /   4 partial   /   5 open</text>
+<rect x="60.0" y="1492" width="225.77777777777777" height="4" rx="0" fill="#ffc66d" stroke="none"/>
+<rect x="285.77777777777777" y="1492" width="282.22222222222223" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
 <g class="milestone">
 <title>Native Runtime: Declared runtime-function boundary (ADR-0129) (partial)</title>
 <text x="60" y="1521" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
@@ -373,16 +373,16 @@
 <text x="568" y="1521" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Guest memory/MMIO runtime (open)</title>
-<text x="60" y="1547" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
+<title>Native Runtime: Guest memory/MMIO runtime (partial)</title>
+<text x="60" y="1547" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
 <text x="83" y="1547" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Guest memory/MMIO runtime</text>
-<text x="568" y="1547" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+<text x="568" y="1547" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Interrupt/timing/event runtime (open)</title>
-<text x="60" y="1573" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
+<title>Native Runtime: Interrupt/timing/event runtime (partial)</title>
+<text x="60" y="1573" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
 <text x="83" y="1573" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Interrupt/timing/event runtime</text>
-<text x="568" y="1573" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+<text x="568" y="1573" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
 <title>Native Runtime: Controller input (open)</title>
@@ -409,10 +409,10 @@
 <text x="568" y="1677" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Renderer integration (open)</title>
-<text x="60" y="1703" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
+<title>Native Runtime: Renderer integration (partial)</title>
+<text x="60" y="1703" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
 <text x="83" y="1703" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Renderer integration</text>
-<text x="568" y="1703" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+<text x="568" y="1703" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
 <title>Native Runtime: Native launch/cache packaging (open)</title>
@@ -421,14 +421,15 @@
 <text x="568" y="1729" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <text x="60" y="1796" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
-<text x="60" y="1814" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Reuse N64ModernRuntime + RT64 (ADR-0126) and link lowered code.</text>
+<text x="60" y="1814" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Plaid runtime + RT64 (ADR-0158/0163): audio, input, saves, packaging and</text>
+<text x="60" y="1830" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">speed.</text>
 <rect x="612" y="1422" width="548" height="418" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
 <text x="632" y="1452" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">06</text>
 <text x="666" y="1453" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Compatibility</text>
-<text x="632" y="1478" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">4 integrated   /   1 partial   /   6 open</text>
+<text x="632" y="1478" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">4 integrated   /   2 partial   /   5 open</text>
 <rect x="632" y="1492" width="184.72727272727272" height="4" rx="0" fill="#58d5ab" stroke="none"/>
-<rect x="816.7272727272727" y="1492" width="46.18181818181818" height="4" rx="0" fill="#ffc66d" stroke="none"/>
-<rect x="862.9090909090909" y="1492" width="277.09090909090907" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
+<rect x="816.7272727272727" y="1492" width="92.36363636363636" height="4" rx="0" fill="#ffc66d" stroke="none"/>
+<rect x="909.0909090909091" y="1492" width="230.9090909090909" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
 <g class="milestone">
 <title>Compatibility: Synthetic discovery corpus (verified)</title>
 <text x="632" y="1521" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">✓</text>
@@ -472,10 +473,10 @@
 <text x="1140" y="1677" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
 </g>
 <g class="milestone">
-<title>Compatibility: First native commercial boot (open)</title>
-<text x="632" y="1703" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
+<title>Compatibility: First native commercial boot (partial)</title>
+<text x="632" y="1703" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
 <text x="655" y="1703" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">First native commercial boot</text>
-<text x="1140" y="1703" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+<text x="1140" y="1703" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
 <title>Compatibility: First native gameplay (open)</title>

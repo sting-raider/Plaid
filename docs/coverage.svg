@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 686" width="840" height="686" role="img" aria-label="Plaid coverage maps">
 <style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}.title{font-size:17px;fill:#1f2328}.cell{font-size:12px;fill:#fff;paint-order:stroke;stroke:#0d1117;stroke-width:2px;stroke-opacity:.45}@media (prefers-color-scheme:dark){.title{fill:#e6edf3}}</style>
 <text x="2" y="22" class="title">VR4300 instructions*: 93.8% (196/209)</text>
-<text x="2" y="378" class="title">Milestones*: 30 verified, 19 partial (69)</text>
+<text x="2" y="378" class="title">Milestones*: 30 verified, 24 partial (69)</text>
 <rect x="0.0" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.df.d (done)</title></rect>
 <rect x="33.3" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.d (done)</title></rect>
 <rect x="66.6" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.s (done)</title></rect>
@@ -260,11 +260,11 @@
 <rect x="319.6" y="386.0" width="63.9" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First native synthetic executable (done)</title></rect>
 <rect x="383.5" y="386.0" width="63.9" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: Mupen/ares differential oracles (done)</title></rect>
 <rect x="447.4" y="386.0" width="63.9" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: Synthetic discovery corpus (done)</title></rect>
-<rect x="255.7" y="438.4" width="63.9" height="52.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: n64-systemtest research corpus (partial)</title></rect>
-<rect x="319.6" y="438.4" width="63.9" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: 100-game campaign (open)</title></rect>
-<rect x="383.5" y="438.4" width="63.9" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First commercial ROM CLOSED (open)</title></rect>
-<rect x="447.4" y="438.4" width="63.9" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First commercial ROM mapped (open)</title></rect>
-<rect x="255.7" y="490.8" width="85.2" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First native commercial boot (open)</title></rect>
+<rect x="255.7" y="438.4" width="63.9" height="52.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First native commercial boot (partial)</title></rect>
+<rect x="319.6" y="438.4" width="63.9" height="52.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: n64-systemtest research corpus (partial)</title></rect>
+<rect x="383.5" y="438.4" width="63.9" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: 100-game campaign (open)</title></rect>
+<rect x="447.4" y="438.4" width="63.9" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First commercial ROM CLOSED (open)</title></rect>
+<rect x="255.7" y="490.8" width="85.2" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First commercial ROM mapped (open)</title></rect>
 <rect x="340.9" y="490.8" width="85.2" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First native gameplay (open)</title></rect>
 <rect x="426.1" y="490.8" width="85.2" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: Representative 25-game set (open)</title></rect>
 <rect x="255.7" y="386.0" width="255.7" height="157.1" fill="none" stroke="#0d1117" stroke-width="2"/>
@@ -294,24 +294,24 @@
 <rect x="511.3" y="386.0" width="231.3" height="157.9" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="515.3" y="399.0" class="cell">Discovery &amp; ProgramMap</text>
 <rect x="511.3" y="543.9" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Declared runtime-function boundary (ADR-0129) (partial)</title></rect>
-<rect x="569.1" y="543.9" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Audio path (open)</title></rect>
-<rect x="627.0" y="543.9" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Controller input (open)</title></rect>
-<rect x="684.8" y="543.9" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Guest memory/MMIO runtime (open)</title></rect>
-<rect x="511.3" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Interrupt/timing/event runtime (open)</title></rect>
-<rect x="569.1" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Native launch/cache packaging (open)</title></rect>
-<rect x="627.0" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: RSP runtime/native path (open)</title></rect>
-<rect x="684.8" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Renderer integration (open)</title></rect>
+<rect x="569.1" y="543.9" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Guest memory/MMIO runtime (partial)</title></rect>
+<rect x="627.0" y="543.9" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Interrupt/timing/event runtime (partial)</title></rect>
+<rect x="684.8" y="543.9" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Renderer integration (partial)</title></rect>
+<rect x="511.3" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Audio path (open)</title></rect>
+<rect x="569.1" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Controller input (open)</title></rect>
+<rect x="627.0" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Native launch/cache packaging (open)</title></rect>
+<rect x="684.8" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: RSP runtime/native path (open)</title></rect>
 <rect x="511.3" y="638.6" width="231.3" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Save devices (open)</title></rect>
 <rect x="511.3" y="543.9" width="231.3" height="142.1" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="515.3" y="556.9" class="cell">Native Runtime</text>
 <rect x="742.6" y="386.0" width="48.7" height="75.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Synthetic native differential verifier (done)</title></rect>
 <rect x="791.3" y="386.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Finite native indirect dispatch (partial)</title></rect>
 <rect x="742.6" y="461.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Integer MIPS lowering (partial)</title></rect>
-<rect x="791.3" y="461.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: MIPS -&gt; C lowering (ADR-0126) (partial)</title></rect>
-<rect x="742.6" y="536.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Return closure / function-level lowering (partial)</title></rect>
-<rect x="791.3" y="536.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: x86-64 host build via C (partial)</title></rect>
-<rect x="742.6" y="611.0" width="48.7" height="75.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: ARM64 host build via C (open)</title></rect>
-<rect x="791.3" y="611.0" width="48.7" height="75.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Link with N64ModernRuntime (open)</title></rect>
+<rect x="791.3" y="461.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Link with the Plaid runtime (ADR-0158) (partial)</title></rect>
+<rect x="742.6" y="536.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: MIPS -&gt; C lowering (ADR-0126) (partial)</title></rect>
+<rect x="791.3" y="536.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Return closure / function-level lowering (partial)</title></rect>
+<rect x="742.6" y="611.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: x86-64 host build via C (partial)</title></rect>
+<rect x="791.3" y="611.0" width="48.7" height="75.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: ARM64 host build via C (open)</title></rect>
 <rect x="742.6" y="386.0" width="97.4" height="300.0" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="746.6" y="399.0" class="cell">Native AOT C…</text>
 </svg>
