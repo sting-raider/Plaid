@@ -1,7 +1,7 @@
 {
   "decoded": 209,
   "format": "plaid-isa-coverage-v0",
-  "lowered": 130,
+  "lowered": 131,
   "mnemonics": {
     "abs.d": false,
     "abs.s": false,
@@ -33,7 +33,7 @@
     "bltzl": true,
     "bne": true,
     "bnel": true,
-    "break": false,
+    "break": true,
     "c.df.d": true,
     "c.eq.d": true,
     "c.eq.s": true,

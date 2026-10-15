@@ -343,6 +343,11 @@ pub fn is_cop1_move(word: u32) -> bool {
     }
 }
 
+/// `BREAK` (ADR-0138): a checked abort in the guarded scope.
+pub fn is_break(word: u32) -> bool {
+    word >> 26 == 0 && word & 63 == 13
+}
+
 /// COP1 `C.cond.S/D` compares (ADR-0135).
 pub fn is_cop1_compare(word: u32) -> bool {
     word >> 26 == 17 && matches!((word >> 21) & 31, 16 | 17) && word & 0x7f0 == 0x30
@@ -354,7 +359,9 @@ pub fn is_cop1_branch(word: u32) -> bool {
 }
 
 fn allowed_static_effect(word: u32, pc: crate::GuestAddr, guarded_ram: bool) -> bool {
-    if guarded_ram && (is_cop1_move(word) || is_cop1_compare(word) || is_cop1_branch(word)) {
+    if guarded_ram
+        && (is_cop1_move(word) || is_cop1_compare(word) || is_cop1_branch(word) || is_break(word))
+    {
         return true;
     }
     let i = decode(word, pc);
@@ -411,6 +418,16 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         .filter(|b| !b.delay_slot_entry)
         .map(|b| b.start.clone())
         .collect();
+    // A reachable BREAK aborts natively in the guarded scope (ADR-0138).
+    let checked_break = |u: &Unresolved| {
+        scope == Scope::DeclaredStaticImagesGuardedRam
+            && u.kind == "exception_or_unsupported_instruction"
+            && u.site.as_ref().is_some_and(|a| {
+                source(images, a)
+                    .and_then(|image| image.word(a.pc))
+                    .is_some_and(is_break)
+            })
+    };
     if !map.fetch_observations.is_empty() {
         add(
             "fetch_execution_identity_unknown",
@@ -865,17 +882,22 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         }
         for u in &expected.unresolved {
             if !(u.kind == "unmapped_target" && u.site.as_ref().is_some_and(|a| starts.contains(a)))
+                && !checked_break(u)
             {
                 add(&u.kind, u.site.clone(), &u.detail, provenance.clone());
             }
         }
     }
+    let mut uses_break = false;
     for u in &map.unresolved {
         let table_obligation = matches!(
             u.kind.as_str(),
             "pointer_table_immutability_unproven" | "pointer_table_target_identity_unproven"
         ) && u.site.as_ref().is_some_and(|a| tables.contains(a));
+        let checked_break = checked_break(u);
+        uses_break |= checked_break;
         if table_obligation
+            || checked_break
             || (u.kind == "unmapped_target" && u.site.as_ref().is_some_and(|a| starts.contains(a)))
         {
             discharged.insert(u.clone());
@@ -1085,6 +1107,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             "Overflow-trapping ADD/ADDI/SUB/DADD/DADDI/DSUB never overflow; a native artifact checks each one and aborts on overflow, with no fallback execution."
                 .into(),
         );
+        if uses_break {
+            assumptions.push(
+                "BREAK is never executed (its Breakpoint exception handler is not modeled); a native artifact aborts if one is reached, with no fallback execution."
+                    .into(),
+            );
+        }
     }
     Ok(SolveReport {
         schema_version: 0,

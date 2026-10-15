@@ -39,7 +39,8 @@ typedef struct { u32 start, end; int load; } plaid_range;
    6: an overflow-trapping add/subtract that would raise an exception;
    7: a COP1 compare with a NaN operand (FCSR enables are not modeled);
    8: code of a declared load entered while RAM does not hold its declared
-      bytes. Executable bytes of a load not yet verified may be written. */
+      bytes. Executable bytes of a load not yet verified may be written;
+   9: a BREAK was reached (its exception handler is not modeled). */
 static inline int plaid_fault(plaid_state *s, u32 pc, u32 code) {
   s->fault = code; s->fault_pc = pc; return 1;
 }
@@ -218,6 +219,7 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
         (0, 31) => format!(
             "{{ u64 n = {a}, d = {b}; if (d) {{ s->lo = n / d; s->hi = n % d; }} else {{ s->lo = ~0ull; s->hi = n; }} }}"
         ),
+        (0, 13) => format!("return plaid_fault(s, 0x{pc:08x}u, 9);"),
         (0, 32) => trap("u32", b.clone(), false, "0x80000000u", rd, "SX32(z)"),
         (0, 34) => trap("u32", b.clone(), true, "0x80000000u", rd, "SX32(z)"),
         (0, 44) => trap("u64", b.clone(), false, "(1ull << 63)", rd, "z"),
