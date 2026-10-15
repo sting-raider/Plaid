@@ -1,0 +1,483 @@
+{
+  "documented": 119,
+  "format": "plaid-rsp-coverage-v0",
+  "lowered": 119,
+  "mnemonics": {
+    "add": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "addi": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "addiu": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "addu": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "and": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "andi": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "beq": {
+      "group": "Branch/jump",
+      "lowered": true
+    },
+    "bgez": {
+      "group": "Branch/jump",
+      "lowered": true
+    },
+    "bgezal": {
+      "group": "Branch/jump",
+      "lowered": true
+    },
+    "bgtz": {
+      "group": "Branch/jump",
+      "lowered": true
+    },
+    "blez": {
+      "group": "Branch/jump",
+      "lowered": true
+    },
+    "bltz": {
+      "group": "Branch/jump",
+      "lowered": true
+    },
+    "bltzal": {
+      "group": "Branch/jump",
+      "lowered": true
+    },
+    "bne": {
+      "group": "Branch/jump",
+      "lowered": true
+    },
+    "break": {
+      "group": "Branch/jump",
+      "lowered": true
+    },
+    "cfc2": {
+      "group": "COP2 move",
+      "lowered": true
+    },
+    "ctc2": {
+      "group": "COP2 move",
+      "lowered": true
+    },
+    "j": {
+      "group": "Branch/jump",
+      "lowered": true
+    },
+    "jal": {
+      "group": "Branch/jump",
+      "lowered": true
+    },
+    "jalr": {
+      "group": "Branch/jump",
+      "lowered": true
+    },
+    "jr": {
+      "group": "Branch/jump",
+      "lowered": true
+    },
+    "lb": {
+      "group": "Scalar load/store",
+      "lowered": true
+    },
+    "lbu": {
+      "group": "Scalar load/store",
+      "lowered": true
+    },
+    "lbv": {
+      "group": "Vector load",
+      "lowered": true
+    },
+    "ldv": {
+      "group": "Vector load",
+      "lowered": true
+    },
+    "lfv": {
+      "group": "Vector load",
+      "lowered": true
+    },
+    "lh": {
+      "group": "Scalar load/store",
+      "lowered": true
+    },
+    "lhu": {
+      "group": "Scalar load/store",
+      "lowered": true
+    },
+    "lhv": {
+      "group": "Vector load",
+      "lowered": true
+    },
+    "llv": {
+      "group": "Vector load",
+      "lowered": true
+    },
+    "lpv": {
+      "group": "Vector load",
+      "lowered": true
+    },
+    "lqv": {
+      "group": "Vector load",
+      "lowered": true
+    },
+    "lrv": {
+      "group": "Vector load",
+      "lowered": true
+    },
+    "lsv": {
+      "group": "Vector load",
+      "lowered": true
+    },
+    "ltv": {
+      "group": "Vector load",
+      "lowered": true
+    },
+    "lui": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "luv": {
+      "group": "Vector load",
+      "lowered": true
+    },
+    "lw": {
+      "group": "Scalar load/store",
+      "lowered": true
+    },
+    "mfc0": {
+      "group": "COP0",
+      "lowered": true
+    },
+    "mfc2": {
+      "group": "COP2 move",
+      "lowered": true
+    },
+    "mtc0": {
+      "group": "COP0",
+      "lowered": true
+    },
+    "mtc2": {
+      "group": "COP2 move",
+      "lowered": true
+    },
+    "nor": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "or": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "ori": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "sb": {
+      "group": "Scalar load/store",
+      "lowered": true
+    },
+    "sbv": {
+      "group": "Vector store",
+      "lowered": true
+    },
+    "sdv": {
+      "group": "Vector store",
+      "lowered": true
+    },
+    "sfv": {
+      "group": "Vector store",
+      "lowered": true
+    },
+    "sh": {
+      "group": "Scalar load/store",
+      "lowered": true
+    },
+    "shv": {
+      "group": "Vector store",
+      "lowered": true
+    },
+    "sll": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "sllv": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "slt": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "slti": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "sltiu": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "sltu": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "slv": {
+      "group": "Vector store",
+      "lowered": true
+    },
+    "spv": {
+      "group": "Vector store",
+      "lowered": true
+    },
+    "sqv": {
+      "group": "Vector store",
+      "lowered": true
+    },
+    "sra": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "srav": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "srl": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "srlv": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "srv": {
+      "group": "Vector store",
+      "lowered": true
+    },
+    "ssv": {
+      "group": "Vector store",
+      "lowered": true
+    },
+    "stv": {
+      "group": "Vector store",
+      "lowered": true
+    },
+    "sub": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "subu": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "suv": {
+      "group": "Vector store",
+      "lowered": true
+    },
+    "sw": {
+      "group": "Scalar load/store",
+      "lowered": true
+    },
+    "swv": {
+      "group": "Vector store",
+      "lowered": true
+    },
+    "vabs": {
+      "group": "Vector add",
+      "lowered": true
+    },
+    "vadd": {
+      "group": "Vector add",
+      "lowered": true
+    },
+    "vaddc": {
+      "group": "Vector add",
+      "lowered": true
+    },
+    "vand": {
+      "group": "Vector select/logic",
+      "lowered": true
+    },
+    "vch": {
+      "group": "Vector select/logic",
+      "lowered": true
+    },
+    "vcl": {
+      "group": "Vector select/logic",
+      "lowered": true
+    },
+    "vcr": {
+      "group": "Vector select/logic",
+      "lowered": true
+    },
+    "veq": {
+      "group": "Vector select/logic",
+      "lowered": true
+    },
+    "vge": {
+      "group": "Vector select/logic",
+      "lowered": true
+    },
+    "vlt": {
+      "group": "Vector select/logic",
+      "lowered": true
+    },
+    "vmacf": {
+      "group": "Vector multiply",
+      "lowered": true
+    },
+    "vmacq": {
+      "group": "Vector multiply",
+      "lowered": true
+    },
+    "vmacu": {
+      "group": "Vector multiply",
+      "lowered": true
+    },
+    "vmadh": {
+      "group": "Vector multiply",
+      "lowered": true
+    },
+    "vmadl": {
+      "group": "Vector multiply",
+      "lowered": true
+    },
+    "vmadm": {
+      "group": "Vector multiply",
+      "lowered": true
+    },
+    "vmadn": {
+      "group": "Vector multiply",
+      "lowered": true
+    },
+    "vmov": {
+      "group": "Vector divide/move",
+      "lowered": true
+    },
+    "vmrg": {
+      "group": "Vector select/logic",
+      "lowered": true
+    },
+    "vmudh": {
+      "group": "Vector multiply",
+      "lowered": true
+    },
+    "vmudl": {
+      "group": "Vector multiply",
+      "lowered": true
+    },
+    "vmudm": {
+      "group": "Vector multiply",
+      "lowered": true
+    },
+    "vmudn": {
+      "group": "Vector multiply",
+      "lowered": true
+    },
+    "vmulf": {
+      "group": "Vector multiply",
+      "lowered": true
+    },
+    "vmulq": {
+      "group": "Vector multiply",
+      "lowered": true
+    },
+    "vmulu": {
+      "group": "Vector multiply",
+      "lowered": true
+    },
+    "vnand": {
+      "group": "Vector select/logic",
+      "lowered": true
+    },
+    "vne": {
+      "group": "Vector select/logic",
+      "lowered": true
+    },
+    "vnop": {
+      "group": "Vector divide/move",
+      "lowered": true
+    },
+    "vnor": {
+      "group": "Vector select/logic",
+      "lowered": true
+    },
+    "vnull": {
+      "group": "Vector divide/move",
+      "lowered": true
+    },
+    "vnxor": {
+      "group": "Vector select/logic",
+      "lowered": true
+    },
+    "vor": {
+      "group": "Vector select/logic",
+      "lowered": true
+    },
+    "vrcp": {
+      "group": "Vector divide/move",
+      "lowered": true
+    },
+    "vrcph": {
+      "group": "Vector divide/move",
+      "lowered": true
+    },
+    "vrcpl": {
+      "group": "Vector divide/move",
+      "lowered": true
+    },
+    "vrndn": {
+      "group": "Vector multiply",
+      "lowered": true
+    },
+    "vrndp": {
+      "group": "Vector multiply",
+      "lowered": true
+    },
+    "vrsq": {
+      "group": "Vector divide/move",
+      "lowered": true
+    },
+    "vrsqh": {
+      "group": "Vector divide/move",
+      "lowered": true
+    },
+    "vrsql": {
+      "group": "Vector divide/move",
+      "lowered": true
+    },
+    "vsar": {
+      "group": "Vector add",
+      "lowered": true
+    },
+    "vsub": {
+      "group": "Vector add",
+      "lowered": true
+    },
+    "vsubc": {
+      "group": "Vector add",
+      "lowered": true
+    },
+    "vxor": {
+      "group": "Vector select/logic",
+      "lowered": true
+    },
+    "xor": {
+      "group": "Scalar ALU",
+      "lowered": true
+    },
+    "xori": {
+      "group": "Scalar ALU",
+      "lowered": true
+    }
+  }
+}

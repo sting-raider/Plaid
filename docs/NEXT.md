@@ -16,7 +16,7 @@ effect in its receipt.
 | 1 | Synthetic ROM -> C -> native | spike096 programs, including nested/recursive calls, match pinned ares exactly; fail-closed cases fault | **done** (spike096, ADR-0127) |
 | 2 | SM64 discovery recall | >= 99% of real functions found, scored locally against a decomp symbol map used only as an oracle | **done: 99.03%** (3795/3832, ADR-0152, `--data-roots`) |
 | 3 | SM64 closed under declared assumptions | solver CLOSED in an explicit assumption scope; every assumption listed and checked | **done** (`closed` under the address-taken scope, ADR-0153..0156; execution-source and runtime-ABI assumptions are declared, the rest checked natively) |
-| 4 | SM64 boots natively to title | lowered code linked with Plaid's runtime + RT64 (ADR-0158); no interpreter linked | open |
+| 4 | SM64 boots natively to title | lowered code linked with Plaid's runtime + RT64 (ADR-0158); no interpreter linked | **done** (ADR-0163), and into gameplay at full speed with native audio (ADR-0164..0169) |
 | 5 | Retire assumptions; OoT | assumptions discharged one by one; OoT via Yaz0 (PR #28) and relocation (PR #31) | open |
 
 Next concrete steps, in order:

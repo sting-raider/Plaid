@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 686" width="840" height="686" role="img" aria-label="Plaid coverage maps">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 1042" width="840" height="1042" role="img" aria-label="Plaid coverage maps">
 <style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}.title{font-size:17px;fill:#1f2328}.cell{font-size:12px;fill:#fff;paint-order:stroke;stroke:#0d1117;stroke-width:2px;stroke-opacity:.45}@media (prefers-color-scheme:dark){.title{fill:#e6edf3}}</style>
 <text x="2" y="22" class="title">VR4300 instructions*: 93.8% (196/209)</text>
-<text x="2" y="378" class="title">Milestones*: 30 verified, 29 partial (69)</text>
+<text x="2" y="378" class="title">Milestones*: 50 verified, 18 partial (73)</text>
 <rect x="0.0" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.df.d (done)</title></rect>
 <rect x="33.3" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.d (done)</title></rect>
 <rect x="66.6" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.s (done)</title></rect>
@@ -233,85 +233,231 @@
 <rect x="796.8" y="302.1" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tnei (done)</title></rect>
 <rect x="753.7" y="162.4" width="86.3" height="167.6" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="757.7" y="175.4" class="cell">Trap</text>
-<rect x="0.0" y="386.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded PI / SP DMA / CPU consumption chain (done)</title></rect>
-<rect x="63.9" y="386.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded PI primitive-to-writer composition (done)</title></rect>
-<rect x="127.8" y="386.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded lower-DMEM ancestry revocation (done)</title></rect>
-<rect x="191.7" y="386.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded lower-IMEM ancestry revocation (done)</title></rect>
-<rect x="0.0" y="436.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded original-clock RAM mutation cuts (done)</title></rect>
-<rect x="63.9" y="436.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded reverse-SP-DMA / RAM executable chain (done)</title></rect>
-<rect x="127.8" y="436.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded scalar producer / executable-read join (done)</title></rect>
-<rect x="191.7" y="436.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded scalar store / executable backing (done)</title></rect>
-<rect x="0.0" y="486.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Controlled D-cache export / executable chain (done)</title></rect>
-<rect x="63.9" y="486.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Controlled mapping / cache / exception chain (done)</title></rect>
-<rect x="127.8" y="486.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Exact IMEM-read / performed-RSP receipts (done)</title></rect>
-<rect x="191.7" y="486.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: I-cache snapshots/fill outcomes (done)</title></rect>
-<rect x="0.0" y="536.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: PI request/queue/source history (done)</title></rect>
-<rect x="63.9" y="536.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Physical/cache fetch context (done)</title></rect>
-<rect x="127.8" y="536.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: SP/PIF backing witnesses (done)</title></rect>
-<rect x="191.7" y="536.0" width="63.9" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: CPU copy/transform lineage (partial)</title></rect>
-<rect x="0.0" y="586.0" width="63.9" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: CPU executable-store sensing (partial)</title></rect>
-<rect x="63.9" y="586.0" width="63.9" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Cache writeback/restore lineage (partial)</title></rect>
-<rect x="127.8" y="586.0" width="63.9" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Decompression/relocation lineage (partial)</title></rect>
-<rect x="191.7" y="586.0" width="63.9" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: RSP writer/dataflow lineage (partial)</title></rect>
-<rect x="0.0" y="636.0" width="255.7" height="50.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Complete mutation census (open)</title></rect>
-<rect x="0.0" y="386.0" width="255.7" height="300.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<rect x="0.0" y="386.0" width="60.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded PI / SP DMA / CPU consumption chain (done)</title></rect>
+<rect x="60.4" y="386.0" width="60.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded PI primitive-to-writer composition (done)</title></rect>
+<rect x="120.8" y="386.0" width="60.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded lower-DMEM ancestry revocation (done)</title></rect>
+<rect x="181.2" y="386.0" width="60.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded lower-IMEM ancestry revocation (done)</title></rect>
+<rect x="0.0" y="436.0" width="60.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded original-clock RAM mutation cuts (done)</title></rect>
+<rect x="60.4" y="436.0" width="60.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded reverse-SP-DMA / RAM executable chain (done)</title></rect>
+<rect x="120.8" y="436.0" width="60.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded scalar producer / executable-read join (done)</title></rect>
+<rect x="181.2" y="436.0" width="60.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded scalar store / executable backing (done)</title></rect>
+<rect x="0.0" y="486.0" width="60.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Controlled D-cache export / executable chain (done)</title></rect>
+<rect x="60.4" y="486.0" width="60.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Controlled mapping / cache / exception chain (done)</title></rect>
+<rect x="120.8" y="486.0" width="60.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Exact IMEM-read / performed-RSP receipts (done)</title></rect>
+<rect x="181.2" y="486.0" width="60.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: I-cache snapshots/fill outcomes (done)</title></rect>
+<rect x="0.0" y="536.0" width="60.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: PI request/queue/source history (done)</title></rect>
+<rect x="60.4" y="536.0" width="60.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Physical/cache fetch context (done)</title></rect>
+<rect x="120.8" y="536.0" width="60.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: SP/PIF backing witnesses (done)</title></rect>
+<rect x="181.2" y="536.0" width="60.4" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: CPU copy/transform lineage (partial)</title></rect>
+<rect x="0.0" y="586.0" width="60.4" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: CPU executable-store sensing (partial)</title></rect>
+<rect x="60.4" y="586.0" width="60.4" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Cache writeback/restore lineage (partial)</title></rect>
+<rect x="120.8" y="586.0" width="60.4" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Decompression/relocation lineage (partial)</title></rect>
+<rect x="181.2" y="586.0" width="60.4" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: RSP writer/dataflow lineage (partial)</title></rect>
+<rect x="0.0" y="636.0" width="241.6" height="50.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Complete mutation census (open)</title></rect>
+<rect x="0.0" y="386.0" width="241.6" height="300.0" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="4.0" y="399.0" class="cell">Executable Provenance</text>
-<rect x="255.7" y="386.0" width="63.9" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: 20M-fetch commercial-prefix replay (done)</title></rect>
-<rect x="319.6" y="386.0" width="63.9" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First native synthetic executable (done)</title></rect>
-<rect x="383.5" y="386.0" width="63.9" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: Mupen/ares differential oracles (done)</title></rect>
-<rect x="447.4" y="386.0" width="63.9" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: Synthetic discovery corpus (done)</title></rect>
-<rect x="255.7" y="438.4" width="63.9" height="52.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First native commercial boot (partial)</title></rect>
-<rect x="319.6" y="438.4" width="63.9" height="52.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First native gameplay (partial)</title></rect>
-<rect x="383.5" y="438.4" width="63.9" height="52.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: n64-systemtest research corpus (partial)</title></rect>
-<rect x="447.4" y="438.4" width="63.9" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: 100-game campaign (open)</title></rect>
-<rect x="255.7" y="490.8" width="85.2" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First commercial ROM CLOSED (open)</title></rect>
-<rect x="340.9" y="490.8" width="85.2" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First commercial ROM mapped (open)</title></rect>
-<rect x="426.1" y="490.8" width="85.2" height="52.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: Representative 25-game set (open)</title></rect>
-<rect x="255.7" y="386.0" width="255.7" height="157.1" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="259.7" y="399.0" class="cell">Compatibility</text>
-<rect x="255.7" y="543.1" width="63.9" height="47.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Direct-control-flow closure (done)</title></rect>
-<rect x="319.6" y="543.1" width="63.9" height="47.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Fail-closed solver &amp; diagnostics (done)</title></rect>
-<rect x="383.5" y="543.1" width="63.9" height="47.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Source/certificate rechecking (done)</title></rect>
-<rect x="447.4" y="543.1" width="63.9" height="47.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Execution-root completeness (partial)</title></rect>
-<rect x="255.7" y="590.8" width="63.9" height="47.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Finite indirect-target closure (partial)</title></rect>
-<rect x="319.6" y="590.8" width="63.9" height="47.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Overlay/executable lifetimes (partial)</title></rect>
-<rect x="383.5" y="590.8" width="63.9" height="47.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Pointer-table immutability proof (partial)</title></rect>
-<rect x="447.4" y="590.8" width="63.9" height="47.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: RSP executable-universe proof (partial)</title></rect>
-<rect x="255.7" y="638.4" width="127.8" height="47.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: TLB/context/cache composition (partial)</title></rect>
-<rect x="383.5" y="638.4" width="127.8" height="47.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: First ROM reaches CLOSED (open)</title></rect>
-<rect x="255.7" y="543.1" width="255.7" height="142.9" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="259.7" y="556.1" class="cell">Closed-World Proof</text>
-<rect x="511.3" y="386.0" width="57.8" height="52.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Bounded cross-block indirect proofs (done)</title></rect>
-<rect x="569.1" y="386.0" width="57.8" height="52.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Direct CFG recovery (done)</title></rect>
-<rect x="627.0" y="386.0" width="57.8" height="52.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Dynamic trace import (done)</title></rect>
-<rect x="684.8" y="386.0" width="57.8" height="52.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Evidence merge &amp; conflicts (done)</title></rect>
-<rect x="511.3" y="438.6" width="57.8" height="52.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Local indirect certificates (done)</title></rect>
-<rect x="569.1" y="438.6" width="57.8" height="52.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: ProgramMap schema &amp; validation (done)</title></rect>
-<rect x="627.0" y="438.6" width="57.8" height="52.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: ROM normalization &amp; identity (done)</title></rect>
-<rect x="684.8" y="438.6" width="57.8" height="52.6" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Jump/pointer-table recovery (partial)</title></rect>
-<rect x="511.3" y="491.3" width="115.7" height="52.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Commercial-ROM map validation (open)</title></rect>
-<rect x="627.0" y="491.3" width="115.7" height="52.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Known-library/signature evidence (open)</title></rect>
-<rect x="511.3" y="386.0" width="231.3" height="157.9" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="515.3" y="399.0" class="cell">Discovery &amp; ProgramMap</text>
-<rect x="511.3" y="543.9" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Audio path (partial)</title></rect>
-<rect x="569.1" y="543.9" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Controller input (partial)</title></rect>
-<rect x="627.0" y="543.9" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Declared runtime-function boundary (ADR-0129) (partial)</title></rect>
-<rect x="684.8" y="543.9" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Guest memory/MMIO runtime (partial)</title></rect>
-<rect x="511.3" y="591.3" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Interrupt/timing/event runtime (partial)</title></rect>
-<rect x="569.1" y="591.3" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: RSP runtime/native path (partial)</title></rect>
-<rect x="627.0" y="591.3" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Renderer integration (partial)</title></rect>
-<rect x="684.8" y="591.3" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Save devices (partial)</title></rect>
-<rect x="511.3" y="638.6" width="231.3" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Native launch/cache packaging (open)</title></rect>
-<rect x="511.3" y="543.9" width="231.3" height="142.1" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="515.3" y="556.9" class="cell">Native Runtime</text>
-<rect x="742.6" y="386.0" width="48.7" height="75.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Synthetic native differential verifier (done)</title></rect>
-<rect x="791.3" y="386.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Finite native indirect dispatch (partial)</title></rect>
-<rect x="742.6" y="461.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Integer MIPS lowering (partial)</title></rect>
-<rect x="791.3" y="461.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Link with the Plaid runtime (ADR-0158) (partial)</title></rect>
-<rect x="742.6" y="536.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: MIPS -&gt; C lowering (ADR-0126) (partial)</title></rect>
-<rect x="791.3" y="536.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Return closure / function-level lowering (partial)</title></rect>
-<rect x="742.6" y="611.0" width="48.7" height="75.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: x86-64 host build via C (partial)</title></rect>
-<rect x="791.3" y="611.0" width="48.7" height="75.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: ARM64 host build via C (open)</title></rect>
-<rect x="742.6" y="386.0" width="97.4" height="300.0" fill="none" stroke="#0d1117" stroke-width="2"/>
-<text x="746.6" y="399.0" class="cell">Native AOT C…</text>
+<rect x="241.6" y="386.0" width="63.3" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Assumption-scoped CLOSED: SM64 (ADR-0153) (done)</title></rect>
+<rect x="304.9" y="386.0" width="63.3" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Direct-control-flow closure (done)</title></rect>
+<rect x="368.2" y="386.0" width="63.3" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Fail-closed solver &amp; diagnostics (done)</title></rect>
+<rect x="431.5" y="386.0" width="63.3" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Source/certificate rechecking (done)</title></rect>
+<rect x="241.6" y="436.0" width="63.3" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Execution-root completeness (partial)</title></rect>
+<rect x="304.9" y="436.0" width="63.3" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Finite indirect-target closure (partial)</title></rect>
+<rect x="368.2" y="436.0" width="63.3" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: First ROM reaches CLOSED (partial)</title></rect>
+<rect x="431.5" y="436.0" width="63.3" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Overlay/executable lifetimes (partial)</title></rect>
+<rect x="241.6" y="486.0" width="84.4" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: Pointer-table immutability proof (partial)</title></rect>
+<rect x="326.0" y="486.0" width="84.4" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: RSP executable-universe proof (partial)</title></rect>
+<rect x="410.4" y="486.0" width="84.4" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Closed-World Proof: TLB/context/cache composition (partial)</title></rect>
+<rect x="241.6" y="386.0" width="253.2" height="150.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="245.6" y="399.0" class="cell">Closed-World Proof</text>
+<rect x="241.6" y="536.0" width="63.3" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: 20M-fetch commercial-prefix replay (done)</title></rect>
+<rect x="304.9" y="536.0" width="63.3" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First commercial ROM mapped (done)</title></rect>
+<rect x="368.2" y="536.0" width="63.3" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First native commercial boot (done)</title></rect>
+<rect x="431.5" y="536.0" width="63.3" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First native gameplay (done)</title></rect>
+<rect x="241.6" y="586.0" width="63.3" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First native synthetic executable (done)</title></rect>
+<rect x="304.9" y="586.0" width="63.3" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: Mupen/ares differential oracles (done)</title></rect>
+<rect x="368.2" y="586.0" width="63.3" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: Synthetic discovery corpus (done)</title></rect>
+<rect x="431.5" y="586.0" width="63.3" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: First commercial ROM CLOSED (partial)</title></rect>
+<rect x="241.6" y="636.0" width="84.4" height="50.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: n64-systemtest research corpus (partial)</title></rect>
+<rect x="326.0" y="636.0" width="84.4" height="50.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: 100-game campaign (open)</title></rect>
+<rect x="410.4" y="636.0" width="84.4" height="50.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Compatibility: Representative 25-game set (open)</title></rect>
+<rect x="241.6" y="536.0" width="253.2" height="150.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="245.6" y="549.0" class="cell">Compatibility</text>
+<rect x="494.8" y="386.0" width="60.4" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Bounded cross-block indirect proofs (done)</title></rect>
+<rect x="555.2" y="386.0" width="60.4" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Commercial-ROM map validation (done)</title></rect>
+<rect x="615.6" y="386.0" width="60.4" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Declared executable loads (ADR-0136) (done)</title></rect>
+<rect x="676.0" y="386.0" width="60.4" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Direct CFG recovery (done)</title></rect>
+<rect x="494.8" y="438.4" width="60.4" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Dynamic trace import (done)</title></rect>
+<rect x="555.2" y="438.4" width="60.4" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Evidence merge &amp; conflicts (done)</title></rect>
+<rect x="615.6" y="438.4" width="60.4" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Known-library/signature evidence (done)</title></rect>
+<rect x="676.0" y="438.4" width="60.4" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Local indirect certificates (done)</title></rect>
+<rect x="494.8" y="490.8" width="80.5" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: ProgramMap schema &amp; validation (done)</title></rect>
+<rect x="575.3" y="490.8" width="80.5" height="52.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: ROM normalization &amp; identity (done)</title></rect>
+<rect x="655.9" y="490.8" width="80.5" height="52.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Discovery &amp; ProgramMap: Jump/pointer-table recovery (partial)</title></rect>
+<rect x="494.8" y="386.0" width="241.6" height="157.1" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="498.8" y="399.0" class="cell">Discovery &amp; ProgramMap</text>
+<rect x="494.8" y="543.1" width="60.4" height="47.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: COP1/FPU lowering (FR = 0 and 1) (done)</title></rect>
+<rect x="555.2" y="543.1" width="60.4" height="47.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Finite native indirect dispatch (done)</title></rect>
+<rect x="615.6" y="543.1" width="60.4" height="47.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Integer MIPS lowering (done)</title></rect>
+<rect x="676.0" y="543.1" width="60.4" height="47.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Link with the Plaid runtime (ADR-0158) (done)</title></rect>
+<rect x="494.8" y="590.8" width="60.4" height="47.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: MIPS -&gt; C lowering (ADR-0126) (done)</title></rect>
+<rect x="555.2" y="590.8" width="60.4" height="47.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: RSP scalar + vector lowering (ADR-0167/0168) (done)</title></rect>
+<rect x="615.6" y="590.8" width="60.4" height="47.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Return closure / function-level lowering (done)</title></rect>
+<rect x="676.0" y="590.8" width="60.4" height="47.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Synthetic native differential verifier (done)</title></rect>
+<rect x="494.8" y="638.4" width="120.8" height="47.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: x86-64 host build via C (done)</title></rect>
+<rect x="615.6" y="638.4" width="120.8" height="47.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: ARM64 host build via C (open)</title></rect>
+<rect x="494.8" y="543.1" width="241.6" height="142.9" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="498.8" y="556.1" class="cell">Native AOT Compiler</text>
+<rect x="736.4" y="386.0" width="51.8" height="60.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Declared runtime-function boundary (ADR-0129) (done)</title></rect>
+<rect x="788.2" y="386.0" width="51.8" height="60.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Guest memory/MMIO runtime (done)</title></rect>
+<rect x="736.4" y="446.0" width="51.8" height="60.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Interrupt/timing/event runtime (done)</title></rect>
+<rect x="788.2" y="446.0" width="51.8" height="60.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: RSP runtime/native path (done)</title></rect>
+<rect x="736.4" y="506.0" width="51.8" height="60.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Renderer integration (done)</title></rect>
+<rect x="788.2" y="506.0" width="51.8" height="60.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Audio path (partial)</title></rect>
+<rect x="736.4" y="566.0" width="51.8" height="60.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Controller input (partial)</title></rect>
+<rect x="788.2" y="566.0" width="51.8" height="60.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Save devices (partial)</title></rect>
+<rect x="736.4" y="626.0" width="103.6" height="60.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Native launch/cache packaging (open)</title></rect>
+<rect x="736.4" y="386.0" width="103.6" height="300.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="740.4" y="399.0" class="cell">Native Runtime</text>
+<text x="2" y="734" class="title">RSP instructions*: 100.0% (119/119)</text>
+<rect x="0.0" y="742.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: add (done)</title></rect>
+<rect x="42.4" y="742.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: addi (done)</title></rect>
+<rect x="84.7" y="742.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: addiu (done)</title></rect>
+<rect x="127.1" y="742.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: addu (done)</title></rect>
+<rect x="0.0" y="792.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: and (done)</title></rect>
+<rect x="42.4" y="792.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: andi (done)</title></rect>
+<rect x="84.7" y="792.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: lui (done)</title></rect>
+<rect x="127.1" y="792.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: nor (done)</title></rect>
+<rect x="0.0" y="842.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: or (done)</title></rect>
+<rect x="42.4" y="842.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: ori (done)</title></rect>
+<rect x="84.7" y="842.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: sll (done)</title></rect>
+<rect x="127.1" y="842.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: sllv (done)</title></rect>
+<rect x="0.0" y="892.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: slt (done)</title></rect>
+<rect x="42.4" y="892.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: slti (done)</title></rect>
+<rect x="84.7" y="892.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: sltiu (done)</title></rect>
+<rect x="127.1" y="892.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: sltu (done)</title></rect>
+<rect x="0.0" y="942.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: sra (done)</title></rect>
+<rect x="42.4" y="942.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: srav (done)</title></rect>
+<rect x="84.7" y="942.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: srl (done)</title></rect>
+<rect x="127.1" y="942.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: srlv (done)</title></rect>
+<rect x="0.0" y="992.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: sub (done)</title></rect>
+<rect x="42.4" y="992.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: subu (done)</title></rect>
+<rect x="84.7" y="992.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: xor (done)</title></rect>
+<rect x="127.1" y="992.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar ALU: xori (done)</title></rect>
+<rect x="0.0" y="742.0" width="169.4" height="300.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="4.0" y="755.0" class="cell">Scalar ALU</text>
+<rect x="169.4" y="742.0" width="42.4" height="40.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector multiply: vmacf (done)</title></rect>
+<rect x="211.8" y="742.0" width="42.4" height="40.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector multiply: vmacq (done)</title></rect>
+<rect x="254.1" y="742.0" width="42.4" height="40.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector multiply: vmacu (done)</title></rect>
+<rect x="296.5" y="742.0" width="42.4" height="40.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector multiply: vmadh (done)</title></rect>
+<rect x="338.8" y="742.0" width="42.4" height="40.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector multiply: vmadl (done)</title></rect>
+<rect x="169.4" y="782.0" width="42.4" height="40.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector multiply: vmadm (done)</title></rect>
+<rect x="211.8" y="782.0" width="42.4" height="40.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector multiply: vmadn (done)</title></rect>
+<rect x="254.1" y="782.0" width="42.4" height="40.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector multiply: vmudh (done)</title></rect>
+<rect x="296.5" y="782.0" width="42.4" height="40.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector multiply: vmudl (done)</title></rect>
+<rect x="338.8" y="782.0" width="42.4" height="40.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector multiply: vmudm (done)</title></rect>
+<rect x="169.4" y="822.0" width="42.4" height="40.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector multiply: vmudn (done)</title></rect>
+<rect x="211.8" y="822.0" width="42.4" height="40.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector multiply: vmulf (done)</title></rect>
+<rect x="254.1" y="822.0" width="42.4" height="40.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector multiply: vmulq (done)</title></rect>
+<rect x="296.5" y="822.0" width="42.4" height="40.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector multiply: vmulu (done)</title></rect>
+<rect x="338.8" y="822.0" width="42.4" height="40.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector multiply: vrndn (done)</title></rect>
+<rect x="169.4" y="862.0" width="211.8" height="40.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector multiply: vrndp (done)</title></rect>
+<rect x="169.4" y="742.0" width="211.8" height="160.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="173.4" y="755.0" class="cell">Vector multiply</text>
+<rect x="169.4" y="902.0" width="42.4" height="46.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector select/logic: vand (done)</title></rect>
+<rect x="211.8" y="902.0" width="42.4" height="46.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector select/logic: vch (done)</title></rect>
+<rect x="254.1" y="902.0" width="42.4" height="46.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector select/logic: vcl (done)</title></rect>
+<rect x="296.5" y="902.0" width="42.4" height="46.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector select/logic: vcr (done)</title></rect>
+<rect x="338.8" y="902.0" width="42.4" height="46.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector select/logic: veq (done)</title></rect>
+<rect x="169.4" y="948.7" width="42.4" height="46.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector select/logic: vge (done)</title></rect>
+<rect x="211.8" y="948.7" width="42.4" height="46.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector select/logic: vlt (done)</title></rect>
+<rect x="254.1" y="948.7" width="42.4" height="46.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector select/logic: vmrg (done)</title></rect>
+<rect x="296.5" y="948.7" width="42.4" height="46.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector select/logic: vnand (done)</title></rect>
+<rect x="338.8" y="948.7" width="42.4" height="46.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector select/logic: vne (done)</title></rect>
+<rect x="169.4" y="995.3" width="52.9" height="46.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector select/logic: vnor (done)</title></rect>
+<rect x="222.4" y="995.3" width="52.9" height="46.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector select/logic: vnxor (done)</title></rect>
+<rect x="275.3" y="995.3" width="52.9" height="46.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector select/logic: vor (done)</title></rect>
+<rect x="328.2" y="995.3" width="52.9" height="46.7" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector select/logic: vxor (done)</title></rect>
+<rect x="169.4" y="902.0" width="211.8" height="140.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="173.4" y="915.0" class="cell">Vector select/logic</text>
+<rect x="381.2" y="742.0" width="44.1" height="39.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: beq (done)</title></rect>
+<rect x="425.3" y="742.0" width="44.1" height="39.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgez (done)</title></rect>
+<rect x="469.4" y="742.0" width="44.1" height="39.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgezal (done)</title></rect>
+<rect x="513.5" y="742.0" width="44.1" height="39.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgtz (done)</title></rect>
+<rect x="381.2" y="781.0" width="44.1" height="39.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: blez (done)</title></rect>
+<rect x="425.3" y="781.0" width="44.1" height="39.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltz (done)</title></rect>
+<rect x="469.4" y="781.0" width="44.1" height="39.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltzal (done)</title></rect>
+<rect x="513.5" y="781.0" width="44.1" height="39.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bne (done)</title></rect>
+<rect x="381.2" y="820.0" width="44.1" height="39.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: break (done)</title></rect>
+<rect x="425.3" y="820.0" width="44.1" height="39.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: j (done)</title></rect>
+<rect x="469.4" y="820.0" width="44.1" height="39.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: jal (done)</title></rect>
+<rect x="513.5" y="820.0" width="44.1" height="39.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: jalr (done)</title></rect>
+<rect x="381.2" y="859.0" width="176.5" height="39.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: jr (done)</title></rect>
+<rect x="381.2" y="742.0" width="176.5" height="156.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="385.2" y="755.0" class="cell">Branch/jump</text>
+<rect x="381.2" y="898.0" width="44.1" height="48.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector store: sbv (done)</title></rect>
+<rect x="425.3" y="898.0" width="44.1" height="48.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector store: sdv (done)</title></rect>
+<rect x="469.4" y="898.0" width="44.1" height="48.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector store: sfv (done)</title></rect>
+<rect x="513.5" y="898.0" width="44.1" height="48.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector store: shv (done)</title></rect>
+<rect x="381.2" y="946.0" width="44.1" height="48.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector store: slv (done)</title></rect>
+<rect x="425.3" y="946.0" width="44.1" height="48.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector store: spv (done)</title></rect>
+<rect x="469.4" y="946.0" width="44.1" height="48.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector store: sqv (done)</title></rect>
+<rect x="513.5" y="946.0" width="44.1" height="48.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector store: srv (done)</title></rect>
+<rect x="381.2" y="994.0" width="44.1" height="48.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector store: ssv (done)</title></rect>
+<rect x="425.3" y="994.0" width="44.1" height="48.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector store: stv (done)</title></rect>
+<rect x="469.4" y="994.0" width="44.1" height="48.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector store: suv (done)</title></rect>
+<rect x="513.5" y="994.0" width="44.1" height="48.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector store: swv (done)</title></rect>
+<rect x="381.2" y="898.0" width="176.5" height="144.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="385.2" y="911.0" class="cell">Vector store</text>
+<rect x="557.6" y="742.0" width="51.8" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector load: lbv (done)</title></rect>
+<rect x="609.4" y="742.0" width="51.8" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector load: ldv (done)</title></rect>
+<rect x="661.2" y="742.0" width="51.8" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector load: lfv (done)</title></rect>
+<rect x="557.6" y="779.5" width="51.8" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector load: lhv (done)</title></rect>
+<rect x="609.4" y="779.5" width="51.8" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector load: llv (done)</title></rect>
+<rect x="661.2" y="779.5" width="51.8" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector load: lpv (done)</title></rect>
+<rect x="557.6" y="817.0" width="51.8" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector load: lqv (done)</title></rect>
+<rect x="609.4" y="817.0" width="51.8" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector load: lrv (done)</title></rect>
+<rect x="661.2" y="817.0" width="51.8" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector load: lsv (done)</title></rect>
+<rect x="557.6" y="854.5" width="77.6" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector load: ltv (done)</title></rect>
+<rect x="635.3" y="854.5" width="77.6" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector load: luv (done)</title></rect>
+<rect x="557.6" y="742.0" width="155.3" height="150.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="561.6" y="755.0" class="cell">Vector load</text>
+<rect x="712.9" y="742.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector divide/move: vmov (done)</title></rect>
+<rect x="755.3" y="742.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector divide/move: vnop (done)</title></rect>
+<rect x="797.6" y="742.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector divide/move: vnull (done)</title></rect>
+<rect x="712.9" y="792.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector divide/move: vrcp (done)</title></rect>
+<rect x="755.3" y="792.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector divide/move: vrcph (done)</title></rect>
+<rect x="797.6" y="792.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector divide/move: vrcpl (done)</title></rect>
+<rect x="712.9" y="842.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector divide/move: vrsq (done)</title></rect>
+<rect x="755.3" y="842.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector divide/move: vrsqh (done)</title></rect>
+<rect x="797.6" y="842.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector divide/move: vrsql (done)</title></rect>
+<rect x="712.9" y="742.0" width="127.1" height="150.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="716.9" y="755.0" class="cell">Vector divide/move</text>
+<rect x="557.6" y="892.0" width="56.5" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar load/store: lb (done)</title></rect>
+<rect x="614.1" y="892.0" width="56.5" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar load/store: lbu (done)</title></rect>
+<rect x="557.6" y="929.5" width="56.5" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar load/store: lh (done)</title></rect>
+<rect x="614.1" y="929.5" width="56.5" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar load/store: lhu (done)</title></rect>
+<rect x="557.6" y="967.0" width="56.5" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar load/store: lw (done)</title></rect>
+<rect x="614.1" y="967.0" width="56.5" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar load/store: sb (done)</title></rect>
+<rect x="557.6" y="1004.5" width="56.5" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar load/store: sh (done)</title></rect>
+<rect x="614.1" y="1004.5" width="56.5" height="37.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Scalar load/store: sw (done)</title></rect>
+<rect x="557.6" y="892.0" width="112.9" height="150.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="561.6" y="905.0" class="cell">Scalar load/sto…</text>
+<rect x="670.6" y="892.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector add: vabs (done)</title></rect>
+<rect x="712.9" y="892.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector add: vadd (done)</title></rect>
+<rect x="670.6" y="942.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector add: vaddc (done)</title></rect>
+<rect x="712.9" y="942.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector add: vsar (done)</title></rect>
+<rect x="670.6" y="992.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector add: vsub (done)</title></rect>
+<rect x="712.9" y="992.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Vector add: vsubc (done)</title></rect>
+<rect x="670.6" y="892.0" width="84.7" height="150.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="674.6" y="905.0" class="cell">Vector add</text>
+<rect x="755.3" y="892.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP2 move: cfc2 (done)</title></rect>
+<rect x="797.6" y="892.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP2 move: ctc2 (done)</title></rect>
+<rect x="755.3" y="942.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP2 move: mfc2 (done)</title></rect>
+<rect x="797.6" y="942.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP2 move: mtc2 (done)</title></rect>
+<rect x="755.3" y="892.0" width="84.7" height="100.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="759.3" y="905.0" class="cell">COP2 move</text>
+<rect x="755.3" y="992.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0: mfc0 (done)</title></rect>
+<rect x="797.6" y="992.0" width="42.4" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0: mtc0 (done)</title></rect>
+<rect x="755.3" y="992.0" width="84.7" height="50.0" fill="none" stroke="#0d1117" stroke-width="2"/>
+<text x="759.3" y="1005.0" class="cell">COP0</text>
 </svg>
