@@ -7,7 +7,7 @@ conflict. Those notes record open obligations; they are not a work queue.
 
 Plaid's novelty is automatic discovery and closure proof from an untouched ROM.
 Below that, reuse: lower through C (`crates/plaid-lower`), then link generated
-code with N64ModernRuntime (GPL-3.0, so linked game apps are GPL-3.0) and RT64.
+code with Plaid's own runtime and RT64 (ADR-0158).
 Every claim in issue #4 must name the milestone it advances and report the
 effect in its receipt.
 
@@ -16,7 +16,7 @@ effect in its receipt.
 | 1 | Synthetic ROM -> C -> native | spike096 programs, including nested/recursive calls, match pinned ares exactly; fail-closed cases fault | **done** (spike096, ADR-0127) |
 | 2 | SM64 discovery recall | >= 99% of real functions found, scored locally against a decomp symbol map used only as an oracle | **done: 99.03%** (3795/3832, ADR-0152, `--data-roots`) |
 | 3 | SM64 closed under declared assumptions | solver CLOSED in an explicit assumption scope; every assumption listed and checked | **done** (`closed` under the address-taken scope, ADR-0153..0156; execution-source and runtime-ABI assumptions are declared, the rest checked natively) |
-| 4 | SM64 boots natively to title | lowered code linked with N64ModernRuntime + RT64; no interpreter linked | open |
+| 4 | SM64 boots natively to title | lowered code linked with Plaid's runtime + RT64 (ADR-0158); no interpreter linked | open |
 | 5 | Retire assumptions; OoT | assumptions discharged one by one; OoT via Yaz0 (PR #28) and relocation (PR #31) | open |
 
 Next concrete steps, in order:
@@ -91,10 +91,14 @@ Next concrete steps, in order:
    Done: `plaid lower-map` (ADR-0157). The closed SM64 map lowers to one
    C file that gcc compiles. Run natively with stub runtime functions, it
    reaches `osCreateThread` for the idle thread.
-   **Next (milestone 4):**
-   - choose the runtime license path: N64ModernRuntime is GPL-3.0, so this
-     is the user's call;
-   - discharge the declared execution-source assumptions in that runtime.
+   **Next (milestone 4), per ADR-0158:** Plaid's own runtime (`runtime/`, C)
+   plus RT64 (MIT).
+   - Runtime core: guest threads on host threads under one baton, message
+     queues, events and PI DMA. Checkpoint: SM64 submits its first
+     graphics task.
+   - Back-edge safepoints in `plaid-lower`, so spinning threads are
+     preemptible.
+   - RT64 for graphics tasks; then audio, controllers and EEPROM.
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user

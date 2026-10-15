@@ -38,4 +38,4 @@ This project is intended for interoperability, research, and preservation purpos
 
 ## License
 
-No license has been chosen yet; all rights are reserved until one is.
+Plaid is licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option. The Mupen64Plus instrumentation in `instruments/mupen/` is a separately licensed GPL research instrument (see its `COPYING`) and is not part of Plaid's compiler or runtime. Reused third-party logic is credited where it is used.
