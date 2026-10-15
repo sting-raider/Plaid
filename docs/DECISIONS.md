@@ -4714,3 +4714,54 @@ Still pending: link-address overlay lowering, verified runtime registration,
 rebinding/invalidation and ares differential execution; then OoT fixed-code
 closure, native title and its RSP snapshot/audio campaign. ADR-0172 is not
 complete until those overlay execution checks pass.
+
+## ADR-0173: One map index for per-site proofs
+
+Status: accepted. Milestone 5 tooling; user-directed ("speed is king").
+
+Context: the per-site proofs (local constants, jump tables, callbacks,
+return closures, the solver's per-site checks and lower-map's table
+ranges) each rescanned the whole map. That made them quadratic in map
+size. SM64's 45419-block map spent almost all of discovery, solve and
+lowering in these scans.
+
+Decision: `indirect::MapIndex` is built once per map. It holds:
+- the blocks of each image and generation, sorted by start, with the
+  largest size;
+- entries plus indirect candidates and observations;
+- direct edges keyed by target.
+
+Every proof keeps its old public form (`verify_static`, `verify_constant`,
+`tables::verify`), which builds an index. The `_in` forms take an index that
+the caller builds once. `tables::table_range` now takes one.
+
+The solver also changes three things:
+- it finds overlapping blocks of distinct identities by binary search
+  instead of comparing every pair;
+- it looks up re-derived edges, sites and blocks in sets;
+- it locates edge sites and runtime functions through the index.
+
+lower-map groups blocks by start once.
+
+The `indirect_chain` certificates return `None` before building their
+roots when the image exceeds `MAX_WORDS`, where `expected_map` refuses
+anyway.
+
+AGENTS.md rule 8 now makes speed a priority. A bottleneck is removed as
+soon as it slows iteration. Before and after timings go in the receipt,
+and outputs stay identical unless the change is intended.
+
+Verification: every query answers the same predicate as the scan it
+replaces, and the existing unit, CLI, runtime and spike096 suites pass
+unchanged. On SM64 (release build, same inputs), the outputs before and
+after the change are byte-identical, and the timings are:
+
+| Step | Before | After |
+|---|---|---|
+| `discover --address-taken` | 14 min 56 s | 17–30 s |
+| `solve --address-taken` | 55 s | 3 s |
+| `lower-map` (47 MB C) | 130 s | 4 s |
+
+Next: the 47 MB translation unit takes minutes in gcc. Splitting
+`lower-map` output into several units that compile in parallel is the
+next bottleneck.

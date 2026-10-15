@@ -6,6 +6,10 @@ use crate::{
     rom::sha256,
 };
 use serde::{Deserialize, Serialize};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::Bound::{self, Excluded, Included, Unbounded},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -64,47 +68,160 @@ pub(crate) fn transfer(word: u32, pc: GuestAddr, state: &mut [Option<u64>; 32]) 
     state[0] = Some(0);
 }
 
+type Key<'a> = (u32, &'a str, u64);
+
+/// Keys of one image and generation with pc in `lo..=hi`; ("", 0) is the least
+/// (image, generation), so the bounds are exact.
+fn span<'a, V>(
+    keys: impl Fn((Bound<Key<'a>>, Bound<Key<'a>>)) -> V,
+    lo: u32,
+    hi: u32,
+) -> Option<V> {
+    let upper = hi
+        .checked_add(1)
+        .map_or(Unbounded, |u| Excluded((u, "", 0)));
+    (lo <= hi).then(|| keys((Included((lo, "", 0)), upper)))
+}
+
+/// What the per-site proofs look up in a map, built once so that analysing
+/// every site of a large map stays linear (ADR-0173).
+pub struct MapIndex<'a> {
+    /// Blocks by image and generation, sorted by start, with the largest size.
+    blocks: BTreeMap<(&'a str, u64), (Vec<&'a BasicBlock>, u32)>,
+    /// Entries and indirect candidates or observations.
+    jumped: BTreeSet<Key<'a>>,
+    /// Direct edges by target.
+    edges: BTreeMap<Key<'a>, Vec<&'a DirectEdge>>,
+}
+
+impl<'a> MapIndex<'a> {
+    pub fn new(map: &'a ProgramMap) -> Self {
+        let mut blocks: BTreeMap<(&str, u64), (Vec<&BasicBlock>, u32)> = BTreeMap::new();
+        for b in &map.blocks {
+            let (list, max) = blocks
+                .entry((b.start.image.as_str(), b.start.generation))
+                .or_default();
+            list.push(b);
+            *max = (*max).max(b.size);
+        }
+        for (list, _) in blocks.values_mut() {
+            list.sort_by_key(|b| b.start.pc.0);
+        }
+        let jumped = map
+            .entries
+            .keys()
+            .chain(
+                map.indirect_sites
+                    .iter()
+                    .flat_map(|s| s.candidates.keys().chain(s.observed.keys())),
+            )
+            .map(key)
+            .collect();
+        let mut edges: BTreeMap<_, Vec<_>> = BTreeMap::new();
+        for e in &map.direct_edges {
+            edges.entry(key(&e.target)).or_default().push(e);
+        }
+        Self {
+            blocks,
+            jumped,
+            edges,
+        }
+    }
+
+    /// The blocks of the site's image that contain its pc.
+    pub(crate) fn containing(&self, site: &CodeAddress) -> Vec<&'a BasicBlock> {
+        let Some((list, max)) = self.blocks.get(&(site.image.as_str(), site.generation)) else {
+            return Vec::new();
+        };
+        let end = list.partition_point(|b| b.start.pc.0 <= site.pc.0);
+        list[..end]
+            .iter()
+            .rev()
+            .take_while(|b| site.pc.0 - b.start.pc.0 < *max)
+            .filter(|b| {
+                GuestRange {
+                    start: b.start.pc,
+                    size: b.size,
+                }
+                .contains(site.pc)
+            })
+            .copied()
+            .collect()
+    }
+
+    /// Whether an entry or indirect candidate or observation is `at`.
+    pub(crate) fn jumped_to(&self, at: &CodeAddress) -> bool {
+        self.jumped.contains(&key(at))
+    }
+
+    /// Whether an entry or indirect candidate or observation is in `lo..=hi`.
+    pub(crate) fn jumped_in(&self, image: &str, generation: u64, lo: u32, hi: u32) -> bool {
+        span(
+            |r| {
+                self.jumped
+                    .range(r)
+                    .any(|k| (k.1, k.2) == (image, generation))
+            },
+            lo,
+            hi,
+        )
+        .unwrap_or(false)
+    }
+
+    /// Direct edges whose target is in `lo..=hi`.
+    pub(crate) fn edges_in(
+        &self,
+        image: &str,
+        generation: u64,
+        lo: u32,
+        hi: u32,
+    ) -> impl Iterator<Item = &'a DirectEdge> {
+        span(|r| self.edges.range(r), lo, hi)
+            .into_iter()
+            .flatten()
+            .filter(move |(k, _)| (k.1, k.2) == (image, generation))
+            .flat_map(|(_, v)| v.iter().copied())
+    }
+
+    /// Direct edges into `target`.
+    pub(crate) fn edges_to(&self, target: &CodeAddress) -> Vec<&'a DirectEdge> {
+        let pc = target.pc.0;
+        self.edges_in(&target.image, target.generation, pc, pc)
+            .collect()
+    }
+
+    /// Whether control can enter the image in `(after, upto]`.
+    fn entered_between(&self, image: &str, generation: u64, after: u32, upto: u32) -> bool {
+        after < upto
+            && (self.jumped_in(image, generation, after + 1, upto)
+                || self
+                    .edges_in(image, generation, after + 1, upto)
+                    .next()
+                    .is_some())
+    }
+}
+
+fn key(a: &CodeAddress) -> Key<'_> {
+    (a.pc.0, a.image.as_str(), a.generation)
+}
+
 /// Register values just before `site`, from a straight-line prefix that starts
 /// at the site's block and that no other control flow enters. Returns the
 /// block start, the state and the prefix bytes including the site word.
-pub(crate) fn prefix_state(
-    map: &ProgramMap,
+pub(crate) fn prefix_state_in(
+    index: &MapIndex,
     image: &CodeImage,
     site: &CodeAddress,
 ) -> Option<(CodeAddress, [Option<u64>; 32], Vec<u8>)> {
     if image.base.image != site.image || image.base.generation != site.generation {
         return None;
     }
-    let blocks: Vec<_> = map
-        .blocks
-        .iter()
-        .filter(|b| {
-            b.start.image == site.image
-                && b.start.generation == site.generation
-                && GuestRange {
-                    start: b.start.pc,
-                    size: b.size,
-                }
-                .contains(site.pc)
-        })
-        .collect();
+    let blocks = index.containing(site);
     if blocks.len() != 1 || blocks[0].delay_slot_entry {
         return None;
     }
     let block = blocks[0];
-    let bypass = |a: &CodeAddress| {
-        a.image == site.image
-            && a.generation == site.generation
-            && a.pc.0 > block.start.pc.0
-            && a.pc.0 <= site.pc.0
-    };
-    if map.entries.keys().any(bypass)
-        || map.direct_edges.iter().any(|e| bypass(&e.target))
-        || map
-            .indirect_sites
-            .iter()
-            .any(|s| s.candidates.keys().chain(s.observed.keys()).any(bypass))
-    {
+    if index.entered_between(&site.image, site.generation, block.start.pc.0, site.pc.0) {
         return None;
     }
     let mut state = [None; 32];
@@ -135,12 +252,12 @@ pub(crate) fn code_pointer(value: u64) -> Option<u32> {
     ((value == u64::from(low) || value == signed_word(low)) && low.is_multiple_of(4)).then_some(low)
 }
 
-fn certificate(
-    map: &ProgramMap,
+fn certificate_in(
+    index: &MapIndex,
     image: &CodeImage,
     site: &CodeAddress,
 ) -> Option<ConstantCertificate> {
-    let (block, state, prefix) = prefix_state(map, image, site)?;
+    let (block, state, prefix) = prefix_state_in(index, image, site)?;
     let i = decode(image.word(site.pc)?, site.pc);
     if !matches!(i.opcode_name(), "jr" | "jalr") {
         return None;
@@ -161,9 +278,10 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
     map.validate()?;
     let mut out = map.clone();
     out.indirect_sites.clear();
+    let index = MapIndex::new(map);
     for old in &map.indirect_sites {
         let mut site = old.clone();
-        let proof = if let Some(proof) = certificate(map, image, &old.site) {
+        let proof = if let Some(proof) = certificate_in(&index, image, &old.site) {
             Some((
                 "plaid-local-constant/v0",
                 proof.target.clone(),
@@ -213,17 +331,19 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
     }
     out = crate::tables::analyze(&out, image)?;
     // New candidate edges may themselves enter a prefix and break dominance.
-    out.indirect_sites = out
+    let index = MapIndex::new(&out);
+    let sites = out
         .indirect_sites
         .iter()
         .map(|old| {
             let mut site = old.clone();
-            if !verify_static(&out, image, old) {
+            if !verify_static_in(&index, &out, image, old) {
                 site.closed_proof = None;
             }
             site
         })
         .collect();
+    out.indirect_sites = sites;
     out.validate()?;
     Ok(out)
 }
@@ -231,12 +351,32 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
 /// A rechecked static target proof: a constant certificate or a verified jump
 /// table (ADR-0132). Scopes decide whether a table's immutability holds.
 pub fn verify_static(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> bool {
-    verify_constant(map, image, site) || crate::tables::verify(map, image, site)
+    verify_static_in(&MapIndex::new(map), map, image, site)
+}
+
+/// [`verify_static`] with the map's index built once by the caller.
+pub fn verify_static_in(
+    index: &MapIndex,
+    map: &ProgramMap,
+    image: &CodeImage,
+    site: &IndirectSite,
+) -> bool {
+    verify_constant_in(index, map, image, site) || crate::tables::verify_in(index, map, image, site)
 }
 
 /// Recompute the certificate using current CFG and bytes; producer labels alone
 /// are insufficient. A later merge/bypass or altered prefix invalidates it.
 pub fn verify_constant(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> bool {
+    verify_constant_in(&MapIndex::new(map), map, image, site)
+}
+
+/// [`verify_constant`] with the map's index built once by the caller.
+pub fn verify_constant_in(
+    index: &MapIndex,
+    map: &ProgramMap,
+    image: &CodeImage,
+    site: &IndirectSite,
+) -> bool {
     let Some(word) = image.word(site.site.pc) else {
         return false;
     };
@@ -263,7 +403,7 @@ pub fn verify_constant(map: &ProgramMap, image: &CodeImage, site: &IndirectSite)
             let Ok(proof) = serde_json::from_str::<ConstantCertificate>(&e.detail) else {
                 return false;
             };
-            if certificate(map, image, &site.site).as_ref() != Some(&proof) {
+            if certificate_in(index, image, &site.site).as_ref() != Some(&proof) {
                 return false;
             }
             proof.target

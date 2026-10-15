@@ -11,7 +11,7 @@
 use crate::{
     EvidenceKind, GuestAddr,
     discovery::CodeImage,
-    indirect::{verify_constant, verify_static},
+    indirect::{MapIndex, verify_constant_in, verify_static_in},
     program::*,
     rom::sha256,
 };
@@ -67,8 +67,9 @@ pub fn ra_calls(map: &ProgramMap, image: &CodeImage) -> Vec<(CodeAddress, CodeAd
         .filter(|e| e.kind == EdgeKind::Call)
         .map(|e| (e.site.clone(), e.target.clone()))
         .collect();
+    let index = MapIndex::new(map);
     for site in &map.indirect_sites {
-        if site.link_register == Some(31) && verify_constant(map, image, site) {
+        if site.link_register == Some(31) && verify_constant_in(&index, map, image, site) {
             calls.extend(
                 site.candidates
                     .keys()
@@ -92,8 +93,9 @@ fn successors(map: &ProgramMap, image: &CodeImage) -> BTreeMap<CodeAddress, Vec<
                 .push(edge.target.clone());
         }
     }
+    let index = MapIndex::new(map);
     for site in &map.indirect_sites {
-        if site.link_register.is_none() && verify_static(map, image, site) {
+        if site.link_register.is_none() && verify_static_in(&index, map, image, site) {
             by_site
                 .entry(site.site.clone())
                 .or_default()
@@ -181,10 +183,11 @@ impl Closure {
             .collect();
         // Entries reached only as constant-jump targets are interior blocks, not
         // host entries. Every other entry is host-entered and returns to the host.
+        let index = MapIndex::new(map);
         let jumped: BTreeSet<_> = map
             .indirect_sites
             .iter()
-            .filter(|s| verify_static(map, image, s))
+            .filter(|s| verify_static_in(&index, map, image, s))
             .flat_map(|s| s.candidates.keys().cloned())
             .collect();
         let succ = successors(map, image);

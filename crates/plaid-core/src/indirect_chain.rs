@@ -206,7 +206,11 @@ pub(crate) fn certificate(
     image: &CodeImage,
     site: &CodeAddress,
 ) -> Option<ChainCertificate> {
-    if site.image != image.base.image || site.generation != image.base.generation {
+    // expected_map refuses such images; skip building the roots first
+    if site.image != image.base.image
+        || site.generation != image.base.generation
+        || image.words.len() > MAX_WORDS
+    {
         return None;
     }
     let roots = roots(map, image);
@@ -422,7 +426,10 @@ pub(crate) fn join_certificate(
     image: &CodeImage,
     site: &CodeAddress,
 ) -> Option<JoinCertificate> {
-    if site.image != image.base.image || site.generation != image.base.generation {
+    if site.image != image.base.image
+        || site.generation != image.base.generation
+        || image.words.len() > MAX_WORDS
+    {
         return None;
     }
     let roots = roots(map, image);
