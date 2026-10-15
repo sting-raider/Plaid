@@ -1172,6 +1172,26 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 "Declared runtime functions ({}) are host-provided: entered only by call or tail call at their entry, they follow the o32 ABI (preserving s0-s7, gp, sp and fp, and returning to $ra), enter guest code only at proven callback arguments through the artifact's fail-closed plaid_enter dispatch, write guest RAM only after plaid_runtime_write accepts the range, and their guest bodies are neither analyzed nor lowered.",
                 names.join(", ")
             ));
+            // names no ROM signature backs (ADR-0171)
+            let mut by_map: Vec<_> = map
+                .runtime_functions
+                .values()
+                .filter(|f| {
+                    f.evidence.iter().any(|id| {
+                        map.evidence.get(id).is_some_and(|e| {
+                            e.producer == crate::signatures::REFERENCE_MAP_PRODUCER
+                        })
+                    })
+                })
+                .map(|f| f.name.as_str())
+                .collect();
+            by_map.dedup();
+            if !by_map.is_empty() {
+                assumptions.push(format!(
+                    "Runtime functions named only by a reference symbol map, not by a signature of the ROM's own bytes ({}), are the libultra functions of those names (ADR-0171).",
+                    by_map.join(", ")
+                ));
+            }
         }
         assumptions.push(
             "Overflow-trapping ADD/ADDI/SUB/DADD/DADDI/DSUB never overflow; a native artifact checks each one and aborts on overflow, with no fallback execution."

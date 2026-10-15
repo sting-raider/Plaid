@@ -4574,3 +4574,74 @@ The user played it past the title with live audio and confirmed it works.
 
 Nothing here is specific to SM64: it is the AI register model, and the
 playback takes whatever buffers the game sends.
+
+## ADR-0171: Runtime functions named from the ROM's own bytes
+
+Context: milestone 5 retires SM64's declared assumptions one by one. One of
+the two that no native check backs is the runtime ABI (assumption 11 of the
+address-taken scope): the declared functions really are the libultra
+functions of their names. All 56 of SM64's names came from its decomp
+symbol map (ADR-0148). That map is an external oracle, and most games have
+none. n64sym signatures alone found 49 names, and 51 with the declared
+loads. Two names came back ambiguous:
+- `__ull_rem` matches relocation-free code at two addresses. The second
+  copy is the game's `__ll_rem`, which compiles to the same instructions.
+- The `osEepromLongWrite` signature matches both `osEepromLongWrite` and
+  `osEepromLongRead`. The two differ only in the `jal` at offset 0x44,
+  which the signature masks as a relocation to `osEepromWrite`.
+
+`osInitialize` and `osContInit` match no n64sym variant: SM64's SDK build
+is not in its database.
+
+Decision: identification uses more of what the signature file already
+says, and records where each name comes from.
+- **Call relocations.** Each `.targ26` relocation names the symbol it
+  calls. If that symbol is identified elsewhere, the matched `j`/`jal` must
+  target its entry, or that signature variant is dropped. This repeats
+  until nothing changes. A relocation to an unidentified symbol constrains
+  nothing.
+- **Identical copies.** A name may stand at several addresses when none of
+  its matching variants has a relocation, so every copy is the same code.
+  The ProgramMap now allows a runtime name at several entries if each
+  declares the same callbacks. Lowering is keyed by address, so each copy
+  calls the one host function.
+- **Reference map as fallback.** `identify <rom> ... <sigs> --reference-map
+  <map>` takes the signatures first. It adds a map name only when the ROM
+  leaves it open. A map name that a signature puts elsewhere, or at an
+  address a signature names otherwise, disagrees with the ROM: it is
+  dropped and reported as ambiguous.
+- **Evidence per function.** Each declared function records `evidence:
+  signature` or `reference map`. `discover` gives map-only names their own
+  evidence record, and the solver states them in a separate assumption.
+  Older `--symbols` files count as map-only throughout.
+
+Verification:
+- unit tests:
+  - a call relocation separates two otherwise identical bodies, and stays
+    open while its callee is unidentified;
+  - relocation-free copies name every address;
+  - the map fills only open names and drops both kinds of disagreement;
+- `scripts/test_cli.py` covers the combined identification, the
+  per-function evidence and the solver's map-only assumption.
+
+Result on SM64 (main, engine and goddard, `--loads`):
+- Signatures alone identify 53 names at 54 entries, with nothing
+  ambiguous. `__ull_rem` is identified at both of its copies, and
+  `osEepromLongWrite` at its own address only.
+- With `--reference-map`, the decomp map adds only `osInitialize`,
+  `osContInit` and `osEepromLongRead`, down from 56 names.
+- Discovery and the solver still reach **`closed`** over 45419 blocks
+  under the address-taken scope. The new assumption names those three
+  functions.
+
+The rest of the runtime-ABI assumption stands: host functions replace
+guest bodies.
+
+The same scope measured on Ocarina of Time (boot plus the Yaz0 `code`
+segment) gives 9764 blocks and 13 blockers:
+- 5 in exception-return code (`eret`);
+- 3 calls into the 64DD driver, which is not on the cartridge;
+- 4 unresolved direct targets.
+
+OoT's game states and actors are relocatable overlays loaded at heap
+addresses, which no scope covers yet. That is the next milestone 5 piece.

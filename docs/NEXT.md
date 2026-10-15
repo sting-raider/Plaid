@@ -116,7 +116,11 @@ Next concrete steps, in order:
      the samples.
    - Done: AI DMA timing as ares models it, and live playback through SDL
      (ADR-0170). SM64's audio keeps pace with the run.
-   - Next: milestone 5, retiring the declared assumptions.
+   - Milestone 5, step 1 (ADR-0171): runtime functions are named from the
+     ROM's own bytes; SM64's decomp map now backs only `osInitialize`,
+     `osContInit` and `osEepromLongRead`, and SM64 stays `closed`.
+   - Next: relocatable overlays (OoT game states and actors load at heap
+     addresses with relocations); then OoT's 13 fixed-code blockers.
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user

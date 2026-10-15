@@ -42,6 +42,7 @@ use plaid_core::{
     trace::DiscoveryTrace,
 };
 use std::{
+    collections::BTreeSet,
     env, fs,
     io::{BufReader, Write},
     process::ExitCode,
@@ -110,6 +111,19 @@ fn run() -> Result<(), String> {
             .position(|a| a == "--symbols")
             .map(|i| args.remove(i))
             .is_some();
+    // `identify --reference-map <map>` completes signature identification from
+    // a reference symbol map where the ROM leaves a name open (ADR-0171).
+    let reference_map = match args.iter().position(|a| a == "--reference-map") {
+        Some(i) if i + 1 < args.len() && args[0] == "identify" && !symbols => {
+            let path = args.remove(i + 1);
+            args.remove(i);
+            Some(path)
+        }
+        Some(_) => {
+            return Err("--reference-map <map> applies only to identify with signatures".into());
+        }
+        None => None,
+    };
     // `discover --data-roots` adds roots from function pointers in ROM data
     // (ADR-0152).
     let data_roots = args.first().is_some_and(|c| c == "discover")
@@ -801,7 +815,7 @@ fn run() -> Result<(), String> {
             output,
             runtime @ ..,
         ] if command == "discover" && runtime.len() <= 1 => {
-            let (runtime, evidence) = runtime_declarations(runtime.first())?;
+            let (runtime, evidence, reference_named) = runtime_declarations(runtime.first())?;
             let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
             let range = GuestRange {
                 start: GuestAddr(number32(start)?),
@@ -852,7 +866,7 @@ fn run() -> Result<(), String> {
                         &image,
                         &entries,
                         &runtime,
-                        evidence,
+                        evidence.clone(),
                         1_000_000,
                     )?;
                 }
@@ -860,6 +874,29 @@ fn run() -> Result<(), String> {
             if let Some((spec, (id, evidence))) = declared {
                 d.map.evidence.insert(id, evidence);
                 d.map.load_images.insert(image.base.image.clone(), spec);
+            }
+            // names only a reference map gives carry their own evidence, so the
+            // solver can list them (ADR-0171)
+            if let Some((id, evidence)) = &evidence
+                && !reference_named.is_empty()
+            {
+                let map_id = format!("{id}:reference-map");
+                d.map.evidence.insert(
+                    map_id.clone(),
+                    Evidence {
+                        producer: plaid_core::signatures::REFERENCE_MAP_PRODUCER.into(),
+                        detail: format!(
+                            "named by a reference symbol map, not by ROM bytes; {}",
+                            evidence.detail
+                        ),
+                        ..evidence.clone()
+                    },
+                );
+                for f in d.map.runtime_functions.values_mut() {
+                    if reference_named.contains(&f.name) {
+                        f.evidence = [map_id.clone()].into();
+                    }
+                }
             }
             if !roots.is_empty() {
                 let id = format!("data-roots:{}", rom.identity.sha256);
@@ -943,7 +980,7 @@ fn run() -> Result<(), String> {
         [command, image_path, base, entry, exit, output, runtime @ ..]
             if command == "lower-c" && runtime.len() <= 1 =>
         {
-            let (runtime, evidence) = runtime_declarations(runtime.first())?;
+            let (runtime, evidence, _) = runtime_declarations(runtime.first())?;
             // Synthetic-only native slice (ADR-0126): raw big-endian words at `base`.
             let bytes = fs::read(image_path).map_err(|e| e.to_string())?;
             let image = CodeImage {
@@ -1024,19 +1061,41 @@ fn run() -> Result<(), String> {
             }
             let text = fs::read(signatures).map_err(|e| e.to_string())?;
             let wanted = plaid_core::signatures::RUNTIME_FUNCTIONS;
-            let (found, source) = if symbols {
+            let (mut found, mut source, mut map_only) = if symbols {
                 let symbols = plaid_core::recall::parse_symbols(&String::from_utf8_lossy(&text));
+                let found = plaid_core::signatures::from_symbols(&image, &symbols, wanted);
+                let names = found.matches.iter().map(|m| m.name.clone()).collect();
                 (
-                    plaid_core::signatures::from_symbols(&image, &symbols, wanted),
-                    "reference symbol map (ADR-0148), symbols",
+                    found,
+                    format!(
+                        "reference symbol map (ADR-0148), symbols sha256 {}",
+                        plaid_core::rom::sha256(&text)
+                    ),
+                    names,
                 )
             } else {
                 let sigs = plaid_core::signatures::parse(&String::from_utf8_lossy(&text))?;
                 (
                     plaid_core::signatures::identify(&image, &sigs, wanted),
-                    "n64sym signature match (ADR-0133), signatures",
+                    format!(
+                        "n64sym signature match (ADR-0133, ADR-0171), signatures sha256 {}",
+                        plaid_core::rom::sha256(&text)
+                    ),
+                    BTreeSet::new(),
                 )
             };
+            if let Some(path) = &reference_map {
+                let map = fs::read(path).map_err(|e| e.to_string())?;
+                let symbols = plaid_core::recall::parse_symbols(&String::from_utf8_lossy(&map));
+                (found, map_only) = plaid_core::signatures::with_reference_map(
+                    found,
+                    plaid_core::signatures::from_symbols(&image, &symbols, wanted),
+                );
+                source += &format!(
+                    ", completed from a reference symbol map sha256 {}",
+                    plaid_core::rom::sha256(&map)
+                );
+            }
             let functions: Vec<_> = found
                 .matches
                 .iter()
@@ -1050,6 +1109,7 @@ fn run() -> Result<(), String> {
                         "name": m.name,
                         "size": (m.size > 0).then_some(m.size),
                         "callbacks": callbacks,
+                        "evidence": if map_only.contains(&m.name) { "reference map" } else { "signature" },
                     })
                 })
                 .collect();
@@ -1057,11 +1117,7 @@ fn run() -> Result<(), String> {
                 "{}",
                 serde_json::to_string_pretty(&serde_json::json!({
                     "format": "plaid-runtime-functions-v0",
-                    "source": format!(
-                        "{source} sha256 {}, rom sha256 {}",
-                        plaid_core::rom::sha256(&text),
-                        rom.identity.sha256
-                    ),
+                    "source": format!("{source}, rom sha256 {}", rom.identity.sha256),
                     "functions": functions,
                     "ambiguous": found.ambiguous,
                 }))
@@ -1183,9 +1239,12 @@ fn main() -> ExitCode {
     }
 }
 
+/// Declared functions, their evidence, and the names a reference symbol map
+/// alone gives (ADR-0171).
 type RuntimeDeclarations = (
     Vec<(GuestAddr, String, Vec<u8>)>,
     Option<(String, Evidence)>,
+    BTreeSet<String>,
 );
 
 /// Read a `plaid-runtime-functions-v0` declaration (ADR-0129): host-provided
@@ -1257,7 +1316,7 @@ fn load_declarations(
 
 fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, String> {
     let Some(path) = path else {
-        return Ok((Vec::new(), None));
+        return Ok((Vec::new(), None, BTreeSet::new()));
     };
     let bytes = fs::read(path).map_err(|e| e.to_string())?;
     let doc: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
@@ -1268,6 +1327,7 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
         .as_str()
         .ok_or("runtime declarations need a source string")?;
     let mut functions = Vec::new();
+    let mut reference_named = BTreeSet::new();
     for f in doc["functions"]
         .as_array()
         .ok_or("runtime declarations need a functions array")?
@@ -1286,6 +1346,17 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
             };
             callbacks.push(register);
         }
+        // files from `identify --symbols` predate the per-function field
+        match f["evidence"].as_str() {
+            Some("reference map") => {
+                reference_named.insert(name.to_string());
+            }
+            None if source.starts_with("reference symbol map") => {
+                reference_named.insert(name.to_string());
+            }
+            Some("signature") | None => {}
+            Some(_) => return Err("runtime evidence is signature or reference map".into()),
+        }
         functions.push((GuestAddr(number32(entry)?), name.to_string(), callbacks));
     }
     let hash = plaid_core::rom::sha256(&bytes);
@@ -1295,5 +1366,9 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
         revision: "0".into(),
         detail: format!("{source}; declaration sha256 {hash}"),
     };
-    Ok((functions, Some((format!("runtime:{hash}"), evidence))))
+    Ok((
+        functions,
+        Some((format!("runtime:{hash}"), evidence)),
+        reference_named,
+    ))
 }

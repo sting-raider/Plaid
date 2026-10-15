@@ -800,7 +800,9 @@ impl ProgramMap {
             address(a)?;
             refs(e)?;
         }
-        let mut names = BTreeSet::new();
+        // one host function may stand for several identical copies (ADR-0171),
+        // so a repeated name must declare the same callbacks
+        let mut names = BTreeMap::new();
         for (a, f) in &self.runtime_functions {
             address(a)?;
             refs(&f.evidence)?;
@@ -809,11 +811,11 @@ impl ProgramMap {
                 .next()
                 .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
                 || !chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
-                || !names.insert(&f.name)
+                || *names.entry(&f.name).or_insert(&f.callbacks) != &f.callbacks
                 || f.callbacks.iter().any(|r| !(4..=7).contains(r))
             {
                 return Err(format!(
-                    "invalid or duplicate runtime function name {:?}",
+                    "invalid runtime function name or callbacks {:?}",
                     f.name
                 ));
             }

@@ -54,6 +54,10 @@ pub const RUNTIME_FUNCTIONS: &[&str] = &[
     "osMapTLB", "osUnmapTLB", "osUnmapTLBAll", "osSetTLBASID",
 ];
 
+/// Evidence producer of runtime functions that only a reference symbol map
+/// names (ADR-0171); the solver lists them in its runtime assumption.
+pub const REFERENCE_MAP_PRODUCER: &str = "plaid-runtime-reference-map/v0";
+
 /// Argument registers of a runtime function that carry guest code pointers.
 pub fn callback_registers(name: &str) -> Vec<u8> {
     match name {
@@ -79,6 +83,8 @@ pub struct Signature {
     crc_a: u32,
     crc_b: u32,
     relocs: BTreeMap<u32, Reloc>,
+    /// `.targ26` offsets and the symbol each one calls (ADR-0171).
+    calls: BTreeMap<u32, String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -90,7 +96,8 @@ pub struct Match {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Identification {
-    /// One address per name and one name per address.
+    /// One name per address, and one address per name unless every copy is
+    /// the same relocation-free code (ADR-0171).
     pub matches: Vec<Match>,
     /// Names left undeclared because they matched several addresses, or
     /// shared an address with another name.
@@ -108,7 +115,9 @@ pub fn parse(text: &str) -> Result<Vec<Signature>, String> {
         match fields.as_slice() {
             [] => {}
             [first, ..] if first.starts_with('#') => {}
-            [kind @ (".targ26" | ".hi16" | ".lo16"), _, offsets @ ..] if !offsets.is_empty() => {
+            [kind @ (".targ26" | ".hi16" | ".lo16"), symbol, offsets @ ..]
+                if !offsets.is_empty() =>
+            {
                 let sig = out
                     .last_mut()
                     .ok_or(format!("line {}: relocation before symbol", n + 1))?;
@@ -118,6 +127,7 @@ pub fn parse(text: &str) -> Result<Vec<Signature>, String> {
                         return Err(format!("line {}: relocation outside {}", n + 1, sig.name));
                     }
                     let reloc = if *kind == ".targ26" {
+                        sig.calls.insert(offset, symbol.to_string());
                         Reloc::Targ26
                     } else {
                         Reloc::Half
@@ -131,6 +141,7 @@ pub fn parse(text: &str) -> Result<Vec<Signature>, String> {
                 crc_a: number(crc_a)?,
                 crc_b: number(crc_b)?,
                 relocs: BTreeMap::new(),
+                calls: BTreeMap::new(),
             }),
             _ => return Err(format!("line {}: not a sig_v1 line", n + 1)),
         }
@@ -182,8 +193,8 @@ pub fn identify(image: &CodeImage, signatures: &[Signature], wanted: &[&str]) ->
         index.entry(key).or_default().push(sig);
     }
     let patterns: BTreeSet<Head> = index.keys().map(|(head, _)| *head).collect();
-    // (entry, name) -> size; a name can have several signature variants
-    let mut found: BTreeMap<(u32, &str), u32> = BTreeMap::new();
+    // (entry, name) -> the signature variants that match there
+    let mut found: BTreeMap<(u32, &str), Vec<&Signature>> = BTreeMap::new();
     for at in 0..image.words.len().saturating_sub(1) {
         for (r0, r1) in &patterns {
             let head = [strip(image.words[at], *r0), strip(image.words[at + 1], *r1)];
@@ -199,30 +210,77 @@ pub fn identify(image: &CodeImage, signatures: &[Signature], wanted: &[&str]) ->
                     && (0..sig.size / 4).all(|k| image.word(GuestAddr(entry + 4 * k)).is_some())
                     && stripped_crc(&image.words[at..end], &sig.relocs) == sig.crc_b
                 {
-                    found.insert((entry, sig.name.as_str()), sig.size);
+                    found
+                        .entry((entry, sig.name.as_str()))
+                        .or_default()
+                        .push(sig);
                 }
             }
         }
     }
-    let mut by_name: BTreeMap<&str, BTreeSet<u32>> = BTreeMap::new();
-    let mut by_entry: BTreeMap<u32, BTreeSet<&str>> = BTreeMap::new();
-    for (entry, name) in found.keys() {
-        by_name.entry(name).or_default().insert(*entry);
-        by_entry.entry(*entry).or_default().insert(name);
+    // A call relocation to a function identified elsewhere must jump to it
+    // (ADR-0171): drop the variants that do not, until nothing changes.
+    loop {
+        let settled = settle(&found);
+        let before: usize = found.values().map(Vec::len).sum();
+        for ((entry, _), sigs) in found.iter_mut() {
+            sigs.retain(|sig| {
+                sig.calls.iter().all(|(offset, callee)| {
+                    settled.get(callee.as_str()).is_none_or(|entries| {
+                        jump_target(image, entry + offset).is_some_and(|t| entries.contains(&t))
+                    })
+                })
+            });
+        }
+        found.retain(|_, sigs| !sigs.is_empty());
+        if found.values().map(Vec::len).sum::<usize>() == before {
+            break;
+        }
     }
+    let settled = settle(&found);
     let mut out = Identification::default();
-    for ((entry, name), size) in found {
-        if by_name[name].len() == 1 && by_entry[&entry].len() == 1 {
+    for ((entry, name), sigs) in &found {
+        if settled.contains_key(name) {
             out.matches.push(Match {
-                entry: GuestAddr(entry),
-                name: name.into(),
-                size,
+                entry: GuestAddr(*entry),
+                name: name.to_string(),
+                size: sigs[0].size,
             });
         } else {
-            out.ambiguous.insert(name.into());
+            out.ambiguous.insert(name.to_string());
         }
     }
     out
+}
+
+/// Names identified by the candidates: each of a name's addresses carries
+/// only that name, and a name at several addresses is identified only when
+/// none of its matching variants has a relocation, so every copy is the same
+/// code (ADR-0171).
+fn settle<'a>(
+    found: &BTreeMap<(u32, &'a str), Vec<&Signature>>,
+) -> BTreeMap<&'a str, BTreeSet<u32>> {
+    let mut by_name: BTreeMap<&str, BTreeSet<u32>> = BTreeMap::new();
+    let mut by_entry: BTreeMap<u32, usize> = BTreeMap::new();
+    for (entry, name) in found.keys() {
+        by_name.entry(name).or_default().insert(*entry);
+        *by_entry.entry(*entry).or_default() += 1;
+    }
+    by_name.retain(|name, entries| {
+        entries.iter().all(|e| by_entry[e] == 1)
+            && (entries.len() == 1
+                || entries
+                    .iter()
+                    .all(|e| found[&(*e, *name)].iter().all(|s| s.relocs.is_empty())))
+    });
+    by_name
+}
+
+/// Target of the J or JAL at `pc`.
+fn jump_target(image: &CodeImage, pc: u32) -> Option<u32> {
+    let word = image.word(GuestAddr(pc))?;
+    matches!(word >> 26, 2 | 3)
+        .then(|| (pc.wrapping_add(4) & 0xf000_0000) | (word & 0x03ff_ffff) << 2)
 }
 
 /// Name runtime functions from a reference symbol map instead of signatures
@@ -256,6 +314,49 @@ pub fn from_symbols(
         }
     }
     out
+}
+
+/// Signature identification, completed from a reference symbol map only
+/// where the ROM's own bytes leave a name open (ADR-0171). A map name that a
+/// signature places at another address, or at an address a signature gives
+/// another name, disagrees with the ROM: it is left out and reported as
+/// ambiguous; in the first case the signature's match goes too. Returns the
+/// names that rest on the map alone.
+pub fn with_reference_map(
+    signatures: Identification,
+    map: Identification,
+) -> (Identification, BTreeSet<String>) {
+    let mut by_name: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
+    for m in &signatures.matches {
+        by_name.entry(m.name.clone()).or_default().insert(m.entry.0);
+    }
+    let named: BTreeSet<u32> = signatures.matches.iter().map(|m| m.entry.0).collect();
+    let mut out = signatures;
+    let mut map_only = BTreeSet::new();
+    let mut conflicts = BTreeSet::new();
+    for m in map.matches {
+        match by_name.get(&m.name) {
+            Some(entries) if entries.contains(&m.entry.0) => {}
+            Some(_) => {
+                conflicts.insert(m.name);
+            }
+            None if named.contains(&m.entry.0) => {
+                conflicts.insert(m.name);
+            }
+            None => {
+                map_only.insert(m.name.clone());
+                out.matches.push(m);
+            }
+        }
+    }
+    out.matches.retain(|m| !conflicts.contains(&m.name));
+    map_only.retain(|n| !conflicts.contains(n));
+    out.ambiguous.extend(map.ambiguous);
+    out.ambiguous.extend(conflicts);
+    out.ambiguous
+        .retain(|n| !out.matches.iter().any(|m| &m.name == n));
+    out.matches.sort();
+    (out, map_only)
 }
 
 #[cfg(test)]
@@ -375,6 +476,90 @@ mod tests {
         );
         // osRecvMesg is misaligned and osGetTime lies past the 64-word image
         assert_eq!(found.ambiguous, BTreeSet::from(["osSendMesg".to_string()]));
+    }
+
+    /// A signature line for `words`, with `.targ26` relocations calling the
+    /// named symbols at the given offsets.
+    fn sig_for(name: &str, words: &[u32], calls: &[(u32, &str)]) -> String {
+        let relocs: BTreeMap<u32, Reloc> = calls.iter().map(|(o, _)| (*o, Reloc::Targ26)).collect();
+        let (a, b) = (
+            stripped_crc(&words[..2], &relocs),
+            stripped_crc(words, &relocs),
+        );
+        let mut text = format!("{name} 0x{:X} 0x{a:08X} 0x{b:08X}\n", words.len() * 4);
+        for (offset, symbol) in calls {
+            text += &format!(" .targ26 {symbol} 0x{offset:03X}\n");
+        }
+        text
+    }
+
+    #[test]
+    fn call_relocations_and_identical_copies_settle_names() {
+        // two leaves at 0x400 and 0x410; BODY at 0x420 calls the first and at
+        // 0x450 calls the second, as osEepromLongWrite and osEepromLongRead
+        // compile to the same code apart from that call
+        let write = [0x2402_0001, 0x03e0_0008, 0];
+        let read = [0x2402_0002, 0x03e0_0008, 0];
+        let copy = [0x2402_0003, 0x03e0_0008, 0];
+        let mut img = image(&[(8, 0x8000_0400), (20, 0x8000_0410)]);
+        for (at, words) in [(0, write), (4, read), (40, copy), (44, copy)] {
+            img.words[at..at + 3].copy_from_slice(&words);
+        }
+        let text = sig_for("osEepromWrite", &write, &[])
+            + &sig_for("osEepromRead", &read, &[])
+            + &sig_for("osEepromLongWrite", &BODY, &[(8, "osEepromWrite")])
+            + &sig_for("__ull_rem", &copy, &[]);
+        let found = identify(&img, &parse(&text).unwrap(), RUNTIME_FUNCTIONS);
+        let at = |name: &str| -> Vec<u32> {
+            found
+                .matches
+                .iter()
+                .filter(|m| m.name == name)
+                .map(|m| m.entry.0)
+                .collect()
+        };
+        assert_eq!(at("osEepromLongWrite"), [0x8000_0420]);
+        // relocation-free code at two addresses is the same function twice
+        assert_eq!(at("__ull_rem"), [0x8000_04a0, 0x8000_04b0]);
+        assert!(found.ambiguous.is_empty(), "{:?}", found.ambiguous);
+        // without the callee identified, the relocation cannot decide
+        let text = sig_for("osEepromLongWrite", &BODY, &[(8, "osEepromWrite")]);
+        let open = identify(&img, &parse(&text).unwrap(), RUNTIME_FUNCTIONS);
+        assert!(open.matches.is_empty());
+        assert_eq!(
+            open.ambiguous,
+            BTreeSet::from(["osEepromLongWrite".to_string()])
+        );
+    }
+
+    #[test]
+    fn a_reference_map_fills_only_what_the_rom_leaves_open() {
+        let m = |name: &str, entry: u32| Match {
+            entry: GuestAddr(entry),
+            name: name.into(),
+            size: 0,
+        };
+        let signatures = Identification {
+            matches: vec![m("osEepromWrite", 0x400), m("osGetTime", 0x430)],
+            ambiguous: BTreeSet::from(["osInitialize".to_string()]),
+        };
+        let map = Identification {
+            matches: vec![
+                m("osEepromWrite", 0x400), // agrees
+                m("osInitialize", 0x500),  // the ROM leaves it open
+                m("osGetTime", 0x440),     // the ROM puts it elsewhere
+                m("osContInit", 0x400),    // the ROM names that address
+            ],
+            ambiguous: BTreeSet::from(["osSendMesg".to_string()]),
+        };
+        let (found, map_only) = with_reference_map(signatures, map);
+        assert_eq!(
+            found.matches,
+            [m("osEepromWrite", 0x400), m("osInitialize", 0x500)]
+        );
+        assert_eq!(map_only, BTreeSet::from(["osInitialize".to_string()]));
+        let ambiguous: Vec<_> = found.ambiguous.iter().map(String::as_str).collect();
+        assert_eq!(ambiguous, ["osContInit", "osGetTime", "osSendMesg"]);
     }
 
     #[test]
