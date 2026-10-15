@@ -47,9 +47,12 @@ Next concrete steps, in order:
    Done: `BREAK` as a checked abort (ADR-0138); OoT at 566 guarded blockers.
    Done: COP1 arithmetic, conversions and FCSR access (ADR-0139); OoT at
    42 guarded blockers.
-   **Next:** the 33 unresolved OoT indirect sites (classify them: jump
-   tables, function-pointer calls, returns without a certificate), then the
-   4 unresolved direct and 3 unmapped targets.
+   Done: GCC's scheduled jump-table shapes (ADR-0140); OoT at 8082 blocks,
+   31 guarded blockers, with no unresolved jump table left.
+   **Next:** identify runtime functions inside declared loads too (OoT's
+   code segment holds libultra, e.g. the `_Printf`-shaped function behind 9
+   `jalr s4` sites), then the 4 unresolved direct and 3 unmapped targets.
+   The 12 struct function-pointer calls need a points-to argument.
 4. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
    boot-segment discovery from the real entry point, then a local-only recall
    score against the decomp map. Keep ROM bytes, maps and traces ignored.

@@ -181,6 +181,20 @@ def jump_table(prefix):
         'next', addiu(t0, t0, 1), slti(t2, t0, 4), bne(t2, zero, 'loop'), nop, *DONE,
         'tbl', lambda pc, L: L['c0'], lambda pc, L: L['c1'], lambda pc, L: L['c2']]
 
+def scheduled_table():
+    # GCC's scheduled shape (ADR-0140): work between the bound and its branch,
+    # the base LUI between scale and add, and a branch-likely loop back into
+    # the guard carrying the bound in its slot.
+    return [addiu(s1, zero, 0), addiu(t0, zero, 0), addiu(t3, zero, 0), sltiu(at, t0, 3), addiu(t3, t3, 1),
+        'guard', beq(at, zero, 'dflt'), nop,
+        sll(t1, t0, 2), lui(at, 0x8000), addu(at, at, t1), lambda pc, L: I(35, t1, at, L['tbl']), jr(t1), nop,
+        'c0', addiu(s1, s1, 1), j('next'), nop,
+        'c1', addiu(s1, s1, 10), j('next'), nop,
+        'c2', addiu(s1, s1, 100), j('next'), nop,
+        'dflt', addiu(s1, s1, 1000),
+        'next', addiu(t0, t0, 1), slti(t2, t0, 5), bnel(t2, zero, 'guard'), sltiu(at, t0, 3), *DONE,
+        'tbl', lambda pc, L: L['c0'], lambda pc, L: L['c1'], lambda pc, L: L['c2']]
+
 PROGRAMS = {
     'alu': [lui(t0, 0x8000), ori(t0, t0, 0x1234), addiu(t1, zero, -5),
         addu(t2, t0, t1), subu(t3, t1, t0), and_(t4, t0, t1), or_(t5, t0, t1), xor(t6, t0, t1), nor(t7, t0, t1),
@@ -281,6 +295,7 @@ PROGRAMS = {
         ldc1(6, 8, gp), dmfc1(t7, 6), mtc1(t5, 1), dmfc1(s0, 1), sdc1(2, 24, gp), *DONE],
     # A bounded jump table, closed under the guarded scope (ADR-0132).
     'table': jump_table([]),
+    'scheduled_table': scheduled_table(),
     # Nested, recursive, pointer and tail calls; frames live in the RAM window.
     'calls': [lui(sp, 0x8000), ori(sp, sp, 0x1100),
         addiu(a0, zero, 5), jal('fact'), nop, addu(s0, v0, zero),

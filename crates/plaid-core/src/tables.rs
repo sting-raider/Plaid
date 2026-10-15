@@ -104,22 +104,27 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
         return None;
     }
     let branch = image.word(edge.site.pc)?;
-    let compare_pc = GuestAddr(edge.site.pc.0.checked_sub(4)?);
-    // The index scale is the SLL just before the add or, as GCC schedules it,
-    // the delay slot of a non-likely guard branch, which runs on both paths.
-    let adjacent = GuestAddr(add_pc.0.checked_sub(4)?);
-    let (shift_pc, in_slot) =
-        if adjacent.0 >= block.start.pc.0 && image.word(adjacent).is_some_and(is_shift) {
-            (adjacent, false)
-        } else if matches!(branch >> 26, 4 | 5)
-            && image
-                .word(GuestAddr(edge.site.pc.0.checked_add(4)?))
-                .is_some_and(is_shift)
-        {
-            (GuestAddr(edge.site.pc.0 + 4), true)
-        } else {
-            return None;
-        };
+    // The index scale is the nearest SLL before the add in the dispatch block
+    // (GCC may schedule the table base LUI between them) or the delay slot of
+    // a non-likely guard branch, which runs on both paths.
+    let scales_add =
+        |w: u32| is_shift(w) && (field(w, 11) == field(add, 21) || field(w, 11) == field(add, 16));
+    let nearest = (block.start.pc.0..add_pc.0)
+        .step_by(4)
+        .rev()
+        .map(GuestAddr)
+        .find(|a| image.word(*a).is_some_and(scales_add));
+    let (shift_pc, in_slot) = if let Some(at) = nearest {
+        (at, false)
+    } else if matches!(branch >> 26, 4 | 5)
+        && image
+            .word(GuestAddr(edge.site.pc.0.checked_add(4)?))
+            .is_some_and(is_shift)
+    {
+        (GuestAddr(edge.site.pc.0 + 4), true)
+    } else {
+        return None;
+    };
     let shift = image.word(shift_pc)?;
     let index = field(shift, 16);
     let scale = field(shift, 11);
@@ -134,28 +139,79 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
         return None;
     }
 
-    // The table bound is established by the SLTIU immediately before this
-    // branch. Alternate execution that enters the branch can reuse an
+    // The table bound is established by the SLTIU that last defines the
+    // branch's flag; GCC may schedule unrelated instructions between them,
+    // which must preserve the index. Alternate execution that enters the
+    // compare-to-branch interval can reuse an
     // unconstrained/stale flag and still select the dispatch edge. When the
     // selected dispatch is the sequential branch fallthrough, entering the
     // physical delay-slot word also skips both compare and branch and then
     // falls directly into the dispatch block. Keep image/generation identity
     // explicit; equal guest PCs in another executable generation are unrelated.
+    let flag = match (field(branch, 21), field(branch, 16)) {
+        (0, 0) => return None,
+        (flag, 0) | (0, flag) => flag,
+        _ => return None,
+    };
+    let mut compare_pc = edge.site.pc;
+    let mut interval = Vec::new();
+    loop {
+        if interval.len() > 32 {
+            return None;
+        }
+        compare_pc = GuestAddr(compare_pc.0.checked_sub(4)?);
+        let word = image.word(compare_pc)?;
+        let instruction = decode(word, compare_pc);
+        if instruction.destination_gpr() == Some(u32::from(flag)) {
+            break;
+        }
+        if !instruction.is_valid()
+            || instruction.has_delay_slot()
+            || instruction.is_trap()
+            || matches!(instruction.opcode_name(), "syscall" | "break" | "eret")
+            || instruction.destination_gpr() == Some(u32::from(index))
+        {
+            return None;
+        }
+        interval.push(word);
+    }
     let bypasses_compare = |address: &CodeAddress| {
         if address.image != site.site.image || address.generation != site.site.generation {
             return false;
         }
-        if address.pc == edge.site.pc {
+        if address.pc.0 > compare_pc.0 && address.pc.0 <= edge.site.pc.0 {
             return true;
         }
         edge.site.pc.0.checked_add(8) == Some(block.start.pc.0)
             && edge.site.pc.0.checked_add(4) == Some(address.pc.0)
     };
+    let compare = image.word(compare_pc)?;
+    // Two direct entries into the interval still pass through the bound:
+    // sequential flow from inside it, and a branch whose delay slot is the
+    // identical SLTIU (GCC's loop rotation puts it in a branch-likely slot).
+    let same = |a: &CodeAddress| a.image == site.site.image && a.generation == site.site.generation;
+    let rebounds = |e: &DirectEdge| {
+        let inside = e.target.pc.0 > compare_pc.0 && e.target.pc.0 <= edge.site.pc.0;
+        inside
+            && same(&e.site)
+            && (e.kind == EdgeKind::Fallthrough
+                && e.delay_slot == DelaySlot::None
+                && e.site.pc.0 >= compare_pc.0
+                && e.site.pc.0.checked_add(4) == Some(e.target.pc.0)
+                || e.kind != EdgeKind::Fallthrough
+                    && e.delay_slot != DelaySlot::None
+                    && e.site
+                        .pc
+                        .0
+                        .checked_add(4)
+                        .and_then(|a| image.word(GuestAddr(a)))
+                        == Some(compare))
+    };
     if map.entries.keys().any(&bypasses_compare)
         || map
             .direct_edges
             .iter()
-            .any(|candidate| bypasses_compare(&candidate.target))
+            .any(|candidate| bypasses_compare(&candidate.target) && !rebounds(candidate))
         || map.indirect_sites.iter().any(|candidate| {
             candidate
                 .candidates
@@ -167,18 +223,11 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
         return None;
     }
 
-    let compare = image.word(compare_pc)?;
     if compare >> 26 != 11 || field(compare, 21) != index {
         return None;
     } // SLTIU
     let count = u32::from(compare as u16);
-    let flag = field(compare, 16);
-    if count == 0 || count > MAX_ENTRIES || flag == 0 {
-        return None;
-    }
-    if !((field(branch, 21) == flag && field(branch, 16) == 0)
-        || (field(branch, 16) == flag && field(branch, 21) == 0))
-    {
+    if count == 0 || count > MAX_ENTRIES {
         return None;
     }
     let guarded = matches!(branch >> 26, 4 | 20) && edge.kind == EdgeKind::Fallthrough
@@ -188,6 +237,9 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
     }
     let mut prefix = Vec::new();
     prefix.extend(compare.to_be_bytes());
+    for word in interval.iter().rev() {
+        prefix.extend(word.to_be_bytes());
+    }
     prefix.extend(branch.to_be_bytes());
     if edge.delay_slot != DelaySlot::None && !in_slot {
         let ds = GuestAddr(edge.site.pc.0.checked_add(4)?);
@@ -226,6 +278,26 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
         prefix.extend(word.to_be_bytes());
         current = GuestAddr(current.0.checked_add(4)?);
     }
+    // Between the scale and the add, the scaled index must survive.
+    let mut between = Vec::new();
+    if !in_slot {
+        transfer(shift, shift_pc, &mut values);
+        let mut current = GuestAddr(shift_pc.0.checked_add(4)?);
+        while current.0 < add_pc.0 {
+            let word = image.word(current)?;
+            let instruction = decode(word, current);
+            if !instruction.is_valid()
+                || instruction.has_delay_slot()
+                || instruction.is_trap()
+                || instruction.destination_gpr() == Some(u32::from(scale))
+            {
+                return None;
+            }
+            transfer(word, current, &mut values);
+            between.push(word);
+            current = GuestAddr(current.0.checked_add(4)?);
+        }
+    }
     let value = values[base as usize]?;
     let low = value as u32;
     if value != u64::from(low) && value != signed_word(low) {
@@ -237,7 +309,10 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
     {
         return None;
     }
-    for word in [shift, add, load, jump] {
+    for word in std::iter::once(shift)
+        .chain(between)
+        .chain([add, load, jump])
+    {
         prefix.extend(word.to_be_bytes());
     }
     Some(TableEvidence {
