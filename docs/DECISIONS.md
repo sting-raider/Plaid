@@ -4254,3 +4254,34 @@ Result:
   frames. That is about 33 VI per second rather than 60, so the build runs
   slow. This is the speed baseline (`-O1`, a synchronous bridge with an
   8 MiB compare per task); no tuning is done before it is recorded.
+
+## ADR-0164: Controller 1 from scripted presses and the renderer window
+
+Context: after ADR-0163, SM64 stopped at "PRESS START", because
+`osContGetReadData` reported an idle controller.
+
+Decision: `osContGetReadData` fills controller 1's `OSContPad` (buttons,
+stick, errno). Its buttons are the OR of two sources:
+- **Scripted presses:** `--press <buttons>@<vi>:<frames>`, keyed to the VI
+  frame count, so runs and tests are reproducible without a person.
+- **The keyboard:** read from the RT64 window by the bridge
+  (`plaid_gfx_input`) and mapped as follows:
+  - X, C, Z: A, B, Z;
+  - Enter: START;
+  - Q, E: L, R;
+  - I, K, J, L: the C buttons;
+  - W, S, A, D: the D-pad;
+  - the arrow keys: the stick.
+
+Controllers 2 to 4 report absent (errno 8). Scripted presses set buttons
+only, not the stick (a commented shortcut).
+
+Result:
+- `runtime/test_runtime.py` checks the merge with a stub window. A press due
+  now is reported, a later press is not, the stick comes through, and
+  controller 2 is absent.
+- **SM64 gets past the title natively.** START at VI 600 and three A presses
+  pass the title and the file select. The game then plays the intro: Peach's
+  letter, then Lakitu over the castle grounds. A 60-second run has no fault:
+  2014 VI frames, 994 graphics tasks and 3360 PI DMAs. That is 33.5 VI/s,
+  the same speed as the ADR-0163 baseline.

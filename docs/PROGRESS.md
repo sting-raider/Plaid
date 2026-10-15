@@ -107,14 +107,14 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Declared runtime-function boundary (ADR-0129) | 🟨 partial |
 | Guest memory/MMIO runtime | 🟨 partial |
 | Interrupt/timing/event runtime | 🟨 partial |
-| Controller input | ⬜ open |
+| Controller input | 🟨 partial |
 | Save devices | ⬜ open |
 | Audio path | ⬜ open |
 | RSP runtime/native path | ⬜ open |
 | Renderer integration | 🟨 partial |
 | Native launch/cache packaging | ⬜ open |
 
-**Remaining:** Plaid runtime + RT64 (ADR-0158/0163): audio, input, saves, packaging and speed.
+**Remaining:** Plaid runtime + RT64 (ADR-0158/0163/0164): audio, saves, packaging and speed.
 
 ## Compatibility
 

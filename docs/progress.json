@@ -86,14 +86,14 @@
         {"name": "Declared runtime-function boundary (ADR-0129)", "state": "partial"},
         {"name": "Guest memory/MMIO runtime", "state": "partial"},
         {"name": "Interrupt/timing/event runtime", "state": "partial"},
-        {"name": "Controller input", "state": "open"},
+        {"name": "Controller input", "state": "partial"},
         {"name": "Save devices", "state": "open"},
         {"name": "Audio path", "state": "open"},
         {"name": "RSP runtime/native path", "state": "open"},
         {"name": "Renderer integration", "state": "partial"},
         {"name": "Native launch/cache packaging", "state": "open"}
       ],
-      "remaining": "Plaid runtime + RT64 (ADR-0158/0163): audio, input, saves, packaging and speed."
+      "remaining": "Plaid runtime + RT64 (ADR-0158/0163/0164): audio, saves, packaging and speed."
     },
     {
       "name": "Compatibility",

@@ -30,6 +30,9 @@ gcc -O1 -std=gnu11 -DPLAID_SAFEPOINTS -DPLAID_LOWERED='"game.c"' -I . runtime/pl
   `rt64/plaid_rt64.dll` (ADR-0163), and VI registers derived from the
   `OSViMode` are presented on every retrace. Without it, graphics tasks
   complete at once.
+- **Controller 1.** `--press <buttons>@<vi>:<frames>` scripts, ORed with the
+  RT64 window's keyboard (ADR-0164): X/C/Z = A/B/Z, Enter = START, Q/E = L/R,
+  I/K/J/L = C, W/S/A/D = D-pad, arrows = stick.
 - **Audio tasks.** These still complete immediately.
 
 ## Rendering with RT64

@@ -363,9 +363,9 @@
 <rect x="40" y="1422" width="548" height="418" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
 <text x="60" y="1452" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">05</text>
 <text x="94" y="1453" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Native Runtime</text>
-<text x="60" y="1478" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">0 integrated   /   4 partial   /   5 open</text>
-<rect x="60.0" y="1492" width="225.77777777777777" height="4" rx="0" fill="#ffc66d" stroke="none"/>
-<rect x="285.77777777777777" y="1492" width="282.22222222222223" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
+<text x="60" y="1478" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">0 integrated   /   5 partial   /   4 open</text>
+<rect x="60.0" y="1492" width="282.22222222222223" height="4" rx="0" fill="#ffc66d" stroke="none"/>
+<rect x="342.22222222222223" y="1492" width="225.77777777777777" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
 <g class="milestone">
 <title>Native Runtime: Declared runtime-function boundary (ADR-0129) (partial)</title>
 <text x="60" y="1521" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
@@ -385,10 +385,10 @@
 <text x="568" y="1573" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Controller input (open)</title>
-<text x="60" y="1599" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
+<title>Native Runtime: Controller input (partial)</title>
+<text x="60" y="1599" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
 <text x="83" y="1599" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Controller input</text>
-<text x="568" y="1599" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+<text x="568" y="1599" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
 <title>Native Runtime: Save devices (open)</title>
@@ -421,7 +421,7 @@
 <text x="568" y="1729" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
 </g>
 <text x="60" y="1796" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
-<text x="60" y="1814" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Plaid runtime + RT64 (ADR-0158/0163): audio, input, saves, packaging and</text>
+<text x="60" y="1814" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Plaid runtime + RT64 (ADR-0158/0163/0164): audio, saves, packaging and</text>
 <text x="60" y="1830" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">speed.</text>
 <rect x="612" y="1422" width="548" height="418" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
 <text x="632" y="1452" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">06</text>

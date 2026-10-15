@@ -101,9 +101,10 @@ Next concrete steps, in order:
      (1459 graphics tasks) without a fault.
    - Done: RT64 draws its graphics tasks (ADR-0163). **SM64 boots natively
      to its title screen.**
-   - Next: controller input (to get past the title), audio through the
-     host, EEPROM persistence, then speed against the ADR-0163 baseline
-     (33 VI/s).
+   - Done: controller 1 from `--press` scripts and the window keyboard
+     (ADR-0164). SM64 gets past the title into the castle-grounds intro.
+   - Next: audio through the host, EEPROM persistence, then speed against
+     the ADR-0163 baseline (33 VI/s).
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user
