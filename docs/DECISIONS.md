@@ -20,7 +20,7 @@ Reason: reproducibility, license separation, and reduced repository noise.
 
 ## ADR-0004: No project license selected yet
 
-Status: Open
+Status: Superseded by ADR-0158 (MIT OR Apache-2.0)
 
 Reason: dependency/reuse strategy is not final. Select a license only after deciding whether code from GPL projects will be incorporated or merely used as reference/oracles.
 
@@ -3953,3 +3953,59 @@ Result:
 
 Going further needs a host runtime (threads, messages, VI, SP tasks) and a
 renderer. That is milestone 4, and it waits on the runtime license choice.
+
+## ADR-0158: License MIT OR Apache-2.0; Plaid's own runtime with RT64
+
+Context: milestone 4 needs a host runtime and a renderer. ADR-0126 planned
+N64ModernRuntime, which is GPL-3.0 and would make every generated game
+application GPL-3.0. The owner delegated the choice and preferred Plaid's
+own stack, provided that is not too much work. RT64 (MIT) already
+implements N64 rendering, shaders included, on D3D12, Vulkan and Metal.
+Writing our own renderer would cost years and prove nothing about Plaid's
+claim.
+
+Decision:
+
+1. **License.** Plaid is `MIT OR Apache-2.0`, in `LICENSE-MIT`,
+   `LICENSE-APACHE` and every crate manifest. A reuse audit found no GPL code
+   outside `instruments/mupen/`, which ADR-0006 already keeps as a separately
+   licensed GPL instrument with its own `COPYING`. That directory is excluded
+   from the grant. The reused N64Recomp symbol lists and the n64sym
+   matching rule are MIT, and the ares-derived spike drivers are ISC; each
+   is already credited where it is used.
+
+2. **Runtime.** Milestone 4 uses Plaid's own permissively licensed host
+   runtime, `runtime/`. It implements the declared runtime functions
+   (`plaid_rt_*`) that lowered code calls. N64ModernRuntime stays a
+   reference to read, never copied.
+   - The runtime is written in C (C11 with pthreads), not Rust. Lowered
+     programs are C translation units whose `plaid_state` layout comes from
+     `plaid-lower`, and the renderer is C++. A C runtime links into the
+     same build with no mirrored struct layouts.
+   - Guest threads run on host threads under one baton: exactly one guest
+     thread executes at a time, as on the single VR4300. A handoff saves
+     the CPU register file from the shared `plaid_state` into the outgoing
+     thread and restores the incoming one. RAM is shared.
+   - Events (VI retrace, SP/DP completion, timers, PI) are libultra
+     messages, posted by host-side sources and delivered at scheduling
+     points.
+   - A thread that never calls the runtime, such as an idle `while (1);`,
+     must still be preemptible. `plaid-lower` will emit a safepoint check
+     at every backward transfer, verified like every lowering change.
+   - Runtime writes to guest RAM (PI DMA, controller data) go through
+     `plaid_runtime_write`. Its executable-byte and declared-load checks
+     still apply.
+
+3. **Rendering.** RT64 consumes the game's display lists at `osSpTaskStartGo`
+   for graphics tasks. Audio tasks go to a Plaid-owned audio path (HLE of
+   the audio microcode, or a reference HLE such as the one in
+   N64ModernRuntime's ecosystem if its license allows). That waits for a
+   later milestone 4 step.
+
+Consequences:
+- ADR-0126 step 2 is superseded: N64ModernRuntime is not linked.
+- A generated game application is under Plaid's license plus RT64's MIT
+  terms. The user still supplies the ROM.
+- Runtime behavior is tested by deterministic synthetic programs that call
+  runtime functions, and by the SM64 native run reaching named checkpoints.
+  The first checkpoint is the first graphics task.
