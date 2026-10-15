@@ -39,3 +39,12 @@ int plaid_rt_safepoint(plaid_state *s) {
   plaid_safepoints++;
   return 0;
 }
+
+/* map(a0 = index, a1 = PageMask, a2 = EntryHi, a3 = EntryLo0,
+   16(sp) = EntryLo1): the TLBWI the guest body performs (ADR-0162). */
+int plaid_rt_map(plaid_state *s) {
+  u64 lo1;
+  if (plaid_load(s, s->r[29] + 16, 4, 0, &lo1)) return 1;
+  s->tlb[s->r[4] & 31] = (plaid_tlb_entry){(u32)s->r[5], (u32)s->r[6], {(u32)s->r[7], (u32)lo1}};
+  return 0;
+}

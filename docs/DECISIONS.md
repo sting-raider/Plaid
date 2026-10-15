@@ -4159,3 +4159,50 @@ Result:
   (269 before). It then fails closed with fault 1 in goddard's
   `load_dynlist`, which reads dynlists through `osMapTLB` mappings at
   virtual `0x04000000`. ADR-0162 handles TLB-mapped data.
+
+## ADR-0162: TLB-mapped data, with D-cache index aliasing
+
+Context: after ADR-0161, SM64 failed closed (fault 1) in goddard's
+`load_dynlist`. It DMAs the dynlists segment into the heap, maps that segment
+at virtual `0x04000000` with `osMapTLB` (64 KiB pages), and walks pointers
+there. `plaid_addr` accepted only KSEG0 and KSEG1, and `osMapTLB` was a no-op
+runtime function (ADR-0155).
+
+Decision:
+- **TLB state.** `plaid_state.tlb[32]` holds each entry as TLBWI writes it:
+  PageMask, EntryHi, EntryLo0 and EntryLo1.
+- **Runtime functions.** `osMapTLB` packs the entry as libultra does: the
+  page frame, noncoherent cached, dirty and valid, with -1 leaving a page
+  invalid. `osUnmapTLBAll` points every entry into KSEG0, where no mapped
+  address can match. `osVirtualToPhysical` translates mapped addresses.
+- **Translation.** `plaid_addr` translates KUSEG, KSSEG and KSEG3 data
+  accesses as pinned ares (`tlb.cpp`) matches them: the first entry whose
+  VPN2 matches under its page mask decides, and the even or odd page is
+  chosen by the page-size bit.
+- **Fail-closed cases.** Lowered code models global entries only. So these
+  all fault 1, where hardware would raise an exception:
+  - a matching entry with an ASID (the runtime refuses to write one);
+  - an invalid page;
+  - a store to a clean page.
+- **Cache index.** ares showed that the VR4300 D-cache is indexed by
+  `vaddr[12:4]`. A 4 KiB page whose virtual bit 12 differs from its physical
+  bit 12 caches a line at a different index than KSEG0 does, and the two
+  views diverge. The per-line cache class (ADR-0126's fault 4) therefore
+  gains a third value: cached at the other index. Any mix of classes on one
+  line faults 4. goddard's 64 KiB pages always keep bit 12, so they never
+  alias.
+
+Result:
+- spike096 adds `tlb`. On ares it maps entries with real MTC0 and TLBWI;
+  natively the runtime writes the same entries. The program stores through a
+  4 KiB even page, its odd page and a 64 KiB page, then reads back through
+  KSEG2, KSEG0 and a second mapping at the same cache index. It matches ares.
+- Three new programs fail closed:
+  - `tlb_invalid` (fault 1);
+  - `tlb_clean` (fault 1);
+  - `tlb_alias` (fault 4). It is the case ares showed: a mapped store at the
+    other index, then a KSEG0 read.
+- SM64 no longer faults. In a 90-second native run it reaches the time limit
+  after 2939 VI frames, 1459 graphics tasks (30 fps), 2931 audio tasks and
+  9861 PI DMAs, with no fault. Display lists are reported but not drawn
+  until RT64 is attached.

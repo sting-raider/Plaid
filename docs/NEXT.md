@@ -97,8 +97,9 @@ Next concrete steps, in order:
      (ADR-0160). SM64 runs natively for 96 frames at 30 fps.
    - Done: declared-load lifetime (ADR-0161). SM64 runs past the goddard
      reload.
-   - Next: TLB-mapped data (ADR-0162). goddard's `load_dynlist` reads
-     dynlists through `osMapTLB` mappings at virtual `0x04000000`.
+   - Done: TLB-mapped data (ADR-0162). SM64 runs natively for 90 seconds
+     (1459 graphics tasks) without a fault.
+   - Next: draw its display lists with RT64 (ADR-0163).
    - RT64 for graphics tasks; then audio, controllers and EEPROM.
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,

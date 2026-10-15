@@ -1131,7 +1131,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     }
     if scope.guarded() {
         assumptions.push(
-            "Data loads/stores are naturally aligned RDRAM accesses through KSEG0/KSEG1 (unaligned LWL/LWR/LDL/LDR read their containing aligned word, and SWL/SWR/SDL/SDR write single bytes), never reach executable bytes, and use only one of KSEG0/KSEG1 per 16-byte line; a native artifact checks every store and access and aborts on violation, with no fallback execution."
+            "Data loads/stores are naturally aligned RDRAM accesses through KSEG0/KSEG1 or global TLB entries written by the runtime's osMapTLB (ADR-0162) (unaligned LWL/LWR/LDL/LDR read their containing aligned word, and SWL/SWR/SDL/SDR write single bytes), never reach executable bytes, and use only one cache view per 16-byte line: cached at its physical D-cache index, cached at the other index, or uncached; a native artifact checks every store and access and aborts on violation, with no fallback execution."
                 .into(),
         );
         if !tables.is_empty() {

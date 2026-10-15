@@ -22,14 +22,19 @@ const PRELUDE: &str = r#"#include <stdint.h>
 typedef uint8_t u8; typedef uint32_t u32; typedef int32_t s32;
 typedef uint64_t u64; typedef int64_t s64;
 #define PLAID_RAM_SIZE 0x800000u
+/* one TLB entry as TLBWI writes it: PageMask, EntryHi, EntryLo0/1 (ADR-0162) */
+typedef struct { u32 mask, hi, lo[2]; } plaid_tlb_entry;
 typedef struct {
   u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 fcsr; u32 llbit; u32 pc; u32 fault; u32 fault_pc;
   u8 ram[PLAID_RAM_SIZE];
-  u8 line_segment[PLAID_RAM_SIZE / 16]; /* 0 untouched, 1 KSEG0, 2 KSEG1 */
+  /* per 16-byte line: 0 untouched, 1 cached at its physical index (KSEG0),
+     2 uncached (KSEG1), 3 cached at the other virtual index (ADR-0162) */
+  u8 line_segment[PLAID_RAM_SIZE / 16];
   u8 load_ok[64]; /* declared load verified in RAM (ADR-0136) */
   /* per RAM word, from plaid_code: 0 data, 1 executable, 2 + n executable
      bytes of declared load n; built once before the first guarded write */
   u8 prot[PLAID_RAM_SIZE / 4]; u8 prot_ready;
+  plaid_tlb_entry tlb[32]; /* written by the runtime's osMapTLB family */
 } plaid_state;
 /* A host runtime with preemptive scheduling builds with PLAID_SAFEPOINTS and
    defines both names; every loop header checks plaid_preempt (ADR-0159). */
@@ -90,15 +95,41 @@ static inline int plaid_protected(plaid_state *s, u32 p, u32 size, u32 pc) {
   }
   return 0;
 }
+/* Mapped data (KUSEG, KSSEG, KSEG3) through the TLB as pinned ares matches
+   it (tlb.cpp): the first entry whose VPN2 matches decides. Only global
+   entries are modeled, so a matching entry with an ASID fails closed, as do
+   an invalid page and a store to a clean one (ADR-0162). The D-cache is
+   indexed by vaddr[12:4], so a 4 KiB page whose virtual bit 12 differs from
+   its physical one caches the line at another index: class 3. */
+static inline int plaid_tlb(plaid_state *s, u32 v, int write, u32 *p, u8 *seg) {
+  u32 i, pm, m, lo;
+  for (i = 0; i < 32; i++) {
+    const plaid_tlb_entry *e = &s->tlb[i];
+    pm = e->mask & (0xaaau << 13);
+    m = pm | pm >> 1 | 0x1fffu;
+    if ((v & ~m) != (e->hi & ~m)) continue;
+    if (!(e->lo[0] & e->lo[1] & 1)) return 1;
+    lo = e->lo[(v & ((m >> 1) + 1)) != 0];
+    if (!(lo & 2) || (write && !(lo & 4))) return 1;
+    *p = (((lo >> 6) & 0xffffffu) << 12) + (v & (m >> 1));
+    *seg = ((lo >> 3) & 7) == 2 ? 2 : (v ^ *p) & 0x1000u ? 3 : 1;
+    return 0;
+  }
+  return 1;
+}
 static inline int plaid_addr(plaid_state *s, u64 va, u32 size, u32 pc, int write, u32 *out) {
   u32 v = (u32)va, p;
-  if (va != SX32(v) || (v & (size - 1)) || v < 0x80000000u || v >= 0xc0000000u)
+  u8 seg;
+  if (va != SX32(v) || (v & (size - 1))) return plaid_fault(s, pc, 1);
+  if (v >= 0x80000000u && v < 0xc0000000u) {
+    p = v & 0x1fffffffu;
+    seg = v < 0xa0000000u ? 1 : 2;
+  } else if (plaid_tlb(s, v, write, &p, &seg)) {
     return plaid_fault(s, pc, 1);
-  p = v & 0x1fffffffu;
+  }
   if (p > PLAID_RAM_SIZE - size) return plaid_fault(s, pc, 1);
-  if (s->line_segment[p >> 4] && s->line_segment[p >> 4] != (v < 0xa0000000u ? 1 : 2))
-    return plaid_fault(s, pc, 4);
-  s->line_segment[p >> 4] = v < 0xa0000000u ? 1 : 2;
+  if (s->line_segment[p >> 4] && s->line_segment[p >> 4] != seg) return plaid_fault(s, pc, 4);
+  s->line_segment[p >> 4] = seg;
   if (write && plaid_protected(s, p, size, pc)) return plaid_fault(s, pc, 2);
   *out = p; return 0;
 }
