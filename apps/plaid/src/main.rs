@@ -982,7 +982,20 @@ fn run() -> Result<(), String> {
             )
             .map_err(|e| e.to_string())?;
         }
-        [command, rom_path, map_path, entry, exit, output] if command == "lower-map" => {
+        [command, rom_path, map_path, entry, exit, output, rest @ ..]
+            if command == "lower-map" && matches!(rest, [] | [_, _]) =>
+        {
+            // `--parts N` writes N translation units: `output` and, for N > 1,
+            // `<stem>.part<k>.c` beside it (ADR-0174).
+            let parts = match rest {
+                [] => 1,
+                [flag, n] if flag == "--parts" => n
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|n| (1..=256).contains(n))
+                    .ok_or("--parts takes 1..=256")?,
+                _ => return Err("lower-map takes only --parts N".into()),
+            };
             // A discovered ROM map (ADR-0157): its images are rebuilt from the
             // ROM as `solve` does, and the host preloads the base window.
             let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
@@ -999,14 +1012,23 @@ fn run() -> Result<(), String> {
                 Some(spec) => CodeImage::from_rom(&rom, spec.base_offset, spec.base.clone())?,
                 None => image.clone(),
             };
-            let c = plaid_lower::lower_c_with_preload(
+            let units = plaid_lower::lower_c_parts(
                 &map,
                 &images,
                 &preload,
                 GuestAddr(number32(entry)?),
                 &[GuestAddr(number32(exit)?)],
+                parts,
             )?;
-            fs::write(output, c).map_err(|e| e.to_string())?;
+            let stem = output.strip_suffix(".c").unwrap_or(output);
+            for (k, c) in units.iter().enumerate() {
+                let path = if k == 0 {
+                    output.clone()
+                } else {
+                    format!("{stem}.part{k}.c")
+                };
+                fs::write(path, c).map_err(|e| e.to_string())?;
+            }
             println!("lowered {} blocks", map.blocks.len());
         }
         [command, image_path, base, entry, exit, output, runtime @ ..]

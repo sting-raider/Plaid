@@ -13,6 +13,16 @@ gcc -O1 -std=gnu11 -DPLAID_SAFEPOINTS -DPLAID_LOWERED='"game.c"' -I . runtime/pl
 ./game --rom <rom.z64> [--stop-at gfx|none] [--gfx-tasks N] [--seconds S] [--dump <addr> <words>]
 ```
 
+A large program compiles faster split into parts (ADR-0174). `--parts N`
+writes `game.c`, which the runtime includes, plus `game.part<k>.c` files that
+hold the guest functions. Each part compiles on its own:
+
+```bash
+plaid lower-map <rom.z64> <map.json> <entry> <exit> game.c --parts 16
+ls game.part*.c | xargs -P 16 -I{} gcc -O1 -std=gnu11 -DPLAID_SAFEPOINTS -c {} -o {}.o
+gcc -O1 -std=gnu11 -DPLAID_SAFEPOINTS -DPLAID_LOWERED='"game.c"' -I . runtime/plaid_rt.c game.part*.c.o -pthread -o game
+```
+
 To run RSP tasks natively, add `-DPLAID_RSP -I crates/plaid-lower/src` and
 link the lowered texts:
 

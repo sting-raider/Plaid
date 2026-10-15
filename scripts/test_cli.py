@@ -1,6 +1,7 @@
 """Exercise normalized ROM -> CFG/indirect targets -> map -> fail-closed report."""
 from pathlib import Path
 import json
+import re
 import hashlib
 import os
 import shutil
@@ -183,6 +184,23 @@ def main():
         lowered=directory/'taken.c'
         run("lower-map",rom,taken,"0x80000000","0x80000f00",lowered)
         assert 'plaid_run' in lowered.read_text(encoding='utf-8')
+        # --parts moves every function body out of the main unit; the units
+        # link with the runtime into one program (ADR-0174)
+        run("lower-map",rom,taken,"0x80000000","0x80000f00",directory/'split.c',"--parts","3")
+        units=[directory/'split.c',*sorted(directory.glob('split.part*.c'))]
+        body=re.compile(r'^(?:static )?int (F_[0-9a-f]{8})\(.*\{$',re.M)
+        defined=[body.findall(u.read_text(encoding='utf-8')) for u in units]
+        assert len(units)>1 and not defined[0]
+        assert sorted(sum(defined[1:],[]))==sorted(body.findall(lowered.read_text(encoding='utf-8')))
+        cc=os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
+        if cc:
+            objects=[]
+            for u in units[1:]:
+                objects.append(u.with_suffix('.o'))
+                subprocess.run([cc,'-std=gnu11','-Wall','-Werror','-Wno-unused-label','-Wno-unused-function',
+                                '-DPLAID_SAFEPOINTS','-c',str(u),'-o',str(objects[-1])],check=True)
+            subprocess.run([cc,'-std=gnu11','-DPLAID_SAFEPOINTS','-DPLAID_LOWERED="split.c"','-I',str(directory),
+                            str(ROOT/'runtime/plaid_rt.c'),*map(str,objects),'-pthread','-o',str(directory/'split.exe')],check=True)
         run("lower-map",rom,runtime_map,"0x80000000","0x80000f00",directory/'open.c',ok=False)
         # declared loads (ADR-0136): the composite is rebuilt by solve
         loads=directory/'loads.json'
