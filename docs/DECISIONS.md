@@ -4392,3 +4392,54 @@ faults 1, and an RDP register faults 4. Unit tests cover the closed
 dispatch, refusing vector and unknown instructions, and delay-slot errors.
 On SM64's audio microcode the lowering stops at the first vector
 instruction, a `vxor` at IMEM 0x1f0. The vector unit is ADR-0168.
+
+## ADR-0168: The RSP vector unit lowers to ported C
+
+Context: ADR-0167 lowers scalar RSP code but refuses COP2, LWC2 and SWC2.
+SM64's audio microcode first uses a vector instruction at IMEM 0x1f0, and
+more than a third of its instructions are vector instructions.
+
+Decision: the RSP prelude gains the vector unit, ported from the scalar
+(SISD) paths of pinned ares `interpreter-vpu.cpp` and the tables in
+`rsp.cpp` (ISC):
+- the state: 32 registers of eight halfwords, the 48-bit accumulator as
+  three slices, the VCO, VCC and VCE flags, and the divide latch;
+- the element selector;
+- every load and store form, with DMEM wrapping per byte;
+- the COP2 moves;
+- every multiply, accumulate, add, compare, clip, logic and divide op.
+
+Each instruction lowers to a call into this code with its fields as
+constants. Encodings that ares runs as VZERO (VSUT, VADDB to VSUM, the
+VEXT and VINS group), LWV, other LWC2 and SWC2 opcodes, and invalid COP2
+moves are lowering errors. No microcode is known to use them, and their
+hardware meaning is unverified. VNOP and VNULL lower to nothing.
+
+The oracle is built with SSE4.1, so ares runs its SIMD paths there. The
+differential test therefore also checks that the ported scalar paths agree
+with ares's SIMD paths.
+
+Result: spike097 adds 20 programs to its five scalar ones, assembled from
+fixed seeds. All match pinned ares 9408cb43 in registers, all of DMEM, the
+vector registers, the accumulator and the flags. The four negatives still
+fault.
+
+| Programs | What they cover |
+| --- | --- |
+| `vec0`..`vec7` | Every computational op on edge and chained values, with random element selectors and preset flags. vd, the accumulator and the flags are stored after each op. |
+| `vflag0`..`vflag3` | Compare, clip, merge and carry ops chained on small-range values, with VCH then VCL forced so VCL reads VCH's VCE. |
+| `vacc0`..`vacc2` | Accumulate chains that carry the 48-bit accumulator past 32 bits in both directions. |
+| `vload0`, `vload1` | Every LWC2 form at every element, at random offsets and addresses, including DMEM wrap. |
+| `vstore0`, `vstore1` | Every SWC2 form at every element, each into its own slot; the last slots wrap. |
+| `vmove` | MTC2 and MFC2 at every element, and CTC2 and CFC2 on every control register. |
+
+A mutation check broke six details of the port one at a time, and spike097
+caught all six: VMULQ rounding, VCL's carry under VCE, the SFV element
+order, the LRV start, the VRSQ shift and VMACU's clamp. The first version of
+the programs missed three of them; the flag, accumulator and per-element
+programs were added for those. Unit tests cover the decode and the refused
+encodings.
+
+SM64's audio microcode (`plaid lower-rsp` at ROM 0xe7740, 0xe20 bytes, IMEM
+0x080) now lowers completely: 904 instructions. The result compiles with
+`-Wall -Wextra` without warnings. Running audio tasks with it is ADR-0169.

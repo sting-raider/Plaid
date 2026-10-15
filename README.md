@@ -36,7 +36,7 @@ Milestone 4 is running Super Mario 64 natively to its title screen. The lowered 
 | Stuck at "PRESS START" | controller always idle | keyboard and scripted input (ADR-0164) |
 | Half speed (33 VI/s) | Windows rounds 1 ms sleeps up to 15.6 ms | high-resolution timer and fixed VI deadlines (ADR-0166) |
 
-**SM64 now runs natively at full speed into gameplay** (59.9 VI/s, 30 fps): RT64 draws it (ADR-0163), the keyboard or a `--press` script controls it (ADR-0164), and `--save` keeps the EEPROM (ADR-0165). Audio is still to come: RSP microcode now lowers to C and matches ares for the scalar unit (ADR-0167), and the vector unit is next. The latest run is in [`research/sm64-first-measurement.md`](research/sm64-first-measurement.md), and what comes next is in [`docs/NEXT.md`](docs/NEXT.md).
+**SM64 now runs natively at full speed into gameplay** (59.9 VI/s, 30 fps): RT64 draws it (ADR-0163), the keyboard or a `--press` script controls it (ADR-0164), and `--save` keeps the EEPROM (ADR-0165). Audio is still to come: RSP microcode, vector unit included, now lowers to C and matches ares (ADR-0167/0168), and SM64's audio microcode lowers completely. Running its audio tasks is next. The latest run is in [`research/sm64-first-measurement.md`](research/sm64-first-measurement.md), and what comes next is in [`docs/NEXT.md`](docs/NEXT.md).
 
 ## Per-game inputs and known gaps
 

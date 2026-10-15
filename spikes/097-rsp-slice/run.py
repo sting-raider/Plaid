@@ -10,6 +10,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import random
 import shutil
 import subprocess
 import sys
@@ -118,8 +119,140 @@ NEGATIVE = {
 }
 
 
+# ---- vector unit (ADR-0168) ----
+vu = lambda f, vd, vs, vt, e: 18 << 26 | 1 << 25 | e << 21 | vt << 16 | vs << 11 | vd << 6 | f
+cop2 = lambda sub: (lambda rt, rd, e=0: 18 << 26 | sub << 21 | rt << 16 | rd << 11 | e << 7)
+mfc2, cfc2, mtc2, ctc2 = map(cop2, (0, 2, 4, 6))
+lwc2 = lambda op, vt, base, imm, e: 50 << 26 | base << 21 | vt << 16 | op << 11 | e << 7 | imm & 0x7F
+swc2 = lambda op, vt, base, imm, e: 58 << 26 | base << 21 | vt << 16 | op << 11 | e << 7 | imm & 0x7F
+lqv = lambda vt, imm, base=zero, e=0: lwc2(4, vt, base, imm, e)
+sqv = lambda vt, imm, base, e=0: swc2(4, vt, base, imm, e)
+VSAR = 0x1D
+# Every computational op; VRCPH/VRSQH come right before their L forms so the
+# double-precision input is exercised.
+VOPS = [*range(0x12), 0x13, 0x14, 0x15, VSAR, *range(0x20, 0x2E), 0x30, 0x32, 0x31, 0x33, 0x34, 0x36, 0x35, 0x37]
+EDGES = [0x8000, 0x7FFF, 0xFFFF, 0, 1, 0x8001, 0x4000, 0xC000, 0x8000, 0xFFFF, 0x7FFF, 0, 0xFFFF, 0x8000, 0x4000,
+         0x4000, 1, 0xFFFE, 0x7FFE, 0x8002, 0x00FF, 0xFF00, 0x1234, 0xEDCB, 0, 0, 0x8000, 0x8000, 0x7FFF, 0x7FFF, 1,
+         0xFFFF]
+SMALL = [0, 1, 2, 3, 0xFFFF, 0xFFFE, 0xFFFD, 0x7FFF, 0x7FFE, 0x8000, 0x8001]
+
+
+def vec_program(k, count=48):
+    """Each op on edge and chained inputs; after each, vd, the accumulator
+    and the flags are stored to DMEM from 0x100 on."""
+    rng = random.Random(1000 + k)
+    out = [lqv(v, v - 1) for v in range(1, 9)]
+    for rd in range(3):
+        out += [*li(t0, rng.getrandbits(16)), ctc2(t0, rd)]
+    out.append(A.addiu(s0, zero, 0x100))
+    for i in range(count):
+        f = VOPS[(k * count + i) % len(VOPS)]
+        vd = rng.randrange(9, 29)
+        out += [vu(f, vd, rng.randrange(1, 29), rng.randrange(1, 29), rng.randrange(16)), sqv(vd, 0, s0)]
+        for n, e in enumerate((8, 9, 10)):
+            out += [vu(VSAR, 29 + n, 0, 0, e), sqv(29 + n, 1 + n, s0)]
+        for n in range(3):
+            out += [cfc2(t0 + n, n), A.sh(t0 + n, 64 + 2 * n, s0)]
+        out.append(A.addiu(s0, s0, 80))
+    return out + [BREAK, A.nop]
+
+
+def vload_program(k):
+    """Every LWC2 form at elements 8k..8k+7, random offsets and addresses (DMEM wraps)."""
+    rng = random.Random(2000 + k)
+    out, dump = [lqv(v, v - 1) for v in range(1, 29)], 0
+    out.append(A.addiu(s0, zero, 0x200))
+    for op in (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11):
+        for e in range(8 * k, 8 * k + 8):
+            vt, imm = rng.randrange(1, 29), rng.randrange(-64, 64)
+            out += [A.addiu(t0, zero, rng.randrange(0x1000)), lwc2(op, vt, t0, imm, e)]
+            for v in (range(vt & ~7, (vt & ~7) + 8) if op == 11 else [vt]):
+                if dump == 64:
+                    out, dump = out + [A.addiu(s0, s0, 0x400)], 0
+                out.append(sqv(v, dump, s0))
+                dump += 1
+    return out + [BREAK, A.nop]
+
+
+def vstore_program(k):
+    """Every SWC2 form at elements 8k..8k+7, each into its own 32-byte slot; the last slots wrap."""
+    rng = random.Random(3000 + k)
+    out, i = [lqv(v, v - 1) for v in range(1, 29)], 0
+    for op, scale in enumerate((1, 2, 4, 8, 16, 16, 8, 8, 16, 16, 16, 16)):
+        for e in range(8 * k, 8 * k + 8):
+            address, imm = 0x200 + 32 * (i + 16) + rng.randrange(16), rng.randrange(-64, 64)
+            # pattern vectors: the edge vectors repeat bytes that SFV/SHV/SUV would hide
+            out += [A.addiu(t0, zero, (address - imm * scale) & 0x7FFF), swc2(op, rng.randrange(5, 29), t0, imm, e)]
+            i += 1
+    return out + [BREAK, A.nop]
+
+
+FLAG_OPS = [0x10, 0x11, 0x14, 0x15, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x25, 0x24, 0x25, 0x24]
+
+
+def vflag_program(k, count=48):
+    """Compare, clip, merge and carry ops chained on small-range values, so
+    equal, sum -1 and carry cases are common; flags dumped after each."""
+    rng = random.Random(5000 + k)
+    out = [lqv(v, 4 + v - 1) for v in range(1, 9)] + [A.addiu(s0, zero, 0x100)]
+    for i in range(count):
+        # every fourth op is VCH then VCL on small values: VCL reads VCH's VCE
+        f, vd = (0x25, 0x24, *FLAG_OPS)[i % 4 if i % 4 < 2 else 2 + rng.randrange(len(FLAG_OPS))], rng.randrange(9, 29)
+        pool = 9 if i < 8 or i % 4 < 2 else 29
+        vs, vt = rng.randrange(1, pool), rng.randrange(1, pool)
+        out += [vu(f, vd, vs, vt, rng.choice((0, 0, 0, 2, 3, 5, 8, 15))), sqv(vd, 0, s0)]
+        for n in range(3):
+            out += [cfc2(t0 + n, n), A.sh(t0 + n, 16 + 2 * n, s0)]
+        out.append(A.addiu(s0, s0, 32))
+    return out + [BREAK, A.nop]
+
+
+MAC_OPS = [0x08, 0x09, 0x0C, 0x0D, 0x0E, 0x0F, 0x0B, 0x02, 0x0A]
+
+
+def vacc_program(k):
+    """Multiply-accumulate chains that carry the 48-bit accumulator past 32
+    bits both ways: a seeding multiply, then ten accumulations of edge values."""
+    rng = random.Random(6000 + k)
+    out = [lqv(v, v - 1) for v in range(1, 9)] + [A.addiu(s0, zero, 0x100)]
+    for f in MAC_OPS[3 * k:3 * k + 3]:
+        for step in range(11):
+            op = rng.choice((0x00, 0x07, 0x05)) if step == 0 else f
+            vs = rng.choice((1, 2, 3)) if step < 6 else rng.randrange(1, 9)
+            vd = 9 + step
+            out += [vu(op, vd, vs, rng.choice((1, 2, 3, vs)), rng.choice((0, 0, 8, 9))), sqv(vd, 0, s0)]
+            for n, e in enumerate((8, 9, 10)):
+                out += [vu(VSAR, 29 + n, 0, 0, e), sqv(29 + n, 1 + n, s0)]
+            out.append(A.addiu(s0, s0, 64))
+    return out + [BREAK, A.nop]
+
+
+def vmove_program():
+    """MTC2/MFC2 at every element (15 wraps), CTC2/CFC2 on every register."""
+    rng = random.Random(4000)
+    out = [lqv(v, v - 1) for v in range(1, 9)] + [A.addiu(s0, zero, 0x400)]
+    for i in range(48):
+        out += [*li(t0, rng.getrandbits(32)), mtc2(t0, rng.randrange(1, 9), i % 16),
+                mfc2(t1, rng.randrange(1, 9), rng.randrange(16)), A.sw(t1, 4 * i, s0)]
+    for i in range(16):
+        out += [*li(t0, rng.getrandbits(32)), ctc2(t0, i % 8), cfc2(t1, rng.randrange(8)), A.sw(t1, 0x100 + 4 * i, s0)]
+    return out + [mfc2(zero, 1, 0), cfc2(zero, 0), BREAK, A.nop]
+
+
+PROGRAMS.update({f'vec{k}': vec_program(k) for k in range(8)})
+PROGRAMS.update({f'vload{k}': vload_program(k) for k in range(2)})
+PROGRAMS.update({f'vstore{k}': vstore_program(k) for k in range(2)})
+PROGRAMS.update({f'vflag{k}': vflag_program(k) for k in range(4)})
+PROGRAMS.update({f'vacc{k}': vacc_program(k) for k in range(3)})
+PROGRAMS['vmove'] = vmove_program()
+
+
 def dmem_image():
-    return bytes((i * 13 + 7) & 0xFF for i in range(4096))
+    image = bytearray((i * 13 + 7) & 0xFF for i in range(4096))
+    image[:64] = b''.join(h.to_bytes(2, 'big') for h in EDGES)
+    rng = random.Random(7)  # 0x40..0xbf: small-range halfwords for the flag programs
+    image[64:192] = b''.join(rng.choice(SMALL).to_bytes(2, 'big') for _ in range(64))
+    return bytes(image)
 
 
 def windows():
