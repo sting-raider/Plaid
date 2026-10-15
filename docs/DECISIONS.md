@@ -3552,3 +3552,32 @@ spike096: a wrong `s->pc` on the host return, and dropping the `$ra` check.
 The lowering test now asserts a checked host return where it used to assert
 OPEN. OoT drops from 29 to 28 guarded blockers: the 21 ADR-0142 sites and 7
 calls into the 64DD driver, which ships on the disk, not the cartridge.
+
+## ADR-0147: Guarded flag cells do not prune branches
+
+Context: 7 of OoT's 28 guarded blockers are calls into the 64DD driver,
+which is absent from the cartridge. Each sits behind a test of the byte at
+`0x80121ae2`, which no closed store writes. The proposal was a guarded flag
+cell: a fixed-address cell whose value set (initial value plus every
+constant store) proves a branch one-way, with native checks on every store
+that overlaps it.
+
+Decision: not adopted. `research/guarded-flag-cells.md` records the
+prototype and its measurement:
+
+- Only cells above every image can assume zero as their initial value.
+  IPL3 writes the low system area, and bytes in the IPL3 window may be BSS
+  that boot code clears later.
+- A conservative `%lo` rule rejects cells with cross-block writers.
+
+With both rules, 15 cells decide 22 branches, make 163 blocks dead and drop
+OoT from 28 to 20 guarded blockers. But several of the cells are runtime
+state, written through struct pointers that no recognizer can see. Their
+`{0}` value set is a blind spot, so pruning would delete live code. The
+native guard would make the artifact fail closed on the first such write,
+and the closure claim would rest on an assumption the game breaks in
+normal play, which is the same reason ADR-0142 rejects guesses. A sound
+version needs whole-program store points-to.
+
+Result: the prototype is reverted and no code changed. OoT stays at 28
+guarded blockers, and its sound frontier now needs store points-to or SM64.

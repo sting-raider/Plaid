@@ -58,10 +58,10 @@ Next concrete steps, in order:
    Done: host-entry returns hand control back to the host (ADR-0146); OoT
    at 28 guarded blockers.
    **Next:** the 7 64DD calls target a driver that ships on the 64DD disk,
-   not the cartridge (no dmadata file places code there). They would need a
-   proof that the guarding flag at `0x80121ae2` stays 0, which takes a BSS
-   initialization argument plus a guarded cell. Otherwise, prioritise SM64
-   (step 4).
+   not the cartridge (no dmadata file places code there). Guarded flag cells
+   that prove the guarding flag stays 0 were prototyped and rejected
+   (ADR-0147): the writer census misses stores through pointers. OoT is at
+   its sound frontier. Prioritise SM64 (step 4), which needs the user's ROM.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user
    supplies the ROM: discover from the real entry point, then score
