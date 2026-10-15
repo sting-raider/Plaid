@@ -3340,3 +3340,41 @@ FCSR is now compared too. `fpu_enabled` (inexact enabled) and `fpu_range`
 no cause reset, a wrong tie rule, no `fesetround`, a wrong RP flush, and no
 sticky flags. OoT, with its declared `code` segment, drops from 566 to 42
 guarded blockers. ISA coverage is 159 of 209 forms.
+
+## ADR-0140: GCC's scheduled jump-table shapes
+
+Context: after ADR-0139, 12 of OoT's 33 unresolved indirect sites are jump
+tables that the ADR-0132 recognizer rejects. Each rejection traced to GCC
+scheduling. An unrelated instruction can sit between `SLTIU` and its
+`BEQZ`; one site has twelve of them. The table-base `LUI` can sit between
+the scale `SLL` and the `ADDU`. And one loop re-enters the guard branch
+from a `BNEL` whose delay slot repeats the same `SLTIU`.
+
+Decision: the recognizer accepts these shapes, under the same rechecked
+proof:
+
+- The bound is the nearest earlier instruction that defines the branch's
+  flag, within 32 instructions, and it must be the `SLTIU` on the index.
+  Instructions in between must be ordinary, non-trapping and leave the
+  index unchanged.
+- The scale is the nearest `SLL` in the dispatch block that feeds the add.
+  Instructions between it and the add must leave the scaled index unchanged
+  and are folded into the base-value computation.
+- Any entry into the compare-to-branch interval is still a bypass, with two
+  exceptions: sequential fallthrough from inside the interval, and a branch
+  whose delay slot holds the identical `SLTIU` word. The delay-slot bypass
+  of ADR-0132 is unchanged.
+- Every word that takes part goes into the evidence prefix hash. For shapes
+  the old rule already accepted, the prefix is byte-identical, so existing
+  evidence does not change.
+
+Result: unit tests cover the scheduled shape and four rejections:
+
+- the interval rewrites the index;
+- the rebound slot uses a different bound;
+- the rebound branch has no bound in its slot;
+- the scaled index is rewritten before the add.
+
+spike096 `scheduled_table` matches pinned ares. OoT, with its declared
+`code` segment, closes all 12 tables. Discovery grows to 8082 blocks and
+the guarded blockers drop from 42 to 31.

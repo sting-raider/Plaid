@@ -20,7 +20,7 @@ Libultra system functions are declared as runtime functions and become calls int
 
 ## Real ROMs
 
-On a local Ocarina of Time boot window, 39 libultra functions are identified by n64sym signature and discovery reaches 320 blocks with 16 blockers under the guarded assumption scope. Declaring the Yaz0-compressed `code` segment as a load, checked by content in the native artifact, extends discovery to 7451 blocks with 42 blockers, most of them indirect jumps not yet proven. No commercial ROM is `CLOSED` yet. Per-ROM numbers and how to reproduce them are in [`docs/STATUS.md`](docs/STATUS.md).
+On a local Ocarina of Time boot window, 39 libultra functions are identified by n64sym signature and discovery reaches 320 blocks with 16 blockers under the guarded assumption scope. Declaring the Yaz0-compressed `code` segment as a load, checked by content in the native artifact, extends discovery to 8082 blocks with 31 blockers, most of them function-pointer calls not yet proven. No commercial ROM is `CLOSED` yet. Per-ROM numbers and how to reproduce them are in [`docs/STATUS.md`](docs/STATUS.md).
 
 ## Build
 

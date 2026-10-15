@@ -161,3 +161,52 @@ fn guard_bypasses_changed_indices_and_unbounded_counts_are_rejected() {
         );
     }
 }
+
+/// GCC's scheduled shape (ADR-0140): an unrelated instruction between the
+/// bound and its branch, the table-base LUI between the scale and the add,
+/// and a loop branch-likely back into the guard with the bound in its slot.
+fn scheduled(patch: &[(usize, u32)]) -> CodeImage {
+    let mut i = image();
+    i.words.fill(0);
+    i.words[..16].copy_from_slice(&[
+        0x2c810003, 0x256b0001, 0x10200009, 0, 0x00045080, 0x3c018000, 0x002a0821, 0x8c2a0100,
+        0x01400008, 0, 0, 0, 0x54a0fff5, 0x2c810003, 0x0800000e, 0,
+    ]);
+    for offset in [0x40, 0x50] {
+        i.words[offset / 4] = 0x08000000 | (offset as u32 / 4);
+    }
+    i.words[64..].copy_from_slice(&[0x80000040, 0x80000050, 0x80000040]);
+    for &(index, word) in patch {
+        i.words[index] = word;
+    }
+    i
+}
+
+fn table_targets(i: &CodeImage) -> Option<Vec<u32>> {
+    let m = analyze_indirect(&map(i), i).unwrap();
+    let s = m
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == 0x80000020)?;
+    plaid_core::tables::verify(&m, i, s).then(|| s.candidates.keys().map(|a| a.pc.0).collect())
+}
+
+#[test]
+fn scheduled_gcc_table_shapes_close() {
+    assert_eq!(
+        table_targets(&scheduled(&[])),
+        Some(vec![0x80000040, 0x80000050])
+    );
+}
+
+#[test]
+fn scheduled_shapes_that_break_the_bound_are_rejected() {
+    for patch in [
+        (1, 0x24840001),  // the interval rewrites the index
+        (13, 0x2c810007), // the rebound slot is a different bound
+        (13, 0),          // the rebound branch does not re-establish the bound
+        (5, 0x254a0004),  // the scaled index is rewritten before the add
+    ] {
+        assert_eq!(table_targets(&scheduled(&[patch])), None, "{patch:x?}");
+    }
+}
