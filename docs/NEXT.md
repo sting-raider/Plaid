@@ -95,9 +95,10 @@ Next concrete steps, in order:
    plus RT64 (MIT).
    - Done: runtime core and loop safepoints (ADR-0159), and FR = 0 COP1
      (ADR-0160). SM64 runs natively for 96 frames at 30 fps.
-   - Next: declared-load lifetime. A write to a verified load's code
-     should invalidate it, and re-entry should re-verify it, because SM64
-     reloads goddard at `0x8016f000`.
+   - Done: declared-load lifetime (ADR-0161). SM64 runs past the goddard
+     reload.
+   - Next: TLB-mapped data (ADR-0162). goddard's `load_dynlist` reads
+     dynlists through `osMapTLB` mappings at virtual `0x04000000`.
    - RT64 for graphics tasks; then audio, controllers and EEPROM.
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,

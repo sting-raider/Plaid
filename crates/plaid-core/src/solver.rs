@@ -1159,7 +1159,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         if !map.load_images.is_empty() {
             let count: usize = map.load_images.values().map(|spec| spec.loads.len()).sum();
             assumptions.push(format!(
-                "{count} declared load(s) place their decoded bytes at their destinations before any of their code runs: a native artifact compares each load's executable bytes in RAM with the declared bytes at the first entry into its code and aborts on a mismatch (fault 8); once verified, stores and runtime writes into those bytes abort (fault 2)."
+                "{count} declared load(s) place their decoded bytes at their destinations before any of their code runs: a native artifact compares each load's executable bytes in RAM with the declared bytes on entry into its code and aborts on a mismatch (fault 8); a store or runtime write into a verified load's executable bytes revokes that verification, so the next entry compares again (ADR-0161), and a store by the load's own code into them aborts (fault 2)."
             ));
         }
         if !map.runtime_functions.is_empty() {
