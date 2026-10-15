@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 686" width="840" height="686" role="img" aria-label="Plaid coverage maps">
 <style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}.title{font-size:17px;fill:#1f2328}.cell{font-size:12px;fill:#fff;paint-order:stroke;stroke:#0d1117;stroke-width:2px;stroke-opacity:.45}@media (prefers-color-scheme:dark){.title{fill:#e6edf3}}</style>
-<text x="2" y="22" class="title">VR4300 instructions*: 76.1% (159/209)</text>
+<text x="2" y="22" class="title">VR4300 instructions*: 83.7% (175/209)</text>
 <text x="2" y="378" class="title">Milestones*: 30 verified, 19 partial (69)</text>
 <rect x="0.0" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.df.d (done)</title></rect>
 <rect x="33.3" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.d (done)</title></rect>
@@ -36,32 +36,32 @@
 <rect x="174.8" y="162.4" width="58.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.un.s (done)</title></rect>
 <rect x="0.0" y="30.0" width="233.1" height="165.5" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="4.0" y="43.0" class="cell">FPU compare</text>
-<rect x="0.0" y="195.5" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.d.l (done)</title></rect>
-<rect x="33.3" y="195.5" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.d.s (done)</title></rect>
-<rect x="66.6" y="195.5" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.d.w (done)</title></rect>
-<rect x="99.9" y="195.5" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.s.d (done)</title></rect>
-<rect x="133.2" y="195.5" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.s.l (done)</title></rect>
-<rect x="166.5" y="195.5" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.s.w (done)</title></rect>
-<rect x="199.8" y="195.5" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.w.d (done)</title></rect>
-<rect x="0.0" y="229.1" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.w.s (done)</title></rect>
-<rect x="33.3" y="229.1" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: trunc.w.d (done)</title></rect>
-<rect x="66.6" y="229.1" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: trunc.w.s (done)</title></rect>
-<rect x="99.9" y="229.1" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.l.d (open)</title></rect>
-<rect x="133.2" y="229.1" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.l.s (open)</title></rect>
-<rect x="166.5" y="229.1" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.w.d (open)</title></rect>
-<rect x="199.8" y="229.1" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.w.s (open)</title></rect>
-<rect x="0.0" y="262.8" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.l.d (open)</title></rect>
-<rect x="33.3" y="262.8" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.l.s (open)</title></rect>
-<rect x="66.6" y="262.8" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: floor.l.d (open)</title></rect>
-<rect x="99.9" y="262.8" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: floor.l.s (open)</title></rect>
-<rect x="133.2" y="262.8" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: floor.w.d (open)</title></rect>
-<rect x="166.5" y="262.8" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: floor.w.s (open)</title></rect>
-<rect x="199.8" y="262.8" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: round.l.d (open)</title></rect>
-<rect x="0.0" y="296.4" width="46.6" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: round.l.s (open)</title></rect>
-<rect x="46.6" y="296.4" width="46.6" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: round.w.d (open)</title></rect>
-<rect x="93.2" y="296.4" width="46.6" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: round.w.s (open)</title></rect>
-<rect x="139.9" y="296.4" width="46.6" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: trunc.l.d (open)</title></rect>
-<rect x="186.5" y="296.4" width="46.6" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: trunc.l.s (open)</title></rect>
+<rect x="0.0" y="195.5" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.l.d (done)</title></rect>
+<rect x="33.3" y="195.5" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.l.s (done)</title></rect>
+<rect x="66.6" y="195.5" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.w.d (done)</title></rect>
+<rect x="99.9" y="195.5" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.w.s (done)</title></rect>
+<rect x="133.2" y="195.5" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.d.l (done)</title></rect>
+<rect x="166.5" y="195.5" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.d.s (done)</title></rect>
+<rect x="199.8" y="195.5" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.d.w (done)</title></rect>
+<rect x="0.0" y="229.1" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.l.d (done)</title></rect>
+<rect x="33.3" y="229.1" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.l.s (done)</title></rect>
+<rect x="66.6" y="229.1" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.s.d (done)</title></rect>
+<rect x="99.9" y="229.1" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.s.l (done)</title></rect>
+<rect x="133.2" y="229.1" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.s.w (done)</title></rect>
+<rect x="166.5" y="229.1" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.w.d (done)</title></rect>
+<rect x="199.8" y="229.1" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: cvt.w.s (done)</title></rect>
+<rect x="0.0" y="262.8" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: floor.l.d (done)</title></rect>
+<rect x="33.3" y="262.8" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: floor.l.s (done)</title></rect>
+<rect x="66.6" y="262.8" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: floor.w.d (done)</title></rect>
+<rect x="99.9" y="262.8" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: floor.w.s (done)</title></rect>
+<rect x="133.2" y="262.8" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: round.l.d (done)</title></rect>
+<rect x="166.5" y="262.8" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: round.l.s (done)</title></rect>
+<rect x="199.8" y="262.8" width="33.3" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: round.w.d (done)</title></rect>
+<rect x="0.0" y="296.4" width="46.6" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: round.w.s (done)</title></rect>
+<rect x="46.6" y="296.4" width="46.6" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: trunc.l.d (done)</title></rect>
+<rect x="93.2" y="296.4" width="46.6" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: trunc.l.s (done)</title></rect>
+<rect x="139.9" y="296.4" width="46.6" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: trunc.w.d (done)</title></rect>
+<rect x="186.5" y="296.4" width="46.6" height="33.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: trunc.w.s (done)</title></rect>
 <rect x="0.0" y="195.5" width="233.1" height="134.5" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="4.0" y="208.5" class="cell">FPU convert</text>
 <rect x="233.1" y="30.0" width="37.8" height="30.6" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>ALU: add (done)</title></rect>

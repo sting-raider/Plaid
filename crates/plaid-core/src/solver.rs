@@ -344,15 +344,16 @@ pub fn is_cop1_move(word: u32) -> bool {
 }
 
 /// COP1 arithmetic, conversions and FCSR access lowered under the guarded
-/// scope (ADR-0139): ADD SUB MUL DIV SQRT ABS MOV NEG .S/.D, CVT.W and
-/// TRUNC.W from S/D, CVT.S from D/W/L, CVT.D from S/W/L, CFC1, CTC1.
+/// scope (ADR-0139/0143): ADD SUB MUL DIV SQRT ABS MOV NEG .S/.D,
+/// CVT/ROUND/TRUNC/CEIL/FLOOR to W and L from S/D, CVT.S from D/W/L, CVT.D
+/// from S/W/L, CFC1, CTC1.
 pub fn is_cop1_arith(word: u32) -> bool {
     let (fmt, f) = ((word >> 21) & 31, word & 63);
     word >> 26 == 17
         && match fmt {
             2 | 6 => word & 0x7ff == 0,
             16 | 17 => {
-                matches!(f, 0..=7 | 13 | 36) || (f == 32 && fmt == 17) || (f == 33 && fmt == 16)
+                matches!(f, 0..=15 | 36 | 37) || (f == 32 && fmt == 17) || (f == 33 && fmt == 16)
             }
             20 | 21 => matches!(f, 32 | 33),
             _ => false,

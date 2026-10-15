@@ -161,24 +161,28 @@ static inline int plaid_arith_d(plaid_state *s, u32 op, u32 fd, u32 fs, u32 ft, 
   if (plaid_fpe(s, e, pc) || plaid_out64(s, &r, pc)) return 1;
   s->f[fd] = r; return 0;
 }
-/* CVT.W and TRUNC.W (rm 1): exact, without libm; inexact iff a fraction remains */
-static inline int plaid_to_w(plaid_state *s, double x, int bad, u32 rm, u32 fd, u32 pc) {
+/* CVT/ROUND/TRUNC/CEIL/FLOOR to W or L (wide), rounding by rm (0 nearest even,
+   1 zero, 2 up, 3 down): exact, without libm; inexact iff a fraction remains.
+   Input ranges are ares's: |x| < 2^31 for W, |x| < 2^53 for L. */
+static inline int plaid_to_int(plaid_state *s, double x, int bad, u32 rm, int wide, u32 fd, u32 pc) {
   long long t; double frac;
   s->fcsr &= ~0x3f000u;
-  if (bad || !(x < 2147483648.0 && x >= -2147483648.0)) return plaid_fault(s, pc, 7);
+  if (bad || (wide ? !(x < 9007199254740992.0 && x > -9007199254740992.0)
+                   : !(x < 2147483648.0 && x >= -2147483648.0)))
+    return plaid_fault(s, pc, 7);
   t = (long long)x; frac = x - (double)t;
   switch (rm) {
   case 0: if (frac > 0.5 || (frac == 0.5 && (t & 1))) t++; else if (frac < -0.5 || (frac == -0.5 && (t & 1))) t--; break;
   case 2: if (frac > 0) t++; break;
   case 3: if (frac < 0) t--; break;
   }
-  if (t > 2147483647ll || t < -2147483647ll - 1) return plaid_fault(s, pc, 7);
+  if (!wide && (t > 2147483647ll || t < -2147483647ll - 1)) return plaid_fault(s, pc, 7);
   if (frac != 0) {
     s->fcsr |= 1u << 12;
     if (s->fcsr & (1u << 7)) return plaid_fault(s, pc, 7);
     s->fcsr |= 1u << 2;
   }
-  s->f[fd] = (u32)t; return 0;
+  s->f[fd] = wide ? (u64)t : (u32)t; return 0;
 }
 /* CVT.S and CVT.D from W, L (range-checked as ares), S or D */
 static inline int plaid_to_s(plaid_state *s, u32 fmt, u32 fd, u32 fs, u32 pc) {
@@ -457,7 +461,7 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
             format!("if (plaid_arith_{kind}(s, {f}, {sa}, {rd}, {rt}, 0x{pc:08x}u)) return 1;")
         }
         (17, 6) if matches!(rs, 16 | 17) => format!("s->f[{sa}] = s->f[{rd}];"),
-        (17, f @ (13 | 36)) if matches!(rs, 16 | 17) => {
+        (17, f @ (8..=15 | 36 | 37)) if matches!(rs, 16 | 17) => {
             let (x, bad) = if rs == 16 {
                 (
                     format!("(double)plaid_f32((u32)s->f[{rd}])"),
@@ -469,12 +473,14 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
                     format!("plaid_f64_bad(s->f[{rd}])"),
                 )
             };
-            let rm = if f == 13 {
-                "1".into()
+            // ROUND/TRUNC/CEIL/FLOOR encode their mode in the low bits; CVT uses FCSR.RM.
+            let rm = if f < 16 {
+                (f & 3).to_string()
             } else {
                 "s->fcsr & 3".to_string()
             };
-            format!("if (plaid_to_w(s, {x}, {bad}, {rm}, {sa}, 0x{pc:08x}u)) return 1;")
+            let wide = u32::from(f < 12 || f == 37);
+            format!("if (plaid_to_int(s, {x}, {bad}, {rm}, {wide}, {sa}, 0x{pc:08x}u)) return 1;")
         }
         (17, 32) if matches!(rs, 17 | 20 | 21) => {
             format!("if (plaid_to_s(s, {rs}, {sa}, {rd}, 0x{pc:08x}u)) return 1;")

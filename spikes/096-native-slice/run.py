@@ -135,6 +135,33 @@ def farith():
     assert off[0] <= 0x100
     return out + DONE
 
+def fround():
+    # ROUND/TRUNC/CEIL/FLOOR to W and L, and CVT.L (ADR-0143): ties, signs,
+    # fractions and a 2^40 + 0.5 double; results and the final FCSR to RAM.
+    import struct
+    S = lambda x: struct.unpack('>I', struct.pack('>f', x))[0]
+    D = lambda x: struct.unpack('>Q', struct.pack('>d', x))[0]
+    def c32(f, v): return [lui(t0, v >> 16), ori(t0, t0, v & 0xFFFF), mtc1(t0, f)]
+    def c64(f, v):
+        return [lui(t0, v >> 48 & 0xFFFF), ori(t0, t0, v >> 32 & 0xFFFF), dsll32(t0, t0, 0),
+                lui(at, v >> 16 & 0xFFFF), dsll32(at, at, 0), dsrl32(at, at, 0), or_(t0, t0, at),
+                ori(t0, t0, v & 0xFFFF), dmtc1(t0, f)]
+    out, off = [lui(gp, 0x8000), ori(gp, gp, 0x1000)], [0]
+    def keep(f, wide=False):
+        o = off[0] = (off[0] + 7) & ~7 if wide else off[0]
+        off[0] += 8 if wide else 4
+        return [(sdc1 if wide else swc1)(f, o, gp)]
+    for fmt, value, const, ops in [(16, x, c32, range(8, 16)) for x in (2.5, -2.5, -0.5, 1.75)] +             [(17, -3.5, c64, range(8, 16)), (17, 2.0 ** 40 + 0.5, c64, range(8, 12))]:
+        out += const(1, S(value) if fmt == 16 else D(value))
+        for f in ops:
+            out += [fop(fmt, f)(2, 1), *keep(2, f < 12 and value > 2 ** 31)]
+    out += c32(1, S(2.5)) + [addiu(t1, zero, 2), ctc1(t1, 31), fop(16, 37)(2, 1), *keep(2, True)]
+    out += c64(1, D(-(2.0 ** 40) - 0.5)) + [addiu(t1, zero, 3), ctc1(t1, 31), fop(17, 37)(2, 1), *keep(2, True)]
+    o = off[0]; off[0] += 4
+    out += [cfc1(t1, 31), sw(t1, o, gp), ctc1(zero, 31)]
+    assert off[0] <= 0x100
+    return out + DONE
+
 def label_pcs(items):
     labels, pc = {'exit': EXIT}, BASE
     for x in items:
@@ -234,6 +261,7 @@ PROGRAMS = {
         swl(t0, 0x51, s0), swr(t0, 0x54, s0), sdl(v0, 0x63, s0), sdr(v0, 0x6D, s0), *DONE],
     'fcompare': fcompare(),
     'farith': farith(),
+    'fround': fround(),
     'load': load_program(),
     # GCC's divide check: BREAK 7 guarded by a divisor test that is not taken.
     'divcheck': [addiu(t0, zero, 21), addiu(t1, zero, 4), div(t0, t1), bne(t1, zero, 'ok'), nop,
@@ -330,6 +358,9 @@ BREAK = [addiu(t1, zero, 0), bne(t1, zero, 'ok'), nop, R(13, 0, 0, 0, 7), 'ok', 
 FPU_ENABLED = [lui(t0, 0x3F80), mtc1(t0, 1), lui(t0, 0x4040), mtc1(t0, 2), addiu(t1, zero, 0x80),
     ctc1(t1, 31), fop(16, 3)(3, 1, 2), *DONE]
 FPU_RANGE = [lui(t0, 0x4F00), mtc1(t0, 1), fop(16, 36)(2, 1), *DONE]
+# CEIL.W of 2^31 - 0.5 rounds out of the W range: fault 7.
+FPU_ROUND_RANGE = [lui(t0, 0x41DF), ori(t0, t0, 0xFFFF), dsll32(t0, t0, 0), lui(at, 0xFFE0), dsll32(at, at, 0),
+    dsrl32(at, at, 0), or_(t0, t0, at), dmtc1(t0, 1), fop(17, 14)(2, 1), *DONE]
 # A compare with a NaN operand is outside the modeled COP1 subset: fault 7.
 FPU_NAN = [lui(t0, 0x7FC0), mtc1(t0, 1), fcmp(16, 2)(1, 1), *DONE]
 CACHE_ALIAS = [lui(s0, 0x8000), sw(s0, 0x1000, s0), lui(s1, 0xA000), lw(t0, 0x1000, s1), *DONE]
@@ -339,7 +370,7 @@ def windows():
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
     OUT.mkdir(parents=True, exist_ok=True)
     progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN, overflow=OVERFLOW, table_write=TABLE_WRITE, fpu_nan=FPU_NAN,
-        fpu_enabled=FPU_ENABLED, fpu_range=FPU_RANGE, load_early=LOADS['load_early'], load_patch=LOADS['load_patch'], break_reached=BREAK)
+        fpu_enabled=FPU_ENABLED, fpu_range=FPU_RANGE, fpu_round_range=FPU_ROUND_RANGE, load_early=LOADS['load_early'], load_patch=LOADS['load_patch'], break_reached=BREAK)
     for name, items in progs.items():
         (OUT / f'{name}.bin').write_bytes(assemble(items))
         extra = []
@@ -367,13 +398,13 @@ def windows():
         oracle = json.loads((OUT / f'{name}-oracle.json').read_text())
         assert json.loads(native.stdout) == oracle, (name, native.stdout, oracle)
         results[name] = hashlib.sha256(json.dumps(oracle, sort_keys=True).encode()).hexdigest()
-    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('fpu_enabled', 7), ('fpu_range', 7), ('load_early', 8), ('load_patch', 2), ('break_reached', 9)):
+    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('fpu_enabled', 7), ('fpu_range', 7), ('fpu_round_range', 7), ('load_early', 8), ('load_patch', 2), ('break_reached', 9)):
         bad = subprocess.run([str(OUT / f'{name}-native.exe')], capture_output=True, text=True)
         assert bad.returncode == 6 and json.loads(bad.stdout)['fault'] == fault, (name, bad.stdout)
     receipt = dict(format='plaid-native-slice-receipt-v0', ares_revision=builder().REV, compiler=Path(cc).name,
-        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, fpu_enabled=7, fpu_range=7, load_early=8, load_patch=2, break_reached=9), interpreter_linked=False, native_complete=False)
+        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, fpu_enabled=7, fpu_range=7, fpu_round_range=7, load_early=8, load_patch=2, break_reached=9), interpreter_linked=False, native_complete=False)
     (OUT / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
-    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, enabled-FPU-exception, out-of-range-conversion, early-load, loaded-code-store and BREAK programs fail closed')
+    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, enabled-FPU-exception, out-of-range-conversion, out-of-range-rounding, early-load, loaded-code-store and BREAK programs fail closed')
     print(json.dumps(receipt, sort_keys=True))
 
 def builder():
