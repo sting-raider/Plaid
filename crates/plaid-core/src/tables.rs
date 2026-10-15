@@ -37,9 +37,12 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
     if jump >> 26 != 0 || !matches!(jump & 63, 8 | 9) {
         return None;
     }
-    let load_pc = GuestAddr(pc.0.checked_sub(4)?);
+    // IDO without the scheduler keeps a load-delay `nop` before the jump
+    // (ADR-0154)
+    let delay_nop = image.word(GuestAddr(pc.0.checked_sub(4)?))? == 0;
+    let load_pc = GuestAddr(pc.0.checked_sub(if delay_nop { 8 } else { 4 })?);
     let load = image.word(load_pc)?;
-    let add_pc = GuestAddr(pc.0.checked_sub(8)?);
+    let add_pc = GuestAddr(load_pc.0.checked_sub(4)?);
     let add = image.word(add_pc)?;
     if load >> 26 != 35
         || field(load, 16) != field(jump, 21)
@@ -318,7 +321,9 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
     }
     for word in std::iter::once(shift)
         .chain(between)
-        .chain([add, load, jump])
+        .chain([add, load])
+        .chain(delay_nop.then_some(0))
+        .chain([jump])
     {
         prefix.extend(word.to_be_bytes());
     }

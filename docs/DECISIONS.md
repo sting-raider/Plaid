@@ -3820,3 +3820,50 @@ to **32** under the address-taken scope:
 
 The layout pass is not part of this discovery, so recall on this map is
 85.5%; milestone 2's 99.03% is measured with `--data-roots`.
+
+## ADR-0154: Jump tables with a load-delay `nop` before the jump
+
+Context: under ADR-0153, 11 of SM64's 12 remaining `jr` sites are goddard
+`switch` statements. Goddard is built with IDO without instruction
+scheduling, so a load-delay `nop` sits between the table `lw` and the `jr`.
+The ADR-0140 pattern needs the `lw` right before the jump.
+
+Decision: when the word before the jump is exactly `nop` (`0x00000000`),
+the pattern takes the load from the word before that. The `nop` is part of
+the hashed prefix, and any other word there still fails the match, because
+it could change the jump register. Everything else (the bound, the guard
+and the bypass checks) is unchanged. The `nop` lies inside the guarded
+dispatch block, so an entry into it is still a bypass.
+
+Result:
+- the `tables` test closes the shape and rejects an `addiu` to the jump
+  register in that slot;
+- spike096 adds `delay_table`, which matches pinned ares.
+
+## ADR-0155: TLB functions as runtime functions; plausible bodies stay in the image
+
+Context: under ADR-0153, goddard's `load_dynlist` reaches `osMapTLB` and
+`osUnmapTLBAll`, giving 18 TLB/COP0 blockers. Separately, SM64's graphics
+task holds `rspF3DBootStart` as a data word. That RSP boot microcode
+decodes as CPU code up to a `jr ra`, but its second word is
+`j 0x84001068`, outside every image.
+
+Decision:
+- `RUNTIME_FUNCTIONS` adds `osMapTLB`, `osUnmapTLB`, `osUnmapTLBAll` and
+  `osSetTLBASID`. These are the TLB functions N64Recomp lists in
+  `ignored_funcs` at the pinned ffb39cd; N64ModernRuntime stubs
+  `osUnmapTLBAll`. Like every runtime function, they are a discovery
+  boundary under the recorded runtime-ABI assumption.
+- An address-taken body (`data_roots::cpu_code`) must also keep every
+  direct jump and branch target inside the image. The solver re-checks the
+  same predicate.
+
+Result:
+- A `data_roots` unit test rejects a body that jumps to `0x84001068` and
+  accepts one with an in-image branch.
+- SM64 identification finds 56 runtime functions, up from 54.
+- SM64 discovery reaches 45388 blocks with 1341 address-taken functions.
+  Under the address-taken scope **1 blocker** remains: the
+  `audio_signal_game_loop_tick` table, whose bound is computed before a
+  taken `bnez` that jumps to the guard. The guarded scope has 92 blockers,
+  all register calls.

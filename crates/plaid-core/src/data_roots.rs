@@ -92,17 +92,30 @@ pub fn scan(bytes: &[u8], image: &CodeImage) -> BTreeSet<GuestAddr> {
 }
 
 /// Whether the words from `pc` to its first `jr ra` and delay slot can be
-/// CPU code: every word decodes and none is a COP2 or COP3 access, which
-/// the VR4300 lacks (RSP microcode is the usual impostor).
+/// CPU code: every word decodes, none is a COP2 or COP3 access, which the
+/// VR4300 lacks, and every direct jump or branch lands in the image (RSP
+/// microcode is the usual impostor, ADR-0155).
 fn cpu_code(image: &CodeImage, pc: GuestAddr) -> bool {
     let mut at = pc.0;
     for _ in 0..4096 {
         let Some(w) = image.word(GuestAddr(at)) else {
             return false;
         };
-        if matches!(w >> 26, 18 | 19 | 50 | 54 | 58 | 62)
-            || !crate::discovery::decode(w, GuestAddr(at)).is_valid()
-        {
+        let i = crate::discovery::decode(w, GuestAddr(at));
+        if matches!(w >> 26, 18 | 19 | 50 | 54 | 58 | 62) || !i.is_valid() {
+            return false;
+        }
+        let target = if i.is_jump_with_address() {
+            Some((at.wrapping_add(4) & 0xf000_0000) | ((w & 0x03ff_ffff) << 2))
+        } else if i.is_branch() {
+            Some(
+                at.wrapping_add(4)
+                    .wrapping_add_signed(i32::from(w as i16) * 4),
+            )
+        } else {
+            None
+        };
+        if target.is_some_and(|t| image.word(GuestAddr(t)).is_none()) {
             return false;
         }
         if w == JR_RA {
@@ -355,5 +368,23 @@ mod tests {
             layout(&image, &map),
             BTreeSet::from([GuestAddr(0x8000_000c), GuestAddr(0x8000_0020)])
         );
+    }
+
+    #[test]
+    fn a_body_that_jumps_outside_the_image_is_not_plausible() {
+        let image = |first: u32| CodeImage {
+            base: CodeAddress {
+                pc: GuestAddr(0x8000_0000),
+                image: "jumps".into(),
+                generation: 0,
+            },
+            words: vec![first, 0, JR_RA, 0],
+            rom_offset: None,
+            physical_start: None,
+            holes: Vec::new(),
+        };
+        // b +8 stays in the image; j 0x84001068 (RSP boot code) does not
+        assert!(plausible(&image(0x1000_0001), GuestAddr(0x8000_0000)));
+        assert!(!plausible(&image(0x0900_041a), GuestAddr(0x8000_0000)));
     }
 }
