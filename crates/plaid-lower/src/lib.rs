@@ -952,10 +952,10 @@ pub fn lower_c_with_preload(
         }
         out += "}\n";
     }
-    // 2: an exit was reached; 0: the host entry returned, which leaves the program.
+    // 2: an exit was reached; 0: the host entry returned through its checked $ra.
     out += &format!(
-        "static int plaid_run(plaid_state *s) {{\n  int r = F_{:08x}(s, s->r[31]);\n  if (r == 2) return 0;\n  return r ? r : plaid_fault(s, 0x{:08x}u, 5);\n}}\n",
-        entry.0, entry.0
+        "static int plaid_run(plaid_state *s) {{\n  u64 host = s->r[31];\n  int r = F_{:08x}(s, host);\n  if (r == 2) return 0;\n  /* a checked return to the host's $ra hands control back (ADR-0146) */\n  if (r == 0) {{ s->pc = (u32)host; return 0; }}\n  return r;\n}}\n",
+        entry.0
     );
     Ok(out)
 }

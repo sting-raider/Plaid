@@ -55,8 +55,13 @@ Next concrete steps, in order:
    `jalr` sites takes its target from memory, and a sound field-store
    census would need whole-program store points-to, so they stay open.
    Store-guarded fixed-address cells would close only 1 of 22.
-   **Next:** the 7 64DD calls need either the 64DD segment declared or a
-   general guarded-call treatment. Otherwise, prioritise SM64 (step 4).
+   Done: host-entry returns hand control back to the host (ADR-0146); OoT
+   at 28 guarded blockers.
+   **Next:** the 7 64DD calls target a driver that ships on the 64DD disk,
+   not the cartridge (no dmadata file places code there). They would need a
+   proof that the guarding flag at `0x80121ae2` stays 0, which takes a BSS
+   initialization argument plus a guarded cell. Otherwise, prioritise SM64
+   (step 4).
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user
    supplies the ROM: discover from the real entry point, then score

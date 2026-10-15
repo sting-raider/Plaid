@@ -55,6 +55,8 @@ int main(int argc, char** argv) {
   }
   std::fclose(file);
   cpu.pipeline.setPc(0xffffffff80000000ull);
+  // The host entry is entered with $ra = exit, so returning from it exits (ADR-0146).
+  cpu.ipu.r[31].u64 = (u64)(s64)(s32)exit;
   int n = 0;
   for(; n < 1000000 && (u32)cpu.ipu.pc != exit; n++) if(cpu.instruction()) cpu.synchronize();
   if((u32)cpu.ipu.pc != exit || cpu.scc.cause.exceptionCode) return 6;

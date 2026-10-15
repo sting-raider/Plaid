@@ -178,11 +178,13 @@ fn calls_lower_to_c_functions_with_checked_returns() {
 }
 
 #[test]
-fn a_return_reachable_from_the_host_entry_stays_open() {
-    // 0: jr ra; nop  -- returns to the unknown host caller.
+fn a_host_entry_return_is_a_checked_return_to_the_host() {
+    // 0: jr ra; nop  -- returns to the host's $ra (ADR-0146).
     let (map, image) = map_of(&[0x03e0_0008, 0]);
-    let err = lower_c(&map, &[image], GuestAddr(BASE), &[]).unwrap_err();
-    assert!(err.contains("not CLOSED"), "{err}");
+    let c = lower_c(&map, &[image], GuestAddr(BASE), &[]).unwrap();
+    assert!(c.contains("if (t != ret) return plaid_fault(s, 0x80000000u, 5); return 0;"));
+    assert!(c.contains("int r = F_80000000(s, host);"));
+    assert!(c.contains("if (r == 0) { s->pc = (u32)host; return 0; }"));
 }
 
 #[test]

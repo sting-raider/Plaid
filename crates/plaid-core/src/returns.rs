@@ -32,6 +32,10 @@ pub struct ReturnCertificate {
     /// runtime that entered it is closed by the declared runtime boundary.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub runtime_entered: bool,
+    /// Some function is a host entry (ADR-0146): returning to the host's
+    /// return address hands control back to the host.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub host_entered: bool,
 }
 
 fn is_jr_ra(word: u32) -> bool {
@@ -162,8 +166,8 @@ pub struct Closure {
     entered: BTreeSet<CodeAddress>,
     /// Block start -> callees whose body contains it.
     containing: BTreeMap<CodeAddress, BTreeSet<CodeAddress>>,
-    /// Blocks in the body of a host-entered entry (unknown return address).
-    hosted: BTreeSet<CodeAddress>,
+    /// Block start -> host entries whose body contains it (ADR-0146).
+    hosted: BTreeMap<CodeAddress, BTreeSet<CodeAddress>>,
 }
 
 impl Closure {
@@ -176,7 +180,7 @@ impl Closure {
             .chain(entered.iter().cloned())
             .collect();
         // Entries reached only as constant-jump targets are interior blocks, not
-        // host entries. Every other entry is host-entered with an unknown return.
+        // host entries. Every other entry is host-entered and returns to the host.
         let jumped: BTreeSet<_> = map
             .indirect_sites
             .iter()
@@ -184,13 +188,15 @@ impl Closure {
             .flat_map(|s| s.candidates.keys().cloned())
             .collect();
         let succ = successors(map, image);
-        let mut hosted = BTreeSet::new();
+        let mut hosted: BTreeMap<CodeAddress, BTreeSet<CodeAddress>> = BTreeMap::new();
         for host in map
             .entries
             .keys()
             .filter(|e| !callees.contains(e) && !jumped.contains(e))
         {
-            hosted.extend(body_from(&succ, host));
+            for block in body_from(&succ, host) {
+                hosted.entry(block).or_default().insert(host.clone());
+            }
         }
         let mut containing: BTreeMap<CodeAddress, BTreeSet<CodeAddress>> = BTreeMap::new();
         for f in &callees {
@@ -217,10 +223,8 @@ impl Closure {
             return None;
         }
         let block = block_of(map, site)?.start.clone();
-        if self.hosted.contains(&block) {
-            return None;
-        }
-        let functions = self.containing.get(&block).cloned().unwrap_or_default();
+        let hosts = self.hosted.get(&block).cloned().unwrap_or_default();
+        let mut functions = self.containing.get(&block).cloned().unwrap_or_default();
         let continuations: BTreeSet<_> = self
             .calls
             .iter()
@@ -231,7 +235,9 @@ impl Closure {
             })
             .collect();
         let runtime_entered = functions.iter().any(|f| self.entered.contains(f));
-        if functions.is_empty() || (continuations.is_empty() && !runtime_entered) {
+        let host_entered = !hosts.is_empty();
+        functions.extend(hosts);
+        if functions.is_empty() || (continuations.is_empty() && !runtime_entered && !host_entered) {
             return None;
         }
         Some(ReturnCertificate {
@@ -239,6 +245,7 @@ impl Closure {
             functions,
             continuations,
             runtime_entered,
+            host_entered,
         })
     }
 
