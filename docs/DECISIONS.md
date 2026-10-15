@@ -3519,3 +3519,36 @@ when untaken. `tests/traps.rs` checks the fallthrough and that only the
 guarded scope discharges the trap. ISA coverage is 196 of 209. The 13
 forms left are COP0, TLB, `ERET`, `SYSCALL` and `CACHE`. OoT is unchanged
 at 29 guarded blockers.
+
+## ADR-0146: A host entry returns to the host
+
+Context: ADR-0127 gave no certificate to a `jr $ra` reachable from a
+host-entered entry, because the return address is unknown. Every boot path
+has such a return. OoT's is the boot function at `0x8000058c`, after it
+starts its threads, and it was one of OoT's 29 guarded blockers. Meanwhile
+`plaid_run` already called the entry with the host's `$ra` as its expected
+return, but treated a normal return as fault 5.
+
+Decision: a host entry's return goes to the host, like a runtime-entered
+callback's (ADR-0130).
+
+- The return closure records, for each block, the host entries whose body
+  contains it. A `jr $ra` there gets a certificate with those entries in
+  `functions` and the new `host_entered` flag. Continuations from calls are
+  unchanged, so a function that is both called and host-entered lists both.
+- The guarded scope's return assumption now reads "returns to the
+  continuation of the call that entered its function, or to the host's
+  return address for a host-entered function".
+- Natively, nothing new is trusted. The entry's C function still compares
+  `$ra` with the host's `$ra` and faults 5 on mismatch. `plaid_run` now
+  treats a normal return as handing control back, with `s->pc` set to the
+  host's `$ra`.
+
+Result: spike096 now enters every program with `$ra` = exit on both sides,
+so `driver.cpp` changed and the oracle was rebuilt. `hostreturn` (a
+non-leaf host entry with a stack frame) matches pinned ares and exits
+through its own return. `host_bad_return` faults 5. Two mutations each fail
+spike096: a wrong `s->pc` on the host return, and dropping the `$ra` check.
+The lowering test now asserts a checked host return where it used to assert
+OPEN. OoT drops from 29 to 28 guarded blockers: the 21 ADR-0142 sites and 7
+calls into the 64DD driver, which ships on the disk, not the cartridge.

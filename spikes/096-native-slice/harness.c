@@ -10,6 +10,7 @@ int main(void) {
   int r;
   u32 a;
   plaid_load_images(&s);
+  s.r[31] = (u64)(s64)(s32)PLAID_EXIT; /* as driver.cpp: the host entry returns to the exit */
   if (plaid_run(&s)) {
     printf("{\"fault\":%u,\"fault_pc\":%u}\n", s.fault, s.fault_pc);
     return 6;

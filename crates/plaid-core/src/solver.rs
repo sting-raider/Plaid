@@ -1090,7 +1090,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     };
     if return_closure {
         assumptions.push(
-            "Each jr $ra returns to the continuation of the call that entered its function; a native artifact checks the return address at every return and aborts on mismatch."
+            "Each jr $ra returns to the continuation of the call that entered its function, or to the host's return address for a host-entered function; a native artifact checks the return address at every return and aborts on mismatch."
                 .into(),
         );
     }

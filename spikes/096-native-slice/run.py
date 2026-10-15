@@ -285,6 +285,10 @@ PROGRAMS = {
     'farith': farith(),
     'fround': fround(),
     'system': system(),
+    # A non-leaf host entry returns to the host's $ra (ADR-0146).
+    'hostreturn': [lui(sp, 0x8000), ori(sp, sp, 0x1100), addiu(sp, sp, -8), sw(ra, 4, sp), jal('f'), nop,
+        addu(s0, v0, zero), lw(ra, 4, sp), jr(ra), addiu(sp, sp, 8),
+        'f', addiu(v0, zero, 42), jr(ra), nop],
     'load': load_program(),
     # GCC's divide check: BREAK 7 guarded by a divisor test that is not taken.
     'divcheck': [addiu(t0, zero, 21), addiu(t1, zero, 4), div(t0, t1), bne(t1, zero, 'ok'), nop,
@@ -375,6 +379,8 @@ RUNTIME = {'boundary': [('sum', [])], 'callback': [('spawn', ['a0'])]}
 LOADS = {'load': load_program(), 'load_early': load_program(early=True), 'load_patch': load_program(patch=True)}
 # Jump-table bytes are store-protected like code: a write must fault 2.
 TABLE_WRITE = jump_table([lui(s2, 0x8000), lambda pc, L: I(43, zero, s2, L['tbl'])])
+# A host entry returning anywhere but the host's $ra: fault 5 (ADR-0146).
+HOST_BAD_RETURN = [addiu(ra, ra, 4), jr(ra), nop]
 # A taken conditional trap raises an unmodeled exception: fault 10.
 TRAP = [addiu(t0, zero, 0), R(52, 0, t0, zero), *DONE]
 # A reached BREAK raises an unmodeled exception: fault 9.
@@ -395,7 +401,7 @@ def windows():
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
     OUT.mkdir(parents=True, exist_ok=True)
     progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN, overflow=OVERFLOW, table_write=TABLE_WRITE, fpu_nan=FPU_NAN,
-        fpu_enabled=FPU_ENABLED, fpu_range=FPU_RANGE, fpu_round_range=FPU_ROUND_RANGE, load_early=LOADS['load_early'], load_patch=LOADS['load_patch'], break_reached=BREAK, trap_taken=TRAP)
+        fpu_enabled=FPU_ENABLED, fpu_range=FPU_RANGE, fpu_round_range=FPU_ROUND_RANGE, load_early=LOADS['load_early'], load_patch=LOADS['load_patch'], break_reached=BREAK, trap_taken=TRAP, host_bad_return=HOST_BAD_RETURN)
     for name, items in progs.items():
         (OUT / f'{name}.bin').write_bytes(assemble(items))
         extra = []
@@ -412,7 +418,7 @@ def windows():
             (OUT / f'{name}.loads.json').write_text(json.dumps(decl))
             extra += ['--loads', str(OUT / f'{name}.loads.json')]
         subprocess.run([str(exe), 'lower-c', str(OUT / f'{name}.bin'), hex(BASE), hex(BASE), hex(EXIT), str(OUT / f'{name}.c'), *extra], check=True)
-        subprocess.run([cc, '-O2', '-std=c99', '-Wall', '-Werror', '-Wno-unused-label', f'-DPLAID_LOWERED="{name}.c"',
+        subprocess.run([cc, '-O2', '-std=c99', '-Wall', '-Werror', '-Wno-unused-label', f'-DPLAID_LOWERED="{name}.c"', f'-DPLAID_EXIT=0x{EXIT:x}u',
             '-I', str(OUT), str(HERE / 'harness.c'), '-o', str(OUT / f'{name}-native.exe')], check=True)
     script = subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(HERE / 'run.py')], text=True).strip()
     subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', script, '--oracle', *sys.argv[1:]], check=True)
@@ -423,13 +429,13 @@ def windows():
         oracle = json.loads((OUT / f'{name}-oracle.json').read_text())
         assert json.loads(native.stdout) == oracle, (name, native.stdout, oracle)
         results[name] = hashlib.sha256(json.dumps(oracle, sort_keys=True).encode()).hexdigest()
-    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('fpu_enabled', 7), ('fpu_range', 7), ('fpu_round_range', 7), ('load_early', 8), ('load_patch', 2), ('break_reached', 9), ('trap_taken', 10)):
+    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('fpu_enabled', 7), ('fpu_range', 7), ('fpu_round_range', 7), ('load_early', 8), ('load_patch', 2), ('break_reached', 9), ('trap_taken', 10), ('host_bad_return', 5)):
         bad = subprocess.run([str(OUT / f'{name}-native.exe')], capture_output=True, text=True)
         assert bad.returncode == 6 and json.loads(bad.stdout)['fault'] == fault, (name, bad.stdout)
     receipt = dict(format='plaid-native-slice-receipt-v0', ares_revision=builder().REV, compiler=Path(cc).name,
-        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, fpu_enabled=7, fpu_range=7, fpu_round_range=7, load_early=8, load_patch=2, break_reached=9, trap_taken=10), interpreter_linked=False, native_complete=False)
+        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, fpu_enabled=7, fpu_range=7, fpu_round_range=7, load_early=8, load_patch=2, break_reached=9, trap_taken=10, host_bad_return=5), interpreter_linked=False, native_complete=False)
     (OUT / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
-    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, enabled-FPU-exception, out-of-range-conversion, out-of-range-rounding, early-load, loaded-code-store, BREAK and trap programs fail closed')
+    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, enabled-FPU-exception, out-of-range-conversion, out-of-range-rounding, early-load, loaded-code-store, BREAK, trap and host-return programs fail closed')
     print(json.dumps(receipt, sort_keys=True))
 
 def builder():
