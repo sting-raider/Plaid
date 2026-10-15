@@ -3611,3 +3611,47 @@ ambiguous names. No local ROM has a symbol map, so no real-ROM number
 changes: Mario Party 2 stays at 29 guarded blockers and OoT at 28. When the
 SM64 ROM arrives, milestones 2 and 3 can use the same decomp map for recall
 and identification.
+
+## ADR-0149: Callbacks forwarded through a wrapper's argument
+
+Context: SM64's game code is built with IDO at `-O0`. Its threads are created
+through `create_thread(thread, id, entry, arg, sp, pri)`, which spills
+`entry` to its argument home and reloads it before calling `osCreateThread`.
+ADR-0130 proves a callback only when the argument register holds a constant
+at the runtime call, so SM64 discovery stopped at 13 to 68 blocks, before the
+idle thread.
+
+Decision: when a callback argument is not a constant, `plaid-core/callbacks`
+checks whether it is the enclosing function's own incoming argument. The
+site's straight-line prefix must start at the function entry, and a
+symbolic pass tracks `a0..a3` through register moves and word spills to
+`$sp` slots:
+- A store of another width through `$sp` clobbers the slots it may touch.
+- Any other read of `$sp` lets the frame escape and clears every slot.
+- A store through any other base is assumed not to write the slots, which
+  C's object rules give for an argument home that is never address-taken.
+
+If the argument is forwarded, the callback's targets are the values that
+each direct call or tail jump into the wrapper passes, up to 4 wrapper
+levels. This needs the wrapper to have callers and no other way in: it must
+not be a program entry, a branch target, an indirect candidate or an
+observation. If a wrapper is also a callback target, the runtime enters it
+with unknown arguments, so every forwarded target is withdrawn. A caller
+with an unproven value leaves that caller's call open as
+`unresolved_runtime_callback`.
+
+The solver records the assumption. Natively nothing changes: `plaid_enter`
+already enters only proven targets and faults 3 on any other address, so a
+broken assumption fails closed.
+
+Result: `tests/forwarded_callbacks.rs` covers both callers' constants, the
+guarded scope without callback blockers, and four fail-closed cases:
+- the frame escapes;
+- a byte store clobbers the slot;
+- a caller passes a loaded value;
+- the wrapper is also an entry.
+
+spike096's new `forwarded` program enters both callbacks natively and
+matches pinned ares exactly. On SM64 (`research/sm64-first-measurement.md`),
+discovery grows from 13 blocks to 2936, with 8 guarded blockers and 8.1%
+recall. OoT stays at 28 and Mario Party 2 at 29.

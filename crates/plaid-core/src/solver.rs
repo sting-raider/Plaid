@@ -710,8 +710,10 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             );
         }
     }
+    let mut forwarded_callbacks = false;
     for image in images {
         for c in crate::callbacks::callbacks(map, image) {
+            forwarded_callbacks |= c.forwarded && c.target.is_some();
             if !c.target.as_ref().is_some_and(|t| starts.contains(t)) {
                 let evidence = map
                     .direct_edges
@@ -1088,6 +1090,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     } else {
         Vec::new()
     };
+    if forwarded_callbacks {
+        assumptions.push(
+            "A wrapper that forwards its own argument to a runtime callback (ADR-0149) is entered only by its direct callers, and no store through a pointer writes the stack slot where it spills that argument (C object rules for an argument home); the native runtime enters only the proven targets and faults 3 on any other."
+                .into(),
+        );
+    }
     if return_closure {
         assumptions.push(
             "Each jr $ra returns to the continuation of the call that entered its function, or to the host's return address for a host-entered function; a native artifact checks the return address at every return and aborts on mismatch."

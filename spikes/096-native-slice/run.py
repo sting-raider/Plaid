@@ -342,6 +342,18 @@ PROGRAMS = {
         'cb', addu(v0, a0, a0), jr(ra), nop,
         'spawn', addiu(sp, sp, -8), sw(ra, 4, sp), addu(t9, a0, zero), addu(a0, a1, zero), jalr(ra, t9), nop,
         addiu(v0, v0, 1), lw(ra, 4, sp), R(15), jr(ra), addiu(sp, sp, 8)],
+    # A wrapper spills its callback argument IDO-style and forwards it to the
+    # runtime (ADR-0149); both callers' constants are entered natively.
+    'forwarded': [lui(sp, 0x8000), ori(sp, sp, 0x2000), lui(gp, 0x8000), ori(gp, gp, 0x1000),
+        lui(a0, 0x8000), LO(a0, a0, 'cb1'), addiu(a1, zero, 21), jal('go'), nop, addu(s1, v0, zero),
+        lui(a0, 0x8000), LO(a0, a0, 'cb2'), addiu(a1, zero, 5), jal('go'), nop, addu(s2, v0, zero),
+        or_(a0, zero, zero), or_(a1, zero, zero), or_(t9, zero, zero), *DONE,
+        'cb1', addu(v0, a0, a0), jr(ra), nop,
+        'cb2', addiu(v0, a0, 100), jr(ra), nop,
+        'go', addiu(sp, sp, -24), sw(ra, 20, sp), sw(a0, 24, sp), sw(a1, 28, sp), sw(zero, 0, gp),
+        lw(a0, 24, sp), lw(a1, 28, sp), jal('spawn'), nop, lw(ra, 20, sp), jr(ra), addiu(sp, sp, 24),
+        'spawn', addiu(sp, sp, -8), sw(ra, 4, sp), addu(t9, a0, zero), addu(a0, a1, zero), jalr(ra, t9), nop,
+        addiu(v0, v0, 1), lw(ra, 4, sp), R(15), jr(ra), addiu(sp, sp, 8)],
     # COP1 data moves with 64-bit FPRs: 32-bit forms keep the high word (ADR-0131).
     'fpu': [lui(gp, 0x8000), ori(gp, gp, 0x1000), lui(t0, 0x3F80), mtc1(t0, 0), swc1(0, 0, gp),
         lui(t1, 0x1234), ori(t1, t1, 0x5678), dsll32(t1, t1, 0), ori(t1, t1, 0x9ABC),
@@ -375,7 +387,7 @@ SELF_MODIFYING = [lui(s0, 0x8000), sw(zero, 8, s0), *DONE]
 BAD_RETURN = [jal('f'), nop, *DONE, 'f', addiu(ra, ra, 8), jr(ra), nop]
 # A trapping add that overflows raises on hardware; native code must fault 6.
 OVERFLOW = [lui(t0, 0x7FFF), ori(t0, t0, 0xFFFF), addi(t1, t0, 1), *DONE]
-RUNTIME = {'boundary': [('sum', [])], 'callback': [('spawn', ['a0'])]}
+RUNTIME = {'boundary': [('sum', [])], 'callback': [('spawn', ['a0'])], 'forwarded': [('spawn', ['a0'])]}
 LOADS = {'load': load_program(), 'load_early': load_program(early=True), 'load_patch': load_program(patch=True)}
 # Jump-table bytes are store-protected like code: a write must fault 2.
 TABLE_WRITE = jump_table([lui(s2, 0x8000), lambda pc, L: I(43, zero, s2, L['tbl'])])
