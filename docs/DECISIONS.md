@@ -4765,3 +4765,46 @@ after the change are byte-identical, and the timings are:
 Next: the 47 MB translation unit takes minutes in gcc. Splitting
 `lower-map` output into several units that compile in parallel is the
 next bottleneck.
+
+## ADR-0174: Lowered C splits into parallel units; JALR sets share a dispatcher
+
+Status: accepted. Milestone 5 tooling (AGENTS.md rule 8).
+
+Context: SM64 lowered to one 47 MB C file. gcc `-O1` took 784 s to build
+it, and nothing could run in parallel. 25 MB of that file came from 94
+address-taken JALR sites. Each inlined a `switch` over all 1341
+address-taken functions, with a call, a return check and a jump per case.
+
+Decision:
+- A JALR with two or more proven targets calls `plaid_call_<k>(s, t, ret,
+  pc)`. That is one dispatcher per distinct target set, which returns the
+  callee's result or `plaid_fault(s, pc, 3)`. The site keeps its order: it
+  reads `t`, writes the link, runs the delay slot, returns a nonzero
+  result, and otherwise continues at the link. This is what every inline
+  case did. Single-target calls and JR switches stay inline.
+- `plaid_lower::lower_c_parts` and `lower-map --parts N` write the main
+  unit, which the runtime includes, plus `<stem>.part<k>.c` units. The
+  part units hold contiguous, size-balanced shares of the guest functions.
+  - With more than one part, the guest functions, `plaid_build_prot`,
+    `plaid_verify_load` and the dispatchers get external linkage.
+  - Each part declares them and repeats only the prelude's `static
+    inline` helpers. `plaid_code`, the load-image data and
+    `plaid_runtime_write` stay single-instance in the main unit.
+- With one part, the output is the same program as before. It changed only
+  where a dispatcher replaced inline cases.
+
+Verification:
+- spike096 lowers its `addrtaken` program through `plaid_call_0` and
+  still matches pinned ares, including the fail-closed fault 3.
+- `scripts/test_cli.py` splits a closed map into parts. It checks that
+  the main unit defines no guest function and that the parts define
+  exactly the single-unit functions. It then compiles each part with
+  `-Wall -Werror` and links them with `runtime/plaid_rt.c`.
+- On SM64, the old single-unit executable and the new split executable
+  print identical results for 30 graphics tasks and 58 audio tasks: every
+  task line, the RAM dump and the stop state.
+
+| SM64 | Before | After |
+|---|---|---|
+| lowered C | 47 MB, one unit | 33 MB; main unit plus 15 parts of ~1.6 MB |
+| build (gcc -O1, 20 threads) | 784 s | 48 s |

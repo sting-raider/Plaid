@@ -69,7 +69,7 @@ static inline int plaid_fault(plaid_state *s, u32 pc, u32 code) {
 }
 "#;
 
-const HELPERS: &str = r#"/* Executable ranges are word-aligned, so a per-word map answers the same
+const BUILD_PROT: &str = r#"/* Executable ranges are word-aligned, so a per-word map answers the same
    overlap question as scanning plaid_code, in constant time (ADR-0159). */
 static void plaid_build_prot(plaid_state *s) {
   u32 i, w;
@@ -78,7 +78,9 @@ static void plaid_build_prot(plaid_state *s) {
       if (s->prot[w] != 1) s->prot[w] = plaid_code[i].load < 0 ? 1 : (u8)(2 + plaid_code[i].load);
   s->prot_ready = 1;
 }
-/* 1 when a write must abort: the base image's code and jump tables always,
+"#;
+
+const HELPERS: &str = r#"/* 1 when a write must abort: the base image's code and jump tables always,
    and a verified declared load's code when the writer at pc is that load's
    own code. Any other write into a verified load revokes its verification;
    the next entry into its code compares the bytes again (ADR-0161). */
@@ -295,13 +297,17 @@ static inline int plaid_ctc1(plaid_state *s, u32 v, u32 pc) {
   if (((v >> 12) & (v >> 7) & 0x1fu) || (v & (1u << 17))) return plaid_fault(s, pc, 7);
   return 0;
 }
-/* Host runtime functions call this before writing guest RAM at physical p. */
+"#;
+
+const RUNTIME_WRITE: &str = r#"/* Host runtime functions call this before writing guest RAM at physical p. */
 int plaid_runtime_write(plaid_state *s, u32 p, u32 size, u32 pc) {
   if (p > PLAID_RAM_SIZE || size > PLAID_RAM_SIZE - p) return plaid_fault(s, pc, 1);
   if (size && plaid_protected(s, p, size, 0)) return plaid_fault(s, pc, 2);
   return 0;
 }
-static inline int plaid_load(plaid_state *s, u64 va, u32 size, u32 pc, u64 *value) {
+"#;
+
+const HELPERS_TAIL: &str = r#"static inline int plaid_load(plaid_state *s, u64 va, u32 size, u32 pc, u64 *value) {
   u32 p, i; u64 x = 0;
   if (plaid_addr(s, va, size, pc, 0, &p)) return 1;
   for (i = 0; i < size; i++) x = x << 8 | s->ram[p + i];
@@ -685,6 +691,8 @@ struct Lowerer<'a> {
     functions: &'a BTreeSet<u32>,
     /// Declared runtime functions (ADR-0129): host-provided `plaid_rt_<name>`.
     runtime: &'a BTreeMap<u32, String>,
+    /// `plaid_call_<k>` dispatchers by JALR target set.
+    dispatch: &'a BTreeMap<&'a BTreeSet<u32>, usize>,
 }
 
 impl Lowerer<'_> {
@@ -760,6 +768,14 @@ impl Lowerer<'_> {
                 ))
             }
             (0, 9, _) => {
+                if let Some(k) = self.dispatch.get(proven()?) {
+                    return Ok(format!(
+                        "{{ u64 t = {a}; {} {slot} {{ int r = plaid_call_{k}(s, t, {}, 0x{pc:08x}u); if (r) return r; }} {} }}",
+                        set(rd, sx(after)),
+                        sx(after),
+                        self.fallthrough(after, pc)
+                    ));
+                }
                 let mut cases = String::new();
                 for &t in proven()? {
                     cases += &format!(" case {}: {}", sx(t), self.call(t, after, pc)?);
@@ -850,6 +866,22 @@ pub fn lower_c_with_preload(
     entry: GuestAddr,
     exits: &[GuestAddr],
 ) -> Result<String, String> {
+    Ok(lower_c_parts(map, images, preload, entry, exits, 1)?.remove(0))
+}
+
+/// [`lower_c_with_preload`] as `parts` translation units that compile in
+/// parallel (ADR-0174). The first is the program the runtime includes; each
+/// other holds a share of the guest functions, which then have external
+/// linkage, and declares the main unit's single-instance definitions.
+pub fn lower_c_parts(
+    map: &ProgramMap,
+    images: &[CodeImage],
+    preload: &CodeImage,
+    entry: GuestAddr,
+    exits: &[GuestAddr],
+    parts: usize,
+) -> Result<Vec<String>, String> {
+    let link = if parts > 1 { "" } else { "static " };
     // Address-taken dispatch is its own scope (ADR-0153).
     let scope = if map.address_taken.is_empty() {
         Scope::DeclaredStaticImagesGuardedRam
@@ -980,14 +1012,19 @@ pub fn lower_c_with_preload(
     }
     let mut out = String::from(PRELUDE);
     out += &format!(
-        "static const plaid_range plaid_code[] = {{{}}};\n{HELPERS}",
-        code.join(", ")
+        "static const plaid_range plaid_code[] = {{{}}};\n{}{HELPERS}{RUNTIME_WRITE}{HELPERS_TAIL}",
+        code.join(", "),
+        BUILD_PROT.replacen("static ", link, 1)
     );
+    // What every other unit sees of the main unit's definitions.
+    let mut shared =
+        format!("{PRELUDE}void plaid_build_prot(plaid_state *s);\n{HELPERS}{HELPERS_TAIL}");
     if !loads.is_empty() {
+        shared += "int plaid_verify_load(plaid_state *s, int load, u32 pc);\n";
         // Expected bytes come from the composite image (ADR-0136).
         let words: Vec<_> = image.words.iter().map(|w| format!("0x{w:08x}u")).collect();
         out += &format!(
-            "static const u32 plaid_declared[] = {{{}}};\nstatic int plaid_verify_load(plaid_state *s, int load, u32 pc) {{\n  u32 i, j, o;\n  for (i = 0; i < sizeof plaid_code / sizeof plaid_code[0]; i++)\n    if (plaid_code[i].load == load)\n      for (j = plaid_code[i].start; j < plaid_code[i].end; j++) {{\n        o = j - 0x{:x}u;\n        if (s->ram[j] != (u8)(plaid_declared[o / 4] >> (24 - 8 * (o % 4)))) return plaid_fault(s, pc, 8);\n      }}\n  s->load_ok[load] = 1; return 0;\n}}\n",
+            "static const u32 plaid_declared[] = {{{}}};\n{link}int plaid_verify_load(plaid_state *s, int load, u32 pc) {{\n  u32 i, j, o;\n  for (i = 0; i < sizeof plaid_code / sizeof plaid_code[0]; i++)\n    if (plaid_code[i].load == load)\n      for (j = plaid_code[i].start; j < plaid_code[i].end; j++) {{\n        o = j - 0x{:x}u;\n        if (s->ram[j] != (u8)(plaid_declared[o / 4] >> (24 - 8 * (o % 4)))) return plaid_fault(s, pc, 8);\n      }}\n  s->load_ok[load] = 1; return 0;\n}}\n",
             words.join(", "),
             physical(image.base.pc.0)?
         );
@@ -1003,11 +1040,39 @@ pub fn lower_c_with_preload(
         words.join(", "),
         words.len(),
     );
+    let mut declarations = String::new();
     for name in runtime.values() {
-        out += &format!("int plaid_rt_{name}(plaid_state *s);\n");
+        declarations += &format!("int plaid_rt_{name}(plaid_state *s);\n");
     }
     for f in &functions {
-        out += &format!("static int F_{f:08x}(plaid_state *s, u64 ret);\n");
+        declarations += &format!("{link}int F_{f:08x}(plaid_state *s, u64 ret);\n");
+    }
+    out += &declarations;
+    shared += &declarations;
+    // A JALR with several proven targets calls one dispatcher per target set
+    // instead of inlining a call per target at every site (ADR-0174).
+    let mut dispatch = BTreeMap::new();
+    for (&pc, ts) in &targets {
+        let w = word(pc)?;
+        if ts.len() < 2 || w >> 26 != 0 || w & 63 != 9 || dispatch.contains_key(ts) {
+            continue;
+        }
+        let k = dispatch.len();
+        let mut cases = String::new();
+        for &t in ts {
+            cases += &if let Some(name) = runtime.get(&t) {
+                format!("  case {}: return plaid_rt_{name}(s);\n", sx(t))
+            } else if functions.contains(&t) {
+                format!("  case {}: return F_{t:08x}(s, ret);\n", sx(t))
+            } else {
+                return Err(format!("{pc:08x}: call target {t:08x} is not a function"));
+            };
+        }
+        out += &format!(
+            "{link}int plaid_call_{k}(plaid_state *s, u64 t, u64 ret, u32 pc) {{\n  (void)ret;\n  switch (t) {{\n{cases}  }}\n  return plaid_fault(s, pc, 3);\n}}\n"
+        );
+        shared += &format!("int plaid_call_{k}(plaid_state *s, u64 t, u64 ret, u32 pc);\n");
+        dispatch.insert(ts, k);
     }
     // The runtime enters guest code only here, and only at proven callbacks.
     out += "int plaid_enter(plaid_state *s, u32 entry, u64 ret) {\n  switch (entry) {\n";
@@ -1038,7 +1103,9 @@ pub fn lower_c_with_preload(
     for b in &map.blocks {
         by_start.entry(&b.start).or_default().push(b);
     }
+    let mut lowered = Vec::new();
     for f in callees.iter().filter(|f| seen.insert(f.pc.0)) {
+        let mut out = String::new();
         let body = &bodies[f];
         let lowerer = Lowerer {
             labels: body.iter().map(|b| b.pc.0).collect(),
@@ -1046,9 +1113,10 @@ pub fn lower_c_with_preload(
             returns: &returns,
             functions: &functions,
             runtime: &runtime,
+            dispatch: &dispatch,
         };
         out += &format!(
-            "static int F_{:08x}(plaid_state *s, u64 ret) {{\n  (void)ret;\n  goto L_{:08x};\n",
+            "{link}int F_{:08x}(plaid_state *s, u64 ret) {{\n  (void)ret;\n  goto L_{:08x};\n",
             f.pc.0, f.pc.0
         );
         for &block in body.iter().filter_map(|b| by_start.get(b)).flatten() {
@@ -1091,11 +1159,30 @@ pub fn lower_c_with_preload(
             }
         }
         out += "}\n";
+        lowered.push(out);
     }
+    // Contiguous shares of about equal size for the parts after the main
+    // unit; with one part, all stay here.
+    let share = lowered.iter().map(String::len).sum::<usize>() / parts.saturating_sub(1).max(1) + 1;
+    let mut units = vec![out];
+    let mut size = 0;
+    for f in lowered {
+        if parts > 1 && (units.len() == 1 || size >= share) && units.len() < parts {
+            units.push(format!(
+                "/* part {} of {parts} (ADR-0174) */\n{shared}",
+                units.len()
+            ));
+            size = 0;
+        }
+        size += f.len();
+        units.last_mut().expect("main unit").push_str(&f);
+    }
+    let mut out = units.remove(0);
     // 2: an exit was reached; 0: the host entry returned through its checked $ra.
     out += &format!(
         "static int plaid_run(plaid_state *s) {{\n  u64 host = s->r[31];\n  int r = F_{:08x}(s, host);\n  if (r == 2) return 0;\n  /* a checked return to the host's $ra hands control back (ADR-0146) */\n  if (r == 0) {{ s->pc = (u32)host; return 0; }}\n  return r;\n}}\n",
         entry.0
     );
-    Ok(out)
+    units.insert(0, out);
+    Ok(units)
 }
