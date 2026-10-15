@@ -600,6 +600,11 @@ pub struct ProgramMap {
     /// Composite images built from declared loads (ADR-0136), by image identity.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub load_images: BTreeMap<String, crate::declared_loads::LoadImage>,
+    /// Address-taken functions (ADR-0153): function starts named by an
+    /// aligned ROM word or by a code constant in decoded guest code. Only the
+    /// address-taken scope uses them, as the targets of register calls.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", with = "pairs")]
+    pub address_taken: BTreeMap<CodeAddress, EvidenceRefs>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -706,6 +711,7 @@ impl ProgramMap {
             unresolved: BTreeSet::new(),
             runtime_functions: BTreeMap::new(),
             load_images: BTreeMap::new(),
+            address_taken: BTreeMap::new(),
         }
     }
 
@@ -810,6 +816,10 @@ impl ProgramMap {
             for load in &spec.loads {
                 refs(&load.evidence)?;
             }
+        }
+        for (a, r) in &self.address_taken {
+            address(a)?;
+            refs(r)?;
         }
         for e in &self.direct_edges {
             address(&e.site)?;

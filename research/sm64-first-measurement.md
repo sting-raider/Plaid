@@ -117,3 +117,33 @@ the main segment alone.
 The "not in reference" count is mostly `static` functions (502 are direct
 call targets) and jump-table case labels, which recall counts through map
 entries. The layout pass contributes 124 of them.
+
+## Update: address-taken dispatch scope (ADR-0153)
+
+```
+plaid discover R 0x1000 0x80246000 0xf4580 0x80246000 map.json id.json --loads sm64-loads.json --address-taken
+plaid solve R map.json --address-taken
+```
+
+Discovery reaches 42856 blocks, 4171 indirect sites and 1313 address-taken
+functions. It takes about 9 minutes in a release build.
+
+| Scope | Blockers |
+| --- | --- |
+| guarded RAM | 120 (100 indirect sites) |
+| guarded RAM plus address-taken dispatch | **32** |
+
+The 32 remaining blockers:
+- 12 `jr` sites:
+  - 11 goddard `switch` tables (`gd_get_colour`, `make_object`,
+    `proc_dynlist`, `gd_printf` and others) where a load-delay `nop` sits
+    between the table `lw` and the `jr`;
+  - the `audio_signal_game_loop_tick` table.
+- 18 TLB/COP0 instructions in `osMapTLB` and `osUnmapTLBAll`, reached from
+  goddard's `load_dynlist`. Neither is a declared runtime function yet.
+- 2 from a junk root that branches into `rspF3DBootStart` and to
+  `0x84001068`.
+
+Rejecting COP2 bodies and counting only constants inside decoded blocks
+removed the earlier `eret` (`__osException`, taken as a constant inside
+`osInitialize`) and most of the RSP microcode impostor.

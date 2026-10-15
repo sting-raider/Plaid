@@ -753,7 +753,13 @@ pub fn lower_c_with_preload(
     entry: GuestAddr,
     exits: &[GuestAddr],
 ) -> Result<String, String> {
-    let report = solve(map, images, Scope::DeclaredStaticImagesGuardedRam)?;
+    // Address-taken dispatch is its own scope (ADR-0153).
+    let scope = if map.address_taken.is_empty() {
+        Scope::DeclaredStaticImagesGuardedRam
+    } else {
+        Scope::DeclaredStaticImagesGuardedRamAddressTaken
+    };
+    let report = solve(map, images, scope)?;
     if report.status != ClosureStatus::Closed {
         let kinds: BTreeSet<_> = report.blockers.iter().map(|b| b.kind.as_str()).collect();
         return Err(format!("program is not CLOSED: {kinds:?}"));
@@ -799,11 +805,23 @@ pub fn lower_c_with_preload(
     let mut returns = BTreeSet::new();
     let mut callees = vec![host.clone()];
     for site in &map.indirect_sites {
-        let Some(proof) = site
+        let proof = site
             .closed_proof
             .as_ref()
-            .and_then(|id| map.evidence.get(id))
-        else {
+            .and_then(|id| map.evidence.get(id));
+        if proof.is_none() && site.link_register.is_some() && !map.address_taken.is_empty() {
+            // the solver accepted it under the address-taken scope
+            callees.extend(map.address_taken.keys().cloned());
+            targets.insert(
+                site.site.pc.0,
+                map.address_taken
+                    .keys()
+                    .map(|t| t.pc.0)
+                    .collect::<BTreeSet<_>>(),
+            );
+            continue;
+        }
+        let Some(proof) = proof else {
             return Err(format!(
                 "{:08x}: indirect site has no closure proof",
                 site.site.pc.0

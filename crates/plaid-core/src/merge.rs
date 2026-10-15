@@ -110,6 +110,12 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
         }
         out.load_images.insert(id.clone(), spec.clone());
     }
+    for (a, refs) in &right.address_taken {
+        out.address_taken
+            .entry(a.clone())
+            .or_default()
+            .extend(refs.clone());
+    }
     for (a, refs) in &right.entries {
         out.entries
             .entry(a.clone())

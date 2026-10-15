@@ -20,13 +20,28 @@ pub enum Scope {
     /// compare arithmetic. Stores must never reach executable bytes; a native
     /// artifact checks every store and aborts on overlap (ADR-0126).
     DeclaredStaticImagesGuardedRam,
+    /// The guarded scope plus address-taken dispatch (ADR-0153): a register
+    /// call with no other proof targets one of the map's address-taken
+    /// functions; a native artifact dispatches over that set and faults 3
+    /// on any other target.
+    DeclaredStaticImagesGuardedRamAddressTaken,
 }
 
 impl Scope {
     fn is_static(self) -> bool {
         matches!(
             self,
-            Scope::DeclaredStaticImages | Scope::DeclaredStaticImagesGuardedRam
+            Scope::DeclaredStaticImages
+                | Scope::DeclaredStaticImagesGuardedRam
+                | Scope::DeclaredStaticImagesGuardedRamAddressTaken
+        )
+    }
+    /// The guarded scope's checked assumptions apply.
+    pub fn guarded(self) -> bool {
+        matches!(
+            self,
+            Scope::DeclaredStaticImagesGuardedRam
+                | Scope::DeclaredStaticImagesGuardedRamAddressTaken
         )
     }
 }
@@ -441,7 +456,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     // A reachable BREAK or conditional trap aborts natively in the guarded
     // scope (ADR-0138/0145).
     let checked_word = |u: &Unresolved, accept: fn(u32) -> bool| {
-        scope == Scope::DeclaredStaticImagesGuardedRam
+        scope.guarded()
             && u.kind == "exception_or_unsupported_instruction"
             && u.site.as_ref().is_some_and(|a| {
                 source(images, a)
@@ -608,9 +623,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 || is_cop1_compare(word)
                 || is_cop1_branch(word)
                 || is_cop1_arith(word);
-            if scope.is_static()
-                && !allowed_static_effect(word, pc, scope == Scope::DeclaredStaticImagesGuardedRam)
-            {
+            if scope.is_static() && !allowed_static_effect(word, pc, scope.guarded()) {
                 add(
                     "unsupported_scope_effect",
                     Some(image.address(pc)),
@@ -679,7 +692,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     }
     // Declared runtime functions (ADR-0129) close calls into them only under the
     // guarded scope's explicit ABI assumption; their bodies must stay undecoded.
-    let runtime_ok = scope == Scope::DeclaredStaticImagesGuardedRam;
+    let runtime_ok = scope.guarded();
     for (a, f) in &map.runtime_functions {
         if !runtime_ok {
             add(
@@ -733,10 +746,19 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     let mut tables = BTreeSet::new();
     // One shared return-closure context per image, not one per site.
     let mut closures: BTreeMap<String, crate::returns::Closure> = BTreeMap::new();
+    // Address-taken dispatch (ADR-0153): every address-taken function must be
+    // a decoded block start whose layout and body can be a CPU function.
+    let address_taken_ok = scope == Scope::DeclaredStaticImagesGuardedRamAddressTaken
+        && !map.address_taken.is_empty()
+        && map.address_taken.keys().all(|a| {
+            starts.contains(a)
+                && source(images, a).is_some_and(|image| crate::data_roots::plausible(image, a.pc))
+        });
+    let mut uses_address_taken = false;
     for site in &map.indirect_sites {
         // Return certificates hold only under the guarded scope's checked
         // call/return assumption; every other scope keeps such sites OPEN.
-        let returns = scope == Scope::DeclaredStaticImagesGuardedRam
+        let returns = scope.guarded()
             && source(images, &site.site).is_some_and(|image| {
                 closures
                     .entry(image.base.image.clone())
@@ -746,15 +768,18 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         return_closure |= returns;
         // A verified jump table closes only under the guarded scope, whose
         // native artifact store-protects table bytes (ADR-0132).
-        let table = scope == Scope::DeclaredStaticImagesGuardedRam
+        let table = scope.guarded()
             && source(images, &site.site)
                 .is_some_and(|image| crate::tables::verify(map, image, site));
         if table {
             tables.insert(site.site.clone());
         }
-        let proof_valid = returns
-            || table
-            || source(images, &site.site).is_some_and(|image| verify_constant(map, image, site));
+        let constant =
+            source(images, &site.site).is_some_and(|image| verify_constant(map, image, site));
+        let dispatched =
+            !returns && !table && !constant && address_taken_ok && site.link_register.is_some();
+        uses_address_taken |= dispatched;
+        let proof_valid = returns || table || constant || dispatched;
         if !proof_valid {
             add(
                 "unresolved_indirect_site",
@@ -1018,7 +1043,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         .values()
         .flat_map(|spec| spec.loads.iter().flat_map(|l| l.evidence.clone()))
         .collect();
-    if !map.load_images.is_empty() && scope != Scope::DeclaredStaticImagesGuardedRam {
+    if !map.load_images.is_empty() && !scope.guarded() {
         add(
             "dynamic_effect_outside_scope",
             None,
@@ -1086,6 +1111,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     } else {
         Vec::new()
     };
+    if uses_address_taken {
+        assumptions.push(format!(
+            "Every register call without another proof targets one of the {} address-taken functions (ADR-0153): function starts named by an aligned ROM word or by a code constant in decoded guest code, as C function pointers must be; a native artifact dispatches over that set and faults 3 on any other target.",
+            map.address_taken.len()
+        ));
+    }
     if forwarded_callbacks {
         assumptions.push(
             "A wrapper that forwards its own argument to a runtime callback (ADR-0149) is entered only by its direct callers, and no store through a pointer writes the stack slot where it spills that argument (C object rules for an argument home); the native runtime enters only the proven targets and faults 3 on any other."
@@ -1098,7 +1129,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 .into(),
         );
     }
-    if scope == Scope::DeclaredStaticImagesGuardedRam {
+    if scope.guarded() {
         assumptions.push(
             "Data loads/stores are naturally aligned RDRAM accesses through KSEG0/KSEG1 (unaligned LWL/LWR/LDL/LDR read their containing aligned word, and SWL/SWR/SDL/SDR write single bytes), never reach executable bytes, and use only one of KSEG0/KSEG1 per 16-byte line; a native artifact checks every store and access and aborts on violation, with no fallback execution."
                 .into(),
