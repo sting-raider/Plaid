@@ -362,3 +362,47 @@ fn cop1_moves_lower_with_an_explicit_fr_assumption() {
     let c = lower_c(&map, &[image], GuestAddr(BASE), &[GuestAddr(0x8000_0010)]).unwrap();
     assert!(c.contains("s->f[0] = (s->f[0] & 0xffffffff00000000ull) | (u32)s->r[8];"));
 }
+
+#[test]
+fn loop_headers_and_only_loop_headers_get_safepoints() {
+    // addiu t0,zero,3; loop: addiu t0,t0,-1; bne t0,zero,loop; nop; b .; nop
+    let words = [[0x2408_0003, 0x2508_ffff, 0x1500_fffe, 0].as_slice(), &HALT].concat();
+    let c = lower(&words, 0x8000_0010).unwrap();
+    assert!(c.contains("L_80000004:\n  PLAID_SAFEPOINT(s);"), "{c}");
+    assert_eq!(c.matches("  PLAID_SAFEPOINT(s);").count(), 1);
+    // without PLAID_SAFEPOINTS the check compiles to nothing
+    assert!(c.contains("#define PLAID_SAFEPOINT(s) ((void)0)"));
+}
+
+#[test]
+fn fr0_maps_odd_transfers_to_upper_words_and_masks_sources() {
+    use plaid_core::solver::{Scope, solve};
+    // lui at,0x3ff0; mtc1 at,f11; add.s f4,f5,f2; lwc1 f7,0(t0); j 0x18; nop; b .; nop
+    let words = [
+        [
+            0x3c01_3ff0,
+            0x4481_5800,
+            0x4602_2900,
+            0xc507_0000,
+            0x0800_0006,
+            0,
+        ]
+        .as_slice(),
+        &HALT,
+    ]
+    .concat();
+    let (mut map, image) = map_of(&words);
+    map.cop1_fr0 = true;
+    let r = solve(
+        &map,
+        std::slice::from_ref(&image),
+        Scope::DeclaredStaticImagesGuardedRam,
+    )
+    .unwrap();
+    assert!(r.assumptions.iter().any(|a| a.contains("Status.FR = 0")));
+    let c = lower_c(&map, &[image], GuestAddr(BASE), &[GuestAddr(0x8000_0018)]).unwrap();
+    // f11 is the upper word of f10; the odd source f5 reads f4
+    assert!(c.contains("s->f[10] = (s->f[10] & 0xffffffffull) | (u64)(u32)s->r[1] << 32;"));
+    assert!(c.contains("plaid_arith_s(s, 0, 4, 4, 2,"));
+    assert!(c.contains("s->f[6] = (s->f[6] & 0xffffffffull) | (u64)(u32)v << 32;"));
+}

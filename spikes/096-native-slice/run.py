@@ -411,6 +411,14 @@ PROGRAMS = {
         'dflt', addiu(s1, s1, 1000),
         'next', addiu(t0, t0, 1), slti(t2, t0, 4), bne(t2, zero, 'loop'), nop, *DONE,
         'tbl', lambda pc, L: L['c0'], lambda pc, L: L['c1'], lambda pc, L: L['c2']],
+    # Status.FR = 0 (ADR-0160), as libultra threads run: doubles in even/odd
+    # pairs built by 32-bit moves, odd 32-bit transfers, masked sources.
+    'fpu_fr0': [lui(gp, 0x8000), ori(gp, gp, 0x1000),
+        lui(at, 0x3FF0), mtc1(at, 11), mtc1(zero, 10), lui(t0, 0x4000), mtc1(t0, 13), mtc1(zero, 12),
+        fop(17, 0)(14, 10, 12), fop(17, 3)(16, 10, 12), sdc1(14, 0, gp), mfc1(t1, 15), mfc1(t2, 14),
+        lui(t3, 0x4040), mtc1(t3, 4), fop(16, 33)(6, 4), fcmp(17, 2)(6, 14), cfc1(t5, 31),
+        fop(17, 32)(8, 16), swc1(8, 8, gp), ldc1(18, 0, gp), lwc1(21, 8, gp), swc1(21, 12, gp),
+        dmfc1(t4, 17), fop(16, 0)(22, 5, 4), swc1(22, 16, gp), *DONE],
     # Nested, recursive, pointer and tail calls; frames live in the RAM window.
     'calls': [lui(sp, 0x8000), ori(sp, sp, 0x1100),
         addiu(a0, zero, 5), jal('fact'), nop, addu(s0, v0, zero),
@@ -447,6 +455,7 @@ AT_BAD = [lui(gp, 0x8000), ori(gp, gp, 0x1000), lui(t0, 0x8000), LO(t0, t0, 'f1'
     'pad', jr(ra), nop,
     'f1', addu(v0, a0, a0), jr(ra), nop]
 ADDRESS_TAKEN = {'addrtaken', 'at_bad'}
+FR0 = {'fpu_fr0'}
 # A taken conditional trap raises an unmodeled exception: fault 10.
 TRAP = [addiu(t0, zero, 0), R(52, 0, t0, zero), *DONE]
 # A reached BREAK raises an unmodeled exception: fault 9.
@@ -485,8 +494,10 @@ def windows():
             extra += ['--loads', str(OUT / f'{name}.loads.json')]
         if name in ADDRESS_TAKEN:
             extra += ['--address-taken']
+        if name in FR0:
+            extra += ['--fr0']
         subprocess.run([str(exe), 'lower-c', str(OUT / f'{name}.bin'), hex(BASE), hex(BASE), hex(EXIT), str(OUT / f'{name}.c'), *extra], check=True)
-        subprocess.run([cc, '-O2', '-std=c99', '-Wall', '-Werror', '-Wno-unused-label', f'-DPLAID_LOWERED="{name}.c"', f'-DPLAID_EXIT=0x{EXIT:x}u',
+        subprocess.run([cc, '-O2', '-std=c99', '-Wall', '-Werror', '-Wno-unused-label', '-DPLAID_SAFEPOINTS', f'-DPLAID_LOWERED="{name}.c"', f'-DPLAID_EXIT=0x{EXIT:x}u',
             '-I', str(OUT), str(HERE / 'harness.c'), '-o', str(OUT / f'{name}-native.exe')], check=True)
     script = subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(HERE / 'run.py')], text=True).strip()
     subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', script, '--oracle', *sys.argv[1:]], check=True)
@@ -516,7 +527,8 @@ def oracle():
     if '--rebuild' in sys.argv or not oracle_exe.exists():
         oracle_exe = builder().build(HERE / 'driver.cpp', OUT / 'oracle')
     for name in PROGRAMS:
-        out = subprocess.run([str(oracle_exe), str(OUT / f'{name}.bin'), hex(EXIT)], capture_output=True, text=True, timeout=120)
+        out = subprocess.run([str(oracle_exe), str(OUT / f'{name}.bin'), hex(EXIT), *(['fr0'] if name in FR0 else [])],
+            capture_output=True, text=True, timeout=120)
         assert out.returncode == 0, (name, out.returncode, out.stderr)
         (OUT / f'{name}-oracle.json').write_text(out.stdout)
 

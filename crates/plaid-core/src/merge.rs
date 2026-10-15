@@ -110,6 +110,9 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
         }
         out.load_images.insert(id.clone(), spec.clone());
     }
+    if out.cop1_fr0 != right.cop1_fr0 {
+        return Err("conflicting COP1 register mode declarations (Status.FR)".into());
+    }
     for (a, refs) in &right.address_taken {
         out.address_taken
             .entry(a.clone())

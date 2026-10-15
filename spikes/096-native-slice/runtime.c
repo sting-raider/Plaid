@@ -29,3 +29,13 @@ int plaid_rt_spawn(plaid_state *s) {
   s->r[2] = SX32((u32)s->r[2] + 1);
   return 0;
 }
+
+/* Every safepoint calls the runtime (ADR-0159); it must leave guest state
+   exactly as ares does, so it only counts. */
+volatile int plaid_preempt = 1;
+static unsigned long plaid_safepoints;
+int plaid_rt_safepoint(plaid_state *s) {
+  (void)s;
+  plaid_safepoints++;
+  return 0;
+}

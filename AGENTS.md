@@ -92,6 +92,7 @@ cargo fmt --all -- --check
 cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo test --locked --workspace
 python scripts/test_cli.py
+python runtime/test_runtime.py   # when runtime/ or plaid-lower changes
 ```
 
 Also run focused regressions, relevant retained synthetic contracts, `python tools/progress.py --check` when progress data changes, and exact pinned-reference checks when semantics depend on a reference implementation.

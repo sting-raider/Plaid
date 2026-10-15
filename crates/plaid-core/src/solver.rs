@@ -1142,8 +1142,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         }
         if uses_cop1 {
             assumptions.push(
-                "COP1 is usable with 64-bit FPRs (Status.CU1 = 1, Status.FR = 1) wherever COP1 instructions execute."
-                    .into(),
+                if map.cop1_fr0 {
+                    "COP1 is usable with 32 FPRs and doubles in even/odd pairs (Status.CU1 = 1, Status.FR = 0, as libultra threads run; ADR-0160) wherever COP1 instructions execute."
+                } else {
+                    "COP1 is usable with 64-bit FPRs (Status.CU1 = 1, Status.FR = 1) wherever COP1 instructions execute."
+                }
+                .into(),
             );
         }
         if uses_compare {

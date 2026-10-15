@@ -27,6 +27,7 @@ On a local Ocarina of Time boot window, 39 libultra functions are identified by 
 ```bash
 cargo test --locked --workspace
 python scripts/test_cli.py
+python runtime/test_runtime.py
 python tools/progress.py --check
 ```
 
