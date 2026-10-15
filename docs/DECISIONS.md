@@ -3275,3 +3275,26 @@ Result: the OoT annotate pass takes 69 ms, and whole discovery about 1 s.
 On the OoT boot window, discovery maps and guarded solve reports are
 byte-identical before and after the change. The workspace tests and
 spike096 pass unchanged.
+
+## ADR-0138: BREAK is a checked abort under the guarded scope
+
+Context: with OoT's `code` segment declared, 182 guarded blockers are
+`BREAK` instructions. Nearly all are GCC's divide checks: `bnez divisor`
+over `break 7` and an overflow check over `break 6`. On hardware a reached
+`BREAK` raises a Breakpoint exception into the game's crash handler, which
+Plaid does not model.
+
+Decision: under `DeclaredStaticImagesGuardedRam`, `BREAK` is admitted. Its
+discovery fact (`exception_or_unsupported_instruction`) is discharged, on
+both the map's facts and the solver's re-derived facts, and the scope lists
+"BREAK is never executed" as an assumption. `plaid-lower` emits an abort
+with the new fault 9. This mirrors the overflow traps (ADR-0128): the
+untaken path is exact, and the taken path fails closed instead of running
+an unmodeled handler. `SYSCALL`, `ERET` and the conditional traps stay
+unsupported. The ISA coverage measure counts `BREAK` as lowered because it
+passes discovery, the guarded solve and lowering.
+
+Result: spike096 `divcheck` (a GCC-shaped `div` with an untaken divisor
+check) matches pinned ares, and `break_reached` faults 9. OoT, with its
+declared `code` segment, drops from 748 to 566 guarded blockers. ISA
+coverage is 131 of 209 forms.

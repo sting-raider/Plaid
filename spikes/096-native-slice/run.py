@@ -170,6 +170,9 @@ PROGRAMS = {
         swl(t0, 0x51, s0), swr(t0, 0x54, s0), sdl(v0, 0x63, s0), sdr(v0, 0x6D, s0), *DONE],
     'fcompare': fcompare(),
     'load': load_program(),
+    # GCC's divide check: BREAK 7 guarded by a divisor test that is not taken.
+    'divcheck': [addiu(t0, zero, 21), addiu(t1, zero, 4), div(t0, t1), bne(t1, zero, 'ok'), nop,
+        R(13, 0, 0, 7 >> 5, 7 & 31), 'ok', mflo(t2), mfhi(t3), *DONE],
     'transfers': [addiu(t0, zero, 1), beq(t0, t0, 'a'), addiu(t0, zero, 5), addiu(t1, zero, 99),
         'a', bne(t0, zero, 'b'), addiu(t2, t0, 1),
         'b', jal('c'), addu(t3, ra, zero), addiu(t4, zero, 7), *DONE,
@@ -255,6 +258,8 @@ RUNTIME = {'boundary': [('sum', [])], 'callback': [('spawn', ['a0'])]}
 LOADS = {'load': load_program(), 'load_early': load_program(early=True), 'load_patch': load_program(patch=True)}
 # Jump-table bytes are store-protected like code: a write must fault 2.
 TABLE_WRITE = jump_table([lui(s2, 0x8000), lambda pc, L: I(43, zero, s2, L['tbl'])])
+# A reached BREAK raises an unmodeled exception: fault 9.
+BREAK = [addiu(t1, zero, 0), bne(t1, zero, 'ok'), nop, R(13, 0, 0, 0, 7), 'ok', *DONE]
 # A compare with a NaN operand depends on unmodeled FCSR enables: fault 7.
 FPU_NAN = [lui(t0, 0x7FC0), mtc1(t0, 1), fcmp(16, 2)(1, 1), *DONE]
 CACHE_ALIAS = [lui(s0, 0x8000), sw(s0, 0x1000, s0), lui(s1, 0xA000), lw(t0, 0x1000, s1), *DONE]
@@ -264,7 +269,7 @@ def windows():
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
     OUT.mkdir(parents=True, exist_ok=True)
     progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN, overflow=OVERFLOW, table_write=TABLE_WRITE, fpu_nan=FPU_NAN,
-        load_early=LOADS['load_early'], load_patch=LOADS['load_patch'])
+        load_early=LOADS['load_early'], load_patch=LOADS['load_patch'], break_reached=BREAK)
     for name, items in progs.items():
         (OUT / f'{name}.bin').write_bytes(assemble(items))
         extra = []
@@ -292,13 +297,13 @@ def windows():
         oracle = json.loads((OUT / f'{name}-oracle.json').read_text())
         assert json.loads(native.stdout) == oracle, (name, native.stdout, oracle)
         results[name] = hashlib.sha256(json.dumps(oracle, sort_keys=True).encode()).hexdigest()
-    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('load_early', 8), ('load_patch', 2)):
+    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('load_early', 8), ('load_patch', 2), ('break_reached', 9)):
         bad = subprocess.run([str(OUT / f'{name}-native.exe')], capture_output=True, text=True)
         assert bad.returncode == 6 and json.loads(bad.stdout)['fault'] == fault, (name, bad.stdout)
     receipt = dict(format='plaid-native-slice-receipt-v0', ares_revision=builder().REV, compiler=Path(cc).name,
-        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, load_early=8, load_patch=2), interpreter_linked=False, native_complete=False)
+        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, load_early=8, load_patch=2, break_reached=9), interpreter_linked=False, native_complete=False)
     (OUT / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
-    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, early-load and loaded-code-store programs fail closed')
+    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, early-load, loaded-code-store and BREAK programs fail closed')
     print(json.dumps(receipt, sort_keys=True))
 
 def builder():
