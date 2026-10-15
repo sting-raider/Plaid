@@ -470,13 +470,30 @@ static int nop(void) { return 0; }
 #define NOP(name) RT(name) { return nop(); }
 NOP(osCreateViManager) NOP(osViSetMode) NOP(osViBlack) NOP(osViSetSpecialFeatures)
 NOP(osCreatePiManager) NOP(osInvalDCache) NOP(osInvalICache) NOP(osWritebackDCache)
-NOP(osWritebackDCacheAll) NOP(osSpTaskYield) NOP(osMapTLB) NOP(osUnmapTLBAll)
+NOP(osWritebackDCacheAll) NOP(osSpTaskYield)
+/* The TLB as libultra's osMapTLB writes it (ADR-0162): 4 KiB-aligned even
+   and odd pages, noncoherent cached, dirty and valid; -1 leaves a page invalid.
+   Lowered code models global entries only, so an ASID is refused. */
+static u32 tlb_lo(u32 paddr) { return paddr == 0xffffffffu ? 1 : (paddr >> 6) | 0x18 | 4 | 2 | 1; }
+RT(osMapTLB) {
+  u32 pm = arg(1);
+  if (arg(5) != 0xffffffffu) finish(1, "osMapTLB with an ASID");
+  S->tlb[arg(0) & 31] = (plaid_tlb_entry){pm, arg(2) & ~(pm | 0x1fffu), {tlb_lo(arg(3)), tlb_lo(arg(4))}};
+  return 0;
+}
+RT(osUnmapTLBAll) { /* EntryHi in KSEG0 never matches a mapped address */
+  int i;
+  for (i = 0; i < 32; i++) S->tlb[i] = (plaid_tlb_entry){0, 0x80000000u, {0, 0}};
+  return 0;
+}
 RT(osSpTaskYielded) { return ret(0); }
 RT(__osSpSetPc) { return ret(0); }
 RT(osViSwapBuffer) { frame_buffer = arg(0); return 0; }
 RT(osVirtualToPhysical) {
-  u32 a = arg(0);
-  return ret(a >= 0x80000000u && a < 0xc0000000u ? a & 0x1fffffffu : a);
+  u32 a = arg(0), p;
+  u8 seg;
+  if (a >= 0x80000000u && a < 0xc0000000u) return ret(a & 0x1fffffffu);
+  return ret(plaid_tlb(S, a, 0, &p, &seg) ? 0xffffffffu : p);
 }
 RT(__osSetFpcCsr) {
   u32 was = S->fcsr | S->fcc << 23;

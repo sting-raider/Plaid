@@ -236,3 +236,13 @@ The goddard reload no longer faults. The fault 1 is a load from `0x04000650`
 in goddard, called from `0x801a72b4` just after the `osMapTLB` loop: this is
 `load_dynlist`, which maps the dynlists segment at virtual `0x04000000` with
 64 KB TLB pages and walks it there. ADR-0162 adds TLB-mapped data.
+
+## Update: TLB-mapped data (ADR-0162)
+
+| Step | Result |
+| --- | --- |
+| `osMapTLB` and mapped data | **90 s time limit, no fault**: 2939 VI frames, 1459 graphics tasks (30 fps), 2931 audio tasks, 9861 PI DMAs |
+
+goddard's dynlists are read through its 64 KiB mappings at `0x04000000`.
+The run ends only at the time limit. Nothing is drawn yet, so which screen
+the game is on is not observed; RT64 is next (ADR-0163).

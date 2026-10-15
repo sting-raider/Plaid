@@ -231,6 +231,23 @@ def load_program(early=False, patch=False, at=LOAD_AT, reload=False, payload=Non
 # The load's own code writing its bytes: fault 2 (ADR-0161).
 SELF_PAYLOAD = ['payload', lui(t0, 0xA000), ori(t0, t0, LOAD_AT & 0xFFFF), sw(t0, 0, t0), jr(ra), nop, nop, nop, nop]
 
+def tlb_program(body, odd_valid=True, dirty=True, even0=0x2000):
+    # TLB-mapped data (ADR-0162). On ares `map` runs MTC0 and TLBWI; natively
+    # runtime.c writes the same entry. Pages are global and cached.
+    mtc0 = lambda rt, rd: 0x40800000 | rt << 16 | rd << 11
+    lo = lambda pa, v=1, d=1: (pa >> 6) | 3 << 3 | d << 2 | v << 1 | 1
+    const = lambda r, v: [lui(r, v >> 16), ori(r, r, v & 0xFFFF)]
+    def entry(i, mask, hi, lo0, lo1):
+        return [addiu(a0, zero, i), *const(a1, mask), *const(a2, hi), *const(a3, lo0), *const(t0, lo1),
+            sw(t0, 16, sp), jal('map'), nop]
+    return [lui(sp, 0x8000), ori(sp, sp, 0x2000),
+        *entry(0, 0, 0x00100000, lo(even0, d=int(dirty)), lo(0x1000)),
+        *entry(1, 0x1E000, 0x04000000, lo(0), lo(0x10000, v=int(odd_valid))),
+        *entry(2, 0, 0xC0000000, lo(0x2000), lo(0x1000)),
+        *body, or_(t0, zero, zero), *DONE,
+        'map', mtc0(a0, 0), mtc0(a1, 5), mtc0(a2, 10), mtc0(a3, 2), lw(t0, 16, sp), mtc0(t0, 3), nop,
+        0x42000002, nop, jr(ra), nop]
+
 def jump_table(prefix):
     # GCC shape: the index scale SLL sits in the bound check's delay slot.
     return [*prefix, addiu(s1, zero, 0), addiu(t0, zero, 0),
@@ -424,6 +441,14 @@ PROGRAMS = {
         'tbl', lambda pc, L: L['c0'], lambda pc, L: L['c1'], lambda pc, L: L['c2']],
     # Status.FR = 0 (ADR-0160), as libultra threads run: doubles in even/odd
     # pairs built by 32-bit moves, odd 32-bit transfers, masked sources.
+    # Stores through a 4 KiB even page, its odd page and a 64 KiB page, read
+    # back through KSEG2, KSEG0 and a second mapping at the same cache index
+    # (ADR-0162).
+    'tlb': tlb_program([lui(t1, 0x1122), ori(t1, t1, 0x3344), lui(t2, 0x5566), ori(t2, t2, 0x7788),
+        lui(s0, 0x0010), sw(t1, 0x10, s0), lui(s4, 0x0010), ori(s4, s4, 0x1000), sw(t2, 0x20, s4),
+        lui(s5, 0x0400), addiu(t3, zero, 0x5A), sb(t3, 0x1033, s5), lhu(v1, 0x1032, s5),
+        lui(s6, 0xC000), lw(s1, 0x10, s6), lui(s7, 0x8000), lw(s2, 0x1020, s7), lw(t5, 0x2010, s7),
+        dsll32(t4, t1, 0), or_(t4, t4, t2), sd(t4, 0x40, s4), ld(s3, 0x1040, s6)]),
     'fpu_fr0': [lui(gp, 0x8000), ori(gp, gp, 0x1000),
         lui(at, 0x3FF0), mtc1(at, 11), mtc1(zero, 10), lui(t0, 0x4000), mtc1(t0, 13), mtc1(zero, 12),
         fop(17, 0)(14, 10, 12), fop(17, 3)(16, 10, 12), sdc1(14, 0, gp), mfc1(t1, 15), mfc1(t2, 14),
@@ -454,7 +479,15 @@ SELF_MODIFYING = [lui(s0, 0x8000), sw(zero, 8, s0), *DONE]
 BAD_RETURN = [jal('f'), nop, *DONE, 'f', addiu(ra, ra, 8), jr(ra), nop]
 # A trapping add that overflows raises on hardware; native code must fault 6.
 OVERFLOW = [lui(t0, 0x7FFF), ori(t0, t0, 0xFFFF), addi(t1, t0, 1), *DONE]
-RUNTIME = {'boundary': [('sum', [])], 'callback': [('spawn', ['a0'])], 'forwarded': [('spawn', ['a0'])]}
+RUNTIME = {'boundary': [('sum', [])], 'callback': [('spawn', ['a0'])], 'forwarded': [('spawn', ['a0'])],
+    'tlb': [('map', [])], 'tlb_invalid': [('map', [])], 'tlb_clean': [('map', [])],
+    'tlb_alias': [('map', [])]}
+# A load from an invalid page and a store to a clean one: fault 1 (ADR-0162).
+TLB_INVALID = tlb_program([lui(s5, 0x0401), lw(s1, 0, s5)], odd_valid=False)
+TLB_CLEAN = tlb_program([lui(s0, 0x0010), sw(t1, 0, s0)], dirty=False)
+# A 4 KiB page caching physical 0x1000 at virtual index bit 12 = 0, then a
+# KSEG0 read of the same line at the other index: fault 4 (ADR-0162).
+TLB_ALIAS = tlb_program([lui(s0, 0x0010), sw(t1, 0x10, s0), lui(s7, 0x8000), lw(s2, 0x1010, s7)], even0=0x1000)
 LOADS = {'load': load_program(), 'load_gap': load_program(at=LOAD_DEST['load_gap']), 'load_reload': load_program(reload=True),
     'load_early': load_program(early=True), 'load_patch': load_program(patch=True), 'load_self': load_program(payload=SELF_PAYLOAD)}
 # Jump-table bytes are store-protected like code: a write must fault 2.
@@ -488,7 +521,7 @@ def windows():
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
     OUT.mkdir(parents=True, exist_ok=True)
     progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN, overflow=OVERFLOW, table_write=TABLE_WRITE, fpu_nan=FPU_NAN,
-        fpu_enabled=FPU_ENABLED, fpu_range=FPU_RANGE, fpu_round_range=FPU_ROUND_RANGE, load_early=LOADS['load_early'], load_patch=LOADS['load_patch'], load_self=LOADS['load_self'], break_reached=BREAK, trap_taken=TRAP, host_bad_return=HOST_BAD_RETURN, at_bad=AT_BAD)
+        fpu_enabled=FPU_ENABLED, fpu_range=FPU_RANGE, fpu_round_range=FPU_ROUND_RANGE, load_early=LOADS['load_early'], load_patch=LOADS['load_patch'], load_self=LOADS['load_self'], break_reached=BREAK, trap_taken=TRAP, host_bad_return=HOST_BAD_RETURN, at_bad=AT_BAD, tlb_invalid=TLB_INVALID, tlb_clean=TLB_CLEAN, tlb_alias=TLB_ALIAS)
     for name, items in progs.items():
         (OUT / f'{name}.bin').write_bytes(assemble(items))
         extra = []
@@ -520,13 +553,13 @@ def windows():
         oracle = json.loads((OUT / f'{name}-oracle.json').read_text())
         assert json.loads(native.stdout) == oracle, (name, native.stdout, oracle)
         results[name] = hashlib.sha256(json.dumps(oracle, sort_keys=True).encode()).hexdigest()
-    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('fpu_enabled', 7), ('fpu_range', 7), ('fpu_round_range', 7), ('load_early', 8), ('load_patch', 8), ('load_self', 2), ('break_reached', 9), ('trap_taken', 10), ('host_bad_return', 5), ('at_bad', 3)):
+    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('fpu_enabled', 7), ('fpu_range', 7), ('fpu_round_range', 7), ('load_early', 8), ('load_patch', 8), ('load_self', 2), ('break_reached', 9), ('trap_taken', 10), ('host_bad_return', 5), ('at_bad', 3), ('tlb_invalid', 1), ('tlb_clean', 1), ('tlb_alias', 4)):
         bad = subprocess.run([str(OUT / f'{name}-native.exe')], capture_output=True, text=True)
         assert bad.returncode == 6 and json.loads(bad.stdout)['fault'] == fault, (name, bad.stdout)
     receipt = dict(format='plaid-native-slice-receipt-v0', ares_revision=builder().REV, compiler=Path(cc).name,
-        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, fpu_enabled=7, fpu_range=7, fpu_round_range=7, load_early=8, load_patch=8, load_self=2, break_reached=9, trap_taken=10, host_bad_return=5, at_bad=3), interpreter_linked=False, native_complete=False)
+        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, fpu_enabled=7, fpu_range=7, fpu_round_range=7, load_early=8, load_patch=8, load_self=2, break_reached=9, trap_taken=10, host_bad_return=5, at_bad=3, tlb_invalid=1, tlb_clean=1, tlb_alias=4), interpreter_linked=False, native_complete=False)
     (OUT / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
-    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, enabled-FPU-exception, out-of-range-conversion, out-of-range-rounding, early-load, patched-load re-entry, load self-write, BREAK, trap, host-return and unknown-target programs fail closed')
+    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, enabled-FPU-exception, out-of-range-conversion, out-of-range-rounding, early-load, patched-load re-entry, load self-write, BREAK, trap, host-return, unknown-target, invalid-page, clean-page and cache-index-alias programs fail closed')
     print(json.dumps(receipt, sort_keys=True))
 
 def builder():

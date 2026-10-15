@@ -16,11 +16,24 @@ Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. 
 
 Unproven states fail closed: the solver reports `OPEN`, and lowered code checks every declared assumption at run time and aborts with a fault code when one is violated. There is no fallback to emulation.
 
-Libultra system functions are declared as runtime functions and become calls into the host runtime ([N64ModernRuntime](https://github.com/N64Recomp/N64ModernRuntime) + [RT64](https://github.com/rt64/rt64), ADR-0126); thread entries and other callbacks are proven per call site.
+Libultra system functions are declared as runtime functions and become calls into Plaid's own C runtime ([`runtime/`](runtime/), ADR-0158/0159): threads, message queues, events, timers, PI DMA, controllers and EEPROM. Graphics will go through [RT64](https://github.com/rt64/rt64) (MIT). Thread entries and other callbacks are proven per call site.
 
 ## Real ROMs
 
 On a local Ocarina of Time boot window, 39 libultra functions are identified by n64sym signature and discovery reaches 320 blocks with 16 blockers under the guarded assumption scope. Declaring the Yaz0-compressed `code` segment as a load, checked by content in the native artifact, and identifying the libultra functions inside it as well leaves 29 blockers over 7684 blocks: function-pointer calls not yet proven, and calls into the 64DD driver segment. Super Mario 64 (USA) solves `CLOSED` under a declared assumption scope: its main, engine and goddard segments, with calls through function pointers restricted to address-taken functions. That covers 45419 blocks. Every assumption is listed in the report, and most are checked by the native artifact. No commercial ROM is `CLOSED` whole-ROM without assumptions yet. Per-ROM numbers and how to reproduce them are in [`docs/STATUS.md`](docs/STATUS.md).
+
+## Native runs: finding and fixing what breaks
+
+Milestone 4 is running Super Mario 64 natively to its title screen. The lowered game is linked with the runtime and run until it stops. Because nothing falls back to emulation, every stop is a fail-closed fault with an exact guest PC. Each fault points at a missing piece of the hardware model or of the runtime, and fixing one usually gets the game further. Each fix is a decision record with a differential test against ares. So far:
+
+| Stop | Cause | Fix |
+| --- | --- | --- |
+| First graphics task took 397 frames | every store scanned 45k code ranges | per-word protection map (ADR-0159) |
+| `mtxf_lookat` fault 7 | libultra runs COP1 with Status.FR = 0 | FR = 0 register pairs (ADR-0160) |
+| goddard reload, fault 2 | a reloaded segment was protected for good | loads re-verify after a write (ADR-0161) |
+| goddard dynlists, fault 1 | data read through `osMapTLB` mappings | TLB-mapped data, with D-cache index aliasing (ADR-0162) |
+
+SM64 now runs natively for a full 90-second test without a fault, at the game's own 30 fps (1459 graphics tasks), but its display lists are not yet drawn. Still to come: RT64 rendering, audio, input and save data. The latest run is in [`research/sm64-first-measurement.md`](research/sm64-first-measurement.md), and what comes next is in [`docs/NEXT.md`](docs/NEXT.md).
 
 ## Build
 
