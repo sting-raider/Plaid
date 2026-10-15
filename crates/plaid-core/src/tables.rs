@@ -186,9 +186,10 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
             && edge.site.pc.0.checked_add(4) == Some(address.pc.0)
     };
     let compare = image.word(compare_pc)?;
-    // Two direct entries into the interval still pass through the bound:
-    // sequential flow from inside it, and a branch whose delay slot is the
-    // identical SLTIU (GCC's loop rotation puts it in a branch-likely slot).
+    // Three direct entries into the interval still pass through the bound:
+    // sequential flow from inside it, a branch whose delay slot is the
+    // identical SLTIU (GCC's loop rotation puts it in a branch-likely slot),
+    // and the fallthrough of a non-likely branch whose slot is the compare.
     let same = |a: &CodeAddress| a.image == site.site.image && a.generation == site.site.generation;
     let rebounds = |e: &DirectEdge| {
         let inside = e.target.pc.0 > compare_pc.0 && e.target.pc.0 <= edge.site.pc.0;
@@ -198,6 +199,12 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
                 && e.delay_slot == DelaySlot::None
                 && e.site.pc.0 >= compare_pc.0
                 && e.site.pc.0.checked_add(4) == Some(e.target.pc.0)
+                // IDO puts the bound in the slot of the previous non-likely
+                // branch, whose fallthrough always runs it (ADR-0151)
+                || e.kind == EdgeKind::Fallthrough
+                    && e.delay_slot == DelaySlot::Always
+                    && e.site.pc.0.checked_add(4) == Some(compare_pc.0)
+                    && e.site.pc.0.checked_add(8) == Some(e.target.pc.0)
                 || e.kind != EdgeKind::Fallthrough
                     && e.delay_slot != DelaySlot::None
                     && e.site

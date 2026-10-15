@@ -365,6 +365,16 @@ PROGRAMS = {
     # A bounded jump table, closed under the guarded scope (ADR-0132).
     'table': jump_table([]),
     'scheduled_table': scheduled_table(),
+    # IDO's shape (ADR-0151): the bound in the slot of a previous branch.
+    'ido_table': [addiu(s1, zero, 0), addiu(t0, zero, 0),
+        'loop', slti(at, t0, 0), bne(at, zero, 'dflt'), sltiu(at, t0, 3), beq(at, zero, 'dflt'), sll(t1, t0, 2),
+        lui(at, 0x8000), addu(at, at, t1), lambda pc, L: I(35, t1, at, L['tbl']), jr(t1), nop,
+        'c0', addiu(s1, s1, 1), j('next'), nop,
+        'c1', addiu(s1, s1, 10), j('next'), nop,
+        'c2', addiu(s1, s1, 100), j('next'), nop,
+        'dflt', addiu(s1, s1, 1000),
+        'next', addiu(t0, t0, 1), slti(t2, t0, 4), bne(t2, zero, 'loop'), nop, *DONE,
+        'tbl', lambda pc, L: L['c0'], lambda pc, L: L['c1'], lambda pc, L: L['c2']],
     # Nested, recursive, pointer and tail calls; frames live in the RAM window.
     'calls': [lui(sp, 0x8000), ori(sp, sp, 0x1100),
         addiu(a0, zero, 5), jal('fact'), nop, addu(s0, v0, zero),

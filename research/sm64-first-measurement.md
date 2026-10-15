@@ -41,7 +41,8 @@ the map's `_mainSegment*` symbols.
 | n64sym identification (49 functions; `osInitialize` missed) | 68 | 11 | 2.0% |
 | `--symbols` identification (54 functions, ADR-0148) | 13 | 1: `create_thread`'s forwarded entry | 1.9% |
 | plus forwarded callbacks (ADR-0149) | 2936 | 8 | 8.1% (245/3029) |
-| plus engine and goddard loads (ADR-0150) | **5337** | **12** | **11.4%** (435/3832, whole map) |
+| plus engine and goddard loads (ADR-0150) | 5337 | 12 | 11.4% (435/3832, whole map) |
+| plus IDO slot-bound tables (ADR-0151) | **5580** | **10** | **11.5%** (442/3832) |
 
 n64sym misses SM64's `osInitialize`: 5 variants match its crcA and none its
 crcB, as on Mario Party 2. Its cache and COP0 callees then show up as 10

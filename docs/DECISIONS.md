@@ -3695,3 +3695,30 @@ calls: render and geo node callbacks, `level_script_execute`'s command
 table, the 3 audio dispatches and the goddard vblank pointer. Whole-map
 recall is **11.4%** (435/3832). OoT (28) and Mario Party 2 (29) are
 unchanged.
+
+## ADR-0151: IDO's jump-table bound in a previous branch's delay slot
+
+Context: SM64's audio sequence interpreter, built by IDO, guards its switch
+tables with `slti at, x, C; bnez at, L; sltiu at, i, N`, then
+`beqz at, default; sll i, i, 2` and the table load. The bound is the
+`sltiu` in the `bnez` delay slot, and the guard block starts after that
+slot. ADR-0140's compare check rejected the `bnez` fallthrough as an entry
+that bypasses the compare.
+
+Decision: one more edge into the compare-to-guard interval counts as passing
+through the bound. It is the fallthrough of a non-likely branch
+(`DelaySlot::Always`) whose delay slot is the compare and which lands
+directly after it. A branch-likely's fallthrough skips its slot, so the
+flag may be stale, and that shape stays rejected.
+
+Result: `tests/tables.rs` covers the IDO shape, which closes, and its
+branch-likely variant, which is rejected. The positive test fails without
+the change. spike096's new `ido_table` program matches pinned ares.
+
+On SM64, 2 of the 3 audio tables close:
+`sequence_channel_process_script` and `sequence_player_process_sequence`.
+Discovery reaches 5580 blocks with 10 guarded blockers, and whole-map recall
+is 11.5%. The third audio table, in `audio_signal_game_loop_tick`, sets
+its bound before a `bnez` whose taken edge reaches the guard, which a
+sequential search cannot follow, so it stays open. OoT (28) and Mario Party
+2 (29) are unchanged.

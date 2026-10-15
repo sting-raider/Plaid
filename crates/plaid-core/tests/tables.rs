@@ -211,3 +211,30 @@ fn scheduled_shapes_that_break_the_bound_are_rejected() {
         assert_eq!(table_targets(&scheduled(&[patch])), None, "{patch:x?}");
     }
 }
+
+/// IDO's shape (ADR-0151): the bound sits in the delay slot of the previous
+/// non-likely branch, whose fallthrough reaches the guard.
+fn ido(likely: bool) -> CodeImage {
+    let mut i = image();
+    i.words.fill(0);
+    let bnez = if likely { 0x5420000a } else { 0x1420000a };
+    i.words[..14].copy_from_slice(&[
+        0x28810010, bnez, 0x2c810003, 0x10200008, 0x00045080, 0x3c018000, 0x002a0821, 0x8c2a0100,
+        0x01400008, 0, 0, 0, 0x0800000c, 0,
+    ]);
+    for offset in [0x40, 0x50] {
+        i.words[offset / 4] = 0x08000000 | (offset as u32 / 4);
+    }
+    i.words[64..].copy_from_slice(&[0x80000040, 0x80000050, 0x80000040]);
+    i
+}
+
+#[test]
+fn ido_bound_in_a_previous_branch_slot_closes_only_when_it_always_runs() {
+    assert_eq!(
+        table_targets(&ido(false)),
+        Some(vec![0x80000040, 0x80000050])
+    );
+    // a branch-likely's fallthrough skips its slot, so the bound may be stale
+    assert_eq!(table_targets(&ido(true)), None);
+}
