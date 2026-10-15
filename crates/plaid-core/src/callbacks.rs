@@ -14,7 +14,7 @@
 use crate::{
     GuestAddr,
     discovery::{CodeImage, decode},
-    indirect::{code_pointer, prefix_state, transfer},
+    indirect::{MapIndex, code_pointer, prefix_state_in, transfer},
     program::*,
 };
 use std::collections::{BTreeMap, BTreeSet};
@@ -35,8 +35,8 @@ pub struct Callback {
 
 /// Value of `register` when control reaches the callee of the direct transfer
 /// at `site`, i.e. after its delay slot.
-fn argument(map: &ProgramMap, image: &CodeImage, site: &CodeAddress, register: u8) -> Option<u32> {
-    let (_, mut state, _) = prefix_state(map, image, site)?;
+fn argument(index: &MapIndex, image: &CodeImage, site: &CodeAddress, register: u8) -> Option<u32> {
+    let (_, mut state, _) = prefix_state_in(index, image, site)?;
     let word = image.word(site.pc)?;
     if !matches!(word >> 26, 2 | 3) {
         return None;
@@ -57,8 +57,8 @@ fn argument(map: &ProgramMap, image: &CodeImage, site: &CodeAddress, register: u
 /// moves and word spills to `$sp` slots. A store through any other base is
 /// assumed not to write those slots, which C's object rules give for an IDO
 /// argument home; the solver records that assumption.
-fn forwarded(map: &ProgramMap, image: &CodeImage, site: &CodeAddress, register: u8) -> Option<u8> {
-    let (_, _, prefix) = prefix_state(map, image, site)?;
+fn forwarded(index: &MapIndex, image: &CodeImage, site: &CodeAddress, register: u8) -> Option<u8> {
+    let (_, _, prefix) = prefix_state_in(index, image, site)?;
     let slot_pc = GuestAddr(site.pc.0.checked_add(4)?);
     let slot = image.word(slot_pc)?;
     let i = decode(slot, slot_pc);
@@ -130,7 +130,7 @@ fn forwarded(map: &ProgramMap, image: &CodeImage, site: &CodeAddress, register: 
 /// Values of `register` at the runtime transfer `site`: the proven constant,
 /// or, when a wrapper forwards its argument, what each of its callers passes.
 fn values(
-    map: &ProgramMap,
+    index: &MapIndex,
     image: &CodeImage,
     site: &CodeAddress,
     register: u8,
@@ -138,15 +138,15 @@ fn values(
     wrappers: &mut BTreeSet<CodeAddress>,
     out: &mut BTreeSet<Callback>,
 ) {
-    let constant = argument(map, image, site, register).map(|pc| image.address(GuestAddr(pc)));
+    let constant = argument(index, image, site, register).map(|pc| image.address(GuestAddr(pc)));
     if constant.is_none()
         && depth > 0
-        && let Some(r) = forwarded(map, image, site, register)
-        && let Some((entry, callers)) = closed_callers(map, image, site)
+        && let Some(r) = forwarded(index, image, site, register)
+        && let Some((entry, callers)) = closed_callers(index, image, site)
     {
         wrappers.insert(entry);
         for caller in callers {
-            values(map, image, &caller, r, depth - 1, wrappers, out);
+            values(index, image, &caller, r, depth - 1, wrappers, out);
         }
         return;
     }
@@ -162,26 +162,21 @@ fn values(
 /// `site`, when those are the only ways in: the entry is no program entry,
 /// indirect candidate, observation or runtime callback target.
 fn closed_callers(
-    map: &ProgramMap,
+    index: &MapIndex,
     image: &CodeImage,
     site: &CodeAddress,
 ) -> Option<(CodeAddress, Vec<CodeAddress>)> {
-    let (entry, _, _) = prefix_state(map, image, site)?;
-    let callers: Vec<_> = map
-        .direct_edges
+    let (entry, _, _) = prefix_state_in(index, image, site)?;
+    let into = index.edges_to(&entry);
+    let callers: Vec<_> = into
         .iter()
-        .filter(|e| e.target == entry && matches!(e.kind, EdgeKind::Call | EdgeKind::Jump))
+        .filter(|e| matches!(e.kind, EdgeKind::Call | EdgeKind::Jump))
         .map(|e| e.site.clone())
         .collect();
-    let other_way_in = map.entries.contains_key(&entry)
-        || map
-            .direct_edges
+    let other_way_in = index.jumped_to(&entry)
+        || into
             .iter()
-            .any(|e| e.target == entry && !matches!(e.kind, EdgeKind::Call | EdgeKind::Jump))
-        || map
-            .indirect_sites
-            .iter()
-            .any(|s| s.candidates.contains_key(&entry) || s.observed.contains_key(&entry));
+            .any(|e| !matches!(e.kind, EdgeKind::Call | EdgeKind::Jump));
     (!callers.is_empty() && !other_way_in).then_some((entry, callers))
 }
 
@@ -189,6 +184,7 @@ fn closed_callers(
 pub fn callbacks(map: &ProgramMap, image: &CodeImage) -> BTreeSet<Callback> {
     let mut out = BTreeSet::new();
     let mut wrappers = BTreeSet::new();
+    let index = MapIndex::new(map);
     for edge in &map.direct_edges {
         let Some(f) = map.runtime_functions.get(&edge.target) else {
             continue;
@@ -201,7 +197,7 @@ pub fn callbacks(map: &ProgramMap, image: &CodeImage) -> BTreeSet<Callback> {
         }
         for &register in &f.callbacks {
             values(
-                map,
+                &index,
                 image,
                 &edge.site,
                 register,

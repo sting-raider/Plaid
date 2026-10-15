@@ -967,8 +967,9 @@ pub fn lower_c_with_preload(
         ));
     }
     // Jump tables are store-protected like code (ADR-0132).
+    let index = plaid_core::indirect::MapIndex::new(map);
     for site in &map.indirect_sites {
-        if let Some((start, count)) = plaid_core::tables::table_range(map, image, site) {
+        if let Some((start, count)) = plaid_core::tables::table_range(&index, map, image, site) {
             code.push(format!(
                 "{{{}, {}, {}}}",
                 physical(start.0)?,
@@ -1031,6 +1032,12 @@ pub fn lower_c_with_preload(
         .collect();
     let mut seen = BTreeSet::new();
     let bodies = returns::function_bodies(map, image, callees.iter());
+    // Blocks by start; `map.blocks` is ordered by start, so a body's blocks
+    // come out in map order.
+    let mut by_start: BTreeMap<_, Vec<_>> = BTreeMap::new();
+    for b in &map.blocks {
+        by_start.entry(&b.start).or_default().push(b);
+    }
     for f in callees.iter().filter(|f| seen.insert(f.pc.0)) {
         let body = &bodies[f];
         let lowerer = Lowerer {
@@ -1044,7 +1051,7 @@ pub fn lower_c_with_preload(
             "static int F_{:08x}(plaid_state *s, u64 ret) {{\n  (void)ret;\n  goto L_{:08x};\n",
             f.pc.0, f.pc.0
         );
-        for block in map.blocks.iter().filter(|b| body.contains(&b.start)) {
+        for &block in body.iter().filter_map(|b| by_start.get(b)).flatten() {
             let (start, end) = (block.start.pc.0, block.start.pc.0.wrapping_add(block.size));
             if exits.contains(&start) {
                 out += &format!("L_{start:08x}: s->pc = 0x{start:08x}u; return 2;\n");

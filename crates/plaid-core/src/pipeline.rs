@@ -2,7 +2,7 @@
 use crate::{
     GuestAddr,
     discovery::{CodeImage, Discovery, direct_cfg_bounded},
-    indirect::{analyze_indirect, verify_static},
+    indirect::{MapIndex, analyze_indirect, verify_static_in},
     program::*,
 };
 use std::collections::{BTreeMap, BTreeSet};
@@ -99,17 +99,19 @@ fn discover_bounded(
                     s
                 })
                 .collect();
-            map.indirect_sites = map
+            let index = MapIndex::new(&map);
+            let sites = map
                 .indirect_sites
                 .iter()
                 .map(|s| {
                     let mut s = s.clone();
-                    if !verify_static(&map, image, &s) {
+                    if !verify_static_in(&index, &map, image, &s) {
                         s.closed_proof = None;
                     }
                     s
                 })
                 .collect();
+            map.indirect_sites = sites;
         }
         let old_count = roots.len();
         // Proven callback arguments are functions the runtime enters (ADR-0130).

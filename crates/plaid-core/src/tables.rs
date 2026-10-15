@@ -3,7 +3,7 @@
 use crate::{
     EvidenceKind, GuestAddr,
     discovery::{CodeImage, decode},
-    indirect::{signed_word, transfer},
+    indirect::{MapIndex, signed_word, transfer},
     program::*,
     rom::sha256,
 };
@@ -28,7 +28,7 @@ fn field(word: u32, shift: u32) -> u8 {
     ((word >> shift) & 31) as u8
 }
 
-fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<TableEvidence> {
+fn pattern(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<TableEvidence> {
     if site.site.image != image.base.image || site.site.generation != image.base.generation {
         return None;
     }
@@ -55,54 +55,29 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
     let is_shift = |w: u32| {
         w >> 26 == 0 && w & 63 == 0 && (w >> 6) & 31 == 2 && field(w, 11) != 0 && field(w, 16) != 0
     };
+    let (here, generation) = (site.site.image.as_str(), site.site.generation);
     let blocks: Vec<_> = map
-        .blocks
-        .iter()
-        .filter(|b| {
-            b.start.image == site.site.image
-                && b.start.generation == site.site.generation
-                && !b.delay_slot_entry
-                && GuestRange {
-                    start: b.start.pc,
-                    size: b.size,
-                }
-                .contains(pc)
-        })
+        .containing(&site.site)
+        .into_iter()
+        .filter(|b| !b.delay_slot_entry)
         .collect();
     if blocks.len() != 1 || blocks[0].start.pc.0 > add_pc.0 {
         return None;
     }
     let block = blocks[0];
-    let bypasses_guard = |address: &CodeAddress| {
-        address.image == site.site.image
-            && address.generation == site.site.generation
-            && address.pc.0 > block.start.pc.0
-            && address.pc.0 <= pc.0
-    };
-    if map.entries.contains_key(&block.start)
-        || map.entries.keys().any(&bypasses_guard)
+    // Nothing but the one incoming edge may enter the dispatch block.
+    if map.jumped_to(&block.start)
+        || map.jumped_in(here, generation, block.start.pc.0 + 1, pc.0)
         || map
-            .direct_edges
-            .iter()
-            .any(|edge| bypasses_guard(&edge.target))
-        || map.indirect_sites.iter().any(|s| {
-            s.candidates
-                .keys()
-                .chain(s.observed.keys())
-                .any(|address| address == &block.start || bypasses_guard(address))
-        })
+            .edges_in(here, generation, block.start.pc.0 + 1, pc.0)
+            .next()
+            .is_some()
     {
         return None;
     }
-    let incoming: Vec<_> = map
-        .direct_edges
-        .iter()
-        .filter(|e| e.target == block.start)
-        .collect();
-    if incoming.len() != 1 {
+    let [edge] = map.edges_to(&block.start)[..] else {
         return None;
-    }
-    let edge = incoming[0];
+    };
     if edge.site.image != image.base.image || edge.site.generation != image.base.generation {
         return None;
     }
@@ -161,24 +136,12 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
     // branch's slot. The branch reads but must not write the flag or index.
     let same = |a: &CodeAddress| a.image == site.site.image && a.generation == site.site.generation;
     let guard_start = map
-        .blocks
-        .iter()
-        .filter(|b| {
-            same(&b.start)
-                && !b.delay_slot_entry
-                && GuestRange {
-                    start: b.start.pc,
-                    size: b.size,
-                }
-                .contains(edge.site.pc)
-        })
+        .containing(&edge.site)
+        .into_iter()
+        .filter(|b| !b.delay_slot_entry)
         .map(|b| b.start.pc)
         .max()?;
-    let into_guard: Vec<_> = map
-        .direct_edges
-        .iter()
-        .filter(|e| e.target.pc == guard_start && same(&e.target))
-        .collect();
+    let into_guard = map.edges_to(&image.address(guard_start));
     let hop = match into_guard[..] {
         [e] if same(&e.site)
             && matches!(e.kind, EdgeKind::Branch | EdgeKind::Jump)
@@ -232,16 +195,17 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
             pc > compare_pc.0 && pc <= branch.0 + 4 || pc >= guard_start.0 && pc <= edge.site.pc.0
         }
     };
-    let bypasses_compare = |address: &CodeAddress| {
-        if address.image != site.site.image || address.generation != site.site.generation {
-            return false;
-        }
-        if on_path(address.pc.0) {
-            return true;
-        }
-        edge.site.pc.0.checked_add(8) == Some(block.start.pc.0)
-            && edge.site.pc.0.checked_add(4) == Some(address.pc.0)
+    // `on_path`, plus the guard's delay slot when it falls into the dispatch.
+    let mut bypass = match hopped {
+        None => vec![(compare_pc.0 + 1, edge.site.pc.0)],
+        Some(branch) => vec![
+            (compare_pc.0 + 1, branch.0 + 4),
+            (guard_start.0, edge.site.pc.0),
+        ],
     };
+    if edge.site.pc.0.checked_add(8) == Some(block.start.pc.0) {
+        bypass.push((edge.site.pc.0 + 4, edge.site.pc.0 + 4));
+    }
     let compare = image.word(compare_pc)?;
     // Three direct entries into the interval still pass through the bound:
     // sequential flow from inside it, a branch whose delay slot is the
@@ -271,19 +235,12 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
                         .and_then(|a| image.word(GuestAddr(a)))
                         == Some(compare))
     };
-    if map.entries.keys().any(&bypasses_compare)
-        || map
-            .direct_edges
-            .iter()
-            .any(|candidate| bypasses_compare(&candidate.target) && !rebounds(candidate))
-        || map.indirect_sites.iter().any(|candidate| {
-            candidate
-                .candidates
-                .keys()
-                .chain(candidate.observed.keys())
-                .any(&bypasses_compare)
-        })
-    {
+    if bypass.iter().any(|&(lo, hi)| {
+        map.jumped_in(here, generation, lo, hi)
+            || map
+                .edges_in(here, generation, lo, hi)
+                .any(|candidate| !rebounds(candidate))
+    }) {
         return None;
     }
 
@@ -401,11 +358,11 @@ pub const PRODUCER: &str = "plaid-pointer-table-candidates/v0";
 
 /// The recognized table, its snapshot words and the evidence detail.
 fn evidence(
-    map: &ProgramMap,
+    index: &MapIndex,
     image: &CodeImage,
     site: &IndirectSite,
 ) -> Option<(TableEvidence, Option<Vec<u32>>, String)> {
-    let mut table = pattern(map, image, site)?;
+    let mut table = pattern(index, image, site)?;
     let words: Option<Vec<_>> = (0..table.count)
         .map(|n| image.word(GuestAddr(table.table_start.0 + n * 4)))
         .collect();
@@ -426,6 +383,16 @@ fn evidence(
 /// exactly the snapshot targets. Whether the table may be treated as
 /// immutable is a scope decision (ADR-0132), not part of this check.
 pub fn verify(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> bool {
+    verify_in(&MapIndex::new(map), map, image, site)
+}
+
+/// [`verify`] with the map's index built once by the caller.
+pub fn verify_in(
+    index: &MapIndex,
+    map: &ProgramMap,
+    image: &CodeImage,
+    site: &IndirectSite,
+) -> bool {
     let Some(e) = site
         .closed_proof
         .as_ref()
@@ -440,7 +407,7 @@ pub fn verify(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> bool 
     {
         return false;
     }
-    let Some((_, Some(words), detail)) = evidence(map, image, site) else {
+    let Some((_, Some(words), detail)) = evidence(index, image, site) else {
         return false;
     };
     let targets: std::collections::BTreeSet<_> =
@@ -458,21 +425,23 @@ pub fn verify(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> bool 
 
 /// Guest bytes of a verified table, as (start, entry count).
 pub fn table_range(
+    index: &MapIndex,
     map: &ProgramMap,
     image: &CodeImage,
     site: &IndirectSite,
 ) -> Option<(GuestAddr, u32)> {
-    if !verify(map, image, site) {
+    if !verify_in(index, map, image, site) {
         return None;
     }
-    let (table, _, _) = evidence(map, image, site)?;
+    let (table, _, _) = evidence(index, image, site)?;
     Some((table.table_start, table.count))
 }
 
 pub(crate) fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap, String> {
     let mut out = map.clone();
+    let index = MapIndex::new(map);
     for old in &map.indirect_sites {
-        let Some((table, words, detail)) = evidence(map, image, old) else {
+        let Some((table, words, detail)) = evidence(&index, image, old) else {
             continue;
         };
         let id = format!("table-candidates:{}", sha256(detail.as_bytes()));

@@ -2,7 +2,7 @@
 use crate::{
     discovery::{CodeImage, decode, direct_cfg_bounded},
     evidence_manifest::DiscoveryTraceManifestSet,
-    indirect::verify_constant,
+    indirect::{MapIndex, verify_constant_in},
     program::*,
     rom::{CanonicalRom, sha256},
     trace::DiscoveryTrace,
@@ -280,24 +280,43 @@ fn static_identity_blockers(
 
     // Two distinct immutable identities cannot simultaneously own the same
     // decoded guest instruction bytes without a mapping/lifetime selector.
-    let blocks: Vec<_> = map.blocks.iter().collect();
-    for (index, a) in blocks.iter().enumerate() {
-        for b in &blocks[index + 1..] {
-            if a.start.image == b.start.image && a.start.generation == b.start.generation {
-                continue;
-            }
-            let a_start = u64::from(a.start.pc.0);
-            let a_end = a_start + u64::from(a.size);
-            let b_start = u64::from(b.start.pc.0);
-            let b_end = b_start + u64::from(b.size);
-            if a_start < b_end && b_start < a_end {
-                blockers.insert(Blocker {
+    // Each identity's blocks sorted by start, with the largest size, so a block
+    // finds its overlaps in another identity by binary search.
+    let mut identities: BTreeMap<(&str, u64), (Vec<&BasicBlock>, u64)> = BTreeMap::new();
+    for b in &map.blocks {
+        let (list, max) = identities
+            .entry((b.start.image.as_str(), b.start.generation))
+            .or_default();
+        list.push(b);
+        *max = (*max).max(u64::from(b.size));
+    }
+    for (list, _) in identities.values_mut() {
+        list.sort_by_key(|b| b.start.pc.0);
+    }
+    let identities: Vec<_> = identities.into_values().collect();
+    for (index, (blocks, _)) in identities.iter().enumerate() {
+        for (others, max) in &identities[index + 1..] {
+            for a in blocks {
+                let a_start = u64::from(a.start.pc.0);
+                let a_end = a_start + u64::from(a.size);
+                let end = others.partition_point(|b| u64::from(b.start.pc.0) < a_end);
+                for b in others[..end]
+                    .iter()
+                    .rev()
+                    .take_while(|b| u64::from(b.start.pc.0) + max > a_start)
+                {
+                    let b_start = u64::from(b.start.pc.0);
+                    let b_end = b_start + u64::from(b.size);
+                    if a_start < b_end && b_start < a_end {
+                        blockers.insert(Blocker {
                     kind: "ambiguous_guest_executable_identity".into(),
                     site: None,
                     detail: "distinct decoded executable image/generation identities overlap guest address space; mapping/lifetime selection is unproven"
                         .into(),
                     evidence: a.evidence.union(&b.evidence).cloned().collect(),
                 });
+                    }
+                }
             }
         }
     }
@@ -662,16 +681,9 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             }
         }
     }
+    let index = MapIndex::new(map);
     for edge in &map.direct_edges {
-        if !map.blocks.iter().any(|b| {
-            b.start.image == edge.site.image
-                && b.start.generation == edge.site.generation
-                && GuestRange {
-                    start: b.start.pc,
-                    size: b.size,
-                }
-                .contains(edge.site.pc)
-        }) {
+        if index.containing(&edge.site).is_empty() {
             add(
                 "unmapped_direct_site",
                 Some(edge.site.clone()),
@@ -702,15 +714,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 f.evidence.clone(),
             );
         }
-        if map.blocks.iter().any(|b| {
-            b.start.image == a.image
-                && b.start.generation == a.generation
-                && GuestRange {
-                    start: b.start.pc,
-                    size: b.size,
-                }
-                .contains(a.pc)
-        }) {
+        if !index.containing(a).is_empty() {
             add(
                 "runtime_function_decoded",
                 Some(a.clone()),
@@ -770,12 +774,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         // native artifact store-protects table bytes (ADR-0132).
         let table = scope.guarded()
             && source(images, &site.site)
-                .is_some_and(|image| crate::tables::verify(map, image, site));
+                .is_some_and(|image| crate::tables::verify_in(&index, map, image, site));
         if table {
             tables.insert(site.site.clone());
         }
-        let constant =
-            source(images, &site.site).is_some_and(|image| verify_constant(map, image, site));
+        let constant = source(images, &site.site)
+            .is_some_and(|image| verify_constant_in(&index, map, image, site));
         let dispatched =
             !returns && !table && !constant && address_taken_ok && site.link_register.is_some();
         uses_address_taken |= dispatched;
@@ -853,13 +857,19 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             .filter(|r| r.image == image.base.image && r.generation == image.base.generation)
             .flat_map(|r| r.evidence.iter().cloned())
             .collect();
+        let edge_key = |e: &DirectEdge| (e.site.clone(), e.target.clone(), e.kind, e.delay_slot);
+        let block_key = |b: &BasicBlock| (b.start.clone(), b.size, b.delay_slot_entry);
+        let edges: BTreeSet<_> = map.direct_edges.iter().map(edge_key).collect();
+        let sites: BTreeSet<_> = map
+            .indirect_sites
+            .iter()
+            .map(|s| (s.site.clone(), s.link_register, s.delay_slot))
+            .collect();
+        let blocks: BTreeSet<_> = map.blocks.iter().map(block_key).collect();
+        let expected_edges: BTreeSet<_> = expected.direct_edges.iter().map(edge_key).collect();
+        let expected_blocks: BTreeSet<_> = expected.blocks.iter().map(block_key).collect();
         for edge in &expected.direct_edges {
-            if !map.direct_edges.iter().any(|e| {
-                e.site == edge.site
-                    && e.target == edge.target
-                    && e.kind == edge.kind
-                    && e.delay_slot == edge.delay_slot
-            }) {
+            if !edges.contains(&edge_key(edge)) {
                 add(
                     "missing_decoded_edge",
                     Some(edge.site.clone()),
@@ -869,11 +879,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             }
         }
         for site in &expected.indirect_sites {
-            if !map.indirect_sites.iter().any(|s| {
-                s.site == site.site
-                    && s.link_register == site.link_register
-                    && s.delay_slot == site.delay_slot
-            }) {
+            if !sites.contains(&(site.site.clone(), site.link_register, site.delay_slot)) {
                 add(
                     "missing_decoded_indirect_site",
                     Some(site.site.clone()),
@@ -883,11 +889,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             }
         }
         for b in &expected.blocks {
-            if !map.blocks.iter().any(|old| {
-                old.start == b.start
-                    && old.size == b.size
-                    && old.delay_slot_entry == b.delay_slot_entry
-            }) {
+            if !blocks.contains(&block_key(b)) {
                 add(
                     "missing_decoded_block",
                     Some(b.start.clone()),
@@ -900,11 +902,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             if b.start.image == image.base.image
                 && b.start.generation == image.base.generation
                 && image.word(b.start.pc).is_some()
-                && !expected.blocks.iter().any(|e| {
-                    e.start == b.start
-                        && e.size == b.size
-                        && e.delay_slot_entry == b.delay_slot_entry
-                })
+                && !expected_blocks.contains(&block_key(b))
             {
                 add(
                     "unexpected_block_extent",
@@ -918,12 +916,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             if edge.site.image == image.base.image
                 && edge.site.generation == image.base.generation
                 && image.word(edge.site.pc).is_some()
-                && !expected.direct_edges.iter().any(|e| {
-                    e.site == edge.site
-                        && e.target == edge.target
-                        && e.kind == edge.kind
-                        && e.delay_slot == edge.delay_slot
-                })
+                && !expected_edges.contains(&edge_key(edge))
             {
                 add(
                     "unexpected_decoded_edge",

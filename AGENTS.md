@@ -13,7 +13,7 @@ Build an automatic N64 ROM-to-native recompilation system. The final native game
 5. **Do not copy code across repositories casually.** Check the source license first. Record reuse decisions in `docs/DECISIONS.md` and preserve required notices.
 6. **No game-specific hacks disguised as general analysis.** A compatibility exception must be documented, isolated, justified, and preferably generalized before merge.
 7. **Every compiler transformation needs a verifier.** At minimum test register state, PC/control flow, memory writes, exceptions, and relevant timing/event effects.
-8. **No performance work without a baseline.** Correctness before speed.
+8. **Speed is a priority.** Remove any bottleneck in analysis, builds, tests or the native artifact as soon as it slows iteration; no separate approval or baseline milestone is needed. Record before/after timings in the receipt, and keep outputs identical (or covered by the same tests) unless the change is intended.
 
 ## Integration modes
 
