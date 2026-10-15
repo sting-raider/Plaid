@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 686" width="840" height="686" role="img" aria-label="Plaid coverage maps">
 <style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}.title{font-size:17px;fill:#1f2328}.cell{font-size:12px;fill:#fff;paint-order:stroke;stroke:#0d1117;stroke-width:2px;stroke-opacity:.45}@media (prefers-color-scheme:dark){.title{fill:#e6edf3}}</style>
-<text x="2" y="22" class="title">VR4300 instructions*: 83.7% (175/209)</text>
+<text x="2" y="22" class="title">VR4300 instructions*: 93.8% (196/209)</text>
 <text x="2" y="378" class="title">Milestones*: 30 verified, 19 partial (69)</text>
 <rect x="0.0" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.df.d (done)</title></rect>
 <rect x="33.3" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.d (done)</title></rect>
@@ -97,44 +97,44 @@
 <rect x="384.2" y="183.2" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ldr (done)</title></rect>
 <rect x="233.1" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lh (done)</title></rect>
 <rect x="270.9" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lhu (done)</title></rect>
-<rect x="308.7" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lw (done)</title></rect>
-<rect x="346.4" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwl (done)</title></rect>
-<rect x="384.2" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwr (done)</title></rect>
-<rect x="233.1" y="241.9" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwu (done)</title></rect>
-<rect x="270.9" y="241.9" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sb (done)</title></rect>
-<rect x="308.7" y="241.9" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sd (done)</title></rect>
-<rect x="346.4" y="241.9" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sdl (done)</title></rect>
-<rect x="384.2" y="241.9" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sdr (done)</title></rect>
-<rect x="233.1" y="271.3" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sh (done)</title></rect>
-<rect x="270.9" y="271.3" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sw (done)</title></rect>
-<rect x="308.7" y="271.3" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: swl (done)</title></rect>
-<rect x="346.4" y="271.3" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: swr (done)</title></rect>
-<rect x="384.2" y="271.3" width="37.8" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ll (open)</title></rect>
-<rect x="233.1" y="300.6" width="63.0" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lld (open)</title></rect>
-<rect x="296.1" y="300.6" width="63.0" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sc (open)</title></rect>
-<rect x="359.0" y="300.6" width="63.0" height="29.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: scd (open)</title></rect>
+<rect x="308.7" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: ll (done)</title></rect>
+<rect x="346.4" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lld (done)</title></rect>
+<rect x="384.2" y="212.6" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lw (done)</title></rect>
+<rect x="233.1" y="241.9" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwl (done)</title></rect>
+<rect x="270.9" y="241.9" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwr (done)</title></rect>
+<rect x="308.7" y="241.9" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: lwu (done)</title></rect>
+<rect x="346.4" y="241.9" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sb (done)</title></rect>
+<rect x="384.2" y="241.9" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sc (done)</title></rect>
+<rect x="233.1" y="271.3" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: scd (done)</title></rect>
+<rect x="270.9" y="271.3" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sd (done)</title></rect>
+<rect x="308.7" y="271.3" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sdl (done)</title></rect>
+<rect x="346.4" y="271.3" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sdr (done)</title></rect>
+<rect x="384.2" y="271.3" width="37.8" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sh (done)</title></rect>
+<rect x="233.1" y="300.6" width="63.0" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: sw (done)</title></rect>
+<rect x="296.1" y="300.6" width="63.0" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: swl (done)</title></rect>
+<rect x="359.0" y="300.6" width="63.0" height="29.4" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Load/store: swr (done)</title></rect>
 <rect x="233.1" y="183.2" width="188.9" height="146.8" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="237.1" y="196.2" class="cell">Load/store</text>
 <rect x="422.0" y="30.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: beq (done)</title></rect>
 <rect x="458.2" y="30.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: beql (done)</title></rect>
 <rect x="494.4" y="30.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgez (done)</title></rect>
-<rect x="530.5" y="30.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgezl (done)</title></rect>
-<rect x="422.0" y="63.3" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgtz (done)</title></rect>
-<rect x="458.2" y="63.3" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgtzl (done)</title></rect>
-<rect x="494.4" y="63.3" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: blez (done)</title></rect>
-<rect x="530.5" y="63.3" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: blezl (done)</title></rect>
-<rect x="422.0" y="96.7" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltz (done)</title></rect>
-<rect x="458.2" y="96.7" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltzl (done)</title></rect>
-<rect x="494.4" y="96.7" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bne (done)</title></rect>
-<rect x="530.5" y="96.7" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bnel (done)</title></rect>
-<rect x="422.0" y="130.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: j (done)</title></rect>
-<rect x="458.2" y="130.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: jal (done)</title></rect>
-<rect x="494.4" y="130.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: jalr (done)</title></rect>
-<rect x="530.5" y="130.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: jr (done)</title></rect>
-<rect x="422.0" y="163.3" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgezal (open)</title></rect>
-<rect x="458.2" y="163.3" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgezall (open)</title></rect>
-<rect x="494.4" y="163.3" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltzal (open)</title></rect>
-<rect x="530.5" y="163.3" width="36.2" height="33.3" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltzall (open)</title></rect>
+<rect x="530.5" y="30.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgezal (done)</title></rect>
+<rect x="422.0" y="63.3" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgezall (done)</title></rect>
+<rect x="458.2" y="63.3" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgezl (done)</title></rect>
+<rect x="494.4" y="63.3" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgtz (done)</title></rect>
+<rect x="530.5" y="63.3" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bgtzl (done)</title></rect>
+<rect x="422.0" y="96.7" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: blez (done)</title></rect>
+<rect x="458.2" y="96.7" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: blezl (done)</title></rect>
+<rect x="494.4" y="96.7" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltz (done)</title></rect>
+<rect x="530.5" y="96.7" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltzal (done)</title></rect>
+<rect x="422.0" y="130.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltzall (done)</title></rect>
+<rect x="458.2" y="130.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bltzl (done)</title></rect>
+<rect x="494.4" y="130.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bne (done)</title></rect>
+<rect x="530.5" y="130.0" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: bnel (done)</title></rect>
+<rect x="422.0" y="163.3" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: j (done)</title></rect>
+<rect x="458.2" y="163.3" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: jal (done)</title></rect>
+<rect x="494.4" y="163.3" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: jalr (done)</title></rect>
+<rect x="530.5" y="163.3" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Branch/jump: jr (done)</title></rect>
 <rect x="422.0" y="30.0" width="144.7" height="166.7" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="426.0" y="43.0" class="cell">Branch/jump</text>
 <rect x="422.0" y="196.7" width="36.2" height="33.3" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU arith: abs.d (done)</title></rect>
@@ -173,15 +173,15 @@
 <rect x="566.7" y="30.0" width="136.7" height="132.4" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="570.7" y="43.0" class="cell">64-bit ALU</text>
 <rect x="703.3" y="30.0" width="34.2" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: break (done)</title></rect>
-<rect x="737.5" y="30.0" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: cache (open)</title></rect>
-<rect x="771.7" y="30.0" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: cfc0 (open)</title></rect>
-<rect x="805.8" y="30.0" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: ctc0 (open)</title></rect>
-<rect x="703.3" y="63.1" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: dmfc0 (open)</title></rect>
-<rect x="737.5" y="63.1" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: dmtc0 (open)</title></rect>
-<rect x="771.7" y="63.1" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: eret (open)</title></rect>
-<rect x="805.8" y="63.1" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: mfc0 (open)</title></rect>
-<rect x="703.3" y="96.2" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: mtc0 (open)</title></rect>
-<rect x="737.5" y="96.2" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: sync (open)</title></rect>
+<rect x="737.5" y="30.0" width="34.2" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: sync (done)</title></rect>
+<rect x="771.7" y="30.0" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: cache (open)</title></rect>
+<rect x="805.8" y="30.0" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: cfc0 (open)</title></rect>
+<rect x="703.3" y="63.1" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: ctc0 (open)</title></rect>
+<rect x="737.5" y="63.1" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: dmfc0 (open)</title></rect>
+<rect x="771.7" y="63.1" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: dmtc0 (open)</title></rect>
+<rect x="805.8" y="63.1" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: eret (open)</title></rect>
+<rect x="703.3" y="96.2" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: mfc0 (open)</title></rect>
+<rect x="737.5" y="96.2" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: mtc0 (open)</title></rect>
 <rect x="771.7" y="96.2" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: syscall (open)</title></rect>
 <rect x="805.8" y="96.2" width="34.2" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: tlbp (open)</title></rect>
 <rect x="703.3" y="129.3" width="45.6" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: tlbr (open)</title></rect>
@@ -219,18 +219,18 @@
 <rect x="710.5" y="302.1" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Mul/div: multu (done)</title></rect>
 <rect x="667.4" y="162.4" width="86.3" height="167.6" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="671.4" y="175.4" class="cell">Mul/div</text>
-<rect x="753.7" y="162.4" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: teq (open)</title></rect>
-<rect x="796.8" y="162.4" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: teqi (open)</title></rect>
-<rect x="753.7" y="190.3" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tge (open)</title></rect>
-<rect x="796.8" y="190.3" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tgei (open)</title></rect>
-<rect x="753.7" y="218.2" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tgeiu (open)</title></rect>
-<rect x="796.8" y="218.2" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tgeu (open)</title></rect>
-<rect x="753.7" y="246.2" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tlt (open)</title></rect>
-<rect x="796.8" y="246.2" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tlti (open)</title></rect>
-<rect x="753.7" y="274.1" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tltiu (open)</title></rect>
-<rect x="796.8" y="274.1" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tltu (open)</title></rect>
-<rect x="753.7" y="302.1" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tne (open)</title></rect>
-<rect x="796.8" y="302.1" width="43.2" height="27.9" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tnei (open)</title></rect>
+<rect x="753.7" y="162.4" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: teq (done)</title></rect>
+<rect x="796.8" y="162.4" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: teqi (done)</title></rect>
+<rect x="753.7" y="190.3" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tge (done)</title></rect>
+<rect x="796.8" y="190.3" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tgei (done)</title></rect>
+<rect x="753.7" y="218.2" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tgeiu (done)</title></rect>
+<rect x="796.8" y="218.2" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tgeu (done)</title></rect>
+<rect x="753.7" y="246.2" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tlt (done)</title></rect>
+<rect x="796.8" y="246.2" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tlti (done)</title></rect>
+<rect x="753.7" y="274.1" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tltiu (done)</title></rect>
+<rect x="796.8" y="274.1" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tltu (done)</title></rect>
+<rect x="753.7" y="302.1" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tne (done)</title></rect>
+<rect x="796.8" y="302.1" width="43.2" height="27.9" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Trap: tnei (done)</title></rect>
 <rect x="753.7" y="162.4" width="86.3" height="167.6" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="757.7" y="175.4" class="cell">Trap</text>
 <rect x="0.0" y="386.0" width="63.9" height="50.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Executable Provenance: Bounded PI / SP DMA / CPU consumption chain (done)</title></rect>

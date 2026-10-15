@@ -381,7 +381,8 @@ fn allowed_static_effect(word: u32, pc: crate::GuestAddr, guarded_ram: bool) -> 
             || is_cop1_compare(word)
             || is_cop1_branch(word)
             || is_cop1_arith(word)
-            || is_break(word))
+            || is_break(word)
+            || crate::discovery::is_conditional_trap(word))
     {
         return true;
     }
@@ -401,7 +402,8 @@ fn allowed_static_effect(word: u32, pc: crate::GuestAddr, guarded_ram: bool) -> 
                 word & 63,
                 4 | 6 | 7 | 16..=20 | 22..=32 | 34 | 42..=44 | 46 | 47 | 56 | 58..=60 | 62 | 63
             ),
-            8 | 10 | 11 | 24 | 26 | 27 | 32..=39 | 40..=46 | 55 | 63 => true,
+            // LL LLD SC SCD (ADR-0145) are guarded memory accesses too.
+            8 | 10 | 11 | 24 | 26 | 27 | 32..=39 | 40..=46 | 48 | 52 | 55 | 56 | 60 | 63 => true,
             _ => false,
         }
     {
@@ -409,7 +411,8 @@ fn allowed_static_effect(word: u32, pc: crate::GuestAddr, guarded_ram: bool) -> 
     }
     match word >> 26 {
         9 | 12 | 13 | 14 | 15 | 25 => true,
-        0 => matches!(word & 63, 0 | 2 | 3 | 33 | 35 | 36 | 37 | 38 | 39 | 45),
+        // SYNC (15) is a no-op on the VR4300.
+        0 => matches!(word & 63, 0 | 2 | 3 | 15 | 33 | 35 | 36 | 37 | 38 | 39 | 45),
         _ => false,
     }
 }
@@ -439,16 +442,19 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         .filter(|b| !b.delay_slot_entry)
         .map(|b| b.start.clone())
         .collect();
-    // A reachable BREAK aborts natively in the guarded scope (ADR-0138).
-    let checked_break = |u: &Unresolved| {
+    // A reachable BREAK or conditional trap aborts natively in the guarded
+    // scope (ADR-0138/0145).
+    let checked_word = |u: &Unresolved, accept: fn(u32) -> bool| {
         scope == Scope::DeclaredStaticImagesGuardedRam
             && u.kind == "exception_or_unsupported_instruction"
             && u.site.as_ref().is_some_and(|a| {
                 source(images, a)
                     .and_then(|image| image.word(a.pc))
-                    .is_some_and(is_break)
+                    .is_some_and(accept)
             })
     };
+    let checked_trap = |u: &Unresolved| checked_word(u, crate::discovery::is_conditional_trap);
+    let checked_break = |u: &Unresolved| checked_word(u, is_break) || checked_trap(u);
     if !map.fetch_observations.is_empty() {
         add(
             "fetch_execution_identity_unknown",
@@ -912,14 +918,15 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             }
         }
     }
-    let mut uses_break = false;
+    let (mut uses_break, mut uses_trap) = (false, false);
     for u in &map.unresolved {
         let table_obligation = matches!(
             u.kind.as_str(),
             "pointer_table_immutability_unproven" | "pointer_table_target_identity_unproven"
         ) && u.site.as_ref().is_some_and(|a| tables.contains(a));
         let checked_break = checked_break(u);
-        uses_break |= checked_break;
+        uses_trap |= checked_trap(u);
+        uses_break |= checked_break && !checked_trap(u);
         if table_obligation
             || checked_break
             || (u.kind == "unmapped_target" && u.site.as_ref().is_some_and(|a| starts.contains(a)))
@@ -1131,6 +1138,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             "Overflow-trapping ADD/ADDI/SUB/DADD/DADDI/DSUB never overflow; a native artifact checks each one and aborts on overflow, with no fallback execution."
                 .into(),
         );
+        if uses_trap {
+            assumptions.push(
+                "Conditional traps (TEQ, TGE, ...) are never taken (their Trap exception handler is not modeled); a native artifact checks each one and aborts if taken, with no fallback execution."
+                    .into(),
+            );
+        }
         if uses_break {
             assumptions.push(
                 "BREAK is never executed (its Breakpoint exception handler is not modeled); a native artifact aborts if one is reached, with no fallback execution."

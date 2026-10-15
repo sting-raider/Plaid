@@ -80,6 +80,16 @@ pub fn decode(word: u32, pc: GuestAddr) -> Instruction {
     Instruction::new(word, pc.0, InstrCategory::CPU)
 }
 
+/// TGE TGEU TLT TLTU TEQ TNE and their immediate forms (ADR-0145). Their
+/// not-taken path falls through, so discovery continues past them.
+pub fn is_conditional_trap(word: u32) -> bool {
+    match word >> 26 {
+        0 => matches!(word & 63, 48..=52 | 54),
+        1 => matches!((word >> 16) & 31, 8..=12 | 14),
+        _ => false,
+    }
+}
+
 fn unsupported(i: &Instruction) -> bool {
     !i.is_valid() || i.is_trap() || matches!(i.opcode_name(), "syscall" | "break" | "eret")
 }
@@ -175,17 +185,19 @@ pub fn direct_cfg_bounded(
         words.insert(site.clone(), word);
         let i = decode(word, pc);
         if unsupported(&i) {
-            terminal.insert(pc, 4);
             map.unresolved.insert(Unresolved {
                 kind: "exception_or_unsupported_instruction".into(),
-                site: Some(site),
+                site: Some(site.clone()),
                 detail: format!(
                     "instruction {word:08x} ({}) requires additional execution model",
                     i.opcode_name()
                 ),
                 evidence: evidence.clone(),
             });
-            continue;
+            if !is_conditional_trap(word) {
+                terminal.insert(pc, 4);
+                continue;
+            }
         }
         if i.has_delay_slot() {
             let links = i.does_link() && !(i.opcode_name() == "jalr" && i.get_rd() == 0);

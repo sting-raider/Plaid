@@ -41,10 +41,11 @@ window) on eleven synthetic programs (also comparing all 32 FPRs):
 - Memory: `LB LBU LH LHU LW LWU SB SH SW` through KSEG0 and KSEG1, and the unaligned `LWL LWR LDL LDR SWL SWR SDL SDR` (ADR-0134)
 - COP1 data moves (FR = 1): `MFC1 DMFC1 MTC1 DMTC1 LWC1 LDC1 SWC1 SDC1`; all 32 `C.cond.S/D` compares and `BC1F BC1T BC1FL BC1TL`, with NaN operands faulting 7 (ADR-0135)
 - COP1 arithmetic (ADR-0139): `ADD SUB MUL DIV SQRT ABS MOV NEG` in `.S` and `.D`, `CVT.S` from D/W/L, `CVT.D` from S/W/L, `CVT/ROUND/TRUNC/CEIL/FLOOR` to W and L from S/D (ADR-0143), `CFC1 CTC1`, with FCSR rounding modes, cause and sticky flags and FS flushing as pinned ares
-- Control: `BEQ BNE BLEZ BGTZ BLTZ BGEZ J JAL JR JALR` and the branch-likely forms, with delay slots; indirect jumps only over proven targets, including bounded jump tables in GCC's scheduled shapes (ADR-0132/0140); nested, recursive, pointer and tail calls with checked returns
+- System (ADR-0145): `LL LLD SC SCD` with an exact LLbit, `SYNC`, and the twelve conditional traps checked as never taken
+- Control: `BEQ BNE BLEZ BGTZ BLTZ BGEZ J JAL JR JALR BLTZAL BGEZAL` and the branch-likely forms, with delay slots; indirect jumps only over proven targets, including bounded jump tables in GCC's scheduled shapes (ADR-0132/0140); nested, recursive, pointer and tail calls with checked returns
 
 Anything else rejects the whole program. A store into executable bytes (fault
 2) or cached and uncached access to the same 16-byte line (fault 4, because the
 write-back D-cache makes the result state-dependent) aborts instead of
 executing, as does a return whose `$ra` is not its call's continuation (fault 5) or an
-overflowing trapping add (fault 6) a COP1 operation outside the modeled subset: a NaN or subnormal operand, an out-of-range conversion or an enabled FPU exception (fault 7), entry into a declared load whose bytes are not in RAM (fault 8), or a reached `BREAK` (fault 9).
+overflowing trapping add (fault 6) a COP1 operation outside the modeled subset: a NaN or subnormal operand, an out-of-range conversion or an enabled FPU exception (fault 7), entry into a declared load whose bytes are not in RAM (fault 8), a reached `BREAK` (fault 9), or a taken conditional trap (fault 10).
