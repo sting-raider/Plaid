@@ -92,12 +92,12 @@
         {"name": "Interrupt/timing/event runtime", "state": "verified"},
         {"name": "Controller input", "state": "partial"},
         {"name": "Save devices", "state": "partial"},
-        {"name": "Audio path", "state": "partial"},
+        {"name": "Audio path", "state": "verified"},
         {"name": "RSP runtime/native path", "state": "verified"},
         {"name": "Renderer integration", "state": "verified"},
         {"name": "Native launch/cache packaging", "state": "open"}
       ],
-      "remaining": "Live audio, other saves and controllers, packaging, non-Windows hosts."
+      "remaining": "Other saves and controllers, packaging, non-Windows hosts."
     },
     {
       "name": "Compatibility",
@@ -143,5 +143,5 @@
       "source": "docs/STATUS.md"
     }
   ],
-  "frontier": "retire SM64’s declared assumptions; live audio (ADR-0170)"
+  "frontier": "retire SM64’s declared assumptions (milestone 5)"
 }

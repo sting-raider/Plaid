@@ -301,3 +301,9 @@ sm64-rsp --rom R --stop-at none --seconds 30 --rsp-capture 600 cap600/
 | fourth run | **20 s, 1190 audio tasks, 592 graphics tasks, no fault** |
 | `--wav` | 30 s, 16-bit stereo at 32006 Hz, intro and title audio; listened to and confirmed |
 | spike098 | tasks 1 (6478 instructions) and 600 (94150 instructions, 2972 RDRAM bytes) match ares 9408cb43 exactly |
+
+## Update: AI timing and live audio (ADR-0170)
+
+| Step | Result |
+| --- | --- |
+| 30 s run, live SDL audio and `--wav` | no fault, 1768 audio tasks, 1783 VI; 29.5 s of audio (31.3 s before, when `osAiGetLength` read 0) |

@@ -35,6 +35,9 @@ std::condition_variable wake;
 std::function<void()> job;
 bool idle = true, ready = false, opened = false, closed = false;
 std::atomic<uint32_t> input{0};  // buttons << 16 | stick x << 8 | stick y
+SDL_AudioDeviceID audio = 0;
+uint32_t audio_rate = 0;
+std::vector<int16_t> pcm;
 
 // Runs f on the renderer thread and waits for it.
 void run(std::function<void()> f) {
@@ -155,6 +158,31 @@ __declspec(dllexport) void plaid_gfx_screen(const uint32_t *regs) {
 
 // Controller 1 from the window's keyboard: buttons << 16 | stick x << 8 | stick y.
 __declspec(dllexport) uint32_t plaid_gfx_input(void) { return input; }
+
+// Plays one AI buffer (ADR-0170): big-endian 16-bit stereo samples at rate Hz.
+// Without an audio device the game runs silent.
+__declspec(dllexport) void plaid_audio_play(const uint8_t *samples, uint32_t bytes, uint32_t rate) {
+    if (rate != audio_rate) {
+        audio_rate = rate;
+        run([=] {  // SDL is initialized on the renderer thread
+            if (audio) SDL_CloseAudioDevice(audio);
+            SDL_AudioSpec want{}, have{};
+            want.freq = int(rate);
+            want.format = AUDIO_S16SYS;
+            want.channels = 2;
+            want.samples = 512;
+            audio = SDL_InitSubSystem(SDL_INIT_AUDIO) == 0 ? SDL_OpenAudioDevice(nullptr, 0, &want, &have, 0) : 0;
+            if (audio) SDL_PauseAudioDevice(audio, 0);
+        });
+    }
+    if (!audio) return;
+    pcm.resize(bytes / 2);
+    for (uint32_t i = 0; i < bytes / 2; i++) pcm[i] = int16_t(samples[2 * i] << 8 | samples[2 * i + 1]);
+    // shortcut: the AI model and the device run on different clocks; past
+    // 200 ms of queued audio drop it rather than resample.
+    if (SDL_GetQueuedAudioSize(audio) > rate * 4 / 5) SDL_ClearQueuedAudio(audio);
+    SDL_QueueAudio(audio, pcm.data(), bytes);
+}
 
 // 1 once the user has closed the window.
 __declspec(dllexport) int plaid_gfx_closed(void) {

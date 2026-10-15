@@ -34,16 +34,16 @@
 <circle cx="770.9" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-14: Lowered to native C 0</title></circle>
 <circle cx="890.0" cy="97.1" r="3.5" fill="#4f9cf7"><title>2026-10-15: Lowered to native C 196</title></circle>
 <path d="M294.3,276.3 L413.4,276.3 L532.6,276.3 L651.7,276.3 L770.9,264.8 L890.0,254.6" fill="none" stroke="#3f8f74" stroke-width="1.5" stroke-dasharray="5 4"/>
-<path d="M294.3,328.8 L413.4,327.5 L532.6,327.5 L651.7,327.5 L770.9,316.0 L890.0,284.0 L890.0,348.0 L294.3,348.0 Z" fill="#58d5ab" fill-opacity="0.12"/>
-<path d="M294.3,328.8 L413.4,327.5 L532.6,327.5 L651.7,327.5 L770.9,316.0 L890.0,284.0" fill="none" stroke="#58d5ab" stroke-width="2.5"/>
+<path d="M294.3,328.8 L413.4,327.5 L532.6,327.5 L651.7,327.5 L770.9,316.0 L890.0,282.7 L890.0,348.0 L294.3,348.0 Z" fill="#58d5ab" fill-opacity="0.12"/>
+<path d="M294.3,328.8 L413.4,327.5 L532.6,327.5 L651.7,327.5 L770.9,316.0 L890.0,282.7" fill="none" stroke="#58d5ab" stroke-width="2.5"/>
 <circle cx="294.3" cy="328.8" r="3.5" fill="#58d5ab"><title>2026-10-10: Milestones verified 15</title></circle>
 <circle cx="413.4" cy="327.5" r="3.5" fill="#58d5ab"><title>2026-10-11: Milestones verified 16</title></circle>
 <circle cx="532.6" cy="327.5" r="3.5" fill="#58d5ab"><title>2026-10-12: Milestones verified 16</title></circle>
 <circle cx="651.7" cy="327.5" r="3.5" fill="#58d5ab"><title>2026-10-13: Milestones verified 16</title></circle>
 <circle cx="770.9" cy="316.0" r="3.5" fill="#58d5ab"><title>2026-10-14: Milestones verified 25</title></circle>
-<circle cx="890.0" cy="284.0" r="3.5" fill="#58d5ab"><title>2026-10-15: Milestones verified 50</title></circle>
+<circle cx="890.0" cy="282.7" r="3.5" fill="#58d5ab"><title>2026-10-15: Milestones verified 51</title></circle>
 <text x="900" y="84.5" fill="#8b9bb0" font-size="13" font-weight="600" font-family="Segoe UI,Arial,sans-serif">VR4300 forms decoded 209</text>
 <text x="900" y="101.1" fill="#4f9cf7" font-size="13" font-weight="600" font-family="Segoe UI,Arial,sans-serif">Lowered to native C 196</text>
 <text x="900" y="258.6" fill="#3f8f74" font-size="13" font-weight="600" font-family="Segoe UI,Arial,sans-serif">Milestones declared 73</text>
-<text x="900" y="288.0" fill="#58d5ab" font-size="13" font-weight="600" font-family="Segoe UI,Arial,sans-serif">Milestones verified 50</text>
+<text x="900" y="286.7" fill="#58d5ab" font-size="13" font-weight="600" font-family="Segoe UI,Arial,sans-serif">Milestones verified 51</text>
 </svg>

@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 1042" width="840" height="1042" role="img" aria-label="Plaid coverage maps">
 <style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}.title{font-size:17px;fill:#1f2328}.cell{font-size:12px;fill:#fff;paint-order:stroke;stroke:#0d1117;stroke-width:2px;stroke-opacity:.45}@media (prefers-color-scheme:dark){.title{fill:#e6edf3}}</style>
 <text x="2" y="22" class="title">VR4300 instructions*: 93.8% (196/209)</text>
-<text x="2" y="378" class="title">Milestones*: 50 verified, 18 partial (73)</text>
+<text x="2" y="378" class="title">Milestones*: 51 verified, 17 partial (73)</text>
 <rect x="0.0" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.df.d (done)</title></rect>
 <rect x="33.3" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.d (done)</title></rect>
 <rect x="66.6" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.s (done)</title></rect>
@@ -307,12 +307,12 @@
 <rect x="615.6" y="638.4" width="120.8" height="47.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: ARM64 host build via C (open)</title></rect>
 <rect x="494.8" y="543.1" width="241.6" height="142.9" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="498.8" y="556.1" class="cell">Native AOT Compiler</text>
-<rect x="736.4" y="386.0" width="51.8" height="60.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Declared runtime-function boundary (ADR-0129) (done)</title></rect>
-<rect x="788.2" y="386.0" width="51.8" height="60.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Guest memory/MMIO runtime (done)</title></rect>
-<rect x="736.4" y="446.0" width="51.8" height="60.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Interrupt/timing/event runtime (done)</title></rect>
-<rect x="788.2" y="446.0" width="51.8" height="60.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: RSP runtime/native path (done)</title></rect>
-<rect x="736.4" y="506.0" width="51.8" height="60.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Renderer integration (done)</title></rect>
-<rect x="788.2" y="506.0" width="51.8" height="60.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Audio path (partial)</title></rect>
+<rect x="736.4" y="386.0" width="51.8" height="60.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Audio path (done)</title></rect>
+<rect x="788.2" y="386.0" width="51.8" height="60.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Declared runtime-function boundary (ADR-0129) (done)</title></rect>
+<rect x="736.4" y="446.0" width="51.8" height="60.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Guest memory/MMIO runtime (done)</title></rect>
+<rect x="788.2" y="446.0" width="51.8" height="60.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Interrupt/timing/event runtime (done)</title></rect>
+<rect x="736.4" y="506.0" width="51.8" height="60.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: RSP runtime/native path (done)</title></rect>
+<rect x="788.2" y="506.0" width="51.8" height="60.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Renderer integration (done)</title></rect>
 <rect x="736.4" y="566.0" width="51.8" height="60.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Controller input (partial)</title></rect>
 <rect x="788.2" y="566.0" width="51.8" height="60.0" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Save devices (partial)</title></rect>
 <rect x="736.4" y="626.0" width="103.6" height="60.0" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Native launch/cache packaging (open)</title></rect>

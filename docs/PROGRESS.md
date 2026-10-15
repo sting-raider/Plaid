@@ -113,12 +113,12 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Interrupt/timing/event runtime | ✅ verified |
 | Controller input | 🟨 partial |
 | Save devices | 🟨 partial |
-| Audio path | 🟨 partial |
+| Audio path | ✅ verified |
 | RSP runtime/native path | ✅ verified |
 | Renderer integration | ✅ verified |
 | Native launch/cache packaging | ⬜ open |
 
-**Remaining:** Live audio, other saves and controllers, packaging, non-Windows hosts.
+**Remaining:** Other saves and controllers, packaging, non-Windows hosts.
 
 ## Compatibility
 

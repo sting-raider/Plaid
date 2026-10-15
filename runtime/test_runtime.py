@@ -137,6 +137,9 @@ void plaid_gfx_screen(const uint32_t *r) {
 }
 int plaid_gfx_closed(void) { return 0; }
 uint32_t plaid_gfx_input(void) { return 0x10F0; } /* stick 16, -16 */
+void plaid_audio_play(const uint8_t *s, uint32_t bytes, uint32_t rate) {
+  printf("{\"stub_audio\":[%u,%u,%u]}\n", bytes, rate, (uint32_t)s[0] << 24 | s[1] << 16 | s[2] << 8 | s[3]);
+}
 '''
 
 
@@ -249,6 +252,69 @@ def rsp_tasks(exe, cc):
           'task, its DMA reached RDRAM and the SP event followed')
 
 
+# ---- AI DMA (ADR-0170) ----
+AIQ, AIBUF, VAL = 0x80004400, 0x80004420, 0x80004440
+B1, B2, B3 = 0x80020000, 0x80021000, 0x80022000
+
+
+def log_v0():
+    return [*li(A.t4, VAL), A.sw(A.v0, 0, A.t4), *log_word(VAL)]
+
+
+AI_RUNTIME = ['osCreateMesgQueue', 'osSetEventMesg', 'osRecvMesg', 'osCreateThread', 'osStartThread', 'osGetCount',
+              'osAiSetFrequency', 'osAiSetNextBuffer', 'osAiGetLength', 'osAiGetStatus']
+AI_PROGRAM = [
+    *li(A.sp, 0x80007F00),
+    *poke(B2, 0x11223344),
+    *call('osCreateThread', T1, 1, 'aithr', 0, 0x8000FF00, 10),
+    *call('osStartThread', T1),
+    *A.DONE,
+    'aithr',
+    *call('osCreateMesgQueue', AIQ, AIBUF, 4),
+    *call('osSetEventMesg', 6, AIQ, 0x66),  # OS_EVENT_AI
+    *call('osAiSetFrequency', 32000), *log_v0(),
+    *call('osAiSetNextBuffer', B1, 0x1000), *log_v0(),
+    *call('osAiSetNextBuffer', B2, 0x1000), *log_v0(),
+    *call('osAiSetNextBuffer', B3, 0x1000), *log_v0(),  # the FIFO is full
+    *call('osAiGetStatus'), *log_v0(),
+    *call('osRecvMesg', AIQ, SLOT, 1), *log_word(SLOT),  # B1 started
+    *call('osGetCount'), *log_v0(),
+    *call('osRecvMesg', AIQ, SLOT, 1), *log_word(SLOT),  # B1 played out, B2 started
+    *call('osGetCount'), *log_v0(),
+    *call('osAiGetStatus'), *log_v0(),
+    'drain', *call('osAiGetLength'), A.bne(A.v0, A.zero, 'drain'), A.nop,
+    *call('osAiGetStatus'), *log_v0(),
+    *A.DONE,
+]
+for name in AI_RUNTIME:
+    AI_PROGRAM += [name, A.jr(A.ra), A.nop]
+
+
+def audio_dma(exe, cc):
+    """The AI FIFO drains at the DAC rate and raises the AI event as each
+    buffer starts; samples reach the WAV file and the host audio hook."""
+    (OUT / 'stub.c').write_text(GFX_STUB)
+    rom, wav = OUT / 'stub.z64', OUT / 'ai.wav'
+    native = build(exe, cc, 'ai', AI_PROGRAM, AI_RUNTIME, ['-DPLAID_RT64', str(OUT / 'stub.c')])
+    run = subprocess.run([str(native), '--rom', str(rom), '--stop-at', 'none', '--seconds', '5', '--wav', str(wav),
+                          '--dump', hex(LOG), '11'], capture_output=True, text=True, timeout=30)
+    lines = {k: v for line in run.stdout.splitlines() if line.startswith('{') for k, v in json.loads(line).items()}
+    assert run.returncode == 0 and lines['stop'] == 'exit', (run.returncode, run.stdout, run.stderr)
+    w = lines['words']
+    rate = 48681812 // round(48681812 / 32000)
+    assert w[:6] == [rate, 0, 0, 0xFFFFFFFF, 0xC3100001, 0x66], [hex(x) for x in w]
+    assert w[7] == 0x66 and w[9:] == [0x43100000, 0x03100000], [hex(x) for x in w]
+    # one buffer of 1024 samples at the DAC rate, in COUNT ticks (46.875 MHz)
+    ticks, want = (w[8] - w[6]) & 0xFFFFFFFF, 1024 * 46875000 // rate
+    assert want * 0.8 < ticks < want * 1.5, (ticks, want)
+    data = wav.read_bytes()
+    assert len(data) == 44 + 0x2000 and data[44 + 0x1000:44 + 0x1004] == bytes([0x22, 0x11, 0x44, 0x33])
+    assert int.from_bytes(data[24:28], 'little') == rate
+    assert lines['stub_audio'] == [0x1000, rate, 0x11223344], lines['stub_audio']
+    print('AI DMA: a two-buffer FIFO refuses a third buffer, drains at the DAC rate', f'({ticks} of {want} ticks),',
+          'raises the AI event per buffer start, and feeds the WAV file and host audio')
+
+
 def build(exe, cc, name, program, runtime, extra=()):
     (OUT / f'{name}.bin').write_bytes(A.assemble(program))
     labels = A.label_pcs(program)
@@ -327,6 +393,7 @@ def main():
     graphics_bridge(exe, cc)
     save_file(exe, cc)
     rsp_tasks(exe, cc)
+    audio_dma(exe, cc)
 
 
 if __name__ == '__main__':

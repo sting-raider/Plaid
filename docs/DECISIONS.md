@@ -4522,3 +4522,55 @@ Captures, snapshots, lowered C and the WAV are game-derived and stay local.
 
 Next: ADR-0170 plays the samples on the host in real time, with AI length
 timing.
+
+## ADR-0170: AI DMA is timed, and audio plays on the host
+
+Context: ADR-0169 runs SM64's audio tasks natively, but `osAiGetLength`
+returned 0 and nothing played. Games pace audio from the AI: SM64 sizes
+each frame's buffer from the samples still queued (`osAiGetLength`), and
+other games wait for the AI event or test `osAiGetStatus`. With a length of
+0 SM64 overproduced by about 4%, so live output would drift and build up
+latency.
+
+Decision: the runtime models the AI as pinned ares does (`ai/ai.cpp`,
+`ai/io.cpp`):
+- **FIFO.** A two-entry DMA FIFO of buffer lengths, 18 bits rounded down to
+  8 bytes. `osAiSetNextBuffer` returns -1 while both entries are taken,
+  like libultra's busy check.
+- **Draining.** Once `osAiSetFrequency` turns DMA on, the head drains one
+  4-byte sample per DAC period on the runtime's host clock, at the rate
+  libultra derives from the NTSC VI clock. When it empties, the next buffer
+  starts at that instant.
+- **AI event.** Raised when a buffer enters an empty FIFO and when the next
+  buffer starts, as the AI interrupt is. The event pump checks every
+  millisecond.
+- **Registers.** `osAiGetLength` reads the bytes left in the playing
+  buffer. `osAiGetStatus` reads full (bits 31 and 0), busy (30), DMA on
+  (25) and the constant bits 24 and 20.
+- **Playback.** With RT64, each buffer is also handed to the shim
+  (`plaid_audio_play`), which plays it through SDL at the AI rate. The
+  model and the device run on different clocks; if more than 200 ms queue
+  up, the queue is dropped rather than resampled. Without an audio device,
+  the game runs silent.
+
+Verification: `runtime/test_runtime.py` runs a guest program against a
+host-audio stub:
+- three buffers are offered and the third is refused;
+- the status bits are checked full, busy and idle;
+- the second AI event arrives one buffer of DAC time after the first (the
+  measured COUNT ticks are within 0.8 to 1.5 of 1024 samples);
+- the FIFO drains to length 0;
+- the WAV file and the host hook get the right samples.
+
+Result: SM64, relinked, runs 30 seconds with no fault: 1768 audio tasks,
+with sound playing through SDL. Its audio now keeps pace with the run:
+
+| `osAiGetLength` | WAV audio from a 30 s run |
+| --- | --- |
+| always 0 (before) | 31.3 s, about 4% too much |
+| ADR-0170 model | 29.5 s; the AI starts about 0.5 s in, after boot |
+
+The user played it past the title with live audio and confirmed it works.
+
+Nothing here is specific to SM64: it is the AI register model, and the
+playback takes whatever buffers the game sends.
