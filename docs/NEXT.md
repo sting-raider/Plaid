@@ -14,7 +14,7 @@ effect in its receipt.
 | # | Milestone | Done when | State |
 | --- | --- | --- | --- |
 | 1 | Synthetic ROM -> C -> native | spike096 programs, including nested/recursive calls, match pinned ares exactly; fail-closed cases fault | **done** (spike096, ADR-0127) |
-| 2 | SM64 discovery recall | >= 99% of real functions found, scored locally against a decomp symbol map used only as an oracle | open: 11.4% (435/3832, ADR-0150) |
+| 2 | SM64 discovery recall | >= 99% of real functions found, scored locally against a decomp symbol map used only as an oracle | open: 11.5% (442/3832, ADR-0151) |
 | 3 | SM64 closed under declared assumptions | solver CLOSED in an explicit assumption scope; every assumption listed and checked | open |
 | 4 | SM64 boots natively to title | lowered code linked with N64ModernRuntime + RT64; no interpreter linked | open |
 | 5 | Retire assumptions; OoT | assumptions discharged one by one; OoT via Yaz0 (PR #28) and relocation (PR #31) | open |
@@ -74,10 +74,13 @@ Next concrete steps, in order:
    Done: disjoint declared loads (ADR-0150). SM64 with its engine and
    goddard segments: 5337 blocks and 12 guarded blockers, all of them
    function-pointer calls loaded from memory. Recall is 11.4%.
+   Done: IDO's slot-bound jump tables (ADR-0151); SM64 is at 5580 blocks
+   and 10 guarded blockers.
    **Next for SM64:**
-   - Function-pointer tables in immutable data, such as the level command
-     table.
-   - The audio dispatches.
+   - Data-referenced function pointers: geo, behavior and level-script
+     callbacks are about 983 of the 3832 reference functions.
+   - The level command table.
+   - The last audio dispatch.
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user
