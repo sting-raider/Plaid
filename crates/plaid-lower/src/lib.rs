@@ -17,11 +17,12 @@ use std::collections::{BTreeMap, BTreeSet};
 pub mod coverage;
 
 const PRELUDE: &str = r#"#include <stdint.h>
+#include <string.h>
 typedef uint8_t u8; typedef uint32_t u32; typedef int32_t s32;
 typedef uint64_t u64; typedef int64_t s64;
 #define PLAID_RAM_SIZE 0x800000u
 typedef struct {
-  u64 r[32]; u64 hi, lo; u64 f[32]; u32 pc; u32 fault; u32 fault_pc;
+  u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 pc; u32 fault; u32 fault_pc;
   u8 ram[PLAID_RAM_SIZE];
   u8 line_segment[PLAID_RAM_SIZE / 16]; /* 0 untouched, 1 KSEG0, 2 KSEG1 */
 } plaid_state;
@@ -33,7 +34,8 @@ typedef struct { u32 start, end; } plaid_range;
    depends on write-back D-cache state this coherent model does not track;
    5: a return whose $ra is not the continuation of the call that entered
    its function (the checked call/return assumption);
-   6: an overflow-trapping add/subtract that would raise an exception. */
+   6: an overflow-trapping add/subtract that would raise an exception;
+   7: a COP1 compare with a NaN operand (FCSR enables are not modeled). */
 static inline int plaid_fault(plaid_state *s, u32 pc, u32 code) {
   s->fault = code; s->fault_pc = pc; return 1;
 }
@@ -119,6 +121,7 @@ fn is_control(word: u32) -> bool {
     match word >> 26 {
         0 => matches!(word & 63, 8 | 9),
         1..=7 | 20..=23 => true,
+        17 => (word >> 21) & 31 == 8,
         _ => false,
     }
 }
@@ -244,6 +247,20 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
                     ));
                 }
             }
+        }
+        // C.cond.S/D (FR = 1): the condition bit is (lt && a < b) || (eq && a == b)
+        // for ordered operands, as pinned ares; a NaN operand faults 7 (ADR-0135).
+        (17, f) if matches!(rs, 16 | 17) && f >= 48 && word & 0x7c0 == 0 => {
+            let (ty, bits, lane) = if rs == 16 {
+                ("float", "u32", "(u32)")
+            } else {
+                ("double", "u64", "")
+            };
+            format!(
+                "{{ {ty} x, y; {bits} xb = {lane}s->f[{rd}], yb = {lane}s->f[{rt}]; memcpy(&x, &xb, sizeof x); memcpy(&y, &yb, sizeof y); if (x != x || y != y) return plaid_fault(s, 0x{pc:08x}u, 7); s->fcc = ({} && x < y) || ({} && x == y); }}",
+                f >> 2 & 1,
+                f >> 1 & 1
+            )
         }
         (49, _) => format!(
             "{{ u64 v; if (plaid_load(s, {addr}, 4, 0x{pc:08x}u, &v)) return 1; s->f[{rt}] = (s->f[{rt}] & 0xffffffff00000000ull) | v; }}"
@@ -395,6 +412,12 @@ impl Lowerer<'_> {
             (21, _, _) => likely(format!("{a} != {b}")),
             (22, _, 0) => likely(format!("(s64){a} <= 0")),
             (23, _, 0) => likely(format!("(s64){a} > 0")),
+            (17, _, _) if rs == 8 && rt & 2 != 0 => {
+                likely(format!("{}s->fcc", if rt & 1 == 0 { "!" } else { "" }))
+            }
+            (17, _, _) if rs == 8 => {
+                conditional(format!("{}s->fcc", if rt & 1 == 0 { "!" } else { "" }))
+            }
             (1, _, 0) => conditional(format!("(s64){a} < 0")),
             (1, _, 1) => conditional(format!("(s64){a} >= 0")),
             // A tail call into the runtime returns to $ra, which must be ours.

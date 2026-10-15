@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
   for(int r = 0; r < 32; r++) std::printf("%s%llu", r ? "," : "", (unsigned long long)cpu.ipu.r[r].u64);
   std::printf("],\"hi\":%llu,\"lo\":%llu,\"fpr\":[", (unsigned long long)cpu.ipu.hi.u64, (unsigned long long)cpu.ipu.lo.u64);
   for(int r = 0; r < 32; r++) std::printf("%s%llu", r ? "," : "", (unsigned long long)cpu.fpu.r[r].s64);
-  std::printf("],\"ram\":[");
+  std::printf("],\"fcc\":%u,\"ram\":[", (unsigned)cpu.fpu.csr.compare);
   // CPU-coherent view through the write-back D-cache, without line fills.
   // The pinned core instantiates only the Byte debug read.
   for(u32 a = 0x1000; a < 0x1100; a += 4) {

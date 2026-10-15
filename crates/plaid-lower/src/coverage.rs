@@ -124,7 +124,8 @@ mod tests {
         let c = super::isa_coverage();
         assert!(c["addu"] && c["jr"] && c["ld"] && c["mtc1"]);
         assert!(c["lwl"] && c["sdr"] && c["lwu"]);
-        assert!(!c["eret"] && !c["add.s"] && !c["c.eq.s"]);
+        assert!(c["c.eq.s"] && c["c.ngt.d"] && c["bc1tl"]);
+        assert!(!c["eret"] && !c["add.s"] && !c["cvt.s.w"]);
         assert!(!c.contains_key("nop") && !c.contains_key("movn"));
     }
 }

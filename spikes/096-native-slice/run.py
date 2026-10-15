@@ -54,8 +54,36 @@ beql = lambda rs, rt, l: B(20, rs, rt, l); bnel = lambda rs, rt, l: B(21, rs, rt
 blezl = lambda rs, l: B(22, rs, 0, l); bgtzl = lambda rs, l: B(23, rs, 0, l)
 bltzl = lambda rs, l: B(1, rs, 2, l); bgezl = lambda rs, l: B(1, rs, 3, l)
 lwl, lwr, ldl, ldr, lwu, swl, swr, sdl, sdr = map(mem, (34, 38, 26, 27, 39, 42, 46, 44, 45))
+fcmp = lambda fmt, cond: (lambda fs, ft: 17 << 26 | fmt << 21 | ft << 16 | fs << 11 | 48 | cond)
+bc1 = lambda nd, tf: (lambda l: B(17, 8, nd << 1 | tf, l))
+bc1f, bc1t, bc1fl, bc1tl = bc1(0, 0), bc1(0, 1), bc1(1, 0), bc1(1, 1)
 nop = 0
 DONE = [j('exit'), nop]
+
+def fcompare():
+    # every C.cond.S/D over ordered edge cases; each condition bit is recorded
+    # through BC1TL (slot runs only when taken) and BC1F (slot always runs)
+    def const64(r, v):
+        return [lui(r, v >> 48 & 0xFFFF), ori(r, r, v >> 32 & 0xFFFF), dsll32(r, r, 0),
+                lui(at, v >> 16 & 0xFFFF), dsll32(at, at, 0), dsrl32(at, at, 0), or_(r, r, at), ori(r, r, v & 0xFFFF)]
+    singles = [(0x3F800000, 0x40000000), (0x40000000, 0x3F800000), (0x3F800000, 0x3F800000),
+               (0x80000000, 0x00000000), (0x00000001, 0x00000000), (0xFF800000, 0x7F800000)]
+    doubles = [(0x3FF0000000000000, 0x4000000000000000), (0x4000000000000000, 0x3FF0000000000000),
+               (0x8000000000000000, 0), (0x0000000000000001, 0)]
+    out, n = [], 0
+    regs = [s0, s1, s2, s3, s4, s5, s6, s7, t8, t9]
+    for fmt, pairs in ((16, singles), (17, doubles)):
+        for x, y in pairs:
+            r = regs[n]; n += 1
+            if fmt == 16:
+                out += [lui(t0, x >> 16), ori(t0, t0, x & 0xFFFF), mtc1(t0, 1), lui(t0, y >> 16), ori(t0, t0, y & 0xFFFF), mtc1(t0, 2)]
+            else:
+                out += [*const64(t0, x), dmtc1(t0, 1), *const64(t0, y), dmtc1(t0, 2)]
+            for cond in range(16):
+                skip = f'k{n}_{cond}'
+                out += [fcmp(fmt, cond)(1, 2), bc1tl(skip), ori(r, r, 1 << cond), skip]
+            out += [fcmp(fmt, 2)(1, 2), bc1f(f'f{n}'), ori(v0, v0, 1 << n), ori(v1, v1, 1 << n), f'f{n}']
+    return out + DONE
 
 def label_pcs(items):
     labels, pc = {'exit': EXIT}, BASE
@@ -123,6 +151,7 @@ PROGRAMS = {
         lwu(s6, 0, s0),
         swl(t1, 0x41, s0), swr(t1, 0x46, s0), swl(t1, 0x48, s0), swr(t1, 0x4F, s0), swl(t1, 0x4F, s0), swr(t1, 0x4C, s0),
         swl(t0, 0x51, s0), swr(t0, 0x54, s0), sdl(v0, 0x63, s0), sdr(v0, 0x6D, s0), *DONE],
+    'fcompare': fcompare(),
     'transfers': [addiu(t0, zero, 1), beq(t0, t0, 'a'), addiu(t0, zero, 5), addiu(t1, zero, 99),
         'a', bne(t0, zero, 'b'), addiu(t2, t0, 1),
         'b', jal('c'), addu(t3, ra, zero), addiu(t4, zero, 7), *DONE,
@@ -207,13 +236,15 @@ OVERFLOW = [lui(t0, 0x7FFF), ori(t0, t0, 0xFFFF), addi(t1, t0, 1), *DONE]
 RUNTIME = {'boundary': [('sum', [])], 'callback': [('spawn', ['a0'])]}
 # Jump-table bytes are store-protected like code: a write must fault 2.
 TABLE_WRITE = jump_table([lui(s2, 0x8000), lambda pc, L: I(43, zero, s2, L['tbl'])])
+# A compare with a NaN operand depends on unmodeled FCSR enables: fault 7.
+FPU_NAN = [lui(t0, 0x7FC0), mtc1(t0, 1), fcmp(16, 2)(1, 1), *DONE]
 CACHE_ALIAS = [lui(s0, 0x8000), sw(s0, 0x1000, s0), lui(s1, 0xA000), lw(t0, 0x1000, s1), *DONE]
 
 def windows():
     exe = ROOT / 'target/debug/plaid.exe'
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
     OUT.mkdir(parents=True, exist_ok=True)
-    progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN, overflow=OVERFLOW, table_write=TABLE_WRITE)
+    progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN, overflow=OVERFLOW, table_write=TABLE_WRITE, fpu_nan=FPU_NAN)
     for name, items in progs.items():
         (OUT / f'{name}.bin').write_bytes(assemble(items))
         extra = []
@@ -235,13 +266,13 @@ def windows():
         oracle = json.loads((OUT / f'{name}-oracle.json').read_text())
         assert json.loads(native.stdout) == oracle, (name, native.stdout, oracle)
         results[name] = hashlib.sha256(json.dumps(oracle, sort_keys=True).encode()).hexdigest()
-    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2)):
+    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7)):
         bad = subprocess.run([str(OUT / f'{name}-native.exe')], capture_output=True, text=True)
         assert bad.returncode == 6 and json.loads(bad.stdout)['fault'] == fault, (name, bad.stdout)
     receipt = dict(format='plaid-native-slice-receipt-v0', ares_revision=builder().REV, compiler=Path(cc).name,
-        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2), interpreter_linked=False, native_complete=False)
+        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7), interpreter_linked=False, native_complete=False)
     (OUT / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
-    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow and table-write programs fail closed')
+    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write and NaN-compare programs fail closed')
     print(json.dumps(receipt, sort_keys=True))
 
 def builder():
