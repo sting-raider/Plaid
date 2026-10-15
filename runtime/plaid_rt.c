@@ -6,7 +6,8 @@
      gcc -std=gnu11 -DPLAID_SAFEPOINTS -DPLAID_LOWERED='"game.c"' -I<dir> \
          runtime/plaid_rt.c -pthread -o game
      game [--rom <rom.z64>] [--stop-at gfx|none] [--gfx-tasks N] [--seconds S]
-          [--press <buttons>@<vi>:<frames>]... [--dump <guest address> <words>]
+          [--press <buttons>@<vi>:<frames>]... [--save <eeprom file>]
+          [--dump <guest address> <words>]
 
    Each declared runtime function (plaid_rt_<name>) implements a libultra
    function under the o32 ABI: arguments in a0-a3 and the caller's stack at
@@ -625,11 +626,38 @@ RT(osContGetReadData) {
   }
   return 0;
 }
+/* 4 Kbit EEPROM (512 bytes). With --save, it is loaded at start and written
+   back after every write (ADR-0165): to <path>.tmp first, then renamed, so an
+   interrupted write leaves the previous save or the complete new one. */
+#define EEPROM_SIZE 512
+static const char *save_path;
+static void save_eeprom(void) {
+  char tmp[1024];
+  FILE *f;
+  if (!save_path) return;
+  snprintf(tmp, sizeof tmp, "%s.tmp", save_path);
+  f = fopen(tmp, "wb");
+  if (!f || fwrite(eeprom, 1, EEPROM_SIZE, f) != EEPROM_SIZE || fclose(f)) finish(1, "cannot write the save file");
+  remove(save_path);
+  if (rename(tmp, save_path)) finish(1, "cannot replace the save file");
+}
+static int load_eeprom(void) {
+  char tmp[1024];
+  FILE *f = fopen(save_path, "rb");
+  size_t n;
+  snprintf(tmp, sizeof tmp, "%s.tmp", save_path);
+  if (!f) f = fopen(tmp, "rb"); /* a write interrupted after the remove */
+  if (!f) return 0;             /* no save yet */
+  n = fread(eeprom, 1, EEPROM_SIZE + 1, f);
+  fclose(f);
+  return n == EEPROM_SIZE ? 0 : -1;
+}
 RT(osEepromProbe) { return ret(1); } /* EEPROM_TYPE_4K */
 RT(osEepromRead) { wr(arg(2), eeprom + 8 * (arg(1) & 63), 8); return ret(0); }
 RT(osEepromWrite) {
   u32 i;
   for (i = 0; i < 8; i++) eeprom[8 * (arg(1) & 63) + i] = (u8)(rd32((arg(2) + i) & ~3u) >> (24 - 8 * ((arg(2) + i) & 3)));
+  save_eeprom();
   return ret(0);
 }
 RT(osEepromLongRead) {
@@ -642,6 +670,7 @@ RT(osEepromLongWrite) {
   u32 a = 8 * (arg(1) & 63), n = arg(3), i, b = arg(2);
   if (a + n > 512) return ret((u32)-1);
   for (i = 0; i < n; i++) eeprom[a + i] = (u8)(rd32((b + i) & ~3u) >> (24 - 8 * ((b + i) & 3)));
+  save_eeprom();
   return ret(0);
 }
 
@@ -677,11 +706,12 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[i], "--stop-at") && i + 1 < argc) stop_gfx = strcmp(argv[++i], "none") ? 1 : 0;
     else if (!strcmp(argv[i], "--gfx-tasks") && i + 1 < argc) stop_gfx = atol(argv[++i]);
     else if (!strcmp(argv[i], "--seconds") && i + 1 < argc) run_seconds = atof(argv[++i]);
+    else if (!strcmp(argv[i], "--save") && i + 1 < argc) save_path = argv[++i];
     else if (!strcmp(argv[i], "--press") && i + 1 < argc && n_presses < MAX_PRESSES &&
              sscanf(argv[++i], "%i@%u:%u", (int *)&presses[n_presses].buttons, &presses[n_presses].at,
                     &presses[n_presses].frames) == 3) n_presses++;
     else {
-      fprintf(stderr, "usage: %s [--rom <rom.z64>] [--stop-at gfx|none] [--gfx-tasks N] [--seconds S] [--press <buttons>@<vi>:<frames>] [--dump <addr> <words>]\n", argv[0]);
+      fprintf(stderr, "usage: %s [--rom <rom.z64>] [--stop-at gfx|none] [--gfx-tasks N] [--seconds S] [--press <buttons>@<vi>:<frames>] [--save <eeprom file>] [--dump <addr> <words>]\n", argv[0]);
       return 2;
     }
   }
@@ -694,6 +724,7 @@ int main(int argc, char **argv) {
     fclose(f);
     if (rom_size < 0x1000 || rom[0] != 0x80 || rom[1] != 0x37) { fprintf(stderr, "expected a big-endian .z64 ROM\n"); return 2; }
   }
+  if (save_path && load_eeprom()) { fprintf(stderr, "%s is not a %d-byte EEPROM save\n", save_path, EEPROM_SIZE); return 2; }
   S = calloc(1, sizeof *S);
   if (!S) return 2;
 #ifdef PLAID_RT64

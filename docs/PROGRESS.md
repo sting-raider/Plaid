@@ -108,13 +108,13 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Guest memory/MMIO runtime | 🟨 partial |
 | Interrupt/timing/event runtime | 🟨 partial |
 | Controller input | 🟨 partial |
-| Save devices | ⬜ open |
+| Save devices | 🟨 partial |
 | Audio path | ⬜ open |
 | RSP runtime/native path | ⬜ open |
 | Renderer integration | 🟨 partial |
 | Native launch/cache packaging | ⬜ open |
 
-**Remaining:** Plaid runtime + RT64 (ADR-0158/0163/0164): audio, saves, packaging and speed.
+**Remaining:** Plaid runtime + RT64 (ADR-0158/0163/0164): audio, other save types, packaging and speed.
 
 ## Compatibility
 

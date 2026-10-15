@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 686" width="840" height="686" role="img" aria-label="Plaid coverage maps">
 <style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}.title{font-size:17px;fill:#1f2328}.cell{font-size:12px;fill:#fff;paint-order:stroke;stroke:#0d1117;stroke-width:2px;stroke-opacity:.45}@media (prefers-color-scheme:dark){.title{fill:#e6edf3}}</style>
 <text x="2" y="22" class="title">VR4300 instructions*: 93.8% (196/209)</text>
-<text x="2" y="378" class="title">Milestones*: 30 verified, 25 partial (69)</text>
+<text x="2" y="378" class="title">Milestones*: 30 verified, 26 partial (69)</text>
 <rect x="0.0" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.df.d (done)</title></rect>
 <rect x="33.3" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.d (done)</title></rect>
 <rect x="66.6" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.s (done)</title></rect>
@@ -298,10 +298,10 @@
 <rect x="627.0" y="543.9" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Guest memory/MMIO runtime (partial)</title></rect>
 <rect x="684.8" y="543.9" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Interrupt/timing/event runtime (partial)</title></rect>
 <rect x="511.3" y="591.3" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Renderer integration (partial)</title></rect>
-<rect x="569.1" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Audio path (open)</title></rect>
-<rect x="627.0" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Native launch/cache packaging (open)</title></rect>
-<rect x="684.8" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: RSP runtime/native path (open)</title></rect>
-<rect x="511.3" y="638.6" width="231.3" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Save devices (open)</title></rect>
+<rect x="569.1" y="591.3" width="57.8" height="47.4" fill="#bf8700" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Save devices (partial)</title></rect>
+<rect x="627.0" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Audio path (open)</title></rect>
+<rect x="684.8" y="591.3" width="57.8" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: Native launch/cache packaging (open)</title></rect>
+<rect x="511.3" y="638.6" width="231.3" height="47.4" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native Runtime: RSP runtime/native path (open)</title></rect>
 <rect x="511.3" y="543.9" width="231.3" height="142.1" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="515.3" y="556.9" class="cell">Native Runtime</text>
 <rect x="742.6" y="386.0" width="48.7" height="75.0" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>Native AOT Compiler: Synthetic native differential verifier (done)</title></rect>
