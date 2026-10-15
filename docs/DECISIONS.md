@@ -3396,3 +3396,25 @@ appears, so it is no longer declared. The guarded measurement drops from 31
 to 29 blockers over 7684 blocks, and no instruction-scope blocker remains.
 `scripts/test_cli.py` checks that a load copying an identified body makes
 it ambiguous, which shows the loaded bytes are scanned.
+
+## ADR-0142: Function-pointer calls through memory stay open
+
+Context: after ADR-0141, 21 of OoT's 29 guarded blockers are `jalr` calls.
+Nine are `_Printf`'s output callback, held in a parameter that one of its
+callers loads from word 0 of a print struct. The others load a struct
+field, a global cell or a list node.
+
+Decision: Plaid adds no field-store census and no parameter-flow closure.
+`research/function-pointer-points-to.md` traces every site back to a
+memory load. The field has no fixed address. 520 `sw x, 0(base)` stores
+in closed code, and the declared runtime functions, write through bases
+that nothing proves. A census over stores that look like the field store
+is therefore a guess. The native `jalr` dispatch already faults 3 outside
+the candidate set. Accepting a runtime-checked guess as closure would let
+any guessed set close, so the guess does not count. The one sound
+extension measured is a store-guarded fixed-address cell, which
+generalizes ADR-0132. It would close 1 of 22 sites, which does not justify
+its machinery. Revisit it if SM64 shows such cells as a blocker class.
+
+Result: the 21 sites stay unresolved. The OoT measurement is unchanged at
+7684 blocks and 29 guarded blockers, and `native_complete` stays false.

@@ -51,10 +51,12 @@ Next concrete steps, in order:
    31 guarded blockers, with no unresolved jump table left.
    Done: runtime identification over declared loads (ADR-0141); OoT at
    7684 blocks, 29 guarded blockers, none of them instruction-scope.
-   **Next:** the 22 function-pointer sites need a points-to argument. 9 are
-   `_Printf`'s output callback, and one caller loads it from a struct. The 7
-   64DD calls need either the 64DD segment declared or a general
-   guarded-call treatment.
+   Recorded negative (ADR-0142): every one of the 21 function-pointer
+   `jalr` sites takes its target from memory, and a sound field-store
+   census would need whole-program store points-to, so they stay open.
+   Store-guarded fixed-address cells would close only 1 of 22.
+   **Next:** the 7 64DD calls need either the 64DD segment declared or a
+   general guarded-call treatment. Otherwise, prioritise SM64 (step 4).
 4. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
    boot-segment discovery from the real entry point, then a local-only recall
    score against the decomp map. Keep ROM bytes, maps and traces ignored.
