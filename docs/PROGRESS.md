@@ -10,7 +10,7 @@ Legend:
 - 🟨 **Partial** — implemented or experimentally supported, but proof/coverage is incomplete.
 - ⬜ **Open** — not implemented or not yet demonstrated.
 
-Last progress-data update: **2026-10-15**. Day-by-day numbers: [progress history](HISTORY.md).
+Last progress-data update: **2026-10-16**. Day-by-day numbers: [progress history](HISTORY.md).
 
 ## Retained evidence
 
@@ -39,7 +39,7 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Commercial-ROM map validation | ✅ verified |
 | Declared executable loads (ADR-0136) | ✅ verified |
 
-**Remaining:** General jump tables, automatic load discovery, overlays.
+**Remaining:** Overlay candidates discovered; checked native overlay execution remains.
 
 ## Executable Provenance
 

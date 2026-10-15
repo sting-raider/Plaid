@@ -119,8 +119,11 @@ Next concrete steps, in order:
    - Milestone 5, step 1 (ADR-0171): runtime functions are named from the
      ROM's own bytes; SM64's decomp map now backs only `osInitialize`,
      `osContInit` and `osEepromLongRead`, and SM64 stays `closed`.
-   - Next: relocatable overlays (OoT game states and actors load at heap
-     addresses with relocations); then OoT's 13 fixed-code blockers.
+   - ADR-0172 stage 1: ROM-owned overlay discovery and relocation validation
+     find 469 OoT candidates (468 executable). Next: lower at link addresses,
+     bind real RAM addresses with byte checks, and differential-test relocated
+     execution/lifetimes. Then clear OoT's 13 fixed-code blockers and run its
+     title/audio snapshot campaign. Candidate discovery alone closes nothing.
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user

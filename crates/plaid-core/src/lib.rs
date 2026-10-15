@@ -57,6 +57,7 @@ pub mod interrupt_roots;
 pub mod llsc_mutation;
 pub mod loads;
 pub mod merge;
+pub mod overlays;
 pub mod pi_fetch_lineage;
 pub mod pi_history;
 pub mod pi_interrupt_history;
