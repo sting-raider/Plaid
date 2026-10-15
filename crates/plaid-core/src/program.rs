@@ -605,6 +605,11 @@ pub struct ProgramMap {
     /// address-taken scope uses them, as the targets of register calls.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty", with = "pairs")]
     pub address_taken: BTreeMap<CodeAddress, EvidenceRefs>,
+    /// Declared COP1 register mode (ADR-0160): true when guest code runs with
+    /// Status.FR = 0, as libultra threads do (32 FPRs, doubles in even/odd
+    /// pairs); false for 64-bit FPRs (Status.FR = 1).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cop1_fr0: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -712,6 +717,7 @@ impl ProgramMap {
             runtime_functions: BTreeMap::new(),
             load_images: BTreeMap::new(),
             address_taken: BTreeMap::new(),
+            cop1_fr0: false,
         }
     }
 

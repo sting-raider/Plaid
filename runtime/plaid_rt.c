@@ -1,0 +1,637 @@
+/* Plaid host runtime (ADR-0158, ADR-0159). SPDX-License-Identifier: MIT OR Apache-2.0
+
+   Build one translation unit: this file includes the lowered program named by
+   PLAID_LOWERED, which must be built with PLAID_SAFEPOINTS.
+
+     gcc -std=gnu11 -DPLAID_SAFEPOINTS -DPLAID_LOWERED='"game.c"' -I<dir> \
+         runtime/plaid_rt.c -pthread -o game
+     game [--rom <rom.z64>] [--stop-at gfx|none] [--gfx-tasks N] [--seconds S]
+          [--dump <guest address> <words>]
+
+   Each declared runtime function (plaid_rt_<name>) implements a libultra
+   function under the o32 ABI: arguments in a0-a3 and the caller's stack at
+   sp+16, results in v0 (and v1 for 64-bit values).
+
+   Threads: every guest thread runs on its own host thread, but only the
+   holder of the baton (`running`) executes guest code, as on the single
+   VR4300. A handoff saves the outgoing thread's CPU registers from the shared
+   plaid_state and restores the incoming thread's. Scheduling follows libultra:
+   the highest-priority runnable thread runs, a thread made runnable queues
+   behind threads of equal priority, and a newly runnable thread of higher
+   priority preempts the sender at once.
+
+   Events (VI retrace, timers, SP/DP task completion, SI, PI) are libultra
+   messages. Host event sources only mark them pending and raise
+   plaid_preempt; the baton holder delivers them at its next runtime call or
+   loop-header safepoint, so guest RAM is only written by the baton holder.
+   When every guest thread is blocked, the event pump delivers them itself. */
+#ifndef PLAID_LOWERED
+#error "define PLAID_LOWERED as the lowered program's C file"
+#endif
+#ifndef PLAID_SAFEPOINTS
+#error "build the lowered program with PLAID_SAFEPOINTS"
+#endif
+#include PLAID_LOWERED
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#define MAX_THREADS 64
+#define MAX_TIMERS 64
+#define THREAD_RETURN 0xffffffffbfc00000ull /* $ra sentinel outside guest code */
+#define RT_EXIT_THREAD 100                  /* propagates out of plaid_enter */
+
+enum { T_FREE, T_STOPPED, T_RUNNABLE, T_RUNNING, T_BLOCKED, T_DEAD };
+enum { EV_SP = 4, EV_SI = 5, EV_AI = 6, EV_VI = 7, EV_PI = 8, EV_DP = 9, EV_COUNT = 15 };
+
+typedef struct {
+  int state;
+  u32 guest, id, entry, arg, sp;
+  s32 pri;
+  u64 seq;
+  u32 wait_queue; /* blocked: the queue address */
+  int wait_full;  /* blocked: 1 waiting for space, 0 for a message */
+  int host_started;
+  pthread_t host;
+  pthread_cond_t wake;
+  u64 r[32], hi, lo, f[32];
+  u32 fcc, fcsr, llbit;
+} rt_thread;
+
+typedef struct { u32 mq, msg; int set; } rt_event;
+typedef struct { int used; u32 guest, mq, msg; u64 due, interval; } rt_timer;
+
+volatile int plaid_preempt;
+static plaid_state *S;
+static pthread_mutex_t big = PTHREAD_MUTEX_INITIALIZER;
+static rt_thread threads[MAX_THREADS];
+static rt_thread *running; /* NULL when every guest thread is blocked */
+static rt_thread boot;     /* the pre-thread boot context (main_func) */
+static u64 seq_counter;
+static int ints_enabled = 1;
+static rt_event events[EV_COUNT];
+static rt_event vi_event;
+static u32 vi_retrace = 1;
+static int pending[EV_COUNT]; /* undelivered event counts */
+static rt_timer timers[MAX_TIMERS];
+static u8 *rom;
+static size_t rom_size;
+static u8 eeprom[2048];
+static struct timespec t0;
+static u64 time_base; /* osSetTime offset in count ticks */
+static u32 frame_buffer;
+static unsigned long vi_count, gfx_tasks, audio_tasks, dma_count;
+static long stop_gfx = 1; /* stop after this many graphics tasks (0: never) */
+static double run_seconds = 0;
+static u32 dump_at, dump_words;
+
+/* ---- reporting ---------------------------------------------------------- */
+
+static void finish(int code, const char *why) {
+  u32 i, p;
+  if (dump_words) {
+    printf("{\"dump\":\"%08x\",\"words\":[", dump_at);
+    for (i = 0; i < dump_words; i++) {
+      p = (dump_at & 0x1fffffffu) + 4 * i;
+      printf("%s%u", i ? "," : "",
+             p + 4 <= PLAID_RAM_SIZE ? (u32)S->ram[p] << 24 | (u32)S->ram[p + 1] << 16 | (u32)S->ram[p + 2] << 8 | S->ram[p + 3] : 0);
+    }
+    printf("]}\n");
+  }
+  printf("{\"stop\":\"%s\",\"vi\":%lu,\"gfx_tasks\":%lu,\"audio_tasks\":%lu,\"pi_dma\":%lu,"
+         "\"framebuffer\":\"%08x\",\"fault\":%u,\"fault_pc\":\"%08x\",\"ra\":\"%08x\",\"a0\":\"%08x\",\"a1\":\"%08x\"}\n",
+         why, vi_count, gfx_tasks, audio_tasks, dma_count, frame_buffer, S->fault, S->fault_pc,
+         (u32)S->r[31], (u32)S->r[4], (u32)S->r[5]);
+  fflush(stdout);
+  exit(code);
+}
+
+/* ---- guest memory ------------------------------------------------------- */
+
+static int phys(u32 va, u32 size, u32 *p) {
+  if (va < 0x80000000u || va >= 0xc0000000u) return 1;
+  *p = va & 0x1fffffffu;
+  return *p > PLAID_RAM_SIZE || size > PLAID_RAM_SIZE - *p;
+}
+static u32 rd32(u32 va) {
+  u32 p;
+  if (phys(va, 4, &p)) { plaid_fault(S, va, 1); finish(1, "runtime read outside RAM"); }
+  return (u32)S->ram[p] << 24 | (u32)S->ram[p + 1] << 16 | (u32)S->ram[p + 2] << 8 | S->ram[p + 3];
+}
+static void wr(u32 va, const u8 *bytes, u32 size) {
+  u32 p;
+  if (phys(va, size, &p) || plaid_runtime_write(S, p, size, va)) finish(1, "runtime write refused");
+  memcpy(S->ram + p, bytes, size);
+}
+static void wr32(u32 va, u32 v) {
+  u8 b[4] = {(u8)(v >> 24), (u8)(v >> 16), (u8)(v >> 8), (u8)v};
+  wr(va, b, 4);
+}
+static void wr16(u32 va, u32 v) {
+  u8 b[2] = {(u8)(v >> 8), (u8)v};
+  wr(va, b, 2);
+}
+static u32 arg(int n) { return n < 4 ? (u32)S->r[4 + n] : rd32((u32)S->r[29] + 4 * n); }
+static int ret(u32 v) { S->r[2] = SX32(v); return 0; }
+static int ret64(u64 v) { S->r[2] = SX32((u32)(v >> 32)); S->r[3] = SX32((u32)v); return 0; }
+
+/* ---- time --------------------------------------------------------------- */
+
+static u64 now_ns(void) {
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return (u64)(t.tv_sec - t0.tv_sec) * 1000000000ull + (u64)t.tv_nsec - (u64)t0.tv_nsec;
+}
+/* COUNT runs at half the 93.75 MHz CPU clock */
+static u64 count_now(void) { return now_ns() * 46875ull / 1000000ull + time_base; }
+
+/* ---- scheduling (caller holds `big`) ------------------------------------ */
+
+static void save(rt_thread *t) {
+  memcpy(t->r, S->r, sizeof t->r); memcpy(t->f, S->f, sizeof t->f);
+  t->hi = S->hi; t->lo = S->lo; t->fcc = S->fcc; t->fcsr = S->fcsr; t->llbit = S->llbit;
+}
+static void restore(const rt_thread *t) {
+  memcpy(S->r, t->r, sizeof t->r); memcpy(S->f, t->f, sizeof t->f);
+  S->hi = t->hi; S->lo = t->lo; S->fcc = t->fcc; S->fcsr = t->fcsr; S->llbit = t->llbit;
+}
+static void apply_rounding(void) {
+  static const int modes[4] = {FE_TONEAREST, FE_TOWARDZERO, FE_UPWARD, FE_DOWNWARD};
+  fesetround(modes[S->fcsr & 3]);
+}
+static rt_thread *best_runnable(void) {
+  rt_thread *b = NULL;
+  int i;
+  for (i = 0; i < MAX_THREADS; i++) {
+    rt_thread *t = &threads[i];
+    if (t->state == T_RUNNABLE && (!b || t->pri > b->pri || (t->pri == b->pri && t->seq < b->seq))) b = t;
+  }
+  return b;
+}
+static void make_runnable(rt_thread *t) { t->state = T_RUNNABLE; t->seq = ++seq_counter; }
+static void *thread_main(void *p);
+
+/* Hand the baton (and S) to `next`, or to nobody. S must already be saved. */
+static void hand_to(rt_thread *next) {
+  running = next;
+  if (!next) return;
+  next->state = T_RUNNING;
+  restore(next);
+  if (!next->host_started) {
+    pthread_attr_t a;
+    next->host_started = 1;
+    pthread_attr_init(&a);
+    pthread_attr_setstacksize(&a, 64u << 20); /* -O0 frames of large guest functions */
+    if (pthread_create(&next->host, &a, thread_main, next)) finish(1, "pthread_create failed");
+    pthread_attr_destroy(&a);
+  } else {
+    pthread_cond_signal(&next->wake);
+  }
+}
+static void wait_for_baton(rt_thread *self) {
+  while (running != self) pthread_cond_wait(&self->wake, &big);
+  apply_rounding();
+}
+/* The running thread gives up the baton (it is runnable, blocked or dead). */
+static void yield_from(rt_thread *self) {
+  save(self);
+  hand_to(best_runnable());
+  if (self->state != T_DEAD && self != &boot) wait_for_baton(self);
+}
+static void deliver_pending(void);
+/* After making threads runnable: run a strictly higher-priority one now. */
+static void maybe_preempt(void) {
+  rt_thread *b;
+  deliver_pending();
+  b = best_runnable();
+  if (running && b && b->pri > running->pri) {
+    rt_thread *self = running;
+    make_runnable(self);
+    yield_from(self);
+  }
+}
+
+/* ---- message queues (OSMesgQueue in guest RAM) -------------------------- */
+/* mtqueue@0 fullqueue@4 validCount@8 first@0xc msgCount@0x10 msg@0x14 */
+
+static void wake_waiter(u32 mq, int full) {
+  rt_thread *b = NULL;
+  int i;
+  for (i = 0; i < MAX_THREADS; i++) {
+    rt_thread *t = &threads[i];
+    if (t->state == T_BLOCKED && t->wait_queue == mq && t->wait_full == full &&
+        (!b || t->pri > b->pri || (t->pri == b->pri && t->seq < b->seq)))
+      b = t;
+  }
+  if (b) make_runnable(b);
+}
+static int block_on(u32 mq, int full) {
+  rt_thread *self = running;
+  if (!self || self == &boot) finish(1, "boot context blocked on a message queue");
+  self->state = T_BLOCKED; self->wait_queue = mq; self->wait_full = full;
+  self->seq = ++seq_counter;
+  yield_from(self);
+  return 0;
+}
+/* jam: put the message at the front. Returns -1 when full and not blocking. */
+static int mq_send(u32 mq, u32 msg, int block, int jam) {
+  u32 count, valid, first;
+  for (;;) {
+    valid = rd32(mq + 8); count = rd32(mq + 0x10);
+    if (valid < count) break;
+    if (!block) return -1;
+    block_on(mq, 1);
+  }
+  first = rd32(mq + 0xc);
+  if (jam) {
+    first = (first + count - 1) % count;
+    wr32(mq + 0xc, first);
+    wr32(rd32(mq + 0x14) + 4 * first, msg);
+  } else {
+    wr32(rd32(mq + 0x14) + 4 * ((first + valid) % count), msg);
+  }
+  wr32(mq + 8, valid + 1);
+  wake_waiter(mq, 0);
+  return 0;
+}
+static int mq_recv(u32 mq, u32 msgp, int block) {
+  u32 valid, first;
+  for (;;) {
+    valid = rd32(mq + 8);
+    if (valid) break;
+    if (!block) return -1;
+    block_on(mq, 0);
+  }
+  first = rd32(mq + 0xc);
+  if (msgp) wr32(msgp, rd32(rd32(mq + 0x14) + 4 * first));
+  wr32(mq + 0xc, (first + 1) % rd32(mq + 0x10));
+  wr32(mq + 8, valid - 1);
+  wake_waiter(mq, 1);
+  return 0;
+}
+
+/* ---- events ------------------------------------------------------------- */
+
+static void post(int ev) { pending[ev]++; plaid_preempt = 1; }
+static void deliver_pending(void) {
+  int ev, i;
+  u64 c;
+  if (!ints_enabled) return;
+  plaid_preempt = 0;
+  for (ev = 0; ev < EV_COUNT; ev++)
+    while (pending[ev]) {
+      pending[ev]--;
+      if (ev == EV_VI) {
+        if (vi_event.set && vi_count % vi_retrace == 0) mq_send(vi_event.mq, vi_event.msg, 0, 0);
+      } else if (events[ev].set) {
+        mq_send(events[ev].mq, events[ev].msg, 0, 0);
+      }
+    }
+  c = count_now();
+  for (i = 0; i < MAX_TIMERS; i++) {
+    rt_timer *t = &timers[i];
+    if (t->used && c >= t->due) {
+      if (t->mq) mq_send(t->mq, t->msg, 0, 0);
+      if (t->interval) t->due += t->interval; else t->used = 0;
+    }
+  }
+}
+/* Host thread: VI retrace at 60 Hz, timers, and delivery while all block. */
+static void *event_pump(void *unused) {
+  u64 next_vi = 0;
+  (void)unused;
+  for (;;) {
+    struct timespec d = {0, 1000000};
+    nanosleep(&d, NULL);
+    pthread_mutex_lock(&big);
+    if (now_ns() >= next_vi) {
+      next_vi = now_ns() + 16683350ull;
+      vi_count++;
+      post(EV_VI);
+    }
+    plaid_preempt = 1; /* timers are checked at delivery */
+    if (run_seconds > 0 && now_ns() > (u64)(run_seconds * 1e9)) finish(0, "time limit");
+    if (!running) { /* every guest thread is blocked: deliver here */
+      deliver_pending();
+      hand_to(best_runnable());
+    }
+    pthread_mutex_unlock(&big);
+  }
+  return NULL;
+}
+
+/* ---- guest threads ------------------------------------------------------ */
+
+static rt_thread *thread_of(u32 guest) {
+  int i;
+  if (!guest) return running;
+  for (i = 0; i < MAX_THREADS; i++)
+    if (threads[i].state != T_FREE && threads[i].guest == guest) return &threads[i];
+  return NULL;
+}
+static void *thread_main(void *p) {
+  rt_thread *self = p;
+  int r;
+  pthread_mutex_lock(&big);
+  wait_for_baton(self);
+  pthread_mutex_unlock(&big);
+  r = plaid_enter(S, self->entry, THREAD_RETURN);
+  pthread_mutex_lock(&big);
+  if (r == 2) finish(0, "exit");
+  if (r && r != RT_EXIT_THREAD) finish(1, "guest fault");
+  self->state = T_DEAD; /* returned from its entry, or destroyed itself */
+  yield_from(self);
+  pthread_mutex_unlock(&big);
+  return NULL;
+}
+int plaid_rt_safepoint(plaid_state *s) {
+  (void)s;
+  pthread_mutex_lock(&big);
+  maybe_preempt();
+  pthread_mutex_unlock(&big);
+  return 0;
+}
+
+/* Every runtime function below runs on the baton holder; LOCKED takes `big`
+   so host event sources see consistent scheduler state. */
+#define RT(name) static int rt_##name(void); \
+  int plaid_rt_##name(plaid_state *s) { int r_; (void)s; pthread_mutex_lock(&big); r_ = rt_##name(); \
+    pthread_mutex_unlock(&big); return r_; } \
+  static int rt_##name(void)
+
+/* osCreateThread(t, id, entry, arg, sp, pri) */
+RT(osCreateThread) {
+  int i;
+  rt_thread *t = thread_of(arg(0));
+  for (i = 0; !t && i < MAX_THREADS; i++)
+    if (threads[i].state == T_FREE || threads[i].state == T_DEAD) t = &threads[i];
+  if (!t) finish(1, "too many guest threads");
+  if (t->host_started) pthread_join(t->host, NULL);
+  memset(t, 0, sizeof *t);
+  pthread_cond_init(&t->wake, NULL);
+  t->state = T_STOPPED; t->guest = arg(0); t->id = arg(1); t->entry = arg(2);
+  t->arg = arg(3); t->sp = arg(4); t->pri = (s32)arg(5);
+  t->r[4] = SX32(t->arg); t->r[29] = SX32(t->sp); t->r[31] = THREAD_RETURN;
+  t->fcsr = 0x01000800u; /* libultra's thread FPCSR: FS and the invalid enable */
+  wr32(t->guest + 4, (u32)t->pri); wr32(t->guest + 0x14, t->id);
+  wr16(t->guest + 0x10, 1); /* OS_STATE_STOPPED */
+  return 0;
+}
+RT(osStartThread) {
+  rt_thread *t = thread_of(arg(0));
+  if (!t) finish(1, "osStartThread on an unknown thread");
+  if (t->state == T_STOPPED) make_runnable(t);
+  wr16(t->guest + 0x10, 2); /* OS_STATE_RUNNABLE */
+  if (running == &boot) { /* the boot context ends here, as in libultra */
+    boot.state = T_DEAD;
+    yield_from(&boot);
+    pthread_mutex_unlock(&big);
+    for (;;) { struct timespec d = {3600, 0}; nanosleep(&d, NULL); }
+  }
+  maybe_preempt();
+  return 0;
+}
+RT(osDestroyThread) {
+  rt_thread *t = thread_of(arg(0));
+  if (!t) return 0;
+  if (t == running) return RT_EXIT_THREAD;
+  t->state = T_DEAD;
+  return 0;
+}
+RT(osSetThreadPri) {
+  rt_thread *t = thread_of(arg(0));
+  if (!t) return 0;
+  t->pri = (s32)arg(1);
+  if (t->guest) wr32(t->guest + 4, (u32)t->pri);
+  if (t == running) {
+    rt_thread *b = best_runnable();
+    if (b && b->pri > t->pri) { make_runnable(t); yield_from(t); }
+  } else {
+    maybe_preempt();
+  }
+  return 0;
+}
+RT(osGetThreadPri) { rt_thread *t = thread_of(arg(0)); return ret(t ? (u32)t->pri : 0); }
+RT(osCreateMesgQueue) {
+  u32 mq = arg(0);
+  wr32(mq, 0); wr32(mq + 4, 0); wr32(mq + 8, 0); wr32(mq + 0xc, 0);
+  wr32(mq + 0x10, arg(2)); wr32(mq + 0x14, arg(1));
+  return 0;
+}
+RT(osSendMesg) { int r = mq_send(arg(0), arg(1), arg(2) & 1, 0); maybe_preempt(); return ret((u32)r); }
+RT(osJamMesg) { int r = mq_send(arg(0), arg(1), arg(2) & 1, 1); maybe_preempt(); return ret((u32)r); }
+RT(osRecvMesg) { int r = mq_recv(arg(0), arg(1), arg(2) & 1); maybe_preempt(); return ret((u32)r); }
+RT(osSetEventMesg) {
+  u32 ev = arg(0);
+  if (ev < EV_COUNT) { events[ev].mq = arg(1); events[ev].msg = arg(2); events[ev].set = 1; }
+  return 0;
+}
+RT(osViSetEvent) {
+  vi_event.mq = arg(0); vi_event.msg = arg(1); vi_event.set = 1;
+  vi_retrace = arg(2) ? arg(2) : 1;
+  return 0;
+}
+/* Interrupt masking: while disabled, events stay pending. */
+RT(__osDisableInt) { u32 was = (u32)ints_enabled; ints_enabled = 0; return ret(was); }
+RT(__osRestoreInt) { ints_enabled = arg(0) & 1; if (ints_enabled) maybe_preempt(); return 0; }
+RT(osSetIntMask) { return ret(0x003fff01u); }
+
+/* ---- time --------------------------------------------------------------- */
+
+RT(osGetTime) { return ret64(count_now()); }
+RT(osGetCount) { return ret((u32)count_now()); }
+RT(osSetTime) { time_base = ((u64)arg(0) << 32 | arg(1)) - (count_now() - time_base); return 0; }
+/* osSetTimer(t, countdown (a2:a3), interval (sp+16:sp+20), mq, msg) */
+RT(osSetTimer) {
+  int i;
+  u64 countdown = (u64)arg(2) << 32 | arg(3), interval = (u64)arg(4) << 32 | arg(5);
+  for (i = 0; i < MAX_TIMERS; i++)
+    if (!timers[i].used || timers[i].guest == arg(0)) break;
+  if (i == MAX_TIMERS) finish(1, "too many timers");
+  timers[i].used = 1; timers[i].guest = arg(0); timers[i].mq = arg(6); timers[i].msg = arg(7);
+  timers[i].interval = interval;
+  timers[i].due = count_now() + (countdown ? countdown : interval);
+  return ret(0);
+}
+
+/* ---- system ------------------------------------------------------------- */
+
+RT(osInitialize) {
+  wr32(0x80000300u, 1);           /* osTvType: NTSC */
+  wr32(0x80000304u, 0);           /* osRomType: cartridge */
+  wr32(0x80000308u, 0xb0000000u); /* osRomBase */
+  wr32(0x8000030cu, 0);           /* osResetType: cold */
+  wr32(0x80000318u, 0x00400000u); /* osMemSize: 4 MiB */
+  return 0;
+}
+static int nop(void) { return 0; }
+#define NOP(name) RT(name) { return nop(); }
+NOP(osCreateViManager) NOP(osViSetMode) NOP(osViBlack) NOP(osViSetSpecialFeatures)
+NOP(osCreatePiManager) NOP(osInvalDCache) NOP(osInvalICache) NOP(osWritebackDCache)
+NOP(osWritebackDCacheAll) NOP(osSpTaskYield) NOP(osMapTLB) NOP(osUnmapTLBAll)
+RT(osSpTaskYielded) { return ret(0); }
+RT(__osSpSetPc) { return ret(0); }
+RT(osViSwapBuffer) { frame_buffer = arg(0); return 0; }
+RT(osVirtualToPhysical) {
+  u32 a = arg(0);
+  return ret(a >= 0x80000000u && a < 0xc0000000u ? a & 0x1fffffffu : a);
+}
+RT(__osSetFpcCsr) {
+  u32 was = S->fcsr | S->fcc << 23;
+  if (plaid_ctc1(S, arg(0), (u32)S->r[31])) return 1;
+  return ret(was);
+}
+
+/* ---- PI DMA ------------------------------------------------------------- */
+
+/* osPiStartDma(mb, pri, direction, devAddr, vAddr, nbytes, mq) */
+RT(osPiStartDma) {
+  u32 mb = arg(0), dir = arg(2), dev = arg(3), va = arg(4), n = arg(5), mq = arg(6);
+  if (dir != 0) finish(1, "PI write to cartridge");
+  if ((u64)dev + n > rom_size) finish(1, "PI DMA outside the ROM");
+  wr(va, rom + dev, n);
+  dma_count++;
+  if (mq) mq_send(mq, mb, 0, 0);
+  maybe_preempt();
+  return ret(0);
+}
+
+/* ---- SP tasks ------------------------------------------------------------ */
+
+static void report_gfx_task(u32 task) {
+  u32 dl = rd32(task + 0x30), i;
+  printf("{\"gfx_task\":%lu,\"task\":\"%08x\",\"ucode\":\"%08x\",\"data_ptr\":\"%08x\",\"data_size\":%u,"
+         "\"display_list\":[",
+         gfx_tasks, task, rd32(task + 0x10), dl, rd32(task + 0x34));
+  for (i = 0; i < 8; i++) printf("%s\"%08x%08x\"", i ? "," : "", rd32(dl + 8 * i), rd32(dl + 8 * i + 4));
+  printf("]}\n");
+}
+RT(osSpTaskLoad) { return 0; }
+/* The renderer (RT64) consumes graphics tasks here in a later step; until then
+   a task completes at once: SP, then DP for graphics. */
+RT(osSpTaskStartGo) {
+  u32 task = arg(0), type = rd32(task);
+  if (type == 1) {
+    gfx_tasks++;
+    report_gfx_task(task);
+    if (stop_gfx && (long)gfx_tasks >= stop_gfx) finish(0, "graphics task");
+    post(EV_SP);
+    post(EV_DP);
+  } else {
+    audio_tasks++;
+    post(EV_SP);
+  }
+  return 0;
+}
+
+/* ---- audio --------------------------------------------------------------- */
+
+RT(osAiSetFrequency) { return ret(arg(0)); }
+RT(osAiGetLength) { return ret(0); }
+RT(osAiSetNextBuffer) { return ret(0); }
+
+/* ---- SI: controllers and EEPROM ------------------------------------------ */
+
+/* osContInit(mq, &bitpattern, status[4]): one standard controller */
+RT(osContInit) {
+  u8 bits = 1;
+  int i;
+  wr(arg(1), &bits, 1);
+  for (i = 0; i < 4; i++) {
+    u8 st[4] = {0, i == 0 ? 5 : 0, 0, i == 0 ? 0 : 8};
+    wr(arg(2) + 4 * i, st, 4);
+  }
+  return ret(0);
+}
+RT(osContStartReadData) { post(EV_SI); return ret(0); }
+RT(osContGetReadData) {
+  int i;
+  for (i = 0; i < 4; i++) {
+    u8 pad[6] = {0, 0, 0, 0, i == 0 ? 0 : 8, 0};
+    wr(arg(0) + 6 * i, pad, 6);
+  }
+  return 0;
+}
+RT(osEepromProbe) { return ret(1); } /* EEPROM_TYPE_4K */
+RT(osEepromRead) { wr(arg(2), eeprom + 8 * (arg(1) & 63), 8); return ret(0); }
+RT(osEepromWrite) {
+  u32 i;
+  for (i = 0; i < 8; i++) eeprom[8 * (arg(1) & 63) + i] = (u8)(rd32((arg(2) + i) & ~3u) >> (24 - 8 * ((arg(2) + i) & 3)));
+  return ret(0);
+}
+RT(osEepromLongRead) {
+  u32 a = 8 * (arg(1) & 63), n = arg(3);
+  if (a + n > 512) return ret((u32)-1);
+  wr(arg(2), eeprom + a, n);
+  return ret(0);
+}
+RT(osEepromLongWrite) {
+  u32 a = 8 * (arg(1) & 63), n = arg(3), i, b = arg(2);
+  if (a + n > 512) return ret((u32)-1);
+  for (i = 0; i < n; i++) eeprom[a + i] = (u8)(rd32((b + i) & ~3u) >> (24 - 8 * ((b + i) & 3)));
+  return ret(0);
+}
+
+/* ---- 64-bit helpers: o32 pairs, high word first ------------------------- */
+
+static u64 pair(int n) { return (u64)arg(n) << 32 | arg(n + 1); }
+RT(__ull_div) { u64 b = pair(2); return ret64(b ? pair(0) / b : 0); }
+RT(__ull_rem) { u64 b = pair(2); return ret64(b ? pair(0) % b : pair(0)); }
+RT(__ll_div) { s64 b = (s64)pair(2); return ret64(b ? (u64)((s64)pair(0) / b) : 0); }
+RT(__ll_mul) { return ret64(pair(0) * pair(2)); }
+RT(__ull_to_d) { double d = (double)pair(0); memcpy(&S->f[0], &d, 8); return 0; }
+RT(__ull_to_f) {
+  float f = (float)pair(0);
+  u32 bits;
+  memcpy(&bits, &f, 4);
+  S->f[0] = (S->f[0] & 0xffffffff00000000ull) | bits;
+  return 0;
+}
+
+/* ---- entry -------------------------------------------------------------- */
+
+int main(int argc, char **argv) {
+  FILE *f;
+  pthread_t pump;
+  int i, r;
+  const char *rom_path = NULL;
+  for (i = 1; i < argc; i++) {
+    if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom_path = argv[++i];
+    else if (!strcmp(argv[i], "--dump") && i + 2 < argc) {
+      dump_at = (u32)strtoul(argv[i + 1], NULL, 0);
+      dump_words = (u32)strtoul(argv[i + 2], NULL, 0);
+      i += 2;
+    } else if (!strcmp(argv[i], "--stop-at") && i + 1 < argc) stop_gfx = strcmp(argv[++i], "none") ? 1 : 0;
+    else if (!strcmp(argv[i], "--gfx-tasks") && i + 1 < argc) stop_gfx = atol(argv[++i]);
+    else if (!strcmp(argv[i], "--seconds") && i + 1 < argc) run_seconds = atof(argv[++i]);
+    else {
+      fprintf(stderr, "usage: %s [--rom <rom.z64>] [--stop-at gfx|none] [--gfx-tasks N] [--seconds S] [--dump <addr> <words>]\n", argv[0]);
+      return 2;
+    }
+  }
+  if (rom_path) { /* the PI DMA source; without one, any DMA stops the run */
+    f = fopen(rom_path, "rb");
+    if (!f) { perror(rom_path); return 2; }
+    fseek(f, 0, SEEK_END); rom_size = (size_t)ftell(f); fseek(f, 0, SEEK_SET);
+    rom = malloc(rom_size);
+    if (!rom || fread(rom, 1, rom_size, f) != rom_size) { fprintf(stderr, "cannot read ROM\n"); return 2; }
+    fclose(f);
+    if (rom_size < 0x1000 || rom[0] != 0x80 || rom[1] != 0x37) { fprintf(stderr, "expected a big-endian .z64 ROM\n"); return 2; }
+  }
+  S = calloc(1, sizeof *S);
+  if (!S) return 2;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
+  plaid_load_images(S);
+  pthread_mutex_lock(&big);
+  pthread_cond_init(&boot.wake, NULL);
+  boot.pri = -1; boot.state = T_RUNNING; running = &boot;
+  pthread_mutex_unlock(&big);
+  pthread_create(&pump, NULL, event_pump, NULL);
+  S->r[31] = THREAD_RETURN;
+  r = plaid_run(S);
+  pthread_mutex_lock(&big);
+  finish(r ? 1 : 0, r ? "guest fault" : "exit");
+  return 0;
+}

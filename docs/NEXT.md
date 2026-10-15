@@ -93,11 +93,11 @@ Next concrete steps, in order:
    reaches `osCreateThread` for the idle thread.
    **Next (milestone 4), per ADR-0158:** Plaid's own runtime (`runtime/`, C)
    plus RT64 (MIT).
-   - Runtime core: guest threads on host threads under one baton, message
-     queues, events and PI DMA. Checkpoint: SM64 submits its first
-     graphics task.
-   - Back-edge safepoints in `plaid-lower`, so spinning threads are
-     preemptible.
+   - Done: runtime core and loop safepoints (ADR-0159), and FR = 0 COP1
+     (ADR-0160). SM64 runs natively for 96 frames at 30 fps.
+   - Next: declared-load lifetime. A write to a verified load's code
+     should invalidate it, and re-entry should re-verify it, because SM64
+     reloads goddard at `0x8016f000`.
    - RT64 for graphics tasks; then audio, controllers and EEPROM.
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,

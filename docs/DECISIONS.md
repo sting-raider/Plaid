@@ -4009,3 +4009,112 @@ Consequences:
 - Runtime behavior is tested by deterministic synthetic programs that call
   runtime functions, and by the SM64 native run reaching named checkpoints.
   The first checkpoint is the first graphics task.
+
+## ADR-0159: Plaid runtime core, loop safepoints and a word protection map
+
+Context: ADR-0158 chose Plaid's own C runtime. Lowered SM64 reaches
+`osCreateThread` with stub runtime functions (ADR-0157). Going further needs:
+- libultra threads, message queues and events;
+- PI DMA from the ROM;
+- a way to preempt a thread that spins without calling the runtime, such as
+  SM64's idle `while (1);`.
+
+Decision:
+
+1. **`runtime/plaid_rt.c`** (MIT OR Apache-2.0, C11 and pthreads) implements
+   the 56 runtime functions SM64 declares. It is built as one translation
+   unit with the lowered program.
+   - **Threads.** Each guest thread is a host thread, but only the holder of
+     one baton runs guest code. A handoff saves and restores the CPU
+     register file in the shared `plaid_state` and re-applies the FCSR
+     rounding mode, which is per host thread.
+   - **Scheduling.** The highest priority runs, FIFO within a priority.
+     Starting or waking a thread of higher priority preempts the current
+     one at once, and lowering your own priority yields.
+   - **Message queues.** They live in guest RAM in the `OSMesgQueue` layout.
+     Blocked threads are kept host-side.
+   - **Events.** VI retrace runs at 60 Hz. Timers, SP/DP completion, SI and
+     PI messages are marked pending by host sources and delivered only by
+     the baton holder, so guest RAM has one writer. When every thread is
+     blocked, the event pump delivers them itself.
+   - **PI DMA** copies ROM bytes through `plaid_runtime_write`, so
+     executable and verified-load bytes stay protected.
+   - **Controllers, EEPROM, 64-bit helpers.** One standard controller and a
+     4 Kbit EEPROM; `__ull_*` and `__ll_*` take o32 register pairs.
+   - **Graphics tasks.** These report their task and display list (the
+     first-frame checkpoint). Until RT64 is attached, both graphics and
+     audio tasks complete immediately.
+
+2. **Loop safepoints.** `plaid-lower` emits `PLAID_SAFEPOINT(s)` at every
+   loop header, meaning the target of a backward direct transfer or of a
+   backward table case.
+   - Within a function, every other transfer moves forward and calls
+     return. So a run that never returns passes a header again and again,
+     and its preemption latency is bounded.
+   - Without `PLAID_SAFEPOINTS` the macro is empty. The runtime build
+     defines it as a check of `plaid_preempt`.
+
+3. **Word protection map.** The store guard scanned every `plaid_code`
+   range on every guest store: 45566 ranges for SM64. Executable ranges are
+   word-aligned, so a per-word map built once from `plaid_code` (`prot` in
+   `plaid_state`) answers the same question in constant time. It covers
+   always-protected code, and code of declared load *n* once that load is
+   verified. The guest store guard and `plaid_runtime_write` both use it.
+
+Result:
+- `runtime/test_runtime.py` lowers a synthetic program with three threads
+  and checks the libultra order exactly: `1,2,3,7,4,5,0x99`. That order
+  covers:
+  - preemption on start and on send;
+  - a blocking receive;
+  - a priority drop;
+  - a VI retrace preempting a spinning thread at its safepoint.
+
+  It passed 6 of 6 runs.
+- A `lower` test checks that only loop headers get safepoints.
+- spike096 builds every program with `PLAID_SAFEPOINTS` and a runtime that
+  takes every safepoint. All programs still match ares, and every
+  fail-closed fault code is unchanged, including the store-guard faults 2.
+- **SM64 runs natively to its first graphics task:** Fast3D microcode
+  `0x8032b330` and a display list that begins with `G_MOVEWORD` segment
+  setup. With the protection map it reached 3 graphics tasks in 11 VI
+  frames, against 397 frames for the first task before it.
+
+## ADR-0160: The COP1 register mode is a declared map property; libultra runs FR = 0
+
+Context: lowered SM64 faulted 7 in `mtxf_lookat`. The code built the double
+`1.0` with `mtc1 $at, $f11; mtc1 $zero, $f10`, an even/odd register pair. So
+SM64 runs COP1 with Status.FR = 0, as libultra threads do: libultra never
+sets FR. Lowering assumed FR = 1 (ADR-0131) and read `$f10` as `0.0`. The
+fault caught this only because the divisor was 0. Any other value would have
+given a silently wrong result, and the solver's listed assumption
+("Status.FR = 1") was false for the game.
+
+Decision: `ProgramMap.cop1_fr0` declares the mode. `discover --fr0` and
+`lower-c --fr0` set it; it defaults to false, and merging rejects maps whose
+modes conflict. The solver lists the declared mode as its COP1 assumption.
+Under FR = 0, lowering follows pinned ares (`interpreter-fpu.cpp`, fgr_t,
+fgr_s and fgr_d) exactly:
+- arithmetic, compare, convert and move sources (fs) and 64-bit transfers
+  (`DMFC1`, `DMTC1`, `LDC1`, `SDC1`) use the even register of the pair;
+- a 32-bit transfer (`MFC1`, `MTC1`, `LWC1`, `SWC1`) of an odd register reads
+  or replaces the upper word of its even partner;
+- ft and fd index the register itself, as in ares.
+
+FR = 1 output is unchanged.
+
+Result:
+- The spike096 ares driver takes an optional `fr0` argument; the oracle was
+  rebuilt with `--rebuild`. The new `fpu_fr0` program matches ares running
+  with Status.FR = 0. It builds doubles from 32-bit moves, uses odd
+  `MFC1`/`LWC1`/`SWC1`, an odd `DMFC1` and an odd single-precision source.
+- A `lower` test checks the odd-word mapping and the masked source.
+- The CLI test checks that `--fr0` is recorded.
+- SM64 is rediscovered with `--fr0`. It stays `closed` under the
+  address-taken scope, and its report now lists Status.FR = 0.
+- **SM64 now runs natively for 96 graphics tasks in 196 VI frames.** That is
+  the game's own 30 fps, through the intro. The run stops with fault 2
+  inside `bzero`, called from `load_to_fixed_pool_addr` on `0x8016f000`:
+  the menu clears goddard's fixed-load region in order to DMA it again.
+  Declared loads are protected for good once verified (ADR-0136), so the
+  native code fails closed here. ADR-0161 gives loads a lifetime.

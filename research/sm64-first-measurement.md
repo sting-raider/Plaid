@@ -202,3 +202,24 @@ runtime osCreateThread at ra=80246384 a0=8033a730 a1=00000001 a2=80246cf0
 That is `create_thread(&gIdleThread, 1, thread1_idle, ...)` in `main_func`,
 with addresses as in the decomp map. Continuing needs a host thread
 scheduler and the rest of the libultra runtime.
+
+## Update: native run with Plaid's runtime (ADR-0159, ADR-0160)
+
+```
+plaid discover R 0x1000 0x80246000 0xf4580 0x80246000 map.json id.json --loads sm64-loads.json --address-taken --fr0
+plaid lower-map R map.json 0x80246000 0x80000000 sm64.c
+gcc -O1 -std=gnu11 -DPLAID_SAFEPOINTS -DPLAID_LOWERED='"sm64.c"' -I . runtime/plaid_rt.c -pthread -o sm64-native
+sm64-native --rom R --stop-at none --seconds 30
+```
+
+The `gcc -O1` build takes about 5 minutes.
+
+| Step | Result |
+| --- | --- |
+| first build | first graphics task (Fast3D `0x8032b330`) after 397 VI frames |
+| per-word protection map | 3 graphics tasks in 11 VI frames, then fault 7 in `mtxf_lookat` (FR = 1 misread `$f10:$f11`) |
+| FR = 0 map | **96 graphics tasks in 196 VI frames (30 fps)**, 269 PI DMAs, 192 audio tasks; then fault 2 |
+
+The fault 2 is `bzero` called from `load_to_fixed_pool_addr`, writing
+`0x8016f020`: the menu clears goddard's fixed-load region before DMAing it
+again.

@@ -27,7 +27,19 @@ typedef struct {
   u8 ram[PLAID_RAM_SIZE];
   u8 line_segment[PLAID_RAM_SIZE / 16]; /* 0 untouched, 1 KSEG0, 2 KSEG1 */
   u8 load_ok[64]; /* declared load verified in RAM (ADR-0136) */
+  /* per RAM word, from plaid_code: 0 data, 1 executable, 2 + n executable
+     bytes of declared load n; built once before the first guarded write */
+  u8 prot[PLAID_RAM_SIZE / 4]; u8 prot_ready;
 } plaid_state;
+/* A host runtime with preemptive scheduling builds with PLAID_SAFEPOINTS and
+   defines both names; every loop header checks plaid_preempt (ADR-0159). */
+#ifdef PLAID_SAFEPOINTS
+extern volatile int plaid_preempt;
+int plaid_rt_safepoint(plaid_state *s);
+#define PLAID_SAFEPOINT(s) do { if (plaid_preempt) { int r_ = plaid_rt_safepoint(s); if (r_) return r_; } } while (0)
+#else
+#define PLAID_SAFEPOINT(s) ((void)0)
+#endif
 /* executable bytes; load: index of the declared load holding them, or -1 */
 typedef struct { u32 start, end; int load; } plaid_range;
 #define SX32(v) ((u64)(s64)(s32)(u32)(v))
@@ -49,8 +61,24 @@ static inline int plaid_fault(plaid_state *s, u32 pc, u32 code) {
 }
 "#;
 
-const HELPERS: &str = r#"static inline int plaid_addr(plaid_state *s, u64 va, u32 size, u32 pc, int write, u32 *out) {
-  u32 v = (u32)va, p, i;
+const HELPERS: &str = r#"/* Executable ranges are word-aligned, so a per-word map answers the same
+   overlap question as scanning plaid_code, in constant time (ADR-0159). */
+static void plaid_build_prot(plaid_state *s) {
+  u32 i, w;
+  for (i = 0; i < sizeof plaid_code / sizeof plaid_code[0]; i++)
+    for (w = plaid_code[i].start >> 2; w < (plaid_code[i].end + 3) >> 2 && w < PLAID_RAM_SIZE / 4; w++)
+      if (s->prot[w] != 1) s->prot[w] = plaid_code[i].load < 0 ? 1 : (u8)(2 + plaid_code[i].load);
+  s->prot_ready = 1;
+}
+static inline int plaid_protected(plaid_state *s, u32 p, u32 size) {
+  u32 w;
+  if (!s->prot_ready) plaid_build_prot(s);
+  for (w = p >> 2; w <= (p + size - 1) >> 2; w++)
+    if (s->prot[w] == 1 || (s->prot[w] > 1 && s->load_ok[s->prot[w] - 2])) return 1;
+  return 0;
+}
+static inline int plaid_addr(plaid_state *s, u64 va, u32 size, u32 pc, int write, u32 *out) {
+  u32 v = (u32)va, p;
   if (va != SX32(v) || (v & (size - 1)) || v < 0x80000000u || v >= 0xc0000000u)
     return plaid_fault(s, pc, 1);
   p = v & 0x1fffffffu;
@@ -58,11 +86,7 @@ const HELPERS: &str = r#"static inline int plaid_addr(plaid_state *s, u64 va, u3
   if (s->line_segment[p >> 4] && s->line_segment[p >> 4] != (v < 0xa0000000u ? 1 : 2))
     return plaid_fault(s, pc, 4);
   s->line_segment[p >> 4] = v < 0xa0000000u ? 1 : 2;
-  if (write)
-    for (i = 0; i < sizeof plaid_code / sizeof plaid_code[0]; i++)
-      if (p < plaid_code[i].end && p + size > plaid_code[i].start &&
-          (plaid_code[i].load < 0 || s->load_ok[plaid_code[i].load]))
-        return plaid_fault(s, pc, 2);
+  if (write && plaid_protected(s, p, size)) return plaid_fault(s, pc, 2);
   *out = p; return 0;
 }
 /* COP1 arithmetic (ADR-0139), following pinned ares: fcsr holds FCSR bits
@@ -227,12 +251,8 @@ static inline int plaid_ctc1(plaid_state *s, u32 v, u32 pc) {
 }
 /* Host runtime functions call this before writing guest RAM at physical p. */
 int plaid_runtime_write(plaid_state *s, u32 p, u32 size, u32 pc) {
-  u32 i;
   if (p > PLAID_RAM_SIZE || size > PLAID_RAM_SIZE - p) return plaid_fault(s, pc, 1);
-  for (i = 0; i < sizeof plaid_code / sizeof plaid_code[0]; i++)
-    if (p < plaid_code[i].end && p + size > plaid_code[i].start &&
-        (plaid_code[i].load < 0 || s->load_ok[plaid_code[i].load]))
-      return plaid_fault(s, pc, 2);
+  if (size && plaid_protected(s, p, size)) return plaid_fault(s, pc, 2);
   return 0;
 }
 static inline int plaid_load(plaid_state *s, u64 va, u32 size, u32 pc, u64 *value) {
@@ -309,13 +329,35 @@ fn is_control(word: u32) -> bool {
 }
 
 /// One non-control instruction, with exact pinned-ares integer semantics.
-fn simple(word: u32, pc: u32) -> Result<String, String> {
+/// `fr0`: Status.FR = 0 (ADR-0160). As pinned ares: arithmetic sources (fs)
+/// and 64-bit transfers use the even register of a pair, a 32-bit transfer
+/// of an odd register is the upper word of its even partner, and ft and fd
+/// index the register itself.
+fn simple(word: u32, pc: u32, fr0: bool) -> Result<String, String> {
     let (rs, rt, rd, sa) = (
         (word >> 21) & 31,
         (word >> 16) & 31,
         (word >> 11) & 31,
         (word >> 6) & 31,
     );
+    let pair = |n: u32| if fr0 { n & !1 } else { n };
+    let fs = pair(rd);
+    // 32-bit FPR transfers: read and replace one word of a 64-bit FPR
+    let get32 = |n: u32| {
+        if fr0 && n & 1 == 1 {
+            format!("(u32)(s->f[{}] >> 32)", n - 1)
+        } else {
+            format!("(u32)s->f[{n}]")
+        }
+    };
+    let put32 = |n: u32, v: &str| {
+        if fr0 && n & 1 == 1 {
+            let e = n - 1;
+            format!("s->f[{e}] = (s->f[{e}] & 0xffffffffull) | (u64)(u32){v} << 32;")
+        } else {
+            format!("s->f[{n}] = (s->f[{n}] & 0xffffffff00000000ull) | (u32){v};")
+        }
+    };
     let (imm, simm) = (word & 0xffff, word as u16 as i16);
     let (a, b) = (format!("s->r[{rs}]"), format!("s->r[{rt}]"));
     let addr = format!("{a} + (u64)(s64){simm}");
@@ -456,12 +498,12 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
         // replace only the low word, as on the VR4300 (ADR-0131).
         // Moves have rs < 16; `add.s $f0, ...` also has zero low bits.
         (17, _) if word & 0x7ff == 0 && rs < 16 => {
-            let f = format!("s->f[{rd}]");
+            let wide = format!("s->f[{}]", pair(rd));
             match rs {
-                0 => set(rt, format!("SX32((u32){f})")),
-                1 => set(rt, f),
-                4 => format!("{f} = ({f} & 0xffffffff00000000ull) | (u32){b};"),
-                5 => format!("{f} = {b};"),
+                0 => set(rt, format!("SX32({})", get32(rd))),
+                1 => set(rt, wide),
+                4 => put32(rd, &b),
+                5 => format!("{wide} = {b};"),
                 // CFC1/CTC1 (ADR-0139): FCR31 is the FCSR, FCR0 the revision.
                 2 => set(
                     rt,
@@ -491,7 +533,7 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
                 ("double", "u64", "")
             };
             format!(
-                "{{ {ty} x, y; {bits} xb = {lane}s->f[{rd}], yb = {lane}s->f[{rt}]; memcpy(&x, &xb, sizeof x); memcpy(&y, &yb, sizeof y); s->fcsr &= ~0x3f000u; if (x != x || y != y) return plaid_fault(s, 0x{pc:08x}u, 7); s->fcc = ({} && x < y) || ({} && x == y); }}",
+                "{{ {ty} x, y; {bits} xb = {lane}s->f[{fs}], yb = {lane}s->f[{rt}]; memcpy(&x, &xb, sizeof x); memcpy(&y, &yb, sizeof y); s->fcsr &= ~0x3f000u; if (x != x || y != y) return plaid_fault(s, 0x{pc:08x}u, 7); s->fcc = ({} && x < y) || ({} && x == y); }}",
                 f >> 2 & 1,
                 f >> 1 & 1
             )
@@ -499,19 +541,19 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
         // COP1 arithmetic and conversions (ADR-0139); fd is the sa field.
         (17, f) if matches!(rs, 16 | 17) && matches!(f, 0..=5 | 7) => {
             let kind = if rs == 16 { "s" } else { "d" };
-            format!("if (plaid_arith_{kind}(s, {f}, {sa}, {rd}, {rt}, 0x{pc:08x}u)) return 1;")
+            format!("if (plaid_arith_{kind}(s, {f}, {sa}, {fs}, {rt}, 0x{pc:08x}u)) return 1;")
         }
-        (17, 6) if matches!(rs, 16 | 17) => format!("s->f[{sa}] = s->f[{rd}];"),
+        (17, 6) if matches!(rs, 16 | 17) => format!("s->f[{sa}] = s->f[{fs}];"),
         (17, f @ (8..=15 | 36 | 37)) if matches!(rs, 16 | 17) => {
             let (x, bad) = if rs == 16 {
                 (
-                    format!("(double)plaid_f32((u32)s->f[{rd}])"),
-                    format!("plaid_f32_bad((u32)s->f[{rd}])"),
+                    format!("(double)plaid_f32((u32)s->f[{fs}])"),
+                    format!("plaid_f32_bad((u32)s->f[{fs}])"),
                 )
             } else {
                 (
-                    format!("plaid_f64(s->f[{rd}])"),
-                    format!("plaid_f64_bad(s->f[{rd}])"),
+                    format!("plaid_f64(s->f[{fs}])"),
+                    format!("plaid_f64_bad(s->f[{fs}])"),
                 )
             };
             // ROUND/TRUNC/CEIL/FLOOR encode their mode in the low bits; CVT uses FCSR.RM.
@@ -524,19 +566,27 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
             format!("if (plaid_to_int(s, {x}, {bad}, {rm}, {wide}, {sa}, 0x{pc:08x}u)) return 1;")
         }
         (17, 32) if matches!(rs, 17 | 20 | 21) => {
-            format!("if (plaid_to_s(s, {rs}, {sa}, {rd}, 0x{pc:08x}u)) return 1;")
+            format!("if (plaid_to_s(s, {rs}, {sa}, {fs}, 0x{pc:08x}u)) return 1;")
         }
         (17, 33) if matches!(rs, 16 | 20 | 21) => {
-            format!("if (plaid_to_d(s, {rs}, {sa}, {rd}, 0x{pc:08x}u)) return 1;")
+            format!("if (plaid_to_d(s, {rs}, {sa}, {fs}, 0x{pc:08x}u)) return 1;")
         }
         (49, _) => format!(
-            "{{ u64 v; if (plaid_load(s, {addr}, 4, 0x{pc:08x}u, &v)) return 1; s->f[{rt}] = (s->f[{rt}] & 0xffffffff00000000ull) | v; }}"
+            "{{ u64 v; if (plaid_load(s, {addr}, 4, 0x{pc:08x}u, &v)) return 1; {} }}",
+            put32(rt, "v")
         ),
-        (53, _) => format!("if (plaid_load(s, {addr}, 8, 0x{pc:08x}u, &s->f[{rt}])) return 1;"),
-        (57, _) => {
-            format!("if (plaid_store(s, {addr}, 4, (u32)s->f[{rt}], 0x{pc:08x}u)) return 1;")
-        }
-        (61, _) => format!("if (plaid_store(s, {addr}, 8, s->f[{rt}], 0x{pc:08x}u)) return 1;"),
+        (53, _) => format!(
+            "if (plaid_load(s, {addr}, 8, 0x{pc:08x}u, &s->f[{}])) return 1;",
+            pair(rt)
+        ),
+        (57, _) => format!(
+            "if (plaid_store(s, {addr}, 4, {}, 0x{pc:08x}u)) return 1;",
+            get32(rt)
+        ),
+        (61, _) => format!(
+            "if (plaid_store(s, {addr}, 8, s->f[{}], 0x{pc:08x}u)) return 1;",
+            pair(rt)
+        ),
         (63, _) => store(8),
         (0, 33) => set(rd, format!("SX32((u32){a} + (u32){b})")),
         (0, 35) => set(rd, format!("SX32((u32){a} - (u32){b})")),
@@ -918,6 +968,21 @@ pub fn lower_c_with_preload(
         out += &format!("  case 0x{0:08x}u: return F_{0:08x}(s, ret);\n", t.pc.0);
     }
     out += "  }\n  return plaid_fault(s, entry, 3);\n}\n";
+    // Loop headers: targets of a backward direct transfer or table case.
+    // Every other transfer inside a function moves forward, so a path that
+    // never returns passes a header again and again (ADR-0159).
+    let headers: BTreeSet<u32> = map
+        .direct_edges
+        .iter()
+        .filter(|e| e.kind != EdgeKind::Call && e.target.pc.0 <= e.site.pc.0)
+        .map(|e| e.target.pc.0)
+        .chain(
+            targets
+                .iter()
+                .flat_map(|(site, ts)| ts.iter().filter(move |t| **t <= *site))
+                .copied(),
+        )
+        .collect();
     let mut seen = BTreeSet::new();
     let bodies = returns::function_bodies(map, image, callees.iter());
     for f in callees.iter().filter(|f| seen.insert(f.pc.0)) {
@@ -940,6 +1005,9 @@ pub fn lower_c_with_preload(
                 continue;
             }
             out += &format!("L_{start:08x}:\n");
+            if headers.contains(&start) {
+                out += "  PLAID_SAFEPOINT(s);\n";
+            }
             if let Some(l) = load_of(start) {
                 out += &format!(
                     "  if (!s->load_ok[{l}] && plaid_verify_load(s, {l}, 0x{start:08x}u)) return 1;\n"
@@ -950,7 +1018,7 @@ pub fn lower_c_with_preload(
             while pc < end {
                 let w = word(pc)?;
                 if is_control(w) {
-                    let slot = simple(word(pc + 4)?, pc + 4)?;
+                    let slot = simple(word(pc + 4)?, pc + 4, map.cop1_fr0)?;
                     out += &format!("  {}\n", lowerer.control(w, pc, &slot)?);
                     pc += 8;
                     transferred = true;
@@ -958,7 +1026,7 @@ pub fn lower_c_with_preload(
                         return Err(format!("{start:08x}: block continues past its transfer"));
                     }
                 } else {
-                    let s = simple(w, pc)?;
+                    let s = simple(w, pc, map.cop1_fr0)?;
                     if !s.is_empty() {
                         out += &format!("  {s}\n");
                     }

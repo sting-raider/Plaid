@@ -172,6 +172,11 @@ def main():
         run("discover",rom,"64","0x80000000","40","0x80000000",taken,"--address-taken")
         assert len(json.loads(taken.read_bytes())['blocks'])>=len(json.loads(runtime_map.read_bytes())['blocks'])
         assert json.loads(run("solve",rom,taken,"--address-taken"))['status']=='closed'
+        # the COP1 register mode is a declared map property (ADR-0160)
+        fr0_map=directory/'fr0-map.json'
+        run("discover",rom,"64","0x80000000","40","0x80000000",fr0_map,"--fr0")
+        assert json.loads(fr0_map.read_bytes())['cop1_fr0'] is True
+        assert 'cop1_fr0' not in json.loads(taken.read_bytes())
         # a closed ROM map lowers to C; an OPEN one is refused (ADR-0157)
         lowered=directory/'taken.c'
         run("lower-map",rom,taken,"0x80000000","0x80000f00",lowered)

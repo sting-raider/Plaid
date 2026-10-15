@@ -18,7 +18,8 @@ struct Headless : ares::Platform {
 };
 
 int main(int argc, char** argv) {
-  if(argc != 3) return 2;
+  if(argc != 3 && argc != 4) return 2;
+  bool fr0 = argc == 4 && std::string(argv[3]) == "fr0";  // Status.FR = 0 (ADR-0160)
   u32 exit = (u32)std::strtoul(argv[2], nullptr, 0);
   Headless frontend;
   platform = &frontend;
@@ -43,8 +44,8 @@ int main(int argc, char** argv) {
   rdram.mapIdentity = 1;
   cpu.scc.status.errorLevel = 0;
   cpu.scc.status.exceptionLevel = 0;
-  cpu.scc.status.enable.coprocessor1 = 1;  // CU1 = 1, FR = 1 (ADR-0131)
-  cpu.scc.status.floatingPointMode = 1;
+  cpu.scc.status.enable.coprocessor1 = 1;  // CU1 = 1, FR = 1 (ADR-0131) unless fr0
+  cpu.scc.status.floatingPointMode = !fr0;
   cpu.context.setMode();
   auto file = std::fopen(argv[1], "rb");
   if(!file) return 5;
