@@ -1,39 +1,39 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 686" width="840" height="686" role="img" aria-label="Plaid coverage maps">
 <style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}.title{font-size:17px;fill:#1f2328}.cell{font-size:12px;fill:#fff;paint-order:stroke;stroke:#0d1117;stroke-width:2px;stroke-opacity:.45}@media (prefers-color-scheme:dark){.title{fill:#e6edf3}}</style>
-<text x="2" y="22" class="title">VR4300 instructions*: 45.0% (94/209)</text>
+<text x="2" y="22" class="title">VR4300 instructions*: 62.2% (130/209)</text>
 <text x="2" y="378" class="title">Milestones*: 30 verified, 19 partial (69)</text>
-<rect x="0.0" y="30.0" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.df.d (open)</title></rect>
-<rect x="33.3" y="30.0" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.d (open)</title></rect>
-<rect x="66.6" y="30.0" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.s (open)</title></rect>
-<rect x="99.9" y="30.0" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.f.d (open)</title></rect>
-<rect x="133.2" y="30.0" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.f.s (open)</title></rect>
-<rect x="166.5" y="30.0" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.le.d (open)</title></rect>
-<rect x="199.8" y="30.0" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.le.s (open)</title></rect>
-<rect x="0.0" y="63.1" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.lt.d (open)</title></rect>
-<rect x="33.3" y="63.1" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.lt.s (open)</title></rect>
-<rect x="66.6" y="63.1" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.nge.d (open)</title></rect>
-<rect x="99.9" y="63.1" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.nge.s (open)</title></rect>
-<rect x="133.2" y="63.1" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngl.d (open)</title></rect>
-<rect x="166.5" y="63.1" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngl.s (open)</title></rect>
-<rect x="199.8" y="63.1" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngle.d (open)</title></rect>
-<rect x="0.0" y="96.2" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngle.s (open)</title></rect>
-<rect x="33.3" y="96.2" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngt.d (open)</title></rect>
-<rect x="66.6" y="96.2" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngt.s (open)</title></rect>
-<rect x="99.9" y="96.2" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ole.d (open)</title></rect>
-<rect x="133.2" y="96.2" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ole.s (open)</title></rect>
-<rect x="166.5" y="96.2" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.olt.d (open)</title></rect>
-<rect x="199.8" y="96.2" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.olt.s (open)</title></rect>
-<rect x="0.0" y="129.3" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.seq.d (open)</title></rect>
-<rect x="33.3" y="129.3" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.seq.s (open)</title></rect>
-<rect x="66.6" y="129.3" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.sf.s (open)</title></rect>
-<rect x="99.9" y="129.3" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ueq.d (open)</title></rect>
-<rect x="133.2" y="129.3" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ueq.s (open)</title></rect>
-<rect x="166.5" y="129.3" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ule.d (open)</title></rect>
-<rect x="199.8" y="129.3" width="33.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ule.s (open)</title></rect>
-<rect x="0.0" y="162.4" width="58.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ult.d (open)</title></rect>
-<rect x="58.3" y="162.4" width="58.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ult.s (open)</title></rect>
-<rect x="116.6" y="162.4" width="58.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.un.d (open)</title></rect>
-<rect x="174.8" y="162.4" width="58.3" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.un.s (open)</title></rect>
+<rect x="0.0" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.df.d (done)</title></rect>
+<rect x="33.3" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.d (done)</title></rect>
+<rect x="66.6" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.eq.s (done)</title></rect>
+<rect x="99.9" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.f.d (done)</title></rect>
+<rect x="133.2" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.f.s (done)</title></rect>
+<rect x="166.5" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.le.d (done)</title></rect>
+<rect x="199.8" y="30.0" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.le.s (done)</title></rect>
+<rect x="0.0" y="63.1" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.lt.d (done)</title></rect>
+<rect x="33.3" y="63.1" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.lt.s (done)</title></rect>
+<rect x="66.6" y="63.1" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.nge.d (done)</title></rect>
+<rect x="99.9" y="63.1" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.nge.s (done)</title></rect>
+<rect x="133.2" y="63.1" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngl.d (done)</title></rect>
+<rect x="166.5" y="63.1" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngl.s (done)</title></rect>
+<rect x="199.8" y="63.1" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngle.d (done)</title></rect>
+<rect x="0.0" y="96.2" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngle.s (done)</title></rect>
+<rect x="33.3" y="96.2" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngt.d (done)</title></rect>
+<rect x="66.6" y="96.2" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ngt.s (done)</title></rect>
+<rect x="99.9" y="96.2" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ole.d (done)</title></rect>
+<rect x="133.2" y="96.2" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ole.s (done)</title></rect>
+<rect x="166.5" y="96.2" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.olt.d (done)</title></rect>
+<rect x="199.8" y="96.2" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.olt.s (done)</title></rect>
+<rect x="0.0" y="129.3" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.seq.d (done)</title></rect>
+<rect x="33.3" y="129.3" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.seq.s (done)</title></rect>
+<rect x="66.6" y="129.3" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.sf.s (done)</title></rect>
+<rect x="99.9" y="129.3" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ueq.d (done)</title></rect>
+<rect x="133.2" y="129.3" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ueq.s (done)</title></rect>
+<rect x="166.5" y="129.3" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ule.d (done)</title></rect>
+<rect x="199.8" y="129.3" width="33.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ule.s (done)</title></rect>
+<rect x="0.0" y="162.4" width="58.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ult.d (done)</title></rect>
+<rect x="58.3" y="162.4" width="58.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.ult.s (done)</title></rect>
+<rect x="116.6" y="162.4" width="58.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.un.d (done)</title></rect>
+<rect x="174.8" y="162.4" width="58.3" height="33.1" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU compare: c.un.s (done)</title></rect>
 <rect x="0.0" y="30.0" width="233.1" height="165.5" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="4.0" y="43.0" class="cell">FPU compare</text>
 <rect x="0.0" y="195.5" width="33.3" height="33.6" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>FPU convert: ceil.l.d (open)</title></rect>
@@ -189,18 +189,18 @@
 <rect x="794.4" y="129.3" width="45.6" height="33.1" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP0/system: tlbwr (open)</title></rect>
 <rect x="703.3" y="30.0" width="136.7" height="132.4" fill="none" stroke="#0d1117" stroke-width="2"/>
 <text x="707.3" y="43.0" class="cell">COP0/system</text>
-<rect x="566.7" y="162.4" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: dmfc1 (done)</title></rect>
-<rect x="600.3" y="162.4" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: dmtc1 (done)</title></rect>
-<rect x="633.8" y="162.4" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: ldc1 (done)</title></rect>
-<rect x="566.7" y="195.9" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: lwc1 (done)</title></rect>
-<rect x="600.3" y="195.9" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: mfc1 (done)</title></rect>
-<rect x="633.8" y="195.9" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: mtc1 (done)</title></rect>
-<rect x="566.7" y="229.4" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: sdc1 (done)</title></rect>
-<rect x="600.3" y="229.4" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: swc1 (done)</title></rect>
-<rect x="633.8" y="229.4" width="33.6" height="33.5" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: bc1f (open)</title></rect>
-<rect x="566.7" y="262.9" width="33.6" height="33.5" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: bc1fl (open)</title></rect>
-<rect x="600.3" y="262.9" width="33.6" height="33.5" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: bc1t (open)</title></rect>
-<rect x="633.8" y="262.9" width="33.6" height="33.5" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: bc1tl (open)</title></rect>
+<rect x="566.7" y="162.4" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: bc1f (done)</title></rect>
+<rect x="600.3" y="162.4" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: bc1fl (done)</title></rect>
+<rect x="633.8" y="162.4" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: bc1t (done)</title></rect>
+<rect x="566.7" y="195.9" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: bc1tl (done)</title></rect>
+<rect x="600.3" y="195.9" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: dmfc1 (done)</title></rect>
+<rect x="633.8" y="195.9" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: dmtc1 (done)</title></rect>
+<rect x="566.7" y="229.4" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: ldc1 (done)</title></rect>
+<rect x="600.3" y="229.4" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: lwc1 (done)</title></rect>
+<rect x="633.8" y="229.4" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: mfc1 (done)</title></rect>
+<rect x="566.7" y="262.9" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: mtc1 (done)</title></rect>
+<rect x="600.3" y="262.9" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: sdc1 (done)</title></rect>
+<rect x="633.8" y="262.9" width="33.6" height="33.5" fill="#2ea043" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: swc1 (done)</title></rect>
 <rect x="566.7" y="296.5" width="50.3" height="33.5" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: cfc1 (open)</title></rect>
 <rect x="617.0" y="296.5" width="50.3" height="33.5" fill="#6e7681" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6"><title>COP1 move: ctc1 (open)</title></rect>
 <rect x="566.7" y="162.4" width="100.7" height="167.6" fill="none" stroke="#0d1117" stroke-width="2"/>

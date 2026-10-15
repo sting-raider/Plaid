@@ -40,9 +40,10 @@ Next concrete steps, in order:
    320 blocks, 21 guarded blockers (7 in boot code; 14 from calls into the
    region its code segment is later DMA'd over).
    Done: unaligned loads and stores (ADR-0134).
-   **Next:** lower `C.cond.fmt`/`BC1x` from the MIPS condition rule (N64Recomp
-   marks its unordered compares TODO; they are wrong for NaN), checked
-   against ares. After that, the
+   Done: COP1 compares and BC1 branches (ADR-0135).
+   **Next:** the OoT code-segment DMA boundary (calls at `0x80000624` and
+   `0x80000d94` reach bytes that a DMA replaces), then COP1 arithmetic and
+   conversions. After that, the
    executable-DMA boundary for the OoT code segment.
 4. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
    boot-segment discovery from the real entry point, then a local-only recall

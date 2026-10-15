@@ -3150,3 +3150,37 @@ stores into prefilled memory. It matches pinned ares. Replacing the `LWR`
 rule with N64Recomp's always-sign-extend makes the program fail. Measured
 ISA coverage rises from 85 to 94 of 209 forms. On OoT the `SWL` blocker at
 `0x80003058` closes, leaving 20 guarded blockers, 6 of them in boot code.
+
+## ADR-0135: COP1 compares use the MIPS condition rule, with NaN failing closed
+
+Context: the OoT boot code branches on `C.EQ.S`/`BC1T`. N64Recomp lowers
+compares to C relational operators and marks its unordered forms TODO: it
+lowers `C.UN` as constant false and `C.UEQ` as `==`. Both are wrong for
+NaN operands.
+
+Decision: `plaid-lower` keeps the FCSR condition bit in `plaid_state.fcc`
+and lowers every `C.cond.S/D` (cond = un|eq|lt|signaling) as
+`(lt && a < b) || (eq && a == b)`, reading single operands from the low word
+of the FR = 1 register. That is the pinned ares result for ordered operands,
+denormals included. With a NaN operand, ares sets the condition to the `un`
+bit or raises an exception, depending on the FCSR Invalid Operation enable,
+which Plaid does not model. So a NaN operand aborts with the new fault 7, and
+the guarded scope lists "no NaN compare operands" as a checked assumption.
+`BC1F/BC1T/BC1FL/BC1TL` lower as conditional or likely branches on `fcc`.
+`DeclaredStaticImagesGuardedRam` admits these opcodes. The COP1
+usability/FR assumption now covers every COP1 instruction.
+
+Result: spike096 `fcompare` runs all 16 conditions for single and double over
+the following operand pairs:
+- 1/2 and 2/1,
+- equal values,
+- -0/+0,
+- denormal/0,
+- -inf/+inf.
+
+Each condition bit is recorded through `BC1TL` and `BC1F`. The run matches
+pinned ares, including the condition bit now printed by both harnesses.
+`fpu_nan` faults 7. ISA coverage rises from 94 to 130 of 209 forms. On OoT
+the four compare/branch blockers close. 16 guarded blockers remain: in boot
+code only the boot return and the `0x80000f10` pointer call, and 14 past the
+code-segment DMA boundary.

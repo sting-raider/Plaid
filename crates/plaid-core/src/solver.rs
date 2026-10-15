@@ -343,8 +343,18 @@ pub fn is_cop1_move(word: u32) -> bool {
     }
 }
 
+/// COP1 `C.cond.S/D` compares (ADR-0135).
+pub fn is_cop1_compare(word: u32) -> bool {
+    word >> 26 == 17 && matches!((word >> 21) & 31, 16 | 17) && word & 0x7f0 == 0x30
+}
+
+/// `BC1F BC1T BC1FL BC1TL` (ADR-0135).
+pub fn is_cop1_branch(word: u32) -> bool {
+    word >> 26 == 17 && (word >> 21) & 31 == 8 && (word >> 18) & 7 == 0
+}
+
 fn allowed_static_effect(word: u32, pc: crate::GuestAddr, guarded_ram: bool) -> bool {
-    if guarded_ram && is_cop1_move(word) {
+    if guarded_ram && (is_cop1_move(word) || is_cop1_compare(word) || is_cop1_branch(word)) {
         return true;
     }
     let i = decode(word, pc);
@@ -519,7 +529,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             );
         }
     }
-    let mut uses_cop1 = false;
+    let (mut uses_cop1, mut uses_compare) = (false, false);
     for b in &map.blocks {
         if b.delay_slot_entry {
             add(
@@ -553,7 +563,8 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 );
                 continue;
             };
-            uses_cop1 |= is_cop1_move(word);
+            uses_compare |= is_cop1_compare(word);
+            uses_cop1 |= is_cop1_move(word) || is_cop1_compare(word) || is_cop1_branch(word);
             if scope.is_static()
                 && !allowed_static_effect(word, pc, scope == Scope::DeclaredStaticImagesGuardedRam)
             {
@@ -1004,7 +1015,13 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         }
         if uses_cop1 {
             assumptions.push(
-                "COP1 is usable with 64-bit FPRs (Status.CU1 = 1, Status.FR = 1) wherever COP1 data moves execute."
+                "COP1 is usable with 64-bit FPRs (Status.CU1 = 1, Status.FR = 1) wherever COP1 instructions execute."
+                    .into(),
+            );
+        }
+        if uses_compare {
+            assumptions.push(
+                "COP1 compares never see a NaN operand, whose result depends on the unmodeled FCSR Invalid Operation enable; a native artifact checks every compare and aborts on a NaN, with no fallback execution."
                     .into(),
             );
         }
