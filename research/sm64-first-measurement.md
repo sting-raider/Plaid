@@ -223,3 +223,16 @@ The `gcc -O1` build takes about 5 minutes.
 The fault 2 is `bzero` called from `load_to_fixed_pool_addr`, writing
 `0x8016f020`: the menu clears goddard's fixed-load region before DMAing it
 again.
+
+## Update: declared-load lifetime (ADR-0161)
+
+With the same build, run for 90 seconds:
+
+| Step | Result |
+| --- | --- |
+| loads re-verify after a write | 96 graphics tasks in 196 VI frames, 192 audio tasks, **395 PI DMAs** (269 before); then fault 1 at `0x80183b38` |
+
+The goddard reload no longer faults. The fault 1 is a load from `0x04000650`
+in goddard, called from `0x801a72b4` just after the `osMapTLB` loop: this is
+`load_dynlist`, which maps the dynlists segment at virtual `0x04000000` with
+64 KB TLB pages and walks it there. ADR-0162 adds TLB-mapped data.

@@ -53,7 +53,8 @@ typedef struct { u32 start, end; int load; } plaid_range;
    7: a COP1 operation outside the modeled subset: a NaN or subnormal
       operand, an out-of-range conversion, or an enabled FPU exception;
    8: code of a declared load entered while RAM does not hold its declared
-      bytes. Executable bytes of a load not yet verified may be written;
+      bytes. Writes into a load revoke its verification, so entry compares
+      again (ADR-0161); a write by the load's own code into it faults 2;
    9: a BREAK was reached (its exception handler is not modeled);
    10: a conditional trap was taken (its exception handler is not modeled). */
 static inline int plaid_fault(plaid_state *s, u32 pc, u32 code) {
@@ -70,11 +71,23 @@ static void plaid_build_prot(plaid_state *s) {
       if (s->prot[w] != 1) s->prot[w] = plaid_code[i].load < 0 ? 1 : (u8)(2 + plaid_code[i].load);
   s->prot_ready = 1;
 }
-static inline int plaid_protected(plaid_state *s, u32 p, u32 size) {
-  u32 w;
+/* 1 when a write must abort: the base image's code and jump tables always,
+   and a verified declared load's code when the writer at pc is that load's
+   own code. Any other write into a verified load revokes its verification;
+   the next entry into its code compares the bytes again (ADR-0161). */
+static inline int plaid_protected(plaid_state *s, u32 p, u32 size, u32 pc) {
+  u32 w, q = pc & 0x1fffffffu;
+  u8 own = 0, k;
   if (!s->prot_ready) plaid_build_prot(s);
-  for (w = p >> 2; w <= (p + size - 1) >> 2; w++)
-    if (s->prot[w] == 1 || (s->prot[w] > 1 && s->load_ok[s->prot[w] - 2])) return 1;
+  if (pc >= 0x80000000u && pc < 0xc0000000u && q < PLAID_RAM_SIZE) own = s->prot[q >> 2];
+  for (w = p >> 2; w <= (p + size - 1) >> 2; w++) {
+    k = s->prot[w];
+    if (k == 1) return 1;
+    if (k > 1 && s->load_ok[k - 2]) {
+      if (k == own) return 1;
+      s->load_ok[k - 2] = 0;
+    }
+  }
   return 0;
 }
 static inline int plaid_addr(plaid_state *s, u64 va, u32 size, u32 pc, int write, u32 *out) {
@@ -86,7 +99,7 @@ static inline int plaid_addr(plaid_state *s, u64 va, u32 size, u32 pc, int write
   if (s->line_segment[p >> 4] && s->line_segment[p >> 4] != (v < 0xa0000000u ? 1 : 2))
     return plaid_fault(s, pc, 4);
   s->line_segment[p >> 4] = v < 0xa0000000u ? 1 : 2;
-  if (write && plaid_protected(s, p, size)) return plaid_fault(s, pc, 2);
+  if (write && plaid_protected(s, p, size, pc)) return plaid_fault(s, pc, 2);
   *out = p; return 0;
 }
 /* COP1 arithmetic (ADR-0139), following pinned ares: fcsr holds FCSR bits
@@ -252,7 +265,7 @@ static inline int plaid_ctc1(plaid_state *s, u32 v, u32 pc) {
 /* Host runtime functions call this before writing guest RAM at physical p. */
 int plaid_runtime_write(plaid_state *s, u32 p, u32 size, u32 pc) {
   if (p > PLAID_RAM_SIZE || size > PLAID_RAM_SIZE - p) return plaid_fault(s, pc, 1);
-  if (size && plaid_protected(s, p, size)) return plaid_fault(s, pc, 2);
+  if (size && plaid_protected(s, p, size, 0)) return plaid_fault(s, pc, 2);
   return 0;
 }
 static inline int plaid_load(plaid_state *s, u64 va, u32 size, u32 pc, u64 *value) {

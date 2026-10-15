@@ -211,15 +211,25 @@ PAYLOAD = ['payload', addiu(v0, zero, 0), addiu(t0, zero, 4),
 # A load placed away from the image leaves a hole in the composite (ADR-0150).
 LOAD_DEST = {'load_gap': LOAD_AT + 0x100}
 
-def load_program(early=False, patch=False, at=LOAD_AT):
-    copy = [lui(s0, 0xA000), LO(s0, s0, 'payload'), lui(s1, 0xA000), ori(s1, s1, at & 0xFFFF),
-        addiu(s2, zero, 8),
-        'cp', lw(t1, 0, s0), sw(t1, 0, s1), addiu(s0, s0, 4), addiu(s1, s1, 4), addiu(s2, s2, -1), bgtz(s2, 'cp'), nop]
+def load_program(early=False, patch=False, at=LOAD_AT, reload=False, payload=None):
+    def copy(label):
+        return [lui(s0, 0xA000), LO(s0, s0, 'payload'), lui(s1, 0xA000), ori(s1, s1, at & 0xFFFF),
+            addiu(s2, zero, 8),
+            label, lw(t1, 0, s0), sw(t1, 0, s1), addiu(s0, s0, 4), addiu(s1, s1, 4), addiu(s2, s2, -1), bgtz(s2, label), nop]
     call = [lambda pc, L: 3 << 26 | (at >> 2) & 0x3FFFFFF, nop, addu(s3, v0, zero)]
-    body = call + copy if early else copy + call
-    if patch:
-        body += [sw(zero, -4, s1)]
-    return [*body, *DONE, *PAYLOAD]
+    body = call + copy('cp') if early else copy('cp') + call
+    # A write into the verified load revokes it (ADR-0161): entering it again
+    # compares its bytes, so a changed word faults 8 and a reloaded copy runs.
+    if patch or reload:
+        body += [sw(s1, -4, s1)]
+    if reload:
+        body += copy('cp2')
+    if patch or reload:
+        body += call
+    return [*body, *DONE, *(payload or PAYLOAD)]
+
+# The load's own code writing its bytes: fault 2 (ADR-0161).
+SELF_PAYLOAD = ['payload', lui(t0, 0xA000), ori(t0, t0, LOAD_AT & 0xFFFF), sw(t0, 0, t0), jr(ra), nop, nop, nop, nop]
 
 def jump_table(prefix):
     # GCC shape: the index scale SLL sits in the bound check's delay slot.
@@ -294,6 +304,7 @@ PROGRAMS = {
         'f', addiu(v0, zero, 42), jr(ra), nop],
     'load': load_program(),
     'load_gap': load_program(at=LOAD_DEST['load_gap']),
+    'load_reload': load_program(reload=True),
     # GCC's divide check: BREAK 7 guarded by a divisor test that is not taken.
     'divcheck': [addiu(t0, zero, 21), addiu(t1, zero, 4), div(t0, t1), bne(t1, zero, 'ok'), nop,
         R(13, 0, 0, 7 >> 5, 7 & 31), 'ok', mflo(t2), mfhi(t3), *DONE],
@@ -444,7 +455,8 @@ BAD_RETURN = [jal('f'), nop, *DONE, 'f', addiu(ra, ra, 8), jr(ra), nop]
 # A trapping add that overflows raises on hardware; native code must fault 6.
 OVERFLOW = [lui(t0, 0x7FFF), ori(t0, t0, 0xFFFF), addi(t1, t0, 1), *DONE]
 RUNTIME = {'boundary': [('sum', [])], 'callback': [('spawn', ['a0'])], 'forwarded': [('spawn', ['a0'])]}
-LOADS = {'load': load_program(), 'load_gap': load_program(at=LOAD_DEST['load_gap']), 'load_early': load_program(early=True), 'load_patch': load_program(patch=True)}
+LOADS = {'load': load_program(), 'load_gap': load_program(at=LOAD_DEST['load_gap']), 'load_reload': load_program(reload=True),
+    'load_early': load_program(early=True), 'load_patch': load_program(patch=True), 'load_self': load_program(payload=SELF_PAYLOAD)}
 # Jump-table bytes are store-protected like code: a write must fault 2.
 TABLE_WRITE = jump_table([lui(s2, 0x8000), lambda pc, L: I(43, zero, s2, L['tbl'])])
 # A host entry returning anywhere but the host's $ra: fault 5 (ADR-0146).
@@ -476,7 +488,7 @@ def windows():
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
     OUT.mkdir(parents=True, exist_ok=True)
     progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN, overflow=OVERFLOW, table_write=TABLE_WRITE, fpu_nan=FPU_NAN,
-        fpu_enabled=FPU_ENABLED, fpu_range=FPU_RANGE, fpu_round_range=FPU_ROUND_RANGE, load_early=LOADS['load_early'], load_patch=LOADS['load_patch'], break_reached=BREAK, trap_taken=TRAP, host_bad_return=HOST_BAD_RETURN, at_bad=AT_BAD)
+        fpu_enabled=FPU_ENABLED, fpu_range=FPU_RANGE, fpu_round_range=FPU_ROUND_RANGE, load_early=LOADS['load_early'], load_patch=LOADS['load_patch'], load_self=LOADS['load_self'], break_reached=BREAK, trap_taken=TRAP, host_bad_return=HOST_BAD_RETURN, at_bad=AT_BAD)
     for name, items in progs.items():
         (OUT / f'{name}.bin').write_bytes(assemble(items))
         extra = []
@@ -508,13 +520,13 @@ def windows():
         oracle = json.loads((OUT / f'{name}-oracle.json').read_text())
         assert json.loads(native.stdout) == oracle, (name, native.stdout, oracle)
         results[name] = hashlib.sha256(json.dumps(oracle, sort_keys=True).encode()).hexdigest()
-    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('fpu_enabled', 7), ('fpu_range', 7), ('fpu_round_range', 7), ('load_early', 8), ('load_patch', 2), ('break_reached', 9), ('trap_taken', 10), ('host_bad_return', 5), ('at_bad', 3)):
+    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('fpu_enabled', 7), ('fpu_range', 7), ('fpu_round_range', 7), ('load_early', 8), ('load_patch', 8), ('load_self', 2), ('break_reached', 9), ('trap_taken', 10), ('host_bad_return', 5), ('at_bad', 3)):
         bad = subprocess.run([str(OUT / f'{name}-native.exe')], capture_output=True, text=True)
         assert bad.returncode == 6 and json.loads(bad.stdout)['fault'] == fault, (name, bad.stdout)
     receipt = dict(format='plaid-native-slice-receipt-v0', ares_revision=builder().REV, compiler=Path(cc).name,
-        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, fpu_enabled=7, fpu_range=7, fpu_round_range=7, load_early=8, load_patch=2, break_reached=9, trap_taken=10, host_bad_return=5, at_bad=3), interpreter_linked=False, native_complete=False)
+        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, fpu_enabled=7, fpu_range=7, fpu_round_range=7, load_early=8, load_patch=8, load_self=2, break_reached=9, trap_taken=10, host_bad_return=5, at_bad=3), interpreter_linked=False, native_complete=False)
     (OUT / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
-    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, enabled-FPU-exception, out-of-range-conversion, out-of-range-rounding, early-load, loaded-code-store, BREAK, trap, host-return and unknown-target programs fail closed')
+    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, enabled-FPU-exception, out-of-range-conversion, out-of-range-rounding, early-load, patched-load re-entry, load self-write, BREAK, trap, host-return and unknown-target programs fail closed')
     print(json.dumps(receipt, sort_keys=True))
 
 def builder():

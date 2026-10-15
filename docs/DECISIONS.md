@@ -4118,3 +4118,44 @@ Result:
   the menu clears goddard's fixed-load region in order to DMA it again.
   Declared loads are protected for good once verified (ADR-0136), so the
   native code fails closed here. ADR-0161 gives loads a lifetime.
+
+## ADR-0161: A verified declared load lives until its code bytes are written
+
+Context: ADR-0136 verifies a declared load at the first entry into its code
+and then protects its executable bytes for the rest of the run. SM64 reloads
+goddard: when the menu returns, `load_to_fixed_pool_addr` clears the fixed
+region at `0x8016f000` with `bzero` and DMAs the segment again. The
+permanent protection aborted that `bzero` (fault 2), although the program
+was only replacing a load with the same bytes.
+
+Decision: verification has a lifetime.
+- A store or runtime write (such as PI DMA) into a verified load's
+  executable bytes clears that load's `load_ok`; it is not a fault.
+  `plaid_protected` does this in the same per-word map lookup (ADR-0159).
+- Every block of a load's code already begins with
+  `if (!s->load_ok[L] && plaid_verify_load(...))`. That includes the return
+  point after each call, because a call ends its block. So the next block
+  entered compares RAM with the declared bytes again. A match re-verifies;
+  a mismatch aborts with fault 8, as before.
+- A store by the load's own code into its own executable bytes still aborts
+  with fault 2. That is self-modifying code, and the running block could not
+  be re-checked before its next instruction.
+- Base-image code and jump tables stay protected for good.
+
+Native code therefore never runs a block of a load whose RAM differs from the
+declared bytes. A writer in another segment can no longer return into stale
+code, since the return point is a block start and re-verifies. The solver's
+declared-load assumption text says so.
+
+Result:
+- spike096 adds `load_reload`, which runs a load, clears and copies it again,
+  then runs it again; it matches ares.
+- `load_patch` patches a verified load from outside and re-enters it; it now
+  fails closed with fault 8 at the re-entry, where it used to fail with
+  fault 2 at the store.
+- The new `load_self`, a load writing its own code through KSEG1, fails
+  closed with fault 2.
+- SM64 runs past the goddard reload: 96 graphics tasks and 395 PI DMAs
+  (269 before). It then fails closed with fault 1 in goddard's
+  `load_dynlist`, which reads dynlists through `osMapTLB` mappings at
+  virtual `0x04000000`. ADR-0162 handles TLB-mapped data.
