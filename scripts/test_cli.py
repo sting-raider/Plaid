@@ -171,7 +171,12 @@ def main():
         taken=directory/'taken-map.json'
         run("discover",rom,"64","0x80000000","40","0x80000000",taken,"--address-taken")
         assert len(json.loads(taken.read_bytes())['blocks'])>=len(json.loads(runtime_map.read_bytes())['blocks'])
-        json.loads(run("solve",rom,taken,"--address-taken"))
+        assert json.loads(run("solve",rom,taken,"--address-taken"))['status']=='closed'
+        # a closed ROM map lowers to C; an OPEN one is refused (ADR-0157)
+        lowered=directory/'taken.c'
+        run("lower-map",rom,taken,"0x80000000","0x80000f00",lowered)
+        assert 'plaid_run' in lowered.read_text(encoding='utf-8')
+        run("lower-map",rom,runtime_map,"0x80000000","0x80000f00",directory/'open.c',ok=False)
         # declared loads (ADR-0136): the composite is rebuilt by solve
         loads=directory/'loads.json'
         def declare(destination):

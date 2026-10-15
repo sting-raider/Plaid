@@ -88,9 +88,10 @@ Next concrete steps, in order:
    Done: a table bound before the only branch into the guard (ADR-0156).
    **Milestone 3 is met:** SM64 solves `closed` under
    `DeclaredStaticImagesGuardedRamAddressTaken`.
+   Done: `plaid lower-map` (ADR-0157). The closed SM64 map lowers to one
+   C file that gcc compiles. Run natively with stub runtime functions, it
+   reaches `osCreateThread` for the idle thread.
    **Next (milestone 4):**
-   - lower the closed SM64 map to C at scale (1341-way address-taken
-     dispatch, 45419 blocks);
    - choose the runtime license path: N64ModernRuntime is GPL-3.0, so this
      is the user's call;
    - discharge the declared execution-source assumptions in that runtime.

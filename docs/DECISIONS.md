@@ -3917,3 +3917,39 @@ The scope's assumptions are all printed in the solve report:
 
 The "Commercial ROMs CLOSED" count stays 0, because it counts whole-ROM
 closure with no assumptions.
+
+## ADR-0157: Lower a discovered ROM map; COP1 moves need `rs < 16`
+
+Context: with SM64 closed (ADR-0156), milestone 4 needs the closed map as C.
+`plaid lower-c` lowers only synthetic word files.
+
+Decision: `plaid lower-map <rom> <map.json> <entry> <exit> <out.c>` lowers a
+discovered map.
+1. It rebuilds the map's images from the ROM, as `solve` does.
+2. It checks that the map matches the canonical ROM.
+3. It takes the declared-load base window as the host preload.
+4. It calls the same `lower_c_with_preload`. That function re-solves the map
+   and refuses any map that is not `CLOSED`.
+
+Lowering SM64 found a bug in the COP1 data-move arm, which matched
+`word & 0x7ff == 0`. `add.s $f0, $f4, $f16` (`0x46102000`) also has zero low
+bits, so it was rejected as an unknown move. Moves have `rs < 16`, and the
+guard now requires it; the solver's own check already did.
+
+Result:
+- spike096's `farith` adds `add.s $f0, $f1, $f2`. Before the fix it fails
+  with "outside the lowered subset"; after it, the program matches pinned
+  ares.
+- `scripts/test_cli.py` lowers a closed CLI map, and `lower-map` refuses an
+  OPEN one.
+- **SM64:** `lower-map` emits all 45419 blocks in 47 s (a 47 MB C
+  translation unit, 56 `plaid_rt_*` runtime entry points). `gcc -O0 -std=c99`
+  compiles it in 58 s.
+- A local smoke harness stubs `osInitialize` to return and stops at any
+  other runtime function. Run natively, SM64 goes from `entry_point` through
+  BSS clearing and `main_func` to
+  `osCreateThread(&gIdleThread = 0x8033a730, 1, thread1_idle = 0x80246cf0)`,
+  matching the decomp map.
+
+Going further needs a host runtime (threads, messages, VI, SP tasks) and a
+renderer. That is milestone 4, and it waits on the runtime license choice.

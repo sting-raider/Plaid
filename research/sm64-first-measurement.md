@@ -179,3 +179,26 @@ address-taken dispatch, has 91 blockers, all register calls.
 The report lists 14 assumptions. Each native-checked one names its fault
 code; the execution-source exclusions and the runtime ABI of the 56 declared
 functions are declared rather than checked.
+
+## Update: lowered to C and run to the first thread (ADR-0157)
+
+```
+plaid lower-map R map.json 0x80246000 0x80000000 sm64.c
+gcc -O0 -std=c99 -c sm64.c
+```
+
+- `lower-map`: 45419 blocks in 47 s, giving a 47 MB C file.
+- gcc 15 `-O0`: 58 s, giving a 28.8 MB object. It printed no errors.
+
+A local harness (not committed) defines the 56 `plaid_rt_*` functions as
+stubs. `osInitialize` returns to its caller; every other stub prints its
+arguments and stops the run. Run natively, it prints:
+
+```
+runtime osInitialize (stub, returns)
+runtime osCreateThread at ra=80246384 a0=8033a730 a1=00000001 a2=80246cf0
+```
+
+That is `create_thread(&gIdleThread, 1, thread1_idle, ...)` in `main_func`,
+with addresses as in the decomp map. Continuing needs a host thread
+scheduler and the rest of the libultra runtime.

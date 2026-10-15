@@ -454,7 +454,8 @@ fn simple(word: u32, pc: u32) -> Result<String, String> {
         (55, _) => load(8, "s64"),
         // COP1 data moves with 64-bit FPRs (Status.FR = 1): 32-bit forms
         // replace only the low word, as on the VR4300 (ADR-0131).
-        (17, _) if word & 0x7ff == 0 => {
+        // Moves have rs < 16; `add.s $f0, ...` also has zero low bits.
+        (17, _) if word & 0x7ff == 0 && rs < 16 => {
             let f = format!("s->f[{rd}]");
             match rs {
                 0 => set(rt, format!("SX32((u32){f})")),
