@@ -222,6 +222,42 @@ pub fn identify(image: &CodeImage, signatures: &[Signature], wanted: &[&str]) ->
     out
 }
 
+/// Name runtime functions from a reference symbol map instead of signatures
+/// (ADR-0148): a decomp's linker map or splat `symbol_addrs`, parsed by
+/// [`crate::recall::parse_symbols`]. Only word-aligned entries inside the
+/// image count, and a name at several addresses is ambiguous. Sizes are not
+/// known, so matches carry size 0.
+pub fn from_symbols(
+    image: &CodeImage,
+    symbols: &BTreeMap<u32, String>,
+    wanted: &[&str],
+) -> Identification {
+    let start = image.base.pc.0;
+    let mut by_name: BTreeMap<&str, Vec<u32>> = BTreeMap::new();
+    for (entry, name) in symbols.range(start..) {
+        if (entry - start) as usize / 4 < image.words.len()
+            && entry % 4 == 0
+            && wanted.contains(&name.as_str())
+        {
+            by_name.entry(name).or_default().push(*entry);
+        }
+    }
+    let mut out = Identification::default();
+    for (name, entries) in by_name {
+        match entries.as_slice() {
+            [entry] => out.matches.push(Match {
+                entry: GuestAddr(*entry),
+                name: name.into(),
+                size: 0,
+            }),
+            _ => {
+                out.ambiguous.insert(name.into());
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -315,6 +351,29 @@ mod tests {
         let shared = identify(&image(&[(8, 0)]), &both, RUNTIME_FUNCTIONS);
         assert!(shared.matches.is_empty() && shared.ambiguous.len() == 2);
         assert_eq!(callback_registers("osCreateThread"), vec![6]);
+    }
+
+    #[test]
+    fn symbol_maps_name_runtime_functions_inside_the_image() {
+        let symbols = BTreeMap::from([
+            (0x8000_0420, "osCreateThread".to_string()),
+            (0x8000_0440, "game_main".to_string()),
+            (0x8000_0460, "osSendMesg".to_string()),
+            (0x8000_0480, "osSendMesg".to_string()),
+            (0x8000_0502, "osRecvMesg".to_string()),
+            (0x8000_0600, "osGetTime".to_string()),
+        ]);
+        let found = from_symbols(&image(&[]), &symbols, RUNTIME_FUNCTIONS);
+        assert_eq!(
+            found.matches,
+            vec![Match {
+                entry: GuestAddr(0x8000_0420),
+                name: "osCreateThread".into(),
+                size: 0,
+            }]
+        );
+        // osRecvMesg is misaligned and osGetTime lies past the 64-word image
+        assert_eq!(found.ambiguous, BTreeSet::from(["osSendMesg".to_string()]));
     }
 
     #[test]

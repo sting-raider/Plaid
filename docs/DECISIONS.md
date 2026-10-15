@@ -3581,3 +3581,33 @@ version needs whole-program store points-to.
 
 Result: the prototype is reverted and no code changed. OoT stays at 28
 guarded blockers, and its sound frontier now needs store points-to or SM64.
+
+## ADR-0148: Runtime functions can be named from a reference symbol map
+
+Context: Mario Party 2's boot window (`research/mario-party-2-boot-window.md`)
+is OPEN with 29 guarded blockers. 27 are libultra system instructions in
+routines that `osInitialize` calls. n64sym's database lacks this SDK build:
+the crcA of three `osInitialize` variants and of the cache routines matches,
+but none of their crcB does. Signature coverage therefore depends on the
+SDK build, which is also a risk for SM64. N64Recomp names reimplemented
+functions from ELF symbols, not signatures.
+
+Decision: `plaid identify <rom> <offset> <start> <size> <reference> --symbols`
+reads a reference symbol map instead of a signature file. The parser is
+ADR-0144's: a GNU ld map's `.text` symbols, or splat `type:func` lines. It
+declares the functions on N64Recomp's reimplemented list whose entries are
+word-aligned and inside the scanned image (the composite with `--loads`). A
+name at more than one address is ambiguous and stays undeclared. The output
+is the same `plaid-runtime-functions-v0` declaration, with no size. Its
+source names the symbol map, with that map's sha256 and the ROM's. The
+symbol map is user-supplied evidence, as signatures are, and the solver still
+records the runtime ABI as an assumption.
+
+crcA-only signature matches stay rejected, because a wrong name would bind
+guest code to the wrong host implementation.
+
+Result: unit and CLI tests cover in-image, misaligned, out-of-image and
+ambiguous names. No local ROM has a symbol map, so no real-ROM number
+changes: Mario Party 2 stays at 29 guarded blockers and OoT at 28. When the
+SM64 ROM arrives, milestones 2 and 3 can use the same decomp map for recall
+and identification.

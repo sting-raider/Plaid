@@ -62,6 +62,11 @@ Next concrete steps, in order:
    that prove the guarding flag stays 0 were prototyped and rejected
    (ADR-0147): the writer census misses stores through pointers. OoT is at
    its sound frontier. Prioritise SM64 (step 4), which needs the user's ROM.
+   Done: runtime functions named from a reference symbol map (ADR-0148,
+   `plaid identify ... --symbols`). Mario Party 2 showed that n64sym's
+   database misses some SDK builds: 27 of its 29 boot-window blockers sit
+   in an unidentified `osInitialize`. Use the SM64 decomp map for both
+   recall and identification.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user
    supplies the ROM: discover from the real entry point, then score
