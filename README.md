@@ -20,7 +20,7 @@ Libultra system functions are declared as runtime functions and become calls int
 
 ## Real ROMs
 
-On a local Ocarina of Time boot window, 39 libultra functions are identified by n64sym signature and discovery reaches 320 blocks with 16 blockers under the guarded assumption scope. Declaring the Yaz0-compressed `code` segment as a load, checked by content in the native artifact, and identifying the libultra functions inside it as well leaves 29 blockers over 7684 blocks: function-pointer calls not yet proven, and calls into the 64DD driver segment. No commercial ROM is `CLOSED` yet. Per-ROM numbers and how to reproduce them are in [`docs/STATUS.md`](docs/STATUS.md).
+On a local Ocarina of Time boot window, 39 libultra functions are identified by n64sym signature and discovery reaches 320 blocks with 16 blockers under the guarded assumption scope. Declaring the Yaz0-compressed `code` segment as a load, checked by content in the native artifact, and identifying the libultra functions inside it as well leaves 29 blockers over 7684 blocks: function-pointer calls not yet proven, and calls into the 64DD driver segment. Super Mario 64 (USA) solves `CLOSED` under a declared assumption scope: its main, engine and goddard segments, with calls through function pointers restricted to address-taken functions. That covers 45419 blocks. Every assumption is listed in the report, and most are checked by the native artifact. No commercial ROM is `CLOSED` whole-ROM without assumptions yet. Per-ROM numbers and how to reproduce them are in [`docs/STATUS.md`](docs/STATUS.md).
 
 ## Build
 

@@ -167,3 +167,15 @@ branch, so the linear walk in ADR-0140 stops.
 
 Recall on this map is 90.2%. It has no layout pass; the milestone 2 figure
 is measured with `--data-roots`.
+
+## Update: milestone 3 met (ADR-0156)
+
+With the table bound walked across the `bnez` into the guard, `plaid solve
+R map.json --address-taken` reports **`status: closed`**, with no blockers
+and `native_complete: false`. Discovery has 45419 blocks, 4385 indirect
+sites and 1341 address-taken functions. The guarded scope, without
+address-taken dispatch, has 91 blockers, all register calls.
+
+The report lists 14 assumptions. Each native-checked one names its fault
+code; the execution-source exclusions and the runtime ABI of the 56 declared
+functions are declared rather than checked.

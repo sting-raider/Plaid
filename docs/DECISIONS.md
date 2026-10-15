@@ -3867,3 +3867,53 @@ Result:
   `audio_signal_game_loop_tick` table, whose bound is computed before a
   taken `bnez` that jumps to the guard. The guarded scope has 92 blockers,
   all register calls.
+
+## ADR-0156: A table bound before the only branch into the guard
+
+Context: after ADR-0155, SM64's last blocker under the address-taken scope
+is the table in `audio_signal_game_loop_tick`. The code runs:
+1. `sltiu at, s4, 10` sets the bound;
+2. `srl t9`;
+3. `bnez t9` is taken to a block that starts with the guard,
+   `beqz at, default`, with the scale `sll t1, s4, 2` in its slot;
+4. the dispatch block follows.
+
+The ADR-0140 walk goes backward linearly from the guard, so it reaches
+unrelated code before the guard block and stops.
+
+Decision: suppose the guard's block has exactly one incoming direct edge,
+and that edge is a branch or jump with a delay slot. Then the backward walk
+moves from the block start to that branch's delay slot and continues there.
+- The branch word itself may not write the flag or the index.
+- The slot and the words before it are checked as before.
+- The bypass check covers both pieces of the path: the compare up to the
+  branch's slot, and the guard block up to the guard. That branch is the
+  one allowed way into the second piece, so any other entry, edge or
+  indirect candidate into either piece rejects the table.
+- Everything after the guard is unchanged.
+
+Result:
+- The `tables` test closes the shape, and rejects it when the branch's slot
+  redefines the index or when a second branch enters the guard.
+- spike096 adds `hop_table`, which matches pinned ares.
+
+**On SM64 the solver now reports `closed` under
+`DeclaredStaticImagesGuardedRamAddressTaken`, with 0 blockers.** That is
+milestone 3. The map covers the main, engine and goddard segments: 45419
+blocks, 4385 indirect sites and 1341 address-taken functions.
+
+The scope's assumptions are all printed in the solve report:
+- **Checked by the native artifact, with a fault code on violation:**
+  address-taken dispatch (3), forwarded callbacks (3), returns (5), data
+  accesses and stores (1, 2, 4), table immutability (2), COP1 (7), declared
+  load contents (8), overflow traps (6) and BREAK (9).
+- **Declared but not checked:**
+  - the excluded execution sources (interrupts, exceptions, DMA, MMIO,
+    overlays and the RSP);
+  - the declared image entries;
+  - the runtime-function ABI for 56 identified functions.
+
+  Milestone 4's runtime has to discharge these.
+
+The "Commercial ROMs CLOSED" count stays 0, because it counts whole-ROM
+closure with no assumptions.

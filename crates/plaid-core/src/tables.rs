@@ -156,17 +156,64 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
         (flag, 0) | (0, flag) => flag,
         _ => return None,
     };
+    // IDO can compute the bound and then take a branch whose only target is
+    // the guard's block (ADR-0156); the walk then continues before that
+    // branch's slot. The branch reads but must not write the flag or index.
+    let same = |a: &CodeAddress| a.image == site.site.image && a.generation == site.site.generation;
+    let guard_start = map
+        .blocks
+        .iter()
+        .filter(|b| {
+            same(&b.start)
+                && !b.delay_slot_entry
+                && GuestRange {
+                    start: b.start.pc,
+                    size: b.size,
+                }
+                .contains(edge.site.pc)
+        })
+        .map(|b| b.start.pc)
+        .max()?;
+    let into_guard: Vec<_> = map
+        .direct_edges
+        .iter()
+        .filter(|e| e.target.pc == guard_start && same(&e.target))
+        .collect();
+    let hop = match into_guard[..] {
+        [e] if same(&e.site)
+            && matches!(e.kind, EdgeKind::Branch | EdgeKind::Jump)
+            && e.delay_slot != DelaySlot::None =>
+        {
+            Some(e.site.pc)
+        }
+        _ => None,
+    };
+    let mut hopped = None;
     let mut compare_pc = edge.site.pc;
     let mut interval = Vec::new();
     loop {
         if interval.len() > 32 {
             return None;
         }
+        if compare_pc == guard_start
+            && hopped.is_none()
+            && let Some(branch) = hop
+        {
+            hopped = Some(branch);
+            compare_pc = GuestAddr(branch.0.checked_add(8)?);
+        }
         compare_pc = GuestAddr(compare_pc.0.checked_sub(4)?);
         let word = image.word(compare_pc)?;
         let instruction = decode(word, compare_pc);
         if instruction.destination_gpr() == Some(u32::from(flag)) {
             break;
+        }
+        if hopped == Some(compare_pc) {
+            if instruction.destination_gpr() == Some(u32::from(index)) {
+                return None;
+            }
+            interval.push(word);
+            continue;
         }
         if !instruction.is_valid()
             || instruction.has_delay_slot()
@@ -178,11 +225,18 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
         }
         interval.push(word);
     }
+    // The pieces of the path from the compare to the guard branch.
+    let on_path = |pc: u32| match hopped {
+        None => pc > compare_pc.0 && pc <= edge.site.pc.0,
+        Some(branch) => {
+            pc > compare_pc.0 && pc <= branch.0 + 4 || pc >= guard_start.0 && pc <= edge.site.pc.0
+        }
+    };
     let bypasses_compare = |address: &CodeAddress| {
         if address.image != site.site.image || address.generation != site.site.generation {
             return false;
         }
-        if address.pc.0 > compare_pc.0 && address.pc.0 <= edge.site.pc.0 {
+        if on_path(address.pc.0) {
             return true;
         }
         edge.site.pc.0.checked_add(8) == Some(block.start.pc.0)
@@ -193,12 +247,12 @@ fn pattern(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> Option<T
     // sequential flow from inside it, a branch whose delay slot is the
     // identical SLTIU (GCC's loop rotation puts it in a branch-likely slot),
     // and the fallthrough of a non-likely branch whose slot is the compare.
-    let same = |a: &CodeAddress| a.image == site.site.image && a.generation == site.site.generation;
     let rebounds = |e: &DirectEdge| {
-        let inside = e.target.pc.0 > compare_pc.0 && e.target.pc.0 <= edge.site.pc.0;
+        let inside = on_path(e.target.pc.0);
         inside
             && same(&e.site)
-            && (e.kind == EdgeKind::Fallthrough
+            && (hopped == Some(e.site.pc) && e.target.pc == guard_start
+                || e.kind == EdgeKind::Fallthrough
                 && e.delay_slot == DelaySlot::None
                 && e.site.pc.0 >= compare_pc.0
                 && e.site.pc.0.checked_add(4) == Some(e.target.pc.0)
