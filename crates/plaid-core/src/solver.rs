@@ -141,11 +141,7 @@ fn content_digest_claim(image: &str) -> Option<&str> {
 }
 
 fn content_digest(image: &CodeImage) -> String {
-    let mut bytes = Vec::with_capacity(image.words.len() * 4);
-    for word in &image.words {
-        bytes.extend(word.to_be_bytes());
-    }
-    sha256(&bytes)
+    image.content_identity()
 }
 
 fn conflicting_region_provenance(a: &Region, b: &Region) -> Option<CodeAddress> {

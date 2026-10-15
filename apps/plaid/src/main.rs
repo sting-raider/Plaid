@@ -825,6 +825,7 @@ fn run() -> Result<(), String> {
                     .collect(),
                 rom_offset: None,
                 physical_start: None,
+                holes: Vec::new(),
             };
             let rom = plaid_core::program::RomIdentity {
                 sha256: image.base.image.clone(),

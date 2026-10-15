@@ -16,6 +16,7 @@ fn image(words: Vec<u32>) -> CodeImage {
         words,
         rom_offset: None,
         physical_start: None,
+        holes: Vec::new(),
     }
 }
 

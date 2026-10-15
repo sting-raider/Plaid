@@ -206,13 +206,14 @@ LOAD_AT = EXIT + 8
 # KSEG1 (no D-cache write-back needed) and called there (ADR-0136).
 PAYLOAD = ['payload', addiu(v0, zero, 0), addiu(t0, zero, 4),
     'pl', addu(v0, v0, t0), addiu(t0, t0, -1), bgtz(t0, 'pl'), nop, jr(ra), nop]
-CALL_LOAD = lambda pc, L: 3 << 26 | (LOAD_AT >> 2) & 0x3FFFFFF
+# A load placed away from the image leaves a hole in the composite (ADR-0150).
+LOAD_DEST = {'load_gap': LOAD_AT + 0x100}
 
-def load_program(early=False, patch=False):
-    copy = [lui(s0, 0xA000), LO(s0, s0, 'payload'), lui(s1, 0xA000), ori(s1, s1, LOAD_AT & 0xFFFF),
+def load_program(early=False, patch=False, at=LOAD_AT):
+    copy = [lui(s0, 0xA000), LO(s0, s0, 'payload'), lui(s1, 0xA000), ori(s1, s1, at & 0xFFFF),
         addiu(s2, zero, 8),
         'cp', lw(t1, 0, s0), sw(t1, 0, s1), addiu(s0, s0, 4), addiu(s1, s1, 4), addiu(s2, s2, -1), bgtz(s2, 'cp'), nop]
-    call = [CALL_LOAD, nop, addu(s3, v0, zero)]
+    call = [lambda pc, L: 3 << 26 | (at >> 2) & 0x3FFFFFF, nop, addu(s3, v0, zero)]
     body = call + copy if early else copy + call
     if patch:
         body += [sw(zero, -4, s1)]
@@ -290,6 +291,7 @@ PROGRAMS = {
         addu(s0, v0, zero), lw(ra, 4, sp), jr(ra), addiu(sp, sp, 8),
         'f', addiu(v0, zero, 42), jr(ra), nop],
     'load': load_program(),
+    'load_gap': load_program(at=LOAD_DEST['load_gap']),
     # GCC's divide check: BREAK 7 guarded by a divisor test that is not taken.
     'divcheck': [addiu(t0, zero, 21), addiu(t1, zero, 4), div(t0, t1), bne(t1, zero, 'ok'), nop,
         R(13, 0, 0, 7 >> 5, 7 & 31), 'ok', mflo(t2), mfhi(t3), *DONE],
@@ -388,7 +390,7 @@ BAD_RETURN = [jal('f'), nop, *DONE, 'f', addiu(ra, ra, 8), jr(ra), nop]
 # A trapping add that overflows raises on hardware; native code must fault 6.
 OVERFLOW = [lui(t0, 0x7FFF), ori(t0, t0, 0xFFFF), addi(t1, t0, 1), *DONE]
 RUNTIME = {'boundary': [('sum', [])], 'callback': [('spawn', ['a0'])], 'forwarded': [('spawn', ['a0'])]}
-LOADS = {'load': load_program(), 'load_early': load_program(early=True), 'load_patch': load_program(patch=True)}
+LOADS = {'load': load_program(), 'load_gap': load_program(at=LOAD_DEST['load_gap']), 'load_early': load_program(early=True), 'load_patch': load_program(patch=True)}
 # Jump-table bytes are store-protected like code: a write must fault 2.
 TABLE_WRITE = jump_table([lui(s2, 0x8000), lambda pc, L: I(43, zero, s2, L['tbl'])])
 # A host entry returning anywhere but the host's $ra: fault 5 (ADR-0146).
@@ -426,7 +428,7 @@ def windows():
         if name in LOADS:
             labels = label_pcs(items)
             decl = dict(format='plaid-loads-v0', source='spike096 synthetic load',
-                loads=[dict(destination=hex(LOAD_AT), size=hex(32), rom=hex(labels['payload'] - BASE), encoding='raw')])
+                loads=[dict(destination=hex(LOAD_DEST.get(name, LOAD_AT)), size=hex(32), rom=hex(labels['payload'] - BASE), encoding='raw')])
             (OUT / f'{name}.loads.json').write_text(json.dumps(decl))
             extra += ['--loads', str(OUT / f'{name}.loads.json')]
         subprocess.run([str(exe), 'lower-c', str(OUT / f'{name}.bin'), hex(BASE), hex(BASE), hex(EXIT), str(OUT / f'{name}.c'), *extra], check=True)

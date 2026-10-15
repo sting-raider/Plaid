@@ -190,13 +190,12 @@ pub fn identify(image: &CodeImage, signatures: &[Signature], wanted: &[&str]) ->
                 .flatten()
             {
                 let end = at + sig.size as usize / 4;
+                let entry = image.base.pc.0 + at as u32 * 4;
                 if end <= image.words.len()
+                    && (0..sig.size / 4).all(|k| image.word(GuestAddr(entry + 4 * k)).is_some())
                     && stripped_crc(&image.words[at..end], &sig.relocs) == sig.crc_b
                 {
-                    found.insert(
-                        (image.base.pc.0 + at as u32 * 4, sig.name.as_str()),
-                        sig.size,
-                    );
+                    found.insert((entry, sig.name.as_str()), sig.size);
                 }
             }
         }
@@ -235,10 +234,7 @@ pub fn from_symbols(
     let start = image.base.pc.0;
     let mut by_name: BTreeMap<&str, Vec<u32>> = BTreeMap::new();
     for (entry, name) in symbols.range(start..) {
-        if (entry - start) as usize / 4 < image.words.len()
-            && entry % 4 == 0
-            && wanted.contains(&name.as_str())
-        {
+        if image.word(GuestAddr(*entry)).is_some() && wanted.contains(&name.as_str()) {
             by_name.entry(name).or_default().push(*entry);
         }
     }
@@ -307,6 +303,7 @@ mod tests {
             words,
             rom_offset: None,
             physical_start: None,
+            holes: Vec::new(),
         }
     }
 

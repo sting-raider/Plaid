@@ -15,6 +15,10 @@ pub struct CodeImage {
     pub words: Vec<u32>,
     pub rom_offset: Option<RomOffset>,
     pub physical_start: Option<PhysicalAddr>,
+    /// Ranges inside the image that hold no supplied bytes, such as the gaps
+    /// between disjoint declared loads (ADR-0150). `word` returns nothing
+    /// there, so control or a table read that reaches one fails closed.
+    pub holes: Vec<GuestRange>,
 }
 impl CodeImage {
     pub fn from_rom(
@@ -46,6 +50,7 @@ impl CodeImage {
             words,
             rom_offset: Some(offset),
             physical_start: None,
+            holes: Vec::new(),
         })
     }
     pub fn size(&self) -> Result<u32, String> {
@@ -56,10 +61,23 @@ impl CodeImage {
     }
     pub fn word(&self, pc: GuestAddr) -> Option<u32> {
         let offset = pc.0.checked_sub(self.base.pc.0)?;
-        if !offset.is_multiple_of(4) {
+        if !offset.is_multiple_of(4) || self.holes.iter().any(|h| h.contains(pc)) {
             return None;
         }
         self.words.get((offset / 4) as usize).copied()
+    }
+    /// The content-derived identity: the SHA-256 of the words, plus the hole
+    /// layout when there are holes (ADR-0150).
+    pub fn content_identity(&self) -> String {
+        let mut bytes: Vec<u8> = self.words.iter().flat_map(|w| w.to_be_bytes()).collect();
+        if !self.holes.is_empty() {
+            bytes.extend(b"holes");
+            for h in &self.holes {
+                bytes.extend(h.start.0.to_be_bytes());
+                bytes.extend(h.size.to_be_bytes());
+            }
+        }
+        sha256(&bytes)
     }
     pub fn address(&self, pc: GuestAddr) -> CodeAddress {
         CodeAddress {

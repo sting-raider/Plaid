@@ -24,6 +24,7 @@ fn image() -> CodeImage {
         words: vec![0x0800_0000, 0, 0x0800_0002, 0],
         rom_offset: Some(RomOffset(64)),
         physical_start: Some(PhysicalAddr(0)),
+        holes: Vec::new(),
     }
 }
 

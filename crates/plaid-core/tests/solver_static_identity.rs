@@ -30,6 +30,7 @@ fn image(
         words,
         rom_offset: rom_offset.map(RomOffset),
         physical_start: physical_start.map(PhysicalAddr),
+        holes: Vec::new(),
     }
 }
 

@@ -22,6 +22,7 @@ fn deleting_only_dispatch_diagnostics_preserves_the_raw_obligation() {
         words: vec![0x0800_0000, 0],
         rom_offset: None,
         physical_start: None,
+        holes: Vec::new(),
     };
     let static_map = direct_cfg(rom.clone(), &image, &[image.base.pc], 100)
         .unwrap()

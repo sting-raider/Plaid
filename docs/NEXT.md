@@ -14,7 +14,7 @@ effect in its receipt.
 | # | Milestone | Done when | State |
 | --- | --- | --- | --- |
 | 1 | Synthetic ROM -> C -> native | spike096 programs, including nested/recursive calls, match pinned ares exactly; fail-closed cases fault | **done** (spike096, ADR-0127) |
-| 2 | SM64 discovery recall | >= 99% of real functions found, scored locally against a decomp symbol map used only as an oracle | open: 8.1% (245/3029, ADR-0149) |
+| 2 | SM64 discovery recall | >= 99% of real functions found, scored locally against a decomp symbol map used only as an oracle | open: 11.4% (435/3832, ADR-0150) |
 | 3 | SM64 closed under declared assumptions | solver CLOSED in an explicit assumption scope; every assumption listed and checked | open |
 | 4 | SM64 boots natively to title | lowered code linked with N64ModernRuntime + RT64; no interpreter linked | open |
 | 5 | Retire assumptions; OoT | assumptions discharged one by one; OoT via Yaz0 (PR #28) and relocation (PR #31) | open |
@@ -71,12 +71,14 @@ Next concrete steps, in order:
    9921382) are in `target/local-inputs/`. Forwarded callbacks (ADR-0149)
    open SM64's `-O0` thread creation: 2936 blocks, 8 guarded blockers, 8.1%
    recall (`research/sm64-first-measurement.md`).
+   Done: disjoint declared loads (ADR-0150). SM64 with its engine and
+   goddard segments: 5337 blocks and 12 guarded blockers, all of them
+   function-pointer calls loaded from memory. Recall is 11.4%.
    **Next for SM64:**
-   - Disjoint declared loads, one image per segment, for the engine
-     (`0x80378800`) and goddard (`0x8016f000`) segments. These are 4 of
-     the 8 blockers.
-   - The 3 audio `jr` dispatches.
-   - Data-driven roots (level and behavior scripts) for recall.
+   - Function-pointer tables in immutable data, such as the level command
+     table.
+   - The audio dispatches.
+   - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user
    supplies the ROM: discover from the real entry point, then score

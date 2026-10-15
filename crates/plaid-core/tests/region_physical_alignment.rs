@@ -15,6 +15,7 @@ fn image(physical_start: Option<u32>) -> CodeImage {
         words: vec![0x0800_0000, 0],
         rom_offset: None,
         physical_start: physical_start.map(PhysicalAddr),
+        holes: Vec::new(),
     }
 }
 

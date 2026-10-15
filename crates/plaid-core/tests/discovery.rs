@@ -10,6 +10,7 @@ fn image(base: u32, words: Vec<u32>) -> CodeImage {
         words,
         rom_offset: None,
         physical_start: None,
+        holes: Vec::new(),
     }
 }
 fn discover(i: &CodeImage) -> Discovery {

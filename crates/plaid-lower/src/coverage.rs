@@ -92,6 +92,7 @@ fn lowers(word: u32) -> bool {
         words,
         rom_offset: None,
         physical_start: None,
+        holes: Vec::new(),
     };
     let rom = RomIdentity {
         sha256: "c".repeat(64),
