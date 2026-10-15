@@ -102,6 +102,23 @@ def assemble(items):
     words += [0] * ((EXIT - pc) // 4) + [0x1000FFFF, 0]  # exit: b . ; nop
     return b''.join(w.to_bytes(4, 'big') for w in words)
 
+LOAD_AT = EXIT + 8
+# A position-independent routine stored as data, copied to LOAD_AT through
+# KSEG1 (no D-cache write-back needed) and called there (ADR-0136).
+PAYLOAD = ['payload', addiu(v0, zero, 0), addiu(t0, zero, 4),
+    'pl', addu(v0, v0, t0), addiu(t0, t0, -1), bgtz(t0, 'pl'), nop, jr(ra), nop]
+CALL_LOAD = lambda pc, L: 3 << 26 | (LOAD_AT >> 2) & 0x3FFFFFF
+
+def load_program(early=False, patch=False):
+    copy = [lui(s0, 0xA000), LO(s0, s0, 'payload'), lui(s1, 0xA000), ori(s1, s1, LOAD_AT & 0xFFFF),
+        addiu(s2, zero, 8),
+        'cp', lw(t1, 0, s0), sw(t1, 0, s1), addiu(s0, s0, 4), addiu(s1, s1, 4), addiu(s2, s2, -1), bgtz(s2, 'cp'), nop]
+    call = [CALL_LOAD, nop, addu(s3, v0, zero)]
+    body = call + copy if early else copy + call
+    if patch:
+        body += [sw(zero, -4, s1)]
+    return [*body, *DONE, *PAYLOAD]
+
 def jump_table(prefix):
     # GCC shape: the index scale SLL sits in the bound check's delay slot.
     return [*prefix, addiu(s1, zero, 0), addiu(t0, zero, 0),
@@ -152,6 +169,7 @@ PROGRAMS = {
         swl(t1, 0x41, s0), swr(t1, 0x46, s0), swl(t1, 0x48, s0), swr(t1, 0x4F, s0), swl(t1, 0x4F, s0), swr(t1, 0x4C, s0),
         swl(t0, 0x51, s0), swr(t0, 0x54, s0), sdl(v0, 0x63, s0), sdr(v0, 0x6D, s0), *DONE],
     'fcompare': fcompare(),
+    'load': load_program(),
     'transfers': [addiu(t0, zero, 1), beq(t0, t0, 'a'), addiu(t0, zero, 5), addiu(t1, zero, 99),
         'a', bne(t0, zero, 'b'), addiu(t2, t0, 1),
         'b', jal('c'), addu(t3, ra, zero), addiu(t4, zero, 7), *DONE,
@@ -234,6 +252,7 @@ BAD_RETURN = [jal('f'), nop, *DONE, 'f', addiu(ra, ra, 8), jr(ra), nop]
 # A trapping add that overflows raises on hardware; native code must fault 6.
 OVERFLOW = [lui(t0, 0x7FFF), ori(t0, t0, 0xFFFF), addi(t1, t0, 1), *DONE]
 RUNTIME = {'boundary': [('sum', [])], 'callback': [('spawn', ['a0'])]}
+LOADS = {'load': load_program(), 'load_early': load_program(early=True), 'load_patch': load_program(patch=True)}
 # Jump-table bytes are store-protected like code: a write must fault 2.
 TABLE_WRITE = jump_table([lui(s2, 0x8000), lambda pc, L: I(43, zero, s2, L['tbl'])])
 # A compare with a NaN operand depends on unmodeled FCSR enables: fault 7.
@@ -244,7 +263,8 @@ def windows():
     exe = ROOT / 'target/debug/plaid.exe'
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
     OUT.mkdir(parents=True, exist_ok=True)
-    progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN, overflow=OVERFLOW, table_write=TABLE_WRITE, fpu_nan=FPU_NAN)
+    progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN, overflow=OVERFLOW, table_write=TABLE_WRITE, fpu_nan=FPU_NAN,
+        load_early=LOADS['load_early'], load_patch=LOADS['load_patch'])
     for name, items in progs.items():
         (OUT / f'{name}.bin').write_bytes(assemble(items))
         extra = []
@@ -254,6 +274,12 @@ def windows():
                 functions=[dict(entry=hex(labels[f]), name=f, callbacks=cb) for f, cb in RUNTIME[name]])
             (OUT / f'{name}.runtime.json').write_text(json.dumps(decl))
             extra = [str(OUT / f'{name}.runtime.json')]
+        if name in LOADS:
+            labels = label_pcs(items)
+            decl = dict(format='plaid-loads-v0', source='spike096 synthetic load',
+                loads=[dict(destination=hex(LOAD_AT), size=hex(32), rom=hex(labels['payload'] - BASE), encoding='raw')])
+            (OUT / f'{name}.loads.json').write_text(json.dumps(decl))
+            extra += ['--loads', str(OUT / f'{name}.loads.json')]
         subprocess.run([str(exe), 'lower-c', str(OUT / f'{name}.bin'), hex(BASE), hex(BASE), hex(EXIT), str(OUT / f'{name}.c'), *extra], check=True)
         subprocess.run([cc, '-O2', '-std=c99', '-Wall', '-Werror', '-Wno-unused-label', f'-DPLAID_LOWERED="{name}.c"',
             '-I', str(OUT), str(HERE / 'harness.c'), '-o', str(OUT / f'{name}-native.exe')], check=True)
@@ -266,13 +292,13 @@ def windows():
         oracle = json.loads((OUT / f'{name}-oracle.json').read_text())
         assert json.loads(native.stdout) == oracle, (name, native.stdout, oracle)
         results[name] = hashlib.sha256(json.dumps(oracle, sort_keys=True).encode()).hexdigest()
-    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7)):
+    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('load_early', 8), ('load_patch', 2)):
         bad = subprocess.run([str(OUT / f'{name}-native.exe')], capture_output=True, text=True)
         assert bad.returncode == 6 and json.loads(bad.stdout)['fault'] == fault, (name, bad.stdout)
     receipt = dict(format='plaid-native-slice-receipt-v0', ares_revision=builder().REV, compiler=Path(cc).name,
-        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7), interpreter_linked=False, native_complete=False)
+        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, load_early=8, load_patch=2), interpreter_linked=False, native_complete=False)
     (OUT / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
-    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write and NaN-compare programs fail closed')
+    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, early-load and loaded-code-store programs fail closed')
     print(json.dumps(receipt, sort_keys=True))
 
 def builder():

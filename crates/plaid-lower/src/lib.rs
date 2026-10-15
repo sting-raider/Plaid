@@ -25,8 +25,10 @@ typedef struct {
   u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 pc; u32 fault; u32 fault_pc;
   u8 ram[PLAID_RAM_SIZE];
   u8 line_segment[PLAID_RAM_SIZE / 16]; /* 0 untouched, 1 KSEG0, 2 KSEG1 */
+  u8 load_ok[64]; /* declared load verified in RAM (ADR-0136) */
 } plaid_state;
-typedef struct { u32 start, end; } plaid_range;
+/* executable bytes; load: index of the declared load holding them, or -1 */
+typedef struct { u32 start, end; int load; } plaid_range;
 #define SX32(v) ((u64)(s64)(s32)(u32)(v))
 /* fault 1: address/alignment outside the supported model; 2: store to
    executable bytes (declared immutable); 3: transfer without a proven target;
@@ -35,7 +37,9 @@ typedef struct { u32 start, end; } plaid_range;
    5: a return whose $ra is not the continuation of the call that entered
    its function (the checked call/return assumption);
    6: an overflow-trapping add/subtract that would raise an exception;
-   7: a COP1 compare with a NaN operand (FCSR enables are not modeled). */
+   7: a COP1 compare with a NaN operand (FCSR enables are not modeled);
+   8: code of a declared load entered while RAM does not hold its declared
+      bytes. Executable bytes of a load not yet verified may be written. */
 static inline int plaid_fault(plaid_state *s, u32 pc, u32 code) {
   s->fault = code; s->fault_pc = pc; return 1;
 }
@@ -52,8 +56,20 @@ const HELPERS: &str = r#"static inline int plaid_addr(plaid_state *s, u64 va, u3
   s->line_segment[p >> 4] = v < 0xa0000000u ? 1 : 2;
   if (write)
     for (i = 0; i < sizeof plaid_code / sizeof plaid_code[0]; i++)
-      if (p < plaid_code[i].end && p + size > plaid_code[i].start) return plaid_fault(s, pc, 2);
+      if (p < plaid_code[i].end && p + size > plaid_code[i].start &&
+          (plaid_code[i].load < 0 || s->load_ok[plaid_code[i].load]))
+        return plaid_fault(s, pc, 2);
   *out = p; return 0;
+}
+/* Host runtime functions call this before writing guest RAM at physical p. */
+int plaid_runtime_write(plaid_state *s, u32 p, u32 size, u32 pc) {
+  u32 i;
+  if (p > PLAID_RAM_SIZE || size > PLAID_RAM_SIZE - p) return plaid_fault(s, pc, 1);
+  for (i = 0; i < sizeof plaid_code / sizeof plaid_code[0]; i++)
+    if (p < plaid_code[i].end && p + size > plaid_code[i].start &&
+        (plaid_code[i].load < 0 || s->load_ok[plaid_code[i].load]))
+      return plaid_fault(s, pc, 2);
+  return 0;
 }
 static inline int plaid_load(plaid_state *s, u64 va, u32 size, u32 pc, u64 *value) {
   u32 p, i; u64 x = 0;
@@ -451,6 +467,22 @@ pub fn lower_c(
     entry: GuestAddr,
     exits: &[GuestAddr],
 ) -> Result<String, String> {
+    let [image] = images else {
+        return Err("exactly one code image is supported".into());
+    };
+    lower_c_with_preload(map, images, image, entry, exits)
+}
+
+/// Lower with `preload` as the RAM contents the host installs before entry
+/// (the IPL3 copy). With declared loads (ADR-0136) the code image is the
+/// composite and the preload is its base window.
+pub fn lower_c_with_preload(
+    map: &ProgramMap,
+    images: &[CodeImage],
+    preload: &CodeImage,
+    entry: GuestAddr,
+    exits: &[GuestAddr],
+) -> Result<String, String> {
     let report = solve(map, images, Scope::DeclaredStaticImagesGuardedRam)?;
     if report.status != ClosureStatus::Closed {
         let kinds: BTreeSet<_> = report.blockers.iter().map(|b| b.kind.as_str()).collect();
@@ -459,6 +491,25 @@ pub fn lower_c(
     let [image] = images else {
         return Err("exactly one code image is supported".into());
     };
+    let loads: Vec<(u32, u32)> = map
+        .load_images
+        .get(&image.base.image)
+        .map(|spec| {
+            spec.loads
+                .iter()
+                .map(|l| {
+                    (
+                        l.destination.start.0,
+                        l.destination.start.0 + l.destination.size,
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if loads.len() > 64 {
+        return Err("at most 64 declared loads are supported".into());
+    }
+    let load_of = |start: u32| loads.iter().position(|(s, e)| *s <= start && start < *e);
     // Proven indirect targets also become map entries; the host enters only here.
     let Some(host) = map.entries.keys().find(|e| e.pc == entry) else {
         return Err(format!("{:08x} is not a map entry", entry.0));
@@ -524,18 +575,20 @@ pub fn lower_c(
         }
         let (start, end) = (block.start.pc.0, block.start.pc.0.wrapping_add(block.size));
         code.push(format!(
-            "{{{}, {}}}",
+            "{{{}, {}, {}}}",
             physical(start)?,
-            physical(end - 1)? + 1
+            physical(end - 1)? + 1,
+            load_of(start).map_or(-1, |l| l as i64)
         ));
     }
     // Jump tables are store-protected like code (ADR-0132).
     for site in &map.indirect_sites {
         if let Some((start, count)) = plaid_core::tables::table_range(map, image, site) {
             code.push(format!(
-                "{{{}, {}}}",
+                "{{{}, {}, {}}}",
                 physical(start.0)?,
-                physical(start.0 + count * 4 - 1)? + 1
+                physical(start.0 + count * 4 - 1)? + 1,
+                load_of(start.0).map_or(-1, |l| l as i64)
             ));
         }
     }
@@ -544,8 +597,21 @@ pub fn lower_c(
         "static const plaid_range plaid_code[] = {{{}}};\n{HELPERS}",
         code.join(", ")
     );
-    let base = physical(image.base.pc.0)?;
-    let words: Vec<_> = image.words.iter().map(|w| format!("0x{w:08x}u")).collect();
+    if !loads.is_empty() {
+        // Expected bytes come from the composite image (ADR-0136).
+        let words: Vec<_> = image.words.iter().map(|w| format!("0x{w:08x}u")).collect();
+        out += &format!(
+            "static const u32 plaid_declared[] = {{{}}};\nstatic int plaid_verify_load(plaid_state *s, int load, u32 pc) {{\n  u32 i, j, o;\n  for (i = 0; i < sizeof plaid_code / sizeof plaid_code[0]; i++)\n    if (plaid_code[i].load == load)\n      for (j = plaid_code[i].start; j < plaid_code[i].end; j++) {{\n        o = j - 0x{:x}u;\n        if (s->ram[j] != (u8)(plaid_declared[o / 4] >> (24 - 8 * (o % 4)))) return plaid_fault(s, pc, 8);\n      }}\n  s->load_ok[load] = 1; return 0;\n}}\n",
+            words.join(", "),
+            physical(image.base.pc.0)?
+        );
+    }
+    let base = physical(preload.base.pc.0)?;
+    let words: Vec<_> = preload
+        .words
+        .iter()
+        .map(|w| format!("0x{w:08x}u"))
+        .collect();
     out += &format!(
         "static inline void plaid_load_images(plaid_state *s) {{\n  static const u32 w[] = {{{}}};\n  u32 i;\n  for (i = 0; i < {}; i++) {{ s->ram[0x{base:x} + 4 * i] = (u8)(w[i] >> 24); s->ram[0x{base:x} + 4 * i + 1] = (u8)(w[i] >> 16); s->ram[0x{base:x} + 4 * i + 2] = (u8)(w[i] >> 8); s->ram[0x{base:x} + 4 * i + 3] = (u8)w[i]; }}\n}}\n",
         words.join(", "),
@@ -564,8 +630,9 @@ pub fn lower_c(
     }
     out += "  }\n  return plaid_fault(s, entry, 3);\n}\n";
     let mut seen = BTreeSet::new();
+    let bodies = returns::function_bodies(map, image, callees.iter());
     for f in callees.iter().filter(|f| seen.insert(f.pc.0)) {
-        let body = returns::function_body(map, image, f);
+        let body = &bodies[f];
         let lowerer = Lowerer {
             labels: body.iter().map(|b| b.pc.0).collect(),
             targets: &targets,
@@ -584,6 +651,11 @@ pub fn lower_c(
                 continue;
             }
             out += &format!("L_{start:08x}:\n");
+            if let Some(l) = load_of(start) {
+                out += &format!(
+                    "  if (!s->load_ok[{l}] && plaid_verify_load(s, {l}, 0x{start:08x}u)) return 1;\n"
+                );
+            }
             let mut pc = start;
             let mut transferred = false;
             while pc < end {

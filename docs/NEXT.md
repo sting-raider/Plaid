@@ -41,9 +41,12 @@ Next concrete steps, in order:
    region its code segment is later DMA'd over).
    Done: unaligned loads and stores (ADR-0134).
    Done: COP1 compares and BC1 branches (ADR-0135).
-   **Next:** the OoT code-segment DMA boundary (calls at `0x80000624` and
-   `0x80000d94` reach bytes that a DMA replaces), then COP1 arithmetic and
-   conversions. After that, the
+   Done: declared executable loads verified by content (ADR-0136) and a
+   shared return-closure context (ADR-0137). OoT with its `code` segment
+   declared: 7451 blocks, 748 guarded blockers.
+   **Next:** `BREAK` as a checked abort (182 OoT sites), then COP1
+   arithmetic, conversions and FCSR access (about 450 sites), reusing
+   N64Recomp semantics where pinned ares agrees. After that, the
    executable-DMA boundary for the OoT code segment.
 4. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
    boot-segment discovery from the real entry point, then a local-only recall

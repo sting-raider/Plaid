@@ -104,6 +104,12 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
             .and_modify(|old| old.evidence.extend(f.evidence.clone()))
             .or_insert_with(|| f.clone());
     }
+    for (id, spec) in &right.load_images {
+        if out.load_images.get(id).is_some_and(|old| old != spec) {
+            return Err(format!("conflicting load declarations for image {id}"));
+        }
+        out.load_images.insert(id.clone(), spec.clone());
+    }
     for (a, refs) in &right.entries {
         out.entries
             .entry(a.clone())

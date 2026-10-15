@@ -3184,3 +3184,94 @@ pinned ares, including the condition bit now printed by both harnesses.
 the four compare/branch blockers close. 16 guarded blockers remain: in boot
 code only the boot return and the `0x80000f10` pointer call, and 14 past the
 code-segment DMA boundary.
+
+## ADR-0136: Declared executable loads are verified by content at first entry
+
+Context: after identification (ADR-0133), the remaining OoT blockers come
+from calls into memory that the game fills with its `code` segment. OoT's
+`code` file is Yaz0-compressed: boot DMAs the compressed bytes and its CPU
+code decompresses them into place. So a model based on DMA observations
+would not describe this load, and analysing the IPL3-copied bytes at those
+addresses analyses stale data. Worse, stale bytes that happened to decode
+cleanly would have been lowered silently.
+
+Decision: a declared load (`plaid-loads-v0`: destination, decoded size, ROM
+source, encoding `raw` or `yaz0`) names the bytes a program places at run
+time, whatever the producer: DMA, CPU copy or decompression.
+`declared_loads::compose` builds the composite image (the base window with
+every load applied). Loads must be word-aligned, non-overlapping and
+contiguous with the base. Discovery and lowering use the composite, and
+`ProgramMap.load_images` records how it was built, so `solve` rebuilds it
+from the ROM and checks its identity. Only `DeclaredStaticImagesGuardedRam`
+accepts declared loads. A block that straddles a load boundary is a blocker,
+because one entry check could not cover both sides.
+
+The native artifact makes the declaration safe to be wrong:
+- The host preloads only the base window.
+- Every block inside load *L* starts with
+  `if (!s->load_ok[L] && plaid_verify_load(...))`, which compares RAM with
+  the declared bytes over *L*'s executable ranges. On a match it marks *L*
+  verified; otherwise it aborts with the new fault 8.
+- Before *L* is verified, stores into its executable bytes are allowed,
+  since that is how it gets loaded. Once verified, they fault 2 like any
+  code write.
+- Host runtime functions must call `plaid_runtime_write` before writing
+  guest RAM. It applies the same rule, which closes the gap where a
+  runtime DMA could overwrite lowered code. The runtime ABI assumption now
+  states this.
+
+A load is verified at most once and never becomes unverified, so one byte
+test per block entry is the steady-state cost. Unloading or reloading an
+overlay over verified code faults 2 and is left to a later decision.
+
+Reuse: the Yaz0 decoder is written from the format description (no code
+copied). The `code` file's ROM range in the OoT measurement comes from the
+game's dmadata table. Its VRAM comes from a local heuristic (internal `jal`
+targets landing on prologues) that is not product logic and not evidence.
+
+Result: spike096 `load` copies a routine through KSEG1 to a declared
+destination and calls it; it matches pinned ares (the routine's result 10
+included). `load_early` (call before copying) faults 8, and `load_patch` (a
+store into the verified routine) faults 2. Unit tests cover the following:
+- Yaz0 literals, overlapping and count-byte back-references, truncation and
+  bad distances;
+- composite patching and extension;
+- rejection of gaps, overlaps, a Yaz0 source that is not Yaz0, and an empty
+  declaration;
+- guarded-only acceptance with its assumption;
+- the straddle blocker.
+
+The CLI test runs discover with `--loads`, then `solve` rebuilding the
+composite, and rejects a gapped declaration and `--loads` on other commands.
+
+On OoT US 1.2, declaring the `code` file (Yaz0, 0x103da0 bytes at
+`0x800116e0`) takes discovery from 320 to 7451 blocks. The guarded solve
+reports 748 blockers, now dominated by instruction coverage:
+- 182 `BREAK`, GCC's divide checks;
+- about 400 COP1 arithmetic, conversion and FCSR sites;
+- 33 unresolved indirect sites;
+- 7 unmapped or unresolved targets.
+
+## ADR-0137: Return certificates share one closure context per map
+
+Context: with the OoT `code` segment declared, discovery's final
+return-certificate pass did not finish in over 25 minutes (release build,
+7451 blocks, 723 indirect sites). `returns::certificate` recomputed, for
+every `jr $ra` site, every call, callback and verified jump, plus the body
+of every function, and each body walk scanned all blocks, edges and sites.
+The solver's `verify` repeated this per site.
+
+Decision: `returns::Closure` computes those map-wide facts once:
+- an indexed successor relation;
+- the bodies of all callees and host entries;
+- an index from block to the functions that contain it.
+
+`certificate`, `verify` and `annotate` answer each site from it. The solver
+caches one per image, and lowering computes all bodies from one index. The
+old per-site functions remain as wrappers. The semantics are unchanged,
+including the first-block-wins rule for duplicate block starts.
+
+Result: the OoT annotate pass takes 69 ms, and whole discovery about 1 s.
+On the OoT boot window, discovery maps and guarded solve reports are
+byte-identical before and after the change. The workspace tests and
+spike096 pass unchanged.
