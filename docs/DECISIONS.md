@@ -3722,3 +3722,46 @@ is 11.5%. The third audio table, in `audio_signal_game_loop_tick`, sets
 its bound before a `bnez` whose taken edge reaches the guard, which a
 sequential search cannot follow, so it stays open. OoT (28) and Mario Party
 2 (29) are unchanged.
+
+## ADR-0152: Heuristic discovery roots from data pointers and layout
+
+Context: after ADR-0151, SM64 recall was 11.5%. Most of the game is reached
+only through function pointers held as data: behavior scripts, geo layouts,
+level scripts and object tables. A ROM scan found about 983 reference
+functions named only by such words. Code also takes addresses with
+`lui`/`addiu` pairs, and some functions are referenced nowhere.
+
+Decision: `plaid discover ... --data-roots` is an opt-in flag that adds
+heuristic discovery roots. It never adds closure facts. `plaid-core/data_roots`
+proposes:
+- aligned big-endian words anywhere in the ROM, and `lui r, hi` followed
+  within 16 words by `addiu`/`ori` from `r`, whose value is a function start
+  in the image;
+- in a second pass, after discovery, each address that follows a `jr ra`,
+  its slot and any zero padding, when discovery has not already decoded it.
+  This skips continuations after an early return, declared runtime functions
+  and IDO's dead duplicate `jr ra` epilogue.
+
+A function start must be a valid, non-zero instruction at the image start,
+or right after a `jr ra` and its delay slot (with optional padding). The
+roots become map entries, which also carry a `plaid-data-pointer-roots/v0`
+evidence record. The solver re-derives control flow from every entry, so a
+wrong root decodes junk whose blockers keep the map OPEN; it cannot make
+anything close.
+
+Result: unit tests cover data, padding and mid-function rejection, and
+layout roots that skip decoded code and dead epilogues. The CLI test runs
+the flag.
+
+On SM64 (main, engine and goddard), discovery reaches 47976 blocks.
+**Whole-map recall is 99.03% (3795/3832)** against the matching decomp map,
+which meets milestone 2's 99% target. There are 1760 discovered starts not
+in the reference:
+- 502 of them are direct call targets, which are `static` functions the map
+  does not list (the ELF has no symbols for them either);
+- most others are jump-table case labels, which map entries count;
+- 124 come from the layout pass.
+
+The missing 37 are mostly unreferenced stubs that begin with `jr ra`, and
+IPL3 symbols outside the windows. Under the guarded scope the rooted map has
+227 blockers, because the roots decode code that the plain map never reached.

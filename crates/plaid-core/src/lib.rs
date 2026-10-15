@@ -8,6 +8,7 @@ pub mod cpu_copy;
 mod cpu_mutation_impl;
 pub mod cpu_sp_conditional;
 pub mod cpu_sp_subword;
+pub mod data_roots;
 pub mod dcache_writeback;
 pub mod cpu_mutation {
     pub use super::cpu_mutation_impl::{
