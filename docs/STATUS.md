@@ -10,8 +10,15 @@ natively with RT64 graphics, input, EEPROM saves and live native RSP audio
 (ADR-0153..0170). Three runtime function names still use a reference map
 (ADR-0171). Whole-ROM closure without assumptions remains unproved.
 
-OoT's fixed image has 9,764 blocks and 13 address-taken-scope blockers. ADR-0172
-stage 1 discovers 469 ROM-owned overlay candidates (468 with executable text)
+OoT's fixed image is **CLOSED** under the address-taken scope: 29,511 blocks
+and 0 blockers (ADR-0175). This needed three fixes:
+- address-taken roots come from the decoded contents of Yaz0 streams, not
+  their compressed bytes;
+- the cartridge's 64DD driver segment is a declared load;
+- `osYieldThread` is a runtime function.
+
+It lowers to C and compiles in 31 s; the link still needs 13 runtime
+functions. ADR-0172 stage 1 discovers 469 ROM-owned overlay candidates (468 with executable text)
 and validates their relocation structure. Generated native byte verifiers pass
 synthetic corruption/bounds checks. Link-address lowering, checked RAM
 bindings and native OoT boot are pending; the catalog does not close blockers.

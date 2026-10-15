@@ -4808,3 +4808,58 @@ Verification:
 |---|---|---|
 | lowered C | 47 MB, one unit | 33 MB; main unit plus 15 parts of ~1.6 MB |
 | build (gcc -O1, 20 threads) | 784 s | 48 s |
+
+## ADR-0175: OoT's fixed code is CLOSED under the address-taken scope
+
+Status: accepted. Milestone 5.
+
+Context: OoT's fixed image (boot plus the Yaz0 `code` segment) had 13
+address-taken-scope blockers, in two groups:
+- the libultra exception and thread-switch code (`__osEnqueueAndYield`,
+  `eret`), reached through two address-taken roots;
+- direct calls into 0x801c7740.., which no supplied image covered.
+
+Findings:
+- Both roots were words read from Yaz0-compressed bytes. The
+  address-taken scan (ADR-0153) read the whole ROM as raw words, so
+  compressed streams produced noise. One root (0x80004498) sat inside
+  `osInvalDCache`. The other (0x80005c20, `osYieldThread`) also appears in
+  real data: a table of libultra pointers in decoded `code` (VRAM
+  0x800ff4e4) that is handed to the 64DD driver.
+- 0x801c7740 is that driver's segment. It is in the cartridge ROM
+  (dmadata entry at ROM 0x7b20: VROM 0xb8ada0..0xb9da70, stored as Yaz0 at
+  0xafde00), not only on the disk. The code at 0x800adaac DMAs it there
+  when its "64DD present" flag is set.
+
+Decision:
+- `data_roots::rom_words` scans a decodable Yaz0 stream's decoded words in
+  place of its compressed bytes, then resumes at the next aligned word
+  after the stream. Yaz0 is a format, not a game. Undecodable "Yaz0"
+  magic stays raw data. `declared_loads::yaz0_stream` reports the bytes
+  consumed and refuses decoded sizes above 64 MiB.
+- `osYieldThread` joins `RUNTIME_FUNCTIONS`. n64sym signs it; N64Recomp
+  lists it under `ignored_funcs` rather than `reimplemented_funcs`.
+  `plaid_rt.c` implements it: the caller queues behind the runnable
+  threads of its own priority.
+- The 64DD segment is declared as a second load in the local OoT loads
+  file, next to `code`. Load declarations remain local measurements.
+  Discovering loads automatically from the ROM's DMA calls is still open.
+
+Result:
+- OoT: 29,511 blocks, 2,562 indirect sites. `solve --address-taken`
+  reports **`closed`**, 0 blockers, 13 assumptions.
+- OoT discovery takes 8 s.
+- SM64 has no Yaz0, and its map is byte-identical.
+
+Verification:
+- `yaz0_streams_contribute_decoded_words_not_compressed_bytes`: a stream
+  whose aligned compressed word is a function start and whose decoded word
+  is another; only the decoded one and the word after the stream count.
+- `runtime/test_runtime.py` adds an equal-priority thread: `osYieldThread`
+  runs it first and is then resumed ahead of it, in libultra order.
+
+Open:
+- 13 runtime functions OoT declares are not in `plaid_rt.c` yet.
+- The overlays (ADR-0172) are not executed natively.
+- SM64's 79 MIO0 streams are still scanned raw. SM64 closes regardless,
+  but MIO0 should be decoded the same way.

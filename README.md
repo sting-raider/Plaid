@@ -1,9 +1,10 @@
 # About
 
-Milestone 5 now includes ROM-owned overlay discovery (ADR-0172): 469 candidates
-in the supplied OoT image, plus tested native byte-verifier generation.
-Native overlay lowering and checked runtime bindings
-are the next step; OoT has not reached native boot.
+Milestone 5: Ocarina of Time's fixed code is now **CLOSED** under the
+address-taken scope: 29,511 blocks, 0 blockers (ADR-0175). ROM-owned overlay
+discovery (ADR-0172) finds its 469 overlays. The next steps are OoT's
+remaining runtime functions and native overlay execution; OoT has not booted
+natively yet.
 
 Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. It analyzes an untouched ROM into a closed executable program, lowers it to C, and links it into a native x86-64 or ARM64 application. No emulation, interpreter, or JIT in the final build; emulators are used only as analysis instruments and test oracles.
 
@@ -61,7 +62,7 @@ ROMs stay local and are never committed. Per-ROM numbers and how to reproduce th
 | ROM | Result |
 | --- | --- |
 | Super Mario 64 (USA) | 99.03% discovery recall. `CLOSED` over 45419 blocks under a declared scope: its main, engine and goddard segments, with calls through function pointers restricted to address-taken functions. Runs natively at full speed (59.9 VI/s), with graphics, input, EEPROM saves and audio. |
-| Ocarina of Time (USA 1.2) | Boot plus the Yaz0-compressed `code` segment: 7684 blocks and 28 blockers under the guarded scope. 21 are function-pointer calls not yet provable (ADR-0142); 7 are calls into the 64DD driver, which ships on the disk. |
+| Ocarina of Time (USA 1.2) | Boot, the Yaz0-compressed `code` segment and the cartridge's 64DD driver segment: `CLOSED` over 29,511 blocks under the address-taken scope (ADR-0175). Its 469 overlays are discovered (ADR-0172) but not yet lowered. |
 | Mario Party 2 (USA) | Boot window: 712 blocks and 29 blockers. 27 sit behind an `osInitialize` whose SDK build n64sym lacks; 2 are function-pointer calls. |
 
 No commercial ROM is `CLOSED` whole-ROM without assumptions yet.

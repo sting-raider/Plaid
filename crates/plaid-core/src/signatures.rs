@@ -37,6 +37,8 @@ pub const RUNTIME_FUNCTIONS: &[&str] = &[
     "osFlashWriteArray", "osFlashReadArray", "osFlashChange",
     "osCreateThread", "osStartThread", "osStopThread", "osDestroyThread",
     "osSetThreadPri", "osGetThreadPri", "osGetThreadId",
+    // in N64Recomp's `ignored_funcs`; OoT stores its address (ADR-0175)
+    "osYieldThread",
     "osCreateMesgQueue", "osRecvMesg", "osSendMesg", "osJamMesg", "osSetEventMesg",
     "osGetTime", "osSetTime", "osSetTimer", "osStopTimer",
     "osVoiceSetWord", "osVoiceCheckWord", "osVoiceStopReadData", "osVoiceInit",
