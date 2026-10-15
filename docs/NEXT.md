@@ -57,9 +57,11 @@ Next concrete steps, in order:
    Store-guarded fixed-address cells would close only 1 of 22.
    **Next:** the 7 64DD calls need either the 64DD segment declared or a
    general guarded-call treatment. Otherwise, prioritise SM64 (step 4).
-4. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
-   boot-segment discovery from the real entry point, then a local-only recall
-   score against the decomp map. Keep ROM bytes, maps and traces ignored.
+4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
+   `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user
+   supplies the ROM: discover from the real entry point, then score
+   against a locally built decomp map. Keep ROM bytes, maps and traces
+   ignored.
 5. **Lowered subset growth** pulled by SM64: done for `ROUND/CEIL/FLOOR`
    and the `.L` conversions (ADR-0143; 175 of 209 forms). The rest are
    COP0, traps, `SYSCALL/ERET`, `LL/SC` and `CACHE`, which stay behind the
