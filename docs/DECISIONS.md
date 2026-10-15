@@ -3085,3 +3085,40 @@ discovered (628 blocks). Six blockers remain: the boot return, `0x80000f10`,
 and four `jalr t9` calls through a device-manager struct field in libultra's
 PI manager thread. That thread is reached only because the heuristic runtime
 declaration does not include `osCreatePiManager`, which N64Recomp reimplements.
+
+## ADR-0133: Runtime functions are identified by n64sym signatures
+
+Context: ADR-0129 declared runtime functions from a hand-written list. On OoT
+that list left libultra's PI manager as guest code, and discovery followed
+its memory-loaded device callbacks.
+
+Decision: `plaid identify <rom> <rom-offset> <guest-start> <size> <sig>`
+matches a code image against an n64sym `sig_v1` signature file and prints a
+`plaid-runtime-functions-v0` declaration for the functions N64Recomp's
+runtime reimplements. `signatures.rs` reimplements n64sym's matching rule:
+CRC32 of the first 8 bytes and of the whole function, with the immediate
+fields of `.targ26`/`.hi16`/`.lo16` words cleared, at every word-aligned
+offset. A name that matches several addresses, or an address that matches
+several names, is left undeclared and listed as ambiguous, so its body is
+analyzed as guest code. Thread entries are marked as callbacks only for
+`osCreateThread` (`a2`). A match names a function. It proves nothing: the
+solver still lists the runtime ABI of every declared name as an assumption.
+No signature file is vendored. The pinned n64sym `builtin_signatures.sig` is
+a user input, and its SHA-256 is recorded in the declaration source.
+
+Reuse: the matching rule follows n64sym `CSignatureFile::TestSymbol` (MIT,
+Copyright (c) 2017-2020 shygoo). The function list is N64Recomp's
+`reimplemented_funcs` (MIT, Copyright (c) 2024 Wiseguy). Both notices are
+kept in `crates/plaid-core/src/signatures.rs`. No code was copied verbatim.
+
+Result: on OoT US 1.2 the pinned signatures identify 39 runtime functions in
+the IPL3 window, including `osCreateThread` at `0x800030e0`, the address the
+heuristic had assumed, and `osCreatePiManager`. `__ull_rem` is ambiguous and
+stays guest code. With these declarations discovery drops from 628 to 320
+blocks and the PI manager thread is no longer analyzed. 21 guarded blockers
+remain. Seven are in boot code: the boot return, the `0x80000f10` pointer
+call, four `C.cond.S`/`BC1x` sites and one `SWL`. The other 14 come from
+calls at `0x80000624` and `0x80000d94` into addresses that, at that point,
+hold stale ROM bytes from the IPL3 copy, because the game DMAs its code
+segment over them first. Those calls need the executable-DMA model, not
+better identification.

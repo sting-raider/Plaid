@@ -35,17 +35,21 @@ Next concrete steps, in order:
    Done: guarded jump tables (ADR-0132). The remaining OoT blockers are
    memory-loaded function pointers inside libultra internals that the
    heuristic declaration leaves as guest code.
-   **Next: identification evidence.** Declare runtime functions from
-   evidence instead of the heuristic: N64Recomp's reimplemented list by name,
-   matched through n64sym signatures (PR #50) or a user-supplied symbol map,
-   never promoted to proof.
+   Done: identification evidence (ADR-0133). `plaid identify` declares
+   N64Recomp's reimplemented functions from n64sym signature matches. OoT:
+   320 blocks, 21 guarded blockers (7 in boot code; 14 from calls into the
+   region its code segment is later DMA'd over).
+   **Next:** lower `C.cond.fmt`/`BC1x` and `LWL/LWR/SWL/SWR` (port the
+   semantics from N64Recomp `operations.cpp` and the N64ModernRuntime
+   helpers, then differential-test against ares). After that, the
+   executable-DMA boundary for the OoT code segment.
 4. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
    boot-segment discovery from the real entry point, then a local-only recall
    score against the decomp map. Keep ROM bytes, maps and traces ignored.
 5. **Lowered subset growth** pulled by SM64: LWL/LWR/SWL/SWR, then COP1
    arithmetic; COP0 stays behind the runtime boundary.
-6. **Known-library evidence** (PR #50 n64sym) as candidate evidence for libultra
-   boundaries; never auto-promoted to proof.
+6. **Known-library evidence**: done for runtime boundaries (ADR-0133); PR #50's
+   source-bound candidate model is still open for other uses.
 
 Paused until a milestone needs them: RSP/SP lane, producer, task-root and
 reverse-DMA provenance beyond spike095.

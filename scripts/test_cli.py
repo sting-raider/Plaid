@@ -145,6 +145,20 @@ def main():
             deleted[field]=[]
         compile_map.write_text(json.dumps(deleted),encoding='utf-8')
         run('solve-traces',rom,compile_map,compile_expected,no_install,ok=False)
+        # n64sym signature identification feeds runtime declarations (ADR-0133)
+        import zlib
+        body=b"".join(w.to_bytes(4,"big") for w in words[8:10])
+        sig=directory/'lib.sig'
+        sig.write_text(f"# sig_v1\n\nosGetCount 0x8 0x{zlib.crc32(body):08X} 0x{zlib.crc32(body):08X}\n",encoding='utf-8')
+        found=json.loads(run('identify',rom,"64","0x80000000","40",sig))
+        assert found['format']=='plaid-runtime-functions-v0' and found['ambiguous']==[]
+        assert [(f['entry'],f['name']) for f in found['functions']]==[('0x80000020','osGetCount')]
+        declared=directory/'runtime.json'; declared.write_text(json.dumps(found),encoding='utf-8')
+        runtime_map=directory/'runtime-map.json'
+        run("discover",rom,"64","0x80000000","40","0x80000000",runtime_map,declared)
+        assert len(json.loads(runtime_map.read_bytes())['runtime_functions'])==1
+        sig.write_text("osGetCount 0x8\n",encoding='utf-8')
+        run('identify',rom,"64","0x80000000","40",sig,ok=False)
         merged=directory / "merged.json"
         run("merge",directory/"z64.json",directory/"v64.json",merged)
         assert merged.read_bytes() == maps[0]
