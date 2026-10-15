@@ -153,6 +153,12 @@ def main():
         found=json.loads(run('identify',rom,"64","0x80000000","40",sig))
         assert found['format']=='plaid-runtime-functions-v0' and found['ambiguous']==[]
         assert [(f['entry'],f['name']) for f in found['functions']]==[('0x80000020','osGetCount')]
+        # identify scans the composite: a load copying the same body makes it ambiguous
+        ident_loads=directory/'ident-loads.json'
+        ident_loads.write_text(json.dumps(dict(format='plaid-loads-v0',source='cli test',
+            loads=[dict(destination='0x80000028',size='0x8',rom='96',encoding='raw')])),encoding='utf-8')
+        both=json.loads(run('identify',rom,"64","0x80000000","40",sig,"--loads",ident_loads))
+        assert both['functions']==[] and both['ambiguous']==['osGetCount'],both
         declared=directory/'runtime.json'; declared.write_text(json.dumps(found),encoding='utf-8')
         runtime_map=directory/'runtime-map.json'
         run("discover",rom,"64","0x80000000","40","0x80000000",runtime_map,declared)

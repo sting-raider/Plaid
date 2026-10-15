@@ -49,10 +49,12 @@ Next concrete steps, in order:
    42 guarded blockers.
    Done: GCC's scheduled jump-table shapes (ADR-0140); OoT at 8082 blocks,
    31 guarded blockers, with no unresolved jump table left.
-   **Next:** identify runtime functions inside declared loads too (OoT's
-   code segment holds libultra, e.g. the `_Printf`-shaped function behind 9
-   `jalr s4` sites), then the 4 unresolved direct and 3 unmapped targets.
-   The 12 struct function-pointer calls need a points-to argument.
+   Done: runtime identification over declared loads (ADR-0141); OoT at
+   7684 blocks, 29 guarded blockers, none of them instruction-scope.
+   **Next:** the 22 function-pointer sites need a points-to argument. 9 are
+   `_Printf`'s output callback, and one caller loads it from a struct. The 7
+   64DD calls need either the 64DD segment declared or a general
+   guarded-call treatment.
 4. **SM64 recall harness** (milestone 2) once the user supplies the ROM:
    boot-segment discovery from the real entry point, then a local-only recall
    score against the decomp map. Keep ROM bytes, maps and traces ignored.
