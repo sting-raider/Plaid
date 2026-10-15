@@ -3448,3 +3448,34 @@ forms, and `CVT.L` under RP and RM. `fpu_round_range` (`CEIL.W` of
 as 32 bits, the wrong mode taken from the function field, and ties rounded
 away from zero. ISA coverage is 175 of 209 forms. OoT is unchanged at 29
 guarded blockers, since its reachable code uses none of these forms.
+
+## ADR-0144: Discovery recall against a local reference map
+
+Context: milestone 2 asks for SM64 discovery recall of at least 99%,
+scored against a decomp map that serves only as a local oracle. Nothing
+measured recall yet.
+
+Decision: `plaid recall <map.json> <reference> [start end]` scores a map's
+function entries against a reference symbol file. The reference stays at
+an ignored local path and is never committed.
+
+- Reference: either a GNU ld map, where a symbol counts when it is listed
+  under a `.text` or `.text.*` input section, or a splat `symbol_addrs`
+  file, where a line counts when it carries `type:func`. Aliases at one
+  address count once. 64-bit addresses, zero- or sign-extended, fold to
+  KSEG0.
+- Discovered functions: map entries, direct call targets, candidates of
+  linking indirect sites, and declared runtime functions. Comparison is by
+  guest PC, because a reference has no image identity. Overlapping overlays
+  would need one range per image.
+- Report (`plaid-recall-v0`): reference and discovered counts, matches,
+  recall, the 0.99 target, whether it is met, and every missed symbol.
+  Discovered entries absent from the reference are counted but not scored
+  as errors, because linker maps omit static functions.
+
+Result: unit tests cover ld-map section filtering, sign-extended
+addresses, aliases and splat `type:func` lines. `scripts/test_cli.py`
+scores a synthetic map with one function never discovered: recall is 2/3,
+the target is missed and the missed name is reported. Restricting the range
+excludes that function and meets the target. An input with no code symbols
+is rejected.

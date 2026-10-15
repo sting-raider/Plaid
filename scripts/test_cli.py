@@ -179,6 +179,17 @@ def main():
         run("solve",rom,load_map,"--loads",loads,ok=False)
         sig.write_text("osGetCount 0x8\n",encoding='utf-8')
         run('identify',rom,"64","0x80000000","40",sig,ok=False)
+        # recall against a reference linker map (ADR-0144)
+        ref=directory/'ref.map'
+        ref.write_text(" .text          0x0000000080000000       0x28 main.o\n"
+            "                0x0000000080000000                entry\n"
+            "                0x0000000080000020                osGetCount\n"
+            "                0x0000000080000024                never_called\n",encoding='utf-8')
+        score=json.loads(run('recall',runtime_map,ref))
+        assert score['format']=='plaid-recall-v0' and score['reference_functions']==3 and score['matched']==2,score
+        assert [m['name'] for m in score['missed']]==['never_called'] and not score['meets_target']
+        assert json.loads(run('recall',runtime_map,ref,'0x80000000','0x80000024'))['meets_target']
+        run('recall',runtime_map,sig,ok=False)
         merged=directory / "merged.json"
         run("merge",directory/"z64.json",directory/"v64.json",merged)
         assert merged.read_bytes() == maps[0]
