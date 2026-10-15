@@ -28,6 +28,7 @@ HISTORY_MD = ROOT / "docs" / "HISTORY.md"
 BADGES = ROOT / "docs" / "badges"
 COVERAGE = ROOT / "docs" / "isa-coverage.json"
 COVERAGE_SVG = ROOT / "docs" / "coverage.svg"
+RSP_COVERAGE = ROOT / "docs" / "rsp-coverage.json"
 
 STATE_LABEL = {
     "verified": "verified",
@@ -94,7 +95,7 @@ def render_svg(data: dict) -> str:
     text(40, 38, "PLAID  /  ENGINEERING ATLAS", 13, "#78dcca", 700)
     text(1160, 38, f'Reviewed {data.get("updated", "unknown")}', 13, anchor="end")
     text(40, 84, "The path from ROM to native gameplay", 32, "#f4f7fc", 700)
-    text(40, 111, "Current frontier: first commercial CLOSED scope (OoT blockers)", 16)
+    text(40, 111, f'Current frontier: {data.get("frontier", "unknown")}', 16)
     for i, evidence in enumerate(data.get("evidence", [])):
         x = 40 + i * 286
         rect(x, 136, 262, 96, "#152538", 10, "#294052")
@@ -219,6 +220,10 @@ def measure_isa() -> dict:
     if coverage.get("format") != "plaid-isa-coverage-v0":
         raise SystemExit("unexpected isa-coverage output")
     COVERAGE.write_text(json.dumps(coverage, indent=2) + "\n", encoding="utf-8")
+    rsp = json.loads(subprocess.check_output([exe, "rsp-coverage"], text=True))
+    if rsp.get("format") != "plaid-rsp-coverage-v0":
+        raise SystemExit("unexpected rsp-coverage output")
+    RSP_COVERAGE.write_text(json.dumps(rsp, indent=2) + "\n", encoding="utf-8")
     return {"isa_lowered": coverage["lowered"], "isa_decoded": coverage["decoded"]}
 
 
@@ -459,7 +464,7 @@ def treemap(groups: dict, x0: float, y0: float, w: float, h: float) -> list:
     return out
 
 
-def render_coverage_svg(coverage: dict, data: dict) -> str:
+def render_coverage_svg(coverage: dict, data: dict, rsp: dict | None = None) -> str:
     isa = {}
     for name, lowered in coverage["mnemonics"].items():
         isa.setdefault(isa_group(name), []).append((name, "done" if lowered else "open"))
@@ -469,7 +474,8 @@ def render_coverage_svg(coverage: dict, data: dict) -> str:
     # stacked, one full-width map per row, so labels stay readable at README width
     width, map_h, top, gap = 840, 300, 30, 26
     map_w, second = width, top + map_h + gap + top
-    height = second + map_h
+    third = second + map_h + gap + top
+    height = third + map_h if rsp else second + map_h
     out = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" '
         f'height="{height}" role="img" aria-label="Plaid coverage maps">',
@@ -485,6 +491,13 @@ def render_coverage_svg(coverage: dict, data: dict) -> str:
     ]
     out += treemap(isa, 0, top, map_w, map_h)
     out += treemap(ms, 0, second, map_w, map_h)
+    if rsp:
+        groups = {}
+        for name, m in rsp["mnemonics"].items():
+            groups.setdefault(m["group"], []).append((name, "done" if m["lowered"] else "open"))
+        out.append(f'<text x="2" y="{third - 8}" class="title">RSP instructions*: '
+                   f'{pct(rsp["lowered"], rsp["documented"])} ({rsp["lowered"]}/{rsp["documented"]})</text>')
+        out += treemap(groups, 0, third, map_w, map_h)
     out.append("</svg>")
     return "\n".join(out) + "\n"
 
@@ -567,7 +580,8 @@ def main() -> int:
         BADGES.mkdir(exist_ok=True)
     if COVERAGE.exists():
         coverage = json.loads(COVERAGE.read_text(encoding="utf-8"))
-        ok &= write_or_check(COVERAGE_SVG, render_coverage_svg(coverage, data), args.check)
+        rsp = json.loads(RSP_COVERAGE.read_text(encoding="utf-8")) if RSP_COVERAGE.exists() else None
+        ok &= write_or_check(COVERAGE_SVG, render_coverage_svg(coverage, data, rsp), args.check)
     for name, content in badges(history, data).items():
         ok &= write_or_check(BADGES / name, content, args.check)
     return 0 if ok else 1

@@ -118,6 +118,134 @@ pub fn isa_coverage() -> BTreeMap<String, bool> {
     out
 }
 
+/// Every instruction of the RSP programming manual, as (group, mnemonic, a
+/// sample word), for `rsp_coverage`. Reserved vector encodings and LWV are
+/// left out: their hardware meaning is unverified (ADR-0168).
+fn rsp_forms() -> Vec<(&'static str, &'static str, u32)> {
+    let mut out = Vec::new();
+    let (rs, rt, rd) = (8 << 21, 9 << 16, 10 << 11);
+    for (name, f) in [
+        ("sll", 0),
+        ("srl", 2),
+        ("sra", 3),
+        ("sllv", 4),
+        ("srlv", 6),
+        ("srav", 7),
+        ("add", 32),
+        ("addu", 33),
+        ("sub", 34),
+        ("subu", 35),
+        ("and", 36),
+        ("or", 37),
+        ("xor", 38),
+        ("nor", 39),
+        ("slt", 42),
+        ("sltu", 43),
+    ] {
+        let sa = if f < 4 { 1 << 6 } else { rs };
+        out.push(("Scalar ALU", name, sa | rt | rd | f));
+    }
+    for (name, op) in [
+        ("addi", 8),
+        ("addiu", 9),
+        ("slti", 10),
+        ("sltiu", 11),
+        ("andi", 12),
+        ("ori", 13),
+        ("xori", 14),
+        ("lui", 15),
+    ] {
+        out.push((
+            "Scalar ALU",
+            name,
+            op << 26 | if op == 15 { 0 } else { rs } | rt | 1,
+        ));
+    }
+    for (name, op) in [
+        ("lb", 32),
+        ("lh", 33),
+        ("lw", 35),
+        ("lbu", 36),
+        ("lhu", 37),
+        ("sb", 40),
+        ("sh", 41),
+        ("sw", 43),
+    ] {
+        out.push(("Scalar load/store", name, op << 26 | rt | 4));
+    }
+    for (name, w) in [
+        ("j", 2 << 26 | 2),
+        ("jal", 3 << 26 | 2),
+        ("jr", rs | 8),
+        ("jalr", rs | 31 << 11 | 9),
+        ("beq", 4 << 26 | rs | rt | 1),
+        ("bne", 5 << 26 | rs | rt | 1),
+        ("blez", 6 << 26 | rs | 1),
+        ("bgtz", 7 << 26 | rs | 1),
+        ("bltz", 1 << 26 | rs | 1),
+        ("bgez", 1 << 26 | rs | 1 << 16 | 1),
+        ("bltzal", 1 << 26 | rs | 16 << 16 | 1),
+        ("bgezal", 1 << 26 | rs | 17 << 16 | 1),
+        ("break", 13),
+    ] {
+        out.push(("Branch/jump", name, w));
+    }
+    for (name, sub) in [("mfc0", 0), ("mtc0", 4)] {
+        out.push(("COP0", name, 16 << 26 | sub << 21 | rt | 4 << 11));
+    }
+    for (name, sub) in [("mfc2", 0), ("cfc2", 2), ("mtc2", 4), ("ctc2", 6)] {
+        out.push(("COP2 move", name, 18 << 26 | sub << 21 | rt | 1 << 11));
+    }
+    let loads = [
+        "lbv", "lsv", "llv", "ldv", "lqv", "lrv", "lpv", "luv", "lhv", "lfv", "", "ltv",
+    ];
+    let stores = [
+        "sbv", "ssv", "slv", "sdv", "sqv", "srv", "spv", "suv", "shv", "sfv", "swv", "stv",
+    ];
+    for op in 0..12u32 {
+        let w = |base: u32| base << 26 | rs | 1 << 16 | op << 11;
+        if !loads[op as usize].is_empty() {
+            out.push(("Vector load", loads[op as usize], w(50)));
+        }
+        out.push(("Vector store", stores[op as usize], w(58)));
+    }
+    let vector = [
+        "vmulf", "vmulu", "vrndp", "vmulq", "vmudl", "vmudm", "vmudn", "vmudh", "vmacf", "vmacu",
+        "vrndn", "vmacq", "vmadl", "vmadm", "vmadn", "vmadh", "vadd", "vsub", "", "vabs", "vaddc",
+        "vsubc", "", "", "", "", "", "", "", "vsar", "", "", "vlt", "veq", "vne", "vge", "vcl",
+        "vch", "vcr", "vmrg", "vand", "vnand", "vor", "vnor", "vxor", "vnxor", "", "", "vrcp",
+        "vrcpl", "vrcph", "vmov", "vrsq", "vrsql", "vrsqh", "vnop", "", "", "", "", "", "", "",
+        "vnull",
+    ];
+    for (f, name) in vector.iter().enumerate().filter(|(_, n)| !n.is_empty()) {
+        let group = match f {
+            0..=15 => "Vector multiply",
+            16..=31 => "Vector add",
+            32..=47 => "Vector select/logic",
+            _ => "Vector divide/move",
+        };
+        out.push((
+            group,
+            name,
+            0x4a00_0000 | 3 << 16 | 2 << 11 | 1 << 6 | f as u32,
+        ));
+    }
+    out
+}
+
+/// RSP mnemonic -> (group, whether it lowers with no fault stub).
+pub fn rsp_coverage() -> BTreeMap<String, (String, bool)> {
+    rsp_forms()
+        .into_iter()
+        .map(|(group, name, word)| {
+            // the word, a delay slot and BREAK
+            let text: Vec<u8> = [word, 0, 13].iter().flat_map(|w| w.to_be_bytes()).collect();
+            let lowered = crate::rsp::lower_rsp(&text, 0, "c").is_ok_and(|l| l.stubs.is_empty());
+            (name.to_string(), (group.to_string(), lowered))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -130,5 +258,14 @@ mod tests {
         assert!(c["round.w.s"] && c["floor.l.d"] && c["cvt.l.s"]);
         assert!(!c["eret"] && !c["syscall"]);
         assert!(!c.contains_key("nop") && !c.contains_key("movn"));
+    }
+
+    #[test]
+    fn every_documented_rsp_instruction_lowers() {
+        let c = super::rsp_coverage();
+        assert_eq!(c.len(), 119);
+        assert!(c.values().all(|(_, lowered)| *lowered), "{c:?}");
+        assert_eq!(c["vmadh"].0, "Vector multiply");
+        assert!(!c.contains_key("lwv") && c.contains_key("swv"));
     }
 }

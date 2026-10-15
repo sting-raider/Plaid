@@ -16,10 +16,10 @@ Last progress-data update: **2026-10-15**. Day-by-day numbers: [progress history
 
 | Evidence | Observed scope | Source |
 | --- | --- | --- |
-| **20,000,000** Observed CPU fetches | Retained commercial-ROM prefix | [Receipt / status](../research/integration-receipts/20261014-storage-writer-fetch-primary.md) |
-| **62** OoT whole-ROM blockers | Local OoT baseline; 44 indirect sites | [Receipt / status](../research/integration-receipts/20261012-discovery-solve-primary-composition.md) |
-| **2,472,203** Full PI-byte fetch chains | Canonical + independent replay agree | [Receipt / status](STATUS-LOG.md) |
-| **0** Commercial ROMs CLOSED | Whole-ROM and native gates remain open | [Receipt / status](STATUS.md) |
+| **45,419** SM64 blocks CLOSED | Under declared assumptions | [Receipt / status](STATUS.md) |
+| **99.03%** SM64 discovery recall | Against a local decomp map | [Receipt / status](STATUS.md) |
+| **59.9 VI/s** SM64 native, full speed | RT64 graphics, native RSP audio | [Receipt / status](../research/sm64-first-measurement.md) |
+| **0** Commercial ROMs CLOSED | Whole-ROM, with no assumptions | [Receipt / status](STATUS.md) |
 
 These are finite observations, not exhaustive execution coverage or a CLOSED certificate.
 
@@ -35,10 +35,11 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Local indirect certificates | ✅ verified |
 | Bounded cross-block indirect proofs | ✅ verified |
 | Jump/pointer-table recovery | 🟨 partial |
-| Known-library/signature evidence | ⬜ open |
-| Commercial-ROM map validation | ⬜ open |
+| Known-library/signature evidence | ✅ verified |
+| Commercial-ROM map validation | ✅ verified |
+| Declared executable loads (ADR-0136) | ✅ verified |
 
-**Remaining:** Broader indirect targets and a complete commercial-ROM map.
+**Remaining:** General jump tables, automatic load discovery, overlays.
 
 ## Executable Provenance
 
@@ -81,40 +82,43 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Pointer-table immutability proof | 🟨 partial |
 | Overlay/executable lifetimes | 🟨 partial |
 | RSP executable-universe proof | 🟨 partial |
-| First ROM reaches CLOSED | ⬜ open |
+| First ROM reaches CLOSED | 🟨 partial |
+| Assumption-scoped CLOSED: SM64 (ADR-0153) | ✅ verified |
 
-**Remaining:** Compose exhaustive roots, targets and lifetimes into a CLOSED scope.
+**Remaining:** Retire the declared assumptions: whole-ROM CLOSED with none.
 
 ## Native AOT Compiler
 
 | Milestone | State |
 | --- | --- |
-| MIPS -> C lowering (ADR-0126) | 🟨 partial |
-| Integer MIPS lowering | 🟨 partial |
-| x86-64 host build via C | 🟨 partial |
+| MIPS -> C lowering (ADR-0126) | ✅ verified |
+| Integer MIPS lowering | ✅ verified |
+| x86-64 host build via C | ✅ verified |
 | ARM64 host build via C | ⬜ open |
-| Return closure / function-level lowering | 🟨 partial |
-| Finite native indirect dispatch | 🟨 partial |
+| Return closure / function-level lowering | ✅ verified |
+| Finite native indirect dispatch | ✅ verified |
 | Synthetic native differential verifier | ✅ verified |
-| Link with the Plaid runtime (ADR-0158) | 🟨 partial |
+| Link with the Plaid runtime (ADR-0158) | ✅ verified |
+| COP1/FPU lowering (FR = 0 and 1) | ✅ verified |
+| RSP scalar + vector lowering (ADR-0167/0168) | ✅ verified |
 
-**Remaining:** Return closure outside the assumption scope, wider ISA, runtime link.
+**Remaining:** ARM64 host build; COP0/TLB/system forms stay behind the runtime.
 
 ## Native Runtime
 
 | Milestone | State |
 | --- | --- |
-| Declared runtime-function boundary (ADR-0129) | 🟨 partial |
-| Guest memory/MMIO runtime | 🟨 partial |
-| Interrupt/timing/event runtime | 🟨 partial |
+| Declared runtime-function boundary (ADR-0129) | ✅ verified |
+| Guest memory/MMIO runtime | ✅ verified |
+| Interrupt/timing/event runtime | ✅ verified |
 | Controller input | 🟨 partial |
 | Save devices | 🟨 partial |
 | Audio path | 🟨 partial |
-| RSP runtime/native path | 🟨 partial |
-| Renderer integration | 🟨 partial |
+| RSP runtime/native path | ✅ verified |
+| Renderer integration | ✅ verified |
 | Native launch/cache packaging | ⬜ open |
 
-**Remaining:** Plaid runtime + RT64 (ADR-0158/0163/0164): audio, other save types, packaging and speed.
+**Remaining:** Live audio, other saves and controllers, packaging, non-Windows hosts.
 
 ## Compatibility
 
@@ -124,15 +128,15 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Mupen/ares differential oracles | ✅ verified |
 | 20M-fetch commercial-prefix replay | ✅ verified |
 | n64-systemtest research corpus | 🟨 partial |
-| First commercial ROM mapped | ⬜ open |
-| First commercial ROM CLOSED | ⬜ open |
+| First commercial ROM mapped | ✅ verified |
+| First commercial ROM CLOSED | 🟨 partial |
 | First native synthetic executable | ✅ verified |
-| First native commercial boot | 🟨 partial |
-| First native gameplay | 🟨 partial |
+| First native commercial boot | ✅ verified |
+| First native gameplay | ✅ verified |
 | Representative 25-game set | ⬜ open |
 | 100-game campaign | ⬜ open |
 
-**Remaining:** First CLOSED ROM, native boot and reproducible gameplay.
+**Remaining:** Whole-ROM CLOSED, then Ocarina of Time and a wider game set.
 
 ## Interpretation
 
