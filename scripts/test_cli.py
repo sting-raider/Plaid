@@ -177,6 +177,13 @@ def main():
         declare('0x80000040')
         run("discover",rom,"64","0x80000000","40","0x80000000",load_map,"--loads",loads,ok=False)
         run("solve",rom,load_map,"--loads",loads,ok=False)
+        # a reference symbol map can name runtime functions instead (ADR-0148)
+        symbol_ref=directory/'symbols.txt'
+        symbol_ref.write_text("osGetCount = 0x80000020; // type:func\n"
+            "osSendMesg = 0x80000008; // type:func\nosSendMesg = 0x80000010; // type:func\n",encoding='utf-8')
+        named=json.loads(run('identify',rom,"64","0x80000000","40",symbol_ref,"--symbols"))
+        assert [(f['entry'],f['name']) for f in named['functions']]==[('0x80000020','osGetCount')]
+        assert named['ambiguous']==['osSendMesg'] and 'symbol map' in named['source'],named
         sig.write_text("osGetCount 0x8\n",encoding='utf-8')
         run('identify',rom,"64","0x80000000","40",sig,ok=False)
         # recall against a reference linker map (ADR-0144)
