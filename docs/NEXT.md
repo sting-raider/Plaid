@@ -99,8 +99,11 @@ Next concrete steps, in order:
      reload.
    - Done: TLB-mapped data (ADR-0162). SM64 runs natively for 90 seconds
      (1459 graphics tasks) without a fault.
-   - Next: draw its display lists with RT64 (ADR-0163).
-   - RT64 for graphics tasks; then audio, controllers and EEPROM.
+   - Done: RT64 draws its graphics tasks (ADR-0163). **SM64 boots natively
+     to its title screen.**
+   - Next: controller input (to get past the title), audio through the
+     host, EEPROM persistence, then speed against the ADR-0163 baseline
+     (33 VI/s).
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user

@@ -96,7 +96,7 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Return closure / function-level lowering | 🟨 partial |
 | Finite native indirect dispatch | 🟨 partial |
 | Synthetic native differential verifier | ✅ verified |
-| Link with N64ModernRuntime | ⬜ open |
+| Link with the Plaid runtime (ADR-0158) | 🟨 partial |
 
 **Remaining:** Return closure outside the assumption scope, wider ISA, runtime link.
 
@@ -105,16 +105,16 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Milestone | State |
 | --- | --- |
 | Declared runtime-function boundary (ADR-0129) | 🟨 partial |
-| Guest memory/MMIO runtime | ⬜ open |
-| Interrupt/timing/event runtime | ⬜ open |
+| Guest memory/MMIO runtime | 🟨 partial |
+| Interrupt/timing/event runtime | 🟨 partial |
 | Controller input | ⬜ open |
 | Save devices | ⬜ open |
 | Audio path | ⬜ open |
 | RSP runtime/native path | ⬜ open |
-| Renderer integration | ⬜ open |
+| Renderer integration | 🟨 partial |
 | Native launch/cache packaging | ⬜ open |
 
-**Remaining:** Reuse N64ModernRuntime + RT64 (ADR-0126) and link lowered code.
+**Remaining:** Plaid runtime + RT64 (ADR-0158/0163): audio, input, saves, packaging and speed.
 
 ## Compatibility
 
@@ -127,7 +127,7 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | First commercial ROM mapped | ⬜ open |
 | First commercial ROM CLOSED | ⬜ open |
 | First native synthetic executable | ✅ verified |
-| First native commercial boot | ⬜ open |
+| First native commercial boot | 🟨 partial |
 | First native gameplay | ⬜ open |
 | Representative 25-game set | ⬜ open |
 | 100-game campaign | ⬜ open |
