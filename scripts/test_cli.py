@@ -167,6 +167,11 @@ def main():
         rooted=directory/'rooted-map.json'
         run("discover",rom,"64","0x80000000","40","0x80000000",rooted,"--data-roots")
         assert len(json.loads(rooted.read_bytes())['blocks'])>=len(json.loads(runtime_map.read_bytes())['blocks'])
+        # address-taken functions are recorded and select their own scope (ADR-0153)
+        taken=directory/'taken-map.json'
+        run("discover",rom,"64","0x80000000","40","0x80000000",taken,"--address-taken")
+        assert len(json.loads(taken.read_bytes())['blocks'])>=len(json.loads(runtime_map.read_bytes())['blocks'])
+        json.loads(run("solve",rom,taken,"--address-taken"))
         # declared loads (ADR-0136): the composite is rebuilt by solve
         loads=directory/'loads.json'
         def declare(destination):

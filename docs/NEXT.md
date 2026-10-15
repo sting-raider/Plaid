@@ -78,11 +78,15 @@ Next concrete steps, in order:
    and 10 guarded blockers.
    Done: heuristic data-pointer and layout roots (ADR-0152). **Milestone 2 is
    met:** SM64 whole-map recall is 99.03%.
-   **Next for SM64 (milestone 3):** closing the function-pointer calls through
-   memory needs a decision on address-taken dispatch. That would be a new
-   assumption scope: an indirect call targets only functions whose addresses
-   appear as data or code constants, and native code faults otherwise. Also
-   open: the level command table and the last audio dispatch.
+   Done: the address-taken dispatch scope (ADR-0153). Register calls
+   dispatch over the 1313 functions whose addresses appear as data or code
+   constants, and native code faults otherwise. SM64 is at 32 blockers
+   under `--address-taken`.
+   **Next for SM64 (milestone 3):**
+   - 11 goddard `switch` tables and 1 audio table, whose `lw` and `jr` are
+     separated by a load-delay `nop`;
+   - declare `osMapTLB` and `osUnmapTLBAll` as runtime functions;
+   - remove the junk direct target into `rspF3DBootStart`.
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user

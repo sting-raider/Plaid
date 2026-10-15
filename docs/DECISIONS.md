@@ -3765,3 +3765,58 @@ in the reference:
 The missing 37 are mostly unreferenced stubs that begin with `jr ra`, and
 IPL3 symbols outside the windows. Under the guarded scope the rooted map has
 227 blockers, because the roots decode code that the plain map never reached.
+
+## ADR-0153: Address-taken dispatch scope for register calls
+
+Context: after ADR-0152, SM64's rooted code has about 100 register calls
+through function pointers loaded from memory: object behaviors, geo and
+render callbacks, goddard draw functions and camera and cutscene tables.
+ADR-0142 found no points-to proof for this class. Compiled C can only call a
+function whose address it takes, so the closed target set is the
+address-taken functions, if that set is complete.
+
+Decision: a new solver scope, `DeclaredStaticImagesGuardedRamAddressTaken`
+(`plaid solve ... --address-taken`). It includes everything in the guarded
+scope, plus one assumption: every register call (`jalr` with a link
+register) without another proof targets an address-taken function.
+
+`plaid discover ... --address-taken` records the set in a new ProgramMap
+field, `address_taken`, with `plaid-address-taken/v0` evidence. A function
+is address-taken when it is a function start by layout (ADR-0152), its body
+up to the first `jr ra` decodes as CPU code with no COP2/COP3 access, and
+either:
+- an aligned ROM word names it; or
+- a `lui`/`addiu` (or `ori`) constant built inside a decoded block names it.
+  Constants in undecoded bytes, such as a runtime function's body, do not
+  count.
+
+Discovery iterates until no new function appears, and the set's members
+stay map entries. Declared runtime functions never join the set.
+
+The solver re-checks the set before it uses it: the set must be non-empty,
+and every member must be a decoded block start and still plausible. If any
+check fails, every register call stays OPEN. Jump-register sites without a
+link (`jr`) never use the set.
+
+`plaid lower-c ... --address-taken` lowers each such call as a dispatch over
+the set. Any other target faults 3 at run time. The fault keeps the
+assumption checked rather than trusted.
+
+Result:
+- The `address_taken` test covers closing over a plausible set, keeping the
+  site OPEN under the guarded scope, and voiding the set when one member is
+  not a function start.
+- spike096 adds `addrtaken` (one target taken by a code constant, one only
+  by a data word) and `at_bad`. Both match pinned ares; `at_bad` calls 4
+  bytes into a function and faults 3.
+
+On SM64 (main, engine and goddard, `--loads`), discovery reaches 42856
+blocks and 1313 address-taken functions. Guarded-scope blockers go from 120
+to **32** under the address-taken scope:
+- 12 `jr` sites: 11 goddard `switch` tables and 1 audio table;
+- 18 TLB and COP0 instructions in `osMapTLB` and `osUnmapTLBAll`, which are not yet
+  declared runtime functions;
+- 2 from a junk direct target into `rspF3DBootStart`.
+
+The layout pass is not part of this discovery, so recall on this map is
+85.5%; milestone 2's 99.03% is measured with `--data-roots`.
