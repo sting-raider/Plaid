@@ -263,3 +263,42 @@ fn a_load_delay_nop_before_the_jump_still_closes_the_table() {
     // anything else between the load and the jump can change the target
     assert_eq!(table_targets(&delay_nop(0x254a0004)), None); // addiu t2, t2, 4
 }
+
+/// IDO's audio shape (ADR-0156): `sltiu` bounds the index, then a taken
+/// `bnez` is the guard block's only way in. `slot` is the `bnez` delay slot
+/// and `other` the word before the guard.
+fn hop(slot: u32, other: u32) -> CodeImage {
+    let mut i = image();
+    i.words.fill(0);
+    i.words[..14].copy_from_slice(&[
+        0x2c810003, 0x14a00003, slot, other, 0, 0x10200006, 0x00045080, 0x3c018000, 0x002a0821,
+        0x8c2a0100, 0x01400008, 0, 0x0800000c, 0,
+    ]);
+    for offset in [0x40, 0x50] {
+        i.words[offset / 4] = 0x08000000 | (offset as u32 / 4);
+    }
+    i.words[64..].copy_from_slice(&[0x80000040, 0x80000050, 0x80000040]);
+    i
+}
+
+fn hop_targets(i: &CodeImage) -> Option<Vec<u32>> {
+    let m = analyze_indirect(&map(i), i).unwrap();
+    let s = m
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == 0x80000028)?;
+    plaid_core::tables::verify(&m, i, s).then(|| s.candidates.keys().map(|a| a.pc.0).collect())
+}
+
+#[test]
+fn a_bound_before_the_only_branch_to_the_guard_closes_the_table() {
+    let leave = 0x10000008; // b out, skipping the guard
+    assert_eq!(
+        hop_targets(&hop(0, leave)),
+        Some(vec![0x80000040, 0x80000050])
+    );
+    // the branch's slot redefines the index after the bound
+    assert_eq!(hop_targets(&hop(0x24840001, leave)), None);
+    // a second way into the guard skips the bound
+    assert_eq!(hop_targets(&hop(0, 0x10000001)), None);
+}

@@ -15,7 +15,7 @@ effect in its receipt.
 | --- | --- | --- | --- |
 | 1 | Synthetic ROM -> C -> native | spike096 programs, including nested/recursive calls, match pinned ares exactly; fail-closed cases fault | **done** (spike096, ADR-0127) |
 | 2 | SM64 discovery recall | >= 99% of real functions found, scored locally against a decomp symbol map used only as an oracle | **done: 99.03%** (3795/3832, ADR-0152, `--data-roots`) |
-| 3 | SM64 closed under declared assumptions | solver CLOSED in an explicit assumption scope; every assumption listed and checked | open |
+| 3 | SM64 closed under declared assumptions | solver CLOSED in an explicit assumption scope; every assumption listed and checked | **done** (`closed` under the address-taken scope, ADR-0153..0156; execution-source and runtime-ABI assumptions are declared, the rest checked natively) |
 | 4 | SM64 boots natively to title | lowered code linked with N64ModernRuntime + RT64; no interpreter linked | open |
 | 5 | Retire assumptions; OoT | assumptions discharged one by one; OoT via Yaz0 (PR #28) and relocation (PR #31) | open |
 
@@ -85,8 +85,15 @@ Next concrete steps, in order:
    Done: load-delay `nop` tables (ADR-0154), TLB runtime functions and
    in-image address-taken bodies (ADR-0155). SM64 is at **1 blocker**
    under `--address-taken`.
-   **Next for SM64 (milestone 3):** the `audio_signal_game_loop_tick`
-   table, whose bound comes before a taken `bnez` to the guard.
+   Done: a table bound before the only branch into the guard (ADR-0156).
+   **Milestone 3 is met:** SM64 solves `closed` under
+   `DeclaredStaticImagesGuardedRamAddressTaken`.
+   **Next (milestone 4):**
+   - lower the closed SM64 map to C at scale (1341-way address-taken
+     dispatch, 45419 blocks);
+   - choose the runtime license path: N64ModernRuntime is GPL-3.0, so this
+     is the user's call;
+   - discharge the declared execution-source assumptions in that runtime.
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user
