@@ -153,12 +153,14 @@ def main():
         found=json.loads(run('identify',rom,"64","0x80000000","40",sig))
         assert found['format']=='plaid-runtime-functions-v0' and found['ambiguous']==[]
         assert [(f['entry'],f['name']) for f in found['functions']]==[('0x80000020','osGetCount')]
-        # identify scans the composite: a load copying the same body makes it ambiguous
+        # identify scans the composite: a load copying the same relocation-free
+        # body is the same function at a second address (ADR-0171)
         ident_loads=directory/'ident-loads.json'
         ident_loads.write_text(json.dumps(dict(format='plaid-loads-v0',source='cli test',
             loads=[dict(destination='0x80000028',size='0x8',rom='96',encoding='raw')])),encoding='utf-8')
         both=json.loads(run('identify',rom,"64","0x80000000","40",sig,"--loads",ident_loads))
-        assert both['functions']==[] and both['ambiguous']==['osGetCount'],both
+        assert [(f['entry'],f['name']) for f in both['functions']]==[('0x80000020','osGetCount'),
+            ('0x80000028','osGetCount')] and both['ambiguous']==[],both
         declared=directory/'runtime.json'; declared.write_text(json.dumps(found),encoding='utf-8')
         runtime_map=directory/'runtime-map.json'
         run("discover",rom,"64","0x80000000","40","0x80000000",runtime_map,declared)
@@ -206,6 +208,19 @@ def main():
         named=json.loads(run('identify',rom,"64","0x80000000","40",symbol_ref,"--symbols"))
         assert [(f['entry'],f['name']) for f in named['functions']]==[('0x80000020','osGetCount')]
         assert named['ambiguous']==['osSendMesg'] and 'symbol map' in named['source'],named
+        # the map completes signatures only where the ROM leaves a name open, and
+        # the solver lists what rests on it (ADR-0171)
+        symbol_ref.write_text("osGetCount = 0x80000020; // type:func\nosInitialize = 0x80000008; // type:func\n",
+            encoding='utf-8')
+        mixed=json.loads(run('identify',rom,"64","0x80000000","40",sig,"--reference-map",symbol_ref))
+        assert [(f['entry'],f['name'],f['evidence']) for f in mixed['functions']]==[
+            ('0x80000008','osInitialize','reference map'),('0x80000020','osGetCount','signature')],mixed
+        declared.write_text(json.dumps(mixed),encoding='utf-8')
+        mixed_map=directory/'mixed-map.json'
+        run("discover",rom,"64","0x80000000","40","0x80000000",mixed_map,declared)
+        notes=json.loads(run("solve",rom,mixed_map,"--guarded-ram"))['assumptions']
+        assert any('reference symbol map' in a and '(osInitialize)' in a for a in notes),notes
+        run('identify',rom,"64","0x80000000","40",symbol_ref,"--symbols","--reference-map",symbol_ref,ok=False)
         sig.write_text("osGetCount 0x8\n",encoding='utf-8')
         run('identify',rom,"64","0x80000000","40",sig,ok=False)
         # recall against a reference linker map (ADR-0144)
