@@ -394,6 +394,8 @@ def main():
     save_file(exe, cc)
     rsp_tasks(exe, cc)
     audio_dma(exe, cc)
+    from test_overlays import main as overlay_verifiers
+    overlay_verifiers()
 
 
 if __name__ == '__main__':

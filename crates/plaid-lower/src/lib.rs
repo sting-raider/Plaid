@@ -15,6 +15,7 @@ use plaid_core::{
 use std::collections::{BTreeMap, BTreeSet};
 
 pub mod coverage;
+pub mod overlay;
 pub mod rsp;
 
 const PRELUDE: &str = r#"#include <stdint.h>

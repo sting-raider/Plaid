@@ -12,7 +12,8 @@ natively with RT64 graphics, input, EEPROM saves and live native RSP audio
 
 OoT's fixed image has 9,764 blocks and 13 address-taken-scope blockers. ADR-0172
 stage 1 discovers 469 ROM-owned overlay candidates (468 with executable text)
-and validates their relocation structure. Link-address lowering, checked RAM
+and validates their relocation structure. Generated native byte verifiers pass
+synthetic corruption/bounds checks. Link-address lowering, checked RAM
 bindings and native OoT boot are pending; the catalog does not close blockers.
 
 ## By layer

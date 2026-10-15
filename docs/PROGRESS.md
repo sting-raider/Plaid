@@ -39,7 +39,7 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Commercial-ROM map validation | ✅ verified |
 | Declared executable loads (ADR-0136) | ✅ verified |
 
-**Remaining:** Overlay candidates discovered; checked native overlay execution remains.
+**Remaining:** Overlay discovery and native byte checks ready; dispatch and lifetimes remain.
 
 ## Executable Provenance
 

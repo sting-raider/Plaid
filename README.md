@@ -1,7 +1,8 @@
 # About
 
 Milestone 5 now includes ROM-owned overlay discovery (ADR-0172): 469 candidates
-in the supplied OoT image. Native overlay lowering and checked runtime bindings
+in the supplied OoT image, plus tested native byte-verifier generation.
+Native overlay lowering and checked runtime bindings
 are the next step; OoT has not reached native boot.
 
 Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. It analyzes an untouched ROM into a closed executable program, lowers it to C, and links it into a native x86-64 or ARM64 application. No emulation, interpreter, or JIT in the final build; emulators are used only as analysis instruments and test oracles.
