@@ -149,9 +149,9 @@ static void finish(int code, const char *why) {
     printf("]}\n");
   }
   printf("{\"stop\":\"%s\",\"vi\":%lu,\"gfx_tasks\":%lu,\"audio_tasks\":%lu,\"pi_dma\":%lu,"
-         "\"framebuffer\":\"%08x\",\"fault\":%u,\"fault_pc\":\"%08x\",\"ra\":\"%08x\",\"a0\":\"%08x\",\"a1\":\"%08x\"}\n",
+         "\"framebuffer\":\"%08x\",\"fault\":%u,\"fault_pc\":\"%08x\",\"ra\":\"%08x\",\"a0\":\"%08x\",\"a1\":\"%08x\",\"t9\":\"%08x\"}\n",
          why, vi_count, gfx_tasks, audio_tasks, dma_count, frame_buffer, S->fault, S->fault_pc,
-         (u32)S->r[31], (u32)S->r[4], (u32)S->r[5]);
+         (u32)S->r[31], (u32)S->r[4], (u32)S->r[5], (u32)S->r[25]);
   fflush(stdout);
   exit(code);
 }
@@ -491,6 +491,16 @@ RT(osYieldThread) {
   if (self && b && b->pri >= self->pri) { make_runnable(self); yield_from(self); }
   return 0;
 }
+RT(osGetThreadId) { rt_thread *t = thread_of(arg(0)); return ret(t ? t->id : 0); }
+RT(osStopThread) {
+  rt_thread *t = thread_of(arg(0));
+  if (!t) return 0;
+  if (t->state == T_BLOCKED) finish(1, "osStopThread on a blocked thread is not modeled");
+  if (t->guest) wr16(t->guest + 0x10, 1); /* OS_STATE_STOPPED */
+  if (t == running) { t->state = T_STOPPED; yield_from(t); }
+  else if (t->state == T_RUNNABLE) t->state = T_STOPPED;
+  return 0;
+}
 RT(osGetThreadPri) { rt_thread *t = thread_of(arg(0)); return ret(t ? (u32)t->pri : 0); }
 RT(osCreateMesgQueue) {
   u32 mq = arg(0);
@@ -534,7 +544,19 @@ RT(osSetTimer) {
   return ret(0);
 }
 
+/* osStopTimer(t): -1 when the timer is not active, as in libultra */
+RT(osStopTimer) {
+  int i;
+  for (i = 0; i < MAX_TIMERS; i++)
+    if (timers[i].used && timers[i].guest == arg(0)) { timers[i].used = 0; return ret(0); }
+  return ret((u32)-1);
+}
+
 /* ---- system ------------------------------------------------------------- */
+
+/* Guest structures the runtime owns live above the 4 MiB osMemSize reports. */
+#define RT_RAM 0x807ff000u
+RT(osGetMemSize) { return ret(0x00400000u); }
 
 RT(osInitialize) {
   wr32(0x80000300u, 1);           /* osTvType: NTSC */
@@ -549,6 +571,8 @@ static int nop(void) { return 0; }
 NOP(osCreateViManager) NOP(osViSetSpecialFeatures)
 NOP(osCreatePiManager) NOP(osInvalDCache) NOP(osInvalICache) NOP(osWritebackDCache)
 NOP(osWritebackDCacheAll) NOP(osSpTaskYield)
+/* shortcut: the VI scale registers are not modeled; RT64 scales the frame itself */
+NOP(osViSetXScale) NOP(osViSetYScale)
 /* The TLB as libultra's osMapTLB writes it (ADR-0162): 4 KiB-aligned even
    and odd pages, noncoherent cached, dirty and valid; -1 leaves a page invalid.
    Lowered code models global entries only, so an ASID is refused. */
@@ -592,6 +616,10 @@ static void vi_update(void) {
 RT(osViSetMode) { vi_mode = arg(0); vi_update(); return 0; }
 RT(osViBlack) { vi_black = arg(0) & 0xff; vi_update(); return 0; }
 RT(osViSwapBuffer) { frame_buffer = arg(0); vi_update(); return 0; }
+/* swaps take effect at once here, so the current and next buffers are the
+   same; before any swap __osViInit's framep is K0BASE */
+RT(osViGetCurrentFramebuffer) { return ret(frame_buffer ? frame_buffer : 0x80000000u); }
+RT(osViGetNextFramebuffer) { return ret(frame_buffer ? frame_buffer : 0x80000000u); }
 static u32 v2p(u32 a) {
   u32 p;
   u8 seg;
@@ -616,6 +644,99 @@ RT(osPiStartDma) {
   dma_count++;
   if (mq) mq_send(mq, mb, 0, 0);
   maybe_preempt();
+  return ret(0);
+}
+/* osCartRomInit(): the cartridge's OSPiHandle, with the PI domain 1 timing
+   libultra reads at boot and base address 0xb0000000 */
+RT(osCartRomInit) {
+  u32 h = RT_RAM;
+  u8 timing[6] = {0, 0x40, 0x07, 0x03, 0x12, 0}; /* type, latency, page, release, pulse, domain */
+  wr32(h, 0); wr(h + 4, timing, 6); wr32(h + 0xc, 0xb0000000u); wr32(h + 0x10, 0);
+  return ret(h);
+}
+/* ---- RCP memory and registers (ADR-0177) ------------------------------- */
+
+/* Uncached CPU words in SP memory and the PI registers, as pinned ares
+   (rsp/io.cpp, pi/io.cpp). The PIF leaves ROM 0x40-0xfff in DMEM and the
+   header's domain 1 timing in the PI. A task the runtime completes without
+   running its microcode leaves SP memory unknown, and reading it then
+   fails closed. PI DMA here completes before the caller resumes, so the
+   status reads idle. On the PI bus the cartridge ROM reads as itself and
+   the 64DD, declared absent, as open bus. Register-driven DMA, bus writes
+   and other devices (SRAM, FlashRAM) fault. */
+#ifdef PLAID_RSP
+#define DMEM rsp.dmem
+#define IMEM rsp.imem
+#else
+static u8 DMEM[4096], IMEM[4096];
+#endif
+static int sp_unknown;
+static u32 pi_bsd[8]; /* DOM1 LAT PWD PGS RLS, DOM2 LAT PWD PGS RLS */
+static const u32 pi_bsd_mask[8] = {0xff, 0xff, 0xf, 0x3, 0xff, 0xff, 0xff, 0xff};
+static void io_boot(void) {
+  u32 c = rom[0] << 24 | rom[1] << 16 | rom[2] << 8 | rom[3];
+  memcpy(DMEM + 0x40, rom + 0x40, 0xfc0);
+  pi_bsd[0] = c & 0xff; pi_bsd[1] = c >> 8 & 0xff; pi_bsd[2] = c >> 16 & 0xf; pi_bsd[3] = c >> 20 & 0x3;
+}
+static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
+  (void)s;
+  if (size != 4) return 1;
+  if (p < 0x04002000u) {
+    u8 *m = (p & 0x1000u ? IMEM : DMEM) + (p & 0xfffu);
+    if (!write) {
+      if (sp_unknown) return 1;
+      *v = (u64)(s64)(s32)(m[0] << 24 | m[1] << 16 | m[2] << 8 | m[3]);
+      return 0;
+    }
+    m[0] = (u8)(*v >> 24); m[1] = (u8)(*v >> 16); m[2] = (u8)(*v >> 8); m[3] = (u8)*v;
+#ifdef PLAID_RSP
+    if (p & 0x1000u) rsp.imem_gen++;
+#endif
+    return 0;
+  }
+  if (p == 0x04600010u) { /* PI_STATUS: idle; a write resets DMA or clears the interrupt, neither pending */
+    if (!write) *v = 0;
+    return 0;
+  }
+  if (p >= 0x04600014u && p <= 0x04600030u) {
+    u32 k = (p - 0x04600014u) >> 2;
+    if (write) pi_bsd[k] = (u32)*v & pi_bsd_mask[k];
+    else *v = pi_bsd[k];
+    return 0;
+  }
+  if (write) return 1;
+  if (p >= 0x05000000u && p < 0x08000000u) { /* no device: the address's low half twice (pi/bus.hpp) */
+    *v = (u64)(s64)(s32)((p & 0xfffeu) << 16 | (p & 0xfffeu));
+    return 0;
+  }
+  if (p >= 0x10000000u && (u64)(p - 0x10000000u) + 4 <= rom_size) {
+    u8 *m = rom + (p - 0x10000000u);
+    *v = (u64)(s64)(s32)(m[0] << 24 | m[1] << 16 | m[2] << 8 | m[3]);
+    return 0;
+  }
+  return 1;
+}
+
+/* osEPiStartDma(handle, mb, direction): the OSIoMesg holds the queue at +4,
+   the RAM address at +8, the device offset at +0xc and the size at +0x10 */
+RT(osEPiStartDma) {
+  u32 h = arg(0), mb = arg(1), mq = rd32(mb + 4), va = rd32(mb + 8), dev = rd32(mb + 0xc), n = rd32(mb + 0x10);
+  if (rd32(h + 0xc) != 0xb0000000u) finish(1, "PI DMA through a non-cartridge handle");
+  if (arg(2) != 0) finish(1, "PI write to cartridge");
+  if ((u64)dev + n > rom_size) finish(1, "PI DMA outside the ROM");
+  wr(va, rom + dev, n);
+  dma_count++;
+  if (mq) mq_send(mq, mb, 0, 0);
+  maybe_preempt();
+  return ret(0);
+}
+
+/* osEPiReadIo(handle, devAddr, data): one word from handle base | devAddr;
+   only the cartridge ROM is modelled */
+RT(osEPiReadIo) {
+  u32 a = (rd32(arg(0) + 0xc) | arg(1)) & 0x1fffffffu;
+  if ((a & 3) || a < 0x10000000u || (u64)(a - 0x10000000u) + 4 > rom_size) finish(1, "PI read outside the ROM");
+  wr(arg(2), rom + (a - 0x10000000u), 4);
   return ret(0);
 }
 
@@ -747,6 +868,7 @@ RT(osSpTaskStartGo) {
   u32 task = arg(0), type = rd32(task);
   if (type == 1) {
     gfx_tasks++;
+    sp_unknown = 1;
     report_gfx_task(task);
     if (stop_gfx && (long)gfx_tasks >= stop_gfx) finish(0, "graphics task");
 #ifdef PLAID_RT64
@@ -758,6 +880,8 @@ RT(osSpTaskStartGo) {
     audio_tasks++;
 #ifdef PLAID_RSP
     rsp_task();
+#else
+    sp_unknown = 1;
 #endif
     post(EV_SP);
   }
@@ -824,17 +948,26 @@ RT(osAiSetNextBuffer) {
 /* ---- SI: controllers and EEPROM ------------------------------------------ */
 
 /* osContInit(mq, &bitpattern, status[4]): one standard controller */
-RT(osContInit) {
-  u8 bits = 1;
+static void cont_status(u32 status) {
   int i;
-  wr(arg(1), &bits, 1);
   for (i = 0; i < 4; i++) {
     u8 st[4] = {0, i == 0 ? 5 : 0, 0, i == 0 ? 0 : 8};
-    wr(arg(2) + 4 * i, st, 4);
+    wr(status + 4 * i, st, 4);
   }
+}
+RT(osContInit) {
+  u8 bits = 1;
+  wr(arg(1), &bits, 1);
+  cont_status(arg(2));
   return ret(0);
 }
 RT(osContStartReadData) { post(EV_SI); return ret(0); }
+RT(osContStartQuery) { post(EV_SI); return ret(0); }
+RT(osContGetQuery) { cont_status(arg(0)); return 0; }
+RT(osContSetCh) { return ret(0); }
+/* No Rumble Pak: PFS_ERR_NOPACK */
+RT(osMotorInit) { return ret(1); }
+RT(__osMotorAccess) { return ret(1); }
 /* Controller 1: scripted presses (--press, by VI frame) OR the renderer
    window's keyboard. shortcut: scripts set buttons only, not the stick. */
 #define MAX_PRESSES 32
@@ -968,6 +1101,8 @@ int main(int argc, char **argv) {
   if (save_path && load_eeprom()) { fprintf(stderr, "%s is not a %d-byte EEPROM save\n", save_path, EEPROM_SIZE); return 2; }
   S = calloc(1, sizeof *S);
   if (!S) return 2;
+  S->io = rt_io;
+  if (rom) io_boot();
 #ifdef PLAID_RT64
   if (!rom || plaid_gfx_open(rom)) { fprintf(stderr, "the renderer needs --rom and a working GPU\n"); return 2; }
 #endif

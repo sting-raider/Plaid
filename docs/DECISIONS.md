@@ -4863,3 +4863,81 @@ Open:
 - The overlays (ADR-0172) are not executed natively.
 - SM64's 79 MIO0 streams are still scanned raw. SM64 closes regardless,
   but MIO0 should be decoded the same way.
+
+## ADR-0176: OoT's boot reaches its first overlay with the full libultra runtime surface
+
+Status: accepted. Milestone 5.
+
+Context: after ADR-0175 the OoT map lowered, but the link needed 13 runtime
+functions that `plaid_rt.c` lacked. The first run then faulted in boot's
+`bzero` on the D-cache coherence rule.
+
+Decision:
+- `plaid_rt.c` implements the libultra functions identification names in
+  OoT. None of them is OoT-specific:
+  - threads and timers: `osGetThreadId`, `osStopThread`, `osStopTimer`;
+  - memory: `osGetMemSize` (4 MiB);
+  - PI: `osCartRomInit`, `osEPiStartDma`, `osEPiReadIo`;
+  - VI: `osViGetCurrentFramebuffer`, `osViGetNextFramebuffer`,
+    `osViSetXScale` and `osViSetYScale` (no-ops);
+  - SI: `osContInit`, `osContStartQuery`, `osContGetQuery`, `osContSetCh`;
+  - the rumble pak: `osMotorInit` and `__osMotorAccess` report no pak.
+
+  Unsupported uses fail closed: a stop of a blocked thread, DMA through a
+  non-cartridge handle, a cartridge write, and DMA outside the ROM. The
+  runtime's own handles live in RAM above the 4 MiB the game is told it
+  has.
+- Coherence rule (fault 4) refined: only cached accesses fill the
+  D-cache. A line used only uncached so far may therefore become cached.
+  Once cached, any other access class still faults. The spike096
+  `uncached_first` program matches pinned ares.
+- The stop report also prints `$t9`, the ABI's call register, so a fault 3
+  names its target.
+
+Result (OoT 1.2, local, lowered RSP):
+- boot runs 680 PI DMAs and two VI retraces;
+- it creates the 64DD handle and probes the drive, finding none;
+- it runs one RSP task as lowered microcode;
+- it stops fail-closed at a call to 0x803b4df0. That is a game-state
+  overlay that `Overlay_Load` relocated into the heap, which is ADR-0172's
+  next stage.
+
+No reference map was used.
+
+## ADR-0177: CPU access to RCP memory and the PI bus is modelled as hardware
+
+Status: accepted. Milestone 5.
+
+Context: naming every function that touches hardware does not scale. Games
+ship libultra and libleo variants that n64sym does not sign; OoT's
+`osDriveRomInit` matched only through a decomp symbol list. Games also
+touch hardware from their own code: OoT reads RSP output from DMEM 0xff4.
+
+Decision:
+- Lowered loads and stores to physical 0x04000000..0x1fffffff go to
+  `plaid_state.io`, which the runtime sets. The access must be uncached
+  (KSEG1 or an uncached TLB page). The default NULL, cached access, and an
+  unhandled address all fault 1, as before.
+- `plaid_rt.c` models words as pinned ares does (`rsp/io.cpp`,
+  `pi/io.cpp`, `pi/bus.hpp`):
+  - SP DMEM/IMEM. At boot DMEM holds ROM 0x40..0xfff, as the PIF leaves
+    it (mupen64plus `bootrom_hle.c`). With `PLAID_RSP` they are the lowered
+    RSP's own memories, and an IMEM write invalidates its texts. A task the
+    runtime completes without running its microcode (any graphics task, or
+    any task without `PLAID_RSP`) leaves SP memory unknown, and reads then
+    fail closed.
+  - `PI_STATUS` reads idle, since runtime DMA completes before the caller
+    resumes.
+  - The BSD DOM1/DOM2 timing registers are latched with ares' masks, and
+    DOM1 starts from the ROM header.
+  - The cartridge ROM reads as itself. The 64DD range 0x05000000..
+    0x07ffffff is declared absent and reads as ares' open bus: the low
+    address half, twice.
+  - PI register DMA, bus writes, SRAM/FlashRAM and other devices fault.
+- With this, `osDriveRomInit` and `LeoDriveExist` run lowered and need no
+  name. OoT gets as far without the decomp symbol list as with it.
+
+Verifier: `runtime/test_runtime.py` `rcp_io` covers DMEM boot bytes,
+DMEM write/read, idle status, masked timing, open bus and ROM words. It
+also checks that an SRAM read and a cached RCP access each fault 1. The
+existing RSP-task test passes over the boot DMEM image.

@@ -68,6 +68,14 @@ python runtime/rsp_texts.py target/debug/plaid snapshots/ texts/   # prints the 
   the CPU's runtime writes. `--rsp-capture <n> <dir>` saves the state before
   and after the n-th RSP task, for the ares comparison in
   `spikes/098-rsp-task`. Without `PLAID_RSP`, these tasks complete at once.
+- **RCP I/O** (ADR-0177). Uncached CPU words in SP DMEM/IMEM and the PI
+  registers and bus behave as pinned ares:
+  - DMEM starts with ROM 0x40..0xfff;
+  - `PI_STATUS` reads idle and the domain timing registers latch;
+  - the ROM reads as itself and the absent 64DD reads as open bus.
+
+  After a task whose microcode did not run, SP memory is unknown and reads
+  fail closed. Other devices, register DMA and cached access fault.
 - **Audio out** (ADR-0170). The AI is modelled as ares models it:
   - a two-buffer DMA FIFO drains one sample per DAC period on the host
     clock, at the rate `osAiSetFrequency` set from the NTSC VI clock;
