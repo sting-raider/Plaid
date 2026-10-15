@@ -3378,3 +3378,21 @@ Result: unit tests cover the scheduled shape and four rejections:
 spike096 `scheduled_table` matches pinned ares. OoT, with its declared
 `code` segment, closes all 12 tables. Discovery grows to 8082 blocks and
 the guarded blockers drop from 42 to 31.
+
+## ADR-0141: runtime identification over declared loads
+
+Context: `plaid identify` scanned only the base window. OoT's `code`
+segment, a declared load since ADR-0136, also links libultra. Two of its
+functions were OoT's last instruction-scope blockers: `mtc0 Compare` in
+`__osSetCompare`-style code, and `cache` in `osWritebackDCacheAll`.
+
+Decision: `identify` accepts `--loads` and scans the same composite image
+that `discover` builds. Nothing else changes. Ambiguity still fails closed:
+a name that matches more than once is reported, not declared.
+
+Result: OoT identification goes from 39 to 59 functions.
+`osViGetCurrentFramebuffer` becomes ambiguous because a second match now
+appears, so it is no longer declared. The guarded measurement drops from 31
+to 29 blockers over 7684 blocks, and no instruction-scope blocker remains.
+`scripts/test_cli.py` checks that a load copying an identified body makes
+it ambiguous, which shows the loaded bytes are scanned.
