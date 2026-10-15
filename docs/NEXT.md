@@ -120,7 +120,8 @@ Next concrete steps, in order:
      ROM's own bytes; SM64's decomp map now backs only `osInitialize`,
      `osContInit` and `osEepromLongRead`, and SM64 stays `closed`.
    - ADR-0172 stage 1: ROM-owned overlay discovery and relocation validation
-     find 469 OoT candidates (468 executable). Next: lower at link addresses,
+     find 469 OoT candidates (468 executable). Native first-entry byte verifier
+     generation is tested; it is not yet wired to dispatch. Next: lower at link addresses,
      bind real RAM addresses with byte checks, and differential-test relocated
      execution/lifetimes. Then clear OoT's 13 fixed-code blockers and run its
      title/audio snapshot campaign. Candidate discovery alone closes nothing.

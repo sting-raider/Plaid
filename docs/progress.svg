@@ -103,7 +103,8 @@
 <text x="568" y="663" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
 </g>
 <text x="60" y="938" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
-<text x="60" y="956" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Overlay candidates discovered; checked native overlay execution remains.</text>
+<text x="60" y="956" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Overlay discovery and native byte checks ready; dispatch and lifetimes</text>
+<text x="60" y="972" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">remain.</text>
 <rect x="612" y="304" width="548" height="678" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
 <text x="632" y="334" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">02</text>
 <text x="666" y="335" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Executable Provenance</text>

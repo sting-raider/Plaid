@@ -22,7 +22,7 @@
         {"name": "Commercial-ROM map validation", "state": "verified"},
         {"name": "Declared executable loads (ADR-0136)", "state": "verified"}
       ],
-      "remaining": "Overlay candidates discovered; checked native overlay execution remains."
+      "remaining": "Overlay discovery and native byte checks ready; dispatch and lifetimes remain."
     },
     {
       "name": "Executable Provenance",

@@ -4693,6 +4693,23 @@ The local OoT image contains 469 structurally matching overlays, 468 with
 nonempty text, and 52,643 relocation records. The catalog and decoded bytes
 remain ignored. This does not close any of its fixed-image blockers.
 
+The next compiler component emits standalone C byte verifiers via
+`plaid_lower::overlay::verifier`. Each verifier reconstructs expected relocated
+bytes in bounded temporary storage, compares the full file and zeroed BSS,
+and leaves guest RAM untouched. Relocation sites and opcodes are resolved at
+compile time; the emitted code contains no guest instruction decoder. Multiple
+verifiers coexist using numeric section IDs. Invalid addresses, insufficient
+RAM, allocation failure and any byte mismatch return failure.
+
+`runtime/test_overlays.py` compiles the generated C with strict warnings. It
+checks five load addresses against the Rust model and explicit arithmetic
+expectations, reused/interleaved HI halves, signed-low carry, segmented
+pointers, data-only images, every-byte corruption, BSS, bounds and allocation
+failure. The full runtime test invokes it. This is the first-entry check
+component, not a runtime binding or relocated-execution differential claim.
+Its contract requires the complete freshly loaded image: callers cannot
+silently accept an already-mutated data/BSS snapshot on first registration.
+
 Still pending: link-address overlay lowering, verified runtime registration,
 rebinding/invalidation and ares differential execution; then OoT fixed-code
 closure, native title and its RSP snapshot/audio campaign. ADR-0172 is not
