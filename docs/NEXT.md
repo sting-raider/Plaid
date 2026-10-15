@@ -108,8 +108,9 @@ Next concrete steps, in order:
      (59.9 VI/s, 30 fps) into gameplay.
    - Done: RSP scalar microcode lowers to C with closed IMEM dispatch
      (ADR-0167, spike097 matches ares).
-   - Next: the RSP vector unit (ADR-0168), ported from ares (ISC) and
-     differential-tested against ares's RSP. Then run audio tasks natively:
+   - Done: the RSP vector unit (ADR-0168), ported from ares (ISC);
+     SM64's audio microcode lowers completely (904 instructions).
+   - Next (ADR-0169): run audio tasks natively:
      the runtime takes each task's microcode address and size, checks the
      bytes against the lowered text, and sends samples to the host.
    - Data-driven roots (level, geo and behavior scripts) for recall.

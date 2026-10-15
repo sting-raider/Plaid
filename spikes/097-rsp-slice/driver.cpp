@@ -79,7 +79,21 @@ int main(int argc, char** argv) {
   for(u32 a = 0; a < 4096; a++) std::printf("%02x", (u32)rsp.dmem.read<Byte>(a));
   std::printf("\",\"rdram\":\"");
   for(u32 a = 0; a < 0x2000; a += 4) std::printf("%08x", (u32)rdram.ram.read<Word>(a, RBusDevice::ARES_DEBUGGER));
-  std::printf("\"}\n");
+  // vector unit (ADR-0168): 32 registers then ACCH, ACCM, ACCL, as halfwords
+  std::printf("\",\"vu\":\"");
+  auto& vpu = rsp.vpu;
+  for(int r = 0; r < 35; r++) {
+    auto& v = r < 32 ? vpu.r[r] : r == 32 ? vpu.acch : r == 33 ? vpu.accm : vpu.accl;
+    for(int n = 0; n < 8; n++) std::printf("%04x", (u32)v.u16(n));
+  }
+  u32 flags[5] = {};
+  for(int n = 0; n < 8; n++) {
+    flags[0] |= vpu.vcol.get(n) << n | vpu.vcoh.get(n) << (8 + n);
+    flags[1] |= vpu.vccl.get(n) << n | vpu.vcch.get(n) << (8 + n);
+    flags[2] |= vpu.vce.get(n) << n;
+  }
+  std::printf("\",\"vflags\":[%u,%u,%u,%u,%u,%u]}\n", flags[0], flags[1], flags[2],
+    (u32)(u16)vpu.divin, (u32)(u16)vpu.divout, (u32)vpu.divdp);
   ares::Nintendo64::system.unload();
   return 0;
 }

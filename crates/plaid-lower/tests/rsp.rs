@@ -17,7 +17,7 @@ fn register_jumps_dispatch_only_over_the_text() {
             "{pc:x}"
         );
     }
-    assert_eq!(c.matches("case 0x").count(), 3);
+    assert_eq!(c.matches(": goto L_").count(), 3);
     assert!(c.contains("default: return plaid_rsp_fault(r, pc, 3);"));
     assert!(c.contains("if (t & 3) return plaid_rsp_fault(r, 0x080u, 3);"));
     // falling off the end of the text faults too
@@ -32,14 +32,35 @@ fn direct_targets_outside_the_text_go_through_the_faulting_dispatch() {
 }
 
 #[test]
-fn vector_and_unknown_instructions_are_refused() {
-    let vector = 0x4a01_086c; // vxor, the first vector op in a real audio microcode
-    assert_eq!(
-        lower_rsp(&text(&[0, vector]), 0x80, "u").unwrap_err(),
-        "084: unsupported RSP instruction 4a01086c"
-    );
-    // MULT has no RSP meaning
-    assert!(lower_rsp(&text(&[24]), 0, "u").is_err());
+fn vector_instructions_lower_to_the_ported_unit() {
+    // vxor $v1, $v1, $v1[0]: the first vector op in a real audio microcode
+    let c = lower_rsp(&text(&[0x4a01_086c]), 0x80, "u").unwrap();
+    assert!(c.contains("plaid_vu(r, 0x2c, 1, 1, 1, 0);"));
+    // lqv $v2[0], 0x10($a0) and sqv $v2[8], -0x10($a0)
+    let c = lower_rsp(&text(&[0xc882_2001, 0xe882_247f]), 0, "u").unwrap();
+    assert!(c.contains("plaid_lwc2(r, 4, 2, 4, 1, 0);"));
+    assert!(c.contains("plaid_swc2(r, 4, 2, 4, -1, 8);"));
+    // vrcph $v3[1], $v4[2] reads e from bits 21..24 and de from vs
+    let c = lower_rsp(&text(&[0x4b44_08f2]), 0, "u").unwrap();
+    assert!(c.contains("plaid_vdivh(r, 3, 1, 4, 10);"));
+}
+
+#[test]
+fn reserved_and_unknown_instructions_are_refused() {
+    for w in [
+        24,          // MULT has no RSP meaning
+        0x4a01_0852, // VSUT: ares runs it as VZERO
+        0x4a01_0856, // VADDB
+        0x4820_0800, // COP2 rs 1 (DMFC2)
+        0xc801_5000, // LWV is not on the N64 RSP
+        0xc801_6000, // LWC2 opcode 12
+        0xe801_6000, // SWC2 opcode 12
+    ] {
+        assert_eq!(
+            lower_rsp(&text(&[w]), 0, "u").unwrap_err(),
+            format!("000: unsupported RSP instruction {w:08x}")
+        );
+    }
 }
 
 #[test]

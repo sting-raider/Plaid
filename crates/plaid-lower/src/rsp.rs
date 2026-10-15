@@ -6,6 +6,7 @@
 //! anything else faults 3. Semantics follow pinned ares (`ares/n64/rsp`).
 
 const PRELUDE: &str = include_str!("rsp_prelude.h");
+const VECTOR_UNIT: &str = include_str!("rsp_vu.h");
 
 fn reg(n: u32) -> String {
     format!("r->r[{n}]")
@@ -82,6 +83,44 @@ fn simple(w: u32, pc: u32) -> Result<String, String> {
             ),
             _ => return unsupported(),
         },
+        // COP2 (ADR-0168): moves, then computational ops (bit 25) by function
+        18 if rs & 16 == 0 => {
+            let e = (w >> 7) & 15;
+            match rs {
+                0 => format!("plaid_mfc2(r, {rt}, {rd}, {e});"),
+                2 => format!("plaid_cfc2(r, {rt}, {rd});"),
+                4 => format!("plaid_mtc2(r, {rt}, {rd}, {e});"),
+                6 => format!("plaid_ctc2(r, {rt}, {rd});"),
+                _ => return unsupported(),
+            }
+        }
+        18 => {
+            let (f, e, vd, de) = (w & 0x3f, (w >> 21) & 15, sa, rd & 7);
+            match f {
+                0x30 | 0x31 | 0x34 | 0x35 => format!(
+                    "plaid_vdiv(r, {}, {}, {vd}, {de}, {rt}, {e});",
+                    f >> 2 & 1,
+                    f & 1
+                ),
+                0x32 | 0x36 => format!("plaid_vdivh(r, {vd}, {de}, {rt}, {e});"),
+                0x33 => format!("plaid_vmov(r, {vd}, {de}, {rt}, {e});"),
+                0x37 | 0x3f => String::new(), // VNOP, VNULL
+                // ares runs the reserved encodings as VZERO; no microcode
+                // should rely on that, so they stay unsupported.
+                0x00..=0x11 | 0x13..=0x15 | 0x1d | 0x20..=0x2d => {
+                    format!("plaid_vu(r, 0x{f:02x}, {vd}, {rd}, {rt}, {e});")
+                }
+                _ => return unsupported(),
+            }
+        }
+        // LWC2 / SWC2: the opcode is in rd, the element in bits 7..10 and a
+        // 7-bit signed offset scaled by the access size.
+        50 | 58 if rd <= 11 && (rd != 10 || w >> 26 == 58) => format!(
+            "plaid_{}(r, {rd}, {rt}, {rs}, {}, {});",
+            if w >> 26 == 50 { "lwc2" } else { "swc2" },
+            (w as i32) << 25 >> 25,
+            (w >> 7) & 15
+        ),
         32 => set(rt, format!("(u32)(s32)(s8)plaid_rsp_ld(r, {addr}, 1)")),
         33 => set(rt, format!("(u32)(s32)(s16)plaid_rsp_ld(r, {addr}, 2)")),
         35 | 39 => set(rt, format!("plaid_rsp_ld(r, {addr}, 4)")),
@@ -195,5 +234,5 @@ pub fn lower_rsp(text: &[u8], imem: u32, name: &str) -> Result<String, String> {
         "  return plaid_rsp_fault(r, 0x{:03x}u, 3);\n}}\n",
         end & 0xfff
     );
-    Ok(format!("{PRELUDE}\n{out}"))
+    Ok(format!("{PRELUDE}{VECTOR_UNIT}\n{out}"))
 }

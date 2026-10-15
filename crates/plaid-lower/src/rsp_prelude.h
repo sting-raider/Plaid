@@ -1,5 +1,6 @@
-/* RSP model for lowered microcode (ADR-0167). Semantics follow pinned ares
-   (ares/n64/rsp: interpreter-ipu.cpp, interpreter-scc.cpp, io.cpp, dma.cpp;
+/* RSP model for lowered microcode (ADR-0167, vector unit ADR-0168).
+   Semantics follow pinned ares (ares/n64/rsp: interpreter-ipu.cpp,
+   interpreter-scc.cpp, interpreter-vpu.cpp, rsp.cpp, io.cpp, dma.cpp;
    ISC license, Copyright (c) 2004-2021 ares team, Near et al).
 
    DMEM and RDRAM are big-endian byte arrays. DMA completes when it is
@@ -21,7 +22,12 @@ typedef struct {
   u32 pending_mem, pending_dram;
   u8 halted, broken, semaphore, single_step, interrupt_on_break, intr;
   u8 signal[8];
+  /* vector unit: element 0 is the most significant halfword; flags are 0 or 0xffff */
+  struct plaid_v { u16 e[8]; } v[32], acch, accm, accl, vcoh, vcol, vcch, vccl, vce;
+  s16 divin, divout;
+  u8 divdp;
 } plaid_rsp;
+typedef struct plaid_v plaid_v;
 
 static int plaid_rsp_fault(plaid_rsp *r, u32 pc, u32 code) {
   r->fault = code; r->fault_pc = pc; r->halted = 1;

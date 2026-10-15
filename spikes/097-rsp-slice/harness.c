@@ -30,6 +30,22 @@ int main(int argc, char **argv) {
   for (a = 0; a < 4096; a++) printf("%02x", r.dmem[a]);
   printf("\",\"rdram\":\"");
   for (a = 0; a < 0x2000; a++) printf("%02x", r.rdram[a]);
-  printf("\"}\n");
+  printf("\",\"vu\":\"");
+  for (i = 0; i < 35; i++) {
+    const plaid_v *v = i < 32 ? &r.v[i] : i == 32 ? &r.acch : i == 33 ? &r.accm : &r.accl;
+    int n;
+    for (n = 0; n < 8; n++) printf("%04x", v->e[n]);
+  }
+  {
+    u32 f[3] = {0, 0, 0};
+    int n;
+    for (n = 0; n < 8; n++) {
+      f[0] |= (u32)(r.vcol.e[n] != 0) << n | (u32)(r.vcoh.e[n] != 0) << (8 + n);
+      f[1] |= (u32)(r.vccl.e[n] != 0) << n | (u32)(r.vcch.e[n] != 0) << (8 + n);
+      f[2] |= (u32)(r.vce.e[n] != 0) << n;
+    }
+    printf("\",\"vflags\":[%u,%u,%u,%u,%u,%u]}\n", f[0], f[1], f[2], (u32)(u16)r.divin, (u32)(u16)r.divout,
+           (u32)r.divdp);
+  }
   return 0;
 }
