@@ -89,7 +89,7 @@
         {"name": "Controller input", "state": "partial"},
         {"name": "Save devices", "state": "partial"},
         {"name": "Audio path", "state": "open"},
-        {"name": "RSP runtime/native path", "state": "open"},
+        {"name": "RSP runtime/native path", "state": "partial"},
         {"name": "Renderer integration", "state": "partial"},
         {"name": "Native launch/cache packaging", "state": "open"}
       ],

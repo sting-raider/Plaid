@@ -12,6 +12,11 @@ Spike096 is the synthetic native slice (milestone 1). `plaid lower-c
 `python spikes/096-native-slice/run.py` (add `--rebuild` after driver changes);
 it needs a C compiler on PATH (`gcc`, `clang` or `CC`) and WSL for the ares oracle.
 
+Spike097 is the same check for RSP microcode (ADR-0167). `plaid lower-rsp
+<rom> <offset> <size> <imem> <name> <out.c> [--raw]` lowers a microcode text.
+Run `python spikes/097-rsp-slice/run.py` (add `--rebuild` after its
+`driver.cpp` changes); it needs the same compiler and WSL.
+
 Spike095 adds raw v11 reverse-SP-DMA receipts. Run its `test_consumer.py`
 and `run.py` (pinned ares baseline/sensor build in WSL, or `--verify-existing`
 for retained outputs). The opt-in `sp_dma_egress_access` recipe observes DMEM

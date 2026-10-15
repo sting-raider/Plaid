@@ -106,9 +106,12 @@ Next concrete steps, in order:
    - Done: EEPROM persistence with `--save` (ADR-0165).
    - Done: VI at NTSC rate on Windows (ADR-0166). SM64 runs at full speed
      (59.9 VI/s, 30 fps) into gameplay.
-   - Next: audio. Lower the RSP audio microcode the way the CPU is lowered:
-     the RSP scalar subset plus the vector unit, with semantics ported from
-     ares (ISC) and differential tests against ares's RSP.
+   - Done: RSP scalar microcode lowers to C with closed IMEM dispatch
+     (ADR-0167, spike097 matches ares).
+   - Next: the RSP vector unit (ADR-0168), ported from ares (ISC) and
+     differential-tested against ares's RSP. Then run audio tasks natively:
+     the runtime takes each task's microcode address and size, checks the
+     bytes against the lowered text, and sends samples to the host.
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user

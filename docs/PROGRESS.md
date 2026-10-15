@@ -110,7 +110,7 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Controller input | 🟨 partial |
 | Save devices | 🟨 partial |
 | Audio path | ⬜ open |
-| RSP runtime/native path | ⬜ open |
+| RSP runtime/native path | 🟨 partial |
 | Renderer integration | 🟨 partial |
 | Native launch/cache packaging | ⬜ open |
 
