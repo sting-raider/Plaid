@@ -105,14 +105,24 @@ PROGRAMS = {
             mfc0(s4, 7), mfc0(s5, 7), mtc0(zero, 7), mfc0(s6, 7),
             *li(t4, 0x01004400), mtc0(t4, 4), mfc0(s7, 4),
             A.addiu(t4, zero, 0x200), mtc0(t4, 4), mfc0(t8, 4), BREAK, A.nop],
+    # DMA from RDRAM into IMEM outside the running text and back out
+    # (ADR-0169); SP_MEM_ADDR reads back the IMEM bit.
+    'dma_imem': [A.addiu(t0, zero, 0x1000), mtc0(t0, 0), mtc0(zero, 1), A.addiu(t1, zero, 15), mtc0(t1, 2),
+                 'busy', mfc0(t3, 6), A.bne(t3, zero, 'busy'), A.nop, mfc0(s0, 0), A.addiu(t0, zero, 0x1080), mtc0(t0, 0), A.addiu(t2, zero, 0x1000), mtc0(t2, 1),
+                 mtc0(t1, 3), 'idle', mfc0(t3, 6), A.bne(t3, zero, 'idle'), A.nop, mfc0(s1, 0), mfc0(s2, 1),
+                 BREAK, A.nop],
     # The microcode halts itself through SP_STATUS instead of BREAK.
     'halt': [A.addiu(t0, zero, 7), A.addiu(t1, zero, 2), mtc0(t1, 4), A.addiu(t0, zero, 9), BREAK, A.nop],
+    # the only RDP register the RSP may touch: DPC_STATUS of an idle RDP
+    'dpc_status': [mfc0(t0, 11), BREAK, A.nop],
 }
-# Fail closed natively: a register jump outside the text (3), DMA into
-# IMEM (2), DMA beyond RDRAM (1), an RDP command register (4).
+# Fail closed natively: a register jump outside the text (3), DMA over the
+# program's own next words (3: IMEM no longer holds lowered code there),
+# DMA beyond RDRAM (1), an RDP command register (4).
 NEGATIVE = {
     'jr_out': ([A.addiu(t0, zero, 0x800), A.jr(t0), A.nop, BREAK, A.nop], 3),
-    'dma_imem': ([A.addiu(t0, zero, 0x1000), mtc0(t0, 0), mtc0(zero, 1), A.addiu(t1, zero, 7), mtc0(t1, 2), BREAK, A.nop], 2),
+    'imem_stale': ([lambda pc, L: A.I(9, t0, zero, 0x1000 | L['patched']), mtc0(t0, 0), mtc0(zero, 1),
+                    A.addiu(t1, zero, 7), mtc0(t1, 2), A.nop, 'patched', A.nop, A.nop, BREAK, A.nop], 3),
     'dma_far': ([A.addiu(t0, zero, 0), mtc0(t0, 0), *li(t1, 0x00FFFFF8), mtc0(t1, 1), A.addiu(t2, zero, 15),
                  mtc0(t2, 2), BREAK, A.nop], 1),
     'dpc': ([mfc0(t0, 8), BREAK, A.nop], 4),
@@ -270,7 +280,8 @@ def windows():
         subprocess.run([cc, '-O2', '-std=c99', '-Wall', '-Werror', '-Wno-unused-label', '-Wno-unused-function',
                         f'-DPLAID_RSP_LOWERED="{name}.c"', '-I', str(OUT), str(HERE / 'harness.c'), '-o', str(out)],
                        check=True)
-        native[name] = subprocess.run([str(out), str(OUT / 'dmem.bin'), hex(IMEM)], capture_output=True, text=True)
+        native[name] = subprocess.run([str(out), str(OUT / f'{name}.imem'), str(OUT / 'dmem.bin'), hex(IMEM)],
+                                      capture_output=True, text=True)
     script = subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(HERE / 'run.py')],
                                      text=True).strip()
     subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', script, '--oracle', *sys.argv[1:]], check=True)
@@ -291,8 +302,8 @@ def windows():
     receipt = dict(format='plaid-rsp-slice-receipt-v0', ares_revision=builder().REV, programs=results,
                    fail_closed_faults={k: v[1] for k, v in NEGATIVE.items()}, interpreter_linked=False)
     (OUT / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
-    print('PASS lowered RSP microcode matches pinned ares on', ', '.join(PROGRAMS), '; out-of-text jump, IMEM DMA, '
-          'far DMA and RDP-register programs fail closed')
+    print('PASS lowered RSP microcode matches pinned ares on', ', '.join(PROGRAMS), '; out-of-text jump, '
+          'self-overwritten code, far DMA and RDP-register programs fail closed')
     print(json.dumps(receipt, sort_keys=True))
 
 

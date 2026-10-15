@@ -12,7 +12,8 @@ plaid_gfx_* records the VI registers the runtime derives from an OSViMode and
 framebuffer, and the graphics task addresses and RAM it hands over. It also
 checks controller 1 (ADR-0164): a scripted --press merged with the stub
 window's stick. A third program checks that --save keeps the EEPROM across
-runs (ADR-0165).
+runs (ADR-0165). A fourth runs an RSP task through lowered IMEM snapshots
+(ADR-0169).
 """
 import importlib.util
 import json
@@ -154,6 +155,100 @@ for name in SAVE_RUNTIME:
     SAVE_PROGRAM += [name, A.jr(A.ra), A.nop]
 
 
+# ---- RSP tasks (ADR-0169) ----
+spec97 = importlib.util.spec_from_file_location('spike097', ROOT / 'spikes/097-rsp-slice/run.py')
+V = importlib.util.module_from_spec(spec97)
+spec97.loader.exec_module(V)
+BOOT, UCODE, UDATA, OUTB, SPQ, SPBUF, RTASK = (0x80006000, 0x80006200, 0x80006400, 0x80005000, 0x80004400,
+                                               0x80004420, 0x80004500)
+# Like libultra's rspboot, the boot microcode has code above 0x080 that runs
+# before it DMAs the task's ucode over it: ucode_data to DMEM 0, then 0x80
+# bytes of ucode to IMEM 0x080, then a jump there.
+BOOT_CODE = [A.j('part2'), A.nop,
+             'part3', A.lw(A.t0, 0x10, A.at), A.addiu(A.t1, A.zero, 0x7F), A.addiu(A.t2, A.zero, 0x1080),
+             V.mtc0(A.t2, 0), V.mtc0(A.t0, 1), V.mtc0(A.t1, 2), A.jr(A.t2), A.nop,
+             *[A.nop] * 24,
+             'part2', A.addiu(A.at, A.zero, 0xFC0), A.lw(A.t0, 0x18, A.at), A.lw(A.t1, 0x1C, A.at),
+             A.addiu(A.t1, A.t1, -1), V.mtc0(A.zero, 0), V.mtc0(A.t0, 1), V.mtc0(A.t1, 2), A.j('part3'), A.nop]
+# The ucode adds to a data word, keeps the physical output_buff the task
+# carries, adds a vector to itself, and DMAs 32 bytes of results out.
+UCODE_CODE = [A.lw(A.t0, 0, A.zero), *li(A.t1, 0x11111111), A.addu(A.t0, A.t0, A.t1), A.sw(A.t0, 0x100, A.zero),
+              A.addiu(A.at, A.zero, 0xFC0), A.lw(A.t2, 0x28, A.at), A.sw(A.t2, 0x104, A.zero),
+              V.lqv(1, 1), V.vu(0x14, 2, 1, 1, 0), V.sqv(2, 0x11, A.zero),
+              A.addiu(A.t3, A.zero, 0x100), V.mtc0(A.t3, 0), V.mtc0(A.t2, 1), A.addiu(A.t4, A.zero, 0x1F),
+              V.mtc0(A.t4, 3), 'wait', V.mfc0(A.t5, 6), A.bne(A.t5, A.zero, 'wait'), A.nop, V.BREAK, A.nop]
+UDATA_WORDS = [0x01020304, 0, 0, 0, 0x7FFF0001, 0x8000FFFF, 0x12340000, 0xC0004000]
+
+
+def rsp_words(items, base):
+    labels, pc = {}, base
+    for x in items:
+        if isinstance(x, str):
+            labels[x] = pc
+        else:
+            pc += 4
+    words, pc = [], base
+    for x in items:
+        if not isinstance(x, str):
+            words.append(x(pc, labels) & 0xFFFFFFFF if callable(x) else x)
+            pc += 4
+    return words
+
+
+BOOT_WORDS, UCODE_WORDS = rsp_words(BOOT_CODE, 0), rsp_words(UCODE_CODE, 0x80)
+TASK_WORDS = [2, 0, BOOT, 4 * len(BOOT_WORDS), UCODE, 0x800, UDATA, 32, 0, 0, OUTB, 0, 0, 0, 0, 0]
+RSP_RUNTIME = ['osCreateMesgQueue', 'osSetEventMesg', 'osSpTaskLoad', 'osSpTaskStartGo', 'osRecvMesg',
+               'osCreateThread', 'osStartThread']
+RSP_PROGRAM = [
+    *li(A.sp, 0x80007F00),
+    *[w for i, v in enumerate(BOOT_WORDS) for w in poke(BOOT + 4 * i, v)],
+    *[w for i, v in enumerate(UCODE_WORDS) for w in poke(UCODE + 4 * i, v)],
+    *[w for i, v in enumerate(UDATA_WORDS) for w in poke(UDATA + 4 * i, v)],
+    *[w for i, v in enumerate(TASK_WORDS) for w in poke(RTASK + 4 * i, v)],
+    *call('osCreateThread', T1, 1, 'audio', 0, 0x8000FF00, 10),
+    *call('osStartThread', T1),
+    *A.DONE,  # the boot context never resumes
+    'audio',  # a thread, so it may block on the SP event
+    *call('osCreateMesgQueue', SPQ, SPBUF, 4),
+    *call('osSetEventMesg', 4, SPQ, 0x55),  # OS_EVENT_SP
+    *call('osSpTaskLoad', RTASK), *call('osSpTaskStartGo', RTASK),
+    *call('osRecvMesg', SPQ, OUTB + 0x20, 1),
+    *A.DONE,
+]
+for name in RSP_RUNTIME:
+    RSP_PROGRAM += [name, A.jr(A.ra), A.nop]
+
+
+def rsp_tasks(exe, cc):
+    """The snapshot protocol end to end: the first run saves IMEM at the boot
+    entry, the second (boot lowered) saves it where the boot jumps into the
+    ucode it loaded, and the third runs the whole task natively."""
+    snaps, texts = OUT / 'rsp-snapshots', OUT / 'rsp-texts'
+    for d in (snaps, texts):
+        shutil.rmtree(d, ignore_errors=True)
+        d.mkdir(parents=True)
+    rsp_c = ['-DPLAID_RSP', '-I', str(ROOT / 'crates/plaid-lower/src')]
+    for step, pc in enumerate((0x000, 0x080, None)):
+        files = subprocess.check_output([sys.executable, str(ROOT / 'runtime/rsp_texts.py'), str(exe), str(snaps),
+                                         str(texts)], text=True).split()
+        native = build(exe, cc, 'rsp', RSP_PROGRAM, RSP_RUNTIME, [*rsp_c, *files])
+        run = subprocess.run([str(native), '--rsp-dump', str(snaps), '--dump', hex(OUTB), '9'],
+                             capture_output=True, text=True, timeout=30)
+        lines = {k: v for line in run.stdout.splitlines() if line.startswith('{') for k, v in json.loads(line).items()}
+        saved = sorted(p.name for p in snaps.glob('imem-*.bin'))
+        if pc is not None:
+            assert run.returncode == 1 and lines['stop'] == 'unlowered RSP code', (run.stdout, run.stderr)
+            assert len(saved) == step + 1 and any(s.startswith(f'imem-{pc:03x}-') for s in saved), saved
+            continue
+        assert run.returncode == 0 and lines['stop'] == 'exit', (run.returncode, run.stdout, run.stderr)
+        vector = [((h + h) & 0xFFFF) for w in UDATA_WORDS[4:] for h in (w >> 16, w & 0xFFFF)]
+        expected = [0x12131415, OUTB & 0x1FFFFFFF, 0, 0,
+                    *[vector[i] << 16 | vector[i + 1] for i in range(0, 8, 2)], 0x55]
+        assert lines['words'] == expected, ([hex(w) for w in lines['words']], [hex(w) for w in expected])
+    print('RSP tasks: boot and ucode IMEM snapshots saved, lowered and run natively; the ucode read the physical '
+          'task, its DMA reached RDRAM and the SP event followed')
+
+
 def build(exe, cc, name, program, runtime, extra=()):
     (OUT / f'{name}.bin').write_bytes(A.assemble(program))
     labels = A.label_pcs(program)
@@ -231,6 +326,7 @@ def main():
           'of a spinning thread match libultra order', json.dumps(dump))
     graphics_bridge(exe, cc)
     save_file(exe, cc)
+    rsp_tasks(exe, cc)
 
 
 if __name__ == '__main__':

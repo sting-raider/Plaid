@@ -284,3 +284,20 @@ Same command as the ADR-0164 run.
 
 The earlier 33 VI/s came from the 15.6 ms Windows sleep tick, not from the
 lowered code or RT64.
+
+## Update: audio tasks (ADR-0169)
+
+```
+sm64-rsp --rom R --stop-at none --seconds 20 --rsp-dump snaps/   # repeated: lower, relink, rerun
+sm64-rsp --rom R --stop-at none --seconds 30 --wav sm64.wav
+sm64-rsp --rom R --stop-at none --seconds 30 --rsp-capture 600 cap600/
+```
+
+| Step | Result |
+| --- | --- |
+| first run, empty registry | stops at IMEM 000 and saves the rspboot snapshot |
+| second run | rspboot runs natively and loads aspMain, then stops at 080 and saves it |
+| third run | aspMain reads DPC_STATUS (fault 4), now an idle-RDP read |
+| fourth run | **20 s, 1190 audio tasks, 592 graphics tasks, no fault** |
+| `--wav` | 30 s, 16-bit stereo at 32006 Hz, intro and title audio; listened to and confirmed |
+| spike098 | tasks 1 (6478 instructions) and 600 (94150 instructions, 2972 RDRAM bytes) match ares 9408cb43 exactly |

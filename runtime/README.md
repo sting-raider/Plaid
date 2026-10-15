@@ -13,6 +13,14 @@ gcc -O1 -std=gnu11 -DPLAID_SAFEPOINTS -DPLAID_LOWERED='"game.c"' -I . runtime/pl
 ./game --rom <rom.z64> [--stop-at gfx|none] [--gfx-tasks N] [--seconds S] [--dump <addr> <words>]
 ```
 
+To run RSP tasks natively, add `-DPLAID_RSP -I crates/plaid-lower/src` and
+link the lowered texts:
+
+```bash
+python runtime/rsp_texts.py target/debug/plaid snapshots/ texts/   # prints the C files to link
+./game --rom <rom.z64> --rsp-dump snapshots/                          # saves IMEM it cannot run yet
+```
+
 ## Model
 
 - **Threads.** Guest threads run on host threads, but only the holder of a
@@ -35,7 +43,24 @@ gcc -O1 -std=gnu11 -DPLAID_SAFEPOINTS -DPLAID_LOWERED='"game.c"' -I . runtime/pl
   I/K/J/L = C, W/S/A/D = D-pad, arrows = stick.
 - **EEPROM.** 4 Kbit. With `--save <file>`, it is loaded at start and written
   back after every write, through `<file>.tmp` (ADR-0165).
-- **Audio tasks.** These still complete immediately.
+- **RSP tasks** (ADR-0169). With `-DPLAID_RSP` and `-I crates/plaid-lower/src`,
+  tasks other than graphics run lowered microcode, as libultra starts them:
+  - `osSpTaskLoad` puts the task, its pointers made physical, at DMEM 0xfc0;
+  - the game's boot microcode goes to IMEM 0;
+  - `osSpTaskStartGo` runs from PC 0 until the RSP halts.
+
+  IMEM is plain bytes, and DMA can rewrite it. A lowered text is a 4 KiB IMEM
+  snapshot, and its code runs a word only while IMEM still holds that word.
+  When control reaches a word no linked text holds, the runtime fails closed.
+  With `--rsp-dump <dir>` it saves that IMEM as a new snapshot first.
+  `runtime/rsp_texts.py` lowers the snapshots and writes the registry, so the
+  next build runs further. RSP DMA into RDRAM passes the same write checks as
+  the CPU's runtime writes. `--rsp-capture <n> <dir>` saves the state before
+  and after the n-th RSP task, for the ares comparison in
+  `spikes/098-rsp-task`. Without `PLAID_RSP`, these tasks complete at once.
+- **Audio out.** `--wav <file>` writes each `osAiSetNextBuffer` buffer as
+  16-bit stereo PCM at the rate `osAiSetFrequency` set, as libultra derives
+  it from the NTSC VI clock.
 
 ## Rendering with RT64
 
@@ -60,4 +85,7 @@ The executable must sit next to `plaid_rt64.dll`, `SDL2.dll`,
 checks libultra's scheduling order, including VI preemption of a spinning
 thread. It also checks the renderer bridge against a stub, without a GPU:
 the VI registers and the task addresses the runtime hands over. It also
-checks controller input and an EEPROM save kept across two runs.
+checks controller input, an EEPROM save kept across two runs, and an RSP
+task run through the snapshot protocol: two runs save the boot and ucode
+snapshots, and the third runs the task natively and checks its RDRAM output
+and the SP event.

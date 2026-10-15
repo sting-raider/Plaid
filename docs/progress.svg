@@ -363,9 +363,9 @@
 <rect x="40" y="1422" width="548" height="418" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
 <text x="60" y="1452" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">05</text>
 <text x="94" y="1453" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Native Runtime</text>
-<text x="60" y="1478" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">0 integrated   /   7 partial   /   2 open</text>
-<rect x="60.0" y="1492" width="395.1111111111111" height="4" rx="0" fill="#ffc66d" stroke="none"/>
-<rect x="455.1111111111111" y="1492" width="112.88888888888889" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
+<text x="60" y="1478" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">0 integrated   /   8 partial   /   1 open</text>
+<rect x="60.0" y="1492" width="451.55555555555554" height="4" rx="0" fill="#ffc66d" stroke="none"/>
+<rect x="511.55555555555554" y="1492" width="56.44444444444444" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
 <g class="milestone">
 <title>Native Runtime: Declared runtime-function boundary (ADR-0129) (partial)</title>
 <text x="60" y="1521" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
@@ -397,10 +397,10 @@
 <text x="568" y="1625" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Audio path (open)</title>
-<text x="60" y="1651" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
+<title>Native Runtime: Audio path (partial)</title>
+<text x="60" y="1651" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
 <text x="83" y="1651" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Audio path</text>
-<text x="568" y="1651" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+<text x="568" y="1651" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <g class="milestone">
 <title>Native Runtime: RSP runtime/native path (partial)</title>

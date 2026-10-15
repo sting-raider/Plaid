@@ -110,9 +110,12 @@ Next concrete steps, in order:
      (ADR-0167, spike097 matches ares).
    - Done: the RSP vector unit (ADR-0168), ported from ares (ISC);
      SM64's audio microcode lowers completely (904 instructions).
-   - Next (ADR-0169): run audio tasks natively:
-     the runtime takes each task's microcode address and size, checks the
-     bytes against the lowered text, and sends samples to the host.
+   - Done: RSP tasks run lowered IMEM snapshots (ADR-0169). The game's own
+     boot code loads its microcode; no per-game offsets. SM64's audio
+     tasks run natively and match ares exactly (spike098); `--wav` writes
+     the samples.
+   - Next (ADR-0170): play the samples on the host in real time, with AI
+     length timing.
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user

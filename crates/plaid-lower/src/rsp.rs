@@ -1,10 +1,13 @@
-//! RSP microcode lowering (ADR-0167).
+//! RSP microcode lowering (ADR-0167..0169).
 //!
-//! A microcode's text is small and fixed (IMEM is 4 KiB, and DMA into IMEM
-//! faults), so every word of the text gets a label. Register jumps dispatch
-//! over exactly those labels: the target set is closed by construction, and
-//! anything else faults 3. Semantics follow pinned ares (`ares/n64/rsp`).
+//! A text is a span of IMEM bytes, usually a whole 4 KiB snapshot, and every
+//! word of it gets a label. Register jumps dispatch over exactly those
+//! labels, so the target set is closed by construction. The lowered code
+//! runs a word only while IMEM still holds the bytes it was lowered from
+//! (DMA can rewrite IMEM); anything else leaves the text for the host to
+//! pick another. Semantics follow pinned ares (`ares/n64/rsp`).
 
+const STATE: &str = include_str!("rsp_state.h");
 const PRELUDE: &str = include_str!("rsp_prelude.h");
 const VECTOR_UNIT: &str = include_str!("rsp_vu.h");
 
@@ -30,8 +33,9 @@ fn is_control(w: u32) -> bool {
     }
 }
 
-/// One non-control instruction at `pc`, or an error naming what is unsupported.
-fn simple(w: u32, pc: u32) -> Result<String, String> {
+/// One non-control instruction at `pc`, or an error naming what is
+/// unsupported. `verify` re-checks the text after a DMA may have written IMEM.
+fn simple(w: u32, pc: u32, verify: &str) -> Result<String, String> {
     let (rs, rt, rd, sa) = (
         (w >> 21) & 31,
         (w >> 16) & 31,
@@ -78,7 +82,7 @@ fn simple(w: u32, pc: u32) -> Result<String, String> {
             }
             0 => format!("{{ if (plaid_rsp_mfc0(r, {rd}, &{t}, 0x{pc:03x}u)) return 1; }}"),
             4 => format!(
-                "{{ if (plaid_rsp_mtc0(r, {rd}, {t}, 0x{pc:03x}u)) return 1; if (r->halted) {{ r->pc = 0x{:03x}u; return 0; }} }}",
+                "{{ if (plaid_rsp_mtc0(r, {rd}, {t}, 0x{pc:03x}u)) return 1; if (r->halted) {{ r->pc = 0x{:03x}u; return 0; }} if (r->imem_written) {{ r->imem_written = 0; {verify} }} }}",
                 (pc + 4) & 0xfff
             ),
             _ => return unsupported(),
@@ -133,15 +137,25 @@ fn simple(w: u32, pc: u32) -> Result<String, String> {
     })
 }
 
-/// Lowers microcode `text` placed at IMEM offset `imem` to
-/// `int plaid_rsp_<name>(plaid_rsp *r, u32 pc)`, which runs from `pc` until
-/// the microcode halts (returns 0) or a fault (returns 1).
-pub fn lower_rsp(text: &[u8], imem: u32, name: &str) -> Result<String, String> {
+/// A lowered text: C source, and the words that became fault stubs.
+pub struct LoweredRsp {
+    pub c: String,
+    pub stubs: Vec<String>,
+}
+
+/// Lowers the IMEM bytes `text` at offset `imem` to
+/// `int plaid_rsp_<name>(plaid_rsp *r, u32 pc)` and the descriptor
+/// `plaid_rsp_text_<name>`. The function runs from `pc` until the RSP halts
+/// (returns 0), faults (1), or reaches a word it cannot run (2, `r->pc`).
+/// Words that are not lowerable become fault-6 stubs: a snapshot holds
+/// leftover bytes, and only the words that execute must be code.
+pub fn lower_rsp(text: &[u8], imem: u32, name: &str) -> Result<LoweredRsp, String> {
     if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') || name.is_empty() {
         return Err(format!("bad microcode name {name:?}"));
     }
     if !imem.is_multiple_of(4)
         || !text.len().is_multiple_of(4)
+        || text.is_empty()
         || imem as usize + text.len() > 0x1000
     {
         return Err("microcode text must be word-aligned and fit in IMEM".into());
@@ -153,17 +167,32 @@ pub fn lower_rsp(text: &[u8], imem: u32, name: &str) -> Result<String, String> {
         .map(|w| u32::from_be_bytes(*w))
         .collect();
     let end = imem + 4 * words.len() as u32;
+    let verify = format!(
+        "plaid_rsp_verify(r, plaid_rsp_bytes_{name}, 0x{imem:03x}u, 0x{:x}u);",
+        text.len()
+    );
     let label = |pc: u32| format!("L_{pc:03x}");
-    // a direct transfer: a label inside the text, else the dispatch faults
+    // a direct transfer: a label inside the text, else leave it
     let go = |target: u32| {
         if (imem..end).contains(&target) {
             format!("goto {};", label(target))
         } else {
-            format!("{{ pc = 0x{target:03x}u; goto dispatch; }}")
+            format!("return plaid_rsp_leave(r, 0x{target:03x}u);")
         }
     };
-    let mut out =
-        format!("int plaid_rsp_{name}(plaid_rsp *r, u32 pc) {{\ndispatch:\n  switch (pc) {{\n");
+    let bytes: Vec<String> = text.iter().map(|b| b.to_string()).collect();
+    let mut out = format!(
+        "static const u8 plaid_rsp_bytes_{name}[{}] = {{\n  {}\n}};\n",
+        text.len(),
+        bytes
+            .chunks(32)
+            .map(|row| row.join(","))
+            .collect::<Vec<_>>()
+            .join(",\n  ")
+    );
+    out += &format!(
+        "int plaid_rsp_{name}(plaid_rsp *r, u32 pc) {{\n  {verify}\ndispatch:\n  switch (pc) {{\n"
+    );
     for i in 0..words.len() as u32 {
         out += &format!(
             "  case 0x{:03x}: goto {};\n",
@@ -171,21 +200,42 @@ pub fn lower_rsp(text: &[u8], imem: u32, name: &str) -> Result<String, String> {
             label(imem + 4 * i)
         );
     }
-    out += "  default: return plaid_rsp_fault(r, pc, 3);\n  }\n";
+    out += "  default: return plaid_rsp_leave(r, pc);\n  }\n";
+    let mut stubs = Vec::new();
     for (i, &w) in words.iter().enumerate() {
         let pc = imem + 4 * i as u32;
         out += &format!("{}:\n", label(pc));
+        let mut stub = |why: String| {
+            stubs.push(why);
+            format!("  return plaid_rsp_fault(r, 0x{pc:03x}u, 6);\n")
+        };
         if !is_control(w) {
-            out += &format!("  {}\n", simple(w, pc)?);
+            out += &match simple(w, pc, &verify) {
+                Ok(c) => format!("  PLAID_RSP_LIVE(0x{pc:03x}u) {c}\n"),
+                Err(why) => stub(why),
+            };
             continue;
         }
-        let slot = *words
-            .get(i + 1)
-            .ok_or_else(|| format!("{pc:03x}: transfer without a delay slot in the text"))?;
-        if is_control(slot) {
-            return Err(format!("{pc:03x}: transfer in a delay slot"));
-        }
-        let slot = simple(slot, pc + 4)?;
+        let slot = match words.get(i + 1) {
+            None => {
+                out += &stub(format!(
+                    "{pc:03x}: transfer without a delay slot in the text"
+                ));
+                continue;
+            }
+            Some(&slot) if is_control(slot) => {
+                out += &stub(format!("{pc:03x}: transfer in a delay slot"));
+                continue;
+            }
+            Some(&slot) => match simple(slot, pc + 4, &verify) {
+                Ok(c) => c,
+                Err(why) => {
+                    out += &stub(why);
+                    continue;
+                }
+            },
+        };
+        out += &format!("  PLAID_RSP_LIVE2(0x{pc:03x}u)\n");
         let (rs, rt, rd) = ((w >> 21) & 31, (w >> 16) & 31, (w >> 11) & 31);
         let (s, t) = (reg(rs), reg(rt));
         let branch = (pc + 4).wrapping_add(((w as u16 as i16 as i32) << 2) as u32) & 0xfff;
@@ -231,8 +281,12 @@ pub fn lower_rsp(text: &[u8], imem: u32, name: &str) -> Result<String, String> {
         };
     }
     out += &format!(
-        "  return plaid_rsp_fault(r, 0x{:03x}u, 3);\n}}\n",
-        end & 0xfff
+        "  return plaid_rsp_leave(r, 0x{:03x}u);\n}}\nconst plaid_rsp_text plaid_rsp_text_{name} = {{0x{imem:03x}u, 0x{:x}u, plaid_rsp_bytes_{name}, plaid_rsp_{name}, \"{name}\"}};\n",
+        end & 0xfff,
+        text.len()
     );
-    Ok(format!("{PRELUDE}{VECTOR_UNIT}\n{out}"))
+    Ok(LoweredRsp {
+        c: format!("{STATE}{PRELUDE}{VECTOR_UNIT}\n{out}"),
+        stubs,
+    })
 }
