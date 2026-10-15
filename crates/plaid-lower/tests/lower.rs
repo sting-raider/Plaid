@@ -33,7 +33,7 @@ fn closed_program_lowers_deterministically_with_guarded_stores() {
     assert!(c.contains("goto L_80000010;"));
     assert!(c.contains("L_80000010: s->pc = 0x80000010u; return 2;"));
     // Executable bytes are registered for the runtime store guard.
-    assert!(c.contains("plaid_code[] = {{0, 16}, {16, 24}}"));
+    assert!(c.contains("plaid_code[] = {{0, 16, -1}, {16, 24, -1}}"));
 }
 
 #[test]

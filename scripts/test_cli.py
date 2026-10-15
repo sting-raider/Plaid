@@ -157,6 +157,20 @@ def main():
         runtime_map=directory/'runtime-map.json'
         run("discover",rom,"64","0x80000000","40","0x80000000",runtime_map,declared)
         assert len(json.loads(runtime_map.read_bytes())['runtime_functions'])==1
+        # declared loads (ADR-0136): the composite is rebuilt by solve
+        loads=directory/'loads.json'
+        def declare(destination):
+            loads.write_text(json.dumps(dict(format='plaid-loads-v0',source='cli test',
+                loads=[dict(destination=destination,size='0x8',rom='64',encoding='raw')])),encoding='utf-8')
+        declare('0x80000028')
+        load_map=directory/'load-map.json'
+        run("discover",rom,"64","0x80000000","40","0x80000000",load_map,"--loads",loads)
+        assert len(json.loads(load_map.read_bytes())['load_images'])==1
+        guarded=json.loads(run("solve",rom,load_map,"--guarded-ram"))
+        assert any('declared load' in a for a in guarded['assumptions'])
+        declare('0x80000040')
+        run("discover",rom,"64","0x80000000","40","0x80000000",load_map,"--loads",loads,ok=False)
+        run("solve",rom,load_map,"--loads",loads,ok=False)
         sig.write_text("osGetCount 0x8\n",encoding='utf-8')
         run('identify',rom,"64","0x80000000","40",sig,ok=False)
         merged=directory / "merged.json"

@@ -23,7 +23,7 @@ no runtime yet. `native_complete` is `false` everywhere.
 
 | ROM (local, never committed) | Result |
 | --- | --- |
-| Ocarina of Time US 1.2, conditional window `0x1000..0x101000` at `0x80000400` | 293 blocks, 45 indirect sites, **62 whole-ROM blockers** (44 unresolved indirect sites, 8 unsupported instructions, 4 other site-level blockers, 6 global model obligations). 43 of the 44 unresolved indirect sites are returns with ADR-0127 certificates, which count only in the assumption scope. Under `--guarded-ram`: **82 blockers**, 69 of them libultra system instructions (ADR-0128). With heuristic runtime declarations and the `osCreateThread` callback (ADR-0129/0130): **628 blocks, 6 blockers** after COP1 moves and guarded jump tables (ADR-0131/0132). With n64sym-identified declarations (ADR-0133, 39 functions): **320 blocks, 16 blockers** after unaligned access and COP1 compares (ADR-0134/0135): in boot code only the host return and one pointer call and 14 from calls into the area the code segment is later DMA'd over |
+| Ocarina of Time US 1.2, conditional window `0x1000..0x101000` at `0x80000400` | 293 blocks, 45 indirect sites, **62 whole-ROM blockers** (44 unresolved indirect sites, 8 unsupported instructions, 4 other site-level blockers, 6 global model obligations). 43 of the 44 unresolved indirect sites are returns with ADR-0127 certificates, which count only in the assumption scope. Under `--guarded-ram`: **82 blockers**, 69 of them libultra system instructions (ADR-0128). With heuristic runtime declarations and the `osCreateThread` callback (ADR-0129/0130): **628 blocks, 6 blockers** after COP1 moves and guarded jump tables (ADR-0131/0132). With n64sym-identified declarations (ADR-0133, 39 functions): **320 blocks, 16 blockers** after unaligned access and COP1 compares (ADR-0134/0135): in boot code only the host return and one pointer call. With the Yaz0 `code` segment declared as a load (ADR-0136): **7451 blocks, 748 blockers** (182 `BREAK`, about 450 COP1 arithmetic/conversion/FCSR, 33 indirect sites, 7 targets) and 14 from calls into the area the code segment is later DMA'd over |
 | Super Mario 64 | Not run yet: no local ROM supplied |
 | Commercial ROMs CLOSED | **0** |
 
@@ -46,4 +46,4 @@ Anything else rejects the whole program. A store into executable bytes (fault
 2) or cached and uncached access to the same 16-byte line (fault 4, because the
 write-back D-cache makes the result state-dependent) aborts instead of
 executing, as does a return whose `$ra` is not its call's continuation (fault 5) or an
-overflowing trapping add (fault 6) or a COP1 compare with a NaN operand (fault 7).
+overflowing trapping add (fault 6) a COP1 compare with a NaN operand (fault 7), or entry into a declared load whose bytes are not in RAM (fault 8).

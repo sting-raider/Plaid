@@ -597,6 +597,9 @@ pub struct ProgramMap {
     /// provided by the host runtime, never decoded.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty", with = "pairs")]
     pub runtime_functions: BTreeMap<CodeAddress, RuntimeFunction>,
+    /// Composite images built from declared loads (ADR-0136), by image identity.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub load_images: BTreeMap<String, crate::declared_loads::LoadImage>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -702,6 +705,7 @@ impl ProgramMap {
             rsp_microcodes: BTreeSet::new(),
             unresolved: BTreeSet::new(),
             runtime_functions: BTreeMap::new(),
+            load_images: BTreeMap::new(),
         }
     }
 
@@ -800,6 +804,11 @@ impl ProgramMap {
                     "invalid or duplicate runtime function name {:?}",
                     f.name
                 ));
+            }
+        }
+        for spec in self.load_images.values() {
+            for load in &spec.loads {
+                refs(&load.evidence)?;
             }
         }
         for e in &self.direct_edges {

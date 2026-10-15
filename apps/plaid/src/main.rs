@@ -74,11 +74,28 @@ fn rom_images(rom: &CanonicalRom, map: &ProgramMap) -> Result<Vec<CodeImage>, St
             }
         }
     }
+    for (id, spec) in &map.load_images {
+        let (_, composite) = plaid_core::declared_loads::compose(rom.bytes(), spec)?;
+        if &composite.base.image != id {
+            return Err(format!("declared loads do not rebuild image {id}"));
+        }
+        images.push(composite);
+    }
     Ok(images)
 }
 
 fn run() -> Result<(), String> {
-    let args: Vec<_> = env::args().skip(1).collect();
+    let mut args: Vec<_> = env::args().skip(1).collect();
+    // `--loads <loads.json>` applies declared loads to discover and lower-c (ADR-0136).
+    let loads_path = match args.iter().position(|a| a == "--loads") {
+        Some(i) if i + 1 < args.len() && matches!(args[0].as_str(), "discover" | "lower-c") => {
+            let path = args.remove(i + 1);
+            args.remove(i);
+            Some(path)
+        }
+        Some(_) => return Err("--loads <file> applies only to discover and lower-c".into()),
+        None => None,
+    };
     match args.as_slice() {
         [
             command,
@@ -744,15 +761,17 @@ fn run() -> Result<(), String> {
         ] if command == "discover" && runtime.len() <= 1 => {
             let (runtime, evidence) = runtime_declarations(runtime.first())?;
             let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
-            let image = CodeImage::from_rom(
-                &rom,
-                RomOffset(number(offset)?),
-                GuestRange {
-                    start: GuestAddr(number32(start)?),
-                    size: number32(size)?,
-                },
-            )?;
-            let d = discover_image_with_runtime(
+            let range = GuestRange {
+                start: GuestAddr(number32(start)?),
+                size: number32(size)?,
+            };
+            let mut image = CodeImage::from_rom(&rom, RomOffset(number(offset)?), range.clone())?;
+            let declared =
+                load_declarations(loads_path.as_ref(), RomOffset(number(offset)?), range)?;
+            if let Some((spec, _)) = &declared {
+                image = plaid_core::declared_loads::compose(rom.bytes(), spec)?.1;
+            }
+            let mut d = discover_image_with_runtime(
                 rom.identity,
                 &image,
                 &[GuestAddr(number32(entry)?)],
@@ -760,6 +779,10 @@ fn run() -> Result<(), String> {
                 evidence,
                 1_000_000,
             )?;
+            if let Some((spec, (id, evidence))) = declared {
+                d.map.evidence.insert(id, evidence);
+                d.map.load_images.insert(image.base.image.clone(), spec);
+            }
             fs::write(output, d.map.to_json()?).map_err(|e| e.to_string())?;
             println!(
                 "discovered {} blocks, {} indirect sites, {} unresolved items",
@@ -793,17 +816,31 @@ fn run() -> Result<(), String> {
                 sha256: image.base.image.clone(),
                 size: bytes.len() as u64,
             };
-            let d = discover_image_with_runtime(
+            let range = GuestRange {
+                start: image.base.pc,
+                size: image.size()?,
+            };
+            let declared = load_declarations(loads_path.as_ref(), RomOffset(0), range)?;
+            let code = match &declared {
+                Some((spec, _)) => plaid_core::declared_loads::compose(&bytes, spec)?.1,
+                None => image.clone(),
+            };
+            let mut d = discover_image_with_runtime(
                 rom,
-                &image,
+                &code,
                 &[GuestAddr(number32(entry)?)],
                 &runtime,
                 evidence,
                 1_000_000,
             )?;
-            let c = plaid_lower::lower_c(
+            if let Some((spec, (id, evidence))) = declared {
+                d.map.evidence.insert(id, evidence);
+                d.map.load_images.insert(code.base.image.clone(), spec);
+            }
+            let c = plaid_lower::lower_c_with_preload(
                 &d.map,
-                &[image],
+                std::slice::from_ref(&code),
+                &image,
                 GuestAddr(number32(entry)?),
                 &[GuestAddr(number32(exit)?)],
             )?;
@@ -906,7 +943,7 @@ fn run() -> Result<(), String> {
         }
         _ => {
             return Err(
-                "usage: plaid inspect-sp-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-pi-fetch-lineage <same-inputs> | inspect-dcache-store64 <history-v2.json> <expected-source-sha256> <report.json> | verify-dcache-store64 <same-inputs> | compose-cop1-mutations <history.json> <expected-source-sha256> <contexts.json> <expected-contexts-sha256> <report.json> | verify-cop1-mutations <same-inputs> | inspect-dcache-resident-reads <history-v1.json> <expected-source-sha256> <report.json> | verify-dcache-resident-reads <same-inputs> | inspect-rsp-cpu-imem <history.json> <expected-source-sha256> <report.json> | verify-rsp-cpu-imem <same-inputs> | inspect-sp-writer-fetch <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-writer-fetch <same-inputs> | create-trace-expectations <new-expected.json> <trace.ndjson>... | solve-traces <rom> <map.json> <expected.json> <trace.ndjson>... | inspect-cpu-definitions <history.json> <external-source-sha256> <report.json> | verify-cpu-definitions <history.json> <external-source-sha256> <report.json> | inspect-cpu-copy-history <history.json> <external-source-sha256> <report.json> | verify-cpu-copy-history <history.json> <external-source-sha256> <report.json> | isa-coverage | identify <rom> <rom-offset> <guest-start> <size> <signatures.sig> | rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> [--guarded-ram] | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> [runtime.json] | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | verify-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | inspect-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | verify-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | merge <left.json> <right.json> <output.json> | lower-c <words.bin> <base> <entry> <exit> <out.c> [runtime.json]"
+                "usage: plaid inspect-sp-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-pi-fetch-lineage <same-inputs> | inspect-dcache-store64 <history-v2.json> <expected-source-sha256> <report.json> | verify-dcache-store64 <same-inputs> | compose-cop1-mutations <history.json> <expected-source-sha256> <contexts.json> <expected-contexts-sha256> <report.json> | verify-cop1-mutations <same-inputs> | inspect-dcache-resident-reads <history-v1.json> <expected-source-sha256> <report.json> | verify-dcache-resident-reads <same-inputs> | inspect-rsp-cpu-imem <history.json> <expected-source-sha256> <report.json> | verify-rsp-cpu-imem <same-inputs> | inspect-sp-writer-fetch <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-writer-fetch <same-inputs> | create-trace-expectations <new-expected.json> <trace.ndjson>... | solve-traces <rom> <map.json> <expected.json> <trace.ndjson>... | inspect-cpu-definitions <history.json> <external-source-sha256> <report.json> | verify-cpu-definitions <history.json> <external-source-sha256> <report.json> | inspect-cpu-copy-history <history.json> <external-source-sha256> <report.json> | verify-cpu-copy-history <history.json> <external-source-sha256> <report.json> | isa-coverage | identify <rom> <rom-offset> <guest-start> <size> <signatures.sig> | rom-info <rom> | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> [--guarded-ram] | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> [runtime.json] | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | verify-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | inspect-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | verify-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | merge <left.json> <right.json> <output.json> | lower-c <words.bin> <base> <entry> <exit> <out.c> [runtime.json] (discover and lower-c also take --loads <loads.json>)"
                     .into(),
             );
         }
@@ -943,6 +980,71 @@ type RuntimeDeclarations = (
 
 /// Read a `plaid-runtime-functions-v0` declaration (ADR-0129): host-provided
 /// guest functions that discovery records as call targets but never decodes.
+type LoadDeclarations = Option<(plaid_core::declared_loads::LoadImage, (String, Evidence))>;
+
+/// Parse `plaid-loads-v0`: loads applied over the base window (ADR-0136).
+fn load_declarations(
+    path: Option<&String>,
+    base_offset: RomOffset,
+    base: GuestRange,
+) -> Result<LoadDeclarations, String> {
+    use plaid_core::declared_loads::{DeclaredLoad, LoadEncoding, LoadImage};
+    let Some(path) = path else {
+        return Ok(None);
+    };
+    let bytes = fs::read(path).map_err(|e| e.to_string())?;
+    let doc: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    if doc["format"] != "plaid-loads-v0" {
+        return Err("load declarations need format plaid-loads-v0".into());
+    }
+    let source = doc["source"]
+        .as_str()
+        .ok_or("load declarations need a source string")?;
+    let id = format!("loads:{}", plaid_core::rom::sha256(&bytes));
+    let mut loads = Vec::new();
+    for l in doc["loads"]
+        .as_array()
+        .ok_or("load declarations need a loads array")?
+    {
+        let field = |name: &str| -> Result<u64, String> {
+            number(
+                l[name]
+                    .as_str()
+                    .ok_or(format!("each load needs a {name} string"))?,
+            )
+        };
+        let encoding = match l["encoding"].as_str() {
+            Some("raw") => LoadEncoding::Raw,
+            Some("yaz0") => LoadEncoding::Yaz0,
+            _ => return Err("load encoding is raw or yaz0".into()),
+        };
+        loads.push(DeclaredLoad {
+            destination: GuestRange {
+                start: GuestAddr(u32::try_from(field("destination")?).map_err(|e| e.to_string())?),
+                size: u32::try_from(field("size")?).map_err(|e| e.to_string())?,
+            },
+            source: RomOffset(field("rom")?),
+            encoding,
+            evidence: [id.clone()].into(),
+        });
+    }
+    loads.sort();
+    let evidence = Evidence {
+        kind: EvidenceKind::Static,
+        producer: "plaid-load-declaration/v0".into(),
+        revision: "0".into(),
+        detail: format!("{source}; declaration sha256 {}", &id[6..]),
+    };
+    Ok(Some((
+        LoadImage {
+            base_offset,
+            base,
+            loads,
+        },
+        (id, evidence),
+    )))
+}
+
 fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, String> {
     let Some(path) = path else {
         return Ok((Vec::new(), None));

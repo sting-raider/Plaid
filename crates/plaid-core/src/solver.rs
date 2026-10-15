@@ -686,12 +686,18 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     }
     let mut return_closure = false;
     let mut tables = BTreeSet::new();
+    // One shared return-closure context per image, not one per site.
+    let mut closures: BTreeMap<String, crate::returns::Closure> = BTreeMap::new();
     for site in &map.indirect_sites {
         // Return certificates hold only under the guarded scope's checked
         // call/return assumption; every other scope keeps such sites OPEN.
         let returns = scope == Scope::DeclaredStaticImagesGuardedRam
-            && source(images, &site.site)
-                .is_some_and(|image| crate::returns::verify(map, image, site));
+            && source(images, &site.site).is_some_and(|image| {
+                closures
+                    .entry(image.base.image.clone())
+                    .or_insert_with(|| crate::returns::Closure::new(map, image))
+                    .verify(map, image, site)
+            });
         return_closure |= returns;
         // A verified jump table closes only under the guarded scope, whose
         // native artifact store-protects table bytes (ADR-0132).
@@ -955,6 +961,39 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             EvidenceRefs::new(),
         );
     }
+    // Declared loads (ADR-0136): only the guarded scope checks them natively.
+    let load_evidence: EvidenceRefs = map
+        .load_images
+        .values()
+        .flat_map(|spec| spec.loads.iter().flat_map(|l| l.evidence.clone()))
+        .collect();
+    if !map.load_images.is_empty() && scope != Scope::DeclaredStaticImagesGuardedRam {
+        add(
+            "dynamic_effect_outside_scope",
+            None,
+            "declared loads are accepted only under the guarded scope",
+            load_evidence.clone(),
+        );
+    }
+    for (id, spec) in &map.load_images {
+        for b in map.blocks.iter().filter(|b| &b.start.image == id) {
+            let (start, end) = (
+                u64::from(b.start.pc.0),
+                u64::from(b.start.pc.0) + u64::from(b.size),
+            );
+            for l in &spec.loads {
+                let (ls, le) = (u64::from(l.destination.start.0), l.destination.end());
+                if start < le && end > ls && !(start >= ls && end <= le) {
+                    add(
+                        "block_straddles_declared_load",
+                        Some(b.start.clone()),
+                        "a block runs between base bytes and a declared load, so one entry check cannot cover it",
+                        l.evidence.clone(),
+                    );
+                }
+            }
+        }
+    }
     if scope == Scope::WholeRom {
         for (kind, detail) in [
             (
@@ -1025,6 +1064,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                     .into(),
             );
         }
+        if !map.load_images.is_empty() {
+            let count: usize = map.load_images.values().map(|spec| spec.loads.len()).sum();
+            assumptions.push(format!(
+                "{count} declared load(s) place their decoded bytes at their destinations before any of their code runs: a native artifact compares each load's executable bytes in RAM with the declared bytes at the first entry into its code and aborts on a mismatch (fault 8); once verified, stores and runtime writes into those bytes abort (fault 2)."
+            ));
+        }
         if !map.runtime_functions.is_empty() {
             let names: Vec<_> = map
                 .runtime_functions
@@ -1032,7 +1077,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 .map(|f| f.name.as_str())
                 .collect();
             assumptions.push(format!(
-                "Declared runtime functions ({}) are host-provided: entered only by call or tail call at their entry, they follow the o32 ABI (preserving s0-s7, gp, sp and fp, and returning to $ra), enter guest code only at proven callback arguments through the artifact's fail-closed plaid_enter dispatch, and their guest bodies are neither analyzed nor lowered.",
+                "Declared runtime functions ({}) are host-provided: entered only by call or tail call at their entry, they follow the o32 ABI (preserving s0-s7, gp, sp and fp, and returning to $ra), enter guest code only at proven callback arguments through the artifact's fail-closed plaid_enter dispatch, write guest RAM only after plaid_runtime_write accepts the range, and their guest bodies are neither analyzed nor lowered.",
                 names.join(", ")
             ));
         }
