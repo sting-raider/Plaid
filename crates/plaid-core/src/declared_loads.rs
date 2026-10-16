@@ -30,6 +30,11 @@ pub struct DeclaredLoad {
     pub source: RomOffset,
     pub encoding: LoadEncoding,
     pub evidence: EvidenceRefs,
+    /// A relocatable overlay placed at its link address (ADR-0172): the game
+    /// loads it elsewhere and relocates it, so its code runs only through a
+    /// checked runtime binding.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub relocatable: bool,
 }
 
 /// How a composite image was built: the base window and the loads applied to
@@ -201,6 +206,7 @@ mod tests {
             source: RomOffset(source),
             encoding,
             evidence: EvidenceRefs::new(),
+            relocatable: false,
         }
     }
 

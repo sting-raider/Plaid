@@ -142,6 +142,14 @@ fn run() -> Result<(), String> {
             .position(|a| a == "--address-taken")
             .map(|i| args.remove(i))
             .is_some();
+    // `discover --overlays` adds the ROM's own relocatable overlays at their
+    // link addresses (ADR-0172, ADR-0179).
+    let overlays = args.first().is_some_and(|c| c == "discover")
+        && args
+            .iter()
+            .position(|a| a == "--overlays")
+            .map(|i| args.remove(i))
+            .is_some();
     // `--fr0` declares that guest code runs with Status.FR = 0 (ADR-0160).
     let fr0 = args
         .first()
@@ -822,10 +830,46 @@ fn run() -> Result<(), String> {
                 size: number32(size)?,
             };
             let mut image = CodeImage::from_rom(&rom, RomOffset(number(offset)?), range.clone())?;
-            let declared =
-                load_declarations(loads_path.as_ref(), RomOffset(number(offset)?), range)?;
+            let mut declared = load_declarations(
+                loads_path.as_ref(),
+                RomOffset(number(offset)?),
+                range.clone(),
+            )?;
             if let Some((spec, _)) = &declared {
                 image = plaid_core::declared_loads::compose(rom.bytes(), spec)?.1;
+            }
+            // overlay tables are found in the image as composed so far
+            let mut overlay_evidence = None;
+            if overlays {
+                let table: Vec<u8> = image.words.iter().flat_map(|w| w.to_be_bytes()).collect();
+                let catalog = plaid_core::overlays::discover(rom.bytes(), &table)?;
+                let detail = serde_json::to_vec(&catalog).map_err(|e| e.to_string())?;
+                let id = format!("overlays:{}", plaid_core::rom::sha256(&detail));
+                let loads = plaid_core::overlays::loads(&catalog, &[id.clone()].into());
+                println!(
+                    "{} of {} overlay candidates placed at their link addresses",
+                    loads.len(),
+                    catalog.len()
+                );
+                let spec = match &mut declared {
+                    Some((spec, _)) => spec,
+                    None => {
+                        &mut declared
+                            .insert((
+                                plaid_core::declared_loads::LoadImage {
+                                    base_offset: RomOffset(number(offset)?),
+                                    base: range,
+                                    loads: Vec::new(),
+                                },
+                                (id.clone(), overlay_evidence_of(&catalog)),
+                            ))
+                            .0
+                    }
+                };
+                spec.loads.extend(loads);
+                spec.loads.sort();
+                image = plaid_core::declared_loads::compose(rom.bytes(), spec)?.1;
+                overlay_evidence = Some((id, overlay_evidence_of(&catalog)));
             }
             let mut entries = vec![GuestAddr(number32(entry)?)];
             let roots = if data_roots {
@@ -870,6 +914,9 @@ fn run() -> Result<(), String> {
                         1_000_000,
                     )?;
                 }
+            }
+            if let Some((id, evidence)) = overlay_evidence {
+                d.map.evidence.insert(id, evidence);
             }
             if let Some((spec, (id, evidence))) = declared {
                 d.map.evidence.insert(id, evidence);
@@ -1349,6 +1396,7 @@ fn load_declarations(
             source: RomOffset(field("rom")?),
             encoding,
             evidence: [id.clone()].into(),
+            relocatable: false,
         });
     }
     loads.sort();
@@ -1366,6 +1414,19 @@ fn load_declarations(
         },
         (id, evidence),
     )))
+}
+
+/// Evidence for loads placed from the ROM's own overlay catalog.
+fn overlay_evidence_of(catalog: &[plaid_core::overlays::Overlay]) -> Evidence {
+    Evidence {
+        kind: EvidenceKind::Static,
+        producer: "plaid-overlay-catalog/v0".into(),
+        revision: "0".into(),
+        detail: format!(
+            "{} relocatable overlays from the ROM's file table and overlay tuples (ADR-0172), placed at link addresses (ADR-0179)",
+            catalog.len()
+        ),
+    }
 }
 
 fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, String> {

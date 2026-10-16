@@ -1,52 +1,38 @@
-# ADR-0172 stage 1: ROM-owned overlay candidates
+# Primary integration: discovery places relocatable overlays at link addresses (ADR-0179)
 
-Milestone 5. Base: `9c5ef482f8030213005f333e69a1925f7211d105`.
-Claim: issue #4 comment 6200706937.
+Base: c114210. Milestone 5, ADR-0172 stage 2a. Worker: Claude co-integrator, user-authorized on main.
 
-The shared checkout contains pre-existing indexing optimizations. This batch
-is prepared in an isolated checkout of the exact canonical base; those changes
-are preserved and excluded from this commit and its validation tree.
+`plaid discover … --overlays` catalogs the overlay tables inside the image
+as composed so far, then adds each executable overlay as a relocatable
+declared load at its link address. Data-only overlays and colliding link
+ranges are left out, and the loads carry catalog evidence.
 
-The ROM file-table recognizer finds a unique sorted, terminated table whose
-self-entry covers it. Overlay tuples in reconstructed source images must match
-file identity, decoded size, section boundaries, relocation trailer and BSS.
-No title, table address, actor number or ROM offset is embedded. Data-only
-overlays remain data-only. The initial explicit profile is Zelda64, not every
-N64 overlay format.
+| OoT 1.2 (local) | Fixed image | With `--overlays` |
+|---|---|---|
+| overlays placed | 0 | 468 of 469 |
+| blocks | 29,511 | 138,829 |
+| discover | 3.3 s | 43 s |
+| `solve --address-taken` | closed, 0 blockers | open, 29 blockers |
 
-The relocation model handles MIPS 32/26/HI16/LO16 with register-selected high
-halves, signed low carry, segmented pointers, source checks and bounded RAM
-destinations. Unknown kinds, duplicate/unaligned/out-of-section sites, missing
-high halves and out-of-image targets reject. Native lowering and runtime
-mapping have not changed; candidate discovery grants no closure certificate.
+The 29 blockers are 28 GCC jump-table shapes outside ADR-0140's recognizer
+and one overlay function that matches a runtime signature.
 
-`inspect-overlays` rebuilds the input map's images against the ROM and records
-their identities. It refuses to overwrite either input. ROMs, decoded images,
-maps and the catalog remain local and ignored.
+The map equals the hand-written load-file experiment's block count, and
+re-running gives the identical map. Lowering refuses the map until it is
+CLOSED and overlays are bound at run time (ADR-0172).
 
-Evidence:
-- Focused Rust tests cover synthetic table placement at different addresses,
-  relocation at three load bases including signed-low carry, malformed
-  trailers and pairs, and contradictory ranges.
-- The CLI regression builds a synthetic ROM and ProgramMap, discovers the
-  expected overlay, rejects a mismatching table span and protects its inputs.
-- Local OoT measurement: 469 candidates, 468 with text; 16,968 HI16, 17,014
-  LO16, 11,160 MIPS26 and 7,501 MIPS32 relocations. All candidates materialize
-  at the analysis test base. This is format validation, not relocated native
-  execution or ares differential evidence.
-- N64Recomp's MIT pin `ffb39cdad1da5de07eaaa48bd1db4a89a7986771` was inspected
-  for section-address immediates and dynamic function lookup. ADR-0172 links
-  the Zelda64 format and loader behavior reference at exact revision
-  `8a3634ca774a9b58d822cbc2cc09309f31eac6a4`. No reference implementation was
-  imported.
+Gate on the exact tree, all passing:
 
-Landing gate: fmt, strict locked workspace/all-target Clippy, locked workspace
-tests, CLI tests, runtime tests, spike096, progress `--record` and `--check`,
-and diff review. The issue #4 closeout records the actual gate result and CAS
-commit. RSP lowering is unchanged; spike097/098 need no new capture or rebuild
-for this metadata-only stage. Retained ROM/RSP evidence is preserved.
+- `cargo fmt --all -- --check`
+- `cargo clippy --locked --workspace --all-targets -- -D warnings`
+- `cargo test --locked --workspace` (688)
+- `python scripts/test_cli.py`
+- `python runtime/test_runtime.py`
+- spike096
+- `tools/progress.py --record` and `--check`
 
-Next: link-address native overlay lowering, exact first-entry byte checks,
-binding generations and invalidation, relocated execution against ares; then
-the fixed OoT blockers and native title/audio campaign. Whole-ROM and native
-OoT completion remain open. No GitHub Actions.
+The redundant closure clippy found was fixed, then clippy, fmt and the
+workspace tests were re-run on the final tree.
+
+ROMs, catalogs and maps stay local. Actions were not used. `native_complete`
+stays false.
