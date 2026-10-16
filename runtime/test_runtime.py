@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('spike096', ROOT / 'spikes/096-native-slice/run.py')
 A = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(A)
-OUT = ROOT / 'target/runtime-test'
+OUT = Path(os.environ.get('PLAID_RUNTIME_TEST_OUT', ROOT / 'target/runtime-test')).resolve()
 
 Q, BUF, Q2, BUF2, SLOT = 0x80002000, 0x80002020, 0x80002040, 0x80002060, 0x80002080
 T1, T2, T4, T5 = 0x80002100, 0x80002300, 0x80002500, 0x80002700
@@ -270,6 +270,62 @@ def rsp_tasks(exe, cc):
         assert lines['words'] == expected, ([hex(w) for w in lines['words']], [hex(w) for w in expected])
     print('RSP tasks: boot and ucode IMEM snapshots saved, lowered and run natively; the ucode read the physical '
           'task, its DMA reached RDRAM and the SP event followed')
+
+
+def rsp_state_abi(exe, cc):
+    """Recompile one retained text after a host state layout change."""
+    directory = OUT / 'rsp-abi'
+    directory.mkdir(exist_ok=True)
+    image = directory / 'code.bin'
+    image.write_bytes(b''.join(w.to_bytes(4, 'big') for w in
+                              [A.addiu(A.t0, A.zero, 42), A.sw(A.t0, 0, A.zero), V.BREAK]))
+    lowered = directory / 'code.c'
+    subprocess.run([str(exe), 'lower-rsp', str(image), '0', '12', '0', 'abi', str(lowered), '--raw'], check=True)
+    harness = directory / 'host.c'
+    harness.write_text('''#include "rsp_state.h"
+#include <assert.h>
+extern const plaid_rsp_text plaid_rsp_text_abi;
+static plaid_rsp r;
+int main(void) {
+  memcpy(r.imem, plaid_rsp_text_abi.bytes, 12);
+  assert(plaid_rsp_text_abi.run(&r, 0) == 0);
+  assert(r.halted && r.broken && r.pc == 12 && r.fault == 0);
+  assert(r.r[8] == 42 && r.dmem[3] == 42);
+  for (unsigned i = 4; i < sizeof r.dmem; i++) assert(r.dmem[i] == 0);
+  return 0;
+}
+''')
+    header = (ROOT / 'crates/plaid-lower/src/rsp_state.h').read_text()
+    for changed in (False, True):
+        # Both TUs must see the new layout even when the lowered C is retained.
+        (directory / 'rsp_state.h').write_text(header.replace('  u32 pc, fault, fault_pc;',
+                                              '  u64 abi_test_padding[3];\n  u32 pc, fault, fault_pc;')
+                                             if changed else header)
+        native = directory / 'abi.exe'
+        subprocess.run([cc, '-O2', '-I', str(directory), str(lowered), str(harness), '-o', str(native)], check=True)
+        subprocess.run([str(native)], check=True, timeout=30)
+    print('RSP state ABI: retained lowered C agrees with the host before and after a layout change')
+
+
+def rsp_completion(exe, cc):
+    registry = OUT / 'rsp-incomplete-registry.c'
+    prefix = '#include "rsp_state.h"\nstatic const u8 bytes[4096] = {'
+    body = '''};
+static int incomplete(plaid_rsp *r, u32 pc) { (void)r; (void)pc; return 0; }
+static const plaid_rsp_text text = {0, 4096, bytes, incomplete, "incomplete"};
+const plaid_rsp_text *const plaid_rsp_texts[] = {&text, 0};
+'''
+    # Unknown code must also fail, rather than being hidden by --rsp-capture.
+    boot = b''.join(w.to_bytes(4, 'big') for w in BOOT_WORDS)
+    for data, reason in ((bytes(4), 'unlowered RSP code'),
+                         (boot, 'RSP task returned without halting')):
+        registry.write_text(prefix + ','.join(map(str, data)) + body)
+        native = build(exe, cc, 'rsp-incomplete', RSP_PROGRAM, RSP_RUNTIME,
+                       ['-DPLAID_RSP', '-I', str(ROOT / 'crates/plaid-lower/src'), str(registry)])
+        run = subprocess.run([str(native), '--rsp-capture', '1', str(OUT)],
+                             capture_output=True, text=True, timeout=30)
+        assert run.returncode == 1 and reason in run.stdout, (run.stdout, run.stderr)
+    print('RSP capture refuses unknown code and a text returning success without halting')
 
 
 def rsp_graphics(exe, cc):
@@ -521,6 +577,8 @@ def main():
     graphics_bridge(exe, cc)
     save_file(exe, cc)
     rsp_tasks(exe, cc)
+    rsp_state_abi(exe, cc)
+    rsp_completion(exe, cc)
     rsp_graphics(exe, cc)
     audio_dma(exe, cc)
     rcp_io(exe, cc)

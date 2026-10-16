@@ -1142,7 +1142,6 @@ static void rsp_task(void) {
   rsp.interrupt_on_break = 1; rsp.single_step = 0; rsp.broken = 0; rsp.halted = 0;
   if (capture) rsp_save("before");
   rc = rsp_run(rsp.pc);
-  if (capture) { rsp_save("after"); finish(0, "RSP task captured"); }
   if (rc < 0) {
     char name[64];
     u32 h = 2166136261u, i;
@@ -1157,6 +1156,8 @@ static void rsp_task(void) {
     fprintf(stderr, "RSP fault %u at IMEM %03x\n", rsp.fault, rsp.fault_pc);
     finish(1, "RSP fault");
   }
+  if (!rsp.halted) finish(1, "RSP task returned without halting");
+  if (capture) { rsp_save("after"); finish(0, "RSP task captured"); }
 }
 #endif
 /* osSpTaskLoad as libultra does it for the RSP: the task, with its pointers

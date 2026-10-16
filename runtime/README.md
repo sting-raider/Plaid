@@ -63,8 +63,11 @@ python runtime/rsp_texts.py target/debug/plaid snapshots/ texts/   # prints the 
   snapshot, and its code runs a word only while IMEM still holds that word.
   When control reaches a word no linked text holds, the runtime fails closed.
   With `--rsp-dump <dir>` it saves that IMEM as a new snapshot first.
-  `runtime/rsp_texts.py` lowers the snapshots and writes the registry, so the
-  next build runs further. RSP DMA into RDRAM passes the same write checks as
+  Lowered RSP C includes the same `rsp_state.h` as its host; retained generated
+  code must be compiled with `-I crates/plaid-lower/src`. It does not embed a
+  private copy of the runtime state layout. `runtime/rsp_texts.py` lowers the
+  snapshots and writes the registry, so the next build runs further.
+  RSP DMA into RDRAM passes the same write checks as
   the CPU's runtime writes. `--rsp-capture <n> <dir>` saves the state before
   and after the n-th RSP task, for the ares comparison in
   `spikes/098-rsp-task`. Without `PLAID_RSP`, these tasks complete at once.
@@ -117,6 +120,9 @@ The script runs each game validation visibly, accepts `--press` for scripted
 controller input, and writes a `Play <name> native RSP.cmd` launcher beside the
 window executable. The launcher supplies the ROM and save paths and has no time
 limit or automated input. The earlier HLE executable has a separate filename.
+Add `--require-audio` to reject a validation run whose `validation.wav` is
+empty or silent. Allow enough time for the game to start playing sound.
+
 Objects are cached by source, headers, flags and compiler identity; a failed
 rebuild cannot mark an old object current. `python scripts/test_native.py`
 checks dependency invalidation and failed builds.

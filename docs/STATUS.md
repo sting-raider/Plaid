@@ -42,6 +42,12 @@ bindings (ADR-0187), an erased-FlashRAM startup now passes the former heap-overl
 fault at VI 3188 and reaches VI 5358 in a visible 90-second run, with no fault.
 Overlay loader lifetimes remain assumed; no assumption is retired.
 
+MM audio is restored (ADR-0189): lowered RSP C shares the host's state header,
+and task completion must halt before capture acceptance. A visible 60-second
+run produces PCM peak 32569; SM64 remains audible at peak 28116. A real MM
+audio task matches pinned ares in all captured state and memory. Native
+validation can require non-silent PCM with `--require-audio`.
+
 F-Zero X's shared executable slots now have separate, content-checked
 alternates (ADR-0185). From the ROM alone it discovers 27,621 blocks and is
 CLOSED under the address-taken scope, with zero scoped blockers. A synthetic

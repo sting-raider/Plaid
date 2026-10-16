@@ -15,6 +15,13 @@ const BREAK: u32 = 13;
 const JR_T0: u32 = 8 << 21 | 8;
 
 #[test]
+fn generated_text_uses_the_runtime_state_header() {
+    let c = c(&[BREAK], 0);
+    assert!(c.starts_with("#include \"rsp_state.h\"\n"));
+    assert!(!c.contains("typedef struct plaid_rsp {"));
+}
+
+#[test]
 fn register_jumps_dispatch_only_over_the_text() {
     let c = c(&[JR_T0, 0, BREAK], 0x80);
     for pc in [0x80, 0x84, 0x88] {

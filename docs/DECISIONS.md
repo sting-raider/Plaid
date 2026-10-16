@@ -5482,3 +5482,33 @@ Pinned N64ModernRuntime's explicit unload/replacement mapping was read for
 design comparison only; no third-party code was copied or linked. Measurements,
 source coordinates and local reproduction commands are in
 `research/mm-heap-overlay.md`; ROMs, RAM dumps and generated output stay ignored.
+
+## ADR-0189: Lowered RSP code shares the host state layout
+
+Context: MM submitted audio tasks at the expected rate but emitted only zero
+PCM. Its retained generated C embedded the pre-DPC `plaid_rsp` layout while the
+host runtime used the current layout. Recompiling the stale generated text
+preserved the mismatch. Task submission counts hid premature returns, and
+`--rsp-capture` reported success before checking task completion.
+
+Decision: generated RSP C includes canonical `rsp_state.h`, just like the host
+and registry. The compiler command must supply that header. A successful RSP
+task must halt; capture acceptance follows fault/unknown-code/completion checks.
+Native validation accepts `--require-audio`, which writes validation.wav and
+rejects empty or zero PCM without making game-specific assumptions about when
+sound should begin.
+
+Verification: a retained synthetic text, separately compiled from its host,
+passes register/PC/DMEM/halt/fault checks both before and after a header-only
+layout mutation; the old generator fails that mutation. Unknown and incomplete
+RSP tasks fail even when captured. Three synthetic WAV cases check silent,
+empty and signed stereo output. Spike097: 27 positive and four negative cases
+match pinned ares. Final visible MM: 60 seconds, PCM peak 32569, fault 0;
+SM64: 15 seconds, peak 28116, fault 0. MM task 600 matches all captured RSP state
+and RDRAM/IMEM/DMEM after 68,417 ares instructions (4,641 changed RDRAM bytes).
+No vector/DMA semantics, AI address translation, guest instructions or closure
+assumptions changed. No reference code reused. Evidence: research/mm-audio.md.
+
+Local gate: formatting, strict workspace/all-target Clippy, 714 Rust tests
+(1 ignored), CLI and full runtime tests pass. See the research note for the
+shared-checkout ownership boundary and exact local gate logs.
