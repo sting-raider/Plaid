@@ -11,6 +11,8 @@ typedef struct plaid_rsp {
   u8 *rdram; u32 rdram_size;
   /* the host's check before an RSP DMA writes RDRAM bytes [p, p + size); nonzero refuses */
   int (*rdram_write)(u32 p, u32 size);
+  /* Optional synchronous DPC bus. Nonzero refuses an unsupported access. */
+  int (*dpc)(u32 reg, u32 *value, int write);
   u32 pc, fault, fault_pc;
   /* SP DMA: the last transfer's registers as ares reads them back (bit 12: IMEM) */
   u32 dma_mem, dma_dram, dma_length, dma_count, dma_skip;

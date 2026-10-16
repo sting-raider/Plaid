@@ -1,6 +1,6 @@
 # Status
 
-Last updated 2026-10-16. This page is the current state in one screen. The
+Last updated 2026-10-17. This page is the current state in one screen. The
 per-cluster history it replaces (spikes 001-095, every receipt summary) is
 preserved verbatim in [`STATUS-LOG.md`](STATUS-LOG.md). Priorities live in
 [`NEXT.md`](NEXT.md); decisions in [`DECISIONS.md`](DECISIONS.md).
@@ -43,7 +43,12 @@ F-Zero X's shared executable slots now have separate, content-checked
 alternates (ADR-0185). From the ROM alone it discovers 27,621 blocks and is
 CLOSED under the address-taken scope, with zero scoped blockers. A synthetic
 overwrite-and-rebind sequence matches pinned ares; tampered and ambiguous
-text fault. Runtime and renderer acceptance are the next integration.
+text fault. With native graphics microcode and RT64 raw RDP output
+(ADR-0186), it runs through a race with vehicle markings and shading,
+input, saves and audio.
+Visible 65-second runs have no runtime fault; the build and launcher are
+reproducible with `native.py --rt64 --rsp-gfx`. Whole-ROM remains OPEN
+with 2,995 blockers; the scoped result still has 14 assumptions.
 
 ## By layer
 
@@ -53,7 +58,7 @@ text fault. Runtime and renderer acceptance are the next integration.
 | Closure proof (solver) | Fail-closed whole-ROM solver; assumption scopes `DeclaredStaticImages` and `DeclaredStaticImagesGuardedRam` reach CLOSED for synthetic programs | Whole-ROM closure without assumptions remains open | `tests/pipeline.rs`, ADR-0126 |
 | Executable provenance | PI/SP/PIF/cache/TLB/RSP byte lineage over pinned ares histories; 20M-fetch commercial boot prefix retained locally | Paused by ADR-0125 until a milestone needs it | [`STATUS-LOG.md`](STATUS-LOG.md) |
 | Native lowering | CLOSED map -> C; integer, COP1, checked calls/returns and native RSP scalar/vector code | Remaining system instructions | spikes096/097/098; ADR-0157..0169 |
-| Runtime and rendering | Plaid runtime + RT64: threads, timing, input, saves, native RSP tasks and live audio | An RT64 build of OoT; remaining runtime ABI assumptions | `runtime/test_runtime.py`; ADR-0158..0171 |
+| Runtime and rendering | Plaid runtime + RT64: threads, timing, input, saves, native RSP audio and graphics tasks | Runtime ABI/timing assumptions, additional devices and non-Windows hosts | `runtime/test_runtime.py`; ADR-0158..0186 |
 
 ## Real-ROM numbers
 

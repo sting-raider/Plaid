@@ -49,6 +49,19 @@ void run(std::function<void()> f) {
     wake.wait(l, [] { return idle; });
 }
 
+void sync_ram(const uint8_t *ram, const uint8_t *dirty_pages = nullptr) {
+    for (uint32_t page = 0; page < RamSize; page += 4096) {
+        if (dirty_pages && !dirty_pages[page / 4096]) continue;
+        for (uint32_t p = page; p < page + 4096; p += 4) {
+            if (std::memcmp(&seen[p], &ram[p], 4)) {
+                std::memcpy(&seen[p], &ram[p], 4);
+                uint32_t w = uint32_t(ram[p]) << 24 | uint32_t(ram[p + 1]) << 16 | uint32_t(ram[p + 2]) << 8 | ram[p + 3];
+                std::memcpy(&rdram[p], &w, 4);
+            }
+        }
+    }
+}
+
 void renderer() {
     RT64::Application::Core core{};
     core.window = {};  // RT64 opens its own window on this thread
@@ -134,15 +147,21 @@ __declspec(dllexport) int plaid_gfx_open(const uint8_t *rom_header) {
 // addresses are the OSTask's ucode, ucode_data and data_ptr.
 __declspec(dllexport) void plaid_gfx_task(const uint8_t *ram, uint32_t ucode, uint32_t ucode_data, uint32_t data_ptr) {
     run([=] {
-        for (uint32_t p = 0; p < RamSize; p += 4) {
-            if (std::memcmp(&seen[p], &ram[p], 4)) {
-                std::memcpy(&seen[p], &ram[p], 4);
-                uint32_t w = uint32_t(ram[p]) << 24 | uint32_t(ram[p + 1]) << 16 | uint32_t(ram[p + 2]) << 8 | ram[p + 3];
-                std::memcpy(&rdram[p], &w, 4);
-            }
-        }
+        sync_ram(ram);
         app->interpreter->loadUCodeGBI(ucode & 0x3FFFFFF, ucode_data & 0x3FFFFFF, true);
         app->processDisplayLists(rdram.data(), data_ptr & 0x3FFFFFF, 0, true);
+    });
+}
+
+// Raw RDP commands produced by lowered RSP microcode, including partial lists.
+__declspec(dllexport) void plaid_gfx_rdp(const uint8_t *ram, const uint8_t *commands, uint32_t size, const uint8_t *dirty_pages) {
+    run([=] {
+        sync_ram(ram, dirty_pages);
+        std::vector<uint32_t> words(size / 4);
+        for (uint32_t p = 0; p < size; p += 4)
+            words[p / 4] = uint32_t(commands[p]) << 24 | uint32_t(commands[p + 1]) << 16 |
+                uint32_t(commands[p + 2]) << 8 | commands[p + 3];
+        app->processDisplayLists(reinterpret_cast<uint8_t *>(words.data()), 0, size, false);
     });
 }
 

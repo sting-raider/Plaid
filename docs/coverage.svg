@@ -100,7 +100,7 @@
 <text x="22" y="858" class="t">Graphics microcode is executed (today RT64 renders display lists at a high level): assumed</text>
 <rect x="2" y="867" width="12" height="12" rx="2" fill="#db6d28"/>
 <text x="22" y="878" class="t">RSP tasks run asynchronously, as on hardware (today they complete synchronously): assumed</text>
-<text x="2" y="926" class="h">Milestones*: 51 verified, 17 partial of 73</text>
+<text x="2" y="926" class="h">Milestones*: 51 verified, 18 partial of 73</text>
 <rect x="2" y="938" width="11" height="11" fill="#2ea043"/>
 <text x="20" y="948" class="s">verified</text>
 <rect x="110" y="938" width="11" height="11" fill="#d29922"/>
@@ -109,8 +109,8 @@
 <text x="228" y="948" class="s">open</text>
 <text x="2" y="978" class="b">All milestones</text>
 <rect x="150.0" y="962" width="391.2" height="16" fill="#2ea043" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>All milestones: 51 verified</title></rect>
-<rect x="541.2" y="962" width="130.4" height="16" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>All milestones: 17 partial</title></rect>
-<rect x="671.6" y="962" width="38.4" height="16" fill="#6e7681" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>All milestones: 5 open</title></rect>
+<rect x="541.2" y="962" width="138.1" height="16" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>All milestones: 18 partial</title></rect>
+<rect x="679.3" y="962" width="30.7" height="16" fill="#6e7681" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>All milestones: 4 open</title></rect>
 <text x="720" y="977" class="t">51/73</text>
 <text x="2" y="1002" class="t">Discovery &amp; ProgramMap</text>
 <rect x="150.0" y="986" width="509.1" height="16" fill="#2ea043" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>Discovery &amp; ProgramMap: 10 verified</title></rect>
@@ -131,8 +131,7 @@
 <text x="720" y="1073" class="t">9/10</text>
 <text x="2" y="1098" class="t">Native Runtime</text>
 <rect x="150.0" y="1082" width="373.3" height="16" fill="#2ea043" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>Native Runtime: 6 verified</title></rect>
-<rect x="523.3" y="1082" width="124.4" height="16" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>Native Runtime: 2 partial</title></rect>
-<rect x="647.8" y="1082" width="62.2" height="16" fill="#6e7681" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>Native Runtime: 1 open</title></rect>
+<rect x="523.3" y="1082" width="186.7" height="16" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>Native Runtime: 3 partial</title></rect>
 <text x="720" y="1097" class="t">6/9</text>
 <text x="2" y="1122" class="t">Compatibility</text>
 <rect x="150.0" y="1106" width="356.4" height="16" fill="#2ea043" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>Compatibility: 7 verified</title></rect>

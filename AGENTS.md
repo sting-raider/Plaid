@@ -84,6 +84,7 @@ For each task:
 ## Local validation
 
 GitHub Actions is manual-only and is not the canonical gate for ordinary integrations.
+Keep native game validation windows visible, including runs with automated button presses.
 
 When production Rust changes are involved, run locally at minimum:
 

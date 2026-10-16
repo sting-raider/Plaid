@@ -103,6 +103,29 @@ gcc game.o target/rt64-shim/Release/plaid_rt64.dll -pthread -o target/rt64-shim/
 The executable must sit next to `plaid_rt64.dll`, `SDL2.dll`,
 `dxcompiler.dll` and `dxil.dll`; the build copies those DLLs there.
 
+### Native graphics microcode
+
+`python scripts/native.py <rom> --rt64 --rsp-gfx` runs graphics tasks through
+the same native RSP snapshot pipeline as audio (ADR-0186). It renders the
+microcode's raw RDP output with RT64, including DMEM command buffers and lists
+split across submissions. This handles graphics microcode variants that RT64's
+display-list HLE does not implement. There is no runtime instruction interpreter
+or JIT; missing microcode still stops the executable and is lowered before the
+next build.
+
+The script runs each game validation visibly, accepts `--press` for scripted
+controller input, and writes a `Play <name> native RSP.cmd` launcher beside the
+window executable. The launcher supplies the ROM and save paths and has no time
+limit or automated input. The earlier HLE executable has a separate filename.
+Objects are cached by source, headers, flags and compiler identity; a failed
+rebuild cannot mark an old object current. `python scripts/test_native.py`
+checks dependency invalidation and failed builds.
+
+DPC commands complete synchronously. Unknown ranges fault, and the native RSP
+word guards remain active. Snapshot collection is finite execution coverage,
+not a proof that every graphics microcode overlay has been found. A new mode
+can still stop at an unlowered snapshot; rebuild through the same pipeline.
+
 ## Tests
 
 `python runtime/test_runtime.py` runs a synthetic multi-thread program and
@@ -113,6 +136,13 @@ checks controller input, an EEPROM save kept across two runs, and an RSP
 task run through the snapshot protocol: two runs save the boot and ucode
 snapshots, and the third runs the task natively and checks its RDRAM output
 and the SP event.
+
+The native graphics contract uses a renderer stub and synthetic microcode to
+check CPU/RSP shared DPC registers, freeze/resume, DMEM wrap, RDRAM command bytes,
+CPU memory visibility and readable SP memory after a native task. Raw handle PI
+DMA is tested through the o32 ABI, including its stack argument, bounds and
+refused cartridge writes. `plaid_rt64_contract`, run by the renderer build,
+checks empty vertical tile loads and split raw commands without a GPU or ROM.
 
 It also checks AI DMA against a host-audio stub:
 - the FIFO refuses a third buffer;

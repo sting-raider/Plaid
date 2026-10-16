@@ -5,9 +5,9 @@
 <rect width="1200" height="1962" rx="18" fill="#0b1320"/>
 <rect width="1200" height="250" rx="18" fill="url(#header)"/>
 <text x="40" y="38" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">PLAID  /  ENGINEERING ATLAS</text>
-<text x="1160" y="38" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="400" text-anchor="end">Reviewed 2026-10-16</text>
+<text x="1160" y="38" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="400" text-anchor="end">Reviewed 2026-10-17</text>
 <text x="40" y="84" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="32" font-weight="700" text-anchor="start">The path from ROM to native gameplay</text>
-<text x="40" y="111" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="16" font-weight="400" text-anchor="start">Current frontier: retire the declared assumptions (milestone 5); OoT overlays run natively</text>
+<text x="40" y="111" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="16" font-weight="400" text-anchor="start">Current frontier: retire the declared assumptions (milestone 5); F-Zero X races with native graphics microcode</text>
 <rect x="40" y="136" width="262" height="96" rx="10" fill="#152538" stroke="#294052"/>
 <text x="58" y="171" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="27" font-weight="700" text-anchor="start">45,419</text>
 <text x="58" y="194" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="600" text-anchor="start">SM64 blocks CLOSED</text>
@@ -103,8 +103,8 @@
 <text x="568" y="663" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
 </g>
 <text x="60" y="938" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
-<text x="60" y="956" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Overlays run natively through a verified binding; load bases are found at</text>
-<text x="60" y="972" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">run time, not proven.</text>
+<text x="60" y="956" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Relocatable and shared-slot overlays run through verified bindings; the</text>
+<text x="60" y="972" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">complete executable universe and load lifetimes remain unproved.</text>
 <rect x="612" y="304" width="548" height="678" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
 <text x="632" y="334" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">02</text>
 <text x="666" y="335" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Executable Provenance</text>
@@ -385,10 +385,9 @@
 <rect x="40" y="1448" width="548" height="418" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
 <text x="60" y="1478" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">05</text>
 <text x="94" y="1479" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Native Runtime</text>
-<text x="60" y="1504" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">6 integrated   /   2 partial   /   1 open</text>
+<text x="60" y="1504" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">6 integrated   /   3 partial   /   0 open</text>
 <rect x="60" y="1518" width="338.6666666666667" height="4" rx="0" fill="#58d5ab" stroke="none"/>
-<rect x="398.6666666666667" y="1518" width="112.88888888888889" height="4" rx="0" fill="#ffc66d" stroke="none"/>
-<rect x="511.55555555555554" y="1518" width="56.44444444444444" height="4" rx="0" fill="#a9b8ca" stroke="none"/>
+<rect x="398.6666666666667" y="1518" width="169.33333333333334" height="4" rx="0" fill="#ffc66d" stroke="none"/>
 <g class="milestone">
 <title>Native Runtime: Declared runtime-function boundary (ADR-0129) (verified)</title>
 <text x="60" y="1547" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">✓</text>
@@ -438,13 +437,14 @@
 <text x="568" y="1729" fill="#58d5ab" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">DONE</text>
 </g>
 <g class="milestone">
-<title>Native Runtime: Native launch/cache packaging (open)</title>
-<text x="60" y="1755" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">○</text>
+<title>Native Runtime: Native launch/cache packaging (partial)</title>
+<text x="60" y="1755" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700" text-anchor="start">◐</text>
 <text x="83" y="1755" fill="#d7e4f3" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="400" text-anchor="start">Native launch/cache packaging</text>
-<text x="568" y="1755" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">OPEN</text>
+<text x="568" y="1755" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="end">PARTIAL</text>
 </g>
 <text x="60" y="1822" fill="#ffc66d" font-family="Segoe UI,Arial,sans-serif" font-size="10" font-weight="700" text-anchor="start">REMAINING</text>
-<text x="60" y="1840" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Other saves and controllers, packaging, non-Windows hosts.</text>
+<text x="60" y="1840" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">Per-ROM native launchers and object caching work on Windows; distribution,</text>
+<text x="60" y="1856" fill="#a9b8ca" font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="400" text-anchor="start">non-Windows hosts, other saves and controllers remain.</text>
 <rect x="612" y="1448" width="548" height="418" rx="12" fill="#111e2f" stroke="#2a3b4f"/>
 <text x="632" y="1478" fill="#78dcca" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="700" text-anchor="start">06</text>
 <text x="666" y="1479" fill="#f4f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="20" font-weight="700" text-anchor="start">Compatibility</text>

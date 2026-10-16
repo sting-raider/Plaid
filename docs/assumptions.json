@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "measured": "2026-10-16",
+  "measured": "2026-10-17",
   "command": "plaid solve <rom> <map> [scope]",
   "singletons": [
     "dynamic_effect_outside_scope",
@@ -123,6 +123,48 @@
         {"scope": "--guarded-ram", "status": "OPEN", "blockers": 891, "assumptions": 13, "note": "all unresolved_indirect_site"},
         {"scope": "--address-taken", "status": "CLOSED", "blockers": 0, "assumptions": 14, "note": "no hand-written input (ADR-0183)"}
       ]
+    },
+    {
+      "id": "fzerox",
+      "name": "F-Zero X (USA), inferred shared-slot alternates",
+      "map": "target/native/fzerox/map.json (scripts/native.py)",
+      "blocks": 27621,
+      "indirect_sites": 1974,
+      "whole_rom": {
+        "status": "OPEN",
+        "by_class": {
+          "dynamic_effect_outside_scope": 1,
+          "exception_or_unsupported_instruction": 422,
+          "pointer_table_immutability_unproven": 120,
+          "pointer_table_target_identity_unproven": 120,
+          "runtime_boundary_outside_scope": 60,
+          "unmapped_target": 131,
+          "unmodeled_exception_paths": 1,
+          "unproven_executable_universe": 1,
+          "unproven_executable_write_policy": 1,
+          "unproven_load_overlay_policy": 1,
+          "unproven_rsp_policy": 1,
+          "unresolved_direct_target": 162,
+          "unresolved_indirect_site": 1973,
+          "unsupported_execution_modes": 1
+        }
+      },
+      "scopes": [
+        {
+          "scope": "--guarded-ram",
+          "status": "OPEN",
+          "blockers": 44,
+          "assumptions": 13,
+          "note": "inferred shared-slot alternates (ADR-0185)"
+        },
+        {
+          "scope": "--address-taken",
+          "status": "CLOSED",
+          "blockers": 0,
+          "assumptions": 14,
+          "note": "inferred shared-slot alternates (ADR-0185)"
+        }
+      ]
     }
   ],
   "assumptions": [
@@ -157,7 +199,7 @@
     "--loads files for executable loads, written by hand (SM64: 2, OoT: 2; Majora's Mask and F-Zero X: none). Without a file table, infer-loads finds segments from ROM ranges named in code; on SM64 it finds the engine segment but not goddard (ADR-0184)",
     "SM64 function identification uses a local decomp map",
     "RSP microcode comes from IMEM snapshots taken by running the game",
-    "Graphics are drawn by RT64 from display lists (high-level emulation)",
+    "Graphics use RT64 display-list HLE by default; --rsp-gfx executes compiled graphics microcode and gives its raw RDP commands to RT64 (ADR-0186)",
     "libultra runs as a host runtime (HLE)"
   ]
 }
