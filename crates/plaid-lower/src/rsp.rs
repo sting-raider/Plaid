@@ -7,7 +7,6 @@
 //! (DMA can rewrite IMEM); anything else leaves the text for the host to
 //! pick another. Semantics follow pinned ares (`ares/n64/rsp`).
 
-const STATE: &str = include_str!("rsp_state.h");
 const PRELUDE: &str = include_str!("rsp_prelude.h");
 const VECTOR_UNIT: &str = include_str!("rsp_vu.h");
 
@@ -286,7 +285,7 @@ pub fn lower_rsp(text: &[u8], imem: u32, name: &str) -> Result<LoweredRsp, Strin
         text.len()
     );
     Ok(LoweredRsp {
-        c: format!("{STATE}{PRELUDE}{VECTOR_UNIT}\n{out}"),
+        c: format!("#include \"rsp_state.h\"\n{PRELUDE}{VECTOR_UNIT}\n{out}"),
         stubs,
     })
 }

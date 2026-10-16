@@ -278,7 +278,8 @@ def windows():
                         str(OUT / f'{name}.c'), '--raw'], check=True)
         out = OUT / f'{name}-native.exe'
         subprocess.run([cc, '-O2', '-std=c99', '-Wall', '-Werror', '-Wno-unused-label', '-Wno-unused-function',
-                        f'-DPLAID_RSP_LOWERED="{name}.c"', '-I', str(OUT), str(HERE / 'harness.c'), '-o', str(out)],
+                        f'-DPLAID_RSP_LOWERED="{name}.c"', '-I', str(OUT),
+                        '-I', str(ROOT / 'crates/plaid-lower/src'), str(HERE / 'harness.c'), '-o', str(out)],
                        check=True)
         native[name] = subprocess.run([str(out), str(OUT / f'{name}.imem'), str(OUT / 'dmem.bin'), hex(IMEM)],
                                       capture_output=True, text=True)

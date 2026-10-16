@@ -25,6 +25,8 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from native_audio import audio_peak
+
 ROOT = Path(__file__).resolve().parents[1]
 SIGNATURES = ROOT / '.refs/n64sym/src/builtin_signatures.sig'
 RT64 = ROOT / 'target/rt64-shim/Release'
@@ -64,6 +66,7 @@ def main():
     ap.add_argument('--rt64', action='store_true')
     ap.add_argument('--rsp-gfx', action='store_true', help='run lowered graphics microcode; requires --rt64')
     ap.add_argument('--press', action='append', default=[], help='runtime button press, e.g. 0x1000@300:4')
+    ap.add_argument('--require-audio', action='store_true', help='reject a validation run with empty or silent PCM')
     ap.add_argument('--seconds', type=float, default=60, help='length of each RSP-loop run')
     a = ap.parse_args()
     if a.rsp_gfx and not a.rt64:
@@ -147,6 +150,8 @@ def main():
             command.append('--rsp-gfx')
         for press in a.press:
             command.extend(['--press', press])
+        if a.require_audio:
+            command.extend(['--wav', str(out / 'validation.wav')])
         r = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, errors='replace', timeout=a.seconds + 60)
         stops = [line for line in r.stdout.splitlines() if line.startswith('{"stop"')]
         print(stops[-1][:400] if stops else r.stderr[-400:])
@@ -156,6 +161,11 @@ def main():
             break
     else:
         sys.exit('RSP snapshot limit reached; executable is not accepted')
+    if a.require_audio:
+        try:
+            print('audio peak:', audio_peak(out / 'validation.wav'))
+        except ValueError as error:
+            sys.exit(str(error) + '; executable is not accepted')
     if a.rt64:
         launcher = RT64 / f'Play {name}{" native RSP" if a.rsp_gfx else ""}.cmd'
         play = [str(window_exe), '--rom', str(rom), *map(str, saves), '--stop-at', 'none']
