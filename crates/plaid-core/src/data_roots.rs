@@ -259,23 +259,45 @@ pub fn discover_address_taken(
         .into_iter()
         .filter(|a| !runtime_entries.contains(a))
         .collect();
+    // each round starts from the last round's roots, so it does not repeat
+    // the indirect passes that found them
+    let mut seeds: BTreeSet<GuestAddr> = BTreeSet::new();
     loop {
-        let roots: Vec<_> = entries.iter().chain(&taken).copied().collect();
-        let mut d = crate::pipeline::discover_image_with_runtime(
+        let roots: Vec<_> = entries
+            .iter()
+            .chain(&taken)
+            .chain(&seeds)
+            .copied()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        // return certificates add no roots, so they label only the last round
+        let mut d = crate::pipeline::discover_labelled(
             rom.clone(),
             image,
             &roots,
             runtime,
             evidence.clone(),
             budget,
+            false,
         )?;
         let before = taken.len();
+        seeds.extend(
+            d.map
+                .entries
+                .keys()
+                .filter(|a| a.image == image.base.image && a.generation == image.base.generation)
+                .map(|a| a.pc),
+        );
         taken.extend(
             block_constants(image, &d.map)
                 .into_keys()
                 .filter(|a| !runtime_entries.contains(a)),
         );
         if taken.len() == before {
+            if !d.map.unresolved.iter().any(|u| u.kind == "resource_limit") {
+                d.map = crate::returns::annotate(&d.map, image)?;
+            }
             let id = format!("address-taken:{}", rom.sha256);
             d.map.evidence.insert(
                 id.clone(),

@@ -4941,3 +4941,46 @@ Verifier: `runtime/test_runtime.py` `rcp_io` covers DMEM boot bytes,
 DMEM write/read, idle status, masked timing, open bus and ROM words. It
 also checks that an SRAM read and a cached RCP access each fault 1. The
 existing RSP-task test passes over the boot DMEM image.
+
+## ADR-0178: Discovery labels returns once and resumes rounds from their roots
+
+Status: accepted. Milestone 5 tooling (rule 8, speed).
+
+Context: composing OoT's 469 catalog overlays at their link addresses
+(ADR-0172) gives a 138,829-block map. Discovering it took 459 s. A profile
+showed three costs:
+- the address-taken loop (ADR-0153) labelled return certificates after
+  every round, although they add no roots;
+- each round restarted the indirect fixed point from its entries;
+- each return certificate scanned every block and every call edge.
+
+Decision, behaviour-preserving:
+- `pipeline::discover_labelled(.., label)`: the address-taken rounds run
+  unlabelled. Return certificates label the final round once, unless the
+  budget ran out, as before.
+- Each round is seeded with the previous round's roots, so it does not
+  repeat the indirect passes that found them. Roots only grow (the inner
+  loop already keeps candidates across passes), so the fixed point is the
+  same.
+- `returns::Closure` keeps the map's `MapIndex` and indexes calls by
+  callee. The containing block is `MapIndex::containing(..).last()`, the
+  first containing block in map order, exactly as the linear scan found
+  it. `Closure::certificate` drops its now-redundant map parameter.
+- The indirect fixed point indexes the previous pass's sites by address
+  instead of scanning them per site.
+
+Maps and solve reports are byte-identical for SM64, for OoT's fixed image,
+for OoT with 50 overlays and for OoT with all 469.
+
+| Run (release) | Before | After |
+|---|---|---|
+| SM64 discover | 30.7 s | 6.7 s |
+| OoT discover | 8.5 s | 3.3 s |
+| OoT + 469 overlays discover | 459 s | 44 s |
+| OoT + 469 overlays solve | 19.3 s | 4.5 s |
+| SM64 solve | 2.1 s | 1.2 s |
+
+With the overlays composed, `solve --address-taken` reports 29 blockers:
+28 unresolved indirect sites and one decoded runtime function. That
+measurement is local. Overlays are not executed yet: that is ADR-0172's
+next stage.
