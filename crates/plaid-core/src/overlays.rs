@@ -1,6 +1,11 @@
 //! ROM-owned overlay descriptions. Recognition is structural, not title/address based.
 //! A catalog is a discovery input; it does not certify reachability or a load lifetime.
-use crate::{declared_loads::yaz0, rom::sha256};
+use crate::{
+    GuestAddr,
+    declared_loads::{DeclaredLoad, LoadEncoding, yaz0},
+    program::{EvidenceRefs, GuestRange, RomOffset},
+    rom::sha256,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -319,6 +324,43 @@ pub fn discover(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> 
     Ok(found.into_values().collect())
 }
 
+/// The executable overlays of a catalog as relocatable loads at their link
+/// addresses, in link order: each file's bytes (text, data, rodata and the
+/// relocation trailer) as the table stores them. Data-only overlays and
+/// overlays sharing a link range are left out; their code, if any, stays
+/// outside the image and fails closed.
+pub fn loads(overlays: &[Overlay], evidence: &EvidenceRefs) -> Vec<DeclaredLoad> {
+    let mut out: Vec<DeclaredLoad> = Vec::new();
+    let mut sorted: Vec<&Overlay> = overlays.iter().filter(|o| o.layout.text > 0).collect();
+    sorted.sort_by_key(|o| o.link);
+    for (i, o) in sorted.iter().enumerate() {
+        let end = u64::from(o.link) + u64::from(o.layout.file_size + o.layout.bss);
+        let clash = |p: &&Overlay| {
+            u64::from(p.link) < end
+                && u64::from(o.link)
+                    < u64::from(p.link) + u64::from(p.layout.file_size + p.layout.bss)
+        };
+        if sorted[..i].iter().chain(&sorted[i + 1..]).any(clash) {
+            continue;
+        }
+        out.push(DeclaredLoad {
+            destination: GuestRange {
+                start: GuestAddr(o.link),
+                size: o.layout.file_size,
+            },
+            source: RomOffset(u64::from(o.file.rom_start)),
+            encoding: if o.file.rom_end == 0 {
+                LoadEncoding::Raw
+            } else {
+                LoadEncoding::Yaz0
+            },
+            evidence: evidence.clone(),
+            relocatable: true,
+        });
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -443,6 +485,27 @@ mod tests {
             assert_eq!(file_table(&rom).unwrap().0, table_at);
             put(&mut image, 24, 0x80800004);
             assert!(discover(&rom, &image).is_err());
+            if table_at == 0x40 {
+                loads_place_executable_overlays_at_their_link_addresses(&catalog);
+            }
         }
+    }
+
+    fn loads_place_executable_overlays_at_their_link_addresses(catalog: &[Overlay]) {
+        let refs: EvidenceRefs = ["overlays:test".to_string()].into();
+        let [load] = loads(catalog, &refs).try_into().unwrap();
+        assert_eq!(load.destination.start, GuestAddr(0x80800000));
+        assert_eq!(load.destination.size, catalog[0].layout.file_size);
+        assert_eq!(load.source, RomOffset(0x400));
+        assert_eq!(load.encoding, LoadEncoding::Raw);
+        assert!(load.relocatable && load.evidence == refs);
+        // an overlay sharing its link range makes both ambiguous
+        let mut twin = catalog[0].clone();
+        twin.link += 4;
+        assert!(loads(&[catalog[0].clone(), twin], &refs).is_empty());
+        // a data-only overlay supplies no code
+        let mut data = catalog[0].clone();
+        data.layout.text = 0;
+        assert!(loads(&[data], &refs).is_empty());
     }
 }

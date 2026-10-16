@@ -4984,3 +4984,39 @@ With the overlays composed, `solve --address-taken` reports 29 blockers:
 28 unresolved indirect sites and one decoded runtime function. That
 measurement is local. Overlays are not executed yet: that is ADR-0172's
 next stage.
+
+## ADR-0179: Discovery places the ROM's relocatable overlays at their link addresses
+
+Status: accepted. Milestone 5, ADR-0172 stage 2a.
+
+Context: ADR-0172 catalogs a ROM's relocatable overlays from its own file
+and overlay tables. Their code was still outside every discovered image.
+
+Decision:
+- `plaid discover … --overlays` builds the image with declared loads as
+  before, then catalogs overlay tables in that image with
+  `overlays::discover`, without title, table address or file index inputs.
+- `overlays::loads` turns each executable overlay into a `DeclaredLoad` at
+  its link address: the file bytes as the table stores them, raw or Yaz0
+  per its table entry, marked `relocatable`. Then the image is composed
+  again.
+- Data-only overlays supply no code and are left out. So are overlays
+  whose link ranges collide, since a link address must name one file.
+- The loads carry `plaid-overlay-catalog/v0` evidence over the catalog's
+  hash. `relocatable` is omitted when false, so existing maps and load
+  files are unchanged.
+- Link-address code is analysis only. The game runs an overlay wherever
+  it loads and relocates it. Lowering must bind each overlay at run time
+  (ADR-0172) before any of its code runs. Until then `lower-map` refuses
+  such maps, because they are not CLOSED.
+
+Measurement (OoT 1.2, local): 468 of 469 overlays placed in 43 s, giving
+138,829 blocks. `solve --address-taken` reports 29 blockers:
+- 28 jump tables whose GCC scheduling the ADR-0140 recognizer does not
+  accept. Examples: the scale inside the compare-to-branch interval, a
+  branch-likely in that interval, the table base in the guard's delay slot.
+- one overlay function whose bytes match a runtime signature.
+
+Verifier: the `overlays` unit test checks that `loads` places an
+overlay at its link address from its table entry, that colliding link
+ranges drop both overlays, and that data-only overlays supply nothing.
