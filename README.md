@@ -16,14 +16,14 @@ Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. 
 
 **The goal:** a commercial ROM that is `CLOSED` over the whole ROM with **no assumptions**, so that every instruction, jump and overlay in it is accounted for, and the native build is proven to match the reference.
 
-**Today:** two games run or boot natively, but each result still rests on a list of assumptions, and the whole-ROM proof is open for both.
+**Today:** three games run natively, to different points, but each result still rests on a list of assumptions, and the whole-ROM proof is open for all of them. Exact counts are in the generated table below.
 
-| | Super Mario 64 (USA) | Ocarina of Time (USA 1.2) |
-| --- | --- | --- |
-| Code discovered | ✅ 99.03% of functions | ✅ fixed image and 468 overlays |
-| `CLOSED` under declared assumptions | ✅ 45,419 blocks, 15 assumptions | ✅ fixed image, 29,542 blocks, 13 assumptions; ✅ with all 468 overlays, 154,414 blocks, 14 assumptions |
-| Runs natively | ✅ full-speed gameplay with input, saves, audio | 🟨 runs through its relocated overlays to its first graphics task |
-| `CLOSED` whole-ROM, no assumptions | ⬜ 4,820 blockers, 0 of 16 assumptions retired | ⬜ 3,105 blockers fixed image, 14,917 with overlays |
+| | Super Mario 64 (USA) | Ocarina of Time (USA 1.2) | Majora's Mask (USA) |
+| --- | --- | --- | --- |
+| Code discovered | ✅ 99.03% of functions | ✅ fixed image and 468 overlays | ✅ with overlays, no hand-written input |
+| `CLOSED` under declared assumptions | ✅ | ✅ fixed image and with overlays | ✅ with overlays |
+| Runs natively | ✅ full-speed gameplay with input, saves, audio | 🟨 title screen and file select, with RT64 | 🟨 plays its intro, then stops at a relocated heap overlay |
+| `CLOSED` whole-ROM, no assumptions | ⬜ 0 of 16 assumptions retired | ⬜ | ⬜ |
 
 The chart and ledger below are generated from measurements. Nothing here is a completion percentage: a bar reaches zero only when the whole ROM closes with no assumption.
 
@@ -92,8 +92,8 @@ Assumptions behind the SM64 `--address-taken` result. "Fault n" means the native
 
 Inputs given by hand, outside the solver:
 
-- Code segment ROM offset, address, size and entry point, given by hand
-- --loads files for executable loads, written by hand (SM64: 2, OoT: 2)
+- Code segment ROM offset, address, size and entry point, given by hand for SM64 and OoT; inferred from the ROM for Majora's Mask (ADR-0183)
+- --loads files for executable loads, written by hand (SM64: 2, OoT: 2; Majora's Mask: none)
 - SM64 function identification uses a local decomp map
 - RSP microcode comes from IMEM snapshots taken by running the game
 - Graphics are drawn by RT64 from display lists (high-level emulation)
@@ -172,10 +172,9 @@ Milestone 4 ran Super Mario 64 natively: the lowered game is linked with the run
 
 ## Per-game inputs and known gaps
 
-Nothing in the compiler or the runtime is keyed to SM64: no game names, addresses or patches. The runtime implements libultra functions by name, and RT64 draws any game's display lists. A game does need a few inputs, given on the command line or in JSON:
+Nothing in the compiler or the runtime is keyed to SM64: no game names, addresses or patches. The runtime implements libultra functions by name, and RT64 draws any game's display lists. A game needs a few inputs. `scripts/native.py <rom>` runs the whole pipeline and infers the first two from the ROM alone when it has a file table (ADR-0183, as for Majora's Mask); SM64 and OoT's earlier builds declared them by hand:
 
-- **Where its code is**: the main segment's ROM offset, address, size and entry point.
-- **Executable loads** (`--loads`): code segments copied at run time, such as SM64's engine and goddard segments, with their ROM ranges and addresses. They are declared by hand today. The native build checks their bytes when they are loaded and faults on a mismatch.
+- **Where its code is and what loads where**: the boot and code segments as executable loads (`plaid infer-loads`, or `--loads` by hand), with their ROM ranges and addresses. A ROM with no file table takes `--loads`. The native build checks their bytes when they are loaded and faults on a mismatch.
 - **Which functions are libultra** (`plaid identify`): n64sym signatures, or a symbol map with `--symbols` when the game's SDK build is missing from n64sym's database. SM64 uses its decomp symbol map, which stays local. The map only names functions; it is not used to find code.
 - **The assumption scope**: for example `--address-taken` and `--fr0`. Every assumption is listed in the solver's report.
 
@@ -216,7 +215,7 @@ Plaid stands on other people's work. Each project below is pinned in [`refs.lock
 | [SDL](https://www.libsdl.org/) | audio output and keyboard input in the runtime | linked at run time | zlib |
 | Super Mario 64 decompilation project | a locally built symbol map, used to name three libultra functions and to score discovery recall | kept local; never committed or used to find code | CC0 |
 
-Thank you to the authors and maintainers of all of them. Super Mario 64, Ocarina of Time and Mario Party 2 are the property of their owners; Plaid is not affiliated with Nintendo.
+Thank you to the authors and maintainers of all of them. Super Mario 64, Ocarina of Time, Majora's Mask and Mario Party 2 are the property of their owners; Plaid is not affiliated with Nintendo.
 
 ## Disclaimer
 

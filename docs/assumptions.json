@@ -153,8 +153,8 @@
     {"name": "RSP tasks run asynchronously, as on hardware (today they complete synchronously)", "state": "assumed"}
   ],
   "hand_inputs": [
-    "Code segment ROM offset, address, size and entry point, given by hand",
-    "--loads files for executable loads, written by hand (SM64: 2, OoT: 2)",
+    "Code segment ROM offset, address, size and entry point, given by hand for SM64 and OoT; inferred from the ROM for Majora's Mask (ADR-0183)",
+    "--loads files for executable loads, written by hand (SM64: 2, OoT: 2; Majora's Mask: none)",
     "SM64 function identification uses a local decomp map",
     "RSP microcode comes from IMEM snapshots taken by running the game",
     "Graphics are drawn by RT64 from display lists (high-level emulation)",
