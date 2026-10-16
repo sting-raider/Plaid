@@ -21,6 +21,11 @@ fn after_return(image: &CodeImage, pc: GuestAddr) -> bool {
         pc.0.checked_sub(back)
             .and_then(|a| image.word(GuestAddr(a)))
     };
+    // after a hole: a declared load (a relocatable overlay's text, say)
+    // begins with a function (ADR-0181)
+    if word(4).is_none() {
+        return true;
+    }
     if word(8) == Some(JR_RA) {
         return true;
     }

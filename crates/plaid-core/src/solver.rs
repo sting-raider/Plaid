@@ -1149,8 +1149,27 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                     .into(),
             );
         }
-        if !map.load_images.is_empty() {
-            let count: usize = map.load_images.values().map(|spec| spec.loads.len()).sum();
+        let relocatable = map
+            .load_images
+            .values()
+            .flat_map(|spec| &spec.loads)
+            .filter(|l| l.relocatable)
+            .count();
+        if relocatable > 0 {
+            assumptions.push(format!(
+                "{relocatable} relocatable overlay(s) are lowered at their link addresses and run only through a run-time binding (ADR-0181): an indirect transfer to a real address binds the one overlay whose relocated bytes and zeroed BSS match RAM there byte for byte (ambiguity or a mismatch aborts, fault 3); relocated immediates are read from the bound bytes and return addresses are the bound copy's; a store or runtime write into bound text revokes the binding, so code entered afterwards aborts (fault 8), and a store by the overlay's own code into its text aborts (fault 2)."
+            ));
+        }
+        if map
+            .load_images
+            .values()
+            .any(|spec| spec.loads.iter().any(|l| !l.relocatable))
+        {
+            let count: usize = map
+                .load_images
+                .values()
+                .map(|spec| spec.loads.iter().filter(|l| !l.relocatable).count())
+                .sum();
             assumptions.push(format!(
                 "{count} declared load(s) place their decoded bytes at their destinations before any of their code runs: a native artifact compares each load's executable bytes in RAM with the declared bytes on entry into its code and aborts on a mismatch (fault 8); a store or runtime write into a verified load's executable bytes revokes that verification, so the next entry compares again (ADR-0161), and a store by the load's own code into them aborts (fault 2)."
             ));

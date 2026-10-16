@@ -1396,7 +1396,8 @@ fn load_declarations(
             source: RomOffset(field("rom")?),
             encoding,
             evidence: [id.clone()].into(),
-            relocatable: false,
+            // placed at its link address; runs only through a binding (ADR-0181)
+            relocatable: l["relocatable"].as_bool().unwrap_or(false),
         });
     }
     loads.sort();
