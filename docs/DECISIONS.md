@@ -5437,3 +5437,48 @@ validation without a runtime fault. These are finite runs. IMEM discovery still
 comes from observed executions; DPC/RSP tasks complete synchronously; runtime,
 rendering and CPU assumptions remain. No assumption is retired and whole-ROM
 closure remains OPEN. `native_complete` stays false.
+
+
+## ADR-0187: inactive overlay rebinding with native-frame pins
+
+Context: an erased-save Majora's Mask startup calls `805665e0` from `800b6928`.
+The relocated overlay at that heap base verifies completely, but its identity
+is still bound at `8053b600`, whose unchanged bytes also verify. Text writes
+alone do not observe heap deallocation. Rejecting every second copy therefore
+faults even when no native frame can still use the previous binding.
+
+Decision:
+- Retain one selected binding per overlay identity. A uniquely verified copy
+  may replace an inactive binding. Verify the complete existing file/BSS
+  contract and check destination protection before releasing old protection.
+- Every generated overlay function has a wrapper that increments its active
+  native-frame count and decrements it on every normal or fault return. Nested
+  calls, tail paths, callbacks and suspended host threads retain the pin until
+  they return. A second base while any frame is active still faults.
+- Unknown/ambiguous targets, protected overlaps, executable write revocation,
+  full relocated-byte verification and the address-taken closure scope retain
+  their existing checks. No loader hook, game-specific address or runtime
+  instruction interpreter/JIT is introduced.
+- Deduplicate exact callee identities before function-body analysis, preserving
+  first occurrence. Repeated address-taken sites otherwise analyze the same
+  bodies millions of times. MM lowering fell from an unfinished approximately
+  449-second run to 14.215 seconds; four retained contracts emit identical C.
+
+Verification: the synthetic heap-copy contract selects B1 -> B2 -> B1 and
+matches pinned ares across PC, registers, FPU and observed RAM. Active-frame
+rebinding, changed text and protected destinations refuse; fault exits balance
+pins and runtime writes revoke the selected binding. Restoring the old rejection
+condition makes this regression fail. The retained overlay self-write and
+revoked-return cases still fault 2 and 8; shared-slot ambiguity still faults 3.
+Formatting, clippy, 710 Rust tests (one ignored), CLI and runtime gates pass.
+
+The rebuilt MM executable reaches VI 5358, 2401 graphics tasks and 4990
+audio tasks with fault 0 at the 90-second time limit stop, using a fresh erased
+FlashRAM copy and a visible RT64 window. This is finite native execution,
+not a loader-lifetime proof. Assumption 12 remains assumed; no assumption is
+retired, whole-ROM closure remains OPEN and native_complete remains false.
+
+Pinned N64ModernRuntime's explicit unload/replacement mapping was read for
+design comparison only; no third-party code was copied or linked. Measurements,
+source coordinates and local reproduction commands are in
+`research/mm-heap-overlay.md`; ROMs, RAM dumps and generated output stay ignored.

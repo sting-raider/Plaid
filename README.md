@@ -22,7 +22,7 @@ Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. 
 | --- | --- | --- | --- | --- |
 | Code discovered | ✅ 99.03% of functions | ✅ fixed image and 468 overlays | ✅ with overlays, no hand-written input | inferred shared-slot alternates |
 | `CLOSED` under declared assumptions | ✅ | ✅ fixed image and with overlays | ✅ with overlays | yes, address-taken scope |
-| Runs natively | ✅ full-speed gameplay with input, saves, audio | 🟨 title screen and file select, with RT64 | 🟨 plays its intro, then stops at a relocated heap overlay | races with compiled graphics microcode, input, saves and audio |
+| Runs natively | ✅ full-speed gameplay with input, saves, audio | 🟨 title screen and file select, with RT64 | 🟨 plays its intro; erased-save heap-overlay run reaches VI 5358 without a fault | races with compiled graphics microcode, input, saves and audio |
 | `CLOSED` whole-ROM, no assumptions | ⬜ 0 of 16 assumptions retired | ⬜ | ⬜ | open |
 
 The chart and ledger below are generated from measurements. Nothing here is a completion percentage: a bar reaches zero only when the whole ROM closes with no assumption.
@@ -87,7 +87,7 @@ Assumptions behind the SM64 `--address-taken` result. "Fault n" means the native
 | 9 | COP1 usable with FR=0 (declared with --fr0) | **unchecked** | assumed | model Status.CU1 and Status.FR, or prove them from the game's own writes |
 | 10 | COP1 stays in the modelled subset: no NaN, subnormal, out-of-range conversion or FPU exception | fault 7 | assumed | model FPU exceptions and the remaining operand classes |
 | 11 | Declared loads place their bytes before the code runs | fault 8 | assumed | derive the loads from the ROM instead of declaring them by hand |
-| 12 | Relocatable overlays run only where their relocated bytes verify (ADR-0181) | fault 2/3/8 | assumed | prove each overlay's load base and lifetime from the game's own loader |
+| 12 | Relocatable overlays run only where their relocated bytes verify; native frames pin each binding (ADR-0181/0187) | fault 2/3/8 | assumed | prove each overlay's load base and lifetime from the game's own loader |
 | 13 | libultra runtime functions are host-provided (HLE) | **unchecked** | assumed | differential-test each HLE function against the game's own libultra; only scenario tests exist today |
 | 14 | Three runtime names come only from a reference symbol map (osInitialize, osContInit, osEepromLongRead; ADR-0171) | **unchecked** | assumed | identify them from the ROM's own bytes |
 | 15 | Trapping arithmetic never overflows | fault 6 | assumed | model the Overflow exception |

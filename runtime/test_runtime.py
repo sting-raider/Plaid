@@ -527,6 +527,8 @@ def main():
     raw_pi_dma(exe, cc)
     from test_overlays import main as overlay_verifiers
     overlay_verifiers()
+    from test_heap_overlays import main as heap_contracts
+    heap_contracts()
     from test_slots import main as slot_contracts
     slot_contracts()
     dpc = OUT / 'dpc-contract.exe'
