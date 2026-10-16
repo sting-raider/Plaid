@@ -26,6 +26,21 @@ pub fn discover_image_with_runtime(
     evidence: Option<(String, Evidence)>,
     budget: usize,
 ) -> Result<Discovery, String> {
+    discover_labelled(rom, image, entries, runtime, evidence, budget, true)
+}
+
+/// As [`discover_image_with_runtime`]; with `label` false the fixed point is
+/// left without return certificates, for callers that iterate further and
+/// label once at the end with [`crate::returns::annotate`].
+pub(crate) fn discover_labelled(
+    rom: RomIdentity,
+    image: &CodeImage,
+    entries: &[GuestAddr],
+    runtime: &[(GuestAddr, String, Vec<u8>)],
+    evidence: Option<(String, Evidence)>,
+    budget: usize,
+    label: bool,
+) -> Result<Discovery, String> {
     let declared = match (runtime.is_empty(), evidence) {
         (true, _) => None,
         (false, None) => return Err("runtime declarations need evidence".into()),
@@ -44,7 +59,7 @@ pub fn discover_image_with_runtime(
             Some((id, evidence, functions))
         }
     };
-    discover_bounded(rom, image, entries, declared.as_ref(), budget)
+    discover_bounded(rom, image, entries, declared.as_ref(), budget, label)
 }
 
 type Declared = (String, Evidence, BTreeMap<CodeAddress, RuntimeFunction>);
@@ -55,6 +70,7 @@ fn discover_bounded(
     entries: &[GuestAddr],
     declared: Option<&Declared>,
     budget: usize,
+    label: bool,
 ) -> Result<Discovery, String> {
     let boundary: BTreeSet<GuestAddr> = declared
         .map(|(_, _, f)| f.keys().map(|a| a.pc).collect())
@@ -80,15 +96,15 @@ fn discover_bounded(
             // Repartitioning replaces block shapes, but inferred possible targets
             // and their original evidence survive even if a proof is revoked.
             map.evidence.extend(previous.evidence.clone());
+            let mut by_site: BTreeMap<&CodeAddress, Vec<&IndirectSite>> = BTreeMap::new();
+            for old in &previous.indirect_sites {
+                by_site.entry(&old.site).or_default().push(old);
+            }
             map.indirect_sites = map
                 .indirect_sites
                 .into_iter()
                 .map(|mut s| {
-                    for old in previous
-                        .indirect_sites
-                        .iter()
-                        .filter(|old| old.site == s.site)
-                    {
+                    for old in by_site.get(&s.site).into_iter().flatten() {
                         for (target, refs) in &old.candidates {
                             s.candidates
                                 .entry(target.clone())
@@ -135,7 +151,9 @@ fn discover_bounded(
         discovery.map = map.clone();
         if roots.len() == old_count {
             // Return certificates only label the fixed point; they add no roots.
-            discovery.map = crate::returns::annotate(&discovery.map, image)?;
+            if label {
+                discovery.map = crate::returns::annotate(&discovery.map, image)?;
+            }
             return Ok(discovery);
         }
         history = Some(map);

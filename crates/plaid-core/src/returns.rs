@@ -42,15 +42,6 @@ fn is_jr_ra(word: u32) -> bool {
     word == 0x03e0_0008
 }
 
-fn block_of<'a>(map: &'a ProgramMap, pc: &CodeAddress) -> Option<&'a BasicBlock> {
-    map.blocks.iter().find(|b| {
-        b.start.image == pc.image
-            && b.start.generation == pc.generation
-            && b.start.pc.0 <= pc.pc.0
-            && pc.pc.0 < b.start.pc.0.wrapping_add(b.size)
-    })
-}
-
 fn in_block(block: &BasicBlock, site: &CodeAddress) -> bool {
     site.image == block.start.image
         && site.generation == block.start.generation
@@ -163,8 +154,10 @@ pub fn function_bodies<'a>(
 }
 
 /// Map-wide facts every return certificate shares, computed once per map.
-pub struct Closure {
-    calls: Vec<(CodeAddress, CodeAddress)>,
+pub struct Closure<'a> {
+    index: MapIndex<'a>,
+    /// Callee entry -> its `$ra`-linking call sites.
+    callers: BTreeMap<CodeAddress, Vec<CodeAddress>>,
     entered: BTreeSet<CodeAddress>,
     /// Block start -> callees whose body contains it.
     containing: BTreeMap<CodeAddress, BTreeSet<CodeAddress>>,
@@ -172,8 +165,8 @@ pub struct Closure {
     hosted: BTreeMap<CodeAddress, BTreeSet<CodeAddress>>,
 }
 
-impl Closure {
-    pub fn new(map: &ProgramMap, image: &CodeImage) -> Self {
+impl<'a> Closure<'a> {
+    pub fn new(map: &'a ProgramMap, image: &CodeImage) -> Self {
         let calls = ra_calls(map, image);
         let entered = crate::callbacks::targets(map, image);
         let callees: BTreeSet<_> = calls
@@ -207,8 +200,13 @@ impl Closure {
                 containing.entry(block).or_default().insert(f.clone());
             }
         }
+        let mut callers: BTreeMap<CodeAddress, Vec<CodeAddress>> = BTreeMap::new();
+        for (site, target) in calls {
+            callers.entry(target).or_default().push(site);
+        }
         Self {
-            calls,
+            index,
+            callers,
             entered,
             containing,
             hosted,
@@ -216,23 +214,19 @@ impl Closure {
     }
 
     /// Recompute the certificate from the current CFG and bytes.
-    pub fn certificate(
-        &self,
-        map: &ProgramMap,
-        image: &CodeImage,
-        site: &CodeAddress,
-    ) -> Option<ReturnCertificate> {
+    pub fn certificate(&self, image: &CodeImage, site: &CodeAddress) -> Option<ReturnCertificate> {
         if !is_jr_ra(image.word(site.pc)?) {
             return None;
         }
-        let block = block_of(map, site)?.start.clone();
+        // the first containing block in map order, as the CFG partitions it
+        let block = self.index.containing(site).last()?.start.clone();
         let hosts = self.hosted.get(&block).cloned().unwrap_or_default();
         let mut functions = self.containing.get(&block).cloned().unwrap_or_default();
-        let continuations: BTreeSet<_> = self
-            .calls
+        let continuations: BTreeSet<_> = functions
             .iter()
-            .filter(|(_, t)| functions.contains(t))
-            .map(|(c, _)| CodeAddress {
+            .filter_map(|f| self.callers.get(f))
+            .flatten()
+            .map(|c| CodeAddress {
                 pc: GuestAddr(c.pc.0.wrapping_add(8)),
                 ..c.clone()
             })
@@ -270,7 +264,7 @@ impl Closure {
         let Ok(proof) = serde_json::from_str::<ReturnCertificate>(&e.detail) else {
             return false;
         };
-        self.certificate(map, image, &site.site).as_ref() == Some(&proof)
+        self.certificate(image, &site.site).as_ref() == Some(&proof)
             && site.candidates.keys().cloned().collect::<BTreeSet<_>>() == proof.continuations
             && site
                 .observed
@@ -285,7 +279,7 @@ pub fn certificate(
     image: &CodeImage,
     site: &CodeAddress,
 ) -> Option<ReturnCertificate> {
-    Closure::new(map, image).certificate(map, image, site)
+    Closure::new(map, image).certificate(image, site)
 }
 
 pub fn verify(map: &ProgramMap, image: &CodeImage, site: &IndirectSite) -> bool {
@@ -300,7 +294,7 @@ pub fn annotate(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap, Strin
     for old in &map.indirect_sites {
         let mut site = old.clone();
         if old.closed_proof.is_none()
-            && let Some(proof) = closure.certificate(map, image, &old.site)
+            && let Some(proof) = closure.certificate(image, &old.site)
             && old
                 .observed
                 .keys()
