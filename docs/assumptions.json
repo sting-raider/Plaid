@@ -179,7 +179,7 @@
     {"name": "COP1 usable with FR=0 (declared with --fr0)", "state": "assumed", "checked": false, "faults": [], "retire": "model Status.CU1 and Status.FR, or prove them from the game's own writes"},
     {"name": "COP1 stays in the modelled subset: no NaN, subnormal, out-of-range conversion or FPU exception", "state": "assumed", "checked": true, "faults": [7], "retire": "model FPU exceptions and the remaining operand classes"},
     {"name": "Declared loads place their bytes before the code runs", "state": "assumed", "checked": true, "faults": [8], "retire": "derive the loads from the ROM instead of declaring them by hand"},
-    {"name": "Relocatable overlays run only where their relocated bytes verify (ADR-0181)", "state": "assumed", "checked": true, "faults": [2, 3, 8], "retire": "prove each overlay's load base and lifetime from the game's own loader"},
+    {"name": "Relocatable overlays run only where their relocated bytes verify; native frames pin each binding (ADR-0181/0187)", "state": "assumed", "checked": true, "faults": [2, 3, 8], "retire": "prove each overlay's load base and lifetime from the game's own loader"},
     {"name": "libultra runtime functions are host-provided (HLE)", "state": "assumed", "checked": false, "faults": [], "retire": "differential-test each HLE function against the game's own libultra; only scenario tests exist today"},
     {"name": "Three runtime names come only from a reference symbol map (osInitialize, osContInit, osEepromLongRead; ADR-0171)", "state": "assumed", "checked": false, "faults": [], "retire": "identify them from the ROM's own bytes"},
     {"name": "Trapping arithmetic never overflows", "state": "assumed", "checked": true, "faults": [6], "retire": "model the Overflow exception"},

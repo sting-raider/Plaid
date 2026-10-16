@@ -51,6 +51,7 @@ typedef struct plaid_state_s {
      binding made by byte verification, revoked by a write into its text
      (prot 255) (ADR-0181) */
   u32 ovl_delta[1024]; u8 ovl_ok[1024];
+  u32 ovl_active[1024]; /* native frames pin their overlay binding (ADR-0187) */
 } plaid_state;
 /* A host runtime with preemptive scheduling builds with PLAID_SAFEPOINTS and
    defines both names; every loop header checks plaid_preempt (ADR-0159). */
@@ -567,16 +568,21 @@ u32 plaid_link(plaid_state *s, u32 t) {
         if (hit) return 1; /* two overlays or two copies fit: ambiguous */
         hit = 1; hk = k; hb = b;
       }
-    if (hit && !s->ovl_ok[hk]) {
+    if (hit && !s->ovl_active[hk]) {
       a = hb & 0x1fffffffu;
       for (w = a >> 2; w < (a + plaid_ovls[hk].text) >> 2; w++)
         if (s->prot[w]) return 1;
+      /* An inactive binding may move; no native frame can still use its delta. */
+      if (s->ovl_ok[hk]) {
+        b = (plaid_ovls[hk].link + s->ovl_delta[hk]) & 0x1fffffffu;
+        for (w = b >> 2; w < (b + plaid_ovls[hk].text) >> 2; w++) s->prot[w] = 0;
+      }
       for (w = a >> 2; w < (a + plaid_ovls[hk].text) >> 2; w++) s->prot[w] = 255;
       s->ovl_delta[hk] = hb - plaid_ovls[hk].link;
       s->ovl_ok[hk] = 1;
       return t - s->ovl_delta[hk];
     }
-    if (hit) return 1; /* a second live copy of a bound overlay */
+    if (hit) return 1; /* an active native frame pins the existing copy */
   }
   for (k = 0; k < PLAID_OVLS; k++)
     if (t - plaid_ovls[k].link < plaid_ovls[k].text) return 1;
@@ -1468,7 +1474,13 @@ pub fn lower_c_parts(
         )
         .collect();
     let mut seen = BTreeSet::new();
-    let bodies = returns::function_bodies(map, image, callees.iter());
+    // Address-taken calls repeat the same callees; analyze each identity once.
+    let mut body_entries = BTreeSet::new();
+    let bodies = returns::function_bodies(
+        map,
+        image,
+        callees.iter().filter(|f| body_entries.insert(*f)),
+    );
     // Blocks by start; `map.blocks` is ordered by start, so a body's blocks
     // come out in map order.
     let mut by_start: BTreeMap<_, Vec<_>> = BTreeMap::new();
@@ -1510,9 +1522,19 @@ pub fn lower_c_parts(
                 )),
             }
         };
+        // A wrapper balances the pin on every exit, including faults and tails.
+        let body_name = if let Some(k) = lowerer.ovl {
+            out += &format!(
+                "static int B_{0:08x}(plaid_state *s, u64 ret);\n{link}int F_{0:08x}(plaid_state *s, u64 ret) {{\n  int r;\n  s->ovl_active[{k}]++;\n  r = B_{0:08x}(s, ret);\n  s->ovl_active[{k}]--;\n  return r;\n}}\n",
+                f.pc.0
+            );
+            format!("static int B_{:08x}", f.pc.0)
+        } else {
+            format!("{link}int F_{:08x}", f.pc.0)
+        };
         out += &format!(
-            "{link}int F_{:08x}(plaid_state *s, u64 ret) {{\n  (void)ret;\n  goto L_{:08x};\n",
-            f.pc.0, f.pc.0
+            "{body_name}(plaid_state *s, u64 ret) {{\n  (void)ret;\n  goto L_{:08x};\n",
+            f.pc.0
         );
         for &block in body.iter().filter_map(|b| by_start.get(b)).flatten() {
             let (start, end) = (block.start.pc.0, block.start.pc.0.wrapping_add(block.size));

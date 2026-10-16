@@ -135,8 +135,11 @@ Next concrete steps, in order:
      (ADR-0185); F-Zero X has 27,621 blocks and zero address-taken blockers.
      Native graphics microcode now renders its vehicles and races through
      RT64 raw RDP output (ADR-0186); the build caches objects and emits a launcher.
-     **Next:** MM's
-     first heap-allocated overlay call (fault 3), OoT past the file select into gameplay, then retire assumptions one by one (see the ledger in the README and
+     Done: MM's inactive heap-overlay binding can move to a unique verified
+     copy while native frames pin active bindings (ADR-0187); an erased-save
+     startup passes its former fault. **Next:** MM and OoT into gameplay, then
+     prove overlay bases/lifetimes from their loaders and retire assumptions
+     one by one (see the ledger in the README and
      `docs/assumptions.json`; 0 of 16 retired).
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
