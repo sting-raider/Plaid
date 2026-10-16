@@ -17,7 +17,7 @@ effect in its receipt.
 | 2 | SM64 discovery recall | >= 99% of real functions found, scored locally against a decomp symbol map used only as an oracle | **done: 99.03%** (3795/3832, ADR-0152, `--data-roots`) |
 | 3 | SM64 closed under declared assumptions | solver CLOSED in an explicit assumption scope; every assumption listed and checked | **done** (`closed` under the address-taken scope, ADR-0153..0156; execution-source and runtime-ABI assumptions are declared, the rest checked natively) |
 | 4 | SM64 boots natively to title | lowered code linked with Plaid's runtime + RT64 (ADR-0158); no interpreter linked | **done** (ADR-0163), and into gameplay at full speed with native audio (ADR-0164..0169) |
-| 5 | Retire assumptions; OoT | assumptions discharged one by one; OoT via Yaz0 (PR #28) and relocation (PR #31) | open |
+| 5 | Retire assumptions; OoT | assumptions discharged one by one; OoT via Yaz0 (PR #28) and relocation (PR #31) | in progress: OoT `CLOSED` under the address-taken scope with all 468 overlays (ADR-0180) and runs relocated overlays natively to its first graphics task (ADR-0181); 0 of 16 assumptions retired |
 
 Next concrete steps, in order:
 
@@ -119,12 +119,16 @@ Next concrete steps, in order:
    - Milestone 5, step 1 (ADR-0171): runtime functions are named from the
      ROM's own bytes; SM64's decomp map now backs only `osInitialize`,
      `osContInit` and `osEepromLongRead`, and SM64 stays `closed`.
-   - ADR-0172 stage 1: ROM-owned overlay discovery and relocation validation
-     find 469 OoT candidates (468 executable). Native first-entry byte verifier
-     generation is tested; it is not yet wired to dispatch. Next: lower at link addresses,
-     bind real RAM addresses with byte checks, and differential-test relocated
-     execution/lifetimes. Then clear OoT's 13 fixed-code blockers and run its
-     title/audio snapshot campaign. Candidate discovery alone closes nothing.
+   - Done: OoT's fixed code `CLOSED` under the address-taken scope (ADR-0175);
+     native boot through the RCP I/O model and a lowered RSP task
+     (ADR-0176/0177); overlays discovered at link addresses (ADR-0172
+     stage 1, ADR-0179) with discovery in 44 s (ADR-0178); jump-table bounds
+     proven over every path (ADR-0180), so OoT with its 468 overlays is
+     `CLOSED` (141,268 blocks); relocatable overlays run natively through a
+     verified binding (ADR-0181), to the first graphics task.
+     **Next:** an RT64 build of OoT and its title/audio snapshot campaign,
+     then retire assumptions one by one (see the ledger in the README and
+     `docs/assumptions.json`; 0 of 16 retired).
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
    `plaid recall <map.json> <sm64.us.map> [start end]`). Once the user

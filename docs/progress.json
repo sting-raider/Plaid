@@ -22,7 +22,7 @@
         {"name": "Commercial-ROM map validation", "state": "verified"},
         {"name": "Declared executable loads (ADR-0136)", "state": "verified"}
       ],
-      "remaining": "Overlay discovery and native byte checks ready; dispatch and lifetimes remain."
+      "remaining": "Overlays run natively through a verified binding; load bases are found at run time, not proven."
     },
     {
       "name": "Executable Provenance",
@@ -143,5 +143,5 @@
       "source": "docs/STATUS.md"
     }
   ],
-  "frontier": "retire SM64â€™s declared assumptions (milestone 5)"
+  "frontier": "retire the declared assumptions (milestone 5); OoT overlays run natively"
 }

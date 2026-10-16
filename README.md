@@ -21,9 +21,9 @@ Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. 
 | | Super Mario 64 (USA) | Ocarina of Time (USA 1.2) |
 | --- | --- | --- |
 | Code discovered | ✅ 99.03% of functions | ✅ fixed image and 468 overlays |
-| `CLOSED` under declared assumptions | ✅ 45,419 blocks, 15 assumptions | ✅ fixed image, 29,511 blocks, 13 assumptions; ⬜ with overlays: 29 blockers |
-| Runs natively | ✅ full-speed gameplay with input, saves, audio | 🟨 boots to its first relocated overlay |
-| `CLOSED` whole-ROM, no assumptions | ⬜ 4,820 blockers, 0 of 15 assumptions retired | ⬜ 3,105 blockers fixed image, 14,642 with overlays |
+| `CLOSED` under declared assumptions | ✅ 45,419 blocks, 15 assumptions | ✅ fixed image, 29,511 blocks, 13 assumptions; ✅ with all 468 overlays, 141,268 blocks, 14 assumptions |
+| Runs natively | ✅ full-speed gameplay with input, saves, audio | 🟨 runs through its relocated overlays to its first graphics task |
+| `CLOSED` whole-ROM, no assumptions | ⬜ 4,820 blockers, 0 of 16 assumptions retired | ⬜ 3,105 blockers fixed image, 14,917 with overlays |
 
 The chart and ledger below are generated from measurements. Nothing here is a completion percentage: a bar reaches zero only when the whole ROM closes with no assumption.
 
@@ -108,7 +108,7 @@ Inputs given by hand, outside the solver:
 | 2 | SM64 discovery finds at least 99% of its functions | ✅ **done**: 99.03%, scored against a local decomp map (ADR-0152) |
 | 3 | SM64 `CLOSED` under declared assumptions | ✅ **done**: 45,419 blocks, every assumption listed (ADR-0153..0156) |
 | 4 | SM64 boots natively to its title screen | ✅ **done**, and further: gameplay at full speed, with input, saves and native audio (ADR-0159..0170) |
-| 5 | Retire the assumptions one by one, then Ocarina of Time | 🟨 **in progress**: OoT fixed code `CLOSED` under the address-taken scope (ADR-0175); boots natively through a hardware RCP I/O model and a lowered RSP task to its first relocated overlay (ADR-0176/0177); overlays discovered at link addresses (ADR-0179), discovery in 44 s (ADR-0178) |
+| 5 | Retire the assumptions one by one, then Ocarina of Time | 🟨 **in progress**: OoT `CLOSED` under the address-taken scope, first the fixed code (ADR-0175), then with all 468 overlays at their link addresses (ADR-0179/0180); boots natively through a hardware RCP I/O model and a lowered RSP task (ADR-0176/0177), and runs relocated overlays through a verified binding to its first graphics task (ADR-0181) |
 
 ## How it works
 
@@ -142,7 +142,7 @@ ROMs stay local and are never committed. Per-ROM numbers and how to reproduce th
 | ROM | Result |
 | --- | --- |
 | Super Mario 64 (USA) | 99.03% discovery recall. `CLOSED` over 45,419 blocks under a declared scope: its main, engine and goddard segments, with calls through function pointers restricted to address-taken functions. Runs natively at full speed (59.9 VI/s), with graphics, input, EEPROM saves and audio. |
-| Ocarina of Time (USA 1.2) | Boot, the Yaz0-compressed `code` segment and the cartridge's 64DD driver segment: `CLOSED` over 29,511 blocks under the address-taken scope (ADR-0175). Boots natively to its first relocated overlay (ADR-0176/0177). Its 468 overlays are discovered at link addresses (ADR-0172, ADR-0179) but not yet lowered. |
+| Ocarina of Time (USA 1.2) | Boot, the Yaz0-compressed `code` segment and the cartridge's 64DD driver segment: `CLOSED` over 29,511 blocks under the address-taken scope (ADR-0175). With its 468 overlays at link addresses (ADR-0172, ADR-0179), it is `CLOSED` over 141,268 blocks under the address-taken scope (ADR-0180). Natively it runs through its relocated game-state overlay to its first graphics task (ADR-0181); an RT64 build of OoT is next. |
 | Mario Party 2 (USA) | Boot window: 712 blocks and 29 blockers. 27 sit behind an `osInitialize` whose SDK build n64sym lacks; 2 are function-pointer calls. |
 
 <details>
@@ -179,7 +179,7 @@ Nothing in the compiler or the runtime is keyed to SM64: no game names, addresse
 
 Known gaps:
 
-- Overlays are discovered but not yet lowered with run-time binding, and 29 jump-table shapes in OoT plus its overlays are not proven yet.
+- OoT has not been run with RT64 yet: its first graphics task is where the runtime stops. Overlay binding is itself an assumption (ledger row 12), and every overlay's load base is found at run time, not proven.
 - The runtime covers the libultra functions that SM64 and OoT's boot call. A game that calls a declared function the runtime lacks fails to link.
 - Saves are 4 Kbit EEPROM only (no 16 Kbit EEPROM, SRAM, Flash or Controller Pak). Only controller 1 works, and there is no rumble.
 - RSP microcode comes from running the game, not from ROM offsets: `--rsp-dump` saves each IMEM image no lowered code holds, and `runtime/rsp_texts.py` lowers it for the next build. A new game needs one or more of these runs. Graphics tasks go to RT64, not lowered microcode. Audio plays through SDL with RT64, or goes to a WAV file.
@@ -212,7 +212,7 @@ Plaid stands on other people's work. Each project below is pinned in [`refs.lock
 | [n64-systemtest](https://github.com/lemmy-64/n64-systemtest) | hardware-behaviour test programs | test inputs | MIT |
 | [Gopher64](https://github.com/gopher64/gopher64), [N64ModernRuntime](https://github.com/N64Recomp/N64ModernRuntime) | cross-checks of hardware and runtime behaviour | read only; no code copied or linked | GPL-3.0 |
 | [SDL](https://www.libsdl.org/) | audio output and keyboard input in the runtime | linked at run time | zlib |
-| Super Mario 64 decompilation project | a symbol map, kept local, used to name libultra functions and to score discovery recall | never committed or used to find code | see its repository |
+| Super Mario 64 decompilation project | a locally built symbol map, used to name three libultra functions and to score discovery recall | kept local; never committed or used to find code | CC0 |
 
 Thank you to the authors and maintainers of all of them. Super Mario 64, Ocarina of Time and Mario Party 2 are the property of their owners; Plaid is not affiliated with Nintendo.
 
