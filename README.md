@@ -49,17 +49,17 @@ No commercial ROM is `CLOSED` whole-ROM without assumptions. Assumptions retired
 | --- | --- | --- | --- | --- |
 | Super Mario 64 (USA) | 45,419 | 1 of 4,385 | OPEN, 4,820 | `--guarded-ram` **OPEN** (91 blockers), 14 assumptions; `--address-taken` **CLOSED**, 15 assumptions |
 | Ocarina of Time (USA 1.2), fixed image | 29,511 | 2 of 2,562 | OPEN, 3,105 | `--guarded-ram` **OPEN** (122 blockers); `--address-taken` **CLOSED**, 13 assumptions |
-| OoT + 468 overlays at link addresses | 138,829 | 6 of 13,310 | OPEN, 14,642 | `--address-taken` **OPEN** (29 blockers) |
+| OoT + 468 overlays at link addresses | 140,154 | 6 of 13,426 | OPEN, 14,812 | `--address-taken` **CLOSED**, 13 assumptions |
 
 Whole-ROM blockers by class:
 
 | Class | sm64 | oot | oot-overlays |
 | --- | ---: | ---: | ---: |
-| `unresolved_indirect_site` | 4,384 | 2,560 | 13,304 |
+| `unresolved_indirect_site` | 4,384 | 2,560 | 13,420 |
 | `exception_or_unsupported_instruction` | 78 | 284 | 631 |
-| `pointer_table_immutability_unproven` | 147 | 96 | 318 |
-| `pointer_table_target_identity_unproven` | 147 | 96 | 318 |
-| `runtime_boundary_outside_scope` | 57 | 62 | 63 |
+| `pointer_table_immutability_unproven` | 147 | 96 | 346 |
+| `pointer_table_target_identity_unproven` | 147 | 96 | 346 |
+| `runtime_boundary_outside_scope` | 57 | 62 | 62 |
 | `dynamic_effect_outside_scope` | 1 | 1 | 1 |
 | `unmodeled_exception_paths` | 1 | 1 | 1 |
 | `unproven_executable_universe` | 1 | 1 | 1 |
@@ -67,7 +67,6 @@ Whole-ROM blockers by class:
 | `unproven_load_overlay_policy` | 1 | 1 | 1 |
 | `unproven_rsp_policy` | 1 | 1 | 1 |
 | `unsupported_execution_modes` | 1 | 1 | 1 |
-| `runtime_function_decoded` | 0 | 0 | 1 |
 
 Assumptions behind the SM64 `--address-taken` result. "Fault n" means the native artifact tests it at run time and aborts with that code; **unchecked** ones are trusted.
 

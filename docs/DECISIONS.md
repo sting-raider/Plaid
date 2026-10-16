@@ -5020,3 +5020,62 @@ Measurement (OoT 1.2, local): 468 of 469 overlays placed in 43 s, giving
 Verifier: the `overlays` unit test checks that `loads` places an
 overlay at its link address from its table entry, that colliding link
 ranges drop both overlays, and that data-only overlays supply nothing.
+
+## ADR-0180: Jump-table bounds proven over every path into the dispatch
+
+Status: accepted. Milestone 5.
+
+Context: with its overlays at link addresses (ADR-0179), OoT had 28
+unresolved jump tables. GCC had scheduled their guards in ways the
+ADR-0140 shape matcher does not accept:
+- the index scale between the compare and the guard branch;
+- a branch-likely inside that interval;
+- the table base `lui` in the guard's delay slot;
+- the scale in an earlier branch's delay slot, with the guard block
+  reached through a branch-likely.
+
+Adding more shapes would not generalize, so this ADR replaces shape
+matching with a path proof.
+
+Decision: when the shape matcher fails, `tables::guarded` walks backwards
+over the CFG from the dispatch `addu base, scaled; lw; jr`, along every
+incoming path, crossing each edge's delay slot only when that edge runs
+it. Each path must establish:
+- `scaled` is `sll index, 2` and is not rewritten before the add;
+- `base` is a `lui`, plus `addiu` adjustments;
+- a branch on a flag selects the dispatch only when the flag is set, and
+  the flag's definition is `sltiu flag, index, count`;
+- `index` is unchanged between the compare and the shift, in either order.
+
+All paths must agree on the table and its count. The walk fails closed on:
+- any entry, edge or indirect target strictly inside a walked block or
+  at a guard branch;
+- a delay-slot entry on the guard's fallthrough;
+- an entry point at a walked block start;
+- call, return or exception edges;
+- loops, more than 16 blocks, or more than 4,096 instructions;
+- a branch that dispatches when the bound flag is clear.
+
+The evidence keeps the producer and format of ADR-0132 tables. It hashes
+every word the walk read, so `verify` recomputes it from the current CFG
+and bytes. Table immutability remains a scope assumption, as before.
+
+Result:
+- SM64 and OoT's fixed-image maps are byte-identical, since the shape
+  matcher still decides them.
+- OoT with its 468 overlays is **CLOSED** under the address-taken scope:
+  140,154 blocks, 0 blockers.
+- The last blocker before this ADR, an 8-byte `osVoiceControlGain`
+  signature inside an overlay, came from running identify over overlay
+  loads. The pipeline identifies runtime functions in the static images
+  only, because libultra links there.
+- Whole-ROM with no assumptions, the same map has 14,812 blockers.
+
+Verifier: `tests/tables_guarded.rs` has the three GCC shapes as positive
+cases. It also has four that must fail closed: a guard that dispatches out
+of range, an index changed between compare and scale, an entry that skips
+the compare, and an entry at the dispatch. The existing predecessor-bypass
+and slot-entry tests still pass. One expectation in `tests/tables.rs`
+changes. A second branch into the guard used to be rejected, but it is
+reached only through the compare, so every path is bounded. The test now
+also checks that adding an entry at that branch rejects the table.
