@@ -29,6 +29,10 @@ BADGES = ROOT / "docs" / "badges"
 COVERAGE = ROOT / "docs" / "isa-coverage.json"
 COVERAGE_SVG = ROOT / "docs" / "coverage.svg"
 RSP_COVERAGE = ROOT / "docs" / "rsp-coverage.json"
+ASSUMPTIONS = ROOT / "docs" / "assumptions.json"
+ASSUMPTIONS_SVG = ROOT / "docs" / "assumptions.svg"
+README = ROOT / "README.md"
+BEGIN, END = "<!-- assumptions:begin -->", "<!-- assumptions:end -->"
 
 STATE_LABEL = {
     "verified": "verified",
@@ -540,6 +544,128 @@ def badges(history: dict, data: dict) -> dict:
     return out
 
 
+# blocker classes drawn as their own segment; the rest fall into "other"
+BLOCKER_GROUPS = [
+    ("Unresolved indirect sites", ["unresolved_indirect_site"], "#d1495b"),
+    ("Pointer tables unproven", ["pointer_table_immutability_unproven",
+                                 "pointer_table_target_identity_unproven"], "#edae49"),
+    ("Unsupported instructions", ["exception_or_unsupported_instruction"], "#00798c"),
+    ("Runtime boundary", ["runtime_boundary_outside_scope"], "#8d6ab8"),
+]
+
+
+def load_assumptions() -> dict:
+    data = json.loads(ASSUMPTIONS.read_text(encoding="utf-8"))
+    if data.get("version") != 1:
+        raise SystemExit(f"unsupported assumptions schema: {data.get('version')!r}")
+    for rom in data["roms"]:
+        if set(data["singletons"]) - set(rom["whole_rom"]["by_class"]):
+            raise SystemExit(f"{rom['id']}: missing singleton blocker classes")
+    for x in data["assumptions"]:
+        if x["state"] not in ("assumed", "retired"):
+            raise SystemExit(f"invalid assumption state: {x['state']!r}")
+    return data
+
+
+def blocker_total(rom: dict) -> int:
+    return sum(rom["whole_rom"]["by_class"].values())
+
+
+def blocker_segments(rom: dict) -> list:
+    """(label, count, color) per group; every other class is 'Other'."""
+    classes = rom["whole_rom"]["by_class"]
+    named = {c for _, cs, _ in BLOCKER_GROUPS for c in cs}
+    segs = [(label, sum(classes.get(c, 0) for c in cs), color) for label, cs, color in BLOCKER_GROUPS]
+    segs.append(("Other (global obligations)", sum(n for c, n in classes.items() if c not in named), "#6e7681"))
+    return segs
+
+
+def closed_sites(rom: dict) -> int:
+    return rom["indirect_sites"] - rom["whole_rom"]["by_class"]["unresolved_indirect_site"]
+
+
+def retired_count(a: dict) -> int:
+    return sum(x["state"] == "retired" for x in a["assumptions"])
+
+
+def render_assumptions_svg(a: dict) -> str:
+    width, left, bar_w, row = 840, 270, 420, 72
+    height = 116 + row * len(a["roms"]) + 44
+    peak = max(blocker_total(r) for r in a["roms"])
+    out = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" '
+        f'height="{height}" role="img" aria-label="Distance to no-assumption CLOSED">',
+        '<style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;fill:#1f2328}'
+        '.title{font-size:17px}.sub{font-size:12px;fill:#59636e}.n{font-size:13px;font-weight:600}'
+        '@media (prefers-color-scheme:dark){text{fill:#e6edf3}.sub{fill:#9198a1}}</style>',
+        f'<text x="2" y="22" class="title">Whole-ROM blockers with no assumptions (measured {esc(a["measured"])})</text>',
+        f'<text x="2" y="44" class="title">Assumptions retired: {retired_count(a)}/{len(a["assumptions"])}</text>',
+    ]
+    lx = 2
+    for label, _, color in blocker_segments(a["roms"][0]):
+        out.append(f'<rect x="{lx}" y="62" width="10" height="10" fill="{color}"/>'
+                   f'<text x="{lx + 15}" y="71" class="sub">{esc(label)}</text>')
+        lx += 15 + int(len(label) * 6.2) + 14
+    for i, rom in enumerate(a["roms"]):
+        y = 96 + i * row
+        out.append(f'<text x="2" y="{y + 15}" class="n">{esc(rom["name"])}</text>')
+        out.append(f'<text x="2" y="{y + 34}" class="sub">{rom["blocks"]:,} blocks, {rom["indirect_sites"]:,} indirect sites</text>')
+        out.append(f'<text x="2" y="{y + 50}" class="sub">{closed_sites(rom):,} sites closed without assumptions</text>')
+        x = left
+        for label, n, color in blocker_segments(rom):
+            w = bar_w * n / peak
+            if n:
+                out.append(f'<rect x="{x:.1f}" y="{y}" width="{max(w, 1):.1f}" height="26" fill="{color}">'
+                           f'<title>{esc(rom["name"])}: {esc(label)} {n:,}</title></rect>')
+            x += w
+        out.append(f'<text x="{x + 8:.1f}" y="{y + 18}" class="n">{blocker_total(rom):,}</text>')
+    y = 96 + row * len(a["roms"])
+    out.append(f'<text x="2" y="{y + 8}" class="sub">A bar reaches zero only when the whole ROM closes with no assumption. '
+               f'Bars share one scale.</text>')
+    out.append("</svg>")
+    return "\n".join(out) + "\n"
+
+
+def render_assumptions_block(a: dict) -> str:
+    L = [BEGIN, "",
+         "### Distance to no-assumption CLOSED", "",
+         "[![whole-ROM blockers by class](docs/assumptions.svg)](docs/assumptions.json)", "",
+         f"No commercial ROM is `CLOSED` whole-ROM without assumptions. Assumptions retired: "
+         f"**{retired_count(a)}/{len(a['assumptions'])}**. Measured {a['measured']} with `{a['command']}`; "
+         "data in [`docs/assumptions.json`](docs/assumptions.json), generated by `tools/progress.py`.", "",
+         "| ROM | Blocks | Indirect sites closed with no assumption | Whole-ROM blockers | Scoped results |",
+         "| --- | --- | --- | --- | --- |"]
+    for r in a["roms"]:
+        scopes = "; ".join(
+            f"`{s['scope']}` **{s['status']}**" + ("" if s["blockers"] == 0 else f" ({s['blockers']:,} blockers)")
+            + (f", {s['assumptions']} assumptions" if s["assumptions"] else "")
+            for s in r["scopes"])
+        L.append(f"| {r['name']} | {r['blocks']:,} | {closed_sites(r):,} of {r['indirect_sites']:,} | "
+                 f"{r['whole_rom']['status']}, {blocker_total(r):,} | {scopes} |")
+    classes = []
+    for r in a["roms"]:
+        classes += [c for c in r["whole_rom"]["by_class"] if c not in classes]
+    L += ["", "Whole-ROM blockers by class:", "",
+          "| Class | " + " | ".join(r["id"] for r in a["roms"]) + " |",
+          "| --- | " + " | ".join("---:" for _ in a["roms"]) + " |"]
+    for c in sorted(classes, key=lambda c: -max(r["whole_rom"]["by_class"].get(c, 0) for r in a["roms"])):
+        L.append(f"| `{c}` | " + " | ".join(f"{r['whole_rom']['by_class'].get(c, 0):,}" for r in a["roms"]) + " |")
+    L += ["", "Assumptions behind the SM64 `--address-taken` result. \"Fault n\" means the native artifact "
+          "tests it at run time and aborts with that code; **unchecked** ones are trusted.", "",
+          "| # | Assumption | Run-time check | State | Retired when |", "| ---: | --- | --- | --- | --- |"]
+    for i, x in enumerate(a["assumptions"], 1):
+        check = "fault " + "/".join(map(str, x["faults"])) if x["checked"] else "**unchecked**"
+        L.append(f"| {i} | {x['name']} | {check} | {x['state']} | {x['retire']} |")
+    L += ["", "Inputs given by hand, outside the solver:", ""] + [f"- {h}" for h in a["hand_inputs"]] + ["", END]
+    return "\n".join(L)
+
+
+def splice_readme(text: str, block: str) -> str:
+    if BEGIN not in text or END not in text:
+        raise SystemExit(f"README.md needs the {BEGIN} / {END} markers")
+    return text.split(BEGIN, 1)[0] + block + text.split(END, 1)[1]
+
+
 def write_or_check(path: Path, content: str, check: bool) -> bool:
     if check:
         current = path.read_text(encoding="utf-8") if path.exists() else None
@@ -582,6 +708,10 @@ def main() -> int:
         coverage = json.loads(COVERAGE.read_text(encoding="utf-8"))
         rsp = json.loads(RSP_COVERAGE.read_text(encoding="utf-8")) if RSP_COVERAGE.exists() else None
         ok &= write_or_check(COVERAGE_SVG, render_coverage_svg(coverage, data, rsp), args.check)
+    assumptions = load_assumptions()
+    ok &= write_or_check(ASSUMPTIONS_SVG, render_assumptions_svg(assumptions), args.check)
+    ok &= write_or_check(README, splice_readme(README.read_text(encoding="utf-8"),
+                                               render_assumptions_block(assumptions)), args.check)
     for name, content in badges(history, data).items():
         ok &= write_or_check(BADGES / name, content, args.check)
     return 0 if ok else 1
