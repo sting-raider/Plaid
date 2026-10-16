@@ -137,6 +137,16 @@ void plaid_gfx_task(const uint8_t *ram, uint32_t ucode, uint32_t data, uint32_t 
   printf("{\"stub_task\":[%u,%u,%u,%u]}\n", ucode, data, dl,
          (uint32_t)ram[p] << 24 | (uint32_t)ram[p + 1] << 16 | (uint32_t)ram[p + 2] << 8 | ram[p + 3]);
 }
+void plaid_gfx_rdp(const uint8_t *ram, const uint8_t *commands, uint32_t size, const uint8_t *dirty) {
+  uint32_t i, pages = 0;
+  (void)ram;
+  for (i = 0; i < 2048; i++) pages += dirty[i] != 0;
+  printf("{\"stub_rdp\":[%u,%u", size, pages);
+  for (i = 0; i < size; i += 4)
+    printf(",%u", (uint32_t)commands[i] << 24 | (uint32_t)commands[i + 1] << 16 |
+           (uint32_t)commands[i + 2] << 8 | commands[i + 3]);
+  printf("]}\n");
+}
 void plaid_gfx_screen(const uint32_t *r) {
   static int once;
   int i;
@@ -262,6 +272,57 @@ def rsp_tasks(exe, cc):
           'task, its DMA reached RDRAM and the SP event followed')
 
 
+def rsp_graphics(exe, cc):
+    """CPU and lowered RSP share DPC state; raw commands cross the renderer ABI unchanged."""
+    commands = [0x11223344, 0x55667788, 0x99AABBCC, 0xDDEEFF00]
+    code = [w for offset, value in zip((0xFF8, 0xFFC, 0, 4), commands)
+            for w in [*li(A.t0, value), A.sw(A.t0, offset, A.zero)]]
+    code += [A.addiu(A.t0, A.zero, 2), V.mtc0(A.t0, 11),  # XBUS source
+             A.addiu(A.t0, A.zero, 0xFF8), V.mtc0(A.t0, 8),
+             A.addiu(A.t0, A.zero, 0x1008), V.mtc0(A.t0, 9), V.BREAK]
+    words = rsp_words(code, 0)
+    task = [1, 0, BOOT, 4 * len(words), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    task[12] = DL  # the runtime reports the task's command buffer before executing it
+    program = [*li(A.sp, 0x80007F00),
+               *[w for i, v in enumerate(words) for w in poke(BOOT + 4 * i, v)],
+               *[w for i, v in enumerate(task) for w in poke(RTASK + 4 * i, v)],
+               *poke(0xA410000C, 8),  # freeze from the CPU, observed by the RSP
+               *call('osSpTaskLoad', RTASK), *call('osSpTaskStartGo', RTASK),
+               *log_word(0xA4100000), *log_word(0xA4100004), *log_word(0xA4100008),
+               *poke(0xA410000C, 4), *log_word(0xA4100008),  # unfreeze drains wrapped DMEM
+               *log_word(0xA4000FF8),  # executed microcode leaves known SP memory
+               *poke(0xA410000C, 1),  # RDRAM source
+               *poke(DL, 0x12345678), *poke(DL + 4, 0x90ABCDEF),
+               *poke(0xA4100000, DL & 0x1FFFFFFF), *poke(0xA4100004, (DL & 0x1FFFFFFF) + 8),
+               *A.DONE]
+    runtime = ['osSpTaskLoad', 'osSpTaskStartGo']
+    for name in runtime:
+        program += [name, A.jr(A.ra), A.nop]
+    snapshot = OUT / 'gfx-rsp.bin'
+    snapshot.write_bytes(b''.join(w.to_bytes(4, 'big') for w in words).ljust(4096, b'\0'))
+    lowered = OUT / 'gfx-rsp.c'
+    subprocess.run([str(exe), 'lower-rsp', str(snapshot), '0', '0x1000', '0', 'gfx_test', str(lowered), '--raw'],
+                   check=True, capture_output=True)
+    registry = OUT / 'gfx-registry.c'
+    registry.write_text('#include "rsp_state.h"\nextern const plaid_rsp_text plaid_rsp_text_gfx_test;\n'
+                        'const plaid_rsp_text *const plaid_rsp_texts[] = {&plaid_rsp_text_gfx_test, 0};\n')
+    (OUT / 'stub.c').write_text(GFX_STUB)
+    native = build(exe, cc, 'rsp-gfx', program, runtime,
+                   ['-DPLAID_RSP', '-DPLAID_RT64', '-I', str(ROOT / 'crates/plaid-lower/src'),
+                    str(lowered), str(registry), str(OUT / 'stub.c')])
+    run = subprocess.run([str(native), '--rsp-gfx', '--rom', str(OUT / 'stub.z64'), '--stop-at', 'none',
+                          '--dump', hex(LOG), '5'], capture_output=True, text=True, timeout=30)
+    lines = [json.loads(line) for line in run.stdout.splitlines() if line.startswith('{')]
+    assert run.returncode == 0, (run.stdout, run.stderr)
+    assert [line['stub_rdp'] for line in lines if 'stub_rdp' in line] == [
+        [16, 2048, *commands], [8, 2048, 0x12345678, 0x90ABCDEF]], lines
+    assert next(line['words'] for line in lines if 'words' in line) == [
+        0xFF8, 0x1008, 0xFF8, 0x1008, commands[0]], lines
+    assert next(line['stop'] for line in lines if 'stop' in line) == 'exit', lines
+    assert not any('stub_task' in line for line in lines), lines
+    print('native graphics RSP: shared CPU/RSP DPC, frozen lists, wrapped DMEM, RDRAM and CPU RAM visibility')
+
+
 # ---- AI DMA (ADR-0170) ----
 AIQ, AIBUF, VAL = 0x80004400, 0x80004420, 0x80004440
 B1, B2, B3 = 0x80020000, 0x80021000, 0x80022000
@@ -332,6 +393,9 @@ IO_PROGRAM = [
     *log_word(0xA4600014),  # PI_BSD_DOM1_LAT from the header
     *poke(0xA460001C, 0x1FF), *log_word(0xA460001C),  # PI_BSD_DOM1_PGS keeps four bits
     *poke(0xA4000100, 0x12345678), *log_word(0xA4000100),
+    *poke(0xA4100000, 0x1237), *log_word(0xA410000C),  # DPC_START: start valid, ready
+    *poke(0xA4100004, 0x2000), *log_word(0xA4100008),  # DPC_END: the list is consumed at once
+    *poke(0xA410000C, 0x2A), *log_word(0xA410000C),  # DPC_STATUS: set source, freeze, flush
     *log_word(0xA6001010),  # no 64DD: open bus
     *log_word(0xB0000040),  # cartridge ROM
     *log_word(0xA8000000),  # SRAM is not modelled: fault 1
@@ -345,7 +409,8 @@ def rcp_io(exe, cc):
     them (ADR-0177); unmodelled devices and cached access fail closed."""
     rom = OUT / 'io.z64'
     rom.write_bytes(bytes([0x80, 0x37, 0x12, 0x40]) + bytes(0x3C) + bytes([0xCA, 0xFE, 0xF0, 0x0D]) + bytes(0xFBC))
-    for name, program, words in (('io', IO_PROGRAM, [0xCAFEF00D, 0, 0x40, 0xF, 0x12345678, 0x10101010, 0xCAFEF00D, 0]),
+    for name, program, words in (('io', IO_PROGRAM, [0xCAFEF00D, 0, 0x40, 0xF, 0x12345678, 0x480, 0x2000, 0x87,
+                                                0x10101010, 0xCAFEF00D, 0]),
                                  ('io_cached', CACHED_IO_PROGRAM, [0])):
         native = build(exe, cc, name, program, [])
         run = subprocess.run([str(native), '--rom', str(rom), '--dump', hex(LOG), str(len(words))],
@@ -353,8 +418,29 @@ def rcp_io(exe, cc):
         lines = {k: v for line in run.stdout.splitlines() if line.startswith('{') for k, v in json.loads(line).items()}
         assert lines.get('stop') == 'guest fault' and lines['fault'] == 1, (run.stdout, run.stderr)
         assert lines.get('words', []) == words, [hex(w) for w in lines.get('words', [])]
-    print('RCP I/O: DMEM boot bytes, idle PI status, masked PI timing, open bus and ROM words as ares; '
+    print('RCP I/O: DMEM boot bytes, idle PI status, masked PI timing, DPC registers, open bus and ROM words as ares; '
           'SRAM and cached RCP access fail closed')
+
+
+def raw_pi_dma(exe, cc):
+    handle, destination = 0x80004800, 0x80004900
+    rom = OUT / 'io.z64'
+    original = rom.read_bytes()
+    for name, direction, offset, stop in [('raw_pi', 0, 0x40, 'exit'),
+                                          ('raw_pi_write', 1, 0x40, 'PI write to cartridge'),
+                                          ('raw_pi_oob', 0, len(original), 'PI DMA outside the ROM')]:
+        program = [*li(A.sp, 0x80007F00), *poke(handle + 0xC, 0xB0000000),
+                   *call('osEPiRawStartDma', handle, direction, offset, destination, 4),
+                   *log_word(destination), *log_v0(), *A.DONE,
+                   'osEPiRawStartDma', A.jr(A.ra), A.nop]
+        native = build(exe, cc, name, program, ['osEPiRawStartDma'])
+        run = subprocess.run([str(native), '--rom', str(rom), '--dump', hex(LOG), '2'],
+                             capture_output=True, text=True, timeout=30)
+        lines = {k: v for line in run.stdout.splitlines() if line.startswith('{') for k, v in json.loads(line).items()}
+        assert lines['stop'] == stop and run.returncode == (stop != 'exit'), (run.stdout, run.stderr)
+        assert lines['words'] == ([0xCAFEF00D, 0] if stop == 'exit' else [0, 0]), lines
+        assert lines['pi_dma'] == (stop == 'exit') and rom.read_bytes() == original, lines
+    print('raw handle PI DMA: o32 stack size, cartridge bytes and return value; writes and out-of-range reads refused')
 
 
 def build(exe, cc, name, program, runtime, extra=()):
@@ -435,12 +521,18 @@ def main():
     graphics_bridge(exe, cc)
     save_file(exe, cc)
     rsp_tasks(exe, cc)
+    rsp_graphics(exe, cc)
     audio_dma(exe, cc)
     rcp_io(exe, cc)
+    raw_pi_dma(exe, cc)
     from test_overlays import main as overlay_verifiers
     overlay_verifiers()
     from test_slots import main as slot_contracts
     slot_contracts()
+    dpc = OUT / 'dpc-contract.exe'
+    subprocess.run([cc, '-O2', '-std=c11', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function',
+                    '-I', str(ROOT / 'crates/plaid-lower/src'), str(ROOT / 'runtime/test_dpc.c'), '-o', str(dpc)], check=True)
+    subprocess.run([str(dpc)], check=True, timeout=30)
 
 
 if __name__ == '__main__':

@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 448" width="840" height="448" role="img" aria-label="Distance to no-assumption CLOSED">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 520" width="840" height="520" role="img" aria-label="Distance to no-assumption CLOSED">
 <style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;fill:#1f2328}.title{font-size:17px}.sub{font-size:12px;fill:#59636e}.n{font-size:13px;font-weight:600}@media (prefers-color-scheme:dark){text{fill:#e6edf3}.sub{fill:#9198a1}}</style>
-<text x="2" y="22" class="title">Whole-ROM blockers with no assumptions (measured 2026-10-16)</text>
+<text x="2" y="22" class="title">Whole-ROM blockers with no assumptions (measured 2026-10-17)</text>
 <text x="2" y="44" class="title">Assumptions retired: 0/16</text>
 <rect x="2" y="62" width="10" height="10" fill="#d1495b"/><text x="17" y="71" class="sub">Unresolved indirect sites</text>
 <rect x="186" y="62" width="10" height="10" fill="#edae49"/><text x="201" y="71" class="sub">Pointer tables unproven</text>
@@ -43,5 +43,14 @@
 <rect x="688.3" y="312" width="1.6" height="26" fill="#8d6ab8"><title>Majora&#x27;s Mask (USA) + overlays, inferred loads: Runtime boundary 81</title></rect>
 <rect x="689.9" y="312" width="1.0" height="26" fill="#6e7681"><title>Majora&#x27;s Mask (USA) + overlays, inferred loads: Other (global obligations) 7</title></rect>
 <text x="698.0" y="330" class="n">21,313</text>
-<text x="2" y="392" class="sub">A bar reaches zero only when the whole ROM closes with no assumption. Bars share one scale.</text>
+<text x="2" y="399" class="n">F-Zero X (USA), inferred shared-slot alternates</text>
+<text x="2" y="418" class="sub">27,621 blocks, 1,974 indirect sites</text>
+<text x="2" y="434" class="sub">1 sites closed without assumptions</text>
+<rect x="270.0" y="384" width="38.9" height="26" fill="#d1495b"><title>F-Zero X (USA), inferred shared-slot alternates: Unresolved indirect sites 1,973</title></rect>
+<rect x="308.9" y="384" width="4.7" height="26" fill="#edae49"><title>F-Zero X (USA), inferred shared-slot alternates: Pointer tables unproven 240</title></rect>
+<rect x="313.6" y="384" width="8.3" height="26" fill="#00798c"><title>F-Zero X (USA), inferred shared-slot alternates: Unsupported instructions 422</title></rect>
+<rect x="321.9" y="384" width="1.2" height="26" fill="#8d6ab8"><title>F-Zero X (USA), inferred shared-slot alternates: Runtime boundary 60</title></rect>
+<rect x="323.1" y="384" width="5.9" height="26" fill="#6e7681"><title>F-Zero X (USA), inferred shared-slot alternates: Other (global obligations) 300</title></rect>
+<text x="337.0" y="402" class="n">2,995</text>
+<text x="2" y="464" class="sub">A bar reaches zero only when the whole ROM closes with no assumption. Bars share one scale.</text>
 </svg>

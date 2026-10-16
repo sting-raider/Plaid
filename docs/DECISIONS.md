@@ -5384,3 +5384,56 @@ The F-Zero X candidate grows from 11,398 blocks / 20 scoped blockers to
 27,621 blocks / 0 scoped blockers. Native game acceptance, raw PI DMA and
 graphics-microcode support are the next runtime integration, not established
 by this compiler result.
+
+
+## ADR-0186: compiled graphics microcode and a raw RDP command boundary
+
+Context: the pinned RT64 display-list path does not implement F-Zero X's
+F3DFLX2 reflection/alpha behavior. Substituting ordinary F3DEX2 left flat vehicle
+surfaces. The existing native RSP backend can execute the original computation;
+a game-specific renderer workaround is unnecessary.
+
+Decision:
+- Opt-in `--rsp-gfx` executes graphics tasks through the existing compiled IMEM
+  snapshot registry. Each word keeps its IMEM identity guard. Missing text stops
+  and is compiled before relinking; the artifact contains no runtime MIPS/RSP
+  interpreter or JIT. The option requires an RT64 build.
+- An optional DPC callback exposes the same registers to CPU MMIO and native
+  RSP COP0. START/END masking, first pending START, freeze clearing order,
+  source selection, current advancement and read-only registers follow pinned
+  ares `ares/n64/rdp/io.cpp` within the synchronous idle model. Unsupported
+  RDRAM ranges, reversed ranges and DMEM submissions over 4 KiB fault.
+- Raw command bytes, including wrapped DMEM lists, reach RT64 in its host-word
+  layout. RT64 retains partial RDP commands between submissions. Changed RSP
+  DMA pages are synchronized; each task and CPU submission also account for
+  CPU RAM writes. Native graphics tasks leave readable SP memory rather than
+  marking its contents unknown as a skipped high-level task does.
+- RT64's loadTile ignored reversed S but allowed reversed integer T, underflowing
+  its unsigned row count and reading beyond RDRAM. A generated build copy adds
+  the empty vertical-range guard, following the pinned ares parallel-rdp
+  load-tile rule. Exact patch context is required once; .refs stays unchanged.
+  RT64 is MIT, Copyright (c) 2024 RT64 Contributors. Its license/notices remain
+  with the pinned dependency; no GPL reference code was copied.
+- Raw handle PI DMA reuses the host runtime's checked PI transfer routine and
+  its o32 stack size argument. It completes synchronously and posts no queue
+  message. Cartridge writes and out-of-range reads are refused.
+- `native.py --rt64 --rsp-gfx` validates visibly, collects missing snapshots,
+  caches objects by source/dependencies/compiler/flags, and writes a launcher
+  with ROM/save arguments but no scripted input or time limit. Temporary object
+  replacement and stamp invalidation protect failed rebuilds. The graphics-RSP
+  executable is named separately from the earlier HLE build.
+
+Verification: native synthetic graphics tasks test shared CPU/RSP DPC state,
+freeze/resume, DMEM wrap, RDRAM command bytes, CPU RAM visibility and post-task SP
+reads. Raw PI DMA tests its ABI, output and refusal cases. The GPU-free RT64
+contract tests vertical empty uploads, unchanged TMEM and a split raw command.
+Standalone RSP DPC tests cover masking, append, missing bus and refused ranges.
+The cache contract covers headers, flags, source changes and compilation failure.
+Pinned-ares spikes096/097 pass; retained real audio task 600 again matches all
+RDRAM/IMEM/DMEM and RSP state through spike098 (94,150 instructions).
+
+Visible F-Zero X runs show vehicle markings/shading and complete 65-second race
+validation without a runtime fault. These are finite runs. IMEM discovery still
+comes from observed executions; DPC/RSP tasks complete synchronously; runtime,
+rendering and CPU assumptions remain. No assumption is retired and whole-ROM
+closure remains OPEN. `native_complete` stays false.

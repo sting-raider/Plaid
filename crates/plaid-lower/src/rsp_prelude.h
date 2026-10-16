@@ -51,6 +51,8 @@ static int plaid_rsp_dma(plaid_rsp *r, u32 value, int to_rdram, u32 pc) {
 }
 static inline int plaid_rsp_mfc0(plaid_rsp *r, u32 rd, u32 *out, u32 pc) {
   u32 i, v = 0;
+  if ((rd & 8) && r->dpc)
+    return r->dpc(rd & 7, out, 0) ? plaid_rsp_fault(r, pc, 4) : 0;
   /* DPC_STATUS reads an idle RDP (ready): graphics tasks have completed
      whenever the RSP runs another task here. Other RDP registers fail. */
   if (rd == 11) { *out = 0x80; return 0; }
@@ -71,6 +73,8 @@ static inline int plaid_rsp_mfc0(plaid_rsp *r, u32 rd, u32 *out, u32 pc) {
 }
 static inline int plaid_rsp_mtc0(plaid_rsp *r, u32 rd, u32 v, u32 pc) {
   u32 i;
+  if ((rd & 8) && r->dpc)
+    return r->dpc(rd & 7, &v, 1) ? plaid_rsp_fault(r, pc, 4) : 0;
   if (rd & 8) return plaid_rsp_fault(r, pc, 4);
   switch (rd & 7) {
   case 0: r->pending_mem = v & 0x1ff8; break;

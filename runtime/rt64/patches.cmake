@@ -1,0 +1,38 @@
+# Local corrections to the pinned MIT RT64 reference. Generate build copies;
+# keep .refs untouched and reject a changed patch context at configure time.
+# RT64 source: Copyright (c) 2024 RT64 Contributors; see .refs/rt64/LICENSE.
+function(plaid_rt64_patch unit before after)
+    get_filename_component(original "${RT64_DIR}/src/${unit}.cpp" ABSOLUTE)
+    file(READ "${original}" source)
+    string(REPLACE "${before}" "" removed "${source}")
+    string(LENGTH "${source}" old_size)
+    string(LENGTH "${removed}" removed_size)
+    string(LENGTH "${before}" match_size)
+    math(EXPR expected_size "${old_size} - ${match_size}")
+    if(NOT removed_size EQUAL expected_size)
+        message(FATAL_ERROR "RT64 patch context must occur exactly once: ${unit}")
+    endif()
+    string(REPLACE "${before}" "${after}" patched "${source}")
+    get_filename_component(name "${unit}" NAME)
+    set(copy "${CMAKE_CURRENT_BINARY_DIR}/patched/${name}.cpp")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/patched")
+    file(WRITE "${copy}.tmp" "${patched}")
+    configure_file("${copy}.tmp" "${copy}" COPYONLY)
+    get_filename_component(original_dir "${original}" DIRECTORY)
+    set_source_files_properties("${copy}" TARGET_DIRECTORY rt64
+        PROPERTIES INCLUDE_DIRECTORIES "${original_dir}")
+    get_target_property(sources rt64 SOURCES)
+    list(FIND sources "${original}" index)
+    if(index LESS 0)
+        message(FATAL_ERROR "RT64 compilation unit missing: ${original}")
+    endif()
+    list(REMOVE_ITEM sources "${original}")
+    list(APPEND sources "${copy}")
+    set_property(TARGET rt64 PROPERTY SOURCES "${sources}")
+endfunction()
+
+# A reversed integer T range does not upload TMEM (pinned ares parallel-rdp,
+# Renderer::load_tile). Otherwise the unsigned row count wraps to billions.
+plaid_rt64_patch(hle/rt64_rdp
+    "if (t.uls > t.lrs) {"
+    "if (t.uls > t.lrs || (t.ult >> 2) > (t.lrt >> 2)) {")

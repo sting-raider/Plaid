@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-16",
+  "updated": "2026-10-17",
   "legend": {
     "verified": "Verified and integrated on main",
     "partial": "Implemented or evidenced, but proof/coverage is incomplete",
@@ -22,7 +22,7 @@
         {"name": "Commercial-ROM map validation", "state": "verified"},
         {"name": "Declared executable loads (ADR-0136)", "state": "verified"}
       ],
-      "remaining": "Overlays run natively through a verified binding; load bases are found at run time, not proven."
+      "remaining": "Relocatable and shared-slot overlays run through verified bindings; the complete executable universe and load lifetimes remain unproved."
     },
     {
       "name": "Executable Provenance",
@@ -95,9 +95,9 @@
         {"name": "Audio path", "state": "verified"},
         {"name": "RSP runtime/native path", "state": "verified"},
         {"name": "Renderer integration", "state": "verified"},
-        {"name": "Native launch/cache packaging", "state": "open"}
+        {"name": "Native launch/cache packaging", "state": "partial"}
       ],
-      "remaining": "Other saves and controllers, packaging, non-Windows hosts."
+      "remaining": "Per-ROM native launchers and object caching work on Windows; distribution, non-Windows hosts, other saves and controllers remain."
     },
     {
       "name": "Compatibility",
@@ -143,5 +143,5 @@
       "source": "docs/STATUS.md"
     }
   ],
-  "frontier": "retire the declared assumptions (milestone 5); OoT overlays run natively"
+  "frontier": "retire the declared assumptions (milestone 5); F-Zero X races with native graphics microcode"
 }

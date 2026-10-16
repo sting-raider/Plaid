@@ -105,6 +105,7 @@ static u32 vi_mode, vi_black, vi_regs[14]; /* see vi_update */
 #ifdef PLAID_RT64
 int plaid_gfx_open(const u8 *rom_header);
 void plaid_gfx_task(const u8 *ram, u32 ucode, u32 ucode_data, u32 data_ptr);
+void plaid_gfx_rdp(const u8 *ram, const u8 *commands, u32 size, const u8 *dirty_pages);
 void plaid_gfx_screen(const u32 *regs);
 int plaid_gfx_closed(void);
 u32 plaid_gfx_input(void); /* buttons << 16 | stick x << 8 | stick y */
@@ -118,6 +119,27 @@ extern const plaid_rsp_text *const plaid_rsp_texts[];
 static plaid_rsp rsp;
 static const char *rsp_dump_dir, *rsp_capture_dir;
 static long rsp_capture;
+static int rsp_graphics;
+#ifdef PLAID_RT64
+#include "dpc.h"
+static u8 rsp_gfx_dirty[PLAID_RAM_SIZE / 4096];
+static int rsp_dpc_consume(u32 current, u32 size, int dmem) {
+  if (dmem) {
+    u8 commands[4096];
+    u32 i;
+    if (size > sizeof commands) return 1;
+    for (i = 0; i < size; i++) commands[i] = rsp.dmem[(current + i) & 0xfff];
+    plaid_gfx_rdp(S->ram, commands, size, rsp_gfx_dirty);
+  } else {
+    if (current > PLAID_RAM_SIZE || size > PLAID_RAM_SIZE - current) return 1;
+    plaid_gfx_rdp(S->ram, S->ram + current, size, rsp_gfx_dirty);
+  }
+  memset(rsp_gfx_dirty, 0, sizeof rsp_gfx_dirty);
+  return 0;
+}
+static plaid_dpc rsp_dp = {0, 0, 0, 0x80, rsp_dpc_consume};
+static int rsp_dpc(u32 reg, u32 *value, int write) { return plaid_dpc_access(&rsp_dp, reg, value, write); }
+#endif
 #endif
 /* --wav: AI buffers as 16-bit stereo PCM, the header rewritten at exit */
 static FILE *wav;
@@ -895,6 +917,36 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
 #endif
     return 0;
   }
+  if (p >= 0x04100000u && p < 0x04100020u) { /* DPC registers, as ares rdp/io.cpp; RT64 draws, so the DP is
+                                                  never busy and a command list is consumed when its end is written */
+#if defined(PLAID_RSP) && defined(PLAID_RT64)
+    if (rsp_graphics) {
+      u32 value = (u32)*v;
+      /* CPU command submissions may follow CPU texture writes between tasks. */
+      if (write) memset(rsp_gfx_dirty, 1, sizeof rsp_gfx_dirty);
+      int result = rsp_dpc((p & 0x1fu) >> 2, &value, write);
+      if (!write) *v = value;
+      return result;
+    }
+#endif
+    static u32 start, current, flags; /* flags: 1 source, 2 freeze, 4 flush, 0x400 start valid */
+    u32 r = (p & 0x1fu) >> 2, d = (u32)*v;
+    if (!write) {
+      *v = r == 0 ? start : r == 1 || r == 2 ? current : r == 3 ? flags | 0x80u : 0;
+      return 0;
+    }
+    if (r == 0) { if (!(flags & 0x400u)) start = d & 0xfffff8u; flags |= 0x400u; }
+    else if (r == 1) { current = d & 0xfffff8u; flags &= ~0x400u; }
+    else if (r == 3) {
+      if (d & 1) flags &= ~1u;
+      if (d & 2) flags |= 1u;
+      if (d & 4) flags &= ~2u;
+      if (d & 8) flags |= 2u;
+      if (d & 16) flags &= ~4u;
+      if (d & 32) flags |= 4u;
+    }
+    return 0;
+  }
   if (p == 0x04600010u) { /* PI_STATUS: idle; a write resets DMA or clears the interrupt, neither pending */
     if (!write) *v = 0;
     return 0;
@@ -936,14 +988,14 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
 
 /* osEPiStartDma(handle, mb, direction): the OSIoMesg holds the queue at +4,
    the RAM address at +8, the device offset at +0xc and the size at +0x10 */
-RT(osEPiStartDma) {
-  u32 h = arg(0), mb = arg(1), mq = rd32(mb + 4), va = rd32(mb + 8), dev = rd32(mb + 0xc), n = rd32(mb + 0x10);
+/* One handle DMA: direction 0 reads the device into RAM at va */
+static void epi_dma(u32 h, u32 dir, u32 dev, u32 va, u32 n) {
   u32 base = rd32(h + 0xc) & 0x1fffffffu, p;
   if (base == 0x08000000u && fl.on) {
     flash_address(((base | dev) & 0x1fffffffu));
     p = v2p(va);
     if (p > PLAID_RAM_SIZE || n > PLAID_RAM_SIZE - p || (n & 1)) finish(1, "FlashRAM DMA outside RAM");
-    if (arg(2) == 0) {
+    if (dir == 0) {
       u32 i;
       dma_wrote(p, n);
       for (i = 0; i < n; i += 2) { u16 d = flash_read_half(); S->ram[p + i] = (u8)(d >> 8); S->ram[p + i + 1] = (u8)d; }
@@ -955,7 +1007,7 @@ RT(osEPiStartDma) {
   } else if (base == 0x08000000u) { /* SRAM: 32 KiB, byte addressed, on PI domain 2 */
     dev = ((base | dev) & 0x1fffffffu) - 0x08000000u; /* libultra ORs the handle base in */
     if ((u64)dev + n > SRAM_SIZE) finish(1, "PI DMA outside SRAM");
-    if (arg(2) == 0) dma_wr(va, sram + dev, n);
+    if (dir == 0) dma_wr(va, sram + dev, n);
     else {
       p = v2p(va);
       if (p > PLAID_RAM_SIZE || n > PLAID_RAM_SIZE - p) finish(1, "SRAM DMA outside RAM");
@@ -965,13 +1017,23 @@ RT(osEPiStartDma) {
     }
   } else {
     if (base != 0x10000000u) finish(1, "PI DMA through a non-cartridge handle");
-    if (arg(2) != 0) finish(1, "PI write to cartridge");
+    if (dir != 0) finish(1, "PI write to cartridge");
     if ((u64)dev + n > rom_size) finish(1, "PI DMA outside the ROM");
     dma_wr(va, rom + dev, n);
   }
   dma_count++;
+}
+RT(osEPiStartDma) {
+  u32 mb = arg(1), mq = rd32(mb + 4);
+  epi_dma(arg(0), arg(2), rd32(mb + 0xc), rd32(mb + 8), rd32(mb + 0x10));
   if (mq) mq_send(mq, mb, 0, 0);
   maybe_preempt();
+  return ret(0);
+}
+/* osEPiRawStartDma(handle, direction, devAddr, dramAddr, size): the same
+   transfer, started directly; it completes at once and posts nothing */
+RT(osEPiRawStartDma) {
+  epi_dma(arg(0), arg(1), arg(2), arg(3), arg(4));
   return ret(0);
 }
 
@@ -1005,6 +1067,12 @@ static void report_gfx_task(u32 task) {
 static int rsp_rdram_write(u32 p, u32 size) {
   int r = plaid_runtime_write(S, p, size, 0);
   if (!r && size) dma_wrote(p, size);
+#ifdef PLAID_RT64
+  if (!r && size) {
+    u32 page;
+    for (page = p / 4096; page <= (p + size - 1) / 4096; page++) rsp_gfx_dirty[page] = 1;
+  }
+#endif
   return r;
 }
 /* Run lowered code from pc until the RSP halts (0) or faults (1); -1 when no
@@ -1099,7 +1167,7 @@ RT(osSpTaskLoad) {
   static const int pointers[] = {4, 6, 8, 10, 11, 12, 14}; /* ucode .. yield_data_ptr */
   u32 task = arg(0), t[16], boot, n, i;
   for (i = 0; i < 16; i++) t[i] = rd32(task + 4 * i);
-  if (t[0] == 1) return 0;
+  if (t[0] == 1 && !rsp_graphics) return 0;
   if (t[1] & 1) finish(1, "yielded RSP task"); /* OS_TASK_YIELDED: only graphics tasks yield */
   for (i = 0; i < 7; i++)
     if (t[pointers[i]]) t[pointers[i]] = v2p(t[pointers[i]]);
@@ -1126,7 +1194,11 @@ RT(osSpTaskStartGo) {
     report_gfx_task(task);
     if (stop_gfx && (long)gfx_tasks >= stop_gfx) finish(0, "graphics task");
 #ifdef PLAID_RT64
-    plaid_gfx_task(S->ram, rd32(task + 0x10), rd32(task + 0x18), rd32(task + 0x30));
+#ifdef PLAID_RSP
+    if (rsp_graphics) { sp_unknown = 0; memset(rsp_gfx_dirty, 1, sizeof rsp_gfx_dirty); rsp_task(); }
+    else
+#endif
+      plaid_gfx_task(S->ram, rd32(task + 0x10), rd32(task + 0x18), rd32(task + 0x30));
 #endif
     post(EV_SP);
     post(EV_DP);
@@ -1328,6 +1400,9 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[i], "--stop-at") && i + 1 < argc) stop_gfx = strcmp(argv[++i], "none") ? 1 : 0;
     else if (!strcmp(argv[i], "--gfx-tasks") && i + 1 < argc) stop_gfx = atol(argv[++i]);
     else if (!strcmp(argv[i], "--seconds") && i + 1 < argc) run_seconds = atof(argv[++i]);
+#if defined(PLAID_RT64) && defined(PLAID_RSP)
+    else if (!strcmp(argv[i], "--rsp-gfx")) { rsp_graphics = 1; rsp.dpc = rsp_dpc; }
+#endif
     else if (!strcmp(argv[i], "--save") && i + 1 < argc) save_path = argv[++i];
     else if (!strcmp(argv[i], "--sram") && i + 1 < argc) sram_path = argv[++i];
     else if (!strcmp(argv[i], "--flash") && i + 1 < argc) flash_path = argv[++i];
@@ -1346,7 +1421,7 @@ int main(int argc, char **argv) {
              sscanf(argv[++i], "%i@%u:%u", (int *)&presses[n_presses].buttons, &presses[n_presses].at,
                     &presses[n_presses].frames) == 3) n_presses++;
     else {
-      fprintf(stderr, "usage: %s [--rom <rom.z64>] [--stop-at gfx|none] [--gfx-tasks N] [--seconds S] [--press <buttons>@<vi>:<frames>] [--save <eeprom file>] [--sram <sram file>] [--wav <file>] [--rsp-dump <dir>] [--rsp-capture <task> <dir>] [--dump <addr> <words>]\n", argv[0]);
+      fprintf(stderr, "usage: %s [--rom <rom.z64>] [--stop-at gfx|none] [--gfx-tasks N] [--seconds S] [--press <buttons>@<vi>:<frames>] [--save <eeprom file>] [--sram <sram file>] [--wav <file>] [--rsp-dump <dir>] [--rsp-capture <task> <dir>] [--rsp-gfx] [--dump <addr> <words>]\n", argv[0]);
       return 2;
     }
   }

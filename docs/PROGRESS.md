@@ -10,7 +10,7 @@ Legend:
 - 🟨 **Partial** — implemented or experimentally supported, but proof/coverage is incomplete.
 - ⬜ **Open** — not implemented or not yet demonstrated.
 
-Last progress-data update: **2026-10-16**. Day-by-day numbers: [progress history](HISTORY.md).
+Last progress-data update: **2026-10-17**. Day-by-day numbers: [progress history](HISTORY.md).
 
 ## Retained evidence
 
@@ -39,7 +39,7 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Commercial-ROM map validation | ✅ verified |
 | Declared executable loads (ADR-0136) | ✅ verified |
 
-**Remaining:** Overlays run natively through a verified binding; load bases are found at run time, not proven.
+**Remaining:** Relocatable and shared-slot overlays run through verified bindings; the complete executable universe and load lifetimes remain unproved.
 
 ## Executable Provenance
 
@@ -116,9 +116,9 @@ These are finite observations, not exhaustive execution coverage or a CLOSED cer
 | Audio path | ✅ verified |
 | RSP runtime/native path | ✅ verified |
 | Renderer integration | ✅ verified |
-| Native launch/cache packaging | ⬜ open |
+| Native launch/cache packaging | 🟨 partial |
 
-**Remaining:** Other saves and controllers, packaging, non-Windows hosts.
+**Remaining:** Per-ROM native launchers and object caching work on Windows; distribution, non-Windows hosts, other saves and controllers remain.
 
 ## Compatibility
 
