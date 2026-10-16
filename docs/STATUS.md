@@ -10,7 +10,7 @@ natively with RT64 graphics, input, EEPROM saves and live native RSP audio
 (ADR-0153..0170). Three runtime function names still use a reference map
 (ADR-0171). Whole-ROM closure without assumptions remains unproved.
 
-OoT's fixed image is **CLOSED** under the address-taken scope: 29,511 blocks
+OoT's fixed image is **CLOSED** under the address-taken scope: 29,542 blocks
 and 0 blockers (ADR-0175). This needed three fixes:
 - address-taken roots come from the decoded contents of Yaz0 streams, not
   their compressed bytes;
@@ -23,12 +23,13 @@ there (ADR-0176). It uses no symbol map. CPU access to SP memory and the PI
 is modelled as hardware, so unnamed library variants work (ADR-0177).
 `discover --overlays` adds the 468 executable overlays at their link addresses
 (ADR-0179). With jump-table bounds proven over every path (ADR-0180), OoT
-with all 468 overlays is **CLOSED** under the address-taken scope: 141,268
-blocks, 0 blockers; whole-ROM without assumptions it has 14,917 blockers.
+with all 468 overlays is **CLOSED** under the address-taken scope: 154,414
+blocks, 0 blockers; whole-ROM without assumptions it has 16,239 blockers.
 Overlays are lowered at their link addresses and run through a run-time
 binding that verifies the relocated bytes in RAM (ADR-0181): natively, OoT
-runs through its relocated game-state overlay to its first graphics task,
-where the runtime stops without RT64.
+runs through its relocated overlays, and with RT64, its own lowered audio
+microcode and SRAM saves it draws the boot logo, title and file select
+(ADR-0182).
 
 ## By layer
 

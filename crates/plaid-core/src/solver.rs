@@ -133,6 +133,15 @@ pub fn solve_with_discovery_sources(
     })
 }
 
+/// Where the declared loads of `image` begin (ADR-0182).
+fn load_starts(map: &ProgramMap, image: &CodeImage) -> BTreeSet<u32> {
+    map.load_images
+        .get(&image.base.image)
+        .into_iter()
+        .flat_map(|spec| spec.loads.iter().map(|l| l.destination.start.0))
+        .collect()
+}
+
 fn source<'a>(images: &'a [CodeImage], address: &CodeAddress) -> Option<&'a CodeImage> {
     let mut found = images.iter().filter(|i| {
         i.base.image == address.image
@@ -752,11 +761,18 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     let mut closures: BTreeMap<String, crate::returns::Closure> = BTreeMap::new();
     // Address-taken dispatch (ADR-0153): every address-taken function must be
     // a decoded block start whose layout and body can be a CPU function.
+    let load_starts: BTreeMap<&str, _> = images
+        .iter()
+        .map(|image| (image.base.image.as_str(), load_starts(map, image)))
+        .collect();
     let address_taken_ok = scope == Scope::DeclaredStaticImagesGuardedRamAddressTaken
         && !map.address_taken.is_empty()
         && map.address_taken.keys().all(|a| {
             starts.contains(a)
-                && source(images, a).is_some_and(|image| crate::data_roots::plausible(image, a.pc))
+                && source(images, a).is_some_and(|image| {
+                    let starts = &load_starts[image.base.image.as_str()];
+                    crate::data_roots::plausible_at(image, a.pc, starts)
+                })
         });
     let mut uses_address_taken = false;
     for site in &map.indirect_sites {

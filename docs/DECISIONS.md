@@ -5135,3 +5135,58 @@ Result:
 Verifier: spike096 differential against pinned ares, plus the three
 fail-closed programs; `runtime/test_overlays.py` still covers the byte
 verifier itself.
+
+## ADR-0182: OoT reaches its title and file select with RT64
+
+Status: accepted. Milestone 5.
+
+Context: with overlays running natively (ADR-0181), the RT64 build of OoT
+drew one frame of its boot logo and stopped. Five gaps were behind it, all
+general.
+
+Decision:
+- **AI registers as hardware.** OoT's `osAiSetNextBuffer` runs lowered and
+  reads `AI_STATUS`. The runtime's I/O hook now models `AI_DRAM_ADDR`,
+  `AI_LEN`, `AI_CONTROL`, `AI_STATUS` and `AI_DACRATE` as pinned ares
+  `ai/io.cpp` does, feeding the same two-entry FIFO as the HLE functions.
+- **Data symbols settle identification.** `osViGetCurrentFramebuffer` was
+  ambiguous because the current- and next-framebuffer getters differ only
+  in the relocated global they load. n64sym signatures name those globals
+  (`.hi16/.lo16 __osViCurr`). A variant now survives only if each data
+  symbol has the address that settled matches give it and no other named
+  global has that address, beside the ADR-0171 call rule. n64sym's
+  section-relative names (`vimgr_data_0010`) may alias a global and decide
+  nothing. `osViSwapBuffer` pins `__osViNext`, so the getter loading that
+  address is not `osViGetCurrentFramebuffer`. Without this, OoT's
+  scheduler read libultra's own VI state, which the HLE swap never
+  updates, and waited forever for its swap.
+- **A declared load begins with a function.** OoT packs overlays back to
+  back at their link addresses, so the word before an overlay is the last
+  one's data, not a `jr ra`. Each actor's first function, usually its
+  init, was never address-taken. Load starts now count as layout
+  boundaries in discovery and in the solver's re-check.
+- **Constants across blocks.** GCC puts a pointer's `lui` in a branch
+  delay slot and its `addiu` in the branch target. Address-taken pairing
+  now follows up to 16 decoded words in address order until the register
+  is redefined. Extra candidates only widen the dispatch set.
+- **SRAM.** PI DMA through a handle on domain 2 (`0x08000000`) reads and
+  writes 32 KiB of byte-addressed SRAM, kept in `--sram <file>`. FlashRAM
+  commands still fail closed.
+- **VI special features.** `osViSetSpecialFeatures` now sets and clears
+  gamma, gamma dither, divot and the dither filter in the control word
+  that `osViSetMode` resets. OoT turns gamma off; ignoring that washed
+  out every colour.
+
+Result:
+- OoT + 468 overlays stays CLOSED: 154,414 blocks, 14 assumptions;
+  whole-ROM 16,239 blockers. The fixed image: 29,542 blocks. SM64's map
+  keeps its blocks and 1,343 address-taken functions.
+- Natively with RT64 and its lowered audio microcode, OoT plays its boot
+  logo, title and file select (checked by eye by the user, colours
+  correct after the gamma fix), writes a 32 KiB SRAM save, and accepts
+  keyboard input.
+
+Verifier: unit tests for data-symbol settling (with a section-alias
+negative case), load-start plausibility, and a cross-block constant
+(`tests/address_taken.rs`). The AI registers follow ares `ai/io.cpp`
+field by field. The full gate passes.

@@ -57,9 +57,18 @@ fn register_calls_close_only_over_plausible_address_taken_functions() {
         size: 4096,
     };
     let bytes: Vec<u8> = image.words.iter().flat_map(|w| w.to_be_bytes()).collect();
-    let mut map = discover_address_taken(rom, &bytes, &image, &[GuestAddr(BASE)], &[], None, 100)
-        .unwrap()
-        .map;
+    let mut map = discover_address_taken(
+        rom,
+        &bytes,
+        &image,
+        &[GuestAddr(BASE)],
+        &[],
+        None,
+        &Default::default(),
+        100,
+    )
+    .unwrap()
+    .map;
     assert_eq!(
         map.address_taken.keys().map(|a| a.pc).collect::<Vec<_>>(),
         [GuestAddr(F)]
@@ -90,5 +99,59 @@ fn register_calls_close_only_over_plausible_address_taken_functions() {
             Scope::DeclaredStaticImagesGuardedRamAddressTaken
         ),
         1
+    );
+}
+
+#[test]
+fn a_constant_built_across_blocks_is_address_taken() {
+    // GCC schedules the `lui` into a branch delay slot and the `addiu` into
+    // the branch target's block (ADR-0182)
+    let f = BASE + 12 * 4;
+    let mut image = image();
+    image.words = vec![
+        0x1480_0002,                // bne a0, zero, +2
+        0x3c08_8000,                // lui t0, 0x8000 (delay slot)
+        0x2402_0001,                // addiu v0, zero, 1
+        0x2508_0000 | (f & 0xffff), // addiu t0, t0, f
+        0xaf88_0000,                // sw t0, 0(gp)
+        0x8f99_0000,                // lw t9, 0(gp)
+        0x0320_f809,                // jalr t9
+        0,
+        0x1000_ffff, // b .
+        0,
+        0x03e0_0008, // pad: jr ra
+        0,
+        0x2482_0001, // f: addiu v0, a0, 1
+        0x03e0_0008, // jr ra
+        0,
+    ];
+    let rom = RomIdentity {
+        sha256: "e".repeat(64),
+        size: 4096,
+    };
+    let bytes: Vec<u8> = image.words.iter().flat_map(|w| w.to_be_bytes()).collect();
+    let map = discover_address_taken(
+        rom,
+        &bytes,
+        &image,
+        &[GuestAddr(BASE)],
+        &[],
+        None,
+        &Default::default(),
+        100,
+    )
+    .unwrap()
+    .map;
+    assert_eq!(
+        map.address_taken.keys().map(|a| a.pc).collect::<Vec<_>>(),
+        [GuestAddr(f)]
+    );
+    assert_eq!(
+        open_sites(
+            &map,
+            &image,
+            Scope::DeclaredStaticImagesGuardedRamAddressTaken
+        ),
+        0
     );
 }

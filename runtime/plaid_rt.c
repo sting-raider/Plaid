@@ -91,6 +91,11 @@ static rt_timer timers[MAX_TIMERS];
 static u8 *rom;
 static size_t rom_size;
 static u8 eeprom[2048];
+/* --sram: the cartridge's SRAM, written back after every write DMA */
+#define SRAM_SIZE 0x8000
+static u8 sram[SRAM_SIZE];
+static const char *sram_path;
+static void save_file(const char *path, const u8 *bytes, size_t size);
 static struct timespec t0;
 static u64 time_base; /* osSetTime offset in count ticks */
 static u32 frame_buffer;
@@ -118,8 +123,10 @@ static FILE *wav;
 static u32 wav_bytes;
 /* AI DMA (ADR-0170), as ares models it: a two-entry FIFO whose head drains
    one 4-byte sample per DAC period, here on the host clock. */
-static struct { u32 len[2], count, on, rate; u64 start_ns; } ai = {{0, 0}, 0, 0, 32000, 0};
+static struct { u32 len[2], count, on, rate; u64 start_ns; u32 addr; } ai = {{0, 0}, 0, 0, 32000, 0, 0};
 static void ai_update(void);
+static u32 ai_length(void);
+static void ai_submit(u32 p, u32 n);
 static unsigned long vi_count, gfx_tasks, audio_tasks, dma_count;
 static long stop_gfx = 1; /* stop after this many graphics tasks (0: never) */
 static double run_seconds = 0;
@@ -149,12 +156,17 @@ static void finish(int code, const char *why) {
     printf("]}\n");
   }
   printf("{\"stop\":\"%s\",\"vi\":%lu,\"gfx_tasks\":%lu,\"audio_tasks\":%lu,\"pi_dma\":%lu,"
-         "\"framebuffer\":\"%08x\",\"fault\":%u,\"fault_pc\":\"%08x\",\"ra\":\"%08x\",\"a0\":\"%08x\",\"a1\":\"%08x\",\"t9\":\"%08x\",\"fcsr\":\"%08x\"",
+         "\"framebuffer\":\"%08x\",\"fault\":%u,\"fault_pc\":\"%08x\",\"ra\":\"%08x\",\"a0\":\"%08x\",\"a1\":\"%08x\",\"a2\":\"%08x\",\"t9\":\"%08x\",\"fcsr\":\"%08x\"",
          why, vi_count, gfx_tasks, audio_tasks, dma_count, frame_buffer, S->fault, S->fault_pc,
-         (u32)S->r[31], (u32)S->r[4], (u32)S->r[5], (u32)S->r[25], S->fcsr | S->fcc << 23);
+         (u32)S->r[31], (u32)S->r[4], (u32)S->r[5], (u32)S->r[6], (u32)S->r[25], S->fcsr | S->fcc << 23);
   if (S->fault == 7) /* a COP1 fault: the operands are in the FPRs */
     for (i = 0; i < 32; i++) printf("%s%016llx\"", i ? ",\"" : ",\"fpr\":[\"", (unsigned long long)S->f[i]);
-  printf("%s}\n", S->fault == 7 ? "]" : "");
+  printf("%s,\"threads\":[", S->fault == 7 ? "]" : "");
+  /* id, state (2 runnable, 3 running, 4 blocked), priority, wait queue */
+  for (i = 0, p = 0; i < MAX_THREADS; i++)
+    if (threads[i].state != T_FREE && threads[i].state != T_DEAD)
+      printf("%s[%u,%d,%d,\"%08x\"]", p++ ? "," : "", threads[i].id, threads[i].state, threads[i].pri, threads[i].wait_queue);
+  printf("]}\n");
   fflush(stdout);
   exit(code);
 }
@@ -289,6 +301,8 @@ static int block_on(u32 mq, int full) {
 /* jam: put the message at the front. Returns -1 when full and not blocking. */
 static int mq_send(u32 mq, u32 msg, int block, int jam) {
   u32 count, valid, first;
+  /* PLAID_TRACE_MQ set: every send on stderr, to find a stalled handshake */
+  { static long t = -1; if (t < 0) t = getenv("PLAID_TRACE_MQ") ? 1 : 0; if (t) fprintf(stderr, "send %08x %08x vi=%lu ra=%08x\n", mq, msg, vi_count, (u32)S->r[31]); }
   for (;;) {
     valid = rd32(mq + 8); count = rd32(mq + 0x10);
     if (valid < count) break;
@@ -516,6 +530,7 @@ RT(osJamMesg) { int r = mq_send(arg(0), arg(1), arg(2) & 1, 1); maybe_preempt();
 RT(osRecvMesg) { int r = mq_recv(arg(0), arg(1), arg(2) & 1); maybe_preempt(); return ret((u32)r); }
 RT(osSetEventMesg) {
   u32 ev = arg(0);
+  if (getenv("PLAID_TRACE_MQ")) fprintf(stderr, "event %u %08x %08x\n", ev, arg(1), arg(2));
   if (ev < EV_COUNT) { events[ev].mq = arg(1); events[ev].msg = arg(2); events[ev].set = 1; }
   return 0;
 }
@@ -571,7 +586,7 @@ RT(osInitialize) {
 }
 static int nop(void) { return 0; }
 #define NOP(name) RT(name) { return nop(); }
-NOP(osCreateViManager) NOP(osViSetSpecialFeatures)
+NOP(osCreateViManager)
 NOP(osCreatePiManager) NOP(osInvalDCache) NOP(osInvalICache) NOP(osWritebackDCache)
 NOP(osWritebackDCacheAll) NOP(osSpTaskYield)
 /* shortcut: the VI scale registers are not modeled; RT64 scales the frame itself */
@@ -595,13 +610,14 @@ RT(osSpTaskYielded) { return ret(0); }
 RT(__osSpSetPc) { return ret(0); }
 /* VI registers as libultra's retrace handler writes them from the OSViMode
    (comRegs at +4, fldRegs[0] at +0x28), the next framebuffer and the black
-   flag. shortcut: field 0 only and no special features (gamma, dither), which
-   SM64's non-interlaced LAN1 mode does not need; interlaced modes would
-   alternate fields. */
+   flag; the control word is the mode's as osViSetSpecialFeatures changed it.
+   shortcut: field 0 only, which SM64's non-interlaced LAN1 mode does not
+   need; interlaced modes would alternate fields. */
+static u32 vi_ctrl;
 static void vi_update(void) {
   u32 m = vi_mode, f = m + 0x28;
   if (!m) return;
-  vi_regs[0] = rd32(m + 0x04);
+  vi_regs[0] = vi_ctrl;
   vi_regs[1] = (frame_buffer & 0x1fffffffu) + rd32(f);
   vi_regs[2] = rd32(m + 0x08);
   vi_regs[3] = rd32(f + 0x10);
@@ -616,7 +632,23 @@ static void vi_update(void) {
   vi_regs[12] = rd32(m + 0x20);
   vi_regs[13] = rd32(f + 0x04);
 }
-RT(osViSetMode) { vi_mode = arg(0); vi_update(); return 0; }
+RT(osViSetMode) { vi_mode = arg(0); vi_ctrl = rd32(vi_mode + 0x04); vi_update(); return 0; }
+/* osViSetSpecialFeatures(func): gamma (VI_CTRL bit 3), gamma dither (2),
+   divot (4) and the dither filter (16), which turns anti-aliasing off and
+   back to the mode's setting (bits 8-9), as libultra documents */
+RT(osViSetSpecialFeatures) {
+  u32 func = arg(0);
+  if (func & 0x01) vi_ctrl |= 0x8;
+  if (func & 0x02) vi_ctrl &= ~0x8u;
+  if (func & 0x04) vi_ctrl |= 0x4;
+  if (func & 0x08) vi_ctrl &= ~0x4u;
+  if (func & 0x10) vi_ctrl |= 0x10;
+  if (func & 0x20) vi_ctrl &= ~0x10u;
+  if (func & 0x40) vi_ctrl = (vi_ctrl | 0x10000u) & ~0x300u;
+  if (func & 0x80) vi_ctrl = (vi_ctrl & ~0x10000u) | (vi_mode ? rd32(vi_mode + 0x04) & 0x300u : 0);
+  vi_update();
+  return 0;
+}
 RT(osViBlack) { vi_black = arg(0) & 0xff; vi_update(); return 0; }
 RT(osViSwapBuffer) { frame_buffer = arg(0); vi_update(); return 0; }
 /* swaps take effect at once here, so the current and next buffers are the
@@ -707,6 +739,22 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
     else *v = pi_bsd[k];
     return 0;
   }
+  if (p >= 0x04500000u && p < 0x04600000u) { /* AI registers, as ares ai/io.cpp */
+    u32 r = (p & 0x1fu) >> 2;
+    ai_update();
+    if (!write) {
+      *v = r == 3 ? (ai.count > 1 ? 0x80000001u : 0) | (ai.count ? 0x40000000u : 0) | ai.on << 25 | 1u << 24 | 1u << 20
+                  : ai_length() & 0x3ffffu;
+      return 0;
+    }
+    if (r == 0 && ai.count < 2) ai.addr = (u32)*v & 0xfffff8u;
+    else if (r == 1 && ai.count < 2) ai_submit(ai.addr, (u32)*v & 0x3fff8u);
+    else if (r == 2) {
+      if (!ai.on && (*v & 1)) ai.start_ns = now_ns();
+      ai.on = (u32)*v & 1;
+    } else if (r == 4) ai.rate = 48681812u / (((u32)*v & 0x3fffu) + 1); /* NTSC VI clock / (rate + 1) */
+    return 0; /* AI_STATUS write: the interrupt is an event here; AI_BITRATE: 16-bit output */
+  }
   if (write) return 1;
   if (p >= 0x05000000u && p < 0x08000000u) { /* no device: the address's low half twice (pi/bus.hpp) */
     *v = (u64)(s64)(s32)((p & 0xfffeu) << 16 | (p & 0xfffeu));
@@ -724,10 +772,23 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
    the RAM address at +8, the device offset at +0xc and the size at +0x10 */
 RT(osEPiStartDma) {
   u32 h = arg(0), mb = arg(1), mq = rd32(mb + 4), va = rd32(mb + 8), dev = rd32(mb + 0xc), n = rd32(mb + 0x10);
-  if (rd32(h + 0xc) != 0xb0000000u) finish(1, "PI DMA through a non-cartridge handle");
-  if (arg(2) != 0) finish(1, "PI write to cartridge");
-  if ((u64)dev + n > rom_size) finish(1, "PI DMA outside the ROM");
-  wr(va, rom + dev, n);
+  u32 base = rd32(h + 0xc) & 0x1fffffffu, p;
+  if (base == 0x08000000u) { /* SRAM: 32 KiB, byte addressed, on PI domain 2 */
+    dev = ((base | dev) & 0x1fffffffu) - 0x08000000u; /* libultra ORs the handle base in */
+    if ((u64)dev + n > SRAM_SIZE) finish(1, "PI DMA outside SRAM");
+    if (arg(2) == 0) wr(va, sram + dev, n);
+    else {
+      p = v2p(va);
+      if (p > PLAID_RAM_SIZE || n > PLAID_RAM_SIZE - p) finish(1, "SRAM DMA outside RAM");
+      memcpy(sram + dev, S->ram + p, n);
+      save_file(sram_path, sram, SRAM_SIZE);
+    }
+  } else {
+    if (base != 0x10000000u) finish(1, "PI DMA through a non-cartridge handle");
+    if (arg(2) != 0) finish(1, "PI write to cartridge");
+    if ((u64)dev + n > rom_size) finish(1, "PI DMA outside the ROM");
+    wr(va, rom + dev, n);
+  }
   dma_count++;
   if (mq) mq_send(mq, mb, 0, 0);
   maybe_preempt();
@@ -932,9 +993,14 @@ RT(osAiGetStatus) {
 }
 /* -1 while the FIFO is full, as libultra's __osAiDeviceBusy check */
 RT(osAiSetNextBuffer) {
-  u32 p = v2p(arg(0)), n = arg(1) & 0x3fff8u, i;
   ai_update();
   if (ai.count == 2) return ret(0xffffffffu);
+  ai_submit(v2p(arg(0)), arg(1) & 0x3fff8u);
+  return ret(0);
+}
+/* one buffer into a FIFO with room: the first raises the AI interrupt */
+static void ai_submit(u32 p, u32 n) {
+  u32 i;
   if (p > PLAID_RAM_SIZE || n > PLAID_RAM_SIZE - p) finish(1, "AI buffer outside RAM");
   if (!ai.count) { ai.start_ns = now_ns(); post(EV_AI); }
   ai.len[ai.count++] = n;
@@ -945,7 +1011,6 @@ RT(osAiSetNextBuffer) {
 #ifdef PLAID_RT64
   plaid_audio_play(S->ram + p, n, ai.rate);
 #endif
-  return ret(0);
 }
 
 /* ---- SI: controllers and EEPROM ------------------------------------------ */
@@ -997,26 +1062,27 @@ RT(osContGetReadData) {
    interrupted write leaves the previous save or the complete new one. */
 #define EEPROM_SIZE 512
 static const char *save_path;
-static void save_eeprom(void) {
+static void save_file(const char *path, const u8 *bytes, size_t size) {
   char tmp[1024];
   FILE *f;
-  if (!save_path) return;
-  snprintf(tmp, sizeof tmp, "%s.tmp", save_path);
+  if (!path) return;
+  snprintf(tmp, sizeof tmp, "%s.tmp", path);
   f = fopen(tmp, "wb");
-  if (!f || fwrite(eeprom, 1, EEPROM_SIZE, f) != EEPROM_SIZE || fclose(f)) finish(1, "cannot write the save file");
-  remove(save_path);
-  if (rename(tmp, save_path)) finish(1, "cannot replace the save file");
+  if (!f || fwrite(bytes, 1, size, f) != size || fclose(f)) finish(1, "cannot write the save file");
+  remove(path);
+  if (rename(tmp, path)) finish(1, "cannot replace the save file");
 }
-static int load_eeprom(void) {
+static void save_eeprom(void) { save_file(save_path, eeprom, EEPROM_SIZE); }
+static int load_file(const char *path, u8 *bytes, size_t size) {
   char tmp[1024];
-  FILE *f = fopen(save_path, "rb");
+  FILE *f = fopen(path, "rb");
   size_t n;
-  snprintf(tmp, sizeof tmp, "%s.tmp", save_path);
+  snprintf(tmp, sizeof tmp, "%s.tmp", path);
   if (!f) f = fopen(tmp, "rb"); /* a write interrupted after the remove */
   if (!f) return 0;             /* no save yet */
-  n = fread(eeprom, 1, EEPROM_SIZE + 1, f);
+  n = fread(bytes, 1, size + 1, f);
   fclose(f);
-  return n == EEPROM_SIZE ? 0 : -1;
+  return n == size ? 0 : -1;
 }
 RT(osEepromProbe) { return ret(1); } /* EEPROM_TYPE_4K */
 RT(osEepromRead) { wr(arg(2), eeprom + 8 * (arg(1) & 63), 8); return ret(0); }
@@ -1073,6 +1139,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--gfx-tasks") && i + 1 < argc) stop_gfx = atol(argv[++i]);
     else if (!strcmp(argv[i], "--seconds") && i + 1 < argc) run_seconds = atof(argv[++i]);
     else if (!strcmp(argv[i], "--save") && i + 1 < argc) save_path = argv[++i];
+    else if (!strcmp(argv[i], "--sram") && i + 1 < argc) sram_path = argv[++i];
     else if (!strcmp(argv[i], "--wav") && i + 1 < argc) {
       if (!(wav = fopen(argv[++i], "wb"))) { perror(argv[i]); return 2; }
       wav_header();
@@ -1088,7 +1155,7 @@ int main(int argc, char **argv) {
              sscanf(argv[++i], "%i@%u:%u", (int *)&presses[n_presses].buttons, &presses[n_presses].at,
                     &presses[n_presses].frames) == 3) n_presses++;
     else {
-      fprintf(stderr, "usage: %s [--rom <rom.z64>] [--stop-at gfx|none] [--gfx-tasks N] [--seconds S] [--press <buttons>@<vi>:<frames>] [--save <eeprom file>] [--wav <file>] [--rsp-dump <dir>] [--rsp-capture <task> <dir>] [--dump <addr> <words>]\n", argv[0]);
+      fprintf(stderr, "usage: %s [--rom <rom.z64>] [--stop-at gfx|none] [--gfx-tasks N] [--seconds S] [--press <buttons>@<vi>:<frames>] [--save <eeprom file>] [--sram <sram file>] [--wav <file>] [--rsp-dump <dir>] [--rsp-capture <task> <dir>] [--dump <addr> <words>]\n", argv[0]);
       return 2;
     }
   }
@@ -1101,7 +1168,8 @@ int main(int argc, char **argv) {
     fclose(f);
     if (rom_size < 0x1000 || rom[0] != 0x80 || rom[1] != 0x37) { fprintf(stderr, "expected a big-endian .z64 ROM\n"); return 2; }
   }
-  if (save_path && load_eeprom()) { fprintf(stderr, "%s is not a %d-byte EEPROM save\n", save_path, EEPROM_SIZE); return 2; }
+  if (sram_path && load_file(sram_path, sram, SRAM_SIZE)) { fprintf(stderr, "%s is not a %d-byte SRAM save\n", sram_path, SRAM_SIZE); return 2; }
+  if (save_path && load_file(save_path, eeprom, EEPROM_SIZE)) { fprintf(stderr, "%s is not a %d-byte EEPROM save\n", save_path, EEPROM_SIZE); return 2; }
   S = calloc(1, sizeof *S);
   if (!S) return 2;
   S->io = rt_io;

@@ -124,10 +124,10 @@ Next concrete steps, in order:
      (ADR-0176/0177); overlays discovered at link addresses (ADR-0172
      stage 1, ADR-0179) with discovery in 44 s (ADR-0178); jump-table bounds
      proven over every path (ADR-0180), so OoT with its 468 overlays is
-     `CLOSED` (141,268 blocks); relocatable overlays run natively through a
-     verified binding (ADR-0181), to the first graphics task.
-     **Next:** an RT64 build of OoT and its title/audio snapshot campaign,
-     then retire assumptions one by one (see the ledger in the README and
+     `CLOSED` (154,414 blocks); relocatable overlays run natively through a
+     verified binding (ADR-0181); with RT64, lowered audio microcode and
+     SRAM, OoT draws its title and file select (ADR-0182).
+     **Next:** play OoT past the file select into gameplay, then retire assumptions one by one (see the ledger in the README and
      `docs/assumptions.json`; 0 of 16 retired).
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,
