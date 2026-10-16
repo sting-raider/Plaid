@@ -12,7 +12,6 @@ import argparse
 import datetime
 import html
 import json
-import math
 import os
 import subprocess
 import textwrap
@@ -406,104 +405,134 @@ def isa_group(name: str) -> str:
     return "ALU"
 
 
-def squarify(items: list, x: float, y: float, w: float, h: float) -> list:
-    """Squarified treemap: items are (key, area) sorted by area, descending."""
-    out, items = [], list(items)
-    while items:
-        short = min(w, h)
+PLAIN, CHECKED, UNCHECKED, OPEN = "#2ea043", "#d29922", "#db6d28", "#6e7681"
+ISA_STATES = [
+    ("plain", PLAIN, "Matches ares, no run-time assumption"),
+    ("checked", CHECKED, "Matches ares; native code checks an assumption and aborts if it fails"),
+    ("unchecked", UNCHECKED, "Matches ares; relies on an assumption nothing checks"),
+    ("open", OPEN, "Not lowered"),
+]
 
-        def worst(row):
-            total = sum(a for _, a in row)
-            return max(max(short * short * a / total ** 2, total ** 2 / (short * short * a))
-                       for _, a in row)
 
-        row, rest = [items[0]], items[1:]
-        while rest and worst(row + [rest[0]]) <= worst(row):
-            row.append(rest.pop(0))
-        total = sum(a for _, a in row)
-        if w >= h:
-            rw, cy = total / h, y
-            for key, a in row:
-                out.append((key, x, cy, rw, a / rw))
-                cy += a / rw
-            x, w = x + rw, w - rw
-        else:
-            rh, cx = total / w, x
-            for key, a in row:
-                out.append((key, cx, y, a / rh, rh))
-                cx += a / rh
-            y, h = y + rh, h - rh
-        items = rest
+def isa_state(name: str, lowered: bool, rules: list) -> str:
+    """Worst dependency wins: unchecked > checked > plain."""
+    if not lowered:
+        return "open"
+    hits = {r["state"] for r in rules
+            if name in r.get("mnemonics", []) or isa_group(name) in r.get("groups", [])}
+    return "unchecked" if "unchecked" in hits else "checked" if "checked" in hits else "plain"
+
+
+def stacked(x, y, w, h, segments) -> list:
+    """segments: (count, color, tooltip); widths are proportional to counts."""
+    total = sum(n for n, *_ in segments)
+    out, cx = [], x
+    for n, color, tip in segments:
+        if n:
+            sw = w * n / total
+            out.append(f'<rect x="{cx:.1f}" y="{y}" width="{sw:.1f}" height="{h}" fill="{color}" '
+                       f'stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>{esc(tip)}</title></rect>')
+            cx += sw
     return out
 
 
-CELL = {"done": "#2ea043", "partial": "#bf8700", "open": "#6e7681"}
+def render_coverage_svg(coverage: dict, data: dict, rsp: dict | None, assumptions: dict) -> str:
+    width, label_w, bar_w, row = 840, 150, 560, 24
+    rules = assumptions["instruction_rules"]
+    for r in rules:
+        unknown = set(r.get("mnemonics", [])) - set(coverage["mnemonics"])
+        if unknown:
+            raise SystemExit(f"instruction_rules name unknown mnemonics: {sorted(unknown)}")
+    out, y = [], 0
 
+    def text(x, yy, value, cls="t"):
+        out.append(f'<text x="{x}" y="{yy}" class="{cls}">{esc(value)}</text>')
 
-def treemap(groups: dict, x0: float, y0: float, w: float, h: float) -> list:
-    """groups: name -> [(item, state)]; one cell per item, done first."""
-    order = sorted(groups, key=lambda g: (-len(groups[g]), g))
-    total = sum(len(groups[g]) for g in order)
-    rects = squarify([(g, len(groups[g]) * w * h / total) for g in order], x0, y0, w, h)
-    rank = {"done": 0, "partial": 1, "open": 2}
-    out = []
-    for g, gx, gy, gw, gh in rects:
-        items = sorted(groups[g], key=lambda it: (rank[it[1]], it[0]))
-        cols = max(1, round(math.sqrt(len(items) * gw / gh)))
-        rows = math.ceil(len(items) / cols)
-        cw, ch = gw / cols, gh / rows
-        last = len(items) - (rows - 1) * cols  # the last row stretches to fill
-        for n, (item, state) in enumerate(items):
-            row, col = divmod(n, cols)
-            w_ = cw if row < rows - 1 else gw / last
-            cx, cy = gx + col * w_, gy + row * ch
-            out.append(f'<rect x="{cx:.1f}" y="{cy:.1f}" width="{w_:.1f}" height="{ch:.1f}" '
-                       f'fill="{CELL[state]}" stroke="#0d1117" stroke-opacity="0.35" stroke-width="0.6">'
-                       f'<title>{esc(g)}: {esc(item)} ({state})</title></rect>')
-        out.append(f'<rect x="{gx:.1f}" y="{gy:.1f}" width="{gw:.1f}" height="{gh:.1f}" '
-                   f'fill="none" stroke="#0d1117" stroke-width="2"/>')
-        label = g if len(g) * 6.6 < gw - 6 else g[:max(0, int((gw - 6) / 6.6) - 1)] + "…"
-        if gw > 24 and gh > 16 and len(label) > 1:
-            out.append(f'<text x="{gx + 4:.1f}" y="{gy + 13:.1f}" class="cell">{esc(label)}</text>')
-    return out
+    def legend(items):
+        nonlocal y
+        for color, label in items:
+            out.append(f'<rect x="2" y="{y - 10}" width="11" height="11" fill="{color}"/>')
+            text(20, y, label, "s")
+            y += 18
 
+    def group_rows(groups, total_label, order):
+        """groups: name -> [state]; one stacked row per group, a bold total first."""
+        nonlocal y
+        every = [s for states in groups.values() for s in states]
+        for label, states, cls in [(total_label, every, "b")] + [(g, groups[g], "t") for g in sorted(groups, key=lambda g: (-len(groups[g]), g))]:
+            counts = {s: states.count(s) for s in order}
+            text(2, y + 16, label, cls)
+            out.extend(stacked(label_w, y, bar_w, 18 if cls == "b" else 16,
+                               [(counts[s], COLORS[s], f"{label}: {counts[s]} {s}") for s in order]))
+            text(label_w + bar_w + 10, y + 15, f"{len(states) - counts.get('open', 0)}/{len(states)}", cls)
+            y += row + (6 if cls == "b" else 0)
 
-def render_coverage_svg(coverage: dict, data: dict, rsp: dict | None = None) -> str:
+    COLORS = {"plain": PLAIN, "checked": CHECKED, "unchecked": UNCHECKED, "open": OPEN,
+              "verified": PLAIN, "partial": CHECKED}
     isa = {}
     for name, lowered in coverage["mnemonics"].items():
-        isa.setdefault(isa_group(name), []).append((name, "done" if lowered else "open"))
-    state = {"verified": "done", "partial": "partial", "open": "open"}
-    ms = {a["name"]: [(m["name"], state[m["state"]]) for m in a["milestones"]] for a in data["areas"]}
-    counts = milestone_counts(data)
-    # stacked, one full-width map per row, so labels stay readable at README width
-    width, map_h, top, gap = 840, 300, 30, 26
-    map_w, second = width, top + map_h + gap + top
-    third = second + map_h + gap + top
-    height = third + map_h if rsp else second + map_h
-    out = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" '
-        f'height="{height}" role="img" aria-label="Plaid coverage maps">',
-        '<style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}'
-        '.title{font-size:17px;fill:#1f2328}.cell{font-size:12px;fill:#fff;'
-        'paint-order:stroke;stroke:#0d1117;stroke-width:2px;stroke-opacity:.45}'
-        '@media (prefers-color-scheme:dark){.title{fill:#e6edf3}}</style>',
-        f'<text x="2" y="22" class="title">VR4300 instructions*: '
-        f'{pct(coverage["lowered"], coverage["decoded"])} ({coverage["lowered"]}/{coverage["decoded"]})</text>',
-        f'<text x="2" y="{second - 8}" class="title">Milestones*: '
-        f'{counts["milestones_verified"]} verified, {counts["milestones_partial"]} partial '
-        f'({counts["milestones_declared"]})</text>',
-    ]
-    out += treemap(isa, 0, top, map_w, map_h)
-    out += treemap(ms, 0, second, map_w, map_h)
+        isa.setdefault(isa_group(name), []).append(isa_state(name, lowered, rules))
+    flat = [s for v in isa.values() for s in v]
+
+    y = 22
+    text(2, y, f"VR4300 instructions*: {coverage['lowered']} of {coverage['decoded']} forms lower to native C "
+               f"({pct(coverage['lowered'], coverage['decoded'])}); {flat.count('plain')} with no run-time assumption", "h")
+    y += 26
+    legend([(c, label) for _, c, label in ISA_STATES])
+    y += 6
+    group_rows(isa, "All forms", [s for s, *_ in ISA_STATES])
+    y += 14
+
     if rsp:
         groups = {}
         for name, m in rsp["mnemonics"].items():
-            groups.setdefault(m["group"], []).append((name, "done" if m["lowered"] else "open"))
-        out.append(f'<text x="2" y="{third - 8}" class="title">RSP instructions*: '
-                   f'{pct(rsp["lowered"], rsp["documented"])} ({rsp["lowered"]}/{rsp["documented"]})</text>')
-        out += treemap(groups, 0, third, map_w, map_h)
-    out.append("</svg>")
-    return "\n".join(out) + "\n"
+            groups.setdefault(m["group"], []).append("plain" if m["lowered"] else "open")
+        text(2, y + 14, f"RSP instructions*: {rsp['lowered']} of {rsp['documented']} lower and match ares "
+                        f"({pct(rsp['lowered'], rsp['documented'])})", "h")
+        y += 40
+        text(2, y + 16, "In a real game", "b")
+        out.extend(stacked(label_w, y, bar_w, 18, [(rsp["lowered"], UNCHECKED, "relies on the unproven RSP obligations below")]))
+        text(label_w + bar_w + 10, y + 15, f"0/{rsp['lowered']}", "b")
+        y += row + 6
+        group_rows(groups, "Instruction semantics", ["plain", "open"])
+        y += 10
+        text(2, y + 14, "This is instruction semantics only. For a real game's RSP side, nothing below is proven:", "b")
+        y += 30
+        for ob in assumptions["rsp_obligations"]:
+            out.append(f'<rect x="2" y="{y - 11}" width="12" height="12" rx="2" fill="{UNCHECKED}"/>')
+            text(22, y, f'{ob["name"]}: {ob["state"]}', "t")
+            y += 20
+        y += 14
+
+    state = {"verified": "verified", "partial": "partial", "open": "open"}
+    areas = {a["name"]: [state[m["state"]] for m in a["milestones"]] for a in data["areas"]}
+    counts = milestone_counts(data)
+    text(2, y + 14, f"Milestones*: {counts['milestones_verified']} verified, {counts['milestones_partial']} partial "
+                    f"of {counts['milestones_declared']}", "h")
+    y += 36
+    out.append(f'<rect x="2" y="{y - 10}" width="11" height="11" fill="{PLAIN}"/>')
+    text(20, y, "verified", "s")
+    out.append(f'<rect x="110" y="{y - 10}" width="11" height="11" fill="{CHECKED}"/>')
+    text(128, y, "partial", "s")
+    out.append(f'<rect x="210" y="{y - 10}" width="11" height="11" fill="{OPEN}"/>')
+    text(228, y, "open", "s")
+    y += 14
+    for name, states in [("All milestones", [s for v in areas.values() for s in v])] + list(areas.items()):
+        c = {s: states.count(s) for s in ("verified", "partial", "open")}
+        text(2, y + 16, name, "b" if name.startswith("All") else "t")
+        out.extend(stacked(label_w, y, bar_w, 16, [(c[s], COLORS.get(s, OPEN), f"{name}: {c[s]} {s}") for s in c]))
+        text(label_w + bar_w + 10, y + 15, f"{c['verified']}/{len(states)}", "t")
+        y += row
+    height = y + 10
+    head = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" '
+        f'height="{height}" role="img" aria-label="Plaid coverage and assumptions">',
+        '<style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;fill:#1f2328}'
+        '.h{font-size:16px;font-weight:600}.b{font-size:13px;font-weight:600}.t{font-size:13px}'
+        '.s{font-size:12px;fill:#59636e}'
+        '@media (prefers-color-scheme:dark){text{fill:#e6edf3}.s{fill:#9198a1}}</style>',
+    ]
+    return "\n".join(head + out + ["</svg>"]) + "\n"
 
 
 def shield_color(fraction: float) -> str:
@@ -540,7 +569,7 @@ def badges(history: dict, data: dict) -> dict:
     }
     if latest.get("isa_lowered") is not None:
         lowered, decoded = latest["isa_lowered"], latest["isa_decoded"]
-        out["isa.svg"] = render_badge("VR4300*", pct(lowered, decoded), shield_color(lowered / decoded))
+        out["isa.svg"] = render_badge("VR4300 forms lowered*", pct(lowered, decoded), shield_color(lowered / decoded))
     return out
 
 
@@ -704,11 +733,11 @@ def main() -> int:
     ok &= write_or_check(HISTORY_MD, render_history_md(history), args.check)
     if not args.check:
         BADGES.mkdir(exist_ok=True)
+    assumptions = load_assumptions()
     if COVERAGE.exists():
         coverage = json.loads(COVERAGE.read_text(encoding="utf-8"))
         rsp = json.loads(RSP_COVERAGE.read_text(encoding="utf-8")) if RSP_COVERAGE.exists() else None
-        ok &= write_or_check(COVERAGE_SVG, render_coverage_svg(coverage, data, rsp), args.check)
-    assumptions = load_assumptions()
+        ok &= write_or_check(COVERAGE_SVG, render_coverage_svg(coverage, data, rsp, assumptions), args.check)
     ok &= write_or_check(ASSUMPTIONS_SVG, render_assumptions_svg(assumptions), args.check)
     ok &= write_or_check(README, splice_readme(README.read_text(encoding="utf-8"),
                                                render_assumptions_block(assumptions)), args.check)
