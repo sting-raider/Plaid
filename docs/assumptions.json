@@ -115,6 +115,15 @@
     {"name": "Trapping arithmetic never overflows", "state": "assumed", "checked": true, "faults": [6], "retire": "model the Overflow exception"},
     {"name": "BREAK is never executed", "state": "assumed", "checked": true, "faults": [9], "retire": "model the Breakpoint exception"}
   ],
+  "instruction_rules": [
+    {"state": "unchecked", "groups": ["FPU arith", "FPU compare", "FPU convert", "COP1 move"], "label": "COP1 is usable with Status.FR = 0 (ledger: declared, unchecked)"},
+    {"state": "checked", "groups": ["Load/store", "Trap"], "mnemonics": ["jr", "jalr", "add", "addi", "sub", "dadd", "daddi", "dsub", "break"], "label": "guarded RAM access, indirect-jump and return closure, no overflow, no trap, no BREAK (each aborts with a fault code)"}
+  ],
+  "rsp_obligations": [
+    {"name": "Microcode comes from the ROM, not from IMEM snapshots taken by running the game", "state": "assumed"},
+    {"name": "Graphics microcode is executed (today RT64 renders display lists at a high level)", "state": "assumed"},
+    {"name": "RSP tasks run asynchronously, as on hardware (today they complete synchronously)", "state": "assumed"}
+  ],
   "hand_inputs": [
     "Code segment ROM offset, address, size and entry point, given by hand",
     "--loads files for executable loads, written by hand (SM64: 2, OoT: 2)",

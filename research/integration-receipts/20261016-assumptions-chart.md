@@ -27,3 +27,12 @@ omitted from the table.
 
 Gate on the exact tree: see the closeout comment on issue #4. ROMs, maps and
 game data stay local. Actions were not used. `native_complete` stays false.
+
+**Follow-up: coverage chart.** The treemaps in `docs/coverage.svg` are replaced
+by stacked bars per instruction group. Each VR4300 form is green (matches ares,
+no run-time assumption), amber (matches ares; native code checks an assumption
+and aborts), orange (relies on an unchecked assumption) or grey (not lowered),
+from `instruction_rules` in `docs/assumptions.json`: 64 green, 44 amber, 88
+orange, 13 grey of 209. RSP semantics stay green (119/119) beside an orange
+"in a real game" bar and the three open RSP obligations. Docs and tooling only;
+`tools/progress.py --check` passes.
