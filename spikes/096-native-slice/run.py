@@ -231,6 +231,90 @@ def load_program(early=False, patch=False, at=LOAD_AT, reload=False, payload=Non
 # The load's own code writing its bytes: fault 2 (ADR-0161).
 SELF_PAYLOAD = ['payload', lui(t0, 0xA000), ori(t0, t0, LOAD_AT & 0xFFFF), sw(t0, 0, t0), jr(ra), nop, nop, nop, nop]
 
+# A relocatable overlay (ADR-0181) in the Zelda64 trailer format, linked at
+# OVL_LINK and declared there; the program copies loader-relocated images to
+# real bases and calls a function pointer read from the overlay's data.
+OVL_LINK, OVL_B1, OVL_B2 = 0x80600000, 0x80003000, 0x80007FC0  # B2: LO16 carry
+
+def overlay_file(extra=()):
+    # (word, relocation kind or None, label); HI16/LO16 name 'ovar' or 'ovh'
+    hi = lambda rt, sym: ('hi', I(15, rt, 0, 0), sym)
+    lo = lambda op, rt, rs, sym: ('lo', I(op, rt, rs, 0), sym)
+    text = [(addiu(sp, sp, -16),), (sw(ra, 12, sp),), hi(t0, 'ovar'), lo(35, t1, t0, 'ovar'),
+        (addiu(t1, t1, 7),), lo(43, t1, t0, 'ovar'), ('jal', 3 << 26, 'ovh'), (nop,),
+        hi(t2, 'ovar'), lo(9, s4, t2, 'ovar'), *extra, (lw(ra, 12, sp),), (jr(ra),), (addiu(sp, sp, 16),),
+        ('ovh',), (addu(v1, ra, zero),), (jr(ra),), (addiu(v0, zero, 42),)]
+    syms, at = {}, 0
+    for x in text:
+        if x[0] == 'ovh': syms['ovh'] = at
+        else: at += 4
+    syms['ovar'] = at  # data: ovar, then fptr -> ovf (offset 0)
+    words, relocs = [], []
+    for x in text:
+        if x[0] == 'ovh': continue
+        off = len(words) * 4
+        if x[0] == 'hi':
+            v = OVL_LINK + syms[x[2]]
+            words.append(x[1] | ((v + 0x8000) >> 16)); relocs.append((1, 5, off))
+        elif x[0] == 'lo':
+            words.append(x[1] | ((OVL_LINK + syms[x[2]]) & 0xFFFF)); relocs.append((1, 6, off))
+        elif x[0] == 'jal':
+            words.append(x[1] | ((OVL_LINK + syms['ovh']) & 0x0FFFFFFF) >> 2); relocs.append((1, 4, off))
+        else:
+            words.append(x[0])
+    text_size = len(words) * 4
+    words += [100, OVL_LINK]; relocs.append((2, 2, 4))
+    start = len(words)
+    words += [text_size, 8, 0, 8, len(relocs)] + [sec << 30 | kind << 24 | off for sec, kind, off in relocs]
+    while (len(words) + 1) % 4: words.append(0)
+    words.append((len(words) + 1 - start) * 4)
+    return words, relocs, text_size
+
+def relocate(words, relocs, text_size, base):
+    out, delta, highs = list(words), base - OVL_LINK, {}
+    for sec, kind, off in relocs:
+        at = (off + (text_size if sec == 2 else 0)) // 4
+        w = out[at]
+        if kind == 2: out[at] = (w + delta) & 0xFFFFFFFF
+        elif kind == 4: out[at] = w & 0xFC000000 | ((((w & 0x3FFFFFF) << 2 | 0x80000000) + delta) & 0x0FFFFFFF) >> 2
+        elif kind == 5: highs[(w >> 16) & 31] = (at, words[at])
+        else:
+            h, orig = highs[(w >> 21) & 31]
+            v = ((orig << 16) + (w & 0xFFFF ^ 0x8000) - 0x8000 + delta) & 0xFFFFFFFF
+            out[h] = out[h] & 0xFFFF0000 | ((v + 0x8000) >> 16) & 0xFFFF
+            out[at] = w & 0xFFFF0000 | v & 0xFFFF
+    return out
+
+def overlay_program(extra=(), tamper=False, revoke=True):
+    words, relocs, text_size = overlay_file(extra)
+    fptr = text_size + 4
+    def copy(label, dst, n):
+        return [lui(s6, 0xA000), LO(s6, s6, label), lui(s7, dst >> 16 | 0x2000), ori(s7, s7, dst & 0xFFFF),
+            addiu(t8, zero, n), label + '_cp', lw(t1, 0, s6), sw(t1, 0, s7), addiu(s6, s6, 4), addiu(s7, s7, 4),
+            addiu(t8, t8, -1), bgtz(t8, label + '_cp'), nop]
+    def call(base):
+        a = base + fptr
+        return [lui(t0, (a + 0x8000) >> 16), lw(t9, a & 0xFFFF, t0), lui(a0, 0x8000), LO(a0, a0, 'clobber'),
+            jalr(ra, t9), nop]
+    poke = [lui(t0, 0xA000), sw(zero, (OVL_B1 + 0x10) & 0xFFFF, t0)]  # a non-relocated text word of B1
+    body = [lui(sp, 0x8000), ori(sp, sp, 0x1100), *copy('ovl_b1', OVL_B1, len(words)), *(poke if tamper else []),
+        *call(OVL_B1), addu(s0, v1, zero), addu(s1, s4, zero), addu(s2, v0, zero)]
+    if revoke:
+        # a write into B1's text revokes its binding, so the copy at B2 binds
+        body += [*poke, *copy('ovl_b2', OVL_B2, len(words)), *call(OVL_B2), addu(s3, v1, zero),
+            lui(t0, (OVL_B1 + text_size + 0x8000) >> 16), lw(s5, (OVL_B1 + text_size) & 0xFFFF, t0)]
+    return [*body, *DONE, 'pad', jr(ra), nop, 'clobber', *poke, jr(ra), nop,
+        'ovl_link', *words, 'ovl_b1', *relocate(words, relocs, text_size, OVL_B1),
+        'ovl_b2', *relocate(words, relocs, text_size, OVL_B2)]
+
+OVERLAYS = {'overlay': overlay_program(),
+    # tampered bytes match no overlay at any base: unknown target, fault 3
+    'ovl_tamper': overlay_program(tamper=True, revoke=False),
+    # overlay code writing its own text: fault 2
+    'ovl_self': overlay_program(extra=[('hi', I(15, t3, 0, 0), 'ovh'), ('lo', I(43, zero, t3, 0), 'ovh')], revoke=False),
+    # a callee revokes the binding; returning into the overlay: fault 8
+    'ovl_callback': overlay_program(extra=[(jalr(ra, a0),), (nop,)], revoke=False)}
+
 def tlb_program(body, odd_valid=True, dirty=True, even0=0x2000):
     # TLB-mapped data (ADR-0162). On ares `map` runs MTC0 and TLBWI; natively
     # runtime.c writes the same entry. Pages are global and cached.
@@ -503,7 +587,8 @@ AT_BAD = [lui(gp, 0x8000), ori(gp, gp, 0x1000), lui(t0, 0x8000), LO(t0, t0, 'f1'
     sw(t9, 0, gp), lw(t9, 0, gp), jalr(ra, t9), nop, *DONE,
     'pad', jr(ra), nop,
     'f1', addu(v0, a0, a0), jr(ra), nop]
-ADDRESS_TAKEN = {'addrtaken', 'at_bad'}
+ADDRESS_TAKEN = {'addrtaken', 'at_bad', *OVERLAYS}
+PROGRAMS['overlay'] = OVERLAYS['overlay']
 FR0 = {'fpu_fr0'}
 # A taken conditional trap raises an unmodeled exception: fault 10.
 TRAP = [addiu(t0, zero, 0), R(52, 0, t0, zero), *DONE]
@@ -525,7 +610,7 @@ def windows():
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
     OUT.mkdir(parents=True, exist_ok=True)
     progs = dict(PROGRAMS, self_modifying=SELF_MODIFYING, cache_alias=CACHE_ALIAS, bad_return=BAD_RETURN, overflow=OVERFLOW, table_write=TABLE_WRITE, fpu_nan=FPU_NAN,
-        fpu_enabled=FPU_ENABLED, fpu_range=FPU_RANGE, fpu_round_range=FPU_ROUND_RANGE, load_early=LOADS['load_early'], load_patch=LOADS['load_patch'], load_self=LOADS['load_self'], break_reached=BREAK, trap_taken=TRAP, host_bad_return=HOST_BAD_RETURN, at_bad=AT_BAD, tlb_invalid=TLB_INVALID, tlb_clean=TLB_CLEAN, tlb_alias=TLB_ALIAS)
+        fpu_enabled=FPU_ENABLED, fpu_range=FPU_RANGE, fpu_round_range=FPU_ROUND_RANGE, load_early=LOADS['load_early'], load_patch=LOADS['load_patch'], load_self=LOADS['load_self'], break_reached=BREAK, trap_taken=TRAP, host_bad_return=HOST_BAD_RETURN, at_bad=AT_BAD, tlb_invalid=TLB_INVALID, tlb_clean=TLB_CLEAN, tlb_alias=TLB_ALIAS, **OVERLAYS)
     for name, items in progs.items():
         (OUT / f'{name}.bin').write_bytes(assemble(items))
         extra = []
@@ -539,6 +624,13 @@ def windows():
             labels = label_pcs(items)
             decl = dict(format='plaid-loads-v0', source='spike096 synthetic load',
                 loads=[dict(destination=hex(LOAD_DEST.get(name, LOAD_AT)), size=hex(32), rom=hex(labels['payload'] - BASE), encoding='raw')])
+            (OUT / f'{name}.loads.json').write_text(json.dumps(decl))
+            extra += ['--loads', str(OUT / f'{name}.loads.json')]
+        if name in OVERLAYS:
+            labels = label_pcs(items)
+            decl = dict(format='plaid-loads-v0', source='spike096 synthetic relocatable overlay',
+                loads=[dict(destination=hex(OVL_LINK), size=hex(labels['ovl_b1'] - labels['ovl_link']),
+                    rom=hex(labels['ovl_link'] - BASE), encoding='raw', relocatable=True)])
             (OUT / f'{name}.loads.json').write_text(json.dumps(decl))
             extra += ['--loads', str(OUT / f'{name}.loads.json')]
         if name in ADDRESS_TAKEN:
@@ -557,13 +649,13 @@ def windows():
         oracle = json.loads((OUT / f'{name}-oracle.json').read_text())
         assert json.loads(native.stdout) == oracle, (name, native.stdout, oracle)
         results[name] = hashlib.sha256(json.dumps(oracle, sort_keys=True).encode()).hexdigest()
-    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('fpu_enabled', 7), ('fpu_range', 7), ('fpu_round_range', 7), ('load_early', 8), ('load_patch', 8), ('load_self', 2), ('break_reached', 9), ('trap_taken', 10), ('host_bad_return', 5), ('at_bad', 3), ('tlb_invalid', 1), ('tlb_clean', 1), ('tlb_alias', 4)):
+    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('fpu_enabled', 7), ('fpu_range', 7), ('fpu_round_range', 7), ('load_early', 8), ('load_patch', 8), ('load_self', 2), ('break_reached', 9), ('trap_taken', 10), ('host_bad_return', 5), ('at_bad', 3), ('tlb_invalid', 1), ('tlb_clean', 1), ('tlb_alias', 4), ('ovl_tamper', 3), ('ovl_self', 2), ('ovl_callback', 8)):
         bad = subprocess.run([str(OUT / f'{name}-native.exe')], capture_output=True, text=True)
         assert bad.returncode == 6 and json.loads(bad.stdout)['fault'] == fault, (name, bad.stdout)
     receipt = dict(format='plaid-native-slice-receipt-v0', ares_revision=builder().REV, compiler=Path(cc).name,
-        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, fpu_enabled=7, fpu_range=7, fpu_round_range=7, load_early=8, load_patch=8, load_self=2, break_reached=9, trap_taken=10, host_bad_return=5, at_bad=3, tlb_invalid=1, tlb_clean=1, tlb_alias=4), interpreter_linked=False, native_complete=False)
+        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, fpu_enabled=7, fpu_range=7, fpu_round_range=7, load_early=8, load_patch=8, load_self=2, break_reached=9, trap_taken=10, host_bad_return=5, at_bad=3, tlb_invalid=1, tlb_clean=1, tlb_alias=4, ovl_tamper=3, ovl_self=2, ovl_callback=8), interpreter_linked=False, native_complete=False)
     (OUT / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
-    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, enabled-FPU-exception, out-of-range-conversion, out-of-range-rounding, early-load, patched-load re-entry, load self-write, BREAK, trap, host-return, unknown-target, invalid-page, clean-page and cache-index-alias programs fail closed')
+    print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, enabled-FPU-exception, out-of-range-conversion, out-of-range-rounding, early-load, patched-load re-entry, load self-write, BREAK, trap, host-return, unknown-target, invalid-page, clean-page, cache-index-alias, tampered-overlay, overlay self-write and revoked-overlay-return programs fail closed')
     print(json.dumps(receipt, sort_keys=True))
 
 def builder():

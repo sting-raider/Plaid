@@ -23,12 +23,12 @@ there (ADR-0176). It uses no symbol map. CPU access to SP memory and the PI
 is modelled as hardware, so unnamed library variants work (ADR-0177).
 `discover --overlays` adds the 468 executable overlays at their link addresses
 (ADR-0179). With jump-table bounds proven over every path (ADR-0180), OoT
-with all 468 overlays is **CLOSED** under the address-taken scope: 140,154
-blocks, 0 blockers; whole-ROM without assumptions it has 14,812 blockers.
-ADR-0172 stage 1 discovers 469 ROM-owned overlay candidates (468 with executable text)
-and validates their relocation structure. Generated native byte verifiers pass
-synthetic corruption/bounds checks. Link-address lowering, checked RAM
-bindings and native OoT boot are pending; the catalog does not close blockers.
+with all 468 overlays is **CLOSED** under the address-taken scope: 141,268
+blocks, 0 blockers; whole-ROM without assumptions it has 14,917 blockers.
+Overlays are lowered at their link addresses and run through a run-time
+binding that verifies the relocated bytes in RAM (ADR-0181): natively, OoT
+runs through its relocated game-state overlay to its first graphics task,
+where the runtime stops without RT64.
 
 ## By layer
 
@@ -37,8 +37,8 @@ bindings and native OoT boot are pending; the catalog does not close blockers.
 | Discovery (ROM -> ProgramMap) | ROM normalization, direct CFG, local and cross-block indirect proofs, function partitioning and return certificates (ADR-0127), trace import, conflict-aware merge | Jump tables beyond the bounded recognizer; overlays and DMA | `crates/plaid-core/tests/`, `crates/plaid-lower/tests/` |
 | Closure proof (solver) | Fail-closed whole-ROM solver; assumption scopes `DeclaredStaticImages` and `DeclaredStaticImagesGuardedRam` reach CLOSED for synthetic programs | Whole-ROM closure without assumptions remains open | `tests/pipeline.rs`, ADR-0126 |
 | Executable provenance | PI/SP/PIF/cache/TLB/RSP byte lineage over pinned ares histories; 20M-fetch commercial boot prefix retained locally | Paused by ADR-0125 until a milestone needs it | [`STATUS-LOG.md`](STATUS-LOG.md) |
-| Native lowering | CLOSED map -> C; integer, COP1, checked calls/returns and native RSP scalar/vector code | Relocatable overlay execution and remaining system instructions | spikes096/097/098; ADR-0157..0169 |
-| Runtime and rendering | Plaid runtime + RT64: threads, timing, input, saves, native RSP tasks and live audio | Verified dynamic overlay binding; remaining runtime ABI assumptions | `runtime/test_runtime.py`; ADR-0158..0171 |
+| Native lowering | CLOSED map -> C; integer, COP1, checked calls/returns and native RSP scalar/vector code | Remaining system instructions | spikes096/097/098; ADR-0157..0169 |
+| Runtime and rendering | Plaid runtime + RT64: threads, timing, input, saves, native RSP tasks and live audio | An RT64 build of OoT; remaining runtime ABI assumptions | `runtime/test_runtime.py`; ADR-0158..0171 |
 
 ## Real-ROM numbers
 

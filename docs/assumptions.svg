@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 376" width="840" height="376" role="img" aria-label="Distance to no-assumption CLOSED">
 <style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;fill:#1f2328}.title{font-size:17px}.sub{font-size:12px;fill:#59636e}.n{font-size:13px;font-weight:600}@media (prefers-color-scheme:dark){text{fill:#e6edf3}.sub{fill:#9198a1}}</style>
 <text x="2" y="22" class="title">Whole-ROM blockers with no assumptions (measured 2026-10-16)</text>
-<text x="2" y="44" class="title">Assumptions retired: 0/15</text>
+<text x="2" y="44" class="title">Assumptions retired: 0/16</text>
 <rect x="2" y="62" width="10" height="10" fill="#d1495b"/><text x="17" y="71" class="sub">Unresolved indirect sites</text>
 <rect x="186" y="62" width="10" height="10" fill="#edae49"/><text x="201" y="71" class="sub">Pointer tables unproven</text>
 <rect x="357" y="62" width="10" height="10" fill="#00798c"/><text x="372" y="71" class="sub">Unsupported instructions</text>
@@ -10,29 +10,29 @@
 <text x="2" y="111" class="n">Super Mario 64 (USA)</text>
 <text x="2" y="130" class="sub">45,419 blocks, 4,385 indirect sites</text>
 <text x="2" y="146" class="sub">1 sites closed without assumptions</text>
-<rect x="270.0" y="96" width="124.3" height="26" fill="#d1495b"><title>Super Mario 64 (USA): Unresolved indirect sites 4,384</title></rect>
-<rect x="394.3" y="96" width="8.3" height="26" fill="#edae49"><title>Super Mario 64 (USA): Pointer tables unproven 294</title></rect>
-<rect x="402.6" y="96" width="2.2" height="26" fill="#00798c"><title>Super Mario 64 (USA): Unsupported instructions 78</title></rect>
-<rect x="404.9" y="96" width="1.6" height="26" fill="#8d6ab8"><title>Super Mario 64 (USA): Runtime boundary 57</title></rect>
-<rect x="406.5" y="96" width="1.0" height="26" fill="#6e7681"><title>Super Mario 64 (USA): Other (global obligations) 7</title></rect>
-<text x="414.7" y="114" class="n">4,820</text>
+<rect x="270.0" y="96" width="123.4" height="26" fill="#d1495b"><title>Super Mario 64 (USA): Unresolved indirect sites 4,384</title></rect>
+<rect x="393.4" y="96" width="8.3" height="26" fill="#edae49"><title>Super Mario 64 (USA): Pointer tables unproven 294</title></rect>
+<rect x="401.7" y="96" width="2.2" height="26" fill="#00798c"><title>Super Mario 64 (USA): Unsupported instructions 78</title></rect>
+<rect x="403.9" y="96" width="1.6" height="26" fill="#8d6ab8"><title>Super Mario 64 (USA): Runtime boundary 57</title></rect>
+<rect x="405.5" y="96" width="1.0" height="26" fill="#6e7681"><title>Super Mario 64 (USA): Other (global obligations) 7</title></rect>
+<text x="413.7" y="114" class="n">4,820</text>
 <text x="2" y="183" class="n">Ocarina of Time (USA 1.2), fixed image</text>
 <text x="2" y="202" class="sub">29,511 blocks, 2,562 indirect sites</text>
 <text x="2" y="218" class="sub">2 sites closed without assumptions</text>
-<rect x="270.0" y="168" width="72.6" height="26" fill="#d1495b"><title>Ocarina of Time (USA 1.2), fixed image: Unresolved indirect sites 2,560</title></rect>
-<rect x="342.6" y="168" width="5.4" height="26" fill="#edae49"><title>Ocarina of Time (USA 1.2), fixed image: Pointer tables unproven 192</title></rect>
-<rect x="348.0" y="168" width="8.1" height="26" fill="#00798c"><title>Ocarina of Time (USA 1.2), fixed image: Unsupported instructions 284</title></rect>
-<rect x="356.1" y="168" width="1.8" height="26" fill="#8d6ab8"><title>Ocarina of Time (USA 1.2), fixed image: Runtime boundary 62</title></rect>
-<rect x="357.8" y="168" width="1.0" height="26" fill="#6e7681"><title>Ocarina of Time (USA 1.2), fixed image: Other (global obligations) 7</title></rect>
-<text x="366.0" y="186" class="n">3,105</text>
+<rect x="270.0" y="168" width="72.1" height="26" fill="#d1495b"><title>Ocarina of Time (USA 1.2), fixed image: Unresolved indirect sites 2,560</title></rect>
+<rect x="342.1" y="168" width="5.4" height="26" fill="#edae49"><title>Ocarina of Time (USA 1.2), fixed image: Pointer tables unproven 192</title></rect>
+<rect x="347.5" y="168" width="8.0" height="26" fill="#00798c"><title>Ocarina of Time (USA 1.2), fixed image: Unsupported instructions 284</title></rect>
+<rect x="355.5" y="168" width="1.7" height="26" fill="#8d6ab8"><title>Ocarina of Time (USA 1.2), fixed image: Runtime boundary 62</title></rect>
+<rect x="357.2" y="168" width="1.0" height="26" fill="#6e7681"><title>Ocarina of Time (USA 1.2), fixed image: Other (global obligations) 7</title></rect>
+<text x="365.4" y="186" class="n">3,105</text>
 <text x="2" y="255" class="n">OoT + 468 overlays at link addresses</text>
-<text x="2" y="274" class="sub">140,154 blocks, 13,426 indirect sites</text>
+<text x="2" y="274" class="sub">141,268 blocks, 13,529 indirect sites</text>
 <text x="2" y="290" class="sub">6 sites closed without assumptions</text>
-<rect x="270.0" y="240" width="380.5" height="26" fill="#d1495b"><title>OoT + 468 overlays at link addresses: Unresolved indirect sites 13,420</title></rect>
-<rect x="650.5" y="240" width="19.6" height="26" fill="#edae49"><title>OoT + 468 overlays at link addresses: Pointer tables unproven 692</title></rect>
-<rect x="670.2" y="240" width="17.9" height="26" fill="#00798c"><title>OoT + 468 overlays at link addresses: Unsupported instructions 631</title></rect>
-<rect x="688.0" y="240" width="1.8" height="26" fill="#8d6ab8"><title>OoT + 468 overlays at link addresses: Runtime boundary 62</title></rect>
+<rect x="270.0" y="240" width="380.8" height="26" fill="#d1495b"><title>OoT + 468 overlays at link addresses: Unresolved indirect sites 13,523</title></rect>
+<rect x="650.8" y="240" width="19.5" height="26" fill="#edae49"><title>OoT + 468 overlays at link addresses: Pointer tables unproven 692</title></rect>
+<rect x="670.2" y="240" width="17.8" height="26" fill="#00798c"><title>OoT + 468 overlays at link addresses: Unsupported instructions 633</title></rect>
+<rect x="688.1" y="240" width="1.7" height="26" fill="#8d6ab8"><title>OoT + 468 overlays at link addresses: Runtime boundary 62</title></rect>
 <rect x="689.8" y="240" width="1.0" height="26" fill="#6e7681"><title>OoT + 468 overlays at link addresses: Other (global obligations) 7</title></rect>
-<text x="698.0" y="258" class="n">14,812</text>
+<text x="698.0" y="258" class="n">14,917</text>
 <text x="2" y="320" class="sub">A bar reaches zero only when the whole ROM closes with no assumption. Bars share one scale.</text>
 </svg>

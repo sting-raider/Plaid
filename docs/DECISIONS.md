@@ -5079,3 +5079,59 @@ and slot-entry tests still pass. One expectation in `tests/tables.rs`
 changes. A second branch into the guard used to be rejected, but it is
 reached only through the compare, so every path is bounded. The test now
 also checks that adding an entry at that branch rejects the table.
+
+## ADR-0181: Relocatable overlays run natively through a verified binding
+
+Status: accepted. Milestone 5. ADR-0172 stage 2b.
+
+Context: with its overlays at link addresses (ADR-0179, ADR-0180), OoT is
+CLOSED, but the game loads each overlay into the heap and relocates it.
+Natively, boot stopped at its first call into a relocated game-state
+overlay (fault 3 at 0x800a151c).
+
+Decision: overlay code is lowered once, at its link address, and runs
+only through a binding to where RAM really holds it.
+- Relocatable declared loads leave the fixed-load machinery: they are not
+  in `plaid_code`, the table ranges or `plaid_declared`.
+- Relocated instructions read their immediates from the bound copy at run
+  time: a HI16 `lui` takes the low half of the RAM word at `pc + delta`,
+  and a LO16 `addiu` or load/store offset takes its signed low half. The
+  verified bytes equal the loader's output, so this is the value the CPU
+  executes, including shared HI16s and segmented pointers the loader left
+  alone. Any other relocation on an executed word rejects lowering.
+- Return addresses written in overlay code are the bound copy's
+  (`link + delta`), so checked returns compare real addresses.
+- An indirect transfer whose proven targets include overlay code, and
+  `plaid_enter`, first translate the target with `plaid_link`. A real
+  address in bound text maps to its link address. In unprotected RAM, it
+  binds the unique overlay and base at which a function entry lands on
+  the target and the ADR-0172 verifier accepts the whole relocated file
+  and zeroed BSS. Two candidates, a second live copy of a bound overlay,
+  bound text overlapping code, or an unbound link address yield no case:
+  fault 3.
+- Binding marks the text words 255. A store or runtime write into them
+  revokes the binding and clears the marks; from the overlay's own code
+  it aborts (fault 2). Every block of overlay code checks its binding
+  (fault 8). A direct call to another overlay's link address aborts.
+- Address-taken layout: a word right after a hole starts a function, as
+  the image start does, because a declared load begins with one.
+
+The solver adds the assumption for relocatable overlays and keeps the
+fixed-load assumption for fixed loads only.
+
+Result:
+- spike096 `overlay`: a Zelda64-format overlay with shared HI16s, a load
+  and store LO16, an `addiu` LO16, an R_MIPS_26 `jal` and an R_MIPS_32
+  function pointer runs at 0x80003000, is revoked by a write, and runs
+  again at 0x80007fc0, where the LO16 carries. It matches pinned ares on
+  all registers and RAM. Fail-closed cases: tampered bytes (fault 3), the
+  overlay writing its own text (fault 2), a callee revoking the binding
+  before the overlay resumes (fault 8).
+- OoT with 468 overlays stays CLOSED (141,268 blocks, 14 assumptions).
+  Natively it runs through its relocated game-state overlay to its first
+  graphics task (686 PI DMAs). SM64 and OoT's fixed image keep their
+  blocks; SM64 gains two address-taken functions after holes.
+
+Verifier: spike096 differential against pinned ares, plus the three
+fail-closed programs; `runtime/test_overlays.py` still covers the byte
+verifier itself.
