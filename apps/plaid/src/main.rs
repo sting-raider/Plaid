@@ -899,6 +899,59 @@ fn run() -> Result<(), String> {
                     1_000_000,
                 )?
             };
+            // calls into a slot root each alternate's code there (ADR-0185)
+            if declared.is_some() {
+                loop {
+                    let starts: BTreeSet<u32> = d.map.blocks.iter().map(|b| b.start.pc.0).collect();
+                    let more: BTreeSet<GuestAddr> = d
+                        .map
+                        .direct_edges
+                        .iter()
+                        .filter(|e| {
+                            e.kind == plaid_core::program::EdgeKind::Call
+                                && !starts.contains(&e.target.pc.0)
+                        })
+                        .flat_map(|e| {
+                            let t = e.target.pc.0;
+                            image.slot_copies(t).into_iter().filter(move |&c| c != t)
+                        })
+                        .filter(|&t| {
+                            !starts.contains(&t)
+                                && plaid_core::data_roots::plausible_at(
+                                    &image,
+                                    GuestAddr(t),
+                                    &starts,
+                                )
+                        })
+                        .map(GuestAddr)
+                        .collect();
+                    if more.is_empty() {
+                        break;
+                    }
+                    entries.extend(more);
+                    d = if address_taken {
+                        plaid_core::data_roots::discover_address_taken(
+                            rom.identity.clone(),
+                            rom.bytes(),
+                            &image,
+                            &entries,
+                            &runtime,
+                            evidence.clone(),
+                            &load_starts(declared.as_ref()),
+                            1_000_000,
+                        )?
+                    } else {
+                        discover_image_with_runtime(
+                            rom.identity.clone(),
+                            &image,
+                            &entries,
+                            &runtime,
+                            evidence.clone(),
+                            1_000_000,
+                        )?
+                    };
+                }
+            }
             // a second pass adds functions found only by layout (ADR-0152)
             let mut roots = roots;
             if data_roots {
@@ -1100,6 +1153,7 @@ fn run() -> Result<(), String> {
                 rom_offset: None,
                 physical_start: None,
                 holes: Vec::new(),
+                slots: Vec::new(),
             };
             let rom = plaid_core::program::RomIdentity {
                 sha256: image.base.image.clone(),
@@ -1293,12 +1347,17 @@ fn run() -> Result<(), String> {
                 })
                 .into_iter()
                 .chain(found.iter().map(|l| {
-                    serde_json::json!({
+                    let mut load = serde_json::json!({
                         "destination": format!("{:#x}", l.destination),
                         "size": format!("{:#x}", l.size),
                         "rom": format!("{:#x}", l.file.rom_start),
                         "encoding": if l.file.rom_end == 0 { "raw" } else { "yaz0" },
-                    })
+                    });
+                    // one of a slot's files: placed apart and bound by content (ADR-0185)
+                    if l.alternate {
+                        load["slot"] = true.into();
+                    }
+                    load
                 }))
                 .collect();
             let evidence: Vec<_> = stub
@@ -1465,7 +1524,30 @@ fn load_declarations(
             evidence: [id.clone()].into(),
             // placed at its link address; runs only through a binding (ADR-0181)
             relocatable: l["relocatable"].as_bool().unwrap_or(false),
+            linked: None,
         });
+        // a slot's file is placed apart, above RAM, after the loads before it
+        if l["slot"].as_bool() == Some(true)
+            && let Some(load) = loads.last_mut()
+        {
+            load.linked = Some(load.destination.start);
+            load.relocatable = true;
+        }
+    }
+    // slot files go above every other load and RAM, each at its link address
+    // modulo 64 KiB, so moving it changes only the high half of a HI16/LO16 pair
+    let mut next = loads
+        .iter()
+        .filter(|l| l.linked.is_none())
+        .map(|l| l.destination.end())
+        .chain([0x8080_0000])
+        .max()
+        .unwrap_or(0x8080_0000);
+    for load in loads.iter_mut().filter(|l| l.linked.is_some()) {
+        let link = u64::from(load.linked.map_or(0, |a| a.0));
+        next += (link.wrapping_sub(next)) & 0xffff;
+        load.destination.start = GuestAddr(u32::try_from(next).map_err(|e| e.to_string())?);
+        next += u64::from(load.destination.size);
     }
     loads.sort();
     let evidence = Evidence {

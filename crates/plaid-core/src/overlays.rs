@@ -210,9 +210,6 @@ impl Layout {
             .file_size
             .checked_add(self.bss)
             .ok_or("overlay span overflow")?;
-        let end = link
-            .checked_add(span)
-            .ok_or("overlay link range overflow")?;
         if !link.is_multiple_of(4)
             || !loaded.is_multiple_of(4)
             || !(0x80000000..0xa0000000).contains(&link)
@@ -221,6 +218,28 @@ impl Layout {
         {
             return Err("overlay load outside aligned direct RAM".into());
         }
+        self.apply(bytes, link, loaded)
+    }
+
+    /// [`Layout::relocate`] without its source and RAM checks: also moves a
+    /// file to a link address outside RAM (a slot alternate, ADR-0185).
+    pub fn apply(&self, bytes: &[u8], link: u32, loaded: u32) -> Result<Vec<u8>, String> {
+        if bytes.len() != self.file_size as usize
+            || bytes.len() > MAX_IMAGE
+            || !bytes.len().is_multiple_of(4)
+            || u64::from(self.text) + u64::from(self.data) + u64::from(self.rodata)
+                > bytes.len() as u64
+            || u64::from(self.file_size) + u64::from(self.bss) > MAX_IMAGE as u64
+        {
+            return Err("overlay layout exceeds its source or image bound".into());
+        }
+        let span = self
+            .file_size
+            .checked_add(self.bss)
+            .ok_or("overlay span overflow")?;
+        let end = link
+            .checked_add(span)
+            .ok_or("overlay link range overflow")?;
         let delta = loaded.wrapping_sub(link);
         let target = |address: u32| -> Result<u32, String> {
             if !(link..=end).contains(&address) {
@@ -270,6 +289,120 @@ impl Layout {
         out.resize(span as usize, 0);
         Ok(out)
     }
+}
+
+/// The text of a fixed-address file that shares a slot with others
+/// (ADR-0185): from `start`, the words while each decodes as CPU code, cut
+/// after the last `jr ra` and its delay slot. Data after the text is not
+/// part of it, so binding never claims bytes the game may write.
+pub fn slot_text(rom: &[u8], start: u32) -> Option<Vec<u8>> {
+    const JR_RA: u32 = 0x03e0_0008;
+    let mut end = None;
+    let mut at = start as usize;
+    while at + 8 <= rom.len() && at - (start as usize) < MAX_IMAGE {
+        let w = word(rom, at).ok()?;
+        if matches!(w >> 26, 18 | 19 | 50 | 54 | 58 | 62)
+            || !crate::discovery::decode(w, GuestAddr(0x8000_0000)).is_valid()
+        {
+            break;
+        }
+        if w == JR_RA {
+            end = Some(at + 8);
+        }
+        at += 4;
+    }
+    rom.get(start as usize..end?).map(<[u8]>::to_vec)
+}
+
+/// The relocations a slot alternate needs to move from `link`: in its text
+/// (as [`slot_text`] finds it), the `j`/`jal`s into the text (R_MIPS_26);
+/// after it, the words that point into the text (R_MIPS_32: jump tables and
+/// function pointers). Other absolute values stay as linked, which is where
+/// the file always runs, so lowered code reads them from RAM unchanged.
+pub fn slot_layout(bytes: &[u8], link: u32) -> Layout {
+    let size = bytes.len() as u32;
+    let text = slot_text(bytes, 0).map_or(size, |t| t.len() as u32);
+    let relocations = (0..size / 4)
+        .filter_map(|k| {
+            let (at, w) = (4 * k, word(bytes, 4 * k as usize).ok()?);
+            let kind = if at < text {
+                let target = 0x8000_0000 | ((w & 0x03ff_ffff) << 2);
+                (matches!(w >> 26, 2 | 3) && target.wrapping_sub(link) < text).then_some(4)
+            } else {
+                (w.wrapping_sub(link) < text && w % 4 == 0).then_some(2)
+            };
+            kind.map(|kind| (at, kind))
+        })
+        .chain(slot_pairs(&bytes[..text as usize], link, text))
+        .collect::<BTreeMap<u32, u8>>()
+        .into_iter()
+        .map(|(offset, kind)| Relocation { offset, kind })
+        .collect();
+    Layout {
+        text,
+        data: size - text,
+        rodata: 0,
+        bss: 0,
+        file_size: size,
+        relocations,
+    }
+}
+
+/// The `lui`/low-half pairs in `text` that form an address inside it
+/// (R_MIPS_HI16 and LO16, as offset and kind): each `lui`, then each later
+/// `addiu`, load or store based on its register until that register is
+/// written again or 32 words pass.
+fn slot_pairs(text: &[u8], link: u32, size: u32) -> Vec<(u32, u8)> {
+    let words: Vec<u32> = text
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_be_bytes(*w))
+        .collect();
+    let writes = |w: u32, r: u32| match w >> 26 {
+        0 => w >> 11 & 31 == r,
+        3 => r == 31,
+        8..=15 | 32..=39 | 55 => w >> 16 & 31 == r,
+        _ => false,
+    };
+    let mut out = Vec::new();
+    for (i, &hi) in words.iter().enumerate() {
+        let r = hi >> 16 & 31;
+        if hi >> 21 != 15 << 5 || r == 0 {
+            continue;
+        }
+        let mut found = false;
+        for (j, &lo) in words.iter().enumerate().skip(i + 1).take(32) {
+            let based = matches!(lo >> 26, 9 | 32..=39 | 40..=46 | 49 | 53 | 55 | 57 | 61 | 63);
+            let address = (hi << 16).wrapping_add(lo as u16 as i16 as i32 as u32);
+            if based && lo >> 21 & 31 == r && address.wrapping_sub(link) < size {
+                out.push((4 * j as u32, 6));
+                found = true;
+            }
+            if writes(lo, r) {
+                break;
+            }
+        }
+        if found {
+            out.push((4 * i as u32, 5));
+        }
+    }
+    out
+}
+
+/// A slot alternate's file: its text, then its data up to the next ROM
+/// offset in `named` (the next file the code names), at most 256 KiB.
+pub fn slot_file(rom: &[u8], start: u32, named: &BTreeSet<u32>) -> Option<Vec<u8>> {
+    let text = slot_text(rom, start)?.len() as u32;
+    let end = named
+        .range(start + text..)
+        .next()
+        .copied()
+        .unwrap_or(u32::MAX)
+        .min(start + text + 0x4_0000)
+        .min(rom.len() as u32)
+        & !3;
+    rom.get(start as usize..end as usize).map(<[u8]>::to_vec)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -359,6 +492,7 @@ pub fn loads(overlays: &[Overlay], evidence: &EvidenceRefs) -> Vec<DeclaredLoad>
             },
             evidence: evidence.clone(),
             relocatable: true,
+            linked: None,
         });
     }
     out
@@ -377,6 +511,9 @@ pub struct StaticLoad {
     /// The file's own `jal` targets inside it, and how many of those follow
     /// a `jr ra` once placed at `destination`.
     pub calls: (u32, u32),
+    /// One of several files placed at the same destination: a slot whose
+    /// files the game swaps (ADR-0185).
+    pub alternate: bool,
 }
 
 /// `lui`/`addiu`/`ori` constants of `bytes` placed at `base`, with the pc
@@ -457,7 +594,23 @@ pub fn static_loads(rom: &[u8], base: &[u8], at: u32) -> Result<Vec<StaticLoad>,
     let mut placed = BTreeSet::new();
     let mut work = vec![(base.to_vec(), at)];
     let mut out: Vec<StaticLoad> = Vec::new();
-    while let Some((image, at)) = work.pop() {
+    let mut swept = false;
+    loop {
+        let Some((image, at)) = work.pop() else {
+            if swept {
+                break;
+            }
+            // again over every image, now that all placed files are known
+            swept = true;
+            let mut again = vec![(base.to_vec(), at)];
+            for l in &out {
+                if let Ok(bytes) = l.file.decode(rom) {
+                    again.push((bytes, l.destination));
+                }
+            }
+            work = again;
+            continue;
+        };
         let found = constants(&image, at);
         if table.is_none() {
             // without a table, a file is a ROM range the code names, read raw
@@ -469,6 +622,37 @@ pub fn static_loads(rom: &[u8], base: &[u8], at: u32) -> Result<Vec<StaticLoad>,
                         rom_start: start,
                         rom_end: 0,
                     });
+                }
+            }
+            // a ROM offset named alone may start a code file whose size the
+            // code computes at run time: its text, up to its last return,
+            // and its data, up to the next offset the code names
+            let named: BTreeSet<u32> = found
+                .keys()
+                .copied()
+                .filter(|&v| v >= 0x1000 && (v as usize) < rom.len())
+                .collect();
+            for &start in found.keys() {
+                // the boot window is the base image, not a file in it
+                if start as usize >= 0x1000 + base.len()
+                    && start % 16 == 0
+                    && (start as usize) < rom.len()
+                    && !placed.contains(&start)
+                    && !by_start.contains_key(&start)
+                    && !out
+                        .iter()
+                        .any(|l| start.wrapping_sub(l.file.rom_start) < l.size)
+                    && let Some(file) = slot_file(rom, start, &named)
+                {
+                    by_start.insert(
+                        start,
+                        RomFile {
+                            virtual_start: start,
+                            virtual_end: start + file.len() as u32,
+                            rom_start: start,
+                            rom_end: 0,
+                        },
+                    );
                 }
             }
         }
@@ -485,56 +669,98 @@ pub fn static_loads(rom: &[u8], base: &[u8], at: u32) -> Result<Vec<StaticLoad>,
                 continue;
             };
             let word = |off: u32| word(&bytes, off as usize).ok();
-            let targets: Vec<u32> = (0..bytes.len() as u32 / 4)
+            // without a table a file may carry data: its calls are in its text
+            let scanned = match table {
+                None => slot_text(&bytes, 0).map_or(bytes.len(), |t| t.len()),
+                Some(_) => bytes.len(),
+            };
+            let targets: Vec<u32> = (0..scanned as u32 / 4)
                 .filter_map(|k| word(4 * k))
                 .filter(|w| w >> 26 == 3)
                 .map(|w| 0x8000_0000 | ((w & 0x03ff_ffff) << 2))
                 .collect();
+            // `jr ra`, its delay slot, then any zero padding
+            let begins = |off: u32| {
+                let mut p = off;
+                while p >= 4 && off - p < 40 && word(p - 4) == Some(0) {
+                    p -= 4;
+                }
+                off == 0
+                    || (p >= 4 && word(p - 4) == Some(JR_RA))
+                    || (p >= 8 && word(p - 8) == Some(JR_RA))
+            };
             let score = |dest: u32| {
                 let inside = targets
                     .iter()
                     .filter_map(|t| t.checked_sub(dest))
                     .filter(|&off| (off as usize) < bytes.len());
                 inside.fold((0u32, 0u32), |(hit, all), off| {
-                    // `jr ra`, its delay slot, then any zero padding
-                    let mut p = off;
-                    while p >= 4 && off - p < 40 && word(p - 4) == Some(0) {
-                        p -= 4;
-                    }
-                    let start = off == 0
-                        || (p >= 4 && word(p - 4) == Some(JR_RA))
-                        || (p >= 8 && word(p - 8) == Some(JR_RA));
-                    (hit + start as u32, all + 1)
+                    (hit + begins(off) as u32, all + 1)
                 })
             };
-            let mut best: Option<(u32, u32, u32, u32)> = None;
-            let mut tied = false;
+            let mut best: Vec<(u32, u32, u32, u32)> = Vec::new();
             for &(dest, pc) in &ram {
                 let (hit, all) = score(dest);
-                if u64::from(all) * 4096 < bytes.len() as u64 || hit * 20 < all * 19 {
+                if u64::from(all) * 4096 < scanned as u64 || hit * 20 < all * 19 {
                     continue;
                 }
-                match best {
-                    Some((h, ..)) if hit < h => {}
-                    Some((h, ..)) if hit == h => tied = true,
-                    _ => {
-                        best = Some((hit, all, dest, pc));
-                        tied = false;
+                match best.first() {
+                    Some(&(h, ..)) if hit < h => {}
+                    Some(&(h, ..)) if hit == h => best.push((hit, all, dest, pc)),
+                    _ => best = vec![(hit, all, dest, pc)],
+                }
+            }
+            // a tie goes to the one destination a placed file already uses:
+            // a slot (ADR-0185); a second sweep sees every placed file
+            if best.len() > 1 {
+                best.retain(|b| out.iter().any(|l| l.destination == b.2));
+            }
+            // A file with too few calls of its own can still be a slot's: on
+            // the second sweep, calls from placed code that land in a slot
+            // past every file there must all begin its functions (ADR-0185).
+            if best.is_empty() && swept && table.is_none() {
+                let calls = placed_calls(rom, base, &out);
+                let slots: BTreeSet<u32> = out
+                    .iter()
+                    .filter(|l| l.alternate)
+                    .map(|l| l.destination)
+                    .collect();
+                for &(dest, pc) in ram.iter().filter(|(d, _)| slots.contains(d)) {
+                    let uncovered: Vec<u32> = calls
+                        .range(dest..dest.saturating_add(scanned as u32))
+                        .copied()
+                        .filter(|t| !out.iter().any(|l| t.wrapping_sub(l.destination) < l.size))
+                        .collect();
+                    let hit = uncovered.iter().filter(|&&t| begins(t - dest)).count() as u32;
+                    if !uncovered.is_empty() && hit == uncovered.len() as u32 {
+                        best.push((hit, hit, dest, pc));
                     }
                 }
             }
-            let Some((hit, all, destination, pc)) = best.filter(|_| !tied) else {
+            let [(hit, all, destination, pc)] = best[..] else {
                 continue;
             };
             let size = bytes.len() as u32;
             let end = u64::from(destination) + u64::from(size);
-            if out.iter().any(|l| {
+            let overlaps = |l: &StaticLoad| {
                 u64::from(l.destination) < end
                     && u64::from(destination) < u64::from(l.destination) + u64::from(l.size)
-            }) {
+            };
+            // files placed at one destination are a slot's alternates; with a
+            // table any other overlap is a contradiction, without one files
+            // the game swaps may also overlap, each bound by its own bytes
+            let alternate = out.iter().any(&overlaps);
+            if table.is_some()
+                && out
+                    .iter()
+                    .any(|l| overlaps(l) && l.destination != destination)
+            {
                 return Err(format!(
                     "inferred loads overlap at {destination:#x}; declare them by hand"
                 ));
+            }
+            for l in out.iter_mut().filter(|l| overlaps(l)) {
+                l.alternate = true;
             }
             by_start.remove(&value);
             placed.insert(value);
@@ -545,12 +771,34 @@ pub fn static_loads(rom: &[u8], base: &[u8], at: u32) -> Result<Vec<StaticLoad>,
                 file_constant_at: named_at,
                 destination_constant_at: pc,
                 calls: (all, hit),
+                alternate,
             });
             work.push((bytes, destination));
         }
     }
     out.sort_by_key(|l| l.destination);
     Ok(out)
+}
+
+/// Every `jal` target in the base window and in the text of placed files.
+fn placed_calls(rom: &[u8], base: &[u8], out: &[StaticLoad]) -> BTreeSet<u32> {
+    let text = |bytes: &[u8]| slot_text(bytes, 0).unwrap_or_default();
+    std::iter::once(base.to_vec())
+        .chain(
+            out.iter()
+                .filter_map(|l| l.file.decode(rom).ok().map(|b| text(&b))),
+        )
+        .flat_map(|bytes| {
+            bytes
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|w| u32::from_be_bytes(*w))
+                .filter(|w| w >> 26 == 3)
+                .map(|w| 0x8000_0000 | ((w & 0x03ff_ffff) << 2))
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 /// The reset stub: the boot window's bytes before the first file the table
@@ -754,10 +1002,51 @@ mod tests {
         assert_eq!(reset_stub(&rom, 0x100), Some(0x60));
         // without a destination whose calls fit, nothing is inferred
         let rom = static_rom(false);
-        assert!(
-            static_loads(&rom, &rom[0x1000..0x1100], 0x80000400)
-                .unwrap()
-                .is_empty()
+        let far = static_loads(&rom, &rom[0x1000..0x1100], 0x80000400).unwrap();
+        assert!(far.is_empty(), "{far:#x?}");
+    }
+
+    #[test]
+    fn a_slot_alternate_relocates_what_points_into_its_text() {
+        let link = 0x8010_0000;
+        let words = [
+            0x3c04_8010, // lui a0, 0x8010
+            0x2484_0018, // addiu a0, a0, 0x18: a pointer to the text (HI16/LO16)
+            0x0c04_0006, // jal 0x80100018 (R_MIPS_26)
+            0x8c88_0000, // lw t0, 0(a0): a0 was redefined, not a LO16
+            0x3c09_8020, // lui t1, 0x8020: outside the text
+            0x8d2a_0000, // lw t2, 0(t1)
+            0x03e0_0008,
+            0,
+            0x03e0_0008,
+            0,
+            0x8010_0018, // data naming the text (R_MIPS_32)
+            0x8010_0019, // unaligned
+            0x8020_0000, // outside the text
+        ];
+        let bytes: Vec<u8> = words.into_iter().flat_map(u32::to_be_bytes).collect();
+        let layout = slot_layout(&bytes, link);
+        assert_eq!(layout.text, 40);
+        let found: Vec<_> = layout
+            .relocations
+            .iter()
+            .map(|r| (r.offset, r.kind))
+            .collect();
+        assert_eq!(found, [(0, 5), (4, 6), (8, 4), (40, 2)]);
+        // moved by a multiple of 64 KiB, only the high half changes
+        let moved = layout.apply(&bytes, link, 0x8080_0000).unwrap();
+        let w = |at: usize| u32::from_be_bytes(moved[at..at + 4].try_into().unwrap());
+        assert_eq!(
+            [w(0), w(4), w(8), w(12), w(16), w(40), w(44)],
+            [
+                0x3c04_8080,
+                0x2484_0018,
+                0x0c20_0006,
+                0x8c88_0000,
+                0x3c09_8020,
+                0x8080_0018,
+                0x8010_0019
+            ]
         );
     }
 
@@ -779,13 +1068,17 @@ mod tests {
             (load.file.rom_start, load.destination, load.size),
             (0x2000, 0x80100000, 0x20)
         );
-        // an end built far from the start names no range
+        // with its end built far from its start, the start alone names the
+        // file, which then runs over its code to the end of the ROM (ADR-0185)
         put(&mut rom, 0x108c, 0);
         put(&mut rom, 0x10f8, 0x24e7_2020);
-        assert!(
-            static_loads(&rom, &rom[0x1000..0x1100], 0x80000400)
-                .unwrap()
-                .is_empty()
+        let [far] = static_loads(&rom, &rom[0x1000..0x1100], 0x80000400)
+            .unwrap()
+            .try_into()
+            .unwrap();
+        assert_eq!(
+            (far.file.rom_start, far.destination, far.size, far.alternate),
+            (0x2000, 0x80100000, 0x100, false)
         );
     }
 

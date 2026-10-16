@@ -5344,3 +5344,43 @@ before any clear), for the CIC default, and for a table-free ROM range
 (with a range built too far apart as the negative case). The full gate
 passes.
 
+
+
+## ADR-0185: executable files that share a fixed slot
+
+Context: F-Zero X swaps several files into the same RAM ranges. Treating one
+file as the permanent image either leaves calls unresolved or gives another
+file's bytes authority. Milestone 5 needs each alternate represented separately.
+
+Decision:
+- `infer-loads` can mark overlapping executable files as `slot` alternates.
+  Without a file table, candidate text ends after the last return before a
+  non-CPU word; candidate data is bounded by the next named ROM file and a
+  256 KiB cap. These are discovery heuristics, not an executable census.
+- Each alternate gets a distinct analysis address above RAM, preserving its
+  low 16 address bits. Synthesized J/JAL, pointer-word and HI16/LO16 relocations
+  let existing discovery and lowering inspect it there. At execution, its
+  addresses refer to the original shared slot through the overlay binding.
+- Calls and address-taken pointers into a slot expand to the decoded alternate
+  functions at that offset. A taken declared runtime function dispatches to its
+  host implementation and is never decoded as guest code.
+- The solver recomputes slot mappings and text bounds from declared source
+  bytes, binds them into the image identity, and rejects mismatched metadata.
+  Admission is limited to the guarded assumption scope. Whole-ROM closure is
+  still OPEN; inferred alternates do not establish completeness.
+- At every binding, generated native code compares every executable byte with
+  the expected relocated text. Slot data remains mutable RAM. Writes revoke
+  bindings; overwritten slots are checked again. No match or multiple matching
+  alternates fault. Nothing decodes guest instructions at run time.
+
+Verification: the public-CLI synthetic contract loads two files into one slot,
+calls them directly and indirectly, and compares the complete result with pinned
+*ares*: 7, then 11, then 7 after replacing the first file. Tampered and ambiguous
+text fault. Rust regressions cover identity, forged slot views, relocation,
+pointer fan-out, and a verifier that must compare all text. The retained mutation
+check confirms the text-bound regression detects a weakened comparison.
+
+The F-Zero X candidate grows from 11,398 blocks / 20 scoped blockers to
+27,621 blocks / 0 scoped blockers. Native game acceptance, raw PI DMA and
+graphics-microcode support are the next runtime integration, not established
+by this compiler result.

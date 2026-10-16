@@ -9,10 +9,21 @@ use plaid_core::overlays::Layout;
 ///
 /// Relocation sites and opcodes are resolved at compile time. Generated code
 /// patches expected bytes, never guest RAM, and contains no guest decoder.
-pub fn verifier(bytes: &[u8], link: u32, id: u32) -> Result<String, String> {
-    let layout = Layout::parse(bytes)?;
+/// `compared` bytes from the start are checked: the whole file, or a slot
+/// alternate's text (ADR-0185), whose data is the game's to write and which
+/// lowered code reads from RAM.
+pub fn verifier(
+    bytes: &[u8],
+    layout: &Layout,
+    compared: usize,
+    link: u32,
+    id: u32,
+) -> Result<String, String> {
+    if compared < layout.text as usize || compared == 0 || compared > bytes.len() {
+        return Err("overlay verifier must compare all executable text within its source".into());
+    }
     // Validate encodings, pairs and targets through the canonical model.
-    layout.relocate(bytes, link, 0x80000000)?;
+    layout.apply(bytes, link, 0x80000000)?;
     let span = layout.file_size + layout.bss;
     let end = link.checked_add(span).ok_or("overlay link overflow")?;
     let words: Vec<u32> = bytes
@@ -84,9 +95,31 @@ int plaid_overlay_verify_{id}(const uint8_t *ram, size_t ram_size, uint32_t base
         }
     }
     out += &format!(
-        "  if (memcmp(ram + p, expected, {}u)) valid = 0;\n  free(expected);\n  for (i = {}u; valid && i < {span}u; i++) if (ram[p + i]) valid = 0;\n  return valid;\n}}\n",
-        bytes.len(),
+        "  if (memcmp(ram + p, expected, {compared}u)) valid = 0;\n  free(expected);\n  for (i = {}u; valid && i < {span}u; i++) if (ram[p + i]) valid = 0;\n  return valid;\n}}\n",
         bytes.len()
     );
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn verifier_cannot_skip_text_or_read_past_its_source() {
+        let layout = Layout {
+            text: 8,
+            data: 4,
+            rodata: 0,
+            bss: 0,
+            file_size: 12,
+            relocations: vec![],
+        };
+        for compared in [0, 4, 7, 13] {
+            assert!(verifier(&[0; 12], &layout, compared, 0x80000000, 0).is_err());
+        }
+        for compared in [8, 12] {
+            assert!(verifier(&[0; 12], &layout, compared, 0x80000000, 0).is_ok());
+        }
+    }
 }

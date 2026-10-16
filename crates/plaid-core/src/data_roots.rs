@@ -126,7 +126,13 @@ fn cpu_code(image: &CodeImage, pc: GuestAddr) -> bool {
         } else {
             None
         };
-        if target.is_some_and(|t| image.word(GuestAddr(t)).is_none()) {
+        // a call into a slot (ADR-0185) lands in some alternate's text
+        if target.is_some_and(|t| {
+            image
+                .slot_copies(t)
+                .iter()
+                .all(|&c| image.word(GuestAddr(c)).is_none())
+        }) {
             return false;
         }
         if w == JR_RA {
@@ -162,7 +168,8 @@ pub fn rom_words(bytes: &[u8], image: &CodeImage, starts: &BTreeSet<u32>) -> BTr
                 .as_chunks::<4>()
                 .0
                 .iter()
-                .map(|w| GuestAddr(u32::from_be_bytes(*w)))
+                .flat_map(|w| image.slot_copies(u32::from_be_bytes(*w)))
+                .map(GuestAddr)
                 .filter(|&pc| plausible_at(image, pc, starts)),
         )
     };
@@ -273,10 +280,12 @@ pub fn block_constants(
                     } else {
                         hi.wrapping_add(x as i16 as u32)
                     };
-                    let pc = GuestAddr(value);
-                    if plausible_at(image, pc, starts) {
-                        let site = out.entry(pc).or_insert(GuestAddr(at));
-                        *site = (*site).min(GuestAddr(at));
+                    for pc in image.slot_copies(image.slot_view(GuestAddr(at), value)) {
+                        let pc = GuestAddr(pc);
+                        if plausible_at(image, pc, starts) {
+                            let site = out.entry(pc).or_insert(GuestAddr(at));
+                            *site = (*site).min(GuestAddr(at));
+                        }
                     }
                 }
                 if crate::discovery::decode(x, GuestAddr(0)).destination_gpr() != Some(rt) {
@@ -325,7 +334,8 @@ pub const ADDRESS_TAKEN: &str = "plaid-address-taken/v0";
 /// Discovery whose roots also include the address-taken functions: ROM words
 /// first, then constants from decoded blocks, until no new function appears.
 /// The set is recorded in `address_taken`; its functions stay map entries.
-/// Declared runtime functions are a boundary and never join the set.
+/// Declared runtime functions are a boundary: taken ones join the set as
+/// host calls, never as roots (ADR-0185).
 #[allow(clippy::too_many_arguments)]
 pub fn discover_address_taken(
     rom: crate::program::RomIdentity,
@@ -338,10 +348,13 @@ pub fn discover_address_taken(
     budget: usize,
 ) -> Result<crate::discovery::Discovery, String> {
     let runtime_entries: BTreeSet<GuestAddr> = runtime.iter().map(|(a, _, _)| *a).collect();
-    let mut taken: BTreeSet<GuestAddr> = rom_words(bytes, image, starts)
-        .into_iter()
-        .filter(|a| !runtime_entries.contains(a))
-        .collect();
+    // A runtime function whose address is taken joins the dispatch set, so a
+    // call through the pointer reaches the host runtime; its body is never a
+    // discovery root (ADR-0185).
+    let (mut runtime_taken, mut taken): (BTreeSet<GuestAddr>, BTreeSet<GuestAddr>) =
+        rom_words(bytes, image, starts)
+            .into_iter()
+            .partition(|a| runtime_entries.contains(a));
     // each round starts from the last round's roots, so it does not repeat
     // the indirect passes that found them
     let mut seeds: BTreeSet<GuestAddr> = BTreeSet::new();
@@ -372,11 +385,13 @@ pub fn discover_address_taken(
                 .filter(|a| a.image == image.base.image && a.generation == image.base.generation)
                 .map(|a| a.pc),
         );
-        taken.extend(
-            block_constants(image, &d.map, starts)
-                .into_keys()
-                .filter(|a| !runtime_entries.contains(a)),
-        );
+        for a in block_constants(image, &d.map, starts).into_keys() {
+            if runtime_entries.contains(&a) {
+                runtime_taken.insert(a);
+            } else {
+                taken.insert(a);
+            }
+        }
         if taken.len() == before {
             if !d.map.unresolved.iter().any(|u| u.kind == "resource_limit") {
                 d.map = crate::returns::annotate(&d.map, image)?;
@@ -391,7 +406,7 @@ pub fn discover_address_taken(
                     detail: "function starts named by an aligned ROM word or a code constant in a decoded block, whose body can be CPU code (ADR-0153)".into(),
                 },
             );
-            for a in &taken {
+            for a in taken.iter().chain(&runtime_taken) {
                 let address = image.address(*a);
                 d.map
                     .address_taken
@@ -435,6 +450,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
+            slots: Vec::new(),
         };
         let data: Vec<u8> = [
             0x8000_0000u32,
@@ -456,6 +472,37 @@ mod tests {
                 GuestAddr(0x8000_0020)
             ])
         );
+    }
+
+    #[test]
+    fn a_pointer_into_a_slot_names_each_alternate_function_there() {
+        // the same code placed for a slot linked at 0x80100000 (ADR-0185)
+        let mut image = CodeImage {
+            base: CodeAddress {
+                pc: GuestAddr(0x8000_0000),
+                image: "roots".into(),
+                generation: 0,
+            },
+            words: vec![0x27bd_ffe8, JR_RA, 0x27bd_0018, 0x2402_0001, JR_RA, 0],
+            rom_offset: None,
+            physical_start: None,
+            holes: Vec::new(),
+            slots: Vec::new(),
+        };
+        let placed = crate::program::GuestRange {
+            start: GuestAddr(0x8000_0000),
+            size: 0x18,
+        };
+        image.slots.push((placed.clone(), 0x8010_0000, 0x18));
+        let data = 0x8010_000cu32.to_be_bytes();
+        let none = BTreeSet::new();
+        assert_eq!(
+            rom_words(&data, &image, &none),
+            BTreeSet::from([GuestAddr(0x8000_000c)])
+        );
+        // past the alternate's text the word names nothing
+        image.slots[0].2 = 0xc;
+        assert!(rom_words(&data, &image, &none).is_empty());
     }
 
     #[test]
@@ -482,6 +529,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
+            slots: Vec::new(),
         };
         let mut rom = b"Yaz0".to_vec();
         rom.extend(16u32.to_be_bytes());
@@ -523,6 +571,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
+            slots: Vec::new(),
         };
         let rom = crate::program::RomIdentity {
             sha256: "a".repeat(64),
@@ -549,6 +598,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
+            slots: Vec::new(),
         };
         // b +8 stays in the image; j 0x84001068 (RSP boot code) does not
         assert!(plausible(&image(0x1000_0001), GuestAddr(0x8000_0000)));
@@ -569,6 +619,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
+            slots: Vec::new(),
         };
         let second = GuestAddr(0x8000_0010);
         assert!(!plausible(&image, second));
@@ -588,6 +639,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
+            slots: Vec::new(),
         };
         assert!(plausible(&image, GuestAddr(0x8000_0010)));
         // a working word right after the slot is not a function start

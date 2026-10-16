@@ -17,6 +17,7 @@ fn image(generation: u64) -> CodeImage {
         rom_offset: None,
         physical_start: None,
         holes: Vec::new(),
+        slots: Vec::new(),
     }
 }
 

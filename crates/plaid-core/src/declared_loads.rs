@@ -35,6 +35,89 @@ pub struct DeclaredLoad {
     /// checked runtime binding.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub relocatable: bool,
+    /// One of the files a slot holds in turn (ADR-0185): linked and run at
+    /// this address, its text sits at `destination` instead, moved there by
+    /// [`crate::overlays::slot_layout`], and runs only through a binding
+    /// that finds it in the slot by content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub linked: Option<GuestAddr>,
+}
+
+impl DeclaredLoad {
+    /// The overlay layout of a relocatable load whose placed bytes are
+    /// `bytes`: a slot alternate's synthesized one, else the Zelda64 trailer.
+    pub fn layout(&self, bytes: &[u8]) -> Result<crate::overlays::Layout, String> {
+        match self.linked {
+            Some(_) => Ok(crate::overlays::slot_layout(
+                bytes,
+                self.destination.start.0,
+            )),
+            None => crate::overlays::Layout::parse(bytes),
+        }
+    }
+}
+
+/// Where code at `target` sits when `target` is in a slot (ADR-0185): the
+/// placed address of each alternate whose text covers it. Which one runs is
+/// decided at run time by the bytes RAM holds.
+pub fn slot_targets(loads: &[DeclaredLoad], target: u32) -> Vec<u32> {
+    loads
+        .iter()
+        .filter_map(|l| {
+            let off = target.wrapping_sub(l.linked?.0);
+            (off < l.destination.size).then(|| l.destination.start.0 + off)
+        })
+        .collect()
+}
+
+/// Slot views must be derived from the declared files, not supplied as extra
+/// authority to discharge missing targets. Their mapping is part of the hash.
+pub fn verify_slots(image: &CodeImage, spec: Option<&LoadImage>) -> bool {
+    let declared: Vec<_> = spec
+        .into_iter()
+        .flat_map(|s| &s.loads)
+        .filter(|l| l.linked.is_some())
+        .collect();
+    if declared.len() != image.slots.len() {
+        return false;
+    }
+    if image.slots.is_empty() {
+        return true;
+    }
+    if image.base.image != image.content_identity() {
+        return false;
+    }
+    image
+        .slots
+        .iter()
+        .enumerate()
+        .all(|(i, (placed, linked, text))| {
+            if image.slots[..i].iter().any(|(other, _, _)| other == placed) {
+                return false;
+            }
+            declared.iter().any(|l| {
+                if !l.relocatable
+                    || l.destination != *placed
+                    || l.linked != Some(GuestAddr(*linked))
+                    || placed.size as usize / 4 > image.words.len()
+                {
+                    return false;
+                }
+                let bytes: Option<Vec<_>> = (0..placed.size / 4)
+                    .map(|n| {
+                        placed
+                            .start
+                            .0
+                            .checked_add(4 * n)
+                            .and_then(|pc| image.word(GuestAddr(pc)))
+                    })
+                    .collect();
+                bytes.is_some_and(|words| {
+                    let bytes: Vec<_> = words.into_iter().flat_map(u32::to_be_bytes).collect();
+                    l.layout(&bytes).is_ok_and(|layout| layout.text == *text)
+                })
+            })
+        })
 }
 
 /// How a composite image was built: the base window and the loads applied to
@@ -117,6 +200,16 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
             data.len()
         ));
     }
+    if let Some(linked) = load.linked {
+        if !load.relocatable {
+            return Err("a slot alternate runs only through a binding".into());
+        }
+        return crate::overlays::slot_layout(&data, linked.0).apply(
+            &data,
+            linked.0,
+            load.destination.start.0,
+        );
+    }
     Ok(data)
 }
 
@@ -144,6 +237,7 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
         rom_offset,
         physical_start: None,
         holes: Vec::new(),
+        slots: Vec::new(),
     };
     let base = image(spec.base.start, base_bytes, Some(spec.base_offset));
     if spec.loads.is_empty() {
@@ -181,13 +275,19 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
     let mut composite = vec![0u8; (hi - lo) as usize];
     let at = |a: u64| (a - lo) as usize;
     composite[at(u64::from(spec.base.start.0))..at(spec.base.end())].copy_from_slice(base_bytes);
+    let mut slots = Vec::new();
     for load in &spec.loads {
+        let data = decoded(bytes, load)?;
+        if let Some(linked) = load.linked {
+            slots.push((load.destination.clone(), linked.0, load.layout(&data)?.text));
+        }
         composite[at(u64::from(load.destination.start.0))..at(load.destination.end())]
-            .copy_from_slice(&decoded(bytes, load)?);
+            .copy_from_slice(&data);
     }
     let mut out = image(GuestAddr(lo as u32), &composite, None);
-    if !holes.is_empty() {
-        out.holes = holes;
+    out.slots = slots;
+    out.holes = holes;
+    if !out.holes.is_empty() || !out.slots.is_empty() {
         out.base.image = out.content_identity();
     }
     Ok((base, out))
@@ -207,7 +307,51 @@ mod tests {
             encoding,
             evidence: EvidenceRefs::new(),
             relocatable: false,
+            linked: None,
         }
+    }
+
+    #[test]
+    fn slot_views_are_bound_to_declarations_text_and_content_identity() {
+        let mut rom = vec![0; 64];
+        for (i, word) in [0x2402_0007u32, 0x03e0_0008, 0, 0x8000_4000]
+            .into_iter()
+            .enumerate()
+        {
+            rom[16 + 4 * i..20 + 4 * i].copy_from_slice(&word.to_be_bytes());
+        }
+        let mut alternate = load(0x8000_0080, 16, 16, LoadEncoding::Raw);
+        alternate.relocatable = true;
+        alternate.linked = Some(GuestAddr(0x8000_4000));
+        let spec = LoadImage {
+            base_offset: RomOffset(0),
+            base: GuestRange {
+                start: GuestAddr(0x8000_0000),
+                size: 16,
+            },
+            loads: vec![alternate],
+        };
+        let (_, image) = compose(&rom, &spec).unwrap();
+        assert!(verify_slots(&image, Some(&spec)));
+        assert!(!verify_slots(&image, None));
+        let mut changed = image.clone();
+        changed.slots[0].1 += 4;
+        assert!(!verify_slots(&changed, Some(&spec)));
+        changed.base.image = changed.content_identity();
+        assert!(!verify_slots(&changed, Some(&spec)));
+        let mut changed = image.clone();
+        changed.slots[0].2 += 4;
+        changed.base.image = changed.content_identity();
+        assert!(!verify_slots(&changed, Some(&spec)));
+        let mut changed = image.clone();
+        changed.slots.push(changed.slots[0].clone());
+        let mut duplicated = spec.clone();
+        duplicated.loads.push(duplicated.loads[0].clone());
+        changed.base.image = changed.content_identity();
+        assert!(!verify_slots(&changed, Some(&duplicated)));
+        let mut changed_spec = spec.clone();
+        changed_spec.loads[0].relocatable = false;
+        assert!(!verify_slots(&image, Some(&changed_spec)));
     }
 
     #[test]

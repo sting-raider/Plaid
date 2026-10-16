@@ -31,6 +31,7 @@ fn measure(target: u32) -> (usize, bool) {
             encoding: LoadEncoding::Raw,
             evidence: EvidenceRefs::from(["load".to_string()]),
             relocatable: false,
+            linked: None,
         }],
     };
     let (_, composite) = compose(&rom, &spec).unwrap();

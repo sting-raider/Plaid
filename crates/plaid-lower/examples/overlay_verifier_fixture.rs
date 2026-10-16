@@ -15,14 +15,16 @@ fn main() {
     let mut c = String::from(
         "#include <stdlib.h>\nstatic int fail_alloc;\nstatic void *test_alloc(size_t n) { return fail_alloc ? NULL : malloc(n); }\n#define malloc test_alloc\n",
     );
-    c += &plaid_lower::overlay::verifier(&bytes, 0x80800000, 7).unwrap();
+    c += &plaid_lower::overlay::verifier(&bytes, &layout, bytes.len(), 0x80800000, 7).unwrap();
     // Multiple generated verifiers must coexist in one translation unit.
-    c += &plaid_lower::overlay::verifier(&bytes, 0x80800000, 8).unwrap();
+    c += &plaid_lower::overlay::verifier(&bytes, &layout, bytes.len(), 0x80800000, 8).unwrap();
     let data_only: Vec<u8> = [0u32, 0, 0, 1, 0, 24]
         .into_iter()
         .flat_map(u32::to_be_bytes)
         .collect();
-    c += &plaid_lower::overlay::verifier(&data_only, 0x80800000, 9).unwrap();
+    let data_layout = Layout::parse(&data_only).unwrap();
+    c += &plaid_lower::overlay::verifier(&data_only, &data_layout, data_only.len(), 0x80800000, 9)
+        .unwrap();
     c += "#include <assert.h>\nstatic uint8_t ram[0x800000];\nint main(void) { size_t i;\n";
     for base in [
         0x80000000u32,
