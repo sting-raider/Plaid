@@ -12,20 +12,79 @@
 
 Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. It analyzes a ROM into a closed executable program, lowers it to C, and links it into a native x86-64 or ARM64 application. There is no emulator, interpreter or JIT in the final build. Emulators are used only as analysis instruments and test oracles.
 
-## Where we are
+## Progress report
 
-**The goal:** a commercial ROM that is `CLOSED` over the whole ROM with **no assumptions**, so that every instruction, jump and overlay in it is accounted for, and the native build is proven to match the reference.
+*As of main `8139af6`, 2026-10-17. Every row traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). "Natively" means the lowered game linked with Plaid's runtime: no interpreter, no JIT, and every unproven state is a fail-closed fault.*
 
-**Today:** four games run natively, to different points, but each result still rests on a list of assumptions, and the whole-ROM proof is open for all of them. Exact counts are in the generated table below.
+**Two finish lines.**
+1. **ROM in, game runs:** you supply only a ROM. Plaid discovers the code, proves it closed under a declared assumption scope, lowers it to C and builds the executable. **Reached for Majora's Mask and F-Zero X** (the build needs no hand input beyond the scope flags), not yet for SM64 or OoT, and no game has been played to the end.
+2. **ROM in, provably complete with zero assumptions:** the whole ROM is `CLOSED` with no assumption. **Not reached: 0 of 16 assumptions retired, no ROM is whole-ROM `CLOSED`.**
+
+### Per game
 
 | | Super Mario 64 (USA) | Ocarina of Time (USA 1.2) | Majora's Mask (USA) | F-Zero X (USA) |
 | --- | --- | --- | --- | --- |
-| Code discovered | ✅ 99.03% of functions | ✅ fixed image and 468 overlays | ✅ with overlays, no hand-written input | inferred shared-slot alternates |
-| `CLOSED` under declared assumptions | ✅ | ✅ fixed image and with overlays | ✅ with overlays | yes, address-taken scope |
-| Runs natively | ✅ full-speed gameplay with input, saves, audio | 🟨 title screen and file select, with RT64 | 🟨 plays its intro; erased-save heap-overlay run reaches VI 5358 without a fault | races with compiled graphics microcode, input, saves and audio |
-| `CLOSED` whole-ROM, no assumptions | ⬜ 0 of 16 assumptions retired | ⬜ | ⬜ | open |
+| Inputs by hand | code segment, 2 `--loads`, local decomp map for 3 runtime names | code segment, 2 `--loads` (earlier builds) | **none**: loads and runtime inferred from the ROM (ADR-0183) | **none**: inferred from the ROM (ADR-0184/0185) |
+| Closure, scope `--address-taken` | ✅ `CLOSED`, 45,419 blocks (ADR-0153..0156) | ✅ `CLOSED`: fixed image 29,542 blocks (ADR-0175); with 468 overlays 154,414 blocks (ADR-0180) | ✅ `CLOSED` with overlays (ADR-0183) | ✅ `CLOSED`, 27,621 blocks, 0 scoped blockers (ADR-0185) |
+| Whole-ROM, no assumptions | OPEN, 4,820 blockers | OPEN, 16,338 with overlays | OPEN, 21,313 | OPEN, 2,995 |
+| How far it runs natively | 59.9 VI/s gameplay with input and saves | boot logo, title screen, file select (ADR-0182) | intro and Clock Town attract scene; erased-FlashRAM run passes the old heap-overlay fault and reaches VI 5358 at the 90 s limit, fault 0 (ADR-0187) | visible 65 s races, vehicle markings and shading, no fault (ADR-0186) |
+| Graphics | RT64 display-list HLE | RT64 display-list HLE | RT64 display-list HLE | compiled graphics microcode, raw RDP to RT64 (`--rsp-gfx`, ADR-0186) |
+| Audio | native: the game's own RSP microcode lowered to C, played via SDL (ADR-0169/0170) | native, lowered microcode (ADR-0182) | restored, PCM peak 32569 in a 60 s run; a real audio task matches ares (ADR-0189) | native, in the same race runs (ADR-0186) |
+| Saves | EEPROM | SRAM | FlashRAM | in the race runs (ADR-0186) |
+| Known stop points | none recorded in a 90 s run | beyond file select is untested | none since ADR-0187; the earlier stop (heap overlay at VI 3188) is fixed. This is finite execution, not a loader-lifetime proof | none in 65 s runs |
 
-The chart and ledger below are generated from measurements. Nothing here is a completion percentage: a bar reaches zero only when the whole ROM closes with no assumption.
+### Distance to "ROM in, game runs"
+
+| Remaining hand input | Status | What retires it |
+| --- | --- | --- |
+| **RSP microcode** comes from IMEM snapshots saved by running the game, so every new game needs one or more snapshot runs | 🟨 in progress on branch `rsp-from-rom`; **not landed** | lower the microcode from the ROM's own bytes instead of from a run |
+| Code segment address and entry point (SM64, OoT) | inferred for MM and F-Zero X (ADR-0183/0184) | run the same inference on SM64 and OoT, which lack a usable file table for it |
+| `--loads` files (SM64: 2, OoT: 2) | inferred for MM and F-Zero X; SM64's inference finds the engine segment but not goddard (ADR-0184) | broader load inference |
+| SM64 decomp map for three runtime names (ADR-0171) | local, never used to find code | identify them from the ROM's bytes (assumption 14) |
+| Scope flags (`--address-taken`, `--fr0`) | chosen by the user; `native.py` refuses to build unless the scope is `CLOSED` | none: the scope is the declared assumption set |
+| libultra as host runtime (HLE) | covers the functions SM64, OoT and MM call; a game calling another fails to link | differential-test each function (assumption 13) |
+
+Only Windows has been tested with RT64. Only controller 1 works, with no rumble.
+
+### Distance to "zero assumptions"
+
+**0 of 16 assumptions retired.** No ROM is whole-ROM `CLOSED`; every commercial ROM still has thousands of blockers, most of them unresolved indirect sites. Recent work (ADR-0180, ADR-0181, ADR-0187) shrank the scoped proofs and the run-time failures, and retired none. The full ledger and blocker table are generated below; the largest items are code immutability and overlay lifetimes (1, 12), the excluded interrupts, DMA and RSP (2), and per-site proofs of indirect targets (4..6).
+
+### Recent landings
+
+| ADR | Commit | What |
+| --- | --- | --- |
+| 0189 | `8139af6` | Lowered RSP code shares the host's state layout; Majora's Mask has sound |
+| 0187 | `32408f6` | Inactive heap overlays rebind under native-frame pins; MM passes its heap-overlay fault |
+| 0186 | `64fe72b` | Compiled graphics microcode feeds RT64 raw RDP; verified build packaged; F-Zero X races |
+| 0185 | `39ed3cc` | Executable files sharing a RAM slot are verified and lowered; F-Zero X `CLOSED` |
+| 0184 | `583f07c` | Boot image and segments inferred from the ROM alone |
+| 0183 | `edb3ca0` | ROM in, native out; Majora's Mask plays its intro |
+| 0182 | `3cd1b2b` | OoT reaches its title and file select with RT64 |
+| 0181 | `00cb683` | Relocatable overlays run natively through a verified binding |
+| 0180 | `42513ef` | Jump-table bounds proven over every path; OoT + overlays `CLOSED` |
+| 0179 | `9e652ab` | Discovery places relocatable overlays at their link addresses |
+
+### How to play
+
+You supply the ROM; ROMs are never committed. `python scripts/native.py <rom> --rt64 [--rsp-gfx]` builds the executable and writes a `Play <name>.cmd` launcher beside it. Built executables live in `target/rt64-shim/Release/` next to `plaid_rt64.dll` and `SDL2.dll`. For example, Majora's Mask is `target/rt64-shim/Release/mm-rt64.exe`; from the repo root:
+
+```powershell
+.\target\rt64-shim\Release\mm-rt64.exe --rom <your mm.z64> --flash <save.fla> --stop-at none
+```
+
+Keyboard controls (RT64 window; `--press` scripts are ORed with it):
+
+| Key | Button |
+| --- | --- |
+| X / C / Z | A / B / Z |
+| Enter | START |
+| Q / E | L / R |
+| I / K / J / L | C-up / C-down / C-left / C-right |
+| W / S / A / D | D-pad |
+| Arrow keys | Control stick |
+
+The save flag depends on the game: `--flash` (Majora's Mask), `--save` (EEPROM games). Build details: [`runtime/README.md`](runtime/README.md).
 
 ## Status
 
@@ -147,7 +206,7 @@ ROMs stay local and are never committed. Per-ROM numbers and how to reproduce th
 | --- | --- |
 | Super Mario 64 (USA) | 99.03% discovery recall. `CLOSED` over 45,419 blocks under a declared scope: its main, engine and goddard segments, with calls through function pointers restricted to address-taken functions. Runs natively at full speed (59.9 VI/s), with graphics, input, EEPROM saves and audio. |
 | Ocarina of Time (USA 1.2) | Boot, the Yaz0-compressed `code` segment and the cartridge's 64DD driver segment: `CLOSED` over 29,542 blocks under the address-taken scope (ADR-0175). With its 468 overlays at link addresses (ADR-0172, ADR-0179), it is `CLOSED` over 154,414 blocks under the address-taken scope (ADR-0180). Natively, with RT64, its own audio microcode and SRAM saves, it runs through its relocated overlays to the title screen and file select (ADR-0181, ADR-0182). |
-| Majora's Mask (USA) | No hand-written input: `scripts/native.py` infers its loads and runtime, and it is `CLOSED` with its overlays under the address-taken scope (ADR-0183). Natively with RT64 it plays the mask intro and the Clock Town attract scene, then stops fail-closed at a relocated heap overlay. |
+| Majora's Mask (USA) | No hand-written input: `scripts/native.py` infers its loads and runtime, and it is `CLOSED` with its overlays under the address-taken scope (ADR-0183). Natively with RT64 it plays the mask intro and the Clock Town attract scene, and, since ADR-0187, passes its former heap-overlay stop and runs 90 s with no fault. Audio is restored (ADR-0189). |
 | F-Zero X (USA) | From the ROM alone, 27,621 blocks and zero blockers under the address-taken scope (ADR-0185). Native graphics microcode feeds RT64 raw RDP commands; visible 65-second races show vehicle markings and shading without a runtime fault (ADR-0186). |
 | Mario Party 2 (USA) | Boot window: 712 blocks and 29 blockers. 27 sit behind an `osInitialize` whose SDK build n64sym lacks; 2 are function-pointer calls. |
 
@@ -184,7 +243,7 @@ Nothing in the compiler or the runtime is keyed to SM64: no game names, addresse
 
 Known gaps:
 
-- Overlay binding is itself an assumption (ledger row 12), and every overlay's load base is found at run time, not proven. MM stops at its first heap-allocated overlay call.
+- Overlay binding is itself an assumption (ledger row 12), and every overlay's load base is found at run time, not proven. MM's heap-overlay stop is fixed (ADR-0187), but that is finite execution, not a lifetime proof.
 - The runtime covers the libultra functions that SM64, OoT and MM call. A game that calls a declared function the runtime lacks fails to link.
 - Saves are 4 Kbit EEPROM, 256 Kbit SRAM and 1 Mbit FlashRAM (no 16 Kbit EEPROM or Controller Pak). Only controller 1 works, and there is no rumble.
 - RSP microcode comes from running the game, not from ROM offsets: `--rsp-dump` saves each IMEM image no lowered code holds, and `runtime/rsp_texts.py` lowers it for the next build. A new game needs one or more of these runs. Graphics tasks use RT64 display-list HLE by default; `--rt64 --rsp-gfx` runs their compiled microcode and sends its raw RDP output to RT64. Audio plays through SDL with RT64, or goes to a WAV file.
