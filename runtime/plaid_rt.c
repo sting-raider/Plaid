@@ -96,6 +96,7 @@ static u8 eeprom[2048];
 static u8 sram[SRAM_SIZE];
 static const char *sram_path;
 static void save_file(const char *path, const u8 *bytes, size_t size);
+static int load_file(const char *path, u8 *bytes, size_t size);
 static struct timespec t0;
 static u64 time_base; /* osSetTime offset in count ticks */
 static u32 frame_buffer;
@@ -161,7 +162,9 @@ static void finish(int code, const char *why) {
          (u32)S->r[31], (u32)S->r[4], (u32)S->r[5], (u32)S->r[6], (u32)S->r[25], S->fcsr | S->fcc << 23);
   if (S->fault == 7) /* a COP1 fault: the operands are in the FPRs */
     for (i = 0; i < 32; i++) printf("%s%016llx\"", i ? ",\"" : ",\"fpr\":[\"", (unsigned long long)S->f[i]);
-  printf("%s,\"threads\":[", S->fault == 7 ? "]" : "");
+  printf("%s,\"gpr\":[", S->fault == 7 ? "]" : "");
+  for (i = 0; i < 32; i++) printf("%s\"%08x\"", i ? "," : "", (u32)S->r[i]);
+  printf("],\"threads\":[");
   /* id, state (2 runnable, 3 running, 4 blocked), priority, wait queue */
   for (i = 0, p = 0; i < MAX_THREADS; i++)
     if (threads[i].state != T_FREE && threads[i].state != T_DEAD)
@@ -380,7 +383,7 @@ static void tick_sleep(void) {
 }
 #define VI_PERIOD_NS 16683350ull /* NTSC: 60000/1001 Hz */
 static void *event_pump(void *unused) {
-  u64 next_vi = 0, now;
+  u64 next_vi = VI_PERIOD_NS, now; /* the first retrace is a frame after boot */
   (void)unused;
   for (;;) {
     tick_sleep();
@@ -460,7 +463,9 @@ RT(osCreateThread) {
   pthread_cond_init(&t->wake, NULL);
   t->state = T_STOPPED; t->guest = arg(0); t->id = arg(1); t->entry = arg(2);
   t->arg = arg(3); t->sp = arg(4); t->pri = (s32)arg(5);
-  t->r[4] = SX32(t->arg); t->r[29] = SX32(t->sp); t->r[31] = THREAD_RETURN;
+  /* libultra starts a thread 16 bytes below the given top: the O32 save
+     area its entry may store its argument registers into */
+  t->r[4] = SX32(t->arg); t->r[29] = SX32(t->sp - 16); t->r[31] = THREAD_RETURN;
   t->fcsr = 0x01000800u; /* libultra's thread FPCSR: FS and the invalid enable */
   wr32(t->guest + 4, (u32)t->pri); wr32(t->guest + 0x14, t->id);
   wr16(t->guest + 0x10, 1); /* OS_STATE_STOPPED */
@@ -543,6 +548,7 @@ RT(osViSetEvent) {
 RT(__osDisableInt) { u32 was = (u32)ints_enabled; ints_enabled = 0; return ret(was); }
 RT(__osRestoreInt) { ints_enabled = arg(0) & 1; if (ints_enabled) maybe_preempt(); return 0; }
 RT(osSetIntMask) { return ret(0x003fff01u); }
+RT(osGetIntMask) { return ret(0x003fff01u); } /* the same unmasked OS_IM_ALL */
 
 /* ---- time --------------------------------------------------------------- */
 
@@ -573,22 +579,32 @@ RT(osStopTimer) {
 /* ---- system ------------------------------------------------------------- */
 
 /* Guest structures the runtime owns live above the 4 MiB osMemSize reports. */
-#define RT_RAM 0x807ff000u
-RT(osGetMemSize) { return ret(0x00400000u); }
+/* Runtime-owned PI handles. Lowered code never runs libultra's exception
+   preamble, so this page between the vectors and the boot globals is free;
+   the top of RAM is not, since a game that sees 8 MiB puts framebuffers there. */
+#define RT_RAM 0x80000200u
+/* An Expansion Pak is installed: the 8 MiB the model has */
+RT(osGetMemSize) { return ret(PLAID_RAM_SIZE); }
 
 RT(osInitialize) {
   wr32(0x80000300u, 1);           /* osTvType: NTSC */
   wr32(0x80000304u, 0);           /* osRomType: cartridge */
   wr32(0x80000308u, 0xb0000000u); /* osRomBase */
   wr32(0x8000030cu, 0);           /* osResetType: cold */
-  wr32(0x80000318u, 0x00400000u); /* osMemSize: 4 MiB */
+  wr32(0x80000318u, PLAID_RAM_SIZE); /* osMemSize */
   return 0;
 }
+/* libultra 2.0K+ splits osInitialize; the common part is the whole effect here */
+RT(__osInitialize_common) { return rt_osInitialize(); }
 static int nop(void) { return 0; }
+/* No Voice Recognition Unit is attached: every call is CONT_ERR_NO_CONTROLLER */
+#define NO_VRU(name) RT(name) { return ret(1); }
+NO_VRU(osVoiceInit) NO_VRU(osVoiceSetWord) NO_VRU(osVoiceCheckWord) NO_VRU(osVoiceClearDictionary)
+NO_VRU(osVoiceMaskDictionary) NO_VRU(osVoiceStartReadData) NO_VRU(osVoiceStopReadData)
+NO_VRU(osVoiceGetReadData) NO_VRU(osVoiceControlGain)
 #define NOP(name) RT(name) { return nop(); }
 NOP(osCreateViManager)
-NOP(osCreatePiManager) NOP(osInvalDCache) NOP(osInvalICache) NOP(osWritebackDCache)
-NOP(osWritebackDCacheAll) NOP(osSpTaskYield)
+NOP(osCreatePiManager) NOP(osInvalICache) NOP(osSpTaskYield)
 /* shortcut: the VI scale registers are not modeled; RT64 scales the frame itself */
 NOP(osViSetXScale) NOP(osViSetYScale)
 /* The TLB as libultra's osMapTLB writes it (ADR-0162): 4 KiB-aligned even
@@ -662,6 +678,71 @@ static u32 v2p(u32 a) {
   return plaid_tlb(S, a, 0, &p, &seg) ? 0xffffffffu : p;
 }
 RT(osVirtualToPhysical) { return ret(v2p(arg(0))); }
+
+/* ---- D-cache maintenance (ADR-0183) --------------------------------------
+   Lowered code never runs CACHE, so these calls are the only maintenance.
+   RAM already holds every store; the tags say which lines may differ from
+   hardware (see plaid_addr). */
+#define DCACHE_SIZE 0x2000u
+/* The slot caching va's line, or -1 (libultra's Hit operations by address) */
+static int dslot(u32 va) {
+  u32 i = (va >> 4) & 0x1ffu, p = v2p(va);
+  return p < PLAID_RAM_SIZE && S->dtag[i] == ((p & ~0xfffu) | 1) ? (int)i : -1;
+}
+static void write_back_slot(int i) { if (S->dtag[i]) plaid_dwriteback(S, i); }
+static void dcache_all(int invalidate) { /* the Index operations over every line */
+  int i;
+  for (i = 0; i < 512; i++) write_back_slot(i);
+  if (invalidate) { memset(S->dtag, 0, sizeof S->dtag); memset(S->dstale, 0, sizeof S->dstale); }
+}
+RT(osWritebackDCache) {
+  u32 va = arg(0), n = arg(1), a;
+  int i;
+  if ((s32)n <= 0) return 0;
+  if (n >= DCACHE_SIZE) { dcache_all(0); return 0; }
+  for (a = va & ~15u; a < va + n; a += 16)
+    if ((i = dslot(a)) >= 0) write_back_slot(i);
+  return 0;
+}
+RT(osWritebackDCacheAll) { dcache_all(0); return 0; }
+/* libultra writes back and invalidates partly covered lines and discards
+   whole ones; a discarded store stays in RAM here but not on hardware, so
+   its line is lost until DMA rewrites all of it */
+RT(osInvalDCache) {
+  u32 va = arg(0), n = arg(1), a;
+  int i;
+  if ((s32)n <= 0) return 0;
+  if (n >= DCACHE_SIZE) { dcache_all(1); return 0; }
+  for (a = va & ~15u; a < va + n; a += 16)
+    if ((i = dslot(a)) >= 0) {
+      if (a >= va && a + 16 <= va + n) { if (S->ddirty[i]) S->line_lost[v2p(a) >> 4] = 1; }
+      else write_back_slot(i);
+      S->dtag[i] = 0; S->ddirty[i] = 0; S->dstale[i] = 0;
+    }
+  return 0;
+}
+/* DMA bypasses the D-cache: it reads RAM, which a dirty resident line has
+   not reached on hardware, and leaves a resident line older than RAM.
+   dma_wrote runs before the bytes change, to keep the cached copy. */
+static void dma_read(u32 p, u32 n) {
+  u32 l;
+  int i;
+  for (l = p >> 4; n && l <= (p + n - 1) >> 4 && l < PLAID_RAM_SIZE / 16; l++)
+    if (S->line_lost[l] || ((i = plaid_dresident(S, l << 4)) >= 0 && S->ddirty[i]))
+      finish(1, "DMA reads RAM that differs from hardware's");
+}
+static void dma_wrote(u32 p, u32 n) {
+  u32 l;
+  int i;
+  for (l = p >> 4; n && l <= (p + n - 1) >> 4 && l < PLAID_RAM_SIZE / 16; l++) {
+    if (l << 4 >= p && (u64)(l << 4) + 16 <= (u64)p + n) S->line_lost[l] = 0;
+    if ((i = plaid_dresident(S, l << 4)) >= 0) {
+      u32 lo = l << 4 > p ? 0 : p & 15, hi = (u64)(l << 4) + 16 <= (u64)p + n ? 16 : (p + n) & 15;
+      plaid_dstale(S, i, l << 4, (u16)(((1u << (hi - lo)) - 1) << lo));
+    }
+  }
+}
+static void dma_wr(u32 va, const u8 *bytes, u32 n) { if (n) dma_wrote(v2p(va), n); wr(va, bytes, n); }
 RT(__osSetFpcCsr) {
   u32 was = S->fcsr | S->fcc << 23;
   if (plaid_ctc1(S, arg(0), (u32)S->r[31])) return 1;
@@ -675,7 +756,7 @@ RT(osPiStartDma) {
   u32 mb = arg(0), dir = arg(2), dev = arg(3), va = arg(4), n = arg(5), mq = arg(6);
   if (dir != 0) finish(1, "PI write to cartridge");
   if ((u64)dev + n > rom_size) finish(1, "PI DMA outside the ROM");
-  wr(va, rom + dev, n);
+  dma_wr(va, rom + dev, n);
   dma_count++;
   if (mq) mq_send(mq, mb, 0, 0);
   maybe_preempt();
@@ -713,9 +794,94 @@ static void io_boot(void) {
   memcpy(DMEM + 0x40, rom + 0x40, 0xfc0);
   pi_bsd[0] = c & 0xff; pi_bsd[1] = c >> 8 & 0xff; pi_bsd[2] = c >> 16 & 0xf; pi_bsd[3] = c >> 20 & 0x3;
 }
+/* ---- FlashRAM (ADR-0183) -------------------------------------------------
+   Domain 2 holds SRAM until a command reaches the FlashRAM register at
+   0x08010000; from then on it is a 128 KiB Macronix FlashRAM as pinned ares
+   models it (cartridge/flash.cpp, ares' default MX29L1101 when the model is
+   unknown: byte indexed, two D2 commands to enter status mode, a stale
+   first status read). Erase and program complete at once: an infinitely
+   fast chip, whose busy status is never seen. */
+#define FLASH_SIZE 0x20000
+static u8 flash[FLASH_SIZE];
+static const char *flash_path;
+static struct {
+  int on, mode, erase_setup, erase_sector, stale, pending_d2, cir_valid, burst;
+  u32 offset;
+  u16 cir_high, stale_value;
+  u8 status, page[128];
+} fl;
+enum { FL_ARRAY, FL_STATUS, FL_ID, FL_PAGE };
+static void flash_power(void) {
+  memset(&fl, 0, sizeof fl);
+  fl.status = 0x80 | 3 << 2; /* write state machine ready; macronix ok bits */
+  memset(fl.page, 0xff, sizeof fl.page);
+}
+static void flash_address(u32 p) { fl.offset = p - 0x08000000u; fl.cir_valid = 0; fl.burst = 0; }
+static u16 flash_read_half(void) {
+  static const u16 id[4] = {0x1111, 0x8001, 0x00c2, 0x001d};
+  u16 d;
+  if ((fl.mode == FL_STATUS || fl.mode == FL_ID) && (fl.offset & 0x20000u)) finish(1, "FlashRAM open bus");
+  if (fl.mode == FL_STATUS && fl.stale) { fl.stale = 0; d = fl.stale_value; }
+  else if (fl.mode == FL_STATUS) d = fl.status;
+  else if (fl.mode == FL_ID) d = id[fl.burst & 3];
+  else if (fl.mode == FL_PAGE) d = (u16)(fl.page[fl.offset & 0x7e] << 8 | fl.page[(fl.offset & 0x7e) + 1]);
+  else d = fl.offset + 1 < FLASH_SIZE ? (u16)(flash[fl.offset & ~1u] << 8 | flash[(fl.offset & ~1u) + 1]) : 0;
+  fl.stale_value = d; fl.offset += 2; fl.burst++;
+  return d;
+}
+static void flash_command(u32 data) {
+  u32 i, base;
+  u8 cmd = (u8)(data >> 24);
+  if (cmd == 0xd2 && !fl.pending_d2) { fl.pending_d2 = 1; return; }
+  fl.pending_d2 = 0;
+  switch (cmd) {
+  case 0x3c: fl.erase_setup = 1; break;
+  case 0x4b: fl.erase_setup = 2; fl.erase_sector = (int)((data & 0x3ff) >> 7); break;
+  case 0x78:
+    if (!fl.erase_setup) break;
+    base = fl.erase_setup == 1 ? 0 : (u32)fl.erase_sector << 14;
+    memset(flash + base, 0xff, fl.erase_setup == 1 ? FLASH_SIZE : 0x4000);
+    fl.erase_setup = 0; fl.mode = FL_STATUS; fl.stale = 1;
+    save_file(flash_path, flash, FLASH_SIZE);
+    break;
+  case 0xa5:
+    base = (data & 0x3ff) << 7;
+    for (i = 0; i < 128; i++) flash[base + i] &= fl.page[i];
+    memset(fl.page, 0xff, sizeof fl.page);
+    fl.mode = FL_STATUS; fl.stale = 1;
+    save_file(flash_path, flash, FLASH_SIZE);
+    break;
+  case 0xb4: fl.mode = FL_PAGE; break;
+  case 0xd2: fl.mode = FL_STATUS; fl.stale = 1; break;
+  case 0xe1: fl.mode = FL_ID; break;
+  case 0xf0: fl.mode = FL_ARRAY; break;
+  default: finish(1, "unknown FlashRAM command");
+  }
+}
+static void flash_write_half(u16 d) {
+  u32 o = fl.offset & ~1u;
+  if (o == 0x10000u || o == 0x10002u) {
+    fl.offset += 2;
+    if (!fl.cir_valid) { fl.cir_high = d; fl.cir_valid = 1; return; }
+    fl.cir_valid = 0;
+    if (!fl.on) { fl.on = 1; if (flash_path && load_file(flash_path, flash, FLASH_SIZE)) finish(1, "not a 128 KiB FlashRAM save"); }
+    flash_command((u32)fl.cir_high << 16 | d);
+    return;
+  }
+  if (fl.mode == FL_STATUS && o == 0 && d == 0) fl.status |= 3 << 2;
+  if (fl.mode == FL_PAGE) { fl.page[o & 0x7f] = (u8)(d >> 8); fl.page[(o & 0x7f) + 1] = (u8)d; }
+  fl.offset += 2;
+}
+
 static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
   (void)s;
   if (size != 4) return 1;
+  if (p >= 0x08000000u && p < 0x10000000u && (fl.on || (write && (p & ~3u) == 0x08010000u))) {
+    flash_address(p);
+    if (write) { flash_write_half((u16)(*v >> 16)); flash_write_half((u16)*v); }
+    else { u32 hi = flash_read_half(); *v = (u64)(s64)(s32)(hi << 16 | flash_read_half()); }
+    return 0;
+  }
   if (p < 0x04002000u) {
     u8 *m = (p & 0x1000u ? IMEM : DMEM) + (p & 0xfffu);
     if (!write) {
@@ -773,13 +939,27 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
 RT(osEPiStartDma) {
   u32 h = arg(0), mb = arg(1), mq = rd32(mb + 4), va = rd32(mb + 8), dev = rd32(mb + 0xc), n = rd32(mb + 0x10);
   u32 base = rd32(h + 0xc) & 0x1fffffffu, p;
-  if (base == 0x08000000u) { /* SRAM: 32 KiB, byte addressed, on PI domain 2 */
+  if (base == 0x08000000u && fl.on) {
+    flash_address(((base | dev) & 0x1fffffffu));
+    p = v2p(va);
+    if (p > PLAID_RAM_SIZE || n > PLAID_RAM_SIZE - p || (n & 1)) finish(1, "FlashRAM DMA outside RAM");
+    if (arg(2) == 0) {
+      u32 i;
+      dma_wrote(p, n);
+      for (i = 0; i < n; i += 2) { u16 d = flash_read_half(); S->ram[p + i] = (u8)(d >> 8); S->ram[p + i + 1] = (u8)d; }
+    } else {
+      u32 i;
+      dma_read(p, n);
+      for (i = 0; i < n; i += 2) flash_write_half((u16)(S->ram[p + i] << 8 | S->ram[p + i + 1]));
+    }
+  } else if (base == 0x08000000u) { /* SRAM: 32 KiB, byte addressed, on PI domain 2 */
     dev = ((base | dev) & 0x1fffffffu) - 0x08000000u; /* libultra ORs the handle base in */
     if ((u64)dev + n > SRAM_SIZE) finish(1, "PI DMA outside SRAM");
-    if (arg(2) == 0) wr(va, sram + dev, n);
+    if (arg(2) == 0) dma_wr(va, sram + dev, n);
     else {
       p = v2p(va);
       if (p > PLAID_RAM_SIZE || n > PLAID_RAM_SIZE - p) finish(1, "SRAM DMA outside RAM");
+      dma_read(p, n);
       memcpy(sram + dev, S->ram + p, n);
       save_file(sram_path, sram, SRAM_SIZE);
     }
@@ -787,7 +967,7 @@ RT(osEPiStartDma) {
     if (base != 0x10000000u) finish(1, "PI DMA through a non-cartridge handle");
     if (arg(2) != 0) finish(1, "PI write to cartridge");
     if ((u64)dev + n > rom_size) finish(1, "PI DMA outside the ROM");
-    wr(va, rom + dev, n);
+    dma_wr(va, rom + dev, n);
   }
   dma_count++;
   if (mq) mq_send(mq, mb, 0, 0);
@@ -799,6 +979,12 @@ RT(osEPiStartDma) {
    only the cartridge ROM is modelled */
 RT(osEPiReadIo) {
   u32 a = (rd32(arg(0) + 0xc) | arg(1)) & 0x1fffffffu;
+  u64 v;
+  if (a >= 0x08000000u && a < 0x10000000u && fl.on) {
+    rt_io(S, a, 4, 0, &v);
+    wr32(arg(2), (u32)v);
+    return ret(0);
+  }
   if ((a & 3) || a < 0x10000000u || (u64)(a - 0x10000000u) + 4 > rom_size) finish(1, "PI read outside the ROM");
   wr(arg(2), rom + (a - 0x10000000u), 4);
   return ret(0);
@@ -816,7 +1002,11 @@ static void report_gfx_task(u32 task) {
 }
 #ifdef PLAID_RSP
 /* RSP DMA into RDRAM obeys the same write checks as the CPU's runtime writes */
-static int rsp_rdram_write(u32 p, u32 size) { return plaid_runtime_write(S, p, size, 0); }
+static int rsp_rdram_write(u32 p, u32 size) {
+  int r = plaid_runtime_write(S, p, size, 0);
+  if (!r && size) dma_wrote(p, size);
+  return r;
+}
 /* Run lowered code from pc until the RSP halts (0) or faults (1); -1 when no
    lowered text holds the word IMEM has at pc. A text that leaves at a pc
    (its copy of the word there, or of the delay slot, is stale) is not chosen
@@ -1140,6 +1330,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--seconds") && i + 1 < argc) run_seconds = atof(argv[++i]);
     else if (!strcmp(argv[i], "--save") && i + 1 < argc) save_path = argv[++i];
     else if (!strcmp(argv[i], "--sram") && i + 1 < argc) sram_path = argv[++i];
+    else if (!strcmp(argv[i], "--flash") && i + 1 < argc) flash_path = argv[++i];
     else if (!strcmp(argv[i], "--wav") && i + 1 < argc) {
       if (!(wav = fopen(argv[++i], "wb"))) { perror(argv[i]); return 2; }
       wav_header();
@@ -1169,6 +1360,8 @@ int main(int argc, char **argv) {
     if (rom_size < 0x1000 || rom[0] != 0x80 || rom[1] != 0x37) { fprintf(stderr, "expected a big-endian .z64 ROM\n"); return 2; }
   }
   if (sram_path && load_file(sram_path, sram, SRAM_SIZE)) { fprintf(stderr, "%s is not a %d-byte SRAM save\n", sram_path, SRAM_SIZE); return 2; }
+  memset(flash, 0xff, FLASH_SIZE); /* an erased chip until its save is loaded */
+  flash_power();
   if (save_path && load_file(save_path, eeprom, EEPROM_SIZE)) { fprintf(stderr, "%s is not a %d-byte EEPROM save\n", save_path, EEPROM_SIZE); return 2; }
   S = calloc(1, sizeof *S);
   if (!S) return 2;

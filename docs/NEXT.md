@@ -17,7 +17,7 @@ effect in its receipt.
 | 2 | SM64 discovery recall | >= 99% of real functions found, scored locally against a decomp symbol map used only as an oracle | **done: 99.03%** (3795/3832, ADR-0152, `--data-roots`) |
 | 3 | SM64 closed under declared assumptions | solver CLOSED in an explicit assumption scope; every assumption listed and checked | **done** (`closed` under the address-taken scope, ADR-0153..0156; execution-source and runtime-ABI assumptions are declared, the rest checked natively) |
 | 4 | SM64 boots natively to title | lowered code linked with Plaid's runtime + RT64 (ADR-0158); no interpreter linked | **done** (ADR-0163), and into gameplay at full speed with native audio (ADR-0164..0169) |
-| 5 | Retire assumptions; OoT | assumptions discharged one by one; OoT via Yaz0 (PR #28) and relocation (PR #31) | in progress: OoT `CLOSED` under the address-taken scope with all 468 overlays (ADR-0180) and runs relocated overlays natively to its first graphics task (ADR-0181); 0 of 16 assumptions retired |
+| 5 | Retire assumptions; OoT | assumptions discharged one by one; OoT via Yaz0 (PR #28) and relocation (PR #31) | in progress: OoT `CLOSED` under the address-taken scope with all 468 overlays (ADR-0180) and draws its title and file select natively (ADR-0182); MM from the ROM alone is `CLOSED` and plays its intro natively (ADR-0183); 0 of 16 assumptions retired |
 
 Next concrete steps, in order:
 
@@ -126,8 +126,10 @@ Next concrete steps, in order:
      proven over every path (ADR-0180), so OoT with its 468 overlays is
      `CLOSED` (154,414 blocks); relocatable overlays run natively through a
      verified binding (ADR-0181); with RT64, lowered audio microcode and
-     SRAM, OoT draws its title and file select (ADR-0182).
-     **Next:** play OoT past the file select into gameplay, then retire assumptions one by one (see the ledger in the README and
+     SRAM, OoT draws its title and file select (ADR-0182); `scripts/native.py`
+     takes an untouched ROM to native, and MM plays its intro natively
+     (ADR-0183).
+     **Next:** MM's first heap-allocated overlay call (fault 3), OoT past the file select into gameplay, then retire assumptions one by one (see the ledger in the README and
      `docs/assumptions.json`; 0 of 16 retired).
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,

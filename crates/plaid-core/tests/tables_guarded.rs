@@ -164,3 +164,52 @@ fn an_entry_that_skips_the_compare_fails_closed() {
 fn an_entry_at_the_dispatch_fails_closed() {
     assert_eq!(targets(&scale_before_branch(), &[0, 0x10], 0x1c), None);
 }
+
+fn andi(t: u32, s: u32, imm: u32) -> u32 {
+    0x3000_0000 | s << 21 | t << 16 | imm
+}
+
+#[test]
+fn a_masked_index_bounds_the_table_without_a_guard() {
+    // GCC's `switch (x & 1)` (ADR-0183): the mask, not a branch, bounds it
+    let code = [
+        andi(T8, A0, 1),
+        sll(T8, T8),
+        lui(AT),
+        addu(AT, AT, T8),
+        lw(T8, AT),
+        jr(T8),
+        0,
+    ];
+    assert_eq!(targets(&code, &[0], 0x14), Some(vec![0x50, 0x60]));
+    // an index changed after its mask is unbounded
+    let code = [
+        andi(T8, A0, 1),
+        addiu(T8, T8, 1),
+        sll(T8, T8),
+        lui(AT),
+        addu(AT, AT, T8),
+        lw(T8, AT),
+        jr(T8),
+        0,
+    ];
+    assert_eq!(targets(&code, &[0], 0x18), None);
+}
+
+#[test]
+fn a_masked_index_does_not_bound_a_called_array() {
+    // `funcs[x & 1]()`: the array may be shorter than the mask
+    let jalr = T8 << 21 | 31 << 11 | 9;
+    let code = [
+        andi(T8, A0, 1),
+        sll(T8, T8),
+        lui(AT),
+        addu(AT, AT, T8),
+        lw(T8, AT),
+        jalr,
+        0,
+        jr(31),
+        0,
+    ];
+    assert_eq!(targets(&code, &[0], 0x14), None);
+}

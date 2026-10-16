@@ -44,16 +44,16 @@
       "id": "oot",
       "name": "Ocarina of Time (USA 1.2), fixed image",
       "map": "oot-map7.json",
-      "blocks": 29542,
-      "indirect_sites": 2566,
+      "blocks": 29613,
+      "indirect_sites": 2574,
       "whole_rom": {
         "status": "OPEN",
         "by_class": {
-          "unresolved_indirect_site": 2564,
+          "unresolved_indirect_site": 2572,
+          "exception_or_unsupported_instruction": 284,
           "pointer_table_immutability_unproven": 96,
           "pointer_table_target_identity_unproven": 96,
-          "exception_or_unsupported_instruction": 284,
-          "runtime_boundary_outside_scope": 64,
+          "runtime_boundary_outside_scope": 65,
           "dynamic_effect_outside_scope": 1,
           "unmodeled_exception_paths": 1,
           "unproven_executable_universe": 1,
@@ -64,7 +64,7 @@
         }
       },
       "scopes": [
-        {"scope": "--guarded-ram", "status": "OPEN", "blockers": 122, "assumptions": null, "note": "all unresolved_indirect_site"},
+        {"scope": "--guarded-ram", "status": "OPEN", "blockers": 122, "assumptions": 12, "note": "all unresolved_indirect_site"},
         {"scope": "--address-taken", "status": "CLOSED", "blockers": 0, "assumptions": 13, "note": ""}
       ]
     },
@@ -72,16 +72,16 @@
       "id": "oot-overlays",
       "name": "OoT + 468 overlays at link addresses",
       "map": "discover --overlays (ADR-0179)",
-      "blocks": 154414,
-      "indirect_sites": 14775,
+      "blocks": 155770,
+      "indirect_sites": 14869,
       "whole_rom": {
         "status": "OPEN",
         "by_class": {
-          "unresolved_indirect_site": 14769,
+          "unresolved_indirect_site": 14863,
+          "exception_or_unsupported_instruction": 651,
           "pointer_table_immutability_unproven": 376,
           "pointer_table_target_identity_unproven": 376,
-          "exception_or_unsupported_instruction": 647,
-          "runtime_boundary_outside_scope": 64,
+          "runtime_boundary_outside_scope": 65,
           "dynamic_effect_outside_scope": 1,
           "unmodeled_exception_paths": 1,
           "unproven_executable_universe": 1,
@@ -92,8 +92,36 @@
         }
       },
       "scopes": [
-        {"scope": "--guarded-ram", "status": "OPEN", "blockers": 708, "assumptions": 13, "note": "all unresolved_indirect_site"},
+        {"scope": "--guarded-ram", "status": "OPEN", "blockers": 711, "assumptions": 13, "note": "all unresolved_indirect_site"},
         {"scope": "--address-taken", "status": "CLOSED", "blockers": 0, "assumptions": 14, "note": "overlays run natively through a verified binding (ADR-0181)"}
+      ]
+    },
+    {
+      "id": "mm",
+      "name": "Majora's Mask (USA) + overlays, inferred loads",
+      "map": "target/native/mm/map.json (scripts/native.py)",
+      "blocks": 214963,
+      "indirect_sites": 19138,
+      "whole_rom": {
+        "status": "OPEN",
+        "by_class": {
+          "unresolved_indirect_site": 19128,
+          "exception_or_unsupported_instruction": 955,
+          "pointer_table_immutability_unproven": 571,
+          "pointer_table_target_identity_unproven": 571,
+          "runtime_boundary_outside_scope": 81,
+          "dynamic_effect_outside_scope": 1,
+          "unmodeled_exception_paths": 1,
+          "unproven_executable_universe": 1,
+          "unproven_executable_write_policy": 1,
+          "unproven_load_overlay_policy": 1,
+          "unproven_rsp_policy": 1,
+          "unsupported_execution_modes": 1
+        }
+      },
+      "scopes": [
+        {"scope": "--guarded-ram", "status": "OPEN", "blockers": 891, "assumptions": 13, "note": "all unresolved_indirect_site"},
+        {"scope": "--address-taken", "status": "CLOSED", "blockers": 0, "assumptions": 14, "note": "no hand-written input (ADR-0183)"}
       ]
     }
   ],

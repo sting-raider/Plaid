@@ -31,6 +31,14 @@ runs through its relocated overlays, and with RT64, its own lowered audio
 microcode and SRAM saves it draws the boot logo, title and file select
 (ADR-0182).
 
+`scripts/native.py <rom>` takes a ROM to a native executable with no
+per-game input (ADR-0183). It infers the code segments from the ROM's file
+table and its boot stub, identifies the runtime, and refuses to build
+unless the address-taken scope is CLOSED. Majora's Mask went through it
+untouched: it is CLOSED, and natively with RT64 it plays its intro and the
+Clock Town attract scene. This needed an exact VR4300 D-cache model,
+FlashRAM, and four general closure fixes.
+
 ## By layer
 
 | Layer | State | Main gap | Evidence |

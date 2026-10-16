@@ -1268,6 +1268,68 @@ fn run() -> Result<(), String> {
                 .map_err(|e| e.to_string())?
             );
         }
+        // Fixed loads inferred from the IPL3 window (ADR-0183), written as
+        // ordinary declarations so the evidence stays inspectable.
+        [command, path, output] if command == "infer-loads" => {
+            let rom = CanonicalRom::from_bytes(&fs::read(path).map_err(|e| e.to_string())?)?;
+            let bytes = rom.bytes();
+            let end = bytes.len().min(0x10_1000);
+            let base = bytes
+                .get(0x1000..end)
+                .ok_or("ROM ends before its boot window")?;
+            let found = plaid_core::overlays::static_loads(bytes, base, rom.header.entry.0)?;
+            let stub = plaid_core::overlays::reset_stub(bytes, base.len() as u32);
+            let loads: Vec<_> = stub
+                .map(|size| {
+                    serde_json::json!({
+                        "destination": format!("{:#x}", rom.header.entry.0),
+                        "size": format!("{size:#x}"),
+                        "rom": "0x1000",
+                        "encoding": "raw",
+                    })
+                })
+                .into_iter()
+                .chain(found.iter().map(|l| {
+                    serde_json::json!({
+                        "destination": format!("{:#x}", l.destination),
+                        "size": format!("{:#x}", l.size),
+                        "rom": format!("{:#x}", l.file.rom_start),
+                        "encoding": if l.file.rom_end == 0 { "raw" } else { "yaz0" },
+                    })
+                }))
+                .collect();
+            let evidence: Vec<_> = stub
+                .map(|size| format!("reset stub of {size:#x} bytes before the first file in the boot window"))
+                .into_iter()
+                .chain(found
+                .iter()
+                .map(|l| {
+                    format!(
+                        "file {:#x} named at {:#x}, placed at {:#x} built at {:#x}, {}/{} calls begin functions",
+                        l.file.virtual_start,
+                        l.file_constant_at,
+                        l.destination,
+                        l.destination_constant_at,
+                        l.calls.1,
+                        l.calls.0
+                    )
+                }))
+                .collect();
+            let doc = serde_json::json!({
+                "format": "plaid-loads-v0",
+                "source": format!("inferred from the boot window (ADR-0183): {}", evidence.join("; ")),
+                "loads": loads,
+            });
+            fs::write(
+                output,
+                serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())? + "\n",
+            )
+            .map_err(|e| e.to_string())?;
+            println!("{} inferred loads -> {output}", loads.len());
+            for e in evidence {
+                println!("  {e}");
+            }
+        }
         [command, path] if command == "check-trace" => {
             let t =
                 DiscoveryTrace::from_ndjson(&fs::read_to_string(path).map_err(|e| e.to_string())?)?;
@@ -1312,7 +1374,7 @@ fn run() -> Result<(), String> {
         }
         _ => {
             return Err(
-                "usage: plaid inspect-sp-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-pi-fetch-lineage <same-inputs> | inspect-dcache-store64 <history-v2.json> <expected-source-sha256> <report.json> | verify-dcache-store64 <same-inputs> | compose-cop1-mutations <history.json> <expected-source-sha256> <contexts.json> <expected-contexts-sha256> <report.json> | verify-cop1-mutations <same-inputs> | inspect-dcache-resident-reads <history-v1.json> <expected-source-sha256> <report.json> | verify-dcache-resident-reads <same-inputs> | inspect-rsp-cpu-imem <history.json> <expected-source-sha256> <report.json> | verify-rsp-cpu-imem <same-inputs> | inspect-sp-writer-fetch <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-writer-fetch <same-inputs> | create-trace-expectations <new-expected.json> <trace.ndjson>... | solve-traces <rom> <map.json> <expected.json> <trace.ndjson>... | inspect-cpu-definitions <history.json> <external-source-sha256> <report.json> | verify-cpu-definitions <history.json> <external-source-sha256> <report.json> | inspect-cpu-copy-history <history.json> <external-source-sha256> <report.json> | verify-cpu-copy-history <history.json> <external-source-sha256> <report.json> | isa-coverage | rsp-coverage | identify <rom> <rom-offset> <guest-start> <size> <signatures.sig | reference.map --symbols> | rom-info <rom> | recall <map.json> <reference.map> [start end] | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> [--guarded-ram | --address-taken] | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> [runtime.json] [--data-roots | --address-taken] [--fr0] | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | verify-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | inspect-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | verify-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | merge <left.json> <right.json> <output.json> | lower-c <words.bin> <base> <entry> <exit> <out.c> [runtime.json] [--address-taken] [--fr0] | lower-map <rom> <map.json> <entry> <exit> <out.c> | lower-rsp <rom> <offset> <size> <imem> <name> <out.c> [--raw] (discover, lower-c and identify also take --loads <loads.json>)"
+                "usage: plaid inspect-sp-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-pi-fetch-lineage <same-inputs> | inspect-dcache-store64 <history-v2.json> <expected-source-sha256> <report.json> | verify-dcache-store64 <same-inputs> | compose-cop1-mutations <history.json> <expected-source-sha256> <contexts.json> <expected-contexts-sha256> <report.json> | verify-cop1-mutations <same-inputs> | inspect-dcache-resident-reads <history-v1.json> <expected-source-sha256> <report.json> | verify-dcache-resident-reads <same-inputs> | inspect-rsp-cpu-imem <history.json> <expected-source-sha256> <report.json> | verify-rsp-cpu-imem <same-inputs> | inspect-sp-writer-fetch <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-writer-fetch <same-inputs> | create-trace-expectations <new-expected.json> <trace.ndjson>... | solve-traces <rom> <map.json> <expected.json> <trace.ndjson>... | inspect-cpu-definitions <history.json> <external-source-sha256> <report.json> | verify-cpu-definitions <history.json> <external-source-sha256> <report.json> | inspect-cpu-copy-history <history.json> <external-source-sha256> <report.json> | verify-cpu-copy-history <history.json> <external-source-sha256> <report.json> | isa-coverage | rsp-coverage | identify <rom> <rom-offset> <guest-start> <size> <signatures.sig | reference.map --symbols> | rom-info <rom> | infer-loads <rom> <loads.json> | recall <map.json> <reference.map> [start end] | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> [--guarded-ram | --address-taken] | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> [runtime.json] [--data-roots | --address-taken] [--fr0] | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | verify-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | inspect-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | verify-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | merge <left.json> <right.json> <output.json> | lower-c <words.bin> <base> <entry> <exit> <out.c> [runtime.json] [--address-taken] [--fr0] | lower-map <rom> <map.json> <entry> <exit> <out.c> | lower-rsp <rom> <offset> <size> <imem> <name> <out.c> [--raw] (discover, lower-c and identify also take --loads <loads.json>)"
                     .into(),
             );
         }

@@ -21,7 +21,7 @@ pub mod rsp;
 const PRELUDE: &str = r#"#include <stdint.h>
 #include <string.h>
 #include <fenv.h>
-typedef uint8_t u8; typedef uint32_t u32; typedef int32_t s32;
+typedef uint8_t u8; typedef uint16_t u16; typedef uint32_t u32; typedef int32_t s32;
 typedef uint64_t u64; typedef int64_t s64;
 #define PLAID_RAM_SIZE 0x800000u
 /* one TLB entry as TLBWI writes it: PageMask, EntryHi, EntryLo0/1 (ADR-0162) */
@@ -29,9 +29,15 @@ typedef struct { u32 mask, hi, lo[2]; } plaid_tlb_entry;
 typedef struct plaid_state_s {
   u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 fcsr; u32 llbit; u32 pc; u32 fault; u32 fault_pc;
   u8 ram[PLAID_RAM_SIZE];
-  /* per 16-byte line: 0 untouched, 1 cached at its physical index (KSEG0),
-     2 uncached (KSEG1), 3 cached at the other virtual index (ADR-0162) */
-  u8 line_segment[PLAID_RAM_SIZE / 16];
+  /* The VR4300 D-cache as pinned ares models it (ADR-0183): 512 direct-mapped
+     16-byte lines indexed by virtual address bits 4-12; dtag holds a resident
+     line's physical page | 1. RAM holds the latest store: ddirty marks a
+     resident line with stores hardware has not yet written back, dstale the
+     bytes whose cached copy is older than RAM (an uncached store or DMA
+     since), dold those older bytes, and line_lost a RAM line holding stores
+     hardware discarded. */
+  u32 dtag[512]; u8 ddirty[512]; u16 dstale[512]; u8 dold[512][16];
+  u8 line_lost[PLAID_RAM_SIZE / 16];
   u8 load_ok[64]; /* declared load verified in RAM (ADR-0136) */
   /* per RAM word, from plaid_code: 0 data, 1 executable, 2 + n executable
      bytes of declared load n; built once before the first guarded write */
@@ -60,9 +66,10 @@ typedef struct { u32 start, end; int load; } plaid_range;
 #define SX32(v) ((u64)(s64)(s32)(u32)(v))
 /* fault 1: address/alignment outside the supported model; 2: store to
    executable bytes (declared immutable); 3: transfer without a proven target;
-   4: one RDRAM line accessed uncached (KSEG1) after a cached access, or
-   cached at two virtual indexes, whose result depends on write-back
-   D-cache state this coherent model does not track;
+   4: an RDRAM access whose result depends on D-cache state: uncached
+   (KSEG1) to a resident line with stores not yet written back, cached to a
+   resident line RAM has overtaken, a line resident at two indexes, or a
+   line holding stores the cache discarded (ADR-0183);
    5: a return whose $ra is not the continuation of the call that entered
    its function (the checked call/return assumption);
    6: an overflow-trapping add/subtract that would raise an exception;
@@ -143,6 +150,32 @@ static inline int plaid_tlb(plaid_state *s, u32 v, int write, u32 *p, u8 *seg) {
   }
   return 1;
 }
+/* RAM under slot i's bytes m is about to change without the cache: keep the
+   cached bytes, which RAM still holds, as the line's older copy (ADR-0183) */
+static inline void plaid_dstale(plaid_state *s, int i, u32 p, u16 m) {
+  u32 b, base = p & ~15u;
+  for (b = 0; b < 16; b++)
+    if ((m >> b & 1) && !(s->dstale[i] >> b & 1)) s->dold[i][b] = s->ram[base + b];
+  s->dstale[i] |= m;
+}
+/* Write slot i back: a dirty line's older bytes go over RAM, as hardware
+   writes the whole cached line */
+static inline void plaid_dwriteback(plaid_state *s, int i) {
+  u32 b, base = (s->dtag[i] & ~0xfffu) | ((u32)i & 0xffu) << 4;
+  if (s->ddirty[i] && s->dstale[i])
+    for (b = 0; b < 16; b++)
+      if (s->dstale[i] >> b & 1) s->ram[base + b] = s->dold[i][b];
+  if (s->ddirty[i]) s->dstale[i] = 0;
+  s->ddirty[i] = 0;
+}
+/* The D-cache slot holding physical line p, or -1: an index's bits 4-11
+   are p's, bit 12 is the virtual address's own (ADR-0183) */
+static inline int plaid_dresident(plaid_state *s, u32 p) {
+  u32 t = (p & ~0xfffu) | 1, i = (p >> 4) & 0xffu;
+  if (s->dtag[i] == t) return (int)i;
+  if (s->dtag[i | 0x100u] == t) return (int)(i | 0x100u);
+  return -1;
+}
 static inline int plaid_addr(plaid_state *s, u64 va, u32 size, u32 pc, int write, u32 *out) {
   u32 v = (u32)va, p;
   u8 seg;
@@ -157,11 +190,31 @@ static inline int plaid_addr(plaid_state *s, u64 va, u32 size, u32 pc, int write
     if (s->io && seg == 2 && p >= 0x04000000u && p < 0x20000000u) { *out = p; return 2; }
     return plaid_fault(s, pc, 1);
   }
-  /* only cached accesses fill the D-cache, so a line used only uncached so
-     far may become cached; once cached, any other class faults (ADR-0176) */
-  if (s->line_segment[p >> 4] && s->line_segment[p >> 4] != seg && s->line_segment[p >> 4] != 2)
-    return plaid_fault(s, pc, 4);
-  s->line_segment[p >> 4] = seg;
+  /* The cache as hardware has it (ADR-0183): a miss writes the old line
+     back and fills (write-allocate); a cached read of a stale byte returns
+     the older cached copy (3: plaid_load reads it); a cached store makes its
+     bytes current. Faults: an uncached access to a dirty resident line,
+     whose stores hardware's RAM lacks, a line resident at both indexes, and
+     a lost line. */
+  if (s->line_lost[p >> 4]) return plaid_fault(s, pc, 4);
+  {
+    u16 m = (u16)(((1u << size) - 1) << (p & 15));
+    if (seg == 2) {
+      int i = plaid_dresident(s, p);
+      if (i >= 0) {
+        if (s->ddirty[i]) return plaid_fault(s, pc, 4);
+        if (write) plaid_dstale(s, i, p, m);
+      }
+    } else {
+      u32 i = (v >> 4) & 0x1ffu, t = (p & ~0xfffu) | 1;
+      if (s->dtag[i] != t) {
+        if (s->dtag[i ^ 0x100] == t) return plaid_fault(s, pc, 4);
+        if (s->dtag[i]) plaid_dwriteback(s, (int)i);
+        s->dtag[i] = t; s->ddirty[i] = 0; s->dstale[i] = 0;
+      } else if (!write && (s->dstale[i] & m)) { *out = p; return 3; }
+      if (write) { s->ddirty[i] = 1; s->dstale[i] &= (u16)~m; }
+    }
+  }
   if (write && plaid_protected(s, p, size, pc)) return plaid_fault(s, pc, 2);
   *out = p; return 0;
 }
@@ -339,6 +392,14 @@ const HELPERS_TAIL: &str = r#"static inline int plaid_load(plaid_state *s, u64 v
   u32 p, i; u64 x = 0;
   int r = plaid_addr(s, va, size, pc, 0, &p);
   if (r == 2) return s->io(s, p, size, 0, value) ? plaid_fault(s, pc, 1) : 0;
+  if (r == 3) { /* the cached copy, older than RAM in its stale bytes */
+    u32 d = ((u32)va >> 4) & 0x1ffu, b;
+    for (i = 0; i < size; i++) {
+      b = (p + i) & 15u;
+      x = x << 8 | (s->dstale[d] >> b & 1 ? s->dold[d][b] : s->ram[p + i]);
+    }
+    *value = x; return 0;
+  }
   if (r) return 1;
   for (i = 0; i < size; i++) x = x << 8 | s->ram[p + i];
   *value = x; return 0;

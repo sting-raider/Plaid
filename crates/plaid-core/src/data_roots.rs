@@ -6,8 +6,12 @@
 //! `lui`/`addiu` pairs. This scan proposes discovery roots, not closure
 //! facts. A wrong root decodes junk whose blockers keep the map OPEN; it
 //! never closes anything.
-use crate::{GuestAddr, discovery::CodeImage, program::ProgramMap};
-use std::collections::{BTreeMap, BTreeSet};
+use crate::{
+    GuestAddr,
+    discovery::CodeImage,
+    program::{EdgeKind, ProgramMap},
+};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 const JR_RA: u32 = 0x03e0_0008;
 
@@ -30,12 +34,13 @@ fn after_return(image: &CodeImage, pc: GuestAddr, starts: &BTreeSet<u32>) -> boo
     if word(8) == Some(JR_RA) {
         return true;
     }
-    // `jr ra; nop` then padding: skip at least one zero word
+    // `jr ra` and its delay slot, then padding: skip at least one zero word
+    // (a `nop` slot is skipped with it, a working one is not; ADR-0183)
     let mut back = 4;
     while back <= 32 && word(back) == Some(0) {
         back += 4;
     }
-    back > 4 && word(back) == Some(JR_RA)
+    back > 4 && (word(back) == Some(JR_RA) || word(back + 4) == Some(JR_RA))
 }
 
 /// Addresses built in code by `lui r, hi` and a later `addiu`/`ori` from `r`
@@ -180,22 +185,49 @@ pub fn rom_words(bytes: &[u8], image: &CodeImage, starts: &BTreeSet<u32>) -> BTr
 }
 
 /// Address constants (`lui r, hi` then `addiu`/`ori` from `r`) built in
-/// decoded code of `map`, as `(function start, lui site)`. The pair is
-/// followed through up to 16 decoded words in address order, across block
-/// boundaries, until `r` is redefined: GCC puts the `lui` in a branch delay
-/// slot and the `addiu` in a later block (ADR-0182). Constants in undecoded
-/// bytes, such as a runtime function's body, do not count.
+/// decoded code of `map`, as `(function start, lui site)`. The walk follows
+/// decoded control flow from the `lui` (fallthrough, branches, jumps and call
+/// continuations, not into callees) for up to 64 instructions per path, until
+/// `r` is redefined: GCC hoists a pointer's `lui` into a branch delay slot far
+/// from its `addiu` (ADR-0182, ADR-0183). Extra candidates only widen
+/// dispatch sets. Constants in undecoded bytes, such as a runtime function's
+/// body, do not count.
 pub fn block_constants(
     image: &CodeImage,
     map: &ProgramMap,
     starts: &BTreeSet<u32>,
 ) -> BTreeMap<GuestAddr, GuestAddr> {
-    let decoded: std::collections::HashSet<u32> = map
+    let here = |a: &crate::program::CodeAddress| {
+        a.image == image.base.image && a.generation == image.base.generation
+    };
+    let blocks: BTreeMap<u32, u32> = map
         .blocks
         .iter()
-        .filter(|b| b.start.image == image.base.image)
-        .flat_map(|b| (0..b.size / 4).map(move |i| b.start.pc.0 + 4 * i))
+        .filter(|b| here(&b.start) && !b.delay_slot_entry)
+        .map(|b| (b.start.pc.0, b.size))
         .collect();
+    let decoded: std::collections::HashSet<u32> = blocks
+        .iter()
+        .flat_map(|(&start, &size)| (0..size / 4).map(move |i| start + 4 * i))
+        .collect();
+    // the last word of each block, and where control goes after it
+    let mut after: HashMap<u32, Vec<u32>> = blocks
+        .iter()
+        .map(|(&start, &size)| (start + size.max(4) - 4, Vec::new()))
+        .collect();
+    for e in &map.direct_edges {
+        if !here(&e.site)
+            || !here(&e.target)
+            || matches!(e.kind, EdgeKind::Call | EdgeKind::Exception)
+        {
+            continue;
+        }
+        if let Some((&start, &size)) = blocks.range(..=e.site.pc.0).next_back()
+            && let Some(targets) = after.get_mut(&(start + size.max(4) - 4))
+        {
+            targets.push(e.target.pc.0);
+        }
+    }
     let mut out = BTreeMap::new();
     for &at in &decoded {
         let Some(w) = image.word(GuestAddr(at)) else {
@@ -206,24 +238,50 @@ pub fn block_constants(
             continue;
         }
         let hi = (w & 0xffff) << 16;
-        for q in (1..=16).map(|k| at.wrapping_add(4 * k)) {
-            let Some(x) = image.word(GuestAddr(q)).filter(|_| decoded.contains(&q)) else {
-                break;
-            };
-            if matches!(x >> 26, 9 | 13) && (x >> 21) & 31 == rt {
-                let value = if x >> 26 == 13 {
-                    hi | (x & 0xffff)
-                } else {
-                    hi.wrapping_add(x as i16 as u32)
-                };
-                let pc = GuestAddr(value);
-                if plausible_at(image, pc, starts) {
-                    let site = out.entry(pc).or_insert(GuestAddr(at));
-                    *site = (*site).min(GuestAddr(at));
+        let mut seen = std::collections::HashSet::new();
+        let mut work = vec![(at, 0u32)];
+        while let Some((q, n)) = work.pop() {
+            let next = match after.get(&q) {
+                // a block ending without a recorded edge falls into the next
+                // unless it ends in a transfer's delay slot
+                Some(targets) if targets.is_empty() => {
+                    let slot = q
+                        .checked_sub(4)
+                        .and_then(|b| image.word(GuestAddr(b)))
+                        .is_some_and(|b| {
+                            crate::discovery::decode(b, GuestAddr(q - 4)).has_delay_slot()
+                        });
+                    if slot {
+                        Vec::new()
+                    } else {
+                        vec![q.wrapping_add(4)]
+                    }
                 }
-            }
-            if crate::discovery::decode(x, GuestAddr(0)).destination_gpr() == Some(rt) {
-                break;
+                Some(targets) => targets.clone(),
+                None => vec![q.wrapping_add(4)],
+            };
+            for q in next {
+                if n >= 64 || !decoded.contains(&q) || !seen.insert(q) {
+                    continue;
+                }
+                let Some(x) = image.word(GuestAddr(q)) else {
+                    continue;
+                };
+                if matches!(x >> 26, 9 | 13) && (x >> 21) & 31 == rt {
+                    let value = if x >> 26 == 13 {
+                        hi | (x & 0xffff)
+                    } else {
+                        hi.wrapping_add(x as i16 as u32)
+                    };
+                    let pc = GuestAddr(value);
+                    if plausible_at(image, pc, starts) {
+                        let site = out.entry(pc).or_insert(GuestAddr(at));
+                        *site = (*site).min(GuestAddr(at));
+                    }
+                }
+                if crate::discovery::decode(x, GuestAddr(0)).destination_gpr() != Some(rt) {
+                    work.push((q, n + 1));
+                }
             }
         }
     }
@@ -515,5 +573,26 @@ mod tests {
         let second = GuestAddr(0x8000_0010);
         assert!(!plausible(&image, second));
         assert!(plausible_at(&image, second, &BTreeSet::from([second.0])));
+    }
+
+    #[test]
+    fn padding_after_a_working_delay_slot_precedes_a_function() {
+        // `jr ra; addiu sp, sp, 0x28` then two words of padding (ADR-0183)
+        let image = CodeImage {
+            base: CodeAddress {
+                pc: GuestAddr(0x8000_0000),
+                image: "padded".into(),
+                generation: 0,
+            },
+            words: vec![JR_RA, 0x27bd_0028, 0, 0, 0x2402_0001, JR_RA, 0],
+            rom_offset: None,
+            physical_start: None,
+            holes: Vec::new(),
+        };
+        assert!(plausible(&image, GuestAddr(0x8000_0010)));
+        // a working word right after the slot is not a function start
+        let mut image = image;
+        image.words[2] = 0x2402_0003;
+        assert!(!plausible(&image, GuestAddr(0x8000_0010)));
     }
 }

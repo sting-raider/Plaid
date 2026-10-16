@@ -148,20 +148,22 @@ def main():
         run('solve-traces',rom,compile_map,compile_expected,no_install,ok=False)
         # n64sym signature identification feeds runtime declarations (ADR-0133)
         import zlib
-        body=b"".join(w.to_bytes(4,"big") for w in words[8:10])
+        # 12 bytes, over a 44-byte window: an 8-byte signature must also start
+        # a plausible function, which `j .` after `jr t0` is not (ADR-0183)
+        body=b"".join(w.to_bytes(4,"big") for w in words[8:10])+bytes(4)
         sig=directory/'lib.sig'
-        sig.write_text(f"# sig_v1\n\nosGetCount 0x8 0x{zlib.crc32(body):08X} 0x{zlib.crc32(body):08X}\n",encoding='utf-8')
-        found=json.loads(run('identify',rom,"64","0x80000000","40",sig))
+        sig.write_text(f"# sig_v1\n\nosGetCount 0xC 0x{zlib.crc32(body[:8]):08X} 0x{zlib.crc32(body):08X}\n",encoding='utf-8')
+        found=json.loads(run('identify',rom,"64","0x80000000","44",sig))
         assert found['format']=='plaid-runtime-functions-v0' and found['ambiguous']==[]
         assert [(f['entry'],f['name']) for f in found['functions']]==[('0x80000020','osGetCount')]
         # identify scans the composite: a load copying the same relocation-free
         # body is the same function at a second address (ADR-0171)
         ident_loads=directory/'ident-loads.json'
         ident_loads.write_text(json.dumps(dict(format='plaid-loads-v0',source='cli test',
-            loads=[dict(destination='0x80000028',size='0x8',rom='96',encoding='raw')])),encoding='utf-8')
-        both=json.loads(run('identify',rom,"64","0x80000000","40",sig,"--loads",ident_loads))
+            loads=[dict(destination='0x8000002c',size='0xc',rom='96',encoding='raw')])),encoding='utf-8')
+        both=json.loads(run('identify',rom,"64","0x80000000","44",sig,"--loads",ident_loads))
         assert [(f['entry'],f['name']) for f in both['functions']]==[('0x80000020','osGetCount'),
-            ('0x80000028','osGetCount')] and both['ambiguous']==[],both
+            ('0x8000002c','osGetCount')] and both['ambiguous']==[],both
         declared=directory/'runtime.json'; declared.write_text(json.dumps(found),encoding='utf-8')
         runtime_map=directory/'runtime-map.json'
         run("discover",rom,"64","0x80000000","40","0x80000000",runtime_map,declared)
@@ -230,7 +232,7 @@ def main():
         # the solver lists what rests on it (ADR-0171)
         symbol_ref.write_text("osGetCount = 0x80000020; // type:func\nosInitialize = 0x80000008; // type:func\n",
             encoding='utf-8')
-        mixed=json.loads(run('identify',rom,"64","0x80000000","40",sig,"--reference-map",symbol_ref))
+        mixed=json.loads(run('identify',rom,"64","0x80000000","44",sig,"--reference-map",symbol_ref))
         assert [(f['entry'],f['name'],f['evidence']) for f in mixed['functions']]==[
             ('0x80000008','osInitialize','reference map'),('0x80000020','osGetCount','signature')],mixed
         declared.write_text(json.dumps(mixed),encoding='utf-8')
@@ -240,7 +242,7 @@ def main():
         assert any('reference symbol map' in a and '(osInitialize)' in a for a in notes),notes
         run('identify',rom,"64","0x80000000","40",symbol_ref,"--symbols","--reference-map",symbol_ref,ok=False)
         sig.write_text("osGetCount 0x8\n",encoding='utf-8')
-        run('identify',rom,"64","0x80000000","40",sig,ok=False)
+        run('identify',rom,"64","0x80000000","44",sig,ok=False)
         # recall against a reference linker map (ADR-0144)
         ref=directory/'ref.map'
         ref.write_text(" .text          0x0000000080000000       0x28 main.o\n"
