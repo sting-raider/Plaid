@@ -157,7 +157,7 @@ pub fn parse(text: &str) -> Result<Vec<Signature>, String> {
     Ok(out)
 }
 
-fn crc32(bytes: &[u8]) -> u32 {
+pub(crate) fn crc32(bytes: &[u8]) -> u32 {
     !bytes.iter().fold(!0u32, |mut crc, b| {
         crc ^= u32::from(*b);
         for _ in 0..8 {

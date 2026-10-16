@@ -129,7 +129,11 @@ Next concrete steps, in order:
      SRAM, OoT draws its title and file select (ADR-0182); `scripts/native.py`
      takes an untouched ROM to native, and MM plays its intro natively
      (ADR-0183).
-     **Next:** MM's first heap-allocated overlay call (fault 3), OoT past the file select into gameplay, then retire assumptions one by one (see the ledger in the README and
+     F-Zero X's boot image and segments are inferred from the ROM alone
+     (ADR-0184).
+     **Next:** overlays that share a slot (F-Zero X's mode overlays at
+     0x80115DF0 and 0x801439D0) as alternates verified by content; MM's
+     first heap-allocated overlay call (fault 3), OoT past the file select into gameplay, then retire assumptions one by one (see the ledger in the README and
      `docs/assumptions.json`; 0 of 16 retired).
    - Data-driven roots (level, geo and behavior scripts) for recall.
 4. **SM64 recall harness** (milestone 2): the scorer is ready (ADR-0144,

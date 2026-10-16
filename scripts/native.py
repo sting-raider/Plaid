@@ -55,15 +55,18 @@ def main():
 
     run('cargo', 'build', '-q', '--release', '-p', 'plaid')
     info = json.loads(plaid('rom-info', rom, capture_output=True, text=True).stdout)
-    entry = info['header']['entry']
+    entry = info['header']['boot_address']  # the header entry, less a CIC-6103/6106 offset
     loads = a.loads.resolve() if a.loads else out / 'loads.json'
     if not a.loads:
         plaid('infer-loads', rom, loads)
-    window = [rom, '0x1000', entry, '0x100000']
+    # a ROM with no file table and no reset stub has no loads to declare
+    with_loads = ['--loads', loads] if json.loads(loads.read_text())['loads'] else []
+    # the main image ends where the entry stub's BSS clear begins; else IPL3's 1 MiB
+    window = [rom, '0x1000', entry, hex(info.get('boot_image_size') or 0x100000)]
     with open(out / 'id.json', 'w') as f:
-        plaid('identify', *window, SIGNATURES, '--loads', loads, stdout=f)
+        plaid('identify', *window, SIGNATURES, *with_loads, stdout=f)
     m = out / 'map.json'
-    discover = ['discover', *window, entry, m, out / 'id.json', '--loads', loads, '--address-taken', '--fr0']
+    discover = ['discover', *window, entry, m, out / 'id.json', *with_loads, '--address-taken', '--fr0']
     tried = subprocess.run([str(ROOT / 'target/release/plaid'), *map(str, discover), '--overlays'],
                            cwd=ROOT, capture_output=True, text=True)
     if tried.returncode != 0:
