@@ -39,12 +39,11 @@ untouched: it is CLOSED, and natively with RT64 it plays its intro and the
 Clock Town attract scene. This needed an exact VR4300 D-cache model,
 FlashRAM, and four general closure fixes.
 
-F-Zero X, which has no decompilation, goes through the same pipeline
-(ADR-0184). The boot address comes from its CIC-6106 boot code, the main
-image ends where its entry stub clears BSS, and three segments are
-inferred without a file table. That gives 11,398 blocks and 20
-blockers, all calls into two overlay slots that several mode overlays
-share.
+F-Zero X's shared executable slots now have separate, content-checked
+alternates (ADR-0185). From the ROM alone it discovers 27,621 blocks and is
+CLOSED under the address-taken scope, with zero scoped blockers. A synthetic
+overwrite-and-rebind sequence matches pinned ares; tampered and ambiguous
+text fault. Runtime and renderer acceptance are the next integration.
 
 ## By layer
 

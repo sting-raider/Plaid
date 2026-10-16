@@ -131,8 +131,9 @@ Next concrete steps, in order:
      (ADR-0183).
      F-Zero X's boot image and segments are inferred from the ROM alone
      (ADR-0184).
-     **Next:** overlays that share a slot (F-Zero X's mode overlays at
-     0x80115DF0 and 0x801439D0) as alternates verified by content; MM's
+     Shared executable slots are now represented and verified as alternates
+     (ADR-0185); F-Zero X has 27,621 blocks and zero address-taken blockers.
+     **Next:** integrate its runtime and graphics path, then MM's
      first heap-allocated overlay call (fault 3), OoT past the file select into gameplay, then retire assumptions one by one (see the ledger in the README and
      `docs/assumptions.json`; 0 of 16 retired).
    - Data-driven roots (level, geo and behavior scripts) for recall.

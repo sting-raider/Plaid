@@ -19,8 +19,41 @@ pub struct CodeImage {
     /// between disjoint declared loads (ADR-0150). `word` returns nothing
     /// there, so control or a table read that reaches one fails closed.
     pub holes: Vec<GuestRange>,
+    /// Slot alternates placed in the image (ADR-0185): each placed range and
+    /// the address the file is linked at, where its own code reaches its
+    /// data. Table reads from code in a placed range use the placed copy.
+    pub slots: Vec<(GuestRange, u32, u32)>,
 }
 impl CodeImage {
+    /// Where code at `at` finds `address`: in a slot alternate's placed copy
+    /// when `at` is in one and `address` is in its linked range (ADR-0185).
+    pub fn slot_view(&self, at: GuestAddr, address: u32) -> u32 {
+        self.slots
+            .iter()
+            .find_map(|(placed, linked, _)| {
+                let off = address.wrapping_sub(*linked);
+                (at.0.wrapping_sub(placed.start.0) < placed.size && off < placed.size)
+                    .then(|| placed.start.0 + off)
+            })
+            .unwrap_or(address)
+    }
+    /// Every placed copy of `address` when it is in a slot's linked text:
+    /// a pointer there names whichever alternate is loaded (ADR-0185).
+    pub fn slot_copies(&self, address: u32) -> Vec<u32> {
+        let copies: Vec<u32> = self
+            .slots
+            .iter()
+            .filter_map(|(placed, linked, text)| {
+                let off = address.wrapping_sub(*linked);
+                (off < *text).then(|| placed.start.0 + off)
+            })
+            .collect();
+        if copies.is_empty() {
+            vec![address]
+        } else {
+            copies
+        }
+    }
     pub fn from_rom(
         rom: &CanonicalRom,
         offset: RomOffset,
@@ -51,6 +84,7 @@ impl CodeImage {
             rom_offset: Some(offset),
             physical_start: None,
             holes: Vec::new(),
+            slots: Vec::new(),
         })
     }
     pub fn size(&self) -> Result<u32, String> {
@@ -75,6 +109,15 @@ impl CodeImage {
             for h in &self.holes {
                 bytes.extend(h.start.0.to_be_bytes());
                 bytes.extend(h.size.to_be_bytes());
+            }
+        }
+        if !self.slots.is_empty() {
+            bytes.extend(b"slots");
+            for (placed, linked, text) in &self.slots {
+                bytes.extend(placed.start.0.to_be_bytes());
+                bytes.extend(placed.size.to_be_bytes());
+                bytes.extend(linked.to_be_bytes());
+                bytes.extend(text.to_be_bytes());
             }
         }
         sha256(&bytes)

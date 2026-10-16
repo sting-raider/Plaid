@@ -16,6 +16,7 @@ fn image(physical_start: Option<u32>) -> CodeImage {
         rom_offset: None,
         physical_start: physical_start.map(PhysicalAddr),
         holes: Vec::new(),
+        slots: Vec::new(),
     }
 }
 

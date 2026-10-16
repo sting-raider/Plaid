@@ -711,6 +711,8 @@ fn evidence(
     site: &IndirectSite,
 ) -> Option<(TableEvidence, Option<Vec<u32>>, String)> {
     let mut table = pattern(index, image, site).or_else(|| guarded(index, image, site))?;
+    // a slot alternate's table is read from its placed copy (ADR-0185)
+    table.table_start = GuestAddr(image.slot_view(site.site.pc, table.table_start.0));
     let words: Option<Vec<_>> = (0..table.count)
         .map(|n| image.word(GuestAddr(table.table_start.0 + n * 4)))
         .collect();

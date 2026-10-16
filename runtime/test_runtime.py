@@ -439,6 +439,8 @@ def main():
     rcp_io(exe, cc)
     from test_overlays import main as overlay_verifiers
     overlay_verifiers()
+    from test_slots import main as slot_contracts
+    slot_contracts()
 
 
 if __name__ == '__main__':

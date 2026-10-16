@@ -35,6 +35,7 @@ fn solve_with_load(
             encoding: LoadEncoding::Raw,
             evidence: ["loads:test".into()].into(),
             relocatable: false,
+            linked: None,
         }],
     };
     let (_, composite) = compose(rom, &spec).unwrap();

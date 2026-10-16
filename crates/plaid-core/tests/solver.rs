@@ -13,6 +13,7 @@ fn image(words: Vec<u32>) -> CodeImage {
         rom_offset: None,
         physical_start: None,
         holes: Vec::new(),
+        slots: Vec::new(),
     }
 }
 fn map(i: &CodeImage) -> ProgramMap {

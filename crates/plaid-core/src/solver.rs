@@ -481,6 +481,42 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         .filter(|b| !b.delay_slot_entry)
         .map(|b| b.start.clone())
         .collect();
+    let mut valid_slots = BTreeSet::new();
+    for image in images {
+        if crate::declared_loads::verify_slots(image, map.load_images.get(&image.base.image)) {
+            valid_slots.insert(image.base.image.clone());
+        } else {
+            add(
+                "slot_metadata_mismatch",
+                Some(image.base.clone()),
+                "slot mappings, text bounds and content identity must match the declared loads",
+                EvidenceRefs::new(),
+            );
+        }
+    }
+    // A call into a slot (ADR-0185) lands on whichever alternate RAM holds:
+    // closed when some alternate has a block there; the binding verifies the
+    // one that runs, and none faults.
+    let into_slot = |a: &CodeAddress| {
+        scope.guarded()
+            && images.iter().any(|i| {
+                i.base.image == a.image
+                    && valid_slots.contains(&i.base.image)
+                    && i.base.generation == a.generation
+                    && i.slots.iter().any(|(placed, linked, text)| {
+                        let off = a.pc.0.wrapping_sub(*linked);
+                        off < *text
+                            && map.load_images.get(&i.base.image).is_some_and(|spec| {
+                                spec.loads.iter().any(|l| {
+                                    l.relocatable
+                                        && l.destination == *placed
+                                        && l.linked == Some(crate::GuestAddr(*linked))
+                                })
+                            })
+                            && starts.contains(&i.address(crate::GuestAddr(placed.start.0 + off)))
+                    })
+            })
+    };
     // A reachable BREAK or conditional trap aborts natively in the guarded
     // scope (ADR-0138/0145).
     let checked_word = |u: &Unresolved, accept: fn(u32) -> bool| {
@@ -702,7 +738,10 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         }
         let into_runtime = matches!(edge.kind, EdgeKind::Call | EdgeKind::Jump)
             && map.runtime_functions.contains_key(&edge.target);
-        if !starts.contains(&edge.target) && !into_runtime {
+        if !starts.contains(&edge.target)
+            && !into_runtime
+            && !(edge.kind == EdgeKind::Call && into_slot(&edge.target))
+        {
             add(
                 "unresolved_direct_target",
                 Some(edge.site.clone()),
@@ -760,7 +799,8 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     // One shared return-closure context per image, not one per site.
     let mut closures: BTreeMap<String, crate::returns::Closure> = BTreeMap::new();
     // Address-taken dispatch (ADR-0153): every address-taken function must be
-    // a decoded block start whose layout and body can be a CPU function.
+    // a decoded block start whose layout and body can be a CPU function, or
+    // a declared runtime function, which the host calls (ADR-0185).
     let load_starts: BTreeMap<&str, _> = images
         .iter()
         .map(|image| (image.base.image.as_str(), load_starts(map, image)))
@@ -768,7 +808,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     let address_taken_ok = scope == Scope::DeclaredStaticImagesGuardedRamAddressTaken
         && !map.address_taken.is_empty()
         && map.address_taken.keys().all(|a| {
-            starts.contains(a)
+            (starts.contains(a) || map.runtime_functions.contains_key(a))
                 && source(images, a).is_some_and(|image| {
                     let starts = &load_starts[image.base.image.as_str()];
                     crate::data_roots::plausible_at(image, a.pc, starts)
@@ -811,6 +851,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         for target in site.candidates.keys().chain(site.observed.keys()) {
             if !starts.contains(target)
                 && !(site.link_register.is_some() && map.runtime_functions.contains_key(target))
+                && !(site.link_register.is_some() && into_slot(target))
             {
                 add(
                     "unresolved_indirect_target",
@@ -943,7 +984,10 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             }
         }
         for u in &expected.unresolved {
-            if !(u.kind == "unmapped_target" && u.site.as_ref().is_some_and(|a| starts.contains(a)))
+            if !(u.kind == "unmapped_target"
+                && u.site
+                    .as_ref()
+                    .is_some_and(|a| starts.contains(a) || into_slot(a)))
                 && !checked_break(u)
             {
                 add(&u.kind, u.site.clone(), &u.detail, provenance.clone());
@@ -961,7 +1005,10 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         uses_break |= checked_break && !checked_trap(u);
         if table_obligation
             || checked_break
-            || (u.kind == "unmapped_target" && u.site.as_ref().is_some_and(|a| starts.contains(a)))
+            || (u.kind == "unmapped_target"
+                && u.site
+                    .as_ref()
+                    .is_some_and(|a| starts.contains(a) || into_slot(a)))
         {
             discharged.insert(u.clone());
         } else {

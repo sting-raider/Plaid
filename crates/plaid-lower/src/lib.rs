@@ -480,6 +480,7 @@ fn relink(overlay: bool) -> &'static str {
 fn overlay_runtime(
     overlays: &[(u32, u32)],
     layouts: &[(Vec<u8>, plaid_core::overlays::Layout)],
+    compared: &[usize],
     functions: &BTreeSet<u32>,
     image: &CodeImage,
 ) -> Result<String, String> {
@@ -491,7 +492,8 @@ fn overlay_runtime(
     );
     let mut table = Vec::new();
     for (k, (&(link, _), (bytes, layout))) in overlays.iter().zip(layouts).enumerate() {
-        out += &overlay::verifier(bytes, link, k as u32)?;
+        // a slot alternate is checked over its text (ADR-0185)
+        out += &overlay::verifier(bytes, layout, compared[k], link, k as u32)?;
         let relocated: BTreeSet<u32> = layout.relocations.iter().map(|r| link + r.offset).collect();
         let entries: Vec<_> = functions
             .range(link..link + layout.text)
@@ -1074,6 +1076,16 @@ impl Lowerer<'_> {
                 self.runtime[&jump]
             )),
             (2, _, _) => Ok(format!("{slot} {}", self.goto(jump)?)),
+            (3, _, _) if self.targets.contains_key(&pc) => {
+                let k = self.dispatch[proven()?];
+                Ok(format!(
+                    "s->r[31] = {}; {slot} {{ int r = plaid_call_{k}(s, {}, {}, 0x{pc:08x}u); if (r) return r; }} {}",
+                    self.link(after),
+                    sx(jump),
+                    self.link(after),
+                    self.fallthrough(after, pc)
+                ))
+            }
             (3, _, _) => Ok(format!(
                 "s->r[31] = {}; {slot} {}",
                 self.link(after),
@@ -1177,15 +1189,14 @@ pub fn lower_c_parts(
     }
     let load_of = |start: u32| loads.iter().position(|(s, e)| *s <= start && start < *e);
     // Relocatable overlays run only through a run-time binding (ADR-0181).
-    let overlays: Vec<(u32, u32)> = declared
-        .iter()
-        .filter(|l| l.relocatable)
-        .map(range)
-        .collect();
+    let relocatable: Vec<&plaid_core::declared_loads::DeclaredLoad> =
+        declared.iter().filter(|l| l.relocatable).collect();
+    let overlays: Vec<(u32, u32)> = relocatable.iter().map(|l| range(l)).collect();
     if overlays.len() > 1024 {
         return Err("at most 1024 relocatable overlays are supported".into());
     }
     let mut layouts = Vec::new();
+    let mut compared = Vec::new();
     let mut relocations = BTreeMap::new();
     for (k, &(link, end)) in overlays.iter().enumerate() {
         let bytes: Vec<u8> = (link..end)
@@ -1199,10 +1210,15 @@ pub fn lower_c_parts(
             .into_iter()
             .flat_map(u32::to_be_bytes)
             .collect();
-        let layout = plaid_core::overlays::Layout::parse(&bytes)?;
+        let layout = relocatable[k].layout(&bytes)?;
         for r in &layout.relocations {
             relocations.insert(link + r.offset, (k, r.kind));
         }
+        compared.push(if relocatable[k].linked.is_some() {
+            layout.text as usize
+        } else {
+            bytes.len()
+        });
         layouts.push((bytes, layout));
     }
     let ovl_of = |pc: u32| overlays.iter().position(|(s, e)| *s <= pc && pc < *e);
@@ -1262,12 +1278,52 @@ pub fn lower_c_parts(
                 .collect::<BTreeSet<_>>(),
         );
     }
-    callees.extend(
-        map.direct_edges
-            .iter()
-            .filter(|e| e.kind == EdgeKind::Call)
-            .map(|e| e.target.clone()),
-    );
+    // A call into a slot dispatches over the alternates RAM may hold there,
+    // through the binding (ADR-0185); other calls name their callee.
+    let blocks: BTreeSet<u32> = map.blocks.iter().map(|b| b.start.pc.0).collect();
+    for e in map.direct_edges.iter().filter(|e| e.kind == EdgeKind::Call) {
+        let slot: BTreeSet<u32> = plaid_core::declared_loads::slot_targets(declared, e.target.pc.0)
+            .into_iter()
+            .filter(|t| blocks.contains(t))
+            .collect();
+        if blocks.contains(&e.target.pc.0) || slot.is_empty() {
+            callees.push(e.target.clone());
+            continue;
+        }
+        callees.extend(slot.iter().map(|&t| image.address(GuestAddr(t))));
+        targets.insert(e.site.pc.0, slot);
+    }
+    // A proven register-call constant can name the linked slot too. Its
+    // native dispatcher must contain the placed alternatives, not a phantom
+    // function at the shared address.
+    for site in map
+        .indirect_sites
+        .iter()
+        .filter(|s| s.link_register.is_some())
+    {
+        if let Some(set) = targets.get_mut(&site.site.pc.0) {
+            let expanded: BTreeSet<u32> = set
+                .iter()
+                .flat_map(|&t| {
+                    if blocks.contains(&t) || runtime.contains_key(&t) {
+                        vec![t]
+                    } else {
+                        plaid_core::declared_loads::slot_targets(declared, t)
+                            .into_iter()
+                            .filter(|a| blocks.contains(a))
+                            .collect()
+                    }
+                })
+                .collect();
+            *set = expanded;
+            callees.extend(
+                set.iter()
+                    .filter(|t| blocks.contains(t))
+                    .map(|&t| image.address(GuestAddr(t))),
+            );
+        }
+    }
+    callees.retain(|f| blocks.contains(&f.pc.0) || runtime.contains_key(&f.pc.0));
     let entered = plaid_core::callbacks::targets(map, image);
     callees.extend(entered.iter().cloned());
     callees.retain(|f| !runtime.contains_key(&f.pc.0));
@@ -1355,13 +1411,14 @@ pub fn lower_c_parts(
     }
     out += &declarations;
     shared += &declarations;
-    out += &overlay_runtime(&overlays, &layouts, &functions, image)?;
+    out += &overlay_runtime(&overlays, &layouts, &compared, &functions, image)?;
     // A JALR with several proven targets calls one dispatcher per target set
     // instead of inlining a call per target at every site (ADR-0174).
     let mut dispatch = BTreeMap::new();
     for (&pc, ts) in &targets {
         let w = word(pc)?;
-        if ts.len() < 2 || w >> 26 != 0 || w & 63 != 9 || dispatch.contains_key(ts) {
+        let jalr = w >> 26 == 0 && w & 63 == 9;
+        if !(jalr && ts.len() >= 2 || w >> 26 == 3) || dispatch.contains_key(ts) {
             continue;
         }
         let k = dispatch.len();
