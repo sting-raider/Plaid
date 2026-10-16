@@ -87,6 +87,8 @@ pub struct Signature {
     relocs: BTreeMap<u32, Reloc>,
     /// `.targ26` offsets and the symbol each one calls (ADR-0171).
     calls: BTreeMap<u32, String>,
+    /// `.hi16` and `.lo16` offsets of each data symbol (ADR-0182).
+    data: BTreeMap<String, (Vec<u32>, Vec<u32>)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -132,6 +134,8 @@ pub fn parse(text: &str) -> Result<Vec<Signature>, String> {
                         sig.calls.insert(offset, symbol.to_string());
                         Reloc::Targ26
                     } else {
+                        let (hi, lo) = sig.data.entry(symbol.to_string()).or_default();
+                        if *kind == ".hi16" { hi } else { lo }.push(offset);
                         Reloc::Half
                     };
                     sig.relocs.insert(offset, reloc);
@@ -144,6 +148,7 @@ pub fn parse(text: &str) -> Result<Vec<Signature>, String> {
                 crc_b: number(crc_b)?,
                 relocs: BTreeMap::new(),
                 calls: BTreeMap::new(),
+                data: BTreeMap::new(),
             }),
             _ => return Err(format!("line {}: not a sig_v1 line", n + 1)),
         }
@@ -221,9 +226,21 @@ pub fn identify(image: &CodeImage, signatures: &[Signature], wanted: &[&str]) ->
         }
     }
     // A call relocation to a function identified elsewhere must jump to it
-    // (ADR-0171): drop the variants that do not, until nothing changes.
+    // (ADR-0171), and a data symbol must have the address identified
+    // functions give it while no other global has that address (ADR-0182):
+    // drop the variants that disagree, until nothing changes.
     loop {
         let settled = settle(&found);
+        let mut symbols: BTreeMap<&str, BTreeSet<u32>> = BTreeMap::new();
+        for ((entry, name), sigs) in &found {
+            if settled.contains_key(name) {
+                for sig in sigs {
+                    for (symbol, value) in data_symbols(image, *entry, sig) {
+                        symbols.entry(symbol).or_default().insert(value);
+                    }
+                }
+            }
+        }
         let before: usize = found.values().map(Vec::len).sum();
         for ((entry, _), sigs) in found.iter_mut() {
             sigs.retain(|sig| {
@@ -231,7 +248,17 @@ pub fn identify(image: &CodeImage, signatures: &[Signature], wanted: &[&str]) ->
                     settled.get(callee.as_str()).is_none_or(|entries| {
                         jump_target(image, entry + offset).is_some_and(|t| entries.contains(&t))
                     })
-                })
+                }) && data_symbols(image, *entry, sig)
+                    .into_iter()
+                    .all(|(symbol, value)| {
+                        symbols.get(symbol).is_none_or(|v| v.contains(&value))
+                            && !symbols.iter().any(|(other, v)| {
+                                *other != symbol
+                                    && global(other)
+                                    && global(symbol)
+                                    && v.contains(&value)
+                            })
+                    })
             });
         }
         found.retain(|_, sigs| !sigs.is_empty());
@@ -276,6 +303,29 @@ fn settle<'a>(
                     .all(|e| found[&(*e, *name)].iter().all(|s| s.relocs.is_empty())))
     });
     by_name
+}
+
+/// Each data symbol's address in the match of `sig` at `entry`: its first
+/// `.hi16` word's immediate, shifted, plus its first `.lo16` word's signed
+/// immediate.
+fn data_symbols<'s>(image: &CodeImage, entry: u32, sig: &'s Signature) -> Vec<(&'s str, u32)> {
+    sig.data
+        .iter()
+        .filter_map(|(symbol, (hi, lo))| {
+            let hi = image.word(GuestAddr(entry + hi.first()?))?;
+            let lo = image.word(GuestAddr(entry + lo.first()?))?;
+            Some((symbol.as_str(), (hi << 16).wrapping_add(lo as i16 as u32)))
+        })
+        .collect()
+}
+
+/// A named global, not one of n64sym's section-relative names such as
+/// `vimgr_data_0010`, which may alias a global at the same address.
+fn global(symbol: &str) -> bool {
+    let mut parts = symbol.rsplitn(3, '_');
+    let (offset, section) = (parts.next(), parts.next());
+    !(matches!(section, Some("text" | "data" | "rodata" | "bss"))
+        && offset.is_some_and(|o| !o.is_empty() && o.chars().all(|c| c.is_ascii_hexdigit())))
 }
 
 /// Target of the J or JAL at `pc`.
@@ -532,6 +582,52 @@ mod tests {
             open.ambiguous,
             BTreeSet::from(["osEepromLongWrite".to_string()])
         );
+    }
+
+    /// A signature line for `words` loading one data symbol through a
+    /// `.hi16` at 0 and a `.lo16` at 4.
+    fn sig_data(name: &str, words: &[u32], symbol: &str) -> String {
+        let relocs = BTreeMap::from([(0, Reloc::Half), (4, Reloc::Half)]);
+        let (a, b) = (
+            stripped_crc(&words[..2], &relocs),
+            stripped_crc(words, &relocs),
+        );
+        format!(
+            "{name} 0x{:X} 0x{a:08X} 0x{b:08X}\n .hi16 {symbol} 0x000\n .lo16 {symbol} 0x004\n",
+            words.len() * 4
+        )
+    }
+
+    #[test]
+    fn data_symbols_settle_lookalike_getters() {
+        // lui t6, %hi(sym); lw t6, %lo(sym)(t6); then a read or a write of
+        // the framebuffer field: the current- and next-framebuffer getters
+        // differ only in the relocated global (ADR-0182)
+        let lui = 0x3c0e_8000;
+        let get = |lo: u32| [lui, 0x8dce_0000 | lo, 0x8dc2_0004, 0x03e0_0008, 0];
+        let swap = [lui, 0x8dce_1004, 0xadc4_0004, 0x03e0_0008, 0];
+        let mut img = image(&[]);
+        img.words[0..5].copy_from_slice(&get(0x1000)); // reads __osViCurr
+        img.words[8..13].copy_from_slice(&get(0x1004)); // reads __osViNext
+        img.words[16..21].copy_from_slice(&swap);
+        let getter = sig_data("osViGetCurrentFramebuffer", &get(0), "__osViCurr");
+        let open = identify(&img, &parse(&getter).unwrap(), RUNTIME_FUNCTIONS);
+        assert!(open.matches.is_empty());
+        let text = getter.clone() + &sig_data("osViSwapBuffer", &swap, "__osViNext");
+        let found = identify(&img, &parse(&text).unwrap(), RUNTIME_FUNCTIONS);
+        let at: BTreeMap<_, _> = found
+            .matches
+            .iter()
+            .map(|m| (m.name.as_str(), m.entry.0))
+            .collect();
+        assert_eq!(at["osViGetCurrentFramebuffer"], 0x8000_0400);
+        assert_eq!(at["osViSwapBuffer"], 0x8000_0440);
+        assert!(found.ambiguous.is_empty(), "{:?}", found.ambiguous);
+        // a section-relative name may alias a global, so it decides nothing
+        let alias = getter + &sig_data("osViSwapBuffer", &swap, "vimgr_data_0004");
+        let still = identify(&img, &parse(&alias).unwrap(), RUNTIME_FUNCTIONS);
+        assert!(still.ambiguous.contains("osViGetCurrentFramebuffer"));
+        assert!(global("__osViNext") && !global("vimgr_data_0004") && global("osViSwapBuffer"));
     }
 
     #[test]

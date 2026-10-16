@@ -11,10 +11,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 const JR_RA: u32 = 0x03e0_0008;
 
-/// Whether `pc` starts a function by layout: the image start, or right after
-/// a `jr ra` and its delay slot, possibly followed by zero padding.
-fn after_return(image: &CodeImage, pc: GuestAddr) -> bool {
-    if pc == image.base.pc {
+/// Whether `pc` starts a function by layout: the image start, a declared
+/// load's start (`starts`), or right after a `jr ra` and its delay slot,
+/// possibly followed by zero padding.
+fn after_return(image: &CodeImage, pc: GuestAddr, starts: &BTreeSet<u32>) -> bool {
+    if pc == image.base.pc || starts.contains(&pc.0) {
         return true;
     }
     let word = |back: u32| {
@@ -74,12 +75,12 @@ fn after_returns(image: &CodeImage) -> impl Iterator<Item = u32> + '_ {
     })
 }
 
-fn function_start(image: &CodeImage, pc: GuestAddr) -> bool {
+fn function_start(image: &CodeImage, pc: GuestAddr, starts: &BTreeSet<u32>) -> bool {
     pc.0.is_multiple_of(4)
         && image
             .word(pc)
             .is_some_and(|w| w != 0 && crate::discovery::decode(w, pc).is_valid())
-        && after_return(image, pc)
+        && after_return(image, pc, starts)
 }
 
 /// Function starts in `image` named by aligned big-endian words of `bytes`
@@ -92,7 +93,7 @@ pub fn scan(bytes: &[u8], image: &CodeImage) -> BTreeSet<GuestAddr> {
         .map(|w| u32::from_be_bytes(*w))
         .chain(code_constants(image))
         .map(GuestAddr)
-        .filter(|&pc| function_start(image, pc))
+        .filter(|&pc| function_start(image, pc, &BTreeSet::new()))
         .collect()
 }
 
@@ -134,14 +135,21 @@ fn cpu_code(image: &CodeImage, pc: GuestAddr) -> bool {
 /// Whether `pc` can be an address-taken function: a function start by
 /// layout whose body can be CPU code (ADR-0153).
 pub fn plausible(image: &CodeImage, pc: GuestAddr) -> bool {
-    function_start(image, pc) && cpu_code(image, pc)
+    plausible_at(image, pc, &BTreeSet::new())
+}
+
+/// [`plausible`] where the declared loads starting at `starts` each begin
+/// with a function (ADR-0182): relocatable overlays are packed back to back
+/// at their link addresses, so the word before one is the last one's data.
+pub fn plausible_at(image: &CodeImage, pc: GuestAddr, starts: &BTreeSet<u32>) -> bool {
+    function_start(image, pc, starts) && cpu_code(image, pc)
 }
 
 /// Address-taken roots from data (ADR-0153): aligned words of `bytes` that
 /// name a function start in `image` whose body can be CPU code.
 /// A decodable Yaz0 stream contributes its decoded words instead of its
 /// compressed bytes, which are not data (ADR-0175).
-pub fn rom_words(bytes: &[u8], image: &CodeImage) -> BTreeSet<GuestAddr> {
+pub fn rom_words(bytes: &[u8], image: &CodeImage, starts: &BTreeSet<u32>) -> BTreeSet<GuestAddr> {
     let mut out = BTreeSet::new();
     let mut take = |words: &[u8]| {
         out.extend(
@@ -150,7 +158,7 @@ pub fn rom_words(bytes: &[u8], image: &CodeImage) -> BTreeSet<GuestAddr> {
                 .0
                 .iter()
                 .map(|w| GuestAddr(u32::from_be_bytes(*w)))
-                .filter(|&pc| plausible(image, pc)),
+                .filter(|&pc| plausible_at(image, pc, starts)),
         )
     };
     let mut at = 0;
@@ -171,41 +179,51 @@ pub fn rom_words(bytes: &[u8], image: &CodeImage) -> BTreeSet<GuestAddr> {
     out
 }
 
-/// Address constants (`lui r, hi` then `addiu`/`ori` from `r`) built inside
-/// one decoded block of `map`, as `(function start, lui site)`. Constants in
-/// undecoded bytes, such as a runtime function's body, do not count.
-pub fn block_constants(image: &CodeImage, map: &ProgramMap) -> BTreeMap<GuestAddr, GuestAddr> {
-    let mut out = BTreeMap::new();
-    for b in map
+/// Address constants (`lui r, hi` then `addiu`/`ori` from `r`) built in
+/// decoded code of `map`, as `(function start, lui site)`. The pair is
+/// followed through up to 16 decoded words in address order, across block
+/// boundaries, until `r` is redefined: GCC puts the `lui` in a branch delay
+/// slot and the `addiu` in a later block (ADR-0182). Constants in undecoded
+/// bytes, such as a runtime function's body, do not count.
+pub fn block_constants(
+    image: &CodeImage,
+    map: &ProgramMap,
+    starts: &BTreeSet<u32>,
+) -> BTreeMap<GuestAddr, GuestAddr> {
+    let decoded: std::collections::HashSet<u32> = map
         .blocks
         .iter()
         .filter(|b| b.start.image == image.base.image)
-    {
-        let words: Vec<u32> = (0..b.size / 4)
-            .map_while(|i| image.word(GuestAddr(b.start.pc.0 + 4 * i)))
-            .collect();
-        for (i, &w) in words.iter().enumerate() {
-            let rt = (w >> 16) & 31;
-            if w >> 26 != 15 || rt == 0 {
-                continue;
+        .flat_map(|b| (0..b.size / 4).map(move |i| b.start.pc.0 + 4 * i))
+        .collect();
+    let mut out = BTreeMap::new();
+    for &at in &decoded {
+        let Some(w) = image.word(GuestAddr(at)) else {
+            continue;
+        };
+        let rt = (w >> 16) & 31;
+        if w >> 26 != 15 || rt == 0 {
+            continue;
+        }
+        let hi = (w & 0xffff) << 16;
+        for q in (1..=16).map(|k| at.wrapping_add(4 * k)) {
+            let Some(x) = image.word(GuestAddr(q)).filter(|_| decoded.contains(&q)) else {
+                break;
+            };
+            if matches!(x >> 26, 9 | 13) && (x >> 21) & 31 == rt {
+                let value = if x >> 26 == 13 {
+                    hi | (x & 0xffff)
+                } else {
+                    hi.wrapping_add(x as i16 as u32)
+                };
+                let pc = GuestAddr(value);
+                if plausible_at(image, pc, starts) {
+                    let site = out.entry(pc).or_insert(GuestAddr(at));
+                    *site = (*site).min(GuestAddr(at));
+                }
             }
-            let hi = (w & 0xffff) << 16;
-            for &x in &words[i + 1..] {
-                if matches!(x >> 26, 9 | 13) && (x >> 21) & 31 == rt {
-                    let value = if x >> 26 == 13 {
-                        hi | (x & 0xffff)
-                    } else {
-                        hi.wrapping_add(x as i16 as u32)
-                    };
-                    let pc = GuestAddr(value);
-                    if plausible(image, pc) {
-                        out.entry(pc)
-                            .or_insert(GuestAddr(b.start.pc.0 + 4 * i as u32));
-                    }
-                }
-                if crate::discovery::decode(x, GuestAddr(0)).destination_gpr() == Some(rt) {
-                    break;
-                }
+            if crate::discovery::decode(x, GuestAddr(0)).destination_gpr() == Some(rt) {
+                break;
             }
         }
     }
@@ -239,7 +257,7 @@ pub fn layout(image: &CodeImage, map: &ProgramMap) -> BTreeSet<GuestAddr> {
                     .contains_key(&image.address(GuestAddr(pc)))
         })
         .map(GuestAddr)
-        .filter(|&pc| function_start(image, pc))
+        .filter(|&pc| function_start(image, pc, &BTreeSet::new()))
         .collect()
 }
 
@@ -250,6 +268,7 @@ pub const ADDRESS_TAKEN: &str = "plaid-address-taken/v0";
 /// first, then constants from decoded blocks, until no new function appears.
 /// The set is recorded in `address_taken`; its functions stay map entries.
 /// Declared runtime functions are a boundary and never join the set.
+#[allow(clippy::too_many_arguments)]
 pub fn discover_address_taken(
     rom: crate::program::RomIdentity,
     bytes: &[u8],
@@ -257,10 +276,11 @@ pub fn discover_address_taken(
     entries: &[GuestAddr],
     runtime: &[(GuestAddr, String, Vec<u8>)],
     evidence: Option<(String, crate::program::Evidence)>,
+    starts: &BTreeSet<u32>,
     budget: usize,
 ) -> Result<crate::discovery::Discovery, String> {
     let runtime_entries: BTreeSet<GuestAddr> = runtime.iter().map(|(a, _, _)| *a).collect();
-    let mut taken: BTreeSet<GuestAddr> = rom_words(bytes, image)
+    let mut taken: BTreeSet<GuestAddr> = rom_words(bytes, image, starts)
         .into_iter()
         .filter(|a| !runtime_entries.contains(a))
         .collect();
@@ -295,7 +315,7 @@ pub fn discover_address_taken(
                 .map(|a| a.pc),
         );
         taken.extend(
-            block_constants(image, &d.map)
+            block_constants(image, &d.map, starts)
                 .into_keys()
                 .filter(|a| !runtime_entries.contains(a)),
         );
@@ -415,7 +435,7 @@ mod tests {
         rom.extend([0, 0]); // the 34-byte stream ends; scanning resumes at 36
         rom.extend(0x8000_000cu32.to_be_bytes());
         assert_eq!(
-            rom_words(&rom, &image),
+            rom_words(&rom, &image, &BTreeSet::new()),
             BTreeSet::from([GuestAddr(0x8000_000c), GuestAddr(0x8000_0020)])
         );
     }
@@ -475,5 +495,25 @@ mod tests {
         // b +8 stays in the image; j 0x84001068 (RSP boot code) does not
         assert!(plausible(&image(0x1000_0001), GuestAddr(0x8000_0000)));
         assert!(!plausible(&image(0x0900_041a), GuestAddr(0x8000_0000)));
+    }
+
+    #[test]
+    fn a_declared_load_begins_with_a_function() {
+        // a load packed right after another load's data: no `jr ra` and no
+        // hole before its first word (ADR-0182)
+        let image = CodeImage {
+            base: CodeAddress {
+                pc: GuestAddr(0x8000_0000),
+                image: "packed".into(),
+                generation: 0,
+            },
+            words: vec![0x2402_0001, JR_RA, 0, 0x1234_5678, 0x2402_0002, JR_RA, 0],
+            rom_offset: None,
+            physical_start: None,
+            holes: Vec::new(),
+        };
+        let second = GuestAddr(0x8000_0010);
+        assert!(!plausible(&image, second));
+        assert!(plausible_at(&image, second, &BTreeSet::from([second.0])));
     }
 }

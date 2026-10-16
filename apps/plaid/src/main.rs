@@ -886,6 +886,7 @@ fn run() -> Result<(), String> {
                     &entries,
                     &runtime,
                     evidence.clone(),
+                    &load_starts(declared.as_ref()),
                     1_000_000,
                 )?
             } else {
@@ -1121,6 +1122,7 @@ fn run() -> Result<(), String> {
                     &[GuestAddr(number32(entry)?)],
                     &runtime,
                     evidence,
+                    &load_starts(declared.as_ref()),
                     1_000_000,
                 )?
             } else {
@@ -1418,6 +1420,14 @@ fn load_declarations(
 }
 
 /// Evidence for loads placed from the ROM's own overlay catalog.
+/// Where each declared load begins (ADR-0182).
+fn load_starts<E>(declared: Option<&(plaid_core::declared_loads::LoadImage, E)>) -> BTreeSet<u32> {
+    declared
+        .into_iter()
+        .flat_map(|(spec, _)| spec.loads.iter().map(|l| l.destination.start.0))
+        .collect()
+}
+
 fn overlay_evidence_of(catalog: &[plaid_core::overlays::Overlay]) -> Evidence {
     Evidence {
         kind: EvidenceKind::Static,

@@ -21,7 +21,7 @@ Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. 
 | | Super Mario 64 (USA) | Ocarina of Time (USA 1.2) |
 | --- | --- | --- |
 | Code discovered | ✅ 99.03% of functions | ✅ fixed image and 468 overlays |
-| `CLOSED` under declared assumptions | ✅ 45,419 blocks, 15 assumptions | ✅ fixed image, 29,511 blocks, 13 assumptions; ✅ with all 468 overlays, 141,268 blocks, 14 assumptions |
+| `CLOSED` under declared assumptions | ✅ 45,419 blocks, 15 assumptions | ✅ fixed image, 29,542 blocks, 13 assumptions; ✅ with all 468 overlays, 154,414 blocks, 14 assumptions |
 | Runs natively | ✅ full-speed gameplay with input, saves, audio | 🟨 runs through its relocated overlays to its first graphics task |
 | `CLOSED` whole-ROM, no assumptions | ⬜ 4,820 blockers, 0 of 16 assumptions retired | ⬜ 3,105 blockers fixed image, 14,917 with overlays |
 
@@ -48,18 +48,18 @@ No commercial ROM is `CLOSED` whole-ROM without assumptions. Assumptions retired
 | ROM | Blocks | Indirect sites closed with no assumption | Whole-ROM blockers | Scoped results |
 | --- | --- | --- | --- | --- |
 | Super Mario 64 (USA) | 45,419 | 1 of 4,385 | OPEN, 4,820 | `--guarded-ram` **OPEN** (91 blockers), 14 assumptions; `--address-taken` **CLOSED**, 15 assumptions |
-| Ocarina of Time (USA 1.2), fixed image | 29,511 | 2 of 2,562 | OPEN, 3,105 | `--guarded-ram` **OPEN** (122 blockers); `--address-taken` **CLOSED**, 13 assumptions |
-| OoT + 468 overlays at link addresses | 141,268 | 6 of 13,529 | OPEN, 14,917 | `--guarded-ram` **OPEN** (696 blockers), 13 assumptions; `--address-taken` **CLOSED**, 14 assumptions |
+| Ocarina of Time (USA 1.2), fixed image | 29,542 | 2 of 2,566 | OPEN, 3,111 | `--guarded-ram` **OPEN** (122 blockers); `--address-taken` **CLOSED**, 13 assumptions |
+| OoT + 468 overlays at link addresses | 154,414 | 6 of 14,775 | OPEN, 16,239 | `--guarded-ram` **OPEN** (708 blockers), 13 assumptions; `--address-taken` **CLOSED**, 14 assumptions |
 
 Whole-ROM blockers by class:
 
 | Class | sm64 | oot | oot-overlays |
 | --- | ---: | ---: | ---: |
-| `unresolved_indirect_site` | 4,384 | 2,560 | 13,523 |
-| `exception_or_unsupported_instruction` | 78 | 284 | 633 |
-| `pointer_table_immutability_unproven` | 147 | 96 | 346 |
-| `pointer_table_target_identity_unproven` | 147 | 96 | 346 |
-| `runtime_boundary_outside_scope` | 57 | 62 | 62 |
+| `unresolved_indirect_site` | 4,384 | 2,564 | 14,769 |
+| `exception_or_unsupported_instruction` | 78 | 284 | 647 |
+| `pointer_table_immutability_unproven` | 147 | 96 | 376 |
+| `pointer_table_target_identity_unproven` | 147 | 96 | 376 |
+| `runtime_boundary_outside_scope` | 57 | 64 | 64 |
 | `dynamic_effect_outside_scope` | 1 | 1 | 1 |
 | `unmodeled_exception_paths` | 1 | 1 | 1 |
 | `unproven_executable_universe` | 1 | 1 | 1 |
@@ -108,7 +108,7 @@ Inputs given by hand, outside the solver:
 | 2 | SM64 discovery finds at least 99% of its functions | ✅ **done**: 99.03%, scored against a local decomp map (ADR-0152) |
 | 3 | SM64 `CLOSED` under declared assumptions | ✅ **done**: 45,419 blocks, every assumption listed (ADR-0153..0156) |
 | 4 | SM64 boots natively to its title screen | ✅ **done**, and further: gameplay at full speed, with input, saves and native audio (ADR-0159..0170) |
-| 5 | Retire the assumptions one by one, then Ocarina of Time | 🟨 **in progress**: OoT `CLOSED` under the address-taken scope, first the fixed code (ADR-0175), then with all 468 overlays at their link addresses (ADR-0179/0180); boots natively through a hardware RCP I/O model and a lowered RSP task (ADR-0176/0177), and runs relocated overlays through a verified binding to its first graphics task (ADR-0181) |
+| 5 | Retire the assumptions one by one, then Ocarina of Time | 🟨 **in progress**: OoT `CLOSED` under the address-taken scope, first the fixed code (ADR-0175), then with all 468 overlays at their link addresses (ADR-0179/0180); boots natively through a hardware RCP I/O model and a lowered RSP task (ADR-0176/0177), runs relocated overlays through a verified binding (ADR-0181), and with RT64 draws its boot logo, title and file select (ADR-0182) |
 
 ## How it works
 
@@ -142,7 +142,7 @@ ROMs stay local and are never committed. Per-ROM numbers and how to reproduce th
 | ROM | Result |
 | --- | --- |
 | Super Mario 64 (USA) | 99.03% discovery recall. `CLOSED` over 45,419 blocks under a declared scope: its main, engine and goddard segments, with calls through function pointers restricted to address-taken functions. Runs natively at full speed (59.9 VI/s), with graphics, input, EEPROM saves and audio. |
-| Ocarina of Time (USA 1.2) | Boot, the Yaz0-compressed `code` segment and the cartridge's 64DD driver segment: `CLOSED` over 29,511 blocks under the address-taken scope (ADR-0175). With its 468 overlays at link addresses (ADR-0172, ADR-0179), it is `CLOSED` over 141,268 blocks under the address-taken scope (ADR-0180). Natively it runs through its relocated game-state overlay to its first graphics task (ADR-0181); an RT64 build of OoT is next. |
+| Ocarina of Time (USA 1.2) | Boot, the Yaz0-compressed `code` segment and the cartridge's 64DD driver segment: `CLOSED` over 29,542 blocks under the address-taken scope (ADR-0175). With its 468 overlays at link addresses (ADR-0172, ADR-0179), it is `CLOSED` over 154,414 blocks under the address-taken scope (ADR-0180). Natively, with RT64, its own audio microcode and SRAM saves, it runs through its relocated overlays to the title screen and file select (ADR-0181, ADR-0182). |
 | Mario Party 2 (USA) | Boot window: 712 blocks and 29 blockers. 27 sit behind an `osInitialize` whose SDK build n64sym lacks; 2 are function-pointer calls. |
 
 <details>
@@ -181,7 +181,7 @@ Known gaps:
 
 - OoT has not been run with RT64 yet: its first graphics task is where the runtime stops. Overlay binding is itself an assumption (ledger row 12), and every overlay's load base is found at run time, not proven.
 - The runtime covers the libultra functions that SM64 and OoT's boot call. A game that calls a declared function the runtime lacks fails to link.
-- Saves are 4 Kbit EEPROM only (no 16 Kbit EEPROM, SRAM, Flash or Controller Pak). Only controller 1 works, and there is no rumble.
+- Saves are 4 Kbit EEPROM and 256 Kbit SRAM only (no 16 Kbit EEPROM, Flash or Controller Pak). Only controller 1 works, and there is no rumble.
 - RSP microcode comes from running the game, not from ROM offsets: `--rsp-dump` saves each IMEM image no lowered code holds, and `runtime/rsp_texts.py` lowers it for the next build. A new game needs one or more of these runs. Graphics tasks go to RT64, not lowered microcode. Audio plays through SDL with RT64, or goes to a WAV file.
 - Only Windows has been tested with RT64.
 
