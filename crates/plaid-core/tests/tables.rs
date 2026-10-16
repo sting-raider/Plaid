@@ -299,6 +299,22 @@ fn a_bound_before_the_only_branch_to_the_guard_closes_the_table() {
     );
     // the branch's slot redefines the index after the bound
     assert_eq!(hop_targets(&hop(0x24840001, leave)), None);
-    // a second way into the guard skips the bound
-    assert_eq!(hop_targets(&hop(0, 0x10000001)), None);
+    // A second branch into the guard (b at 0x0c) is reached only through the
+    // compare at 0x00 too, so every path bounds the index (ADR-0180)...
+    assert_eq!(
+        hop_targets(&hop(0, 0x10000001)),
+        Some(vec![0x80000040, 0x80000050])
+    );
+    // ...but an entry at that branch skips the bound.
+    let i = hop(0, 0x10000001);
+    let mut m = map(&i);
+    let evidence = m.entries.values().next().unwrap().clone();
+    m.entries.insert(i.address(GuestAddr(0x8000000c)), evidence);
+    let m = analyze_indirect(&m, &i).unwrap();
+    let s = m
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == 0x80000028)
+        .unwrap();
+    assert!(!plaid_core::tables::verify(&m, &i, s));
 }

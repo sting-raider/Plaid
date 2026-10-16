@@ -22,8 +22,9 @@ microcode, boot runs to its first game-state overlay and stops fail-closed
 there (ADR-0176). It uses no symbol map. CPU access to SP memory and the PI
 is modelled as hardware, so unnamed library variants work (ADR-0177).
 `discover --overlays` adds the 468 executable overlays at their link addresses
-(138,829 blocks, 29 blockers: 28 GCC jump-table shapes, one signature match)
-(ADR-0179).
+(ADR-0179). With jump-table bounds proven over every path (ADR-0180), OoT
+with all 468 overlays is **CLOSED** under the address-taken scope: 140,154
+blocks, 0 blockers; whole-ROM without assumptions it has 14,812 blockers.
 ADR-0172 stage 1 discovers 469 ROM-owned overlay candidates (468 with executable text)
 and validates their relocation structure. Generated native byte verifiers pass
 synthetic corruption/bounds checks. Link-address lowering, checked RAM

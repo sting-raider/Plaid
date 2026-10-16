@@ -72,17 +72,16 @@
       "id": "oot-overlays",
       "name": "OoT + 468 overlays at link addresses",
       "map": "discover --overlays (ADR-0179)",
-      "blocks": 138829,
-      "indirect_sites": 13310,
+      "blocks": 140154,
+      "indirect_sites": 13426,
       "whole_rom": {
         "status": "OPEN",
         "by_class": {
-          "unresolved_indirect_site": 13304,
-          "pointer_table_immutability_unproven": 318,
-          "pointer_table_target_identity_unproven": 318,
+          "unresolved_indirect_site": 13420,
+          "pointer_table_immutability_unproven": 346,
+          "pointer_table_target_identity_unproven": 346,
           "exception_or_unsupported_instruction": 631,
-          "runtime_boundary_outside_scope": 63,
-          "runtime_function_decoded": 1,
+          "runtime_boundary_outside_scope": 62,
           "dynamic_effect_outside_scope": 1,
           "unmodeled_exception_paths": 1,
           "unproven_executable_universe": 1,
@@ -93,7 +92,7 @@
         }
       },
       "scopes": [
-        {"scope": "--address-taken", "status": "OPEN", "blockers": 29, "assumptions": null, "note": "28 GCC jump-table shapes and one signature match"}
+        {"scope": "--address-taken", "status": "CLOSED", "blockers": 0, "assumptions": 13, "note": "jump tables proven over every path (ADR-0180)"}
       ]
     }
   ],
