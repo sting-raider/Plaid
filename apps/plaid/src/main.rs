@@ -1263,7 +1263,8 @@ fn run() -> Result<(), String> {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&serde_json::json!({
-                    "source_order": rom.source_order, "identity": rom.identity, "header": rom.header
+                    "source_order": rom.source_order, "identity": rom.identity, "header": rom.header,
+                    "boot_image_size": rom.boot_image_size()
                 }))
                 .map_err(|e| e.to_string())?
             );
@@ -1273,16 +1274,18 @@ fn run() -> Result<(), String> {
         [command, path, output] if command == "infer-loads" => {
             let rom = CanonicalRom::from_bytes(&fs::read(path).map_err(|e| e.to_string())?)?;
             let bytes = rom.bytes();
-            let end = bytes.len().min(0x10_1000);
+            // the main image when the entry stub bounds it, else IPL3's 1 MiB
+            let size = rom.boot_image_size().unwrap_or(0x10_0000) as usize;
+            let end = bytes.len().min(0x1000 + size);
             let base = bytes
                 .get(0x1000..end)
                 .ok_or("ROM ends before its boot window")?;
-            let found = plaid_core::overlays::static_loads(bytes, base, rom.header.entry.0)?;
+            let found = plaid_core::overlays::static_loads(bytes, base, rom.header.boot_address.0)?;
             let stub = plaid_core::overlays::reset_stub(bytes, base.len() as u32);
             let loads: Vec<_> = stub
                 .map(|size| {
                     serde_json::json!({
-                        "destination": format!("{:#x}", rom.header.entry.0),
+                        "destination": format!("{:#x}", rom.header.boot_address.0),
                         "size": format!("{size:#x}"),
                         "rom": "0x1000",
                         "encoding": "raw",

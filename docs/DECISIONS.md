@@ -5292,3 +5292,55 @@ Verifier:
 - The CLI test's 8-byte signature fixture is widened to 12 bytes, since
   its `j .` after `jr t0` is no longer a plausible start.
 - The full gate passes.
+
+## ADR-0184: The boot image and its segments come from the ROM alone
+
+Status: accepted. Milestone 5.
+
+Context: F-Zero X (USA) has no decompilation and no Zelda-style file table.
+`scripts/native.py` found 10 blocks in it. Three assumptions behind
+ADR-0183's pipeline failed, each in general terms:
+- the header's entry point is where the game runs;
+- IPL3's 1 MiB copy is all main-image code at its link address;
+- only a file table names segments.
+
+Decision:
+- **Boot address.** CIC-NUS-6103 and 6106 boot code jumps 1 or 2 MiB
+  below the header entry. `RomHeader.boot_address` applies that offset.
+  The CIC is identified as n64sym (MIT) does, by the CRC32 of ROM
+  0x40..0x1000: `0x0B050EE0` is 6103 and `0xACC8580A` is 6106.
+- **Boot image size.** The libultra entry stub clears BSS from
+  `_bssStart` before it jumps to main, so the main image ends there.
+  `CanonicalRom::boot_image_size` evaluates the stub's
+  `lui`/`addiu`/`ori` constants up to its first `sw zero, 0(base)`. It
+  gives none for any other shape, and then the 1 MiB window stays.
+  `rom-info` reports it, and `infer-loads` and `native.py` use it. For
+  SM64 it gives 0xF4580, the size so far declared by hand.
+- **Segments without a table.** When `file_table` fails, a candidate file
+  is a ROM range whose start and end offsets the code builds within four
+  words of each other, as `_segmentRomStart`/`_segmentRomEnd` DMA
+  arguments are. It is read raw and placed by ADR-0183's rule: the unique
+  RAM constant where at least 95% of its own calls begin functions.
+  Accepted segments join the search.
+
+Result:
+- **F-Zero X**, from the ROM alone:
+  - boot address 0x80067000, a 0x71030-byte main image;
+  - three segments: ROM 0x98080 at 0x800FC730, 0x1459A0 at 0x80115DF0,
+    and 0x72120 at 0x80403010 (561 of 562 calls begin functions);
+  - 11,398 blocks and 20 address-taken blockers, up from 10 blocks.
+  - All 20 blockers are calls into two overlay slots (0x80115DF0 and
+    0x801439D0). Several ROM files load into each slot by game mode, with
+    sizes the code computes from link symbols. Overlays that share a
+    link range are still left out (ADR-0181), so these fail closed.
+- **SM64:** the table-free rule finds its engine segment exactly as
+  declared by hand: ROM 0xF5580 at 0x80378800, 0x13490 bytes. Goddard is
+  loaded from a level script, not from code constants, and is not found.
+- **OoT and MM:** inferred loads are unchanged. With the bounded boot
+  image both stay CLOSED with the same blocks (155,770 and 214,963).
+
+Verifier: unit tests for the boot-image bound (the stub shape, and a jump
+before any clear), for the CIC default, and for a table-free ROM range
+(with a range built too far apart as the negative case). The full gate
+passes.
+

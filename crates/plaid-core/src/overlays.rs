@@ -382,13 +382,22 @@ pub struct StaticLoad {
 /// `lui`/`addiu`/`ori` constants of `bytes` placed at `base`, with the pc
 /// that completes each (the first, so the result is deterministic).
 fn constants(bytes: &[u8], base: u32) -> BTreeMap<u32, u32> {
+    let mut out = BTreeMap::new();
+    for (value, pc) in each_constant(bytes, base) {
+        out.entry(value).or_insert(pc);
+    }
+    out
+}
+
+/// Every `lui`/`addiu`/`ori` constant in `bytes` with the address of its low half
+fn each_constant(bytes: &[u8], base: u32) -> Vec<(u32, u32)> {
     let words: Vec<u32> = bytes
         .as_chunks::<4>()
         .0
         .iter()
         .map(|w| u32::from_be_bytes(*w))
         .collect();
-    let mut out = BTreeMap::new();
+    let mut out = Vec::new();
     for (k, &w) in words.iter().enumerate() {
         if w >> 26 != 0xf {
             continue;
@@ -402,7 +411,26 @@ fn constants(bytes: &[u8], base: u32) -> BTreeMap<u32, u32> {
                 _ => continue,
             };
             if (v >> 21) & 31 == rt {
-                out.entry(value).or_insert(base.wrapping_add(4 * m as u32));
+                out.push((value, base.wrapping_add(4 * m as u32)));
+            }
+        }
+    }
+    out
+}
+
+/// ROM ranges a ROM without a file table names in code (ADR-0184): a start
+/// and an end offset built within four words of each other, as the
+/// `_segmentRomStart`/`_segmentRomEnd` arguments of a DMA are.
+fn rom_ranges(bytes: &[u8], base: u32, rom_len: usize) -> BTreeSet<(u32, u32)> {
+    let offsets: Vec<(u32, u32)> = each_constant(bytes, base)
+        .into_iter()
+        .filter(|&(v, _)| v >= 0x1000 && (v as usize) <= rom_len)
+        .collect();
+    let mut out = BTreeSet::new();
+    for &(a, pa) in &offsets {
+        for &(b, pb) in &offsets {
+            if a < b && pa.abs_diff(pb) <= 16 && (b - a) as usize <= MAX_IMAGE {
+                out.insert((a, b));
             }
         }
     }
@@ -410,7 +438,8 @@ fn constants(bytes: &[u8], base: u32) -> BTreeMap<u32, u32> {
 }
 
 /// Fixed loads reachable from the base window: a ROM file whose virtual start
-/// the code builds as a constant, placed at the one constant RAM address
+/// the code builds as a constant (without a file table, a ROM range whose
+/// both ends it builds; ADR-0184), placed at the one constant RAM address
 /// where at least 95% of its own `jal` targets begin a function (follow a
 /// `jr ra`), with at least one call per 4 KiB. Accepted files join the
 /// search. A tie between destinations, or overlapping placements, accepts
@@ -418,20 +447,31 @@ fn constants(bytes: &[u8], base: u32) -> BTreeMap<u32, u32> {
 /// image and fails closed.
 pub fn static_loads(rom: &[u8], base: &[u8], at: u32) -> Result<Vec<StaticLoad>, String> {
     const JR_RA: u32 = 0x03e0_0008;
-    // shortcut: loads are inferred only for ROMs with a file table; others
-    // declare theirs by hand until a table-free rule exists
-    let Ok((_, files)) = file_table(rom) else {
-        return Ok(Vec::new());
-    };
-    let mut by_start: BTreeMap<u32, RomFile> = files
-        .into_iter()
+    let table = file_table(rom).ok().map(|(_, files)| files);
+    let mut by_start: BTreeMap<u32, RomFile> = table
+        .iter()
+        .flatten()
         .filter(|f| f.virtual_start != 0 && f.rom_start != u32::MAX)
-        .map(|f| (f.virtual_start, f))
+        .map(|f| (f.virtual_start, f.clone()))
         .collect();
+    let mut placed = BTreeSet::new();
     let mut work = vec![(base.to_vec(), at)];
     let mut out: Vec<StaticLoad> = Vec::new();
     while let Some((image, at)) = work.pop() {
         let found = constants(&image, at);
+        if table.is_none() {
+            // without a table, a file is a ROM range the code names, read raw
+            for (start, end) in rom_ranges(&image, at, rom.len()) {
+                if !placed.contains(&start) {
+                    by_start.entry(start).or_insert(RomFile {
+                        virtual_start: start,
+                        virtual_end: end,
+                        rom_start: start,
+                        rom_end: 0,
+                    });
+                }
+            }
+        }
         let ram: Vec<(u32, u32)> = found
             .iter()
             .filter(|(v, _)| (0x8000_0000..0x8080_0000).contains(*v) && *v % 4 == 0)
@@ -497,6 +537,7 @@ pub fn static_loads(rom: &[u8], base: &[u8], at: u32) -> Result<Vec<StaticLoad>,
                 ));
             }
             by_start.remove(&value);
+            placed.insert(value);
             out.push(StaticLoad {
                 file,
                 destination,
@@ -713,6 +754,34 @@ mod tests {
         assert_eq!(reset_stub(&rom, 0x100), Some(0x60));
         // without a destination whose calls fit, nothing is inferred
         let rom = static_rom(false);
+        assert!(
+            static_loads(&rom, &rom[0x1000..0x1100], 0x80000400)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn without_a_table_a_rom_range_named_in_code_is_a_file() {
+        // the same code file, no file table: boot builds its start and end
+        // a word apart, as DMA arguments (ADR-0184)
+        let mut rom = static_rom(true);
+        rom[0x40..0x80].fill(0);
+        assert!(file_table(&rom).is_err());
+        for (n, w) in [0x3c07_0000, 0x24e7_2020].into_iter().enumerate() {
+            put(&mut rom, 0x1088 + n * 4, w); // lui a3, 0; addiu a3, a3, 0x2020
+        }
+        let [load] = static_loads(&rom, &rom[0x1000..0x1100], 0x80000400)
+            .unwrap()
+            .try_into()
+            .unwrap();
+        assert_eq!(
+            (load.file.rom_start, load.destination, load.size),
+            (0x2000, 0x80100000, 0x20)
+        );
+        // an end built far from the start names no range
+        put(&mut rom, 0x108c, 0);
+        put(&mut rom, 0x10f8, 0x24e7_2020);
         assert!(
             static_loads(&rom, &rom[0x1000..0x1100], 0x80000400)
                 .unwrap()
