@@ -31,10 +31,8 @@ pub const RUNTIME_FUNCTIONS: &[&str] = &[
     "osPfsFileState", "osPfsFindFile", "osPfsReadWriteFile",
     "osCartRomInit", "osCreatePiManager", "osPiReadIo", "osPiStartDma", "osEPiStartDma",
     "osPiGetStatus", "osEPiRawStartDma", "osEPiReadIo",
-    "osFlashInit", "osFlashReadStatus", "osFlashReadId", "osFlashClearStatus",
-    "osFlashAllErase", "osFlashAllEraseThrough", "osFlashSectorErase",
-    "osFlashSectorEraseThrough", "osFlashCheckEraseEnd", "osFlashWriteBuffer",
-    "osFlashWriteArray", "osFlashReadArray", "osFlashChange",
+    // N64Recomp's osFlash* are left out: the FlashRAM is modelled on the PI
+    // bus and libultra's flash code runs as guest code (ADR-0183)
     "osCreateThread", "osStartThread", "osStopThread", "osDestroyThread",
     "osSetThreadPri", "osGetThreadPri", "osGetThreadId",
     // in N64Recomp's `ignored_funcs`; OoT stores its address (ADR-0175)
@@ -45,6 +43,9 @@ pub const RUNTIME_FUNCTIONS: &[&str] = &[
     "osVoiceMaskDictionary", "osVoiceStartReadData", "osVoiceControlGain",
     "osVoiceGetReadData", "osVoiceClearDictionary",
     "osSetIntMask", "__osDisableInt", "__osRestoreInt",
+    // in N64Recomp's `ignored_funcs`; OoT hands its address to the 64DD
+    // driver (ADR-0183)
+    "osGetIntMask",
     "osVirtualToPhysical",
     "osGetCount", "osSetCount", "__osSetFpcCsr",
     "osInvalDCache", "osInvalICache", "osWritebackDCache", "osWritebackDCacheAll",
@@ -213,8 +214,12 @@ pub fn identify(image: &CodeImage, signatures: &[Signature], wanted: &[&str]) ->
             {
                 let end = at + sig.size as usize / 4;
                 let entry = image.base.pc.0 + at as u32 * 4;
+                // two words are only the index key and also occur inside
+                // other functions: such a match must begin where a function
+                // can (ADR-0183)
                 if end <= image.words.len()
                     && (0..sig.size / 4).all(|k| image.word(GuestAddr(entry + 4 * k)).is_some())
+                    && (sig.size > 8 || crate::data_roots::plausible(image, GuestAddr(entry)))
                     && stripped_crc(&image.words[at..end], &sig.relocs) == sig.crc_b
                 {
                     found

@@ -301,8 +301,11 @@ pub fn discover(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> 
             continue;
         }
         let bytes = file.decode(rom)?;
-        let layout = Layout::parse(&bytes)
-            .map_err(|e| format!("overlay table +{at:#x}, file {a:#x}, link {link:#x}: {e}"))?;
+        // a fixed-address file named the same way has no relocation trailer;
+        // it is not an overlay, and leaving it out of the image fails closed
+        let Ok(layout) = Layout::parse(&bytes) else {
+            continue;
+        };
         if layout.file_size.checked_add(layout.bss) != Some(end - link) {
             return Err("overlay table range differs from file and BSS".into());
         }
@@ -359,6 +362,169 @@ pub fn loads(overlays: &[Overlay], evidence: &EvidenceRefs) -> Vec<DeclaredLoad>
         });
     }
     out
+}
+
+/// A non-relocatable file the code places at a fixed address (ADR-0183).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StaticLoad {
+    pub file: RomFile,
+    pub destination: u32,
+    pub size: u32,
+    /// Where the image names the file's virtual start, and where it builds
+    /// the destination.
+    pub file_constant_at: u32,
+    pub destination_constant_at: u32,
+    /// The file's own `jal` targets inside it, and how many of those follow
+    /// a `jr ra` once placed at `destination`.
+    pub calls: (u32, u32),
+}
+
+/// `lui`/`addiu`/`ori` constants of `bytes` placed at `base`, with the pc
+/// that completes each (the first, so the result is deterministic).
+fn constants(bytes: &[u8], base: u32) -> BTreeMap<u32, u32> {
+    let words: Vec<u32> = bytes
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_be_bytes(*w))
+        .collect();
+    let mut out = BTreeMap::new();
+    for (k, &w) in words.iter().enumerate() {
+        if w >> 26 != 0xf {
+            continue;
+        }
+        let (rt, hi) = ((w >> 16) & 31, w << 16);
+        for (m, &v) in words.iter().enumerate().skip(k + 1).take(16) {
+            let lo = v & 0xffff;
+            let value = match v >> 26 {
+                9 => hi.wrapping_add(lo as i16 as u32),
+                0xd => hi | lo,
+                _ => continue,
+            };
+            if (v >> 21) & 31 == rt {
+                out.entry(value).or_insert(base.wrapping_add(4 * m as u32));
+            }
+        }
+    }
+    out
+}
+
+/// Fixed loads reachable from the base window: a ROM file whose virtual start
+/// the code builds as a constant, placed at the one constant RAM address
+/// where at least 95% of its own `jal` targets begin a function (follow a
+/// `jr ra`), with at least one call per 4 KiB. Accepted files join the
+/// search. A tie between destinations, or overlapping placements, accepts
+/// nothing: the caller declares such a load by hand or it stays out of the
+/// image and fails closed.
+pub fn static_loads(rom: &[u8], base: &[u8], at: u32) -> Result<Vec<StaticLoad>, String> {
+    const JR_RA: u32 = 0x03e0_0008;
+    // shortcut: loads are inferred only for ROMs with a file table; others
+    // declare theirs by hand until a table-free rule exists
+    let Ok((_, files)) = file_table(rom) else {
+        return Ok(Vec::new());
+    };
+    let mut by_start: BTreeMap<u32, RomFile> = files
+        .into_iter()
+        .filter(|f| f.virtual_start != 0 && f.rom_start != u32::MAX)
+        .map(|f| (f.virtual_start, f))
+        .collect();
+    let mut work = vec![(base.to_vec(), at)];
+    let mut out: Vec<StaticLoad> = Vec::new();
+    while let Some((image, at)) = work.pop() {
+        let found = constants(&image, at);
+        let ram: Vec<(u32, u32)> = found
+            .iter()
+            .filter(|(v, _)| (0x8000_0000..0x8080_0000).contains(*v) && *v % 4 == 0)
+            .map(|(&v, &pc)| (v, pc))
+            .collect();
+        for (&value, &named_at) in &found {
+            let Some(file) = by_start.get(&value).cloned() else {
+                continue;
+            };
+            let Ok(bytes) = file.decode(rom) else {
+                continue;
+            };
+            let word = |off: u32| word(&bytes, off as usize).ok();
+            let targets: Vec<u32> = (0..bytes.len() as u32 / 4)
+                .filter_map(|k| word(4 * k))
+                .filter(|w| w >> 26 == 3)
+                .map(|w| 0x8000_0000 | ((w & 0x03ff_ffff) << 2))
+                .collect();
+            let score = |dest: u32| {
+                let inside = targets
+                    .iter()
+                    .filter_map(|t| t.checked_sub(dest))
+                    .filter(|&off| (off as usize) < bytes.len());
+                inside.fold((0u32, 0u32), |(hit, all), off| {
+                    // `jr ra`, its delay slot, then any zero padding
+                    let mut p = off;
+                    while p >= 4 && off - p < 40 && word(p - 4) == Some(0) {
+                        p -= 4;
+                    }
+                    let start = off == 0
+                        || (p >= 4 && word(p - 4) == Some(JR_RA))
+                        || (p >= 8 && word(p - 8) == Some(JR_RA));
+                    (hit + start as u32, all + 1)
+                })
+            };
+            let mut best: Option<(u32, u32, u32, u32)> = None;
+            let mut tied = false;
+            for &(dest, pc) in &ram {
+                let (hit, all) = score(dest);
+                if u64::from(all) * 4096 < bytes.len() as u64 || hit * 20 < all * 19 {
+                    continue;
+                }
+                match best {
+                    Some((h, ..)) if hit < h => {}
+                    Some((h, ..)) if hit == h => tied = true,
+                    _ => {
+                        best = Some((hit, all, dest, pc));
+                        tied = false;
+                    }
+                }
+            }
+            let Some((hit, all, destination, pc)) = best.filter(|_| !tied) else {
+                continue;
+            };
+            let size = bytes.len() as u32;
+            let end = u64::from(destination) + u64::from(size);
+            if out.iter().any(|l| {
+                u64::from(l.destination) < end
+                    && u64::from(destination) < u64::from(l.destination) + u64::from(l.size)
+            }) {
+                return Err(format!(
+                    "inferred loads overlap at {destination:#x}; declare them by hand"
+                ));
+            }
+            by_start.remove(&value);
+            out.push(StaticLoad {
+                file,
+                destination,
+                size,
+                file_constant_at: named_at,
+                destination_constant_at: pc,
+                calls: (all, hit),
+            });
+            work.push((bytes, destination));
+        }
+    }
+    out.sort_by_key(|l| l.destination);
+    Ok(out)
+}
+
+/// The reset stub: the boot window's bytes before the first file the table
+/// places in it (ADR-0183). IPL3 copies both, but the stub is its own file and
+/// the game may reclaim it, so it is declared as a load of its own: a write
+/// revokes it, and running it again re-checks its bytes.
+pub fn reset_stub(rom: &[u8], window: u32) -> Option<u32> {
+    let (_, files) = file_table(rom).ok()?;
+    files
+        .iter()
+        .filter(|f| f.rom_end == 0 && f.rom_start == f.virtual_start)
+        .map(|f| f.rom_start)
+        .filter(|&s| s > 0x1000 && s < 0x1000 + window && s % 4 == 0)
+        .min()
+        .map(|s| s - 0x1000)
 }
 
 #[cfg(test)]
@@ -489,6 +655,69 @@ mod tests {
                 loads_place_executable_overlays_at_their_link_addresses(&catalog);
             }
         }
+    }
+
+    /// A table with a reset stub, a boot file and one code file; the boot
+    /// file names the code file and two RAM addresses (ADR-0183).
+    fn static_rom(dest: bool) -> Vec<u8> {
+        let mut rom = vec![0; 0x2100];
+        let table = [
+            [0, 0x20, 0, 0],
+            [0x40, 0x90, 0x40, 0],
+            [0x1060, 0x1100, 0x1060, 0],
+            [0x2000, 0x2020, 0x2000, 0],
+        ];
+        for (n, w) in table.iter().flatten().enumerate() {
+            put(&mut rom, 0x40 + n * 4, *w);
+        }
+        let boot = [
+            0x3c05_0000,                        // lui a1, 0
+            0x24a5_2000,                        // addiu a1, a1, 0x2000
+            0x3c04_8020,                        // lui a0, 0x8020 (a decoy)
+            0x2484_0000,                        // addiu a0, a0, 0
+            if dest { 0x3c06_8010 } else { 0 }, // lui a2, 0x8010
+            if dest { 0x24c6_0000 } else { 0 }, // addiu a2, a2, 0
+        ];
+        for (n, w) in boot.into_iter().enumerate() {
+            put(&mut rom, 0x1080 + n * 4, w);
+        }
+        // f0 calls f1 at +0x10, which calls f0
+        let code = [
+            0x0c04_0004,
+            0,
+            0x03e0_0008,
+            0,
+            0x0c04_0000,
+            0,
+            0x03e0_0008,
+            0,
+        ];
+        for (n, w) in code.into_iter().enumerate() {
+            put(&mut rom, 0x2000 + n * 4, w);
+        }
+        rom
+    }
+
+    #[test]
+    fn a_named_file_is_placed_where_its_calls_begin_functions() {
+        let rom = static_rom(true);
+        let [load] = static_loads(&rom, &rom[0x1000..0x1100], 0x80000400)
+            .unwrap()
+            .try_into()
+            .unwrap();
+        assert_eq!(
+            (load.file.rom_start, load.destination, load.size),
+            (0x2000, 0x80100000, 0x20)
+        );
+        assert_eq!(load.calls, (2, 2));
+        assert_eq!(reset_stub(&rom, 0x100), Some(0x60));
+        // without a destination whose calls fit, nothing is inferred
+        let rom = static_rom(false);
+        assert!(
+            static_loads(&rom, &rom[0x1000..0x1100], 0x80000400)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     fn loads_place_executable_overlays_at_their_link_addresses(catalog: &[Overlay]) {

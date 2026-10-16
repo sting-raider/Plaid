@@ -386,6 +386,20 @@ PROGRAMS = {
     # is coherent (ADR-0176); the reverse order still faults (cache_alias).
     'uncached_first': [lui(s1, 0xA000), ori(s1, s1, 0x1040), addiu(t0, zero, 0x55), sw(t0, 0, s1), lw(t1, 4, s1),
         lui(s0, 0x8000), ori(s0, s0, 0x1040), lw(t2, 0, s0), addiu(t3, zero, 0x66), sw(t3, 4, s0), lw(t4, 4, s0), *DONE],
+    # A cached line without a cached store reads the same uncached (ADR-0183).
+    'clean_uncached': [lui(s0, 0x8000), ori(s0, s0, 0x1080), lw(t0, 0, s0), lui(s1, 0xA000), ori(s1, s1, 0x1080),
+        lw(t1, 4, s1), lw(t2, 0, s0), *DONE],
+    # A dirty line evicted by another at its index is in RAM, so an uncached
+    # read of it agrees with hardware (the 8 KiB direct-mapped D-cache).
+    'evicted_uncached': [lui(s0, 0x8000), addiu(t0, zero, 0x5a), sw(t0, 0x10e0, s0), lw(t1, 0x30e0, s0),
+        lui(s1, 0xA000), lw(t2, 0x10e0, s1), *DONE],
+    # An uncached store under a resident line leaves its cached copy older
+    # than RAM; a cached read returns the old word, as on hardware (ADR-0183).
+    'stale_cached': [lui(s0, 0x8000), lw(t0, 0x10c0, s0), lui(s1, 0xA000), addiu(t1, zero, 0x77), sw(t1, 0x10c0, s1),
+        lw(t2, 0x10c0, s0), lw(t3, 0x10c0, s1), *DONE],
+    # A cached store over a stale byte makes it current again (ADR-0183).
+    'stale_overwritten': [lui(s0, 0x8000), lw(t0, 0x1100, s0), lui(s1, 0xA000), addiu(t1, zero, 0x11), sw(t1, 0x1100, s1),
+        addiu(t2, zero, 0x22), sw(t2, 0x1100, s0), lw(t3, 0x1100, s0), *DONE],
     # LWL/LWR/LDL/LDR/LWU and SWL/SWR/SDL/SDR at every misalignment; v0 has a
     # non-sign-extended upper word to expose LWR's upper-word rule.
     'unaligned': [lui(s0, 0x8000), ori(s0, s0, 0x1000), lui(t0, 0x89AB), ori(t0, t0, 0xCDEF),

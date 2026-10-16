@@ -5190,3 +5190,105 @@ Verifier: unit tests for data-symbol settling (with a section-alias
 negative case), load-start plausibility, and a cross-block constant
 (`tests/address_taken.rs`). The AI registers follow ares `ai/io.cpp`
 field by field. The full gate passes.
+
+## ADR-0183: ROM in, native out; Majora's Mask runs its intro natively
+
+Status: accepted. Milestone 5.
+
+Context: every game so far needed hand-written inputs: the boot and code
+segments as declared loads, and sometimes a curated identification. To
+find out what a third game would need, Majora's Mask (USA) went through
+the same pipeline with nothing written by hand for it. Every gap it showed
+was general.
+
+Decision:
+- **Loads are inferred.** `plaid infer-loads <rom> <loads.json>` writes
+  `plaid-loads-v0` from the ROM alone:
+  - The *reset stub* is the boot-window bytes before the first
+    identity-mapped file. It is declared as a revocable load.
+  - A file-table file is a fixed load when two things hold. Its virtual
+    start is a `lui`/`addiu`/`ori` constant in code already found. Its
+    destination is the unique constant RAM address where at least 95% of
+    its own `jal` targets begin a function (after `jr ra`, its slot and
+    zero padding), with at least one call per 4 KiB.
+  - Accepted files join a worklist, and overlapping placements are an
+    error.
+  - A ROM with no file table gets no static loads and takes `--loads`.
+- **`scripts/native.py <rom>`** runs the whole pipeline: infer-loads,
+  identify, discover (with overlays when there is a file table), solve,
+  lower in 16 parts, compile in parallel, and the RSP snapshot loop
+  (ADR-0169). It builds nothing unless the address-taken scope is CLOSED.
+  `--rt64` also links the window build.
+- **Identification:**
+  - An 8-byte signature must also start a plausible function. Two words
+    match mid-function too often.
+  - `osFlash*` leaves the runtime set: FlashRAM is now modelled and the
+    library runs as guest code.
+  - `osGetIntMask` joins the set. It is in N64Recomp's ignored functions,
+    and OoT passes its address to the 64DD driver.
+- **Closure:**
+  - An `andi` mask on a non-linking `jr` index bounds the table on that
+    path. Called (`jalr`) arrays still need a guard.
+  - The table limit rises from 256 to 1024 entries.
+  - Padding after a `jr ra` whose delay slot does work (not a `nop`)
+    precedes a function.
+  - Address-constant pairing walks the CFG from each `lui` along
+    non-call edges and call continuations, up to 64 instructions per path,
+    until the register is redefined. ADR-0182's 16 words in address order
+    missed a `lui` hoisted into the slot of a far branch.
+- **Runtime:**
+  - `__osInitialize_common` (libultra 2.0K+) is `osInitialize`.
+  - The Voice Recognition Unit is absent: its calls return
+    `CONT_ERR_NO_CONTROLLER`.
+  - A thread starts 16 bytes below its stack top, as libultra's
+    `osCreateThread` does; MM's stack check walked into its list.
+  - An Expansion Pak is present: `osMemSize` and `osGetMemSize` report
+    8 MiB. Runtime PI handles moved from the top of RAM to `0x80000200`.
+  - The first VI comes one frame after boot, not at once.
+  - The stop report gains all 32 GPRs.
+- **An exact VR4300 D-cache.** ADR-0176's single-segment rule faulted on
+  MM's ordinary cache maintenance. Lowered code now tracks the real cache:
+  - 512 direct-mapped 16-byte lines, indexed by vaddr bits 4-12 and
+    tagged by physical page. Each line has a dirty bit, a mask of stale
+    bytes, and the older bytes a cached read still returns.
+  - Stores still go to RAM at once.
+  - A miss writes back (restoring older bytes that hardware never wrote)
+    and fills.
+  - `osWritebackDCache`, `osWritebackDCacheAll` and `osInvalDCache` act
+    on the tags.
+  - PI DMA writes leave resident lines stale; DMA reads check for dirty
+    lines.
+  - Still fail-closed (fault 4): an uncached access to a dirty line, a
+    line resident at two indexes, and a line lost to an invalidate. RSP
+    DMA reads of dirty lines are not yet checked, since the RSP has no
+    read hook.
+- **FlashRAM.** The MX29L1101 is modelled as pinned ares
+  `cartridge/flash.cpp`:
+  - It becomes the domain-2 device on the first command written to
+    `0x08010000`; otherwise domain 2 stays SRAM.
+  - Erase and program complete at once.
+  - The 128 KiB save is kept in `--flash <file>`.
+
+Result:
+- MM with its overlays, with no hand-written input, is CLOSED under the
+  address-taken scope: 214,963 blocks, 19,138 indirect sites, 14
+  assumptions. `--guarded-ram` leaves 891 blockers and whole-ROM 21,313.
+- OoT now discovers more: 29,613 blocks for the fixed image, 155,770 with
+  its overlays (whole-ROM 3,120 and 16,338). Both stay CLOSED.
+- Natively with RT64 it plays the mask intro, the Happy Mask Salesman and
+  the Clock Town attract scene (screenshots taken by the runtime's own
+  window). Headless, the longest run reached 3,181 VIs, 1,125 graphics and
+  3,167 audio tasks, then stopped fail-closed at a call to a relocated
+  heap overlay (fault 3).
+- SM64 is unchanged.
+
+Verifier:
+- spike096 adds `clean_uncached`, `evicted_uncached`, `stale_cached` and
+  `stale_overwritten`, matched against pinned ares, which reads the RAM
+  dump through its D-cache. `cache_alias` still faults.
+- Unit tests cover load inference, masked tables (with negative and
+  `jalr` cases), padding after a working slot, and a far-hoisted
+  constant.
+- The CLI test's 8-byte signature fixture is widened to 12 bytes, since
+  its `j .` after `jr t0` is no longer a plausible start.
+- The full gate passes.

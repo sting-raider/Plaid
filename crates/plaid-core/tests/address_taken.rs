@@ -155,3 +155,50 @@ fn a_constant_built_across_blocks_is_address_taken() {
         0
     );
 }
+
+#[test]
+fn a_constant_hoisted_into_a_far_branch_slot_is_address_taken() {
+    // GCC hoists the `lui` into the slot of a branch whose target, past more
+    // than 16 words of the fallthrough path, holds the `addiu` (ADR-0183)
+    let mut words = vec![
+        0x1480_0018, // bnez a0, +24 words (to index 25)
+        0x3c08_8000, // lui t0, 0x8000 (delay slot)
+    ];
+    words.extend([0x2402_0001; 21]); // fallthrough: addiu v0, zero, 1
+    words.extend([0x03e0_0008, 0]); // jr ra (indexes 23, 24)
+    let f = BASE + 4 * 34;
+    words.extend([
+        0x2508_0000 | (f & 0xffff), // 25: addiu t0, t0, f
+        0xaf88_0000,                // sw t0, 0(gp)
+        0x8f99_0000,                // lw t9, 0(gp)
+        0x0320_f809,                // jalr t9
+        0,
+        0x1000_ffff, // 30: b .
+        0,
+        0x03e0_0008, // pad: jr ra
+        0,
+        0x2482_0001, // 34: f: addiu v0, a0, 1
+        0x03e0_0008, // jr ra
+        0,
+    ]);
+    let mut image = image();
+    image.words = words;
+    let rom = RomIdentity {
+        sha256: "e".repeat(64),
+        size: 4096,
+    };
+    let bytes: Vec<u8> = image.words.iter().flat_map(|w| w.to_be_bytes()).collect();
+    let map = discover_address_taken(
+        rom,
+        &bytes,
+        &image,
+        &[GuestAddr(BASE)],
+        &[],
+        None,
+        &Default::default(),
+        100,
+    )
+    .unwrap()
+    .map;
+    assert!(map.address_taken.keys().any(|a| a.pc == GuestAddr(f)));
+}

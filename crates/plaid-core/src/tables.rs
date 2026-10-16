@@ -10,7 +10,8 @@ use crate::{
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
-const MAX_ENTRIES: u32 = 256;
+// a switch over a few hundred cases is ordinary compiler output (ADR-0183)
+const MAX_ENTRIES: u32 = 1024;
 
 #[derive(Serialize)]
 struct TableEvidence {
@@ -372,6 +373,10 @@ struct Need {
     flags: Vec<(u8, bool, u32)>,
     /// The guard's SLTIU: (register, count, branch pc).
     bound: Option<(u8, u32, u32)>,
+    /// Whether an ANDI mask may bound the index: a `switch` dispatch (`jr`),
+    /// whose table GCC fills over the whole masked range; a C array called
+    /// through `jalr` may be shorter than its mask.
+    masks: bool,
 }
 
 impl Need {
@@ -416,8 +421,13 @@ impl Need {
             self.index = Some(x);
             return Some(());
         }
+        // `andi index, x, mask` bounds the index on this path (ADR-0183)
         if self.bound.is_none() && Some(d) == self.index {
-            return None;
+            if word >> 26 != 12 || !self.masks {
+                return None;
+            }
+            self.bound = Some((d, (word & 0xffff) + 1, pc.0));
+            return Some(());
         }
         if Some(d) == self.base {
             match word >> 26 {
@@ -453,7 +463,8 @@ impl Need {
 /// accept (ADR-0180): every CFG path into the dispatch must establish that
 /// the add's operands are a LUI-built base and `index << 2`, after a branch
 /// that selects the dispatch only when `sltiu flag, index, count` is set,
-/// with the index unchanged between the compare and the shift. Paths are
+/// with the index unchanged between the compare and the shift, or an ANDI
+/// mask that defines the index before its shift. Paths are
 /// followed through each edge's delay slot only when that edge executes it.
 /// Entries into the walked instructions, entry points, calls, returns,
 /// loops and paths that disagree fail closed.
@@ -493,6 +504,7 @@ fn guarded(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
             base_value: None,
             flags: Vec::new(),
             bound: None,
+            masks: jump & 63 == 8,
         };
         let mut walk = Walk {
             map,

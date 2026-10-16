@@ -6,6 +6,14 @@
 
 static plaid_state s;
 
+/* RAM as a cached read sees it, as driver.cpp dumps through ares' D-cache:
+   a resident line's stale bytes read its older copy (ADR-0183) */
+static u32 cached_byte(u32 a) {
+  u32 i = (a >> 4) & 0x1ffu;
+  if (s.dtag[i] == ((a & ~0xfffu) | 1) && (s.dstale[i] >> (a & 15) & 1)) return s.dold[i][a & 15];
+  return s.ram[a];
+}
+
 int main(void) {
   int r;
   u32 a;
@@ -22,7 +30,7 @@ int main(void) {
   printf("],\"fcc\":%u,\"fcsr\":%u,\"ram\":[", s.fcc, s.fcsr | s.fcc << 23);
   for (a = 0x1000; a < 0x1100; a += 4)
     printf("%s%u", a != 0x1000 ? "," : "",
-           (u32)s.ram[a] << 24 | (u32)s.ram[a + 1] << 16 | (u32)s.ram[a + 2] << 8 | s.ram[a + 3]);
+           cached_byte(a) << 24 | cached_byte(a + 1) << 16 | cached_byte(a + 2) << 8 | cached_byte(a + 3));
   printf("]}\n");
   return 0;
 }

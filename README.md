@@ -48,25 +48,26 @@ No commercial ROM is `CLOSED` whole-ROM without assumptions. Assumptions retired
 | ROM | Blocks | Indirect sites closed with no assumption | Whole-ROM blockers | Scoped results |
 | --- | --- | --- | --- | --- |
 | Super Mario 64 (USA) | 45,419 | 1 of 4,385 | OPEN, 4,820 | `--guarded-ram` **OPEN** (91 blockers), 14 assumptions; `--address-taken` **CLOSED**, 15 assumptions |
-| Ocarina of Time (USA 1.2), fixed image | 29,542 | 2 of 2,566 | OPEN, 3,111 | `--guarded-ram` **OPEN** (122 blockers); `--address-taken` **CLOSED**, 13 assumptions |
-| OoT + 468 overlays at link addresses | 154,414 | 6 of 14,775 | OPEN, 16,239 | `--guarded-ram` **OPEN** (708 blockers), 13 assumptions; `--address-taken` **CLOSED**, 14 assumptions |
+| Ocarina of Time (USA 1.2), fixed image | 29,613 | 2 of 2,574 | OPEN, 3,120 | `--guarded-ram` **OPEN** (122 blockers), 12 assumptions; `--address-taken` **CLOSED**, 13 assumptions |
+| OoT + 468 overlays at link addresses | 155,770 | 6 of 14,869 | OPEN, 16,338 | `--guarded-ram` **OPEN** (711 blockers), 13 assumptions; `--address-taken` **CLOSED**, 14 assumptions |
+| Majora's Mask (USA) + overlays, inferred loads | 214,963 | 10 of 19,138 | OPEN, 21,313 | `--guarded-ram` **OPEN** (891 blockers), 13 assumptions; `--address-taken` **CLOSED**, 14 assumptions |
 
 Whole-ROM blockers by class:
 
-| Class | sm64 | oot | oot-overlays |
-| --- | ---: | ---: | ---: |
-| `unresolved_indirect_site` | 4,384 | 2,564 | 14,769 |
-| `exception_or_unsupported_instruction` | 78 | 284 | 647 |
-| `pointer_table_immutability_unproven` | 147 | 96 | 376 |
-| `pointer_table_target_identity_unproven` | 147 | 96 | 376 |
-| `runtime_boundary_outside_scope` | 57 | 64 | 64 |
-| `dynamic_effect_outside_scope` | 1 | 1 | 1 |
-| `unmodeled_exception_paths` | 1 | 1 | 1 |
-| `unproven_executable_universe` | 1 | 1 | 1 |
-| `unproven_executable_write_policy` | 1 | 1 | 1 |
-| `unproven_load_overlay_policy` | 1 | 1 | 1 |
-| `unproven_rsp_policy` | 1 | 1 | 1 |
-| `unsupported_execution_modes` | 1 | 1 | 1 |
+| Class | sm64 | oot | oot-overlays | mm |
+| --- | ---: | ---: | ---: | ---: |
+| `unresolved_indirect_site` | 4,384 | 2,572 | 14,863 | 19,128 |
+| `exception_or_unsupported_instruction` | 78 | 284 | 651 | 955 |
+| `pointer_table_immutability_unproven` | 147 | 96 | 376 | 571 |
+| `pointer_table_target_identity_unproven` | 147 | 96 | 376 | 571 |
+| `runtime_boundary_outside_scope` | 57 | 65 | 65 | 81 |
+| `dynamic_effect_outside_scope` | 1 | 1 | 1 | 1 |
+| `unmodeled_exception_paths` | 1 | 1 | 1 | 1 |
+| `unproven_executable_universe` | 1 | 1 | 1 | 1 |
+| `unproven_executable_write_policy` | 1 | 1 | 1 | 1 |
+| `unproven_load_overlay_policy` | 1 | 1 | 1 | 1 |
+| `unproven_rsp_policy` | 1 | 1 | 1 | 1 |
+| `unsupported_execution_modes` | 1 | 1 | 1 | 1 |
 
 Assumptions behind the SM64 `--address-taken` result. "Fault n" means the native artifact tests it at run time and aborts with that code; **unchecked** ones are trusted.
 
@@ -143,6 +144,7 @@ ROMs stay local and are never committed. Per-ROM numbers and how to reproduce th
 | --- | --- |
 | Super Mario 64 (USA) | 99.03% discovery recall. `CLOSED` over 45,419 blocks under a declared scope: its main, engine and goddard segments, with calls through function pointers restricted to address-taken functions. Runs natively at full speed (59.9 VI/s), with graphics, input, EEPROM saves and audio. |
 | Ocarina of Time (USA 1.2) | Boot, the Yaz0-compressed `code` segment and the cartridge's 64DD driver segment: `CLOSED` over 29,542 blocks under the address-taken scope (ADR-0175). With its 468 overlays at link addresses (ADR-0172, ADR-0179), it is `CLOSED` over 154,414 blocks under the address-taken scope (ADR-0180). Natively, with RT64, its own audio microcode and SRAM saves, it runs through its relocated overlays to the title screen and file select (ADR-0181, ADR-0182). |
+| Majora's Mask (USA) | No hand-written input: `scripts/native.py` infers its loads and runtime, and it is `CLOSED` with its overlays under the address-taken scope (ADR-0183). Natively with RT64 it plays the mask intro and the Clock Town attract scene, then stops fail-closed at a relocated heap overlay. |
 | Mario Party 2 (USA) | Boot window: 712 blocks and 29 blockers. 27 sit behind an `osInitialize` whose SDK build n64sym lacks; 2 are function-pointer calls. |
 
 <details>
@@ -179,9 +181,9 @@ Nothing in the compiler or the runtime is keyed to SM64: no game names, addresse
 
 Known gaps:
 
-- OoT has not been run with RT64 yet: its first graphics task is where the runtime stops. Overlay binding is itself an assumption (ledger row 12), and every overlay's load base is found at run time, not proven.
-- The runtime covers the libultra functions that SM64 and OoT's boot call. A game that calls a declared function the runtime lacks fails to link.
-- Saves are 4 Kbit EEPROM and 256 Kbit SRAM only (no 16 Kbit EEPROM, Flash or Controller Pak). Only controller 1 works, and there is no rumble.
+- Overlay binding is itself an assumption (ledger row 12), and every overlay's load base is found at run time, not proven. MM stops at its first heap-allocated overlay call.
+- The runtime covers the libultra functions that SM64, OoT and MM call. A game that calls a declared function the runtime lacks fails to link.
+- Saves are 4 Kbit EEPROM, 256 Kbit SRAM and 1 Mbit FlashRAM (no 16 Kbit EEPROM or Controller Pak). Only controller 1 works, and there is no rumble.
 - RSP microcode comes from running the game, not from ROM offsets: `--rsp-dump` saves each IMEM image no lowered code holds, and `runtime/rsp_texts.py` lowers it for the next build. A new game needs one or more of these runs. Graphics tasks go to RT64, not lowered microcode. Audio plays through SDL with RT64, or goes to a WAV file.
 - Only Windows has been tested with RT64.
 
