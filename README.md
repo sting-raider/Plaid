@@ -1,34 +1,114 @@
-# About
+<div align="center">
 
-Milestone 5: Ocarina of Time's fixed code is now **CLOSED** under the
-address-taken scope: 29,511 blocks, 0 blockers (ADR-0175). ROM-owned overlay
-discovery (ADR-0172) finds its 469 overlays. The next steps are OoT's
-remaining runtime functions and native overlay execution; OoT has not booted
-natively yet.
+# Plaid
 
-Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. It analyzes an untouched ROM into a closed executable program, lowers it to C, and links it into a native x86-64 or ARM64 application. No emulation, interpreter, or JIT in the final build; emulators are used only as analysis instruments and test oracles.
-
-[Status](docs/STATUS.md), [next steps](docs/NEXT.md), [architecture](docs/ARCHITECTURE.md), [decisions](docs/DECISIONS.md), [development](docs/DEVELOPMENT.md), [milestone details](docs/PROGRESS.md)
-
-## Status
+**Turn an untouched Nintendo 64 ROM into a native program, with no emulator inside.**
 
 [![VR4300](docs/badges/isa.svg)](docs/HISTORY.md) [![milestones](docs/badges/milestones.svg)](docs/PROGRESS.md) [![ROMs CLOSED](docs/badges/closed.svg)](docs/STATUS.md)
+
+[Status](docs/STATUS.md) · [Next steps](docs/NEXT.md) · [Architecture](docs/ARCHITECTURE.md) · [Decisions](docs/DECISIONS.md) · [Development](docs/DEVELOPMENT.md) · [Milestones](docs/PROGRESS.md)
+
+</div>
+
+Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. It analyzes a ROM into a closed executable program, lowers it to C, and links it into a native x86-64 or ARM64 application. There is no emulator, interpreter or JIT in the final build. Emulators are used only as analysis instruments and test oracles.
+
+## Where we are
+
+**The goal:** a commercial ROM that is `CLOSED` over the whole ROM with **no assumptions**, so that every instruction, jump and overlay in it is accounted for, and the native build is proven to match the reference.
+
+**Today:** two games run or boot natively, but each result still rests on a list of assumptions, and the whole-ROM proof is open for both.
+
+| | Super Mario 64 (USA) | Ocarina of Time (USA 1.2) |
+| --- | --- | --- |
+| Code discovered | ✅ 99.03% of functions | ✅ fixed image and 468 overlays |
+| `CLOSED` under declared assumptions | ✅ 45,419 blocks, 15 assumptions | ✅ fixed image, 29,511 blocks, 13 assumptions; ⬜ with overlays: 29 blockers |
+| Runs natively | ✅ full-speed gameplay with input, saves, audio | 🟨 boots to its first relocated overlay |
+| `CLOSED` whole-ROM, no assumptions | ⬜ 4,820 blockers, 0 of 15 assumptions retired | ⬜ 3,105 blockers fixed image, 14,642 with overlays |
+
+The chart and ledger below are generated from measurements. Nothing here is a completion percentage: a bar reaches zero only when the whole ROM closes with no assumption.
+
+## Status
 
 [![coverage maps](docs/coverage.svg)](docs/PROGRESS.md)
 
 [Progress history](docs/HISTORY.md)
 
-<sub>* VR4300 instructions: forms the VR4300 implements that pass discovery, the closure solver and native lowering in a test program (`plaid isa-coverage`), each differential-tested against the pinned ares interpreter in [spike096](spikes/096-native-slice/). RSP instructions: every instruction in the RSP manual, lowered to C by `plaid rsp-coverage` and checked against ares in [spike097](spikes/097-rsp-slice/). Milestones: states in [`docs/progress.json`](docs/progress.json); the total grows as milestones are added. ROMs CLOSED: commercial ROMs with whole-ROM closure and no assumptions.</sub>
+<sub>* **These percentages do not mean a game works or is proven.** VR4300 instructions: instruction semantics only. A form counts when it passes discovery, the closure solver and native lowering in a test program (`plaid isa-coverage`) and matches the pinned ares interpreter in [spike096](spikes/096-native-slice/). Exceptions and interrupts are not modelled. The unfilled cells are COP0 moves, TLB instructions, `ERET`, `SYSCALL` and `CACHE`: they are not lowered in guest code, and libultra's uses of them are replaced by Plaid's own runtime (an assumption, listed below). RSP instructions: 100% means every RSP instruction lowers to C and matches ares in [spike097](spikes/097-rsp-slice/). It does not mean a game's RSP side is proven: microcode comes from IMEM snapshots taken by running the game, not from the ROM; graphics microcode is not executed (RT64 renders display lists at a high level); and RSP tasks complete synchronously. Milestones: states in [`docs/progress.json`](docs/progress.json); the total grows as milestones are added. ROMs CLOSED: commercial ROMs with whole-ROM closure and no assumptions.</sub>
+
+## Distance to no-assumption CLOSED
+
+<!-- assumptions:begin -->
+
+### Distance to no-assumption CLOSED
+
+[![whole-ROM blockers by class](docs/assumptions.svg)](docs/assumptions.json)
+
+No commercial ROM is `CLOSED` whole-ROM without assumptions. Assumptions retired: **0/15**. Measured 2026-10-16 with `plaid solve <rom> <map> [scope]`; data in [`docs/assumptions.json`](docs/assumptions.json), generated by `tools/progress.py`.
+
+| ROM | Blocks | Indirect sites closed with no assumption | Whole-ROM blockers | Scoped results |
+| --- | --- | --- | --- | --- |
+| Super Mario 64 (USA) | 45,419 | 1 of 4,385 | OPEN, 4,820 | `--guarded-ram` **OPEN** (91 blockers), 14 assumptions; `--address-taken` **CLOSED**, 15 assumptions |
+| Ocarina of Time (USA 1.2), fixed image | 29,511 | 2 of 2,562 | OPEN, 3,105 | `--guarded-ram` **OPEN** (122 blockers); `--address-taken` **CLOSED**, 13 assumptions |
+| OoT + 468 overlays at link addresses | 138,829 | 6 of 13,310 | OPEN, 14,642 | `--address-taken` **OPEN** (29 blockers) |
+
+Whole-ROM blockers by class:
+
+| Class | sm64 | oot | oot-overlays |
+| --- | ---: | ---: | ---: |
+| `unresolved_indirect_site` | 4,384 | 2,560 | 13,304 |
+| `exception_or_unsupported_instruction` | 78 | 284 | 631 |
+| `pointer_table_immutability_unproven` | 147 | 96 | 318 |
+| `pointer_table_target_identity_unproven` | 147 | 96 | 318 |
+| `runtime_boundary_outside_scope` | 57 | 62 | 63 |
+| `dynamic_effect_outside_scope` | 1 | 1 | 1 |
+| `unmodeled_exception_paths` | 1 | 1 | 1 |
+| `unproven_executable_universe` | 1 | 1 | 1 |
+| `unproven_executable_write_policy` | 1 | 1 | 1 |
+| `unproven_load_overlay_policy` | 1 | 1 | 1 |
+| `unproven_rsp_policy` | 1 | 1 | 1 |
+| `unsupported_execution_modes` | 1 | 1 | 1 |
+| `runtime_function_decoded` | 0 | 0 | 1 |
+
+Assumptions behind the SM64 `--address-taken` result. "Fault n" means the native artifact tests it at run time and aborts with that code; **unchecked** ones are trusted.
+
+| # | Assumption | Run-time check | State | Retired when |
+| ---: | --- | --- | --- | --- |
+| 1 | Only declared image entries execute; code is immutable | fault 2/3 | assumed | model code writes (self-modifying code, overlay loads) and prove every executable byte's origin |
+| 2 | Interrupts, exceptions, DMA, MMIO, overlays, RSP and external entries are excluded from analysis | **unchecked** | assumed | model them in the closure proof, or prove the HLE runtime equivalent; the runtime stands in for them today |
+| 3 | 32-bit address model | fault 1 | assumed | model 64-bit addressing and the full TLB, or prove the game never leaves the 32-bit subset |
+| 4 | Register calls reach only address-taken functions (1,341 in SM64) | fault 3 | assumed | prove each indirect site's target set by data flow, jump-table shape or points-to |
+| 5 | Forwarded runtime-callback wrappers are entered only by their direct callers (ADR-0149) | fault 3 | assumed | prove the callback target at each wrapper call site |
+| 6 | Return closure: each jr ra returns to its caller's continuation | fault 5 | assumed | prove return targets per function, including tail calls and stack-slot integrity |
+| 7 | Guarded RAM data access: aligned RDRAM through KSEG0/KSEG1 or runtime-written TLB entries, no stores into code | fault 1/2/4 | assumed | prove each load and store address range |
+| 8 | Jump tables are read-only | fault 2 | assumed | prove table immutability and target identity (pointer_table blockers) |
+| 9 | COP1 usable with FR=0 (declared with --fr0) | **unchecked** | assumed | model Status.CU1 and Status.FR, or prove them from the game's own writes |
+| 10 | COP1 stays in the modelled subset: no NaN, subnormal, out-of-range conversion or FPU exception | fault 7 | assumed | model FPU exceptions and the remaining operand classes |
+| 11 | Declared loads place their bytes before the code runs | fault 8 | assumed | derive the loads from the ROM instead of declaring them by hand |
+| 12 | libultra runtime functions are host-provided (HLE) | **unchecked** | assumed | differential-test each HLE function against the game's own libultra; only scenario tests exist today |
+| 13 | Three runtime names come only from a reference symbol map (osInitialize, osContInit, osEepromLongRead; ADR-0171) | **unchecked** | assumed | identify them from the ROM's own bytes |
+| 14 | Trapping arithmetic never overflows | fault 6 | assumed | model the Overflow exception |
+| 15 | BREAK is never executed | fault 9 | assumed | model the Breakpoint exception |
+
+Inputs given by hand, outside the solver:
+
+- Code segment ROM offset, address, size and entry point, given by hand
+- --loads files for executable loads, written by hand (SM64: 2, OoT: 2)
+- SM64 function identification uses a local decomp map
+- RSP microcode comes from IMEM snapshots taken by running the game
+- Graphics are drawn by RT64 from display lists (high-level emulation)
+- libultra runs as a host runtime (HLE)
+
+<!-- assumptions:end -->
 
 ## Milestones
 
 | # | Milestone | State |
 | --- | --- | --- |
-| 1 | Synthetic ROM to C to native, matching ares exactly | **done** (spike096) |
-| 2 | SM64 discovery finds at least 99% of its functions | **done**: 99.03%, scored against a local decomp map (ADR-0152) |
-| 3 | SM64 `CLOSED` under declared assumptions | **done**: 45419 blocks, every assumption listed (ADR-0153..0156) |
-| 4 | SM64 boots natively to its title screen | **done**, and further: gameplay at full speed, with input, saves and native audio (ADR-0159..0170) |
-| 5 | Retire the assumptions one by one, then Ocarina of Time | next |
+| 1 | Synthetic ROM to C to native, matching ares exactly | ✅ **done** (spike096) |
+| 2 | SM64 discovery finds at least 99% of its functions | ✅ **done**: 99.03%, scored against a local decomp map (ADR-0152) |
+| 3 | SM64 `CLOSED` under declared assumptions | ✅ **done**: 45,419 blocks, every assumption listed (ADR-0153..0156) |
+| 4 | SM64 boots natively to its title screen | ✅ **done**, and further: gameplay at full speed, with input, saves and native audio (ADR-0159..0170) |
+| 5 | Retire the assumptions one by one, then Ocarina of Time | 🟨 **in progress**: OoT fixed code `CLOSED` under the address-taken scope (ADR-0175); boots natively through a hardware RCP I/O model and a lowered RSP task to its first relocated overlay (ADR-0176/0177); overlays discovered at link addresses (ADR-0179), discovery in 44 s (ADR-0178) |
 
 ## How it works
 
@@ -53,7 +133,7 @@ flowchart TD
 
 Unproven states fail closed: the solver reports `OPEN`, and lowered code checks every declared assumption at run time and aborts with a fault code when one is violated. There is no fallback to emulation.
 
-Libultra system functions are declared as runtime functions and become calls into Plaid's own C runtime ([`runtime/`](runtime/), ADR-0158/0159): threads, message queues, events, timers, PI DMA, controllers, EEPROM and RSP tasks. Graphics go through [RT64](https://github.com/rt64/rt64) (MIT, [`runtime/rt64/`](runtime/rt64/)). Other RSP tasks, such as audio, run the game's own microcode lowered to C (ADR-0167..0169). Thread entries and other callbacks are proven per call site. How to build and run a game is in [`runtime/README.md`](runtime/README.md).
+Libultra system functions are declared as runtime functions and become calls into Plaid's own C runtime ([`runtime/`](runtime/), ADR-0158/0159): threads, message queues, events, timers, PI DMA, controllers, EEPROM and RSP tasks. Graphics go through [RT64](https://github.com/rt64/rt64). Other RSP tasks, such as audio, run the game's own microcode lowered to C (ADR-0167..0169). Thread entries and other callbacks are proven per call site. How to build and run a game is in [`runtime/README.md`](runtime/README.md).
 
 ## Real ROMs
 
@@ -61,13 +141,12 @@ ROMs stay local and are never committed. Per-ROM numbers and how to reproduce th
 
 | ROM | Result |
 | --- | --- |
-| Super Mario 64 (USA) | 99.03% discovery recall. `CLOSED` over 45419 blocks under a declared scope: its main, engine and goddard segments, with calls through function pointers restricted to address-taken functions. Runs natively at full speed (59.9 VI/s), with graphics, input, EEPROM saves and audio. |
-| Ocarina of Time (USA 1.2) | Boot, the Yaz0-compressed `code` segment and the cartridge's 64DD driver segment: `CLOSED` over 29,511 blocks under the address-taken scope (ADR-0175). Its 469 overlays are discovered (ADR-0172) but not yet lowered. |
+| Super Mario 64 (USA) | 99.03% discovery recall. `CLOSED` over 45,419 blocks under a declared scope: its main, engine and goddard segments, with calls through function pointers restricted to address-taken functions. Runs natively at full speed (59.9 VI/s), with graphics, input, EEPROM saves and audio. |
+| Ocarina of Time (USA 1.2) | Boot, the Yaz0-compressed `code` segment and the cartridge's 64DD driver segment: `CLOSED` over 29,511 blocks under the address-taken scope (ADR-0175). Boots natively to its first relocated overlay (ADR-0176/0177). Its 468 overlays are discovered at link addresses (ADR-0172, ADR-0179) but not yet lowered. |
 | Mario Party 2 (USA) | Boot window: 712 blocks and 29 blockers. 27 sit behind an `osInitialize` whose SDK build n64sym lacks; 2 are function-pointer calls. |
 
-No commercial ROM is `CLOSED` whole-ROM without assumptions yet.
-
-## Native runs: finding and fixing what breaks
+<details>
+<summary><b>Native runs: finding and fixing what breaks</b></summary>
 
 Milestone 4 ran Super Mario 64 natively: the lowered game is linked with the runtime and run until it stops. Because nothing falls back to emulation, every stop is a fail-closed fault with an exact guest PC. Each fault points at a missing piece of the hardware model or of the runtime, and fixing one usually gets the game further. Each fix is a decision record with a differential test against ares:
 
@@ -85,7 +164,9 @@ Milestone 4 ran Super Mario 64 natively: the lowered game is linked with the run
 | Audio microcode, fault 4 | it reads the RDP status register | an idle-RDP read, checked against ares (ADR-0169) |
 | Audio ran 4% fast | `osAiGetLength` always read 0 | AI DMA timed as ares models it, played through SDL (ADR-0170) |
 
-**SM64 now runs natively at full speed into gameplay** (59.9 VI/s, 30 fps): RT64 draws it (ADR-0163), the keyboard or a `--press` script controls it (ADR-0164), and `--save` keeps the EEPROM (ADR-0165). Its audio comes from the game's own RSP microcode, lowered to C; on real audio tasks it matches ares in every byte (ADR-0169). It plays live through SDL, paced by a model of the AI's DMA timing, and `--wav` records it (ADR-0170). The latest run is in [`research/sm64-first-measurement.md`](research/sm64-first-measurement.md), and what comes next is in [`docs/NEXT.md`](docs/NEXT.md).
+**SM64 runs natively at full speed into gameplay** (59.9 VI/s, 30 fps): RT64 draws it (ADR-0163), the keyboard or a `--press` script controls it (ADR-0164), and `--save` keeps the EEPROM (ADR-0165). Its audio comes from the game's own RSP microcode, lowered to C; on real audio tasks it matches ares in every byte (ADR-0169). It plays live through SDL, paced by a model of the AI's DMA timing, and `--wav` records it (ADR-0170). The latest run is in [`research/sm64-first-measurement.md`](research/sm64-first-measurement.md), and what comes next is in [`docs/NEXT.md`](docs/NEXT.md).
+
+</details>
 
 ## Per-game inputs and known gaps
 
@@ -96,10 +177,10 @@ Nothing in the compiler or the runtime is keyed to SM64: no game names, addresse
 - **Which functions are libultra** (`plaid identify`): n64sym signatures, or a symbol map with `--symbols` when the game's SDK build is missing from n64sym's database. SM64 uses its decomp symbol map, which stays local. The map only names functions; it is not used to find code.
 - **The assumption scope**: for example `--address-taken` and `--fr0`. Every assumption is listed in the solver's report.
 
-Known gaps for other games:
+Known gaps:
 
-- Compressed or relocated code segments, as in Ocarina of Time (Yaz0 and overlay relocations), are not lowered yet. Load discovery is manual.
-- The runtime covers the libultra functions that SM64 calls. A game that calls a declared function the runtime lacks fails to link.
+- Overlays are discovered but not yet lowered with run-time binding, and 29 jump-table shapes in OoT plus its overlays are not proven yet.
+- The runtime covers the libultra functions that SM64 and OoT's boot call. A game that calls a declared function the runtime lacks fails to link.
 - Saves are 4 Kbit EEPROM only (no 16 Kbit EEPROM, SRAM, Flash or Controller Pak). Only controller 1 works, and there is no rumble.
 - RSP microcode comes from running the game, not from ROM offsets: `--rsp-dump` saves each IMEM image no lowered code holds, and `runtime/rsp_texts.py` lowers it for the next build. A new game needs one or more of these runs. Graphics tasks go to RT64, not lowered microcode. Audio plays through SDL with RT64, or goes to a WAV file.
 - Only Windows has been tested with RT64.
@@ -114,6 +195,26 @@ python tools/progress.py --check
 ```
 
 The full local gate, the native differential test and reference-lab setup are in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+
+## Credits
+
+Plaid stands on other people's work. Each project below is pinned in [`refs.lock.toml`](refs.lock.toml) and its license is checked before any reuse; reuse decisions are recorded in [`docs/DECISIONS.md`](docs/DECISIONS.md) and [`docs/SOURCES.md`](docs/SOURCES.md).
+
+| Project | What Plaid uses it for | How | License |
+| --- | --- | --- | --- |
+| [Rabbitizer](https://github.com/Decompollaborate/rabbitizer) | MIPS instruction decoder used by discovery | linked dependency | MIT |
+| [spimdisasm](https://github.com/Decompollaborate/spimdisasm) | disassembly experiments for call and jump-table recovery | reference | MIT |
+| [n64sym](https://github.com/shygoo/n64sym) | libultra function signatures; Plaid's matching rule follows its `TestSymbol` | signatures and a reimplemented rule | MIT |
+| [N64Recomp](https://github.com/N64Recomp/N64Recomp) | the model of lowering MIPS to C, and of reimplemented runtime functions | reference and design | MIT |
+| [RT64](https://github.com/rt64/rt64) | renders each game's display lists | built and linked into generated games | MIT |
+| [ares](https://github.com/ares-emulator/ares) | accuracy oracle for CPU and RSP semantics | differential testing only, never linked into a native build | ISC |
+| [Mupen64Plus](https://github.com/mupen64plus/mupen64plus-core) | instrumented discovery reference and second oracle | research instrument in `instruments/mupen/`, separately licensed | GPL-2.0-or-later |
+| [n64-systemtest](https://github.com/lemmy-64/n64-systemtest) | hardware-behaviour test programs | test inputs | MIT |
+| [Gopher64](https://github.com/gopher64/gopher64), [N64ModernRuntime](https://github.com/N64Recomp/N64ModernRuntime) | cross-checks of hardware and runtime behaviour | read only; no code copied or linked | GPL-3.0 |
+| [SDL](https://www.libsdl.org/) | audio output and keyboard input in the runtime | linked at run time | zlib |
+| Super Mario 64 decompilation project | a symbol map, kept local, used to name libultra functions and to score discovery recall | never committed or used to find code | see its repository |
+
+Thank you to the authors and maintainers of all of them. Super Mario 64, Ocarina of Time and Mario Party 2 are the property of their owners; Plaid is not affiliated with Nintendo.
 
 ## Disclaimer
 
