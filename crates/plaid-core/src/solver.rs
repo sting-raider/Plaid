@@ -466,6 +466,14 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         .validate(true)?;
     }
     let mut blockers = static_identity_blockers(map, images, scope);
+    if let Err(detail) = crate::signatures::verify_status_abi(map) {
+        blockers.insert(Blocker {
+            kind: "runtime_status_abi".into(),
+            site: None,
+            detail,
+            evidence: BTreeSet::new(),
+        });
+    }
     let mut discharged = BTreeSet::new();
     let mut add = |kind: &str, site: Option<CodeAddress>, detail: &str, evidence: EvidenceRefs| {
         blockers.insert(Blocker {
@@ -1243,8 +1251,18 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 .values()
                 .map(|f| f.name.as_str())
                 .collect();
+            let status = if names.contains(&"__osGetSR")
+                || map
+                    .runtime_functions
+                    .values()
+                    .any(|f| f.status_global.is_some())
+            {
+                " Status observation uses the verified cold-start FR=0 SDK thread/mask ABI: complete live Status is known only after a supported thread dispatch; unknown boot contexts, incompatible saved modes and PRENMI delivery fault explicitly. The all-blocked HLE idle dispatcher accepts pending events without changing any blocked context's saved interrupt preference."
+            } else {
+                ""
+            };
             assumptions.push(format!(
-                "Declared runtime functions ({}) are host-provided: entered only by call or tail call at their entry, they follow the o32 ABI (preserving s0-s7, gp, sp and fp, and returning to $ra), enter guest code only at proven callback arguments through the artifact's fail-closed plaid_enter dispatch, write guest RAM only after plaid_runtime_write accepts the range, and their guest bodies are neither analyzed nor lowered.",
+                "Declared runtime functions ({}) are host-provided: entered only by call or tail call at their entry, they follow the o32 ABI (preserving s0-s7, gp, sp and fp, and returning to $ra), enter guest code only at proven callback arguments through the artifact's fail-closed plaid_enter dispatch, write guest RAM only after plaid_runtime_write accepts the range, and their guest bodies are neither analyzed nor lowered.{status}",
                 names.join(", ")
             ));
             // names no ROM signature backs (ADR-0171)

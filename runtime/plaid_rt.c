@@ -43,6 +43,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "status.h"
+#include "joybus.h"
 #ifdef _WIN32
 #include <windows.h>
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
@@ -70,6 +72,8 @@ typedef struct {
   pthread_cond_t wake;
   u64 r[32], hi, lo, f[32];
   u32 fcc, fcsr, llbit;
+  u32 status_global;
+  int status_known, ie;
 } rt_thread;
 
 typedef struct { u32 mq, msg; int set; } rt_event;
@@ -83,10 +87,17 @@ static rt_thread *running; /* NULL when every guest thread is blocked */
 static rt_thread boot;     /* the pre-thread boot context (main_func) */
 static u64 seq_counter;
 static int ints_enabled = 1;
+static u32 status_kernel_global; /* the SDK copy whose exception vectors are installed */
 static rt_event events[EV_COUNT];
 static rt_event vi_event;
 static u32 vi_retrace = 1;
 static int pending[EV_COUNT]; /* undelivered event counts */
+static struct { u32 mq, msg; } pi_completions[64];
+static unsigned pi_completion_count;
+static u32 pi_status; /* immediate raw ROM DMA: idle plus pending interrupt */
+static u32 si_status, si_dram, si_read_address, si_write_address;
+static plaid_joybus joybus;
+static int si_access(u32 p, int write, u64 *value);
 static rt_timer timers[MAX_TIMERS];
 static u8 *rom;
 static size_t rom_size;
@@ -244,10 +255,27 @@ static u64 count_now(void) { return now_ns() * 46875ull / 1000000ull + time_base
 static void save(rt_thread *t) {
   memcpy(t->r, S->r, sizeof t->r); memcpy(t->f, S->f, sizeof t->f);
   t->hi = S->hi; t->lo = S->lo; t->fcc = S->fcc; t->fcsr = S->fcsr; t->llbit = S->llbit;
+  t->ie = ints_enabled;
+  if (t->status_known) {
+    u32 global = rd32(status_kernel_global ? status_kernel_global : t->status_global);
+    wr32(t->guest + 0x118, status_saved(S->cp0_status, global));
+    wr32(t->guest + 0x128, status_saved_mi(S->mi_mask, global, rd32(t->guest + 0x128)));
+  }
 }
 static void restore(const rt_thread *t) {
   memcpy(S->r, t->r, sizeof t->r); memcpy(S->f, t->f, sizeof t->f);
   S->hi = t->hi; S->lo = t->lo; S->fcc = t->fcc; S->fcsr = t->fcsr; S->llbit = t->llbit;
+  S->status_known = (u32)t->status_known;
+  S->status_thread = t->status_known ? t->guest : 0;
+  ints_enabled = t->ie;
+  if (t->status_known) {
+    u32 saved = rd32(t->guest + 0x118), global = rd32(status_kernel_global ? status_kernel_global : t->status_global);
+    if (saved & 0x040000fcu) finish(1, "unsupported saved Status mode");
+    S->cp0_status = (saved & ~0xff02u) | (saved & global & 0xff00u);
+    S->mi_mask = rd32(t->guest + 0x128) & (global >> 16) & 0x3fu;
+    ints_enabled = S->cp0_status & 1;
+    if (pi_status & 8u) { pending[EV_PI] = 1; plaid_preempt = 1; }
+  }
 }
 static void apply_rounding(void) {
   static const int modes[4] = {FE_TONEAREST, FE_TOWARDZERO, FE_UPWARD, FE_DOWNWARD};
@@ -287,21 +315,27 @@ static void wait_for_baton(rt_thread *self) {
   apply_rounding();
 }
 /* The running thread gives up the baton (it is runnable, blocked or dead). */
-static void yield_from(rt_thread *self) {
+static void yield_from(rt_thread *self, int api_disabled) {
+  int previous_ie = ints_enabled;
+  if (api_disabled) { ints_enabled = 0; if (S->status_known) S->cp0_status &= ~1u; }
   save(self);
   hand_to(best_runnable());
   if (self->state != T_DEAD && self != &boot) wait_for_baton(self);
+  if (api_disabled && self->state != T_DEAD && self != &boot) {
+    ints_enabled |= previous_ie;
+    if (S->status_known) S->cp0_status |= (u32)previous_ie;
+  }
 }
 static void deliver_pending(void);
 /* After making threads runnable: run a strictly higher-priority one now. */
-static void maybe_preempt(void) {
+static void maybe_preempt(int api_disabled) {
   rt_thread *b;
   deliver_pending();
   b = best_runnable();
   if (running && b && b->pri > running->pri) {
     rt_thread *self = running;
     make_runnable(self);
-    yield_from(self);
+    yield_from(self, api_disabled);
   }
 }
 
@@ -324,7 +358,7 @@ static int block_on(u32 mq, int full) {
   if (!self || self == &boot) finish(1, "boot context blocked on a message queue");
   self->state = T_BLOCKED; self->wait_queue = mq; self->wait_full = full;
   self->seq = ++seq_counter;
-  yield_from(self);
+  yield_from(self, 1);
   return 0;
 }
 /* jam: put the message at the front. Returns -1 when full and not blocking. */
@@ -369,20 +403,48 @@ static int mq_recv(u32 mq, u32 msgp, int block) {
 /* ---- events ------------------------------------------------------------- */
 
 static void post(int ev) { pending[ev]++; plaid_preempt = 1; }
+static int event_eligible(int ev) {
+  if (ev == 14 && pending[ev]) finish(1, "PRENMI delivery is outside the cold-start Status ABI");
+  /* No running context: the HLE idle dispatcher accepts pending sources;
+     a blocked caller's disabled IE does not become the idle CPU's policy. */
+  if (!running) return 1;
+  if (!ints_enabled) return 0;
+  if (!S->status_known) return 1;
+  if (S->cp0_status & 6u) return 0;
+  if (ev >= EV_SP && ev <= EV_DP)
+    return (S->cp0_status & 0x400u) && (S->mi_mask & (1u << (ev - EV_SP)));
+  return (S->cp0_status & 0x8000u) != 0; /* Count/Compare timers */
+}
+static void pi_complete(u32 mq, u32 msg) {
+  if (!mq) return;
+  if (event_eligible(EV_PI)) { mq_send(mq, msg, 0, 0); return; }
+  if (pi_completion_count == 64) finish(1, "too many pending PI completions");
+  pi_completions[pi_completion_count].mq = mq;
+  pi_completions[pi_completion_count++].msg = msg;
+  plaid_preempt = 1;
+}
 static void deliver_pending(void) {
   int ev, i;
   u64 c;
-  if (!ints_enabled) return;
   plaid_preempt = 0;
   for (ev = 0; ev < EV_COUNT; ev++)
-    while (pending[ev]) {
+    while (pending[ev] && event_eligible(ev)) {
       pending[ev]--;
+      if (ev == EV_PI) pi_status &= ~8u;
+      if (ev == EV_SI) si_status &= ~0x1000u;
       if (ev == EV_VI) {
         if (vi_event.set && vi_count % vi_retrace == 0) mq_send(vi_event.mq, vi_event.msg, 0, 0);
       } else if (events[ev].set) {
         mq_send(events[ev].mq, events[ev].msg, 0, 0);
       }
     }
+  if (event_eligible(EV_PI)) {
+    unsigned n;
+    for (n = 0; n < pi_completion_count; n++)
+      mq_send(pi_completions[n].mq, pi_completions[n].msg, 0, 0);
+    pi_completion_count = 0;
+  }
+  if (!event_eligible(10)) return;
   c = count_now();
   for (i = 0; i < MAX_TIMERS; i++) {
     rt_timer *t = &timers[i];
@@ -458,14 +520,14 @@ static void *thread_main(void *p) {
   if (r == 2) finish(0, "exit");
   if (r && r != RT_EXIT_THREAD) finish(1, "guest fault");
   self->state = T_DEAD; /* returned from its entry, or destroyed itself */
-  yield_from(self);
+  yield_from(self, 0);
   pthread_mutex_unlock(&big);
   return NULL;
 }
 int plaid_rt_safepoint(plaid_state *s) {
   (void)s;
   pthread_mutex_lock(&big);
-  maybe_preempt();
+  maybe_preempt(0);
   pthread_mutex_unlock(&big);
   return 0;
 }
@@ -488,6 +550,7 @@ RT(osCreateThread) {
   memset(t, 0, sizeof *t);
   pthread_cond_init(&t->wake, NULL);
   t->state = T_STOPPED; t->guest = arg(0); t->id = arg(1); t->entry = arg(2);
+  t->ie = 1;
   t->arg = arg(3); t->sp = arg(4); t->pri = (s32)arg(5);
   /* libultra starts a thread 16 bytes below the given top: the O32 save
      area its entry may store its argument registers into */
@@ -504,11 +567,11 @@ RT(osStartThread) {
   wr16(t->guest + 0x10, 2); /* OS_STATE_RUNNABLE */
   if (running == &boot) { /* the boot context ends here, as in libultra */
     boot.state = T_DEAD;
-    yield_from(&boot);
+    yield_from(&boot, 1);
     pthread_mutex_unlock(&big);
     for (;;) { struct timespec d = {3600, 0}; nanosleep(&d, NULL); }
   }
-  maybe_preempt();
+  maybe_preempt(1);
   return 0;
 }
 RT(osDestroyThread) {
@@ -525,9 +588,9 @@ RT(osSetThreadPri) {
   if (t->guest) wr32(t->guest + 4, (u32)t->pri);
   if (t == running) {
     rt_thread *b = best_runnable();
-    if (b && b->pri > t->pri) { make_runnable(t); yield_from(t); }
+    if (b && b->pri > t->pri) { make_runnable(t); yield_from(t, 1); }
   } else {
-    maybe_preempt();
+    maybe_preempt(1);
   }
   return 0;
 }
@@ -536,7 +599,7 @@ RT(osYieldThread) {
   rt_thread *self = running, *b;
   deliver_pending();
   b = best_runnable();
-  if (self && b && b->pri >= self->pri) { make_runnable(self); yield_from(self); }
+  if (self && b && b->pri >= self->pri) { make_runnable(self); yield_from(self, 1); }
   return 0;
 }
 RT(osGetThreadId) { rt_thread *t = thread_of(arg(0)); return ret(t ? t->id : 0); }
@@ -545,7 +608,7 @@ RT(osStopThread) {
   if (!t) return 0;
   if (t->state == T_BLOCKED) finish(1, "osStopThread on a blocked thread is not modeled");
   if (t->guest) wr16(t->guest + 0x10, 1); /* OS_STATE_STOPPED */
-  if (t == running) { t->state = T_STOPPED; yield_from(t); }
+  if (t == running) { t->state = T_STOPPED; yield_from(t, 1); }
   else if (t->state == T_RUNNABLE) t->state = T_STOPPED;
   return 0;
 }
@@ -556,9 +619,9 @@ RT(osCreateMesgQueue) {
   wr32(mq + 0x10, arg(2)); wr32(mq + 0x14, arg(1));
   return 0;
 }
-RT(osSendMesg) { int r = mq_send(arg(0), arg(1), arg(2) & 1, 0); maybe_preempt(); return ret((u32)r); }
-RT(osJamMesg) { int r = mq_send(arg(0), arg(1), arg(2) & 1, 1); maybe_preempt(); return ret((u32)r); }
-RT(osRecvMesg) { int r = mq_recv(arg(0), arg(1), arg(2) & 1); maybe_preempt(); return ret((u32)r); }
+RT(osSendMesg) { int r = mq_send(arg(0), arg(1), arg(2) & 1, 0); maybe_preempt(1); return ret((u32)r); }
+RT(osJamMesg) { int r = mq_send(arg(0), arg(1), arg(2) & 1, 1); maybe_preempt(1); return ret((u32)r); }
+RT(osRecvMesg) { int r = mq_recv(arg(0), arg(1), arg(2) & 1); maybe_preempt(1); return ret((u32)r); }
 RT(osSetEventMesg) {
   u32 ev = arg(0);
   if (getenv("PLAID_TRACE_MQ")) fprintf(stderr, "event %u %08x %08x\n", ev, arg(1), arg(2));
@@ -571,10 +634,46 @@ RT(osViSetEvent) {
   return 0;
 }
 /* Interrupt masking: while disabled, events stay pending. */
-RT(__osDisableInt) { u32 was = (u32)ints_enabled; ints_enabled = 0; return ret(was); }
-RT(__osRestoreInt) { ints_enabled |= arg(0) & 1; if (ints_enabled) maybe_preempt(); return 0; }
+RT(__osDisableInt) { u32 was = (u32)ints_enabled; ints_enabled = 0; if (S->status_known) S->cp0_status &= ~1u; return ret(was); }
+RT(__osRestoreInt) { ints_enabled |= arg(0) & 1; if (S->status_known) S->cp0_status |= arg(0) & 1; if (ints_enabled) maybe_preempt(0); return 0; }
 RT(osSetIntMask) { return ret(0x003fff01u); }
 RT(osGetIntMask) { return ret(0x003fff01u); } /* the same unmasked OS_IM_ALL */
+RT(__osGetSR) {
+  if (!S->status_known) return plaid_fault(S, (u32)S->r[31] - 8, 11);
+  return ret(S->cp0_status);
+}
+int plaid_rt_osCreateThread_global(plaid_state *s, u32 global) {
+  rt_thread *t;
+  int result;
+  (void)s;
+  pthread_mutex_lock(&big);
+  result = rt_osCreateThread();
+  t = thread_of(arg(0));
+  t->status_known = 1;
+  t->status_global = global;
+  wr32(t->guest + 0x118, 0xff03u); /* verified SDK create, before ERET */
+  wr32(t->guest + 0x128, 0x3fu);
+  wr32(t->guest + 0x18, 0);
+  pthread_mutex_unlock(&big);
+  return result;
+}
+int plaid_rt_osSetIntMask_global(plaid_state *s, u32 global_address) {
+  u32 global, old;
+  int result;
+  (void)s;
+  pthread_mutex_lock(&big);
+  if (!S->status_known) {
+    result = plaid_fault(S, (u32)S->r[31] - 8, 11);
+  } else {
+    global = rd32(global_address);
+    old = status_old_mask(S->cp0_status, S->mi_mask, global);
+    status_set_mask(&S->cp0_status, &S->mi_mask, arg(0), global);
+    result = ret(old);
+    maybe_preempt(0);
+  }
+  pthread_mutex_unlock(&big);
+  return result;
+}
 
 /* ---- time --------------------------------------------------------------- */
 
@@ -613,12 +712,23 @@ RT(osStopTimer) {
 RT(osGetMemSize) { return ret(PLAID_RAM_SIZE); }
 
 RT(osInitialize) {
+  if (S->status_known) S->cp0_status |= 0x20000000u;
+  if (plaid_ctc1(S, 0x01000800u, (u32)S->r[31])) return 1;
   wr32(0x80000300u, 1);           /* osTvType: NTSC */
   wr32(0x80000304u, 0);           /* osRomType: cartridge */
   wr32(0x80000308u, 0xb0000000u); /* osRomBase */
   wr32(0x8000030cu, 0);           /* osResetType: cold */
   wr32(0x80000318u, PLAID_RAM_SIZE); /* osMemSize */
   return 0;
+}
+int plaid_rt_osInitialize_global(plaid_state *s, u32 global) {
+  int result;
+  (void)s;
+  pthread_mutex_lock(&big);
+  result = rt_osInitialize();
+  status_kernel_global = global;
+  pthread_mutex_unlock(&big);
+  return result;
 }
 /* libultra 2.0K+ splits osInitialize; the common part is the whole effect here */
 RT(__osInitialize_common) { return rt_osInitialize(); }
@@ -716,21 +826,22 @@ static int dslot(u32 va) {
   return p < PLAID_RAM_SIZE && S->dtag[i] == ((p & ~0xfffu) | 1) ? (int)i : -1;
 }
 static void write_back_slot(int i) { if (S->dtag[i]) plaid_dwriteback(S, i); }
-static void dcache_all(int invalidate) { /* the Index operations over every line */
+static void dcache_all(void) { /* Index Writeback Invalidate D over every line */
   int i;
   for (i = 0; i < 512; i++) write_back_slot(i);
-  if (invalidate) { memset(S->dtag, 0, sizeof S->dtag); memset(S->dstale, 0, sizeof S->dstale); }
+  memset(S->dtag, 0, sizeof S->dtag); memset(S->dstale, 0, sizeof S->dstale);
+  memset(S->ddirty, 0, sizeof S->ddirty);
 }
 RT(osWritebackDCache) {
   u32 va = arg(0), n = arg(1), a;
   int i;
   if ((s32)n <= 0) return 0;
-  if (n >= DCACHE_SIZE) { dcache_all(0); return 0; }
+  if (n >= DCACHE_SIZE) { dcache_all(); return 0; }
   for (a = va & ~15u; a < va + n; a += 16)
     if ((i = dslot(a)) >= 0) write_back_slot(i);
   return 0;
 }
-RT(osWritebackDCacheAll) { dcache_all(0); return 0; }
+RT(osWritebackDCacheAll) { dcache_all(); return 0; }
 /* libultra writes back and invalidates partly covered lines and discards
    whole ones; a discarded store stays in RAM here but not on hardware, so
    its line is lost until DMA rewrites all of it */
@@ -738,7 +849,7 @@ RT(osInvalDCache) {
   u32 va = arg(0), n = arg(1), a;
   int i;
   if ((s32)n <= 0) return 0;
-  if (n >= DCACHE_SIZE) { dcache_all(1); return 0; }
+  if (n >= DCACHE_SIZE) { dcache_all(); return 0; }
   for (a = va & ~15u; a < va + n; a += 16)
     if ((i = dslot(a)) >= 0) {
       if (a >= va && a + 16 <= va + n) { if (S->ddirty[i]) S->line_lost[v2p(a) >> 4] = 1; }
@@ -771,6 +882,7 @@ static void dma_wrote(u32 p, u32 n) {
 static void dma_wr(u32 va, const u8 *bytes, u32 n) { if (n) dma_wrote(v2p(va), n); wr(va, bytes, n); }
 RT(__osSetFpcCsr) {
   u32 was = S->fcsr | S->fcc << 23;
+  if (plaid_status_fp(S, (u32)S->r[31] - 8, 1)) return 1;
   if (plaid_ctc1(S, arg(0), (u32)S->r[31])) return 1;
   return ret(was);
 }
@@ -784,8 +896,8 @@ RT(osPiStartDma) {
   if ((u64)dev + n > rom_size) finish(1, "PI DMA outside the ROM");
   dma_wr(va, rom + dev, n);
   dma_count++;
-  if (mq) mq_send(mq, mb, 0, 0);
-  maybe_preempt();
+  pi_complete(mq, mb);
+  maybe_preempt(1);
   return ret(0);
 }
 /* osCartRomInit(): the cartridge's OSPiHandle, with the PI domain 1 timing
@@ -902,6 +1014,8 @@ static void flash_write_half(u16 d) {
 static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
   (void)s;
   if (size != 4) return 1;
+  if ((p >= 0x04800000u && p < 0x04800020u) || (p >= 0x1fc007c0u && p < 0x1fc00800u))
+    return si_access(p, write, v);
   if (p >= 0x08000000u && p < 0x10000000u && (fl.on || (write && (p & ~3u) == 0x08010000u))) {
     flash_address(p);
     if (write) { flash_write_half((u16)(*v >> 16)); flash_write_half((u16)*v); }
@@ -951,8 +1065,9 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
     }
     return 0;
   }
-  if (p == 0x04600010u) { /* PI_STATUS: idle; a write resets DMA or clears the interrupt, neither pending */
-    if (!write) *v = 0;
+  if (p == 0x04600010u) { /* DMA completes immediately; interrupt acknowledgment remains visible. */
+    if (!write) *v = pi_status;
+    else if (*v & 2) { pi_status &= ~8u; pending[EV_PI] = 0; }
     return 0;
   }
   if (p >= 0x04600014u && p <= 0x04600030u) {
@@ -988,6 +1103,23 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
     return 0;
   }
   return 1;
+}
+
+RT(osPiGetStatus) {
+  u64 value = 0;
+  if (rt_io(S, 0x04600010u, 4, 0, &value)) return plaid_fault(S, (u32)S->r[31] - 8, 1);
+  return ret((u32)value);
+}
+RT(osPiRawStartDma) {
+  u32 direction = arg(0), offset = arg(1), destination = arg(2), size = arg(3);
+  if (direction != 0) finish(1, "PI write to cartridge");
+  if (!size || ((offset | destination | size) & 7u)) finish(1, "unaligned raw PI DMA is not modeled");
+  if ((u64)offset + size > rom_size) finish(1, "PI DMA outside the ROM");
+  dma_wr(destination, rom + offset, size);
+  dma_count++;
+  pi_status |= 8u;
+  if (S->status_known) { pending[EV_PI] = 1; plaid_preempt = 1; }
+  return ret(0);
 }
 
 /* osEPiStartDma(handle, mb, direction): the OSIoMesg holds the queue at +4,
@@ -1030,8 +1162,8 @@ static void epi_dma(u32 h, u32 dir, u32 dev, u32 va, u32 n) {
 RT(osEPiStartDma) {
   u32 mb = arg(1), mq = rd32(mb + 4);
   epi_dma(arg(0), arg(2), rd32(mb + 0xc), rd32(mb + 8), rd32(mb + 0x10));
-  if (mq) mq_send(mq, mb, 0, 0);
-  maybe_preempt();
+  pi_complete(mq, mb);
+  maybe_preempt(1);
   return ret(0);
 }
 /* osEPiRawStartDma(handle, direction, devAddr, dramAddr, size): the same
@@ -1340,7 +1472,7 @@ static void ai_submit(u32 p, u32 n) {
 static void cont_status(u32 status) {
   int i;
   for (i = 0; i < 4; i++) {
-    u8 st[4] = {0, i == 0 ? 5 : 0, 0, i == 0 ? 0 : 8};
+    u8 st[4] = {0, i == 0 ? 5 : 0, i == 0 ? 2 : 0, i == 0 ? 0 : 8};
     wr(status + 4 * i, st, 4);
   }
 }
@@ -1356,13 +1488,17 @@ RT(osContGetQuery) { cont_status(arg(0)); return 0; }
 RT(osContSetCh) { return ret(0); }
 /* No Rumble Pak: PFS_ERR_NOPACK */
 RT(osMotorInit) { return ret(1); }
+RT(__osPfsGetStatus) { return ret(1); } /* every channel has no Controller Pak */
 RT(__osMotorAccess) { return ret(1); }
+/* Both SDK wrappers use the same no-accessory policy as __osMotorAccess. */
+RT(osMotorStart) { return rt___osMotorAccess(); }
+RT(osMotorStop) { return rt___osMotorAccess(); }
 /* Controller 1: scripted presses (--press, by VI frame) OR the renderer
    window's keyboard. shortcut: scripts set buttons only, not the stick. */
 #define MAX_PRESSES 32
 static struct { u32 buttons, at, frames; } presses[MAX_PRESSES];
 static int n_presses;
-RT(osContGetReadData) {
+static u32 controller_input(void) {
   u32 b = 0, stick = 0;
   int i;
   for (i = 0; i < n_presses; i++)
@@ -1371,6 +1507,11 @@ RT(osContGetReadData) {
   stick = plaid_gfx_input();
   b |= stick >> 16;
 #endif
+  return (b << 16) | (stick & 0xffffu);
+}
+RT(osContGetReadData) {
+  u32 input = controller_input(), b = input >> 16, stick = input;
+  int i;
   for (i = 0; i < 4; i++) { /* OSContPad: button, stick_x, stick_y, errno */
     u8 pad[6] = {0, 0, 0, 0, i == 0 ? 0 : 8, 0};
     if (i == 0) { pad[0] = (u8)(b >> 8); pad[1] = (u8)b; pad[2] = (u8)(stick >> 8); pad[3] = (u8)stick; }
@@ -1406,6 +1547,11 @@ static int load_file(const char *path, u8 *bytes, size_t size) {
   return n == size ? 0 : -1;
 }
 RT(osEepromProbe) { return ret(1); } /* EEPROM_TYPE_4K */
+RT(__osEepStatus) {
+  wr16(arg(1), 0x8000); /* 4 Kbit device, no response error */
+  wr16(arg(1) + 2, count_now() < joybus.eeprom_busy_until ? 0x8000 : 0); /* busy as the SI path */
+  return ret(0);
+}
 RT(osEepromRead) { wr(arg(2), eeprom + 8 * (arg(1) & 63), 8); return ret(0); }
 RT(osEepromWrite) {
   u32 i;
@@ -1425,6 +1571,48 @@ RT(osEepromLongWrite) {
   for (i = 0; i < n; i++) eeprom[a + i] = (u8)(rd32((b + i) & ~3u) >> (24 - 8 * ((b + i) & 3)));
   save_eeprom();
   return ret(0);
+}
+
+/* Native SI transfers preserve the SDK's guest packet construction and cache
+   operations. Completion is immediate; interrupts remain pending until eligible. */
+static int si_access(u32 p, int write, u64 *value) {
+  u32 offset;
+  if (p >= 0x1fc007c0u) {
+    offset = p - 0x1fc007c0u;
+    if (write) {
+      unsigned byte;
+      for (byte = 0; byte < 4; byte++) joybus.ram[offset + byte] = (u8)(*value >> (24 - byte * 8));
+      if (offset == 60 && plaid_joy_parse(&joybus)) return 1;
+    } else {
+      *value = (u32)joybus.ram[offset] << 24 | (u32)joybus.ram[offset + 1] << 16
+        | (u32)joybus.ram[offset + 2] << 8 | joybus.ram[offset + 3];
+    }
+    return 0;
+  }
+  offset = p - 0x04800000u;
+  if (!write) {
+    *value = offset == 0 ? si_dram : offset == 4 ? si_read_address
+      : offset == 16 ? si_write_address : offset == 24 ? si_status : 0;
+    return 0;
+  }
+  if (offset == 0) { si_dram = (u32)*value & 0xfffff8u; return 0; }
+  if (offset == 24) { si_status = 0; pending[EV_SI] = 0; return 0; }
+  if (offset != 4 && offset != 16) return 1;
+  if (((u32)*value & ~1u) != 0x1fc007c0u || si_dram > PLAID_RAM_SIZE - 64) return 1;
+  if (offset == 16) {
+    si_write_address = (u32)*value & ~1u;
+    dma_read(si_dram, 64);
+    memcpy(joybus.ram, S->ram + si_dram, 64);
+    if (plaid_joy_parse(&joybus)) return 1;
+  } else {
+    si_read_address = (u32)*value & ~1u;
+    if (plaid_joy_run(&joybus, eeprom, count_now(), controller_input())) return 1;
+    dma_wr(0xa0000000u | si_dram, joybus.ram, 64);
+    if (joybus.changed) { save_eeprom(); joybus.changed = 0; }
+  }
+  si_status = 0x1000;
+  pending[EV_SI] = 1; plaid_preempt = 1;
+  return 0;
 }
 
 /* ---- 64-bit helpers: o32 pairs, high word first ------------------------- */

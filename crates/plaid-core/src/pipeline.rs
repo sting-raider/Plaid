@@ -52,6 +52,7 @@ pub(crate) fn discover_labelled(
                         name: name.clone(),
                         evidence: [id.clone()].into(),
                         callbacks: callbacks.clone(),
+                        status_global: None,
                     };
                     (image.address(*a), f)
                 })

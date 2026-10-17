@@ -499,15 +499,18 @@ def raw_pi_dma(exe, cc):
     print('raw handle PI DMA: o32 stack size, cartridge bytes and return value; writes and out-of-range reads refused')
 
 
-def build(exe, cc, name, program, runtime, extra=()):
+def build(exe, cc, name, program, runtime, extra=(), status_globals=None, fr0=False):
     (OUT / f'{name}.bin').write_bytes(A.assemble(program))
     labels = A.label_pcs(program)
     decl = dict(format='plaid-runtime-functions-v0', source='runtime test declaration',
                 functions=[dict(entry=hex(labels[n]), name=n, callbacks=['a2'] if n == 'osCreateThread' else [])
                            for n in runtime])
+    for function in decl['functions']:
+        if status_globals and function['name'] in status_globals:
+            function['status_global'] = hex(status_globals[function['name']])
     (OUT / f'{name}.runtime.json').write_text(json.dumps(decl))
     subprocess.run([str(exe), 'lower-c', str(OUT / f'{name}.bin'), hex(A.BASE), hex(A.BASE), hex(A.EXIT),
-                    str(OUT / f'{name}.c'), str(OUT / f'{name}.runtime.json')], check=True)
+                    str(OUT / f'{name}.c'), str(OUT / f'{name}.runtime.json'), *(['--fr0'] if fr0 else [])], check=True)
     native = OUT / (f'{name}-native.exe' if os.name == 'nt' else f'{name}-native')
     subprocess.run([cc, '-O2', '-std=gnu11', '-Wall', '-Werror', '-Wno-unused-label', '-Wno-unused-function',
                     '-DPLAID_SAFEPOINTS', f'-DPLAID_LOWERED="{name}.c"', '-I', str(OUT), *extra,
@@ -576,6 +579,14 @@ def main():
           'of a spinning thread match libultra order', json.dumps(dump))
     import test_interrupts
     test_interrupts.run(exe, cc, sys.modules[__name__])
+    import test_status
+    test_status.run(exe, cc, sys.modules[__name__])
+    import test_cache_writeback
+    test_cache_writeback.run(exe, cc, sys.modules[__name__])
+    import test_controller_policy
+    test_controller_policy.run(exe, cc, sys.modules[__name__])
+    import test_joybus
+    test_joybus.run(exe, cc, sys.modules[__name__])
     graphics_bridge(exe, cc)
     save_file(exe, cc)
     rsp_tasks(exe, cc)
@@ -587,6 +598,8 @@ def main():
     audio_dma(exe, cc)
     rcp_io(exe, cc)
     raw_pi_dma(exe, cc)
+    import test_raw_pi
+    test_raw_pi.run(exe, cc, sys.modules[__name__])
     from test_overlays import main as overlay_verifiers
     overlay_verifiers()
     from test_heap_overlays import main as heap_contracts
