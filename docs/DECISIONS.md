@@ -5612,3 +5612,47 @@ source check on DrvFS (0.044 s versus a Linux check interrupted after >110 s).
 The passive instruction callback avoids debugger disassembly: the same complete
 BK capture is byte-identical at 14.591 -> 2.581 s. Full results, map comparisons,
 local gates and remaining obligations are in research/rom-sweep.md.
+
+
+## ADR-0191: Identify independent SDK copies in disconnected supplied images
+
+Context: a composite image can hold independently linked SDK copies. Global
+name uniqueness left relocated copies ambiguous, while settled functions from
+one copy rejected valid data relocations in another. In BK the boot
+osInitialize CRC matches the pinned signature, but its osClockRate/osViClock
+addresses disagree with the recovered SDK's globals. This is not missing
+signature coverage or failure to scan recovered bytes.
+
+Decision: preserve whole-image identification, and additionally resolve
+signature name uniqueness and data-symbol constraints in each connected
+supplied image, separated by existing unmapped holes. Combine the results;
+conflicting names or sizes at one address select no runtime boundary. Calls
+still check settled callee addresses across the composite in each resolution. Within one component,
+multiple relocated copies and conflicting names remain ambiguous; signature
+bytes cannot cross a hole. Adjacent supplied loads remain one namespace. This
+is identification evidence under the existing runtime ABI assumption, not a
+proof of SDK equivalence or an instruction-scope exemption. No game identity,
+address or added runtime boundary is used. No decoder or emulator is added to
+the native artifact. No reference implementation code was copied.
+
+Verification: synthetic independent globals/duplicate relocated names,
+lookalike getters, hole-crossing refusal and cross-component call tampering
+join the retained single-image identification regressions. The broader ROM
+sweep and final local gate are recorded in research/rom-sweep.md. BK scoped
+closure and later native stages remain the task's acceptance gate.
+
+Constant-return two-instruction stubs (`jr ra; addiu/ori v0,zero,imm`) are
+left as guest code even when a service signature matches: the bytes cannot
+identify a particular runtime service. BK's switch case returning 11 matched
+osVoiceInit and removed the table's guest target from discovery. Effectful
+small signatures remain eligible. A synthetic lookalike/refusal regression
+covers both encodings and an effectful control. Existing table/return/native
+instruction verifiers apply to the recovered guest block.
+
+Control-map review found that component-only matching loses cross-component
+VI-global evidence in OoT. Preserve whole-image identification and combine it
+with component recovery from the same scanned candidates. Conflicting names
+or sizes at one address select no runtime boundary. A split-image getter
+regression and explicit name/size conflict tests retain this requirement;
+scanning is shared, not repeated. Final verification supersedes the earlier
+component-only checkpoint and its gate in the research receipt.

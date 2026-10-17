@@ -1,17 +1,22 @@
 # Status
 
-## Ares boot-produced executable harvest (partial; ADR-0190)
+## BK SDK identification and boot harvest (partial; ADR-0190/0191)
 
-The ROM-only pipeline now uses pinned ares at analysis time to recover missing
-executable images from a deterministic reset boot. PI/CPU-write provenance,
-composition replay and native byte guards are retained; no emulator enters the
-native artifact. BK recovers three images and expands 276 -> 32,321 blocks,
-but scoped blockers are 1 -> 223 -> 117 -> 72. ERET/system boundaries, seven
-unmapped targets and decoder/indirect candidates remain. Its normal native
-pipeline still refuses before lowering; native VI, fault and PCM are unmeasured.
-SF64/MK64/PM/GE remain at 298/31/204/7. The bounded no-input trace does not prove
-input is required. No assumption is retired. See `research/rom-sweep.md` for
-determinism, no-regression maps, budgets, speed measurements and local gates.
+The ROM-only pipeline replays pinned ares at analysis time, preserving PI/CPU
+provenance and native executable-byte guards. Independent SDK copies now have
+separate signature symbol namespaces across supplied-image holes, while
+preserving whole-image identification evidence. Constant-return
+stub lookalikes remain guest code. BK improves **72 -> 29 scoped blockers**:
+one unsupported Status read, seven invalid/data-shaped candidates counted in
+two classes, and seven missing targets plus seven direct edges. Exception-handler
+and jump-table indirect blockers are resolved; 32,192 blocks, 87 runtime IDs.
+
+A 500-million-call no-input experiment reaches analysis VI 676 without fetching
+the seven missing targets; this does not prove input dependence. The production
+100-million-call profile is unchanged. BK still refuses before native lowering;
+native VI, fault/PC and PCM are unmeasured. Paper Mario improves 204 -> 164 after
+SDK identification and three additional replayed loads. No assumption is retired.
+See `research/rom-sweep.md` for the six-ROM sweep, control maps and local gate.
 
 ## ROM-derived RSP native dispatch (ADR-0188)
 

@@ -101,11 +101,11 @@ pub struct Match {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Identification {
-    /// One name per address, and one address per name unless every copy is
-    /// the same relocation-free code (ADR-0171).
+    /// One name per address, and one address per name in each connected
+    /// supplied image unless every copy is relocation-free code (ADR-0191).
     pub matches: Vec<Match>,
-    /// Names left undeclared because they matched several addresses, or
-    /// shared an address with another name.
+    /// Names with no selected declaration because they matched several
+    /// addresses in a component, or shared an address with another name.
     pub ambiguous: BTreeSet<String>,
 }
 
@@ -220,6 +220,11 @@ pub fn identify(image: &CodeImage, signatures: &[Signature], wanted: &[&str]) ->
                 if end <= image.words.len()
                     && (0..sig.size / 4).all(|k| image.word(GuestAddr(entry + 4 * k)).is_some())
                     && (sig.size > 8 || crate::data_roots::plausible(image, GuestAddr(entry)))
+                    // A constant-return stub cannot identify a particular SDK
+                    // service: unrelated switch arms have exactly these bytes.
+                    && !(sig.size == 8
+                        && image.words[at] == 0x03e0_0008
+                        && matches!(image.words[at + 1] >> 16, 0x2402 | 0x3402))
                     && stripped_crc(&image.words[at..end], &sig.relocs) == sig.crc_b
                 {
                     found
@@ -230,18 +235,70 @@ pub fn identify(image: &CodeImage, signatures: &[Signature], wanted: &[&str]) ->
             }
         }
     }
+    // Disjoint supplied images can contain independently linked SDK copies.
+    // Their data globals and name uniqueness belong to separate namespaces;
+    // call relocations still constrain targets across the complete image.
+    let namespace = |entry: u32| {
+        image
+            .holes
+            .iter()
+            .filter(|h| h.end() <= u64::from(entry))
+            .count()
+    };
+    let global = resolve(image, found.clone(), &|_| 0);
+    if image.holes.is_empty() {
+        return global;
+    }
+    let local = resolve(image, found, &namespace);
+    combine(global, local)
+}
+
+fn combine(global: Identification, local: Identification) -> Identification {
+    // Whole-image relocation evidence can identify services split across
+    // components. Keep it alongside independent-copy evidence, but never
+    // select between conflicting names or sizes at the same address.
+    let mut matches: BTreeMap<GuestAddr, Match> = BTreeMap::new();
+    let mut conflicts = BTreeSet::new();
+    let mut ambiguous = global.ambiguous;
+    ambiguous.extend(local.ambiguous);
+    for m in global.matches.into_iter().chain(local.matches) {
+        if let Some(previous) = matches.get(&m.entry) {
+            if previous != &m {
+                conflicts.insert(m.entry);
+                ambiguous.extend([previous.name.clone(), m.name.clone()]);
+            }
+        } else {
+            matches.insert(m.entry, m);
+        }
+    }
+    matches.retain(|entry, _| !conflicts.contains(entry));
+    ambiguous.retain(|name| !matches.values().any(|m| &m.name == name));
+    Identification {
+        matches: matches.into_values().collect(),
+        ambiguous,
+    }
+}
+
+fn resolve(
+    image: &CodeImage,
+    mut found: BTreeMap<(u32, &str), Vec<&Signature>>,
+    namespace: &impl Fn(u32) -> usize,
+) -> Identification {
     // A call relocation to a function identified elsewhere must jump to it
     // (ADR-0171), and a data symbol must have the address identified
     // functions give it while no other global has that address (ADR-0182):
     // drop the variants that disagree, until nothing changes.
     loop {
-        let settled = settle(&found);
-        let mut symbols: BTreeMap<&str, BTreeSet<u32>> = BTreeMap::new();
+        let settled = settle(&found, namespace);
+        let mut symbols: BTreeMap<(usize, &str), BTreeSet<u32>> = BTreeMap::new();
         for ((entry, name), sigs) in &found {
-            if settled.contains_key(name) {
+            if settled.contains_key(&(namespace(*entry), *name)) {
                 for sig in sigs {
                     for (symbol, value) in data_symbols(image, *entry, sig) {
-                        symbols.entry(symbol).or_default().insert(value);
+                        symbols
+                            .entry((namespace(*entry), symbol))
+                            .or_default()
+                            .insert(value);
                     }
                 }
             }
@@ -250,15 +307,22 @@ pub fn identify(image: &CodeImage, signatures: &[Signature], wanted: &[&str]) ->
         for ((entry, _), sigs) in found.iter_mut() {
             sigs.retain(|sig| {
                 sig.calls.iter().all(|(offset, callee)| {
-                    settled.get(callee.as_str()).is_none_or(|entries| {
-                        jump_target(image, entry + offset).is_some_and(|t| entries.contains(&t))
-                    })
+                    let entries: BTreeSet<_> = settled
+                        .iter()
+                        .filter(|((_, name), _)| *name == callee)
+                        .flat_map(|(_, entries)| entries)
+                        .collect();
+                    entries.is_empty()
+                        || jump_target(image, entry + offset).is_some_and(|t| entries.contains(&t))
                 }) && data_symbols(image, *entry, sig)
                     .into_iter()
                     .all(|(symbol, value)| {
-                        symbols.get(symbol).is_none_or(|v| v.contains(&value))
-                            && !symbols.iter().any(|(other, v)| {
-                                *other != symbol
+                        symbols
+                            .get(&(namespace(*entry), symbol))
+                            .is_none_or(|v| v.contains(&value))
+                            && !symbols.iter().any(|((scope, other), v)| {
+                                *scope == namespace(*entry)
+                                    && *other != symbol
                                     && global(other)
                                     && global(symbol)
                                     && v.contains(&value)
@@ -271,10 +335,10 @@ pub fn identify(image: &CodeImage, signatures: &[Signature], wanted: &[&str]) ->
             break;
         }
     }
-    let settled = settle(&found);
+    let settled = settle(&found, namespace);
     let mut out = Identification::default();
     for ((entry, name), sigs) in &found {
-        if settled.contains_key(name) {
+        if settled.contains_key(&(namespace(*entry), *name)) {
             out.matches.push(Match {
                 entry: GuestAddr(*entry),
                 name: name.to_string(),
@@ -288,19 +352,23 @@ pub fn identify(image: &CodeImage, signatures: &[Signature], wanted: &[&str]) ->
 }
 
 /// Names identified by the candidates: each of a name's addresses carries
-/// only that name, and a name at several addresses is identified only when
+/// only that name, and a name at several addresses in one namespace is identified only when
 /// none of its matching variants has a relocation, so every copy is the same
 /// code (ADR-0171).
 fn settle<'a>(
     found: &BTreeMap<(u32, &'a str), Vec<&Signature>>,
-) -> BTreeMap<&'a str, BTreeSet<u32>> {
-    let mut by_name: BTreeMap<&str, BTreeSet<u32>> = BTreeMap::new();
+    namespace: &impl Fn(u32) -> usize,
+) -> BTreeMap<(usize, &'a str), BTreeSet<u32>> {
+    let mut by_name: BTreeMap<(usize, &str), BTreeSet<u32>> = BTreeMap::new();
     let mut by_entry: BTreeMap<u32, usize> = BTreeMap::new();
     for (entry, name) in found.keys() {
-        by_name.entry(name).or_default().insert(*entry);
+        by_name
+            .entry((namespace(*entry), name))
+            .or_default()
+            .insert(*entry);
         *by_entry.entry(*entry).or_default() += 1;
     }
-    by_name.retain(|name, entries| {
+    by_name.retain(|(_, name), entries| {
         entries.iter().all(|e| by_entry[e] == 1)
             && (entries.len() == 1
                 || entries
@@ -634,6 +702,120 @@ mod tests {
         let still = identify(&img, &parse(&alias).unwrap(), RUNTIME_FUNCTIONS);
         assert!(still.ambiguous.contains("osViGetCurrentFramebuffer"));
         assert!(global("__osViNext") && !global("vimgr_data_0004") && global("osViSwapBuffer"));
+    }
+
+    #[test]
+    fn disjoint_sdk_copies_have_independent_globals_and_name_uniqueness() {
+        let get = |lo: u32| [0x3c0e_8000, 0x8dce_0000 | lo, 0x8dc2_0004, 0x03e0_0008, 0];
+        let anchor = |lo: u32| [0x3c0e_8000, 0x8dce_0000 | lo, 0xadc4_0004, 0x03e0_0008, 0];
+        let mut img = image(&[]);
+        for (at, words) in [
+            (0, get(0x1000)),
+            (8, anchor(0x1000)),
+            (32, get(0x2000)),
+            (40, anchor(0x2000)),
+        ] {
+            img.words[at..at + 5].copy_from_slice(&words);
+        }
+        let text = sig_data("osViGetCurrentFramebuffer", &get(0), "__osViCurr")
+            + &sig_data("osViSwapBuffer", &anchor(0), "__osViCurr");
+        let sigs = parse(&text).unwrap();
+        // Two relocated copies inside one supplied component remain ambiguous.
+        assert!(identify(&img, &sigs, RUNTIME_FUNCTIONS).matches.is_empty());
+        img.holes.push(crate::program::GuestRange {
+            start: GuestAddr(0x8000_0440),
+            size: 0x40,
+        });
+        let found = identify(&img, &sigs, RUNTIME_FUNCTIONS);
+        assert_eq!(found.matches.len(), 4);
+        assert!(found.ambiguous.is_empty());
+        // In each component a different named global still excludes a lookalike.
+        let wrong = text + &sig_data("osViGetNextFramebuffer", &get(0), "__osViNext");
+        assert_eq!(
+            identify(&img, &parse(&wrong).unwrap(), RUNTIME_FUNCTIONS).matches,
+            found.matches
+        );
+        // Crossing a gap never supplies a complete signature.
+        img.holes[0].start = GuestAddr(0x8000_0408);
+        assert_eq!(identify(&img, &sigs, RUNTIME_FUNCTIONS).matches.len(), 2);
+    }
+
+    #[test]
+    fn call_relocations_still_check_callees_across_disjoint_images() {
+        let leaf = [0x2402_0001, 0x03e0_0008, 0];
+        let mut img = image(&[(0, 0x8000_0480)]);
+        img.words[32..35].copy_from_slice(&leaf);
+        img.holes.push(crate::program::GuestRange {
+            start: GuestAddr(0x8000_0440),
+            size: 0x40,
+        });
+        let text = sig_for("osEepromLongWrite", &BODY, &[(8, "osEepromWrite")])
+            + &sig_for("osEepromWrite", &leaf, &[]);
+        let sigs = parse(&text).unwrap();
+        assert_eq!(identify(&img, &sigs, RUNTIME_FUNCTIONS).matches.len(), 2);
+        img.words[2] += 4; // identical masked CRC, but wrong cross-image call
+        let found = identify(&img, &sigs, RUNTIME_FUNCTIONS);
+        assert_eq!(found.matches.len(), 1);
+        assert_eq!(found.matches[0].name, "osEepromWrite");
+    }
+
+    #[test]
+    fn constant_return_switch_arms_do_not_identify_runtime_services() {
+        let mut img = image(&[]);
+        for slot in [0x2402_000b, 0x3402_000b] {
+            let stub = [0x03e0_0008, slot];
+            img.words[..2].copy_from_slice(&stub);
+            let sigs = parse(&sig_for("osVoiceInit", &stub, &[])).unwrap();
+            let found = identify(&img, &sigs, RUNTIME_FUNCTIONS);
+            assert!(found.matches.is_empty());
+            assert!(found.ambiguous.is_empty());
+        }
+        // A small effectful function is still eligible for its exact signature.
+        let effectful = [0x03e0_0008, 0x4442_f800]; // return FCSR
+        img.words[..2].copy_from_slice(&effectful);
+        let sigs = parse(&sig_for("__osSetFpcCsr", &effectful, &[])).unwrap();
+        assert_eq!(identify(&img, &sigs, RUNTIME_FUNCTIONS).matches.len(), 1);
+    }
+
+    #[test]
+    fn whole_image_data_evidence_still_identifies_services_split_across_images() {
+        let get = |lo: u32| [0x3c0e_8000, 0x8dce_0000 | lo, 0x8dc2_0004, 0x03e0_0008, 0];
+        let swap = [0x3c0e_8000, 0x8dce_1004, 0xadc4_0004, 0x03e0_0008, 0];
+        let mut img = image(&[]);
+        img.words[..5].copy_from_slice(&get(0x1000));
+        img.words[8..13].copy_from_slice(&get(0x1004));
+        img.words[32..37].copy_from_slice(&swap);
+        img.holes.push(crate::program::GuestRange {
+            start: GuestAddr(0x8000_0440),
+            size: 0x40,
+        });
+        let text = sig_data("osViGetCurrentFramebuffer", &get(0), "__osViCurr")
+            + &sig_data("osViSwapBuffer", &swap, "__osViNext");
+        let found = identify(&img, &parse(&text).unwrap(), RUNTIME_FUNCTIONS);
+        assert_eq!(found.matches.len(), 2);
+        assert_eq!(found.matches[0].entry.0, 0x8000_0400);
+        assert_eq!(found.matches[1].entry.0, 0x8000_0480);
+        assert!(found.ambiguous.is_empty());
+    }
+
+    #[test]
+    fn conflicting_identifications_never_select_a_runtime_boundary() {
+        let declaration = |name: &str, size| Identification {
+            matches: vec![Match {
+                entry: GuestAddr(0x8000_0400),
+                name: name.into(),
+                size,
+            }],
+            ambiguous: BTreeSet::new(),
+        };
+        let identical = combine(declaration("osGetTime", 12), declaration("osGetTime", 12));
+        assert_eq!(identical.matches.len(), 1);
+        for (name, size) in [("osSetTime", 12), ("osGetTime", 16)] {
+            let conflict = combine(declaration("osGetTime", 12), declaration(name, size));
+            assert!(conflict.matches.is_empty());
+            assert!(conflict.ambiguous.contains("osGetTime"));
+            assert!(conflict.ambiguous.contains(name));
+        }
     }
 
     #[test]
