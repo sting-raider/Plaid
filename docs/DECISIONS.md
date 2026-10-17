@@ -5551,3 +5551,56 @@ RSP state/DMA/instruction verifiers remain in force. Visible ROM-only RT64 runs
 with bounded timeouts pass for F-Zero X (20 s, --rsp-gfx), SM64 (20 s) and MM
 (60 s), each with fault 0 and nonzero PCM through the --require-audio checker.
 Exact counters, local gates, OoT outcome and limits: research/rsp-from-rom.md.
+
+## ADR-0190: bounded ROM-only boot execution for CPU-produced text (partial)
+
+Status: partial implementation; no commercial-ROM acceptance. Milestone 5.
+
+Hypothesis: executing a ROM-derived boot path can recover executable RAM bytes
+without recognizing a game-specific compressor or accepting a supplied snapshot.
+The first implementation is deliberately bounded: cached KSEG0 RAM, readonly
+ROM, an integer subset, architectural delay slots, unknown initial registers
+and memory, and a one-million-instruction budget. It starts from ADR-0184's
+declared IPL3 copy and boot window, with an explicit empty-cache analysis
+profile; this is not authentic PIF/IPL3 execution.
+Unknown-dependent control, unsupported instructions, coprocessors, device
+accesses, exceptions and unsupported cache behavior stop capture. No values are
+invented for these boundaries. A stop leaves static load inference unchanged.
+
+At the first transfer out of the boot image, accept only a contiguous,
+word-aligned CPU-written range containing the target, with entirely known
+bytes. Track the normal direct-mapped D-cache's line residency and writeback;
+unflushed text or a previously fetched instruction-cache line is refused.
+KSEG1 aliases, cache discard, device timing and interrupts are outside this
+model. This is candidate discovery under the existing declared scope, not an
+exhaustive executable-universe proof.
+
+`infer-loads` emits encoding `boot` with the ROM identity, source ranges
+actually consumed, transfer target, instruction count and output digest in its
+evidence. Composition regenerates bytes from the ROM and checks the exact
+range; inline snapshots cannot supply authority. Existing declared-load native
+entry checks compare executable bytes in RAM (fault 8 on mismatch), and writes
+revoke the existing verification. No runtime MIPS decoder/JIT/interpreter is
+emitted or linked. This executor remains exclusively in the analysis tool.
+
+Verification: deterministic synthetic ROM copy/XOR loops, register/PC/memory
+checks, delay-slot checks, unknown-state, overflow, writeback and budget
+negatives; the public CLI reaches scoped CLOSED and lowers to native code.
+The full synthetic boot runs from original IPL3 bytes and matches pinned ares
+9408cb43d4948fc3ea6e152a307a34348df3fe04 in all 32 registers, PC and checked
+RAM. Native tampered text faults 8 before running. The oracle exposed the need
+for a real D-cache writeback; the successful native fixture uses eviction.
+Cache-instruction captures are unit-tested separately: native lowering still
+rejects those raw instructions under its existing scope. Reference licenses
+were inspected; only the existing separately built ISC/BSD ares oracle is used,
+with its retained notices. No upstream implementation code was copied.
+
+BK is not fixed: the executor stops at 800021a0, MFC0 Status, after 11136
+instructions, before PI DMA or decompression. This demonstrates missing model
+coverage, not that hardware initialization is inherently external or that BK
+needs a controller/timer input. The next work is a verified boot/device profile
+or an extension of the pinned oracle path, not guessed system-call results.
+BK/SF64/MK64/PM blocker counts remain 1/298/31/204; normal BK native.py refuses
+to build. Remaining results, timings and complete local gate receipt are in
+research/rom-sweep.md. No claim of commercial native acceptance or retired
+assumptions is made.

@@ -1,5 +1,16 @@
 # Status
 
+## Partial post-boot executable inference (ADR-0190)
+
+ROM-only bounded CPU execution can recover text produced by a pure integer
+boot path. Composition replays the transformation; native entry retains the
+existing content guard. A synthetic copy/XOR loop matches pinned ares, and
+tampered text faults. This does **not** close BK: execution stops at its first
+unmodeled COP0 Status read, before DMA/decompression. BK/SF64/MK64/PM scoped
+blockers remain 1/298/31/204. This is a model-coverage limit, not proof that BK
+requires interactive input. No assumption is retired. See
+`research/rom-sweep.md` for the partial receipt and continuation boundary.
+
 ## ROM-derived RSP native dispatch (ADR-0188)
 
 The default native build derives and lowers RSP microcode from ROM images;

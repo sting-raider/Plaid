@@ -20,6 +20,8 @@ use serde::{Deserialize, Serialize};
 pub enum LoadEncoding {
     Raw,
     Yaz0,
+    /// Re-execute the bounded ROM-only boot transformation; no snapshot input.
+    Boot,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -192,6 +194,21 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
             .ok_or("load source outside the ROM")?
             .to_vec(),
         LoadEncoding::Yaz0 => yaz0(bytes.get(start..).ok_or("load source outside the ROM")?)?,
+        LoadEncoding::Boot => {
+            if start != 0 || load.relocatable || load.linked.is_some() {
+                return Err(
+                    "boot-produced loads require the whole ROM and a fixed destination".into(),
+                );
+            }
+            let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
+            let capture = crate::boot_execution::execute(&rom).map_err(|stop| {
+                format!("boot capture stopped at {:08x}: {}", stop.pc.0, stop.reason)
+            })?;
+            if capture.destination != load.destination {
+                return Err("boot-produced load differs from replayed destination".into());
+            }
+            capture.bytes
+        }
     };
     if data.len() != size {
         return Err(format!(
