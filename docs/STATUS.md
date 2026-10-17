@@ -1,5 +1,16 @@
 # Status
 
+## ROM-derived RSP native dispatch (ADR-0188)
+
+The default native build derives and lowers RSP microcode from ROM images;
+snapshots are oracle-only. Startup requires a unique direct-reachable entry
+match. Every executed word remains guarded against current IMEM, including
+indirect targets and fallthrough. Visible timed ROM-only runs pass with audio
+and fault 0 for F-Zero X (native graphics, 20 s), SM64 (20 s) and MM (60 s).
+This removes the snapshot hand input on those paths; whole-ROM closure and the
+general RSP-policy proof remain open. See research/rsp-from-rom.md for counters,
+OoT's separately reported result and the full gate receipt.
+
 Last updated 2026-10-17. This page is the current state in one screen. The
 per-cluster history it replaces (spikes 001-095, every receipt summary) is
 preserved verbatim in [`STATUS-LOG.md`](STATUS-LOG.md). Priorities live in

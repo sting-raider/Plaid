@@ -116,6 +116,10 @@ void plaid_audio_play(const u8 *samples, u32 bytes, u32 rate); /* big-endian s16
    runtime/rsp_texts.py lists, null-terminated. */
 #include "rsp_state.h"
 extern const plaid_rsp_text *const plaid_rsp_texts[];
+#ifdef PLAID_RSP_ROM
+extern const u32 plaid_rsp_boot_ucode_sizes[];
+extern const u8 plaid_rsp_rom_reachable[][128];
+#endif
 static plaid_rsp rsp;
 static const char *rsp_dump_dir, *rsp_capture_dir;
 static long rsp_capture;
@@ -1079,12 +1083,24 @@ static int rsp_rdram_write(u32 p, u32 size) {
    lowered text holds the word IMEM has at pc. A text that leaves at a pc
    (its copy of the word there, or of the delay slot, is stale) is not chosen
    for that pc again until IMEM changes. */
+static void rsp_file(const char *dir, const char *name, const void *bytes, size_t size);
+static void rsp_dump_imem(u32 pc) {
+  char name[64];
+  u32 h = 2166136261u, i;
+  if (!rsp_dump_dir) return;
+  for (i = 0; i < 4096; i++) h = (h ^ rsp.imem[i]) * 16777619u;
+  snprintf(name, sizeof name, "imem-%03x-%08x.bin", pc, h);
+  rsp_file(rsp_dump_dir, name, rsp.imem, 4096);
+}
 static int rsp_run(u32 pc) {
   u32 xpc = ~0u, xgen = 0;
   u64 xmask = 0;
   for (;;) {
     const plaid_rsp_text *t = NULL;
     int i, rc;
+    /* Oracle only: capture recognized placements too, without feeding their
+       bytes back into ROM discovery or native compilation. */
+    rsp_dump_imem(pc);
     for (i = 0; plaid_rsp_texts[i] && i < 64; i++) {
       const plaid_rsp_text *c = plaid_rsp_texts[i];
       if (pc == xpc && rsp.imem_gen == xgen && (xmask >> i & 1)) continue;
@@ -1136,8 +1152,50 @@ static void rsp_save(const char *tag) {
                 rsp.interrupt_on_break);
   snprintf(name, sizeof name, "%s-state.json", tag); rsp_file(rsp_capture_dir, name, json, (size_t)n);
 }
+#ifdef PLAID_RSP_ROM
+/* Startup selects direct-reachable entry words. Every executed word, including
+   indirect targets and subsequent fallthrough, still passes its fetch guard. */
+static int rsp_rom_matches(u32 index, const u8 *bytes, u32 start, u32 size) {
+  const plaid_rsp_text *t = plaid_rsp_texts[index];
+  u32 pc;
+  if (t->start != start || !size || size > t->size) return 0;
+  for (pc = start; pc < t->start + t->size; pc += 4) {
+    if (!(plaid_rsp_rom_reachable[index][pc / 32] >> (pc / 4 % 8) & 1)) continue;
+    if (pc - start + 4 > size || memcmp(bytes + pc - start, t->bytes + pc - start, 4)) return 0;
+  }
+  return 1;
+}
+#endif
 static void rsp_task(void) {
   int rc, capture = rsp_capture_dir && (long)audio_tasks == rsp_capture;
+#ifdef PLAID_RSP_ROM
+  /* Check the submitted bytes before any RSP side effects. The recognized
+     boot DMA length takes precedence over the SDK's often ignored ucode_size. */
+  u32 boot_size, ucode, size = 0, i;
+  u32 boot_matches = 0, text_matches = 0;
+  boot_size = (u32)rsp.dmem[0xfcc] << 24 | (u32)rsp.dmem[0xfcd] << 16 |
+              (u32)rsp.dmem[0xfce] << 8 | rsp.dmem[0xfcf];
+  if (boot_size && boot_size <= 0x1000) boot_size = ((boot_size - 1) | 7) + 1;
+  ucode = (u32)rsp.dmem[0xfd0] << 24 | (u32)rsp.dmem[0xfd1] << 16 |
+          (u32)rsp.dmem[0xfd2] << 8 | rsp.dmem[0xfd3];
+  for (i = 0; plaid_rsp_texts[i]; i++) {
+    if (boot_size <= 0x1000 && rsp_rom_matches(i, rsp.imem, 0, boot_size)) {
+      boot_matches++;
+      size = plaid_rsp_boot_ucode_sizes[i];
+    }
+  }
+  if (boot_matches != 1) finish(1, "unknown or ambiguous ROM-derived RSP microcode");
+  /* A recognized boot loads text at 0x80. Otherwise this is direct-loaded text.
+     The DMA size, rather than advertised ucode_size, bounds the comparison. */
+  if (size) {
+    if (ucode <= PLAID_RAM_SIZE && size <= PLAID_RAM_SIZE - ucode) {
+      for (i = 0; plaid_rsp_texts[i]; i++) {
+        if (rsp_rom_matches(i, S->ram + ucode, 0x80, size)) text_matches++;
+      }
+    }
+    if (text_matches != 1) finish(1, "unknown or ambiguous ROM-derived RSP microcode");
+  }
+#endif
   /* osSpTaskStartGo: SET_INTR_ON_BREAK | CLEAR_SSTEP | CLEAR_BROKE | CLEAR_HALT */
   rsp.interrupt_on_break = 1; rsp.single_step = 0; rsp.broken = 0; rsp.halted = 0;
   if (capture) rsp_save("before");

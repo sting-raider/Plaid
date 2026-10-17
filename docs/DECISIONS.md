@@ -5512,3 +5512,42 @@ assumptions changed. No reference code reused. Evidence: research/mm-audio.md.
 Local gate: formatting, strict workspace/all-target Clippy, 714 Rust tests
 (1 ignored), CLI and full runtime tests pass. See the research note for the
 shared-checkout ownership boundary and exact local gate logs.
+
+## ADR-0188: ROM-derived RSP selection with fetch-verified native dispatch
+
+Context: task DMAs can include mutable data after audio instructions. Comparing
+the complete DMA range rejects valid tasks despite the existing per-word IMEM
+identity verifier. A static text/data partition is unnecessary for this supported
+execution model: execution itself decides which bytes require identity.
+
+Decision: derive candidate texts from ROM image roots and overlay descriptors,
+then lower them ahead of time. Select exactly one initial placement by words
+reachable from its entry through direct control flow, including branch arms and
+delay slots, stopping each path at an indirect transfer. Zero or multiple matches
+refuse before RSP execution. Direct-loaded tasks use the same rule. Recognized
+standard boots also select the text loaded by their actual DMA size, irrespective
+of advertised ucode_size. No game-specific address or text boundary is used.
+
+Every subsequently executed word must still match the instruction it was lowered
+from, including JR targets, delay slots and fallthrough outside the startup mask.
+The ADR-0167 closed native IMEM dispatcher faults if no lowered word matches.
+Unknown executable DMA therefore cannot silently become guest execution. The
+registry remains complete:false: this is an enforced supported dispatch model,
+not proof that every ROM task or executable overlay is discovered. No runtime
+MIPS decoder, interpreter, JIT or snapshot fallback is linked.
+
+The default scripts/native.py pipeline uses only ROM-derived RSP texts. Snapshots
+are oracle-only; --rsp-dump captures comparison inputs without recompiling them.
+The snapshot hand input is removed for the demonstrated SM64, MM and F-Zero X
+paths. Whole-ROM closure and the solver's general RSP-policy obligation remain
+open; finite runs do not retire the full assumption. No reference code reused.
+
+Verification: four focused Rust contracts check direct reachability, both arms,
+delay slots, remaining pending paths and placement exits. Fourteen synthetic
+ROM-task contracts check standard/direct loading, startup corruption and
+ambiguity refusal, LH/JR target and subsequent fallthrough mutations refusing
+at the exact fetch PC, and unexecuted mutated data succeeding. Existing native
+RSP state/DMA/instruction verifiers remain in force. Visible ROM-only RT64 runs
+with bounded timeouts pass for F-Zero X (20 s, --rsp-gfx), SM64 (20 s) and MM
+(60 s), each with fault 0 and nonzero PCM through the --require-audio checker.
+Exact counters, local gates, OoT outcome and limits: research/rsp-from-rom.md.

@@ -1,5 +1,14 @@
 # Next
 
+## RSP continuation after ADR-0188
+
+ROM-derived RSP dispatch is accepted for the finite SM64, MM and F-Zero X
+runs in research/rsp-from-rom.md; retain startup uniqueness and every fetch
+identity check. Next resolve OoT's unsupported bootstrap path without a game
+exception, and broaden task/overlay/DMA coverage. The complete:false registry
+and general solver RSP-policy obligation stay open. Snapshots may compare
+behavior as oracles, never supply the default native build's microcode.
+
 ## Milestone plan (ADR-0125, ADR-0126) — read this first
 
 This section overrides the per-cluster continuation notes below wherever they
