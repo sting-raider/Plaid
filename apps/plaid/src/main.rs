@@ -1550,7 +1550,10 @@ fn load_declarations(
             Some("raw") => LoadEncoding::Raw,
             Some("yaz0") => LoadEncoding::Yaz0,
             Some("boot") => LoadEncoding::Boot,
-            _ => return Err("load encoding is raw, yaz0 or boot".into()),
+            Some("ares_boot") => LoadEncoding::AresBoot {
+                entry: GuestAddr(u32::try_from(field("entry")?).map_err(|e| e.to_string())?),
+            },
+            _ => return Err("load encoding is raw, yaz0, boot or ares_boot".into()),
         };
         loads.push(DeclaredLoad {
             destination: GuestRange {

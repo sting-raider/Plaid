@@ -5552,55 +5552,63 @@ with bounded timeouts pass for F-Zero X (20 s, --rsp-gfx), SM64 (20 s) and MM
 (60 s), each with fault 0 and nonzero PCM through the --require-audio checker.
 Exact counters, local gates, OoT outcome and limits: research/rsp-from-rom.md.
 
-## ADR-0190: bounded ROM-only boot execution for CPU-produced text (partial)
+## ADR-0190: analysis-time ares boot harvest for ROM-produced text (partial)
 
-Status: partial implementation; no commercial-ROM acceptance. Milestone 5.
+Status: partial implementation; BK remains scoped OPEN. Milestone 5.
 
-Hypothesis: executing a ROM-derived boot path can recover executable RAM bytes
-without recognizing a game-specific compressor or accepting a supplied snapshot.
-The first implementation is deliberately bounded: cached KSEG0 RAM, readonly
-ROM, an integer subset, architectural delay slots, unknown initial registers
-and memory, and a one-million-instruction budget. It starts from ADR-0184's
-declared IPL3 copy and boot window, with an explicit empty-cache analysis
-profile; this is not authentic PIF/IPL3 execution.
-Unknown-dependent control, unsupported instructions, coprocessors, device
-accesses, exceptions and unsupported cache behavior stop capture. No values are
-invented for these boundaries. A stop leaves static load inference unchanged.
+Use pinned ares 9408cb43d4948fc3ea6e152a307a34348df3fe04 as the boot CPU/device
+executor, rather than extending Plaid's initial integer executor. Reset runs
+through the hash-checked NTSC PIF firmware, with CIC selected from IPL3 CRC32,
+8 MiB RAM, deterministic entropy and a neutral controller 1. No supplied save
+or RAM snapshot is an input. Unknown IPL3 signatures refuse. Each boot stops
+at 100,000,000 instruction calls or 3,600 VI; discovery permits eight rounds.
+Budget exhaustion is not evidence that input is required.
 
-At the first transfer out of the boot image, accept only a contiguous,
-word-aligned CPU-written range containing the target, with entirely known
-bytes. Track the normal direct-mapped D-cache's line residency and writeback;
-unflushed text or a previously fetched instruction-cache line is refused.
-KSEG1 aliases, cache discard, device timing and interrupts are outside this
-model. This is candidate discovery under the existing declared scope, not an
-exhaustive executable-universe proof.
+The existing separately built headless oracle provides passive instruction,
+RAM scalar/writeback and PI DMA callbacks. Reference CPU/RSP recompilers are
+disabled in this analysis process. Tracking starts at the inferred game entry
+after authentic IPL3 execution. At the first fetch of a missing KSEG0 target,
+capture a contiguous produced RAM image only when its word-aligned bytes agree
+with resident instruction-cache lines. Missing producers, other-device writes
+and stale cache generations refuse. Provenance records the whole canonical ROM,
+firmware and core identities, first fetch PC, instruction budget/count, observed
+PI request source/destination ranges, completed CPU writes/writebacks and image
+digest. PI-derived consumed ROM ranges are not an exhaustive CPU-read lineage.
 
-`infer-loads` emits encoding `boot` with the ROM identity, source ranges
-actually consumed, transfer target, instruction count and output digest in its
-evidence. Composition regenerates bytes from the ROM and checks the exact
-range; inline snapshots cannot supply authority. Existing declared-load native
-entry checks compare executable bytes in RAM (fault 8 on mismatch), and writes
-revoke the existing verification. No runtime MIPS decoder/JIT/interpreter is
-emitted or linked. This executor remains exclusively in the analysis tool.
+The ROM-only native pipeline harvests only after scoped closure is OPEN, then
+repeats identification, discovery and closure. Multiple requested targets can
+be captured in one boot; newly exposed frontiers replay that deterministic boot.
+Static loads and earlier images are preserved by subtracting overlaps. Encoding
+`ares_boot` names whole-ROM source zero and its first-fetch `entry`. Composition
+re-executes ares, validates identity/ranges/budget/digest, and derives only a
+bounded subrange of the regenerated image. RAM snapshot files are outputs only;
+there is no on-disk replay cache. A process-local memo avoids duplicate entries
+within a composition. All existing native executable-byte guards remain:
+mutation revokes verification and mismatched text faults 8. The final native
+artifact links no ares CPU, MIPS decoder, interpreter or JIT.
 
-Verification: deterministic synthetic ROM copy/XOR loops, register/PC/memory
-checks, delay-slot checks, unknown-state, overflow, writeback and budget
-negatives; the public CLI reaches scoped CLOSED and lowers to native code.
-The full synthetic boot runs from original IPL3 bytes and matches pinned ares
-9408cb43d4948fc3ea6e152a307a34348df3fe04 in all 32 registers, PC and checked
-RAM. Native tampered text faults 8 before running. The oracle exposed the need
-for a real D-cache writeback; the successful native fixture uses eviction.
-Cache-instruction captures are unit-tested separately: native lowering still
-rejects those raw instructions under its existing scope. Reference licenses
-were inspected; only the existing separately built ISC/BSD ares oracle is used,
-with its retained notices. No upstream implementation code was copied.
+The predecessor's `boot` encoding and integer executor remain for pure integer
+paths and their synthetic differential contract; no device semantics were
+added. Its copy/XOR loop still matches ares in all 32 registers, PC and checked
+RAM, and native tampering faults 8. New synthetic tests exercise the ares
+harvest itself from an explicitly declared post-IPL test state: deterministic
+bytes/PC/CPU-write ranges, budget/no-producer/stale-cache refusal, overlap
+preservation and production refusal of an unknown-CRC synthetic IPL3 in
+all three byte orders. This fixture does not prove synthetic reset/CIC boot.
 
-BK is not fixed: the executor stops at 800021a0, MFC0 Status, after 11136
-instructions, before PI DMA or decompression. This demonstrates missing model
-coverage, not that hardware initialization is inherently external or that BK
-needs a controller/timer input. The next work is a verified boot/device profile
-or an extension of the pinned oracle path, not guessed system-call results.
-BK/SF64/MK64/PM blocker counts remain 1/298/31/204; normal BK native.py refuses
-to build. Remaining results, timings and complete local gate receipt are in
-research/rom-sweep.md. No claim of commercial native acceptance or retired
-assumptions is made.
+BK advances 276 -> 32,321 blocks with three recovered images. Scoped blockers
+are 1 -> 223 -> 117 -> 72, exposing a larger executable frontier rather than
+closing it. The next barrier includes ERET at 80002b5c, 47 unsupported scope
+effects, seven unmapped targets and decoder/indirect candidates requiring
+classification. The normal --rt64 --seconds 60 --require-audio pipeline refuses
+before lowering. Analysis reaches VI 187; native VI/fault/PCM are unmeasured.
+SF64/MK64/PM/GE remain 298/31/204/7. No assumption is retired.
+
+Reuse decision: the existing pinned ISC/BSD ares core remains a separately built
+analysis dependency, with its complete LICENSE retained by the builder. The
+new adapter reuses project-owned observer tooling; no upstream implementation
+code was copied into production. Native git now performs the same full HEAD
+source check on DrvFS (0.044 s versus a Linux check interrupted after >110 s).
+The passive instruction callback avoids debugger disassembly: the same complete
+BK capture is byte-identical at 14.591 -> 2.581 s. Full results, map comparisons,
+local gates and remaining obligations are in research/rom-sweep.md.

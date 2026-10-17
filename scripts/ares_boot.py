@@ -1,0 +1,92 @@
+"""Analysis-only pinned ares boot capture. RAM files are outputs, never inputs."""
+import argparse
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import zlib
+
+ROOT = Path(__file__).resolve().parents[1]
+REV = '9408cb43d4948fc3ea6e152a307a34348df3fe04'
+BUDGET = 100_000_000
+
+
+def build_oracle():
+    import fcntl
+    spec = importlib.util.spec_from_file_location('ares_builder', ROOT / 'spikes/003-ares-oracle/run.py')
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    directory = ROOT / 'target/ares-boot/oracle'
+    directory.mkdir(parents=True, exist_ok=True)
+    with (directory / 'build.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return builder.build(ROOT / 'scripts/ares_boot.cpp', directory,
+                             raw_fetch_access=True, physical_fetch_access=True,
+                             rdram_burst_access=True, rdram_scalar_access=True, pi_dma_access=True,
+                             cpu_instruction_access=True)
+
+
+def capture_many(rom, entries):
+    rom = Path(rom).resolve()
+    data = rom.read_bytes()
+    if len(data) < 4096 or len(data) > 64 * 1024 * 1024 or len(data) % 4:
+        raise ValueError('boot capture requires a word-aligned ROM of 4 KiB..64 MiB')
+    width = {bytes.fromhex('37804012'): 2, bytes.fromhex('40123780'): 4}.get(data[:4])
+    if width:
+        canonical = bytearray(len(data))
+        for lane in range(width):
+            canonical[lane::width] = data[width - 1 - lane::width]
+        with tempfile.TemporaryDirectory(prefix='plaid-canonical-') as temporary:
+            path = Path(temporary) / 'input.z64'
+            path.write_bytes(canonical)
+            return capture_many(path, entries)
+    if data[:4] != bytes.fromhex('80371240'):
+        raise ValueError('unrecognized N64 byte-order signature')
+    crc = zlib.crc32(data[0x40:0x1000])
+    cics = {0x6170a4a1: '6101', 0x90bb6cb5: '6102', 0x0b050ee0: '6103',
+            0x98bc2c86: '6105', 0xacc8580a: '6106'}
+    if crc not in cics:
+        raise ValueError(f'unsupported IPL3 CRC32 {crc:08x}; no guessed CIC')
+    boot = int.from_bytes(data[8:12], 'big') - {0x0b050ee0: 0x100000, 0xacc8580a: 0x200000}.get(crc, 0)
+    if os.name == 'nt':
+        def linux(p):
+            return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(p)], text=True).strip()
+        command = ['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(Path(__file__).resolve()),
+                   linux(rom), ','.join(hex(e) for e in entries), '--many']
+        return json.loads(subprocess.check_output(command, text=True, timeout=300))
+    # DrvFS index preloading is much slower than a serial source check.
+    os.environ['GIT_CONFIG_COUNT'] = '1'
+    os.environ['GIT_CONFIG_KEY_0'] = 'core.preloadindex'
+    os.environ['GIT_CONFIG_VALUE_0'] = 'false'
+    exe = build_oracle()
+    firmware = ROOT / '.refs/ares/ares/System/Nintendo 64/pif.ntsc.rom'
+    assert hashlib.sha256(firmware.read_bytes()).hexdigest() == 'fa7b09795ef1e54461e59f6f2d902368133e3f1cd980e34383e6a780d74beffd'
+    with tempfile.TemporaryDirectory(prefix='plaid-ares-') as temporary:
+        output = Path(temporary) / 'capture.json'
+        subprocess.run([str(exe), str(rom), str(firmware), hex(boot), ','.join(hex(e) for e in entries), str(BUDGET),
+                        'CIC-NUS-' + cics[crc], str(output)], check=True, timeout=180)
+        results = [json.loads(line) for line in output.read_text().splitlines()]
+    for result in results:
+        result.update(format='plaid-ares-boot-harvest-v1', revision=REV, budget=BUDGET, vi_budget=3600, rom_sha256=hashlib.sha256(data).hexdigest(),
+                  firmware_sha256=hashlib.sha256(firmware.read_bytes()).hexdigest(), cic=cics[crc],
+                  initial_state='cpu_power_pif_entry', controller='gamepad1_neutral')
+        if 'bytes' in result:
+            result['output_sha256'] = hashlib.sha256(bytes(result['bytes'])).hexdigest()
+            result['consumed_rom'] = sorted({(p - 0x10000000, p - 0x10000000 + n)
+                                             for _, p, n in result['pi_dma']
+                                             if 0x10000000 <= p and p + n <= 0x10000000 + len(data)})
+    return results
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('rom', type=Path)
+    parser.add_argument('entry')
+    parser.add_argument('--many', action='store_true')
+    args = parser.parse_args()
+    entries = [int(v, 0) for v in args.entry.split(',')]
+    results = capture_many(args.rom, entries)
+    print(json.dumps(results if args.many else next((r for r in results if 'bytes' in r), results[-1]), separators=(',', ':')))

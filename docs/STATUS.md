@@ -1,15 +1,17 @@
 # Status
 
-## Partial post-boot executable inference (ADR-0190)
+## Ares boot-produced executable harvest (partial; ADR-0190)
 
-ROM-only bounded CPU execution can recover text produced by a pure integer
-boot path. Composition replays the transformation; native entry retains the
-existing content guard. A synthetic copy/XOR loop matches pinned ares, and
-tampered text faults. This does **not** close BK: execution stops at its first
-unmodeled COP0 Status read, before DMA/decompression. BK/SF64/MK64/PM scoped
-blockers remain 1/298/31/204. This is a model-coverage limit, not proof that BK
-requires interactive input. No assumption is retired. See
-`research/rom-sweep.md` for the partial receipt and continuation boundary.
+The ROM-only pipeline now uses pinned ares at analysis time to recover missing
+executable images from a deterministic reset boot. PI/CPU-write provenance,
+composition replay and native byte guards are retained; no emulator enters the
+native artifact. BK recovers three images and expands 276 -> 32,321 blocks,
+but scoped blockers are 1 -> 223 -> 117 -> 72. ERET/system boundaries, seven
+unmapped targets and decoder/indirect candidates remain. Its normal native
+pipeline still refuses before lowering; native VI, fault and PCM are unmeasured.
+SF64/MK64/PM/GE remain at 298/31/204/7. The bounded no-input trace does not prove
+input is required. No assumption is retired. See `research/rom-sweep.md` for
+determinism, no-regression maps, budgets, speed measurements and local gates.
 
 ## ROM-derived RSP native dispatch (ADR-0188)
 

@@ -8,6 +8,7 @@ Steps, each a plain `plaid` command whose output stays in target/native/<name>:
   identify       libultra functions the host runtime replaces
   discover       with the ROM's relocatable overlays when it has a file table
   solve          the address-taken scope must be CLOSED, else nothing is built
+                 when OPEN, harvest missing images with pinned ares and retry
   lower-map      16 parts, compiled in parallel with gcc
   rsp-from-rom   derive and lower candidate microcode from ROM image pointers
   snapshots      oracle-only; never loaded by the default build
@@ -27,6 +28,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from native_audio import audio_peak
+from harvest_boot import harvest
 
 ROOT = Path(__file__).resolve().parents[1]
 SIGNATURES = ROOT / '.refs/n64sym/src/builtin_signatures.sig'
@@ -86,23 +88,29 @@ def main():
     loads = a.loads.resolve() if a.loads else out / 'loads.json'
     if not a.loads:
         plaid('infer-loads', rom, loads)
-    # a ROM with no file table and no reset stub has no loads to declare
-    with_loads = ['--loads', loads] if json.loads(loads.read_text())['loads'] else []
     # the main image ends where the entry stub's BSS clear begins; else IPL3's 1 MiB
     window = [rom, '0x1000', entry, hex(info.get('boot_image_size') or 0x100000)]
-    with open(out / 'id.json', 'w') as f:
-        plaid('identify', *window, SIGNATURES, *with_loads, stdout=f)
     m = out / 'map.json'
-    discover = ['discover', *window, entry, m, out / 'id.json', *with_loads, '--address-taken', '--fr0']
-    tried = subprocess.run([str(ROOT / 'target/release/plaid'), *map(str, discover), '--overlays'],
-                           cwd=ROOT, capture_output=True, text=True)
-    if tried.returncode != 0:
-        if 'file table' not in tried.stderr:
-            sys.exit(tried.stderr)
-        plaid(*discover)  # no file table, so no overlay catalog
-    else:
-        print(tried.stdout.strip().splitlines()[-1])
-    verdict = json.loads(plaid('solve', rom, m, '--address-taken', capture_output=True, text=True).stdout)
+    for attempt in range(8):
+        # A ROM with no file table and no reset stub has no loads to declare.
+        with_loads = ['--loads', loads] if json.loads(loads.read_text())['loads'] else []
+        with open(out / 'id.json', 'w') as f:
+            plaid('identify', *window, SIGNATURES, *with_loads, stdout=f)
+        discover = ['discover', *window, entry, m, out / 'id.json', *with_loads, '--address-taken', '--fr0']
+        tried = subprocess.run([str(ROOT / 'target/release/plaid'), *map(str, discover), '--overlays'],
+                               cwd=ROOT, capture_output=True, text=True)
+        if tried.returncode != 0:
+            if 'file table' not in tried.stderr:
+                sys.exit(tried.stderr)
+            plaid(*discover)  # no file table, so no overlay catalog
+        else:
+            print(tried.stdout.strip().splitlines()[-1])
+        verdict = json.loads(plaid('solve', rom, m, '--address-taken', capture_output=True, text=True).stdout)
+        if verdict['status'] == 'closed' or a.loads or attempt == 7:
+            break
+        print('solve', verdict['status'], len(verdict['blockers']), 'blockers; analysis-time boot harvest', flush=True)
+        if not harvest(rom, loads, m, info, out / f'boot-harvest-{attempt}.json'):
+            break
     print('solve', verdict['status'], len(verdict['blockers']), 'blockers')
     if verdict['status'] != 'closed':
         sys.exit('not CLOSED under the address-taken scope: nothing is built')

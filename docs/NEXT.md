@@ -1,16 +1,23 @@
 # Next
 
-## Continue post-boot execution after ADR-0190
+## Continue reference-driven post-boot discovery after ADR-0190
 
-The bounded ROM-only executor is a synthetic-validated partial candidate.
-BK still stops at `800021a0` (`MFC0 Status`), before the loader runs. Extend
-verified initialization/device coverage, preferably through the existing pinned
-ares instrumentation, before claiming a commercial-ROM unlock. Distinguish
-deterministic hardware initialization from genuine missing timer/controller
-inputs; do not replace system initialization with guessed values. Preserve ROM
-source provenance, replay, cache visibility and native text content guards.
-Then repeat scoped closure and the visible, audio-required native pipeline;
-the BK gameplay acceptance criteria remain unmet.
+Keep ares as the analysis-time CPU/device executor. BK's loader now produces
+three replayed images, but closure remains OPEN with 72 blockers: classify its
+ERET/system boundaries (starting at 80002b5c), seven unmapped targets and the
+decoder/indirect candidates exposed by the third image. Distinguish executable
+text from contiguous produced data before treating invalid decoded candidates
+as actual executed instructions. Do not hide these behind a broader native
+scope or game-specific runtime exceptions.
+
+The deterministic reset profile stops at 100 million instruction calls / 3,600
+VI and eight discovery rounds; BK's retained trace reaches VI 187. Missing
+targets after that budget are not proven input-dependent. Broaden measured boot
+coverage or establish a genuine controller requirement before supplying input.
+SF64/MK64/PM/GE remain OPEN. Preserve source provenance, replay, cache visibility
+and native text guards, then repeat closure and the visible audio-required native
+pipeline. BK lowering, compilation, RSP-from-ROM and native execution remain
+unreached. Whole-ROM closure and executable overlay lifetime proofs remain open.
 
 ## RSP continuation after ADR-0188
 
