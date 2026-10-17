@@ -267,6 +267,8 @@ def main():
         run("solve",bad,directory/"z64.json",ok=False)
     from test_overlays import main as test_overlays
     test_overlays()
+    from test_runtime_bindings import main as test_runtime_bindings
+    test_runtime_bindings()
     print("CLI pipeline: all byte orders, deterministic maps, target traversal, identity gates and OPEN whole-ROM reports passed")
 
 if __name__ == "__main__":

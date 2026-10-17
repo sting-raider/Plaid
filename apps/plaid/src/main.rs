@@ -1271,13 +1271,19 @@ fn run() -> Result<(), String> {
                         .iter()
                         .map(|r| format!("a{}", r - 4))
                         .collect();
-                    serde_json::json!({
+                    let mut function = serde_json::json!({
                         "entry": format!("{:#010x}", m.entry.0),
                         "name": m.name,
                         "size": (m.size > 0).then_some(m.size),
                         "callbacks": callbacks,
                         "evidence": if map_only.contains(&m.name) { "reference map" } else { "signature" },
-                    })
+                    });
+                    if let Some(data) = found.data_bindings.get(&m.entry) {
+                        function["data_bindings"] = serde_json::json!(data.iter()
+                            .map(|(name, address)| (name, format!("{:#010x}", address.0)))
+                            .collect::<std::collections::BTreeMap<_, _>>());
+                    }
+                    function
                 })
                 .collect();
             println!(

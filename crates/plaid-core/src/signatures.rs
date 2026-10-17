@@ -11,6 +11,9 @@
 use crate::{GuestAddr, discovery::CodeImage};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+#[path = "signature_bindings.rs"]
+mod bindings;
+
 /// Functions N64Recomp's runtime reimplements (`reimplemented_funcs` in
 /// N64Recomp `src/symbol_lists.cpp`, MIT, Copyright (c) 2024 Wiseguy), plus
 /// its ignored TLB functions.
@@ -107,6 +110,9 @@ pub struct Identification {
     /// Names with no selected declaration because they matched several
     /// addresses in a component, or shared an address with another name.
     pub ambiguous: BTreeSet<String>,
+    /// Verified scalar address references, distinct for each selected SDK copy.
+    /// This is address evidence, not a claim that the global value is immutable.
+    pub data_bindings: BTreeMap<GuestAddr, BTreeMap<String, GuestAddr>>,
 }
 
 /// Parse an n64sym `sig_v1` file.
@@ -259,23 +265,43 @@ fn combine(global: Identification, local: Identification) -> Identification {
     // select between conflicting names or sizes at the same address.
     let mut matches: BTreeMap<GuestAddr, Match> = BTreeMap::new();
     let mut conflicts = BTreeSet::new();
-    let mut ambiguous = global.ambiguous;
-    ambiguous.extend(local.ambiguous);
-    for m in global.matches.into_iter().chain(local.matches) {
-        if let Some(previous) = matches.get(&m.entry) {
-            if previous != &m {
-                conflicts.insert(m.entry);
-                ambiguous.extend([previous.name.clone(), m.name.clone()]);
+    let mut ambiguous = BTreeSet::new();
+    let mut data_bindings = BTreeMap::new();
+    let mut data_conflicts = BTreeSet::new();
+    for identified in [global, local] {
+        ambiguous.extend(identified.ambiguous);
+        for m in identified.matches {
+            let data = identified
+                .data_bindings
+                .get(&m.entry)
+                .cloned()
+                .unwrap_or_default();
+            if let Some(previous) = data_bindings.get(&m.entry) {
+                if previous != &data {
+                    data_conflicts.insert(m.entry);
+                }
+            } else {
+                data_bindings.insert(m.entry, data);
             }
-        } else {
-            matches.insert(m.entry, m);
+            if let Some(previous) = matches.get(&m.entry) {
+                if previous != &m {
+                    conflicts.insert(m.entry);
+                    ambiguous.extend([previous.name.clone(), m.name.clone()]);
+                }
+            } else {
+                matches.insert(m.entry, m);
+            }
         }
     }
     matches.retain(|entry, _| !conflicts.contains(entry));
     ambiguous.retain(|name| !matches.values().any(|m| &m.name == name));
+    data_bindings.retain(|entry, data| {
+        !data.is_empty() && matches.contains_key(entry) && !data_conflicts.contains(entry)
+    });
     Identification {
         matches: matches.into_values().collect(),
         ambiguous,
+        data_bindings,
     }
 }
 
@@ -339,6 +365,10 @@ fn resolve(
     let mut out = Identification::default();
     for ((entry, name), sigs) in &found {
         if settled.contains_key(&(namespace(*entry), *name)) {
+            let data = bindings::collect(image, *entry, sigs);
+            if !data.is_empty() {
+                out.data_bindings.insert(GuestAddr(*entry), data);
+            }
             out.matches.push(Match {
                 entry: GuestAddr(*entry),
                 name: name.to_string(),
@@ -475,6 +505,8 @@ pub fn with_reference_map(
         }
     }
     out.matches.retain(|m| !conflicts.contains(&m.name));
+    out.data_bindings
+        .retain(|entry, _| out.matches.iter().any(|m| m.entry == *entry));
     map_only.retain(|n| !conflicts.contains(n));
     out.ambiguous.extend(map.ambiguous);
     out.ambiguous.extend(conflicts);
@@ -696,6 +728,10 @@ mod tests {
             .collect();
         assert_eq!(at["osViGetCurrentFramebuffer"], 0x8000_0400);
         assert_eq!(at["osViSwapBuffer"], 0x8000_0440);
+        assert_eq!(
+            found.data_bindings[&GuestAddr(0x8000_0400)]["__osViCurr"],
+            GuestAddr(0x8000_1000)
+        );
         assert!(found.ambiguous.is_empty(), "{:?}", found.ambiguous);
         // a section-relative name may alias a global, so it decides nothing
         let alias = getter + &sig_data("osViSwapBuffer", &swap, "vimgr_data_0004");
@@ -729,6 +765,14 @@ mod tests {
         let found = identify(&img, &sigs, RUNTIME_FUNCTIONS);
         assert_eq!(found.matches.len(), 4);
         assert!(found.ambiguous.is_empty());
+        assert_eq!(
+            found.data_bindings[&GuestAddr(0x8000_0400)]["__osViCurr"],
+            GuestAddr(0x8000_1000)
+        );
+        assert_eq!(
+            found.data_bindings[&GuestAddr(0x8000_0480)]["__osViCurr"],
+            GuestAddr(0x8000_2000)
+        );
         // In each component a different named global still excludes a lookalike.
         let wrong = text + &sig_data("osViGetNextFramebuffer", &get(0), "__osViNext");
         assert_eq!(
@@ -807,6 +851,7 @@ mod tests {
                 size,
             }],
             ambiguous: BTreeSet::new(),
+            data_bindings: BTreeMap::new(),
         };
         let identical = combine(declaration("osGetTime", 12), declaration("osGetTime", 12));
         assert_eq!(identical.matches.len(), 1);
@@ -816,6 +861,20 @@ mod tests {
             assert!(conflict.ambiguous.contains("osGetTime"));
             assert!(conflict.ambiguous.contains(name));
         }
+        let mut first = declaration("osGetTime", 12);
+        first.data_bindings.insert(
+            GuestAddr(0x8000_0400),
+            [("global".into(), GuestAddr(0x8000_1000))].into(),
+        );
+        let mut other = first.clone();
+        other
+            .data_bindings
+            .get_mut(&GuestAddr(0x8000_0400))
+            .unwrap()
+            .insert("global".into(), GuestAddr(0x8000_2000));
+        let conflict = combine(first, other);
+        assert_eq!(conflict.matches.len(), 1);
+        assert!(conflict.data_bindings.is_empty());
     }
 
     #[test]
@@ -825,10 +884,15 @@ mod tests {
             name: name.into(),
             size: 0,
         };
-        let signatures = Identification {
+        let mut signatures = Identification {
             matches: vec![m("osEepromWrite", 0x400), m("osGetTime", 0x430)],
             ambiguous: BTreeSet::from(["osInitialize".to_string()]),
+            data_bindings: BTreeMap::new(),
         };
+        signatures.data_bindings.insert(
+            GuestAddr(0x430),
+            [("global".into(), GuestAddr(0x1000))].into(),
+        );
         let map = Identification {
             matches: vec![
                 m("osEepromWrite", 0x400), // agrees
@@ -837,8 +901,10 @@ mod tests {
                 m("osContInit", 0x400),    // the ROM names that address
             ],
             ambiguous: BTreeSet::from(["osSendMesg".to_string()]),
+            data_bindings: BTreeMap::new(),
         };
         let (found, map_only) = with_reference_map(signatures, map);
+        assert!(found.data_bindings.is_empty());
         assert_eq!(
             found.matches,
             [m("osEepromWrite", 0x400), m("osInitialize", 0x500)]

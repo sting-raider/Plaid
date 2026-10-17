@@ -4,8 +4,11 @@
 
 The next acceptance sequence and pinned-source observations are in
 `research/status-interrupt-model.md`. RestoreInt(0) now has a retained
-pinned-ares differential and preserves enabled IE (ADR-0193). Continue with
-verified mask bindings, thread state and event delivery.
+pinned-ares differential and preserves enabled IE (ADR-0193). Identification
+now retains conservative per-copy scalar address bindings (ADR-0194). Next
+verify SDK mask variants and carry their required bindings through the program
+map/lowering contract, then implement mask, thread state and event delivery.
+Missing/unsupported metadata must leave a new mask boundary unresolved.
 
 BK is now scoped OPEN with one genuine Status-read blocker at 80259d30.
 Implement and differential-test guest-visible Status, interrupt-mask changes
