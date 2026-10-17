@@ -1346,7 +1346,7 @@ fn run() -> Result<(), String> {
                 .ok_or("ROM ends before its boot window")?;
             let found = plaid_core::overlays::static_loads(bytes, base, rom.header.boot_address.0)?;
             let stub = plaid_core::overlays::reset_stub(bytes, base.len() as u32);
-            let loads: Vec<_> = stub
+            let mut loads: Vec<_> = stub
                 .map(|size| {
                     serde_json::json!({
                         "destination": format!("{:#x}", rom.header.boot_address.0),
@@ -1370,7 +1370,7 @@ fn run() -> Result<(), String> {
                     load
                 }))
                 .collect();
-            let evidence: Vec<_> = stub
+            let mut evidence: Vec<_> = stub
                 .map(|size| format!("reset stub of {size:#x} bytes before the first file in the boot window"))
                 .into_iter()
                 .chain(found
@@ -1387,6 +1387,33 @@ fn run() -> Result<(), String> {
                     )
                 }))
                 .collect();
+            match plaid_core::boot_execution::execute(&rom) {
+                Ok(capture) => {
+                    let lo = u64::from(capture.destination.start.0);
+                    let hi = capture.destination.end();
+                    let overlaps = loads.iter().any(|l| {
+                        let start = l["destination"].as_str().and_then(|v| number(v).ok());
+                        let size = l["size"].as_str().and_then(|v| number(v).ok());
+                        start.zip(size).is_some_and(|(s, n)| s < hi && lo < s + n)
+                    });
+                    if !overlaps {
+                        loads.push(serde_json::json!({
+                            "destination": format!("{lo:#x}"),
+                            "size": format!("{:#x}", capture.destination.size),
+                            "rom": "0x0", "encoding": "boot",
+                        }));
+                        evidence.push(format!(
+                            "ROM-only boot execution/v1: ROM sha256 {}; entry {:08x}; {} instructions; consumed ROM ranges {:?}; output sha256 {}; replayed during composition, content-guarded at native entry",
+                            rom.identity.sha256, capture.entry.0, capture.steps,
+                            capture.consumed, plaid_core::rom::sha256(&capture.bytes)
+                        ));
+                    }
+                }
+                Err(stop) => println!(
+                    "boot execution stopped at {:08x} after {} instructions: {}",
+                    stop.pc.0, stop.steps, stop.reason
+                ),
+            }
             let doc = serde_json::json!({
                 "format": "plaid-loads-v0",
                 "source": format!("inferred from the boot window (ADR-0183): {}", evidence.join("; ")),
@@ -1522,7 +1549,8 @@ fn load_declarations(
         let encoding = match l["encoding"].as_str() {
             Some("raw") => LoadEncoding::Raw,
             Some("yaz0") => LoadEncoding::Yaz0,
-            _ => return Err("load encoding is raw or yaz0".into()),
+            Some("boot") => LoadEncoding::Boot,
+            _ => return Err("load encoding is raw, yaz0 or boot".into()),
         };
         loads.push(DeclaredLoad {
             destination: GuestRange {

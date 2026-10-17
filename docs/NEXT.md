@@ -1,5 +1,17 @@
 # Next
 
+## Continue post-boot execution after ADR-0190
+
+The bounded ROM-only executor is a synthetic-validated partial candidate.
+BK still stops at `800021a0` (`MFC0 Status`), before the loader runs. Extend
+verified initialization/device coverage, preferably through the existing pinned
+ares instrumentation, before claiming a commercial-ROM unlock. Distinguish
+deterministic hardware initialization from genuine missing timer/controller
+inputs; do not replace system initialization with guessed values. Preserve ROM
+source provenance, replay, cache visibility and native text content guards.
+Then repeat scoped closure and the visible, audio-required native pipeline;
+the BK gameplay acceptance criteria remain unmet.
+
 ## RSP continuation after ADR-0188
 
 ROM-derived RSP dispatch is accepted for the finite SM64, MM and F-Zero X

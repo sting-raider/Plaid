@@ -184,3 +184,168 @@ was warranted for this documentation-only commit. All own survey/compiler
 processes exited; no game process was started. Only this research note is
 committed. No code changes, assumptions retired, native acceptance claims,
 ROMs/assets, external messages, push or main write.
+
+## Post-boot executable inference: partial implementation (ADR-0190)
+
+2026-10-17; branch `post-boot-loads`, prepared on `5c0ddb5`. Single-worker
+claim/hypothesis: a ROM-derived boot transformation can provide a general
+executable image without recognizing a compressor or accepting a snapshot as
+input. This work advances the mechanism and its verifier, **not commercial-ROM
+closure**. The requested BK acceptance criteria remain unmet.
+
+### Mechanism and authority
+
+`plaid_core::boot_execution` executes an analysis-only bounded integer model
+from the ROM's inferred boot address/window and declared IPL3 copy. Registers
+other than r0 and RAM outside that copy begin unknown; writes can propagate
+unknown values, but control, addresses and captured text cannot depend on them.
+Execution stops at unsupported instructions, coprocessors, device/uncached
+accesses, exceptions, unknown-dependent control or a 1,000,000-instruction
+budget. No timers, controllers, firmware or guessed system-call results are
+supplied. This is not an authentic PIF/IPL3 boot trace or a complete CPU/device
+model. Its declared initial cache profile is empty, rather than reconstructed
+from authentic IPL3 execution. Existing ares tracing was inspected first: its boot tooling needs
+explicit state/firmware. Extending that verified path remains preferable to
+inventing device semantics in this small model.
+
+The first transfer beyond the boot window can yield the contiguous CPU-written
+range containing its target. Every byte must be known, word aligned and written
+back from D-cache; previously fetched instruction-cache lines are refused.
+Normal KSEG0 D-cache line eviction and three writeback operations are modeled;
+uncached aliases/discard and asynchronous device events are not. The public
+`infer-loads` writes encoding `boot`, with consumed canonical ROM ranges,
+transformation instruction count, target, ROM identity and output digest.
+Composition executes the boot again and requires the exact output destination;
+no supplied RAM snapshot can substitute for execution. Refusal preserves the
+previous static declarations verbatim. Overlapping static declarations are
+retained rather than overwritten by a boot candidate.
+
+Native lowering reuses the existing declared-load content guard: executable
+RAM bytes must equal the regenerated image before native entry; mutation revokes
+verification, and mismatched text faults 8. No analysis executor, runtime MIPS
+decoder, interpreter or JIT enters the generated C/native binary. This does not
+close unknown targets or retire executable-universe/lifetime assumptions.
+
+### Real ROM results
+
+Each pair uses the archived pre-change release binary and the candidate release
+binary to independently run `rom-info`, `infer-loads`, `identify`, `discover`
+(with `--loads --address-taken --fr0`, and `--overlays` when available), then
+`solve --address-taken`. No symbols or per-game load declarations were supplied.
+The original survey inputs are retained; SM64/MM/F-Zero X/OoT use ignored local
+ROM paths. Every pair has byte-identical load declarations, runtime IDs **and
+complete maps**, including evidence identities. There are zero new accepted
+commercial-ROM images. GE and Rogue Squadron were not rerun in this extension.
+
+After collecting the complete map pairs, review added decoder validation and
+canonical-address checks to the executor. The full local gate was rerun, and
+final release inference was rerun for all eight ROMs: every declaration is still
+byte-identical to both map-pair inputs. No map consumer or non-boot encoding
+changed, so these retained map digests apply to those identical inputs. The
+inference timings below use that final release recheck.
+
+| ROM | Scoped blockers before -> after | Loads before -> after | infer-loads wall seconds before / after | Map |
+| --- | ---: | ---: | ---: | --- |
+| bk | 1 -> 1 | 0 -> 0 | 0.0318 / 0.2338 | identical |
+| sf64 | 298 -> 298 | 0 -> 0 | 0.1012 / 0.1379 | identical |
+| mk64 | 31 -> 31 | 1 -> 1 | 0.2003 / 0.2598 | identical |
+| pm | 204 -> 204 | 16 -> 16 | 1.6121 / 1.7164 | identical |
+| sm64 | 23 -> 23 | 1 -> 1 | 0.2067 / 0.2438 | identical |
+| mm | 0 -> 0 | 2 -> 2 | 0.2741 / 0.3080 | identical |
+| fzerox | 0 -> 0 | 10 -> 10 | 2.0038 / 2.1686 | identical |
+| oot | 0 -> 0 | 3 -> 3 | 0.3141 / 0.3379 | identical |
+
+SM64's 23 blockers are the untouched ROM-only default on both sides, rather than
+the historical configured build with extra loads/runtime names. MM, F-Zero X
+and OoT retain scoped CLOSED. Timings are process wall measurements made amid
+other local validation, not a speedup claim. No inference bottleneck was found;
+the release rebuild took 51.67 s. Full overlay maps remain expensive; MM's
+discovery/solve wall measurements were 83.238 / 80.538 s,
+unchanged code and identical output. No performance claim is made.
+
+The precise analysis stops are model limits, not proof of unavoidable external
+inputs (in particular COP0 Status could be provided by a verified boot profile):
+
+- **bk:** `boot execution stopped at 800021a0 after 11136 instructions: unmodeled coprocessor state/instruction 40026000; verified boot/device state is required`.
+- **sf64:** `boot execution stopped at 8001ef18 after 397125 instructions: external or unsupported memory input at a0300000`.
+- **mk64:** `boot execution stopped at 800d1b40 after 412141 instructions: unmodeled coprocessor state/instruction 40026000; verified boot/device state is required`.
+- **pm:** `boot execution stopped at 8006c670 after 202640 instructions: unmodeled coprocessor state/instruction 40026000; verified boot/device state is required`.
+- **sm64:** `boot execution stopped at 80328720 after 115041 instructions: unmodeled coprocessor state/instruction 40026000; verified boot/device state is required`.
+- **mm:** `boot execution stopped at 80085364 after 15987 instructions: unsupported instruction 50400007`.
+- **fzerox:** `boot execution stopped at 800be6a0 after 93301 instructions: unmodeled coprocessor state/instruction 40026000; verified boot/device state is required`.
+- **oot:** `boot execution stopped at 80001aa0 after 11903 instructions: write into executing boot image needs cache/lifetime proof`.
+
+BK's normal command was also run:
+
+```powershell
+$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+python scripts/native.py target/local-inputs/bk.z64 --name post-boot-bk --rt64 --seconds 60 --require-audio
+```
+
+It still discovers 276 blocks, 17 indirect sites and zero discovery unresolved
+items, then refuses at **solve OPEN, 1 blocker** (`8000052c -> 8023d680`). The
+analysis stops earlier at `800021a0`, MFC0 Status, after 11,136 instructions;
+no PI transfer or decompression was executed by this candidate. Lowering,
+compilation, RSP-from-ROM and visible native validation are unreached. There is
+no BK guest run, no game window, and **VI, runtime fault/PC and PCM peak are
+unmeasured**, not zero or successful. The 60-second/audio requirement was not
+bypassed. Further verified boot/device coverage is required before measuring
+the next post-closure blocker.
+
+### Synthetic and local gate receipt
+
+Three Rust contracts cover deterministic copy/XOR decoding with a loop and
+delay slots, output bytes/PC/registers/source ranges, composition replay/range
+tampering, unknown inputs and output, ADDI overflow, missing writeback,
+writeback variants, illegal delay-slot transfer and budget refusal.
+`runtime/test_boot_execution.py` exercises the public CLI and normal scoped
+solver, lowers the result, compiles it and runs from the **original IPL3 copy**,
+not preloaded recovered text. All 32 registers, final PC and 0x100 bytes of RAM
+match the existing pinned ares oracle exactly. Mutated text faults 8 before
+native entry. The first ares attempt exposed missing D-cache writeback; the
+successful native fixture evicts the dirty line before transferring. Raw CACHE
+instructions remain excluded by the existing native scope, so those capture
+variants are unit tests, not a claim of native CACHE support. The standalone
+focused native contract and its invocation in the full runtime gate both pass.
+Pinned ares is `9408cb43d4948fc3ea6e152a307a34348df3fe04`; the reference checkout is
+clean and its separate oracle retains ISC/BSD notices. No reference code was
+copied into production and no new dependency was introduced.
+
+All five required local gates pass on the final production/test tree:
+
+- `cargo fmt --all -- --check`: exit 0, 0.801 s.
+- `cargo clippy --locked --workspace --all-targets -- -D warnings`: exit 0, 6.281 s.
+- `cargo test --locked --workspace`: exit 0, 81.813 s; 720 Rust tests.
+- `python scripts/test_cli.py`: exit 0, 16.068 s.
+- `python runtime/test_runtime.py`: exit 0, 137.952 s.
+
+Progress data did not change, so progress.py --check was not required. README
+was not edited. ADR-0190 was appended as bytes with the entire original
+DECISIONS.md prefix preserved, including its non-UTF-8 byte. STATUS/NEXT name
+the partial boundary. No push, main write, external claim message or copyrighted
+ROM/asset is included. All own validation processes exited; no game was launched.
+
+Ignored evidence: `target/post-boot-loads/{sweep.json,gate.json,bk-native.log}`,
+the per-ROM `before/after` loads/IDs/maps/solve outputs and logs, gate-0..4.log;
+`sweep.py`, `gate.py` and `receipt.py` reproduce this local receipt. Synthetic
+native/oracle artifacts are under `target/boot-execution-contract/`.
+
+Retained map digests (the before digest equals the after digest):
+
+| ROM | SHA-256 |
+| --- | --- |
+| bk | `ee6e880441e2180b02adfc43f758d77046e25da6303481b943016303c2a37989` |
+| sf64 | `8d5ac59450cabe60ce9bc0daf25519f4c75bbb13cfd3a790f37b5fe97a892dc2` |
+| mk64 | `ce1388d785184416e07a302a42d86f3a01e5efcf135445cee8df60859b0d2202` |
+| pm | `4f695875d6db5075849e1f6639ac22f5e96a11bc5cd5f194e3c6e4e02119bd2b` |
+| sm64 | `456255a006e31fd74e15cf969941840568db8fc601b78d84e415c08e51691110` |
+| mm | `fdc609d0a1f19d081356200a2ea207d6ab2ae03e957736ac4b66f3e8bb375127` |
+| fzerox | `3ea5d068cdbac14e5f50d6aacfa200587a19b5c106aed3fc602a8ccf7386de1a` |
+| oot | `b53f8802bba5f8388e2c5b375eecb529f8adc757c264d81539ee3d715f86cf4b` |
+
+Remaining unproven: BK scoped closure and all downstream native stages;
+commercial boot execution/device initialization; broader instruction/cache/event
+semantics; generated-code overlays after the first transfer; whole-ROM closure
+and game execution for the other surveyed titles. This is a **partial** commit,
+not a validation handoff for unavailable tools: all requested local gates ran,
+but the boot/device semantics needed to achieve the main objective remain work.
