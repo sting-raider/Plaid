@@ -140,11 +140,26 @@ The visible ROM-only run (`native.py --rt64 --seconds 60 --require-audio`, the
 same three presses) still reaches scoped CLOSED with zero blockers, builds, and
 stops at VI 8 / 19 PI transfers with fault 4 at 8026e614: a cached LWL of the
 SDK's PIF reply buffer (80284be4) after the read DMA, whose result depends on
-D-cache state. libultra's raw SI DMA writes the read-address register and then
-invalidates the buffer; the native transfer completes when the register is
-written, before that invalidate, whereas hardware completes it later. Whether
-completing SI DMA at interrupt delivery removes the fault is untested. No
-graphics task, audio task or gameplay has been observed.
+D-cache state. A traced build showed all four buffer lines dirty, holding the
+SDK's refill stores, when the invalidate after the read start discarded them.
+libultra's raw SI DMA writes the read-address register and then invalidates the
+buffer. Pinned ares (si/io.cpp) queues both SI DMA directions and moves the
+bytes with the interrupt later, so the discarded stores never reach RAM before
+the transfer. The native transfer completed at the register write, before the
+invalidate, so the runtime counted the line as lost.
+
+SI DMA now follows the ares order: the address write leaves the DMA busy, and
+the transfer and interrupt complete together at SI delivery or the guest's next
+SI/PIF access. runtime/test_si_order.py runs that sequence (dirty refill, read
+start, hit invalidate, wait, cached read) against pinned ares on a port with no
+device in either model; RAM and PC match, and the previous runtime faults 4 on
+it. A trial that kept instant completion and exempted fully DMA-overwritten
+dirty lines also passed BK's stop but was not adopted, because it keeps the
+reversed order.
+
+The visible run then stays scoped CLOSED and stops at VI 10 / 19 PI transfers
+on BK's first audio task: "unknown or ambiguous ROM-derived RSP microcode"
+(fault 0). No graphics task or gameplay has been observed.
 
 ## Sources, evidence and scope
 
