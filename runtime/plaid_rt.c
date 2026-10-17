@@ -572,7 +572,7 @@ RT(osViSetEvent) {
 }
 /* Interrupt masking: while disabled, events stay pending. */
 RT(__osDisableInt) { u32 was = (u32)ints_enabled; ints_enabled = 0; return ret(was); }
-RT(__osRestoreInt) { ints_enabled = arg(0) & 1; if (ints_enabled) maybe_preempt(); return 0; }
+RT(__osRestoreInt) { ints_enabled |= arg(0) & 1; if (ints_enabled) maybe_preempt(); return 0; }
 RT(osSetIntMask) { return ret(0x003fff01u); }
 RT(osGetIntMask) { return ret(0x003fff01u); } /* the same unmasked OS_IM_ALL */
 

@@ -1,5 +1,12 @@
 # Status
 
+## Interrupt restore prerequisite (ADR-0193)
+
+`__osRestoreInt(0)` preserves an already-enabled IE bit. A retained synthetic
+test reproduces the old assignment bug and compares nested/repeated restores,
+preserved ABI registers and RAM with pinned ares. Full Status/mask/thread
+semantics remain unverified; BK stays scoped OPEN/1.
+
 ## BK paired executable slot catalog (partial; ADR-0192)
 
 Review hardening rejects conflicting source initializers, partial matches of

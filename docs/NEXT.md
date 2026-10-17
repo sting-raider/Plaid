@@ -3,8 +3,9 @@
 ## Continue BK after paired-slot discovery (ADR-0192)
 
 The next acceptance sequence and pinned-source observations are in
-`research/status-interrupt-model.md`. Start with the retained RestoreInt(0)
-counterexample, then verified mask bindings, thread state and event delivery.
+`research/status-interrupt-model.md`. RestoreInt(0) now has a retained
+pinned-ares differential and preserves enabled IE (ADR-0193). Continue with
+verified mask bindings, thread state and event delivery.
 
 BK is now scoped OPEN with one genuine Status-read blocker at 80259d30.
 Implement and differential-test guest-visible Status, interrupt-mask changes
