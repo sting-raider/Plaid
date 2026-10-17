@@ -577,6 +577,8 @@ def main():
     graphics_bridge(exe, cc)
     save_file(exe, cc)
     rsp_tasks(exe, cc)
+    import test_rsp_rom
+    test_rsp_rom.run(exe, cc, sys.modules[__name__])
     rsp_state_abi(exe, cc)
     rsp_completion(exe, cc)
     rsp_graphics(exe, cc)

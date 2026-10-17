@@ -204,6 +204,17 @@ pub fn block_constants(
     map: &ProgramMap,
     starts: &BTreeSet<u32>,
 ) -> BTreeMap<GuestAddr, GuestAddr> {
+    pointer_constants(image, map)
+        .into_iter()
+        .filter(|(pc, _)| plausible_at(image, *pc, starts))
+        .collect()
+}
+
+/// Bounded LUI pairs before CPU-function filtering; data consumers verify content.
+pub(crate) fn pointer_constants(
+    image: &CodeImage,
+    map: &ProgramMap,
+) -> BTreeMap<GuestAddr, GuestAddr> {
     let here = |a: &crate::program::CodeAddress| {
         a.image == image.base.image && a.generation == image.base.generation
     };
@@ -282,7 +293,7 @@ pub fn block_constants(
                     };
                     for pc in image.slot_copies(image.slot_view(GuestAddr(at), value)) {
                         let pc = GuestAddr(pc);
-                        if plausible_at(image, pc, starts) {
+                        if image.word(pc).is_some() {
                             let site = out.entry(pc).or_insert(GuestAddr(at));
                             *site = (*site).min(GuestAddr(at));
                         }

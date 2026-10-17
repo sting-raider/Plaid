@@ -142,6 +142,99 @@ pub struct LoweredRsp {
     pub stubs: Vec<String>,
 }
 
+/// Entry words reachable through direct control flow, including delay slots.
+/// Register targets are checked by closed native dispatch and per-word fetch
+/// identity guards; they do not extend this startup selection mask.
+pub struct RspReachability {
+    pub words: Vec<u32>,
+    pub indirect: bool,
+    pub exits: Vec<u32>,
+}
+
+pub fn reachable_words(text: &[u8], imem: u32) -> Result<RspReachability, String> {
+    if text.is_empty()
+        || !text.len().is_multiple_of(4)
+        || !imem.is_multiple_of(4)
+        || imem as usize + text.len() > 0x1000
+    {
+        return Err("reachability text must be word-aligned and fit in IMEM".into());
+    }
+    let end = imem + text.len() as u32;
+    let mut seen = std::collections::BTreeSet::new();
+    let mut visited = std::collections::BTreeSet::new();
+    let mut exits = std::collections::BTreeSet::new();
+    let mut pending = vec![imem];
+    let mut indirect = false;
+    while let Some(pc) = pending.pop() {
+        if !(imem..end).contains(&pc) {
+            exits.insert(pc);
+            continue;
+        }
+        if !visited.insert(pc) {
+            continue;
+        }
+        seen.insert(pc);
+        let i = (pc - imem) as usize;
+        let w = u32::from_be_bytes(text[i..i + 4].try_into().unwrap());
+        if !is_control(w) {
+            if !(w >> 26 == 0 && w & 63 == 13) && simple(w, pc, "").is_ok() {
+                pending.push((pc + 4) & 0xfff);
+            }
+            continue;
+        }
+        // Fetching a transfer also fetches its delay slot. Invalid slots fault
+        // in native code, but still belong to the identity certificate.
+        let slot_pc = (pc + 4) & 0xfff;
+        if slot_pc < imem || slot_pc >= end {
+            exits.insert(slot_pc);
+            continue;
+        }
+        seen.insert(slot_pc);
+        if w >> 26 == 0 {
+            indirect = true;
+            continue;
+        }
+        if matches!(w >> 26, 2 | 3) {
+            pending.push((w << 2) & 0xfff);
+        } else {
+            pending.push((pc + 8) & 0xfff);
+            pending.push((pc + 4).wrapping_add((w as i16 as i32 as u32) << 2) & 0xfff);
+        }
+    }
+    Ok(RspReachability {
+        words: seen.into_iter().collect(),
+        indirect,
+        exits: exits.into_iter().collect(),
+    })
+}
+
+/// Content filter for ROM pointer hints. False negatives remain unsupported;
+/// this is deliberately not evidence of whole-ROM RSP closure.
+pub fn plausible_text(text: &[u8]) -> bool {
+    if text.len() < 128 {
+        return false;
+    }
+    let words: Vec<_> = text[..text.len().min(256)]
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_be_bytes(*w))
+        .collect();
+    let specific = words
+        .iter()
+        .filter(|&&w| {
+            (w >> 26 == 16 && matches!((w >> 21) & 31, 0 | 4) && (w >> 11) & 31 < 16)
+                || (w >> 26 == 18 && w & (1 << 25) != 0)
+        })
+        .count();
+    specific >= 2
+        && words
+            .iter()
+            .take(32)
+            .enumerate()
+            .all(|(i, &w)| is_control(w) || simple(w, i as u32 * 4, "").is_ok())
+}
+
 /// Lowers the IMEM bytes `text` at offset `imem` to
 /// `int plaid_rsp_<name>(plaid_rsp *r, u32 pc)` and the descriptor
 /// `plaid_rsp_text_<name>`. The function runs from `pc` until the RSP halts
