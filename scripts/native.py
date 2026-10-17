@@ -133,7 +133,7 @@ def main():
     # Keep runtime objects in the build directory, alongside the generated C.
     runtime_source = out / 'runtime.c'
     runtime_source.write_text(f'#include "{(ROOT / "runtime/plaid_rt.c").as_posix()}"\n')
-    runtime_deps = c.read_bytes() + (ROOT / 'runtime/plaid_rt.c').read_bytes() + (ROOT / 'runtime/dpc.h').read_bytes()
+    runtime_deps = c.read_bytes() + (ROOT / 'runtime/plaid_rt.c').read_bytes() + b''.join(p.read_bytes() for p in sorted((ROOT / 'runtime').glob('*.h')))
     main_obj = compile_cached(runtime_source, rt, runtime_deps)
     window_exe = RT64 / f'{name}{"-rsp" if a.rsp_gfx else ""}-rt64.exe'
     if a.rt64:

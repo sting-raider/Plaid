@@ -13,6 +13,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[path = "signature_bindings.rs"]
 mod bindings;
+#[path = "signature_status.rs"]
+mod status;
+pub use status::verify as verify_status_abi;
 
 /// Functions N64Recomp's runtime reimplements (`reimplemented_funcs` in
 /// N64Recomp `src/symbol_lists.cpp`, MIT, Copyright (c) 2024 Wiseguy), plus
@@ -28,12 +31,12 @@ pub const RUNTIME_FUNCTIONS: &[&str] = &[
     "osSpTaskLoad", "osSpTaskStartGo", "osSpTaskYield", "osSpTaskYielded", "__osSpSetPc",
     "osContInit", "osContStartReadData", "osContGetReadData", "osContStartQuery",
     "osContGetQuery", "osContSetCh",
-    "osEepromProbe", "osEepromWrite", "osEepromLongWrite", "osEepromRead", "osEepromLongRead",
+    "osEepromProbe", "osEepromWrite", "osEepromLongWrite", "osEepromRead", "osEepromLongRead", "__osEepStatus",
     "__osMotorAccess", "osMotorInit", "osMotorStart", "osMotorStop",
     "osPfsInitPak", "osPfsFreeBlocks", "osPfsAllocateFile", "osPfsDeleteFile",
-    "osPfsFileState", "osPfsFindFile", "osPfsReadWriteFile",
+    "osPfsFileState", "osPfsFindFile", "osPfsReadWriteFile", "__osPfsGetStatus",
     "osCartRomInit", "osCreatePiManager", "osPiReadIo", "osPiStartDma", "osEPiStartDma",
-    "osPiGetStatus", "osEPiRawStartDma", "osEPiReadIo",
+    "osPiGetStatus", "osPiRawStartDma", "osEPiRawStartDma", "osEPiReadIo",
     // N64Recomp's osFlash* are left out: the FlashRAM is modelled on the PI
     // bus and libultra's flash code runs as guest code (ADR-0183)
     "osCreateThread", "osStartThread", "osStopThread", "osDestroyThread",
@@ -45,7 +48,7 @@ pub const RUNTIME_FUNCTIONS: &[&str] = &[
     "osVoiceSetWord", "osVoiceCheckWord", "osVoiceStopReadData", "osVoiceInit",
     "osVoiceMaskDictionary", "osVoiceStartReadData", "osVoiceControlGain",
     "osVoiceGetReadData", "osVoiceClearDictionary",
-    "osSetIntMask", "__osDisableInt", "__osRestoreInt",
+    "osSetIntMask", "__osDisableInt", "__osRestoreInt", "__osGetSR",
     // in N64Recomp's `ignored_funcs`; OoT hands its address to the 64DD
     // driver (ADR-0183)
     "osGetIntMask",
@@ -113,6 +116,8 @@ pub struct Identification {
     /// Verified scalar address references, distinct for each selected SDK copy.
     /// This is address evidence, not a claim that the global value is immutable.
     pub data_bindings: BTreeMap<GuestAddr, BTreeMap<String, GuestAddr>>,
+    /// Selected, verified global-mask SDK ABI, bound independently per copy.
+    pub status_globals: BTreeMap<GuestAddr, GuestAddr>,
 }
 
 /// Parse an n64sym `sig_v1` file.
@@ -252,11 +257,13 @@ pub fn identify(image: &CodeImage, signatures: &[Signature], wanted: &[&str]) ->
             .count()
     };
     let global = resolve(image, found.clone(), &|_| 0);
-    if image.holes.is_empty() {
-        return global;
-    }
-    let local = resolve(image, found, &namespace);
-    combine(global, local)
+    let mut out = if image.holes.is_empty() {
+        global
+    } else {
+        combine(global, resolve(image, found, &namespace))
+    };
+    status::annotate(image, signatures, &mut out);
+    out
 }
 
 fn combine(global: Identification, local: Identification) -> Identification {
@@ -302,6 +309,7 @@ fn combine(global: Identification, local: Identification) -> Identification {
         matches: matches.into_values().collect(),
         ambiguous,
         data_bindings,
+        status_globals: BTreeMap::new(),
     }
 }
 
@@ -506,6 +514,8 @@ pub fn with_reference_map(
     }
     out.matches.retain(|m| !conflicts.contains(&m.name));
     out.data_bindings
+        .retain(|entry, _| out.matches.iter().any(|m| m.entry == *entry));
+    out.status_globals
         .retain(|entry, _| out.matches.iter().any(|m| m.entry == *entry));
     map_only.retain(|n| !conflicts.contains(n));
     out.ambiguous.extend(map.ambiguous);
@@ -852,6 +862,7 @@ mod tests {
             }],
             ambiguous: BTreeSet::new(),
             data_bindings: BTreeMap::new(),
+            status_globals: BTreeMap::new(),
         };
         let identical = combine(declaration("osGetTime", 12), declaration("osGetTime", 12));
         assert_eq!(identical.matches.len(), 1);
@@ -888,6 +899,7 @@ mod tests {
             matches: vec![m("osEepromWrite", 0x400), m("osGetTime", 0x430)],
             ambiguous: BTreeSet::from(["osInitialize".to_string()]),
             data_bindings: BTreeMap::new(),
+            status_globals: BTreeMap::new(),
         };
         signatures.data_bindings.insert(
             GuestAddr(0x430),
@@ -902,6 +914,7 @@ mod tests {
             ],
             ambiguous: BTreeSet::from(["osSendMesg".to_string()]),
             data_bindings: BTreeMap::new(),
+            status_globals: BTreeMap::new(),
         };
         let (found, map_only) = with_reference_map(signatures, map);
         assert!(found.data_bindings.is_empty());
