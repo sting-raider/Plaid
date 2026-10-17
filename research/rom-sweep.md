@@ -501,3 +501,219 @@ OPEN. This is a **partial implementation**, not a missing-environment handoff.
 Commercial native execution, exhaustive executable/overlay lifetime closure,
 input requirements beyond the finite budget and the newly exposed static
 candidates remain unproven. No assumption was retired.
+
+## BK closure continuation (partial, ADR-0191)
+
+Implementation claim, 2026-10-17, sole worker on bk-closure: test whether
+independently linked SDK copies in disjoint supplied images cause global
+signature constraints to reject valid runtime boundaries. Preserve native
+closed-world refusal and existing executable-byte guards. Milestone 5; no
+assumption retired. Final measurements and remaining obligations follow below.
+
+### Identification and exact blocker classification
+
+The predecessor diagnostic was rerun successfully; its old empty ID file and
+WSL path error were not evidence of signature failure. The boot osInitialize
+at 80001d70 already matches the pinned n64sym CRC/relocations. Recovered images
+were already included in identify. The actual failure was treating independently
+linked libultra copies as one symbol namespace: the recovered osClockRate and
+osViClock addresses caused rejection of the boot candidate, while relocated
+copies of other functions remained globally ambiguous. ADR-0191 preserves whole-image matching and additionally scopes data
+symbols/name uniqueness to connected supplied image components (holes separate
+them), retaining cross-component callee checks and within-component ambiguity.
+The same scanned candidates feed both resolutions; conflicting names or sizes
+at one address select no runtime boundary.
+Adjacent loads remain one component; this is not complete SDK-copy inference.
+No SDK version signature, title-specific rule or runtime service was added.
+
+The reproducible classifier is `research/classify-sweep-blockers.py`; it reads
+retained solve/map artifacts and optional ignored byte images, reports raw words,
+COP0 registers, containing blocks, incoming edges and indirect certificates.
+It never supplies images to the compiler. The 72 -> 29 assertion and the actual
+map/provenance comparisons are retained under target/bk-closure.
+
+| Scoped blocker kind | Before | After |
+| --- | ---: | ---: |
+| unsupported_scope_effect | 47 | 8 |
+| exception_or_unsupported_instruction | 8 | 7 |
+| unmapped_target | 7 | 7 |
+| unresolved_direct_target | 7 | 7 |
+| unresolved_indirect_site | 2 | 0 |
+| unresolved_indirect_target | 1 | 0 |
+| **Total** | **72** | **29** |
+
+Of the original 47 effects, 40 are genuine system instructions: 19 MFC0,
+15 MTC0, two TLBP, two TLBR, one TLBWI and one ERET. The other seven are the
+same noncanonical/invalid words counted again by the unsupported-instruction
+class. ERET is also counted in both classes. After identifying the SDK copies,
+39 genuine system effects, ERET's second diagnostic, and the two exception
+handler dispatch sites (800024a0, 80002850) disappear behind the existing HLE
+boundary. This does not add native ERET/COP0 support or prove HLE equivalence.
+
+The remaining genuine system instruction is MFC0 Status at 80259d30, an exact
+existing __osGetSR signature (CRC A 6658f48b, B 7f62261b). That helper is absent
+from Plaid's supported runtime service set. Its caller at 80246f70 tests Status
+bit 0x1000, so replacing it with osGetCount or a guessed constant is unsound.
+A verified guest-visible Status/interrupt-mask model remains necessary.
+
+The third indirect blocker was a false runtime name: the jump-table case at
+803111d4 is `jr ra; addiu v0,zero,11`, also the complete osVoiceInit stub
+signature. Existing plausibility checks admitted this unrelated switch arm,
+removing its guest block while the table still required it. Constant-return
+two-instruction signatures now leave such code as guest code. The existing
+12-entry guarded-table and return machinery then closes this dispatch at
+803111b4. No new indirect certificate kind was necessary. Effectful small
+signatures remain eligible; no guest instruction semantics changed.
+
+### Missing text, generation limits, and native refusal
+
+All seven remaining decoder candidates are reached by direct calls, rather
+than merely unreferenced data-root guesses:
+
+| Candidate PC / word | Incoming call site |
+| --- | --- |
+| 8038cdbc / 02ae0000 | 802c2898 |
+| 8038d37c / 03880001 | 80352660 (entry 8038d360) |
+| 8038d3a0 / 03470001 | 80352638 (entry 8038d398) |
+| 8038d3c4 / 035b0001 | 80352640 (entry 8038d3a4) |
+| 8038d528 / 009000c0 | 80352688 (entry 8038d51c) |
+| 8038d570 / 009200c2 | 80352670 (entry 8038d564) |
+| 8038da14 / 3e99999a | 80333d60 |
+
+These bytes look like pointer/record/float data in the captured generation.
+That is not a proof that every such target is non-executable in every supported
+state. Missing overlay generations or overapproximated calls remain plausible;
+no text/data exclusion or invalid-word lowering was added. They remain seven
+unsupported-instruction plus seven scope-effect blockers.
+
+The seven missing targets remain 8038dd30, 8038e374, 8038e400, 8038f128,
+8038f158, 8038f1b0 and 80390544, each with one unresolved direct call. An
+analysis-only 500,000,000-call neutral-input replay (predecessor driver with
+only its budget ceiling raised) reaches **VI 676**, stop PC **8024082c**, with
+all seven still unfetched and no new harvest. Its raw stop receipt SHA-256 is
+6ce0c14a183ea1fbd06d878261ef76b02d6508f2a2ae4083701c8aef48ac71d2.
+This is finite negative evidence, not proof of input dependence or dead code.
+The production ceiling/profile remains 100,000,000 calls / 3,600 VI; temporary
+PLAID_DIAG instrumentation and the WIP budget change are removed.
+
+The normal command (followed by byte-identical BK identification and a solver
+recheck after the final control-map correction) was:
+
+```powershell
+$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+python scripts/native.py target/local-inputs/bk.z64 --name bk-closure-final --rt64 --seconds 60 --require-audio
+```
+
+It reaches **solve OPEN, 29 blockers**, with 32,192 blocks and 87 runtime IDs.
+Successive scoped counts are 1 -> 181 -> 74 -> 29. The three load declarations,
+image digests and complete provenance are byte-identical to ADR-0190's retained
+BK loads. Native lowering, RSP extraction, compilation, visible gameplay and
+audio validation remain unreached. **Native VI, fault/PC and PCM peak are
+unmeasured**, not zero. No native artifact or game process was launched.
+
+### Final sweep, regressions and validation
+
+| ROM | Scoped blockers before -> after | Loads before -> after | Final status |
+| --- | ---: | ---: | --- |
+| BK | 72 -> 29 | 3 -> 3 | OPEN |
+| Star Fox 64 | 298 -> 298 | 0 -> 0 | OPEN |
+| Mario Kart 64 | 31 -> 31 | 1 -> 1 | OPEN |
+| Paper Mario | 204 -> 164 | 16 -> 19 | OPEN |
+| GoldenEye | 7 -> 7 | 1 -> 1 | OPEN |
+| Rogue Squadron | 211 -> 211 | 3 -> 3 | OPEN |
+
+Paper Mario's runtime IDs increase 18 -> 121, with no names removed. With the
+original loads the fix gives 168 blockers; subsequent ares harvests give
+168 -> 164. Three new declarations at 80200000/80, 80200080/190 and 802b2000/f0
+are replayed with existing provenance/guards. Final blocks grow 38,724 -> 41,689.
+Its final classes are 135 unresolved indirect sites, 13 direct edges, eight
+unmapped targets and eight unsupported scope effects. No claim of native play
+or closure is made for any of these six ROMs.
+
+SM64's ROM-only default remains OPEN with 23 blockers and a byte-identical map.
+Its separately configured CLOSED build (original two static loads and reference
+map completion) was regenerated with the archived pre-harvest binary and final
+binary using identical commands: both CLOSED, 45,419 blocks, byte-identical
+complete maps. Comparing that build to the older ADR-0171 historical map also
+shows pre-existing entry/address-taken census changes; the actual new before/
+after pair is exact. MM and F-Zero X remain CLOSED with byte-identical maps.
+SF64/MK64/GE also retain byte-identical full maps. Rogue Squadron's ID files are
+identical after LF/CRLF normalization; only the corresponding raw declaration
+SHA-256 differs in its map evidence/runtime declarations, and normalizing just
+that digest makes the complete parsed maps identical. No other normalization
+is used. Per-file SHA-256 receipts are in map-verification.json.
+
+Five new deterministic Rust regressions cover independent globals and duplicate
+relocated names, within-component ambiguity, getter disambiguation, hole-crossing
+refusal, cross-component call tampering, constant-return switch lookalikes and
+an effectful small-signature control. The independent-SDK regression fails with
+the original 40dde18 production identifier (0 matches versus 4), then passes
+with the fix. All twelve focused signature tests pass. Split-image VI-global evidence
+and conflicting name/size refusal are explicitly covered. The final full runtime gate
+retains native state/RAM/PC comparisons with pinned ares, executable tamper faults,
+heap/shared-slot overlay tests and RSP startup/fetch/ABI/event checks. No new
+instruction lowering, runtime CPU state or text exclusion bypass was introduced.
+
+Final local gate on the final production/test tree:
+
+| Command | Exit | Seconds |
+| --- | ---: | ---: |
+| cargo fmt --all -- --check | 0 | 0.795 |
+| cargo clippy --locked --workspace --all-targets -- -D warnings | 0 | 5.687 |
+| cargo test --locked --workspace | 0 | 83.234 |
+| python scripts/test_cli.py | 0 | 7.500 |
+| python runtime/test_runtime.py | 0 | 128.641 |
+
+Rust total: **725 passed, one ignored**. Progress data is unchanged, so
+progress.py --check is not required. No performance optimization is claimed;
+these are measured validation times, not a before/after speed benchmark.
+The earlier checkpoint gates were superseded by this complete gate after
+preserving whole-image evidence and adding its regressions. Final review checked namespace boundaries, cross-image calls,
+small-stub behavior and retention of all closure refusals. No reference code or
+new dependency was copied. Pinned ares and n64sym HEADs are exact and clean.
+DECISIONS was edited as bytes; the complete pre-task byte prefix, including its
+non-UTF-8 byte, is SHA-256 verified unchanged. README is untouched.
+
+Ignored evidence: target/bk-closure/{before-classification.json,
+after-classification.json,solve-final.json,later.jsonl,regression-red.log,
+signature-final.log,map-verification.json,decisions-prefix.json}, final-sweep/
+loads/IDs/maps/solve/harvest receipts, sm64-configured{,-before,-accepted}/, gate-accepted/
+and native-final.log; checked-sweep/results.json and recheck.py retain the
+accepted-revision identification/solver checks. The retained local sweep/gate/SM64 scripts reproduce the
+commands; target/native/bk-closure-final/ holds the normal BK pipeline artifacts.
+Diagnostic byte images remain ignored outputs, never compiler input snapshots.
+No push/main write, external messages, ROM/assets or compatibility exception is
+included. This is a **partial implementation**, with all required local validation
+available and completed, not a missing-capability validation handoff. BK Status
+semantics, static text/data or overlay-generation proof, executable lifetime,
+input requirements and all downstream native gameplay/audio remain unproven.
+No assumption is retired.
+
+OoT's first component-only control remained CLOSED but lost six boot VI runtime
+names. This was caught before closeout: whole-image evidence is now preserved
+and combined with component recovery, with name/size conflicts refusing a
+boundary. The accepted OoT map retains all 65 previous runtime declarations
+and adds only osSetTime at 801ca3c0 (24-byte existing SDK signature). Its guest
+block and return disappear: 155,770 -> 155,769 blocks; scoped CLOSED remains
+unchanged. This is the sole semantic control-map difference. The split-image
+global-evidence regression prevents the discarded VI-boundary regression.
+
+After that correction, identify and solve were rerun for all ten ROM/control
+inputs on the accepted revision. Exact IDs permit reusing the corresponding
+complete already-regenerated map (discovery code and inputs are unchanged);
+PM and OoT were rediscovered because their ID bytes changed. PM's function
+list stays identical (121); only the now-resolved osSetTime ambiguity metadata
+and its declaration digest change. Its digest-normalized map stays identical.
+BK remains byte-identical to the complete normal run (including IDs and map),
+with the same 29-blocker verdict. MM/F-Zero X/ROM-only SM64 controls stay
+byte-identical to the original baselines. Configured SM64 was also independently
+rediscovered again on the accepted revision and is byte-identical to its
+pre-change configured baseline. All ten final verdicts and hashes are retained
+in checked-sweep/results.json and map-verification.json. No new native control
+gameplay run was made; this regression evidence is identification/map/closure
+plus the complete synthetic native runtime gate.
+
+Iteration timing control (single local runs, not a speedup claim): configured
+SM64 identify/discover/solve before were 0.683 / 6.814 / 1.081 seconds; accepted
+revision 0.350 / 6.468 / 1.076 seconds, with byte-identical complete maps.
+No owned compiler/oracle/validation/game processes remain after closeout.

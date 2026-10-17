@@ -1,23 +1,27 @@
 # Next
 
-## Continue reference-driven post-boot discovery after ADR-0190
+## Continue BK closure after ADR-0191
 
-Keep ares as the analysis-time CPU/device executor. BK's loader now produces
-three replayed images, but closure remains OPEN with 72 blockers: classify its
-ERET/system boundaries (starting at 80002b5c), seven unmapped targets and the
-decoder/indirect candidates exposed by the third image. Distinguish executable
-text from contiguous produced data before treating invalid decoded candidates
-as actual executed instructions. Do not hide these behind a broader native
-scope or game-specific runtime exceptions.
+BK is scoped OPEN with 29 blockers. Existing signatures identify its independent
+SDK copies across disconnected supplied images; two exception dispatch blockers
+and a false osVoiceInit switch-arm boundary are resolved. Next model the actual
+__osGetSR/Status interrupt-mask observation (80259d30), without returning a guessed
+constant. The existing runtime service set has no verified Status helper.
 
-The deterministic reset profile stops at 100 million instruction calls / 3,600
-VI and eight discovery rounds; BK's retained trace reaches VI 187. Missing
-targets after that budget are not proven input-dependent. Broaden measured boot
-coverage or establish a genuine controller requirement before supplying input.
-SF64/MK64/PM/GE remain OPEN. Preserve source provenance, replay, cache visibility
-and native text guards, then repeat closure and the visible audio-required native
-pipeline. BK lowering, compilation, RSP-from-ROM and native execution remain
-unreached. Whole-ROM closure and executable overlay lifetime proofs remain open.
+Seven direct-call targets in 8038xxxx decode as data-shaped/noncanonical words
+in the captured generation; seven further targets are unmapped. Establish the
+loader/overlay generations or a genuine non-executable proof. Do not suppress
+static calls merely because a finite trace missed them. A 500-million-call
+neutral-input experiment reaches analysis VI 676 without fetching the seven
+missing targets; input dependence remains unproven. Production stays at
+100 million calls / 3,600 VI / eight rounds.
+
+Preserve source provenance, replay, cache visibility and native content guards.
+BK native lowering, RSP extraction, visible execution and required PCM remain
+unreached. PM improves to 164 blockers through the general identification fix
+and three newly harvested declarations; SF64/MK64/GE/RS remain OPEN. Repeat the
+normal visible, audio-required native pipeline only after scoped CLOSED.
+Whole-ROM closure and executable overlay lifetime proofs remain open.
 
 ## RSP continuation after ADR-0188
 
