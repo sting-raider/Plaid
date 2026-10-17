@@ -5741,3 +5741,34 @@ No upstream implementation or game code was copied. Synthetic Rust/CLI tests
 retain signed-low/ORI distinctions, disagreement and refusal cases. See
 research/integration-receipts/20261017-sdk-data-bindings.md for the artifact
 contract, pinned reference, controls and validation protocol.
+
+## ADR-0195: Post-IPL SP memory from the ROM's own IPL3 in pinned ares
+
+Status: accepted; declared assumption. Milestone 5.
+
+The PIF copies ROM 0x40-0xfff into DMEM, but the ROM's IPL3 then runs from
+DMEM and leaves both SP memories changed at the game entry. Games may read
+that state: BK requires DMEM word 0 = ffffffff and IMEM word 0 = 000017d7
+before it loads rspboot (ROM 0xb70 to 802820c0); with the PIF-only copy it
+never does, and its first audio task finds no boot microcode. In pinned ares
+DMEM 0x00-0x3f is all ff, DMEM 0x40-0xfff differs from the ROM copy in 3,957
+bytes and IMEM is fully written.
+
+At analysis time native.py runs pinned ares 9408cb43 from reset through the
+hash-checked NTSC PIF and the ROM's IPL3, under the CIC selected from its
+IPL3 CRC32 (ADR-0190's executor and refusals), to the first fetch of the
+inferred game entry, and records DMEM then IMEM at that instant. The native
+runtime starts SP memory from those 8 KiB (PLAID_SP_BOOT); builds without
+them keep the PIF copy. A run that never reaches the entry builds nothing.
+The native artifact contains the bytes only, never ares.
+
+Declared assumption: post-IPL SP memory is pinned ares' result of the ROM's
+IPL3 under deterministic entropy. It is retired by agreement with real
+hardware dumps per CIC. The run-time --rom is not checked against the build
+ROM, as for the rest of the artifact. Other IPL3 side effects (RDRAM
+configuration words, SP/MI registers) are not modelled by this decision.
+
+Tests: the synthetic ares fixture records 8 KiB of SP memory at the entry
+fetch, identical whether the run stops there or continues; the runtime test
+starts DMEM/IMEM from a declared state rather than ROM 0x40-0xfff. No
+upstream implementation or game code was copied.

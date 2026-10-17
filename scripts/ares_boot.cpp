@@ -17,6 +17,7 @@ static std::set<u32> targets;
 static u64 steps = 0;
 static FILE* result;
 static std::vector<std::array<u32, 3>> dma;
+static std::vector<u8> sp; // DMEM then IMEM at the first entry fetch
 static void mark(bool write, u32 address, u32 size, u32 device) {
   if(!entered || !write || !rdram.mapIdentity || address >= written.size()) return;
   u8 origin = device == (u32)RBusDevice::VR4300_DCACHE || device == (u32)RBusDevice::VR4300_UNCACHED ? 1
@@ -36,7 +37,14 @@ static void ranges(FILE* f, u32 lo, u32 hi, u8 mask) {
 }
 static void observe(u64 address, u32 word) {
     u32 pc = address;
-    if(pc == boot && !entered) { entered = true; std::fill(written.begin(), written.end(), 0); }
+    if(pc == boot && !entered) {
+      entered = true; std::fill(written.begin(), written.end(), 0);
+      // SP memory as the ROM's own IPL3 leaves it (ADR-0195).
+      for(u32 a = 0; a < 0x2000; a += 4) {
+        u32 w = a < 0x1000 ? rsp.dmem.read<Word>(a) : rsp.imem.read<Word>(a - 0x1000);
+        for(int s = 24; s >= 0; s -= 8) sp.push_back(u8(w >> s));
+      }
+    }
     if(!targets.contains(pc) || !entered) return;
     targets.erase(pc); // Only the first fetch can authorize this generation.
     auto reject = [&](const char* reason) {
@@ -117,7 +125,9 @@ int main(int argc, char** argv) {
     if(cpu.instruction()) cpu.synchronize();
     if(vi.refreshed) { vis++; vi.refreshed = false; }
   }
-  std::fprintf(result, "{\"stop_pc\":%u,\"steps\":%llu,\"vi\":%u,\"entered\":%s,\"remaining\":%zu}\n", (u32)cpu.ipu.pc, (unsigned long long)steps, vis, entered ? "true" : "false", targets.size());
+  std::fprintf(result, "{\"stop_pc\":%u,\"steps\":%llu,\"vi\":%u,\"entered\":%s,\"remaining\":%zu,\"sp\":[", (u32)cpu.ipu.pc, (unsigned long long)steps, vis, entered ? "true" : "false", targets.size());
+  for(size_t i = 0; i < sp.size(); i++) std::fprintf(result, "%s%u", i ? "," : "", (u32)sp[i]);
+  std::fprintf(result, "]}\n");
   bool error = std::ferror(result); if(std::fclose(result)) error = true;
   ares::Nintendo64::system.unload();
   return error ? 5 : 0;

@@ -11,7 +11,8 @@ def run(exe, cc, T):
     destination = 0xa0001040
     program = [*T.li(A.sp,0x80007f00), *T.li(A.gp,0x80001000),
                *T.poke(destination-4,0x12345678), *T.poke(destination+16,0x87654321),
-               *T.call('osPiRawStartDma',0,0x100,destination,16), A.sw(A.v0,0,A.gp),
+               *T.poke(0xa0000308,0xb0000000),  # osRomBase, as IPL3 leaves it
+               *T.call('osPiRawStartDma',0,0xb0000100,destination,16), A.sw(A.v0,0,A.gp),
                'wait', *T.li(A.t0,0xa4600010), A.lw(A.t1,0,A.t0), A.andi(A.t1,A.t1,3),
                A.bne(A.t1,A.zero,'wait'), A.nop,
                *T.call('osPiGetStatus'), A.sw(A.v0,4,A.gp), *T.poke(0xa4600010,2),
@@ -24,7 +25,8 @@ def run(exe, cc, T):
     program += [A.mfhi(A.t2),A.sd(A.t2,0xe0,A.gp),A.mflo(A.t2),A.sd(A.t2,0xe8,A.gp),*A.DONE,
                'osPiRawStartDma', *T.li(A.t0,0xa4600000),
                *T.li(A.t1,0x1fffffff), A.and_(A.t1,A.a2,A.t1), A.sw(A.t1,0,A.t0),
-               *T.li(A.t1,0x10000000), A.or_(A.t1,A.t1,A.a1), A.sw(A.t1,4,A.t0),
+               *T.li(A.t1,0x80000308), A.lw(A.t1,0,A.t1), A.or_(A.t1,A.t1,A.a1),  # K1_TO_PHYS(osRomBase | devAddr)
+               *T.li(A.t2,0x1fffffff), A.and_(A.t1,A.t1,A.t2), A.sw(A.t1,4,A.t0),
                A.addiu(A.t1,A.a3,-1), A.sw(A.t1,12,A.t0), A.jr(A.ra), A.addiu(A.v0,A.zero,0),
                'osPiGetStatus', *T.li(A.t0,0xa4600010), A.jr(A.ra), A.lw(A.v0,0,A.t0)]
     native = T.build(exe,cc,'raw-rom',program,['osPiRawStartDma','osPiGetStatus'])
@@ -54,12 +56,12 @@ def run(exe, cc, T):
         ('bounds',(0,0x2000,destination,16),'PI DMA outside the ROM'),
         ('executable',(0,0x100,A.BASE,16),'runtime write refused'),
         ('alignment',(0,0x101,destination,16),'unaligned raw PI DMA is not modeled')]:
-        bad=[*T.li(A.sp,0x80007f00),*T.call('osPiRawStartDma',*arguments),*A.DONE,
+        bad=[*T.li(A.sp,0x80007f00),*T.poke(0xa0000308,0xb0000000),*T.call('osPiRawStartDma',*arguments),*A.DONE,
              'osPiRawStartDma',A.jr(A.ra),A.nop]
         binary=T.build(exe,cc,'raw-rom-'+name,bad,['osPiRawStartDma'])
         failed=subprocess.run([str(binary),'--rom',str(rom)],capture_output=True,text=True,timeout=30)
         assert failed.returncode==1 and reason in failed.stdout and '"pi_dma":0' in failed.stdout,(failed.stdout,failed.stderr)
-    print('raw ROM PI DMA: RAM/guards/return and interrupt status/ack match pinned ares; writes, bounds and unsupported alignment refused')
+    print('raw ROM PI DMA: osRomBase-qualified address, RAM/guards/return and interrupt status/ack match pinned ares; writes, bounds and unsupported alignment refused')
 
 if __name__=='__main__':
     import shutil
