@@ -892,12 +892,17 @@ RT(__osSetFpcCsr) {
 
 /* ---- PI DMA ------------------------------------------------------------- */
 
+/* libultra's PI DMA addresses the cartridge at K1_TO_PHYS(osRomBase | devAddr) */
+static u32 pi_rom_offset(u32 dev, u32 n) {
+  u32 p = (rd32(0x80000308u) | dev) & 0x1fffffffu;
+  if (p < 0x10000000u || (u64)(p - 0x10000000u) + n > rom_size) finish(1, "PI DMA outside the ROM");
+  return p - 0x10000000u;
+}
 /* osPiStartDma(mb, pri, direction, devAddr, vAddr, nbytes, mq) */
 RT(osPiStartDma) {
   u32 mb = arg(0), dir = arg(2), dev = arg(3), va = arg(4), n = arg(5), mq = arg(6);
   if (dir != 0) finish(1, "PI write to cartridge");
-  if ((u64)dev + n > rom_size) finish(1, "PI DMA outside the ROM");
-  dma_wr(va, rom + dev, n);
+  dma_wr(va, rom + pi_rom_offset(dev, n), n);
   dma_count++;
   pi_complete(mq, mb);
   maybe_preempt(1);
@@ -914,8 +919,10 @@ RT(osCartRomInit) {
 /* ---- RCP memory and registers (ADR-0177) ------------------------------- */
 
 /* Uncached CPU words in SP memory and the PI registers, as pinned ares
-   (rsp/io.cpp, pi/io.cpp). The PIF leaves ROM 0x40-0xfff in DMEM and the
-   header's domain 1 timing in the PI. A task the runtime completes without
+   (rsp/io.cpp, pi/io.cpp). A native build starts SP memory as the ROM's
+   own IPL3 leaves it in pinned ares (PLAID_SP_BOOT, ADR-0195); otherwise
+   the PIF leaves ROM 0x40-0xfff in DMEM. The header's domain 1 timing is
+   in the PI. A task the runtime completes without
    running its microcode leaves SP memory unknown, and reading it then
    fails closed. PI DMA here completes before the caller resumes, so the
    status reads idle. On the PI bus the cartridge ROM reads as itself and
@@ -930,9 +937,16 @@ static u8 DMEM[4096], IMEM[4096];
 static int sp_unknown;
 static u32 pi_bsd[8]; /* DOM1 LAT PWD PGS RLS, DOM2 LAT PWD PGS RLS */
 static const u32 pi_bsd_mask[8] = {0xff, 0xff, 0xf, 0x3, 0xff, 0xff, 0xff, 0xff};
+#ifdef PLAID_SP_BOOT
+#include PLAID_SP_BOOT
+#endif
 static void io_boot(void) {
   u32 c = rom[0] << 24 | rom[1] << 16 | rom[2] << 8 | rom[3];
+#ifdef PLAID_SP_BOOT
+  memcpy(DMEM, plaid_sp_boot, 0x1000); memcpy(IMEM, plaid_sp_boot + 0x1000, 0x1000);
+#else
   memcpy(DMEM + 0x40, rom + 0x40, 0xfc0);
+#endif
   pi_bsd[0] = c & 0xff; pi_bsd[1] = c >> 8 & 0xff; pi_bsd[2] = c >> 16 & 0xf; pi_bsd[3] = c >> 20 & 0x3;
 }
 /* ---- FlashRAM (ADR-0183) -------------------------------------------------
@@ -1117,8 +1131,7 @@ RT(osPiRawStartDma) {
   u32 direction = arg(0), offset = arg(1), destination = arg(2), size = arg(3);
   if (direction != 0) finish(1, "PI write to cartridge");
   if (!size || ((offset | destination | size) & 7u)) finish(1, "unaligned raw PI DMA is not modeled");
-  if ((u64)offset + size > rom_size) finish(1, "PI DMA outside the ROM");
-  dma_wr(destination, rom + offset, size);
+  dma_wr(destination, rom + pi_rom_offset(offset, size), size);
   dma_count++;
   pi_status |= 8u;
   if (S->status_known) { pending[EV_PI] = 1; plaid_preempt = 1; }

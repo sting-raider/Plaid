@@ -41,6 +41,9 @@ def main():
         assert bytes(image['bytes']) == struct.pack('>3I', 0x2402002a, 0x03e00008, 0), image
         assert image['cpu_writes'] == [[0x1000, 0x100c]] and image['pi_dma'] == [], image
         assert image['steps'] == 13 and stop['remaining'] == 0, (image, stop)
+        # SP memory is taken at the entry fetch, before any guest instruction.
+        entry = [json.loads(line) for line in run('0x80000400', 1000).splitlines()][-1]
+        assert len(stop['sp']) == 0x2000 and stop['sp'] == entry['sp'] and entry['steps'] == 1, entry['steps']
         refused = [json.loads(line) for line in run('0x80001000', 4).splitlines()]
         assert len(refused) == 1 and refused[0]['remaining'] == 1 and refused[0]['steps'] == 4
         refused = [json.loads(line) for line in run('0x80000400', 1000).splitlines()]
@@ -66,7 +69,7 @@ def main():
                 raise AssertionError('synthetic IPL3 was accepted for reset boot')
             except ValueError as error:
                 assert str(error) == 'unsupported IPL3 CRC32 e8b8467d; no guessed CIC', str(error)
-    print('PASS ares harvest: deterministic synthetic text, exact RAM/PC/CPU-write ranges, budget refusal (declared post-IPL fixture)')
+    print('PASS ares harvest: deterministic synthetic text, exact RAM/PC/CPU-write ranges, SP memory at entry, budget refusal (declared post-IPL fixture)')
 
     # A recovered range can overlap known images. Only missing components are
     # added; static declarations and caller-supplied snapshots gain no authority.

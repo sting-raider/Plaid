@@ -161,6 +161,28 @@ The visible run then stays scoped CLOSED and stops at VI 10 / 19 PI transfers
 on BK's first audio task: "unknown or ambiguous ROM-derived RSP microcode"
 (fault 0). No graphics task or gameplay has been observed.
 
+That task had no boot microcode in IMEM because BK never loaded rspboot. Before
+it DMAs ROM 0xb70 to 802820c0 (code near 802549c8) BK checks the SP memory
+IPL3 leaves behind: DMEM word 0 = ffffffff and IMEM word 0 = 000017d7. Native
+boot copied only ROM 0x40-0xfff into DMEM, so the check failed. At the game
+entry pinned ares has DMEM 0x00-0x3f all ff, DMEM 0x40-0xfff 3,957 bytes away
+from the ROM copy and IMEM fully written. ADR-0195: native.py now captures
+DMEM/IMEM from pinned ares at the first entry fetch (the ROM's own IPL3, CIC
+from its CRC32) and the runtime starts from those 8 KiB, a declared assumption.
+The BK capture equals an independent ares handoff dump byte for byte.
+
+The load then refused as "PI DMA outside the ROM": BK passes devAddr
+b0000b70, and libultra's raw PI DMA addresses K1_TO_PHYS(osRomBase | devAddr),
+which is 10000b70 as in ares; the HLE took devAddr as a ROM offset.
+osPiRawStartDma and osPiStartDma now OR the guest's osRomBase. test_raw_pi.py
+uses a base-qualified devAddr against pinned ares and the old runtime refuses it.
+Native 802820c0 then holds ROM 0xb70-0xc6f, the bytes ares DMAs there.
+
+The visible run now reaches the 60 s limit with no fault: VI 3545, 1,768
+audio tasks, 20 PI transfers. It issues no graphics task and its PCM is
+silent, so the window stays black and --require-audio rejects the build.
+Graphics task dispatch is the next barrier and has not been compared with ares.
+
 ## Sources, evidence and scope
 
 References are exactly refs.lock.toml: ares

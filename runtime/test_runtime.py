@@ -499,6 +499,26 @@ def raw_pi_dma(exe, cc):
     print('raw handle PI DMA: o32 stack size, cartridge bytes and return value; writes and out-of-range reads refused')
 
 
+SP_BOOT_PROGRAM = [*li(A.sp, 0x80007F00), *(w for a in (0xA4000000, 0xA4000040, 0xA4001000, 0xA4001FFC)
+                                            for w in log_word(a)), *A.DONE]
+
+
+def sp_boot(exe, cc):
+    """A native build starts DMEM and IMEM from the post-IPL state native.py
+    captures in pinned ares (ADR-0195), not from the PIF's ROM copy."""
+    rom = OUT / 'io.z64'
+    state = bytes((i * 7 + 3) & 0xFF for i in range(0x2000))
+    (OUT / 'sp_boot.h').write_text('static const u8 plaid_sp_boot[0x2000] = {' + ','.join(map(str, state)) + '};\n')
+    native = build(exe, cc, 'sp_boot', SP_BOOT_PROGRAM, [], ['-DPLAID_SP_BOOT="sp_boot.h"'])
+    run = subprocess.run([str(native), '--rom', str(rom), '--dump', hex(LOG), '4'],
+                         capture_output=True, text=True, timeout=30)
+    lines = {k: v for line in run.stdout.splitlines() if line.startswith('{') for k, v in json.loads(line).items()}
+    words = [int.from_bytes(state[o:o + 4], 'big') for o in (0, 0x40, 0x1000, 0x1FFC)]
+    assert run.returncode == 0 and lines.get('stop') == 'exit', (run.returncode, run.stdout, run.stderr)
+    assert lines['words'] == words, [hex(w) for w in lines['words']]
+    print('SP boot: DMEM and IMEM start from the declared post-IPL state, not ROM 0x40-0xfff')
+
+
 def build(exe, cc, name, program, runtime, extra=(), status_globals=None, fr0=False):
     (OUT / f'{name}.bin').write_bytes(A.assemble(program))
     labels = A.label_pcs(program)
@@ -599,6 +619,7 @@ def main():
     rsp_graphics(exe, cc)
     audio_dma(exe, cc)
     rcp_io(exe, cc)
+    sp_boot(exe, cc)
     raw_pi_dma(exe, cc)
     import test_raw_pi
     test_raw_pi.run(exe, cc, sys.modules[__name__])
