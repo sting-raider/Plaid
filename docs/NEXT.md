@@ -1,5 +1,26 @@
 # Next
 
+## Continue BK after paired-slot discovery (ADR-0192)
+
+The next acceptance sequence and pinned-source observations are in
+`research/status-interrupt-model.md`. Start with the retained RestoreInt(0)
+counterexample, then verified mask bindings, thread state and event delivery.
+
+BK is now scoped OPEN with one genuine Status-read blocker at 80259d30.
+Implement and differential-test guest-visible Status, interrupt-mask changes
+and thread/event interactions before admitting __osGetSR as a runtime boundary.
+Current osSetIntMask/osGetIntMask return fixed masks; __osDisableInt tracks a
+separate enable bit. Adding a guessed Status constant would be unsound.
+
+The source catalog now supplies 13 shared-slot executable files with format-owned
+text/data bounds. Retain catalog/metadata uniqueness, exact decoded sizes,
+instruction/data separation, content checks and native-frame pins. Whole-loader
+lifetime and exhaustive execution remain unproven. Once scoped CLOSED, rerun
+the normal visible `--rt64 --seconds 60 --require-audio` pipeline and record VI,
+fault/PC and PCM. See the continuation receipt in `research/rom-sweep.md`.
+
+The older continuation below records the pre-ADR-0192 state.
+
 ## Continue BK closure after ADR-0191
 
 BK is scoped OPEN with 29 blockers. Existing signatures identify its independent

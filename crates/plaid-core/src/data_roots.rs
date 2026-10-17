@@ -83,7 +83,7 @@ fn after_returns(image: &CodeImage) -> impl Iterator<Item = u32> + '_ {
 fn function_start(image: &CodeImage, pc: GuestAddr, starts: &BTreeSet<u32>) -> bool {
     pc.0.is_multiple_of(4)
         && image
-            .word(pc)
+            .instruction_word(pc)
             .is_some_and(|w| w != 0 && crate::discovery::decode(w, pc).is_valid())
         && after_return(image, pc, starts)
 }
@@ -109,7 +109,7 @@ pub fn scan(bytes: &[u8], image: &CodeImage) -> BTreeSet<GuestAddr> {
 fn cpu_code(image: &CodeImage, pc: GuestAddr) -> bool {
     let mut at = pc.0;
     for _ in 0..4096 {
-        let Some(w) = image.word(GuestAddr(at)) else {
+        let Some(w) = image.instruction_word(GuestAddr(at)) else {
             return false;
         };
         let i = crate::discovery::decode(w, GuestAddr(at));
@@ -131,12 +131,14 @@ fn cpu_code(image: &CodeImage, pc: GuestAddr) -> bool {
             image
                 .slot_copies(t)
                 .iter()
-                .all(|&c| image.word(GuestAddr(c)).is_none())
+                .all(|&c| image.instruction_word(GuestAddr(c)).is_none())
         }) {
             return false;
         }
         if w == JR_RA {
-            return image.word(GuestAddr(at.wrapping_add(4))).is_some();
+            return image
+                .instruction_word(GuestAddr(at.wrapping_add(4)))
+                .is_some();
         }
         at = at.wrapping_add(4);
     }

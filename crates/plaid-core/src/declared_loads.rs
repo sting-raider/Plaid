@@ -20,6 +20,11 @@ use serde::{Deserialize, Serialize};
 pub enum LoadEncoding {
     Raw,
     Yaz0,
+    /// Two adjacent 1172 streams: text followed by data, bounded by the catalog.
+    RarePair {
+        end: RomOffset,
+        text_size: u32,
+    },
     /// Re-execute the bounded ROM-only boot transformation; no snapshot input.
     Boot,
     /// Pinned ares reset boot; the payload selects the first fetched target.
@@ -54,12 +59,15 @@ impl DeclaredLoad {
     /// The overlay layout of a relocatable load whose placed bytes are
     /// `bytes`: a slot alternate's synthesized one, else the Zelda64 trailer.
     pub fn layout(&self, bytes: &[u8]) -> Result<crate::overlays::Layout, String> {
-        match self.linked {
-            Some(_) => Ok(crate::overlays::slot_layout(
+        match (self.linked, self.encoding) {
+            (Some(_), LoadEncoding::RarePair { text_size, .. }) => {
+                crate::overlays::slot_layout_bounded(bytes, self.destination.start.0, text_size)
+            }
+            (Some(_), _) => Ok(crate::overlays::slot_layout(
                 bytes,
                 self.destination.start.0,
             )),
-            None => crate::overlays::Layout::parse(bytes),
+            (None, _) => crate::overlays::Layout::parse(bytes),
         }
     }
 }
@@ -72,7 +80,11 @@ pub fn slot_targets(loads: &[DeclaredLoad], target: u32) -> Vec<u32> {
         .iter()
         .filter_map(|l| {
             let off = target.wrapping_sub(l.linked?.0);
-            (off < l.destination.size).then(|| l.destination.start.0 + off)
+            let size = match l.encoding {
+                LoadEncoding::RarePair { text_size, .. } => text_size,
+                _ => l.destination.size,
+            };
+            (off < size).then(|| l.destination.start.0 + off)
         })
         .collect()
 }
@@ -199,6 +211,16 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
             .ok_or("load source outside the ROM")?
             .to_vec(),
         LoadEncoding::Yaz0 => yaz0(bytes.get(start..).ok_or("load source outside the ROM")?)?,
+        LoadEncoding::RarePair { end, text_size } => {
+            if !load.relocatable || load.linked.is_none() {
+                return Err("1172 paired files require a slot binding".into());
+            }
+            let (data, actual_text) = crate::paired_streams::decode(bytes, load.source.0, end.0)?;
+            if actual_text != text_size {
+                return Err("1172 text size differs from the stream boundary".into());
+            }
+            data
+        }
         LoadEncoding::Boot => {
             if start != 0 || load.relocatable || load.linked.is_some() {
                 return Err(
@@ -244,11 +266,13 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
         if !load.relocatable {
             return Err("a slot alternate runs only through a binding".into());
         }
-        return crate::overlays::slot_layout(&data, linked.0).apply(
-            &data,
-            linked.0,
-            load.destination.start.0,
-        );
+        let layout = match load.encoding {
+            LoadEncoding::RarePair { text_size, .. } => {
+                crate::overlays::slot_layout_bounded(&data, linked.0, text_size)?
+            }
+            _ => crate::overlays::slot_layout(&data, linked.0),
+        };
+        return layout.apply(&data, linked.0, load.destination.start.0);
     }
     Ok(data)
 }

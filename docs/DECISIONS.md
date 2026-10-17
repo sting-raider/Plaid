@@ -5656,3 +5656,53 @@ or sizes at one address select no runtime boundary. A split-image getter
 regression and explicit name/size conflict tests retain this requirement;
 scanning is shared, not repeated. Final verification supersedes the earlier
 component-only checkpoint and its gate in the research receipt.
+
+
+## ADR-0192: Paired-stream executable slot catalogs (partial BK closure)
+
+Status: implemented; BK remains scoped OPEN. No assumption is retired.
+
+The pinned ares store observer identifies BK's loader at 80251da0, the paired
+decompression wrapper at 8023dd24 and slot writes at 8023e5f8/8023e7e4. The
+loader indexes a physical source table initialized by boot code (80001bf0,
+table 803ffe10); its unrelated segment table contains obsolete virtual source
+offsets. ROM-only structural analysis recovers the physical table from literal
+stores and matches its complete pair census to a unique segment table in a
+boot-named compressed container. No title IDs, fixed offsets or captured RAM
+are production inputs. This recognition declares candidate files; it does not
+prove that every executable source or future loader state is known.
+
+Extend plaid-loads-v0 with rare_pair, rom_end and text_size. Each bounded 1172
+stream has a big-endian decoded size and raw DEFLATE payload. The first stream
+is text, the next data; the complete catalog must agree with the segment table,
+including an explicitly empty entry. Refuse missing/ambiguous metadata and
+damaged/truncated catalogs rather than admitting a valid suffix. Decoding
+requires stream end, exact size, alignment and bounded file padding. Recompute
+the declared text size from the ROM before composition. Slot data supplies
+table reads but cannot supply instructions, including fallthrough/delay slots.
+An explicit branch into it remains an OPEN obligation.
+
+Reuse ADR-0185 slot placement/relocations and ADR-0187 content verification and
+native-frame pins. Format-owned text bounds replace the return-scan boundary
+for this encoding. Data/BSS state is guest memory, never silently decoded as
+MIPS at run time. Existing raw/Yaz0/boot load encodings are preserved.
+
+Use the locked flate2 1.1.10 Rust dependency (MIT OR Apache-2.0), with its Rust
+backend, rather than writing another DEFLATE implementation. No upstream code
+was copied or vendored; Cargo.lock retains the transitive versions. The API
+contract was checked against https://docs.rs/flate2/1.1.10/flate2/ . The pinned
+ares reference remains separately built and licensed. Python zlib provides an
+independent research parser; synthetic native state/RAM/PC/fault comparisons
+with pinned ares cover raw and paired shared slots, switching and refusal.
+
+BK has 13 slot files and improves 29 -> 1 scoped blocker. __osGetSR remains
+unsupported: the current HLE interrupt mask is not a verified architectural
+Status model. Do not identify away the remaining read or fabricate its value.
+Native gameplay/audio acceptance remains unreached. See research/rom-sweep.md
+for exact results, controls, commands and final gate.
+
+Review hardening retains conflicting literal writes (including partial and malformed
+initializers), refuses matching prefixes/suffixes of longer segment tables and
+validates row ordering before arithmetic. Identical duplicate initializers agree.
+Six deterministic Rust regressions and independent Python contracts retain the
+required counterexamples. See research/integration-receipts/20261017-paired-slot-primary.md.

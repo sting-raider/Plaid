@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 SLICE = ROOT / 'spikes/096-native-slice'
@@ -29,30 +30,50 @@ def main():
                 a.lui(a.a0, 0x8000), a.ori(a.a0, a.a0, slot & 0xffff), a.jal('icache'), a.nop]
 
     call = [3 << 26 | (slot >> 2 & 0x3ffffff), a.nop]
-    for mode in ('switch', 'tamper', 'ambiguous'):
+    def snapshot(offset):
+        # Retain each generation's actual slot writes in the oracle RAM slice.
+        return [a.lui(a.t0, 0xa000), a.ori(a.t0, a.t0, slot & 0xffff),
+                a.lui(a.t2, 0xa000), a.ori(a.t2, a.t2, offset),
+                *[word for at in range(0, 16, 4)
+                  for word in (a.lw(a.t1, at, a.t0), a.sw(a.t1, at, a.t2))]]
+    for mode in ('switch', 'tamper', 'ambiguous', 'paired-switch', 'paired-tamper', 'paired-ambiguous'):
+        case = mode.removeprefix('paired-')
         items = [*copy('one', 'copy1')]
-        if mode == 'tamper':
+        if case == 'tamper':
             items += [a.sw(0, -16, a.s1)]
-        items += [*call, a.addu(a.s3, a.v0, 0)]
-        if mode == 'switch':
-            items += [*copy('two', 'copy2'), *call, a.addu(a.s4, a.v0, 0),
+        items += [*call, a.addu(a.s3, a.v0, 0), *snapshot(0x1000)]
+        if case == 'switch':
+            items += [*copy('two', 'copy2'), *call, a.addu(a.s4, a.v0, 0), *snapshot(0x1010),
                       *copy('one', 'copy3'), a.lui(a.t9, 0x8000), a.ori(a.t9, a.t9, 0x4000),
-                      a.jalr(a.ra, a.t9), a.nop, a.addu(a.s5, a.v0, 0)]
+                      a.jalr(a.ra, a.t9), a.nop, a.addu(a.s5, a.v0, 0), *snapshot(0x1020)]
         items += [*a.DONE,
                   'icache', a.I(47, 16, a.a0, 0), a.jr(a.ra), a.nop,
                   'one', a.addiu(a.v0, 0, 7), a.jr(a.ra), a.nop, slot,
-                  'two', a.addiu(a.v0, 0, 7 if mode == 'ambiguous' else 11), a.jr(a.ra), a.nop, slot]
+                  'two', a.addiu(a.v0, 0, 7 if case == 'ambiguous' else 11), a.jr(a.ra), a.nop, slot]
         raw = a.assemble(items)
         labels = a.label_pcs(items)
         rom = bytearray(0x1000)
         rom[:4] = bytes.fromhex('80371240')
         rom.extend(raw)
         source, loads, m, c, runtime = (OUT / f'{mode}{ext}' for ext in ('.z64', '.loads.json', '.map.json', '.c', '.runtime.json'))
+        declarations = []
+        for label in ('one', 'two'):
+            offset = 0x1000 + labels[label] - a.BASE
+            entry = {'destination': hex(slot), 'size': '0x10', 'rom': hex(offset),
+                     'encoding': 'raw', 'slot': True}
+            if mode.startswith('paired-'):
+                def stream(data):
+                    compressor = zlib.compressobj(wbits=-15)
+                    return b'\x11\x72' + len(data).to_bytes(4, 'big') + compressor.compress(data) + compressor.flush()
+                encoded = stream(rom[offset:offset + 16]) + stream(bytes(16))
+                entry.update(rom=hex(len(rom)), rom_end=hex(len(rom) + len(encoded)),
+                             size='0x20', text_size='0x10', encoding='rare_pair')
+                rom.extend(encoded)
+            declarations.append(entry)
+        rom.extend(bytes((-len(rom)) % 4))
         source.write_bytes(rom)
         loads.write_text(json.dumps({'format': 'plaid-loads-v0', 'source': 'synthetic shared-slot contract',
-                         'loads': [{'destination': hex(slot), 'size': '0x10',
-                                    'rom': hex(0x1000 + labels[label] - a.BASE),
-                                    'encoding': 'raw', 'slot': True} for label in ('one', 'two')]}))
+                                    'loads': declarations}))
         runtime.write_text(json.dumps({'format': 'plaid-runtime-functions-v0', 'source': 'synthetic cache boundary',
                                       'functions': [{'entry': hex(labels['icache']), 'name': 'icache', 'callbacks': []}]}))
         cmd = [str(exe), 'discover', str(source), '0x1000', hex(a.BASE), hex(len(raw)), hex(a.BASE), str(m), str(runtime),
@@ -71,7 +92,7 @@ def main():
                         str(SLICE / 'harness.c'), '-lm', '-o', str(native)], check=True)
         run = subprocess.run([str(native)], capture_output=True, text=True, timeout=30)
         state = json.loads(run.stdout)
-        if mode == 'switch':
+        if case == 'switch':
             assert run.returncode == 0 and state['regs'][19:22] == [7, 11, 7], (mode, state)
             raw_path = OUT / 'switch.bin'
             raw_path.write_bytes(raw)
@@ -92,7 +113,7 @@ def main():
             assert ref.returncode == 0 and state == json.loads(ref.stdout), (state, ref.stdout, ref.stderr)
         else:
             assert run.returncode == 6 and state['fault'] == 3, (mode, state)
-    print('PASS shared-slot native calls match pinned ares (7/11/7); tampered and ambiguous text fail closed')
+    print('PASS raw and paired-stream slots match pinned ares (7/11/7); tampered and ambiguous text fail closed')
 
 
 if __name__ == '__main__':

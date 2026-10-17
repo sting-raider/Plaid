@@ -1,5 +1,23 @@
 # Status
 
+## BK paired executable slot catalog (partial; ADR-0192)
+
+Review hardening rejects conflicting source initializers, partial matches of
+longer segment tables and malformed metadata arithmetic. Six retained Rust
+regressions cover these failures; the primary receipt is
+`research/integration-receipts/20261017-paired-slot-primary.md`.
+
+The ROM-only path now derives 13 executable files sharing 80385610 from a
+constant-initialized physical source catalog and a matching segment table.
+The 1172 paired-stream boundary supplies text/data sizes; data remains readable
+for tables but is excluded from instruction discovery. Existing content-verified
+bindings and native-frame pins apply. BK improves **29 -> 1 scoped blocker**:
+the remaining MFC0 Status at 80259d30 is the unsupported SDK __osGetSR helper.
+Seven data-word effects, seven invalid candidates, seven missing targets and
+seven direct edges are resolved. Native lowering and gameplay/audio remain
+unreached; VI, fault/PC and PCM are unmeasured. No assumption is retired.
+The full receipt, controls and local gate are in `research/rom-sweep.md`.
+
 ## BK SDK identification and boot harvest (partial; ADR-0190/0191)
 
 The ROM-only pipeline replays pinned ares at analysis time, preserving PI/CPU

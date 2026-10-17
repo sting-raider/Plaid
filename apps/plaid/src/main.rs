@@ -1345,6 +1345,7 @@ fn run() -> Result<(), String> {
                 .get(0x1000..end)
                 .ok_or("ROM ends before its boot window")?;
             let found = plaid_core::overlays::static_loads(bytes, base, rom.header.boot_address.0)?;
+            let paired = plaid_core::paired_streams::infer(bytes, base);
             let stub = plaid_core::overlays::reset_stub(bytes, base.len() as u32);
             let mut loads: Vec<_> = stub
                 .map(|size| {
@@ -1370,6 +1371,16 @@ fn run() -> Result<(), String> {
                     load
                 }))
                 .collect();
+            for file in &paired {
+                loads.push(serde_json::json!({
+                    "destination": format!("{:#x}", file.destination),
+                    "size": format!("{:#x}", file.text + file.data),
+                    "rom": format!("{:#x}", file.source),
+                    "rom_end": format!("{:#x}", file.end),
+                    "text_size": format!("{:#x}", file.text),
+                    "encoding": "rare_pair", "slot": true,
+                }));
+            }
             let mut evidence: Vec<_> = stub
                 .map(|size| format!("reset stub of {size:#x} bytes before the first file in the boot window"))
                 .into_iter()
@@ -1387,6 +1398,11 @@ fn run() -> Result<(), String> {
                     )
                 }))
                 .collect();
+            for file in &paired {
+                evidence.push(format!("1172 paired-stream catalog {:#x} index {}; metadata container {:#x}+{:#x}; text/data {:#x}/{:#x}, BSS {:#x}; decoded SHA256 {}",
+                    file.source_table, file.index, file.metadata_source, file.metadata_offset,
+                    file.text, file.data, file.bss, file.sha256));
+            }
             match plaid_core::boot_execution::execute(&rom) {
                 Ok(capture) => {
                     let lo = u64::from(capture.destination.start.0);
@@ -1549,11 +1565,15 @@ fn load_declarations(
         let encoding = match l["encoding"].as_str() {
             Some("raw") => LoadEncoding::Raw,
             Some("yaz0") => LoadEncoding::Yaz0,
+            Some("rare_pair") => LoadEncoding::RarePair {
+                end: RomOffset(field("rom_end")?),
+                text_size: u32::try_from(field("text_size")?).map_err(|e| e.to_string())?,
+            },
             Some("boot") => LoadEncoding::Boot,
             Some("ares_boot") => LoadEncoding::AresBoot {
                 entry: GuestAddr(u32::try_from(field("entry")?).map_err(|e| e.to_string())?),
             },
-            _ => return Err("load encoding is raw, yaz0, boot or ares_boot".into()),
+            _ => return Err("load encoding is raw, yaz0, rare_pair, boot or ares_boot".into()),
         };
         loads.push(DeclaredLoad {
             destination: GuestRange {

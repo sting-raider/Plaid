@@ -25,6 +25,16 @@ pub struct CodeImage {
     pub slots: Vec<(GuestRange, u32, u32)>,
 }
 impl CodeImage {
+    /// Slot data remains readable for tables, but cannot supply instructions.
+    pub fn instruction_word(&self, pc: GuestAddr) -> Option<u32> {
+        if self.slots.iter().any(|(placed, _, text)| {
+            let off = pc.0.wrapping_sub(placed.start.0);
+            off < placed.size && off >= *text
+        }) {
+            return None;
+        }
+        self.word(pc)
+    }
     /// Where code at `at` finds `address`: in a slot alternate's placed copy
     /// when `at` is in one and `address` is in its linked range (ADR-0185).
     pub fn slot_view(&self, at: GuestAddr, address: u32) -> u32 {
@@ -224,7 +234,7 @@ pub fn direct_cfg_bounded(
             continue;
         }
         let site = image.address(pc);
-        let Some(word) = image.word(pc) else {
+        let Some(word) = image.instruction_word(pc) else {
             map.unresolved.insert(Unresolved {
                 kind: "unmapped_target".into(),
                 site: Some(site),
@@ -263,7 +273,7 @@ pub fn direct_cfg_bounded(
         if i.has_delay_slot() {
             let links = i.does_link() && !(i.opcode_name() == "jalr" && i.get_rd() == 0);
             let ds = GuestAddr(pc.0.wrapping_add(4));
-            let ds_word = image.word(ds);
+            let ds_word = image.instruction_word(ds);
             let ds_valid = ds_word.is_some_and(|w| {
                 let d = decode(w, ds);
                 !unsupported(&d) && !d.has_delay_slot()
@@ -361,7 +371,7 @@ pub fn direct_cfg_bounded(
             }
         } else {
             let next = GuestAddr(pc.0.wrapping_add(4));
-            if image.word(next).is_some() {
+            if image.instruction_word(next).is_some() {
                 pending.insert(next);
             } else {
                 terminal.insert(pc, 4);

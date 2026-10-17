@@ -322,6 +322,20 @@ pub fn slot_text(rom: &[u8], start: u32) -> Option<Vec<u8>> {
 pub fn slot_layout(bytes: &[u8], link: u32) -> Layout {
     let size = bytes.len() as u32;
     let text = slot_text(bytes, 0).map_or(size, |t| t.len() as u32);
+    slot_layout_with_text(bytes, link, text)
+}
+
+/// A format-owned text boundary, verified against its source during decoding.
+pub fn slot_layout_bounded(bytes: &[u8], link: u32, text: u32) -> Result<Layout, String> {
+    let size = u32::try_from(bytes.len()).map_err(|_| "slot file size overflow")?;
+    if text == 0 || text > size || !text.is_multiple_of(4) || !size.is_multiple_of(4) {
+        return Err("slot text boundary outside file or unaligned".into());
+    }
+    Ok(slot_layout_with_text(bytes, link, text))
+}
+
+fn slot_layout_with_text(bytes: &[u8], link: u32, text: u32) -> Layout {
+    let size = bytes.len() as u32;
     let relocations = (0..size / 4)
         .filter_map(|k| {
             let (at, w) = (4 * k, word(bytes, 4 * k as usize).ok()?);
