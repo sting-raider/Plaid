@@ -574,6 +574,8 @@ def main():
     assert stop['vi'] >= 1
     print('runtime scheduling: start/send preemption, blocking receive, priority drop, yield and VI preemption '
           'of a spinning thread match libultra order', json.dumps(dump))
+    import test_interrupts
+    test_interrupts.run(exe, cc, sys.modules[__name__])
     graphics_bridge(exe, cc)
     save_file(exe, cc)
     rsp_tasks(exe, cc)

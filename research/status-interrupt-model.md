@@ -23,7 +23,9 @@ The local references match `refs.lock.toml`: ares
   retained differential test.
 - The simple `__osDisableInt` clears IE and returns the previous IE bit.
   `__osRestoreInt` ORs its argument into Status. The current runtime's IE
-  assignment incorrectly disables an already-enabled context for argument 0.
+  assignment incorrectly disabled an already-enabled context for argument 0.
+  ADR-0193 fixes that IE operation and retains the synthetic differential in
+  `runtime/test_interrupts.py`; the broader Status model remains open.
 - The observed global-mask `osSetIntMask` preserves IE, replaces CPU IM
   using the request and `__OSGlobalIntMask`, and writes the six effective MI
   enables. Its returned previous mask reconstructs inhibited logical bits;
@@ -67,7 +69,7 @@ alongside SP/SI/AI/VI/DP posting; changing only `post()` would leave bypasses.
 
 ## Smallest verification sequence
 
-1. Retain a synthetic counterexample for `RestoreInt(0)` in enabled and
+1. Implemented in ADR-0193: retain a synthetic counterexample for `RestoreInt(0)` in enabled and
    disabled contexts, plus nested disable/restore and valid 0/1 arguments.
    Check the ABI return values, preserved registers, PC, RAM writes and
    exception result against a synthetic pinned-ares reference sequence.

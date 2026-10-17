@@ -5706,3 +5706,20 @@ initializers), refuses matching prefixes/suffixes of longer segment tables and
 validates row ordering before arithmetic. Identical duplicate initializers agree.
 Six deterministic Rust regressions and independent Python contracts retain the
 required counterexamples. See research/integration-receipts/20261017-paired-slot-primary.md.
+
+## ADR-0193: Preserve enabled IE when restoring a saved zero bit
+
+__osRestoreInt restores valid saved IE values by OR, not assignment. A saved
+zero leaves an already-enabled context enabled. Keep the existing delivery
+and preemption path when IE is enabled. This is a correction to the runtime
+Boolean IE operation, not a complete architectural Status model.
+
+Retain a synthetic public lower-c/runtime differential against pinned ares,
+with exact driver hashes, nested/repeated restores, preserved ABI GPR/HI/LO,
+RAM and exit/fault checks. The old assignment fails the enabled-zero case.
+Only the analysis-time oracle executes the independently assembled COP0
+reference routines. No SDK code or game asset is copied.
+
+Do not admit __osGetSR or retire an assumption: verified mask bindings, full
+saved/live Status and event/thread semantics still remain open. See
+research/integration-receipts/20261017-interrupt-restore.md.
