@@ -14,7 +14,7 @@ Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. 
 
 ## Progress report
 
-*As of main `8139af6`, 2026-10-17. Every row traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). "Natively" means the lowered game linked with Plaid's runtime: no interpreter, no JIT, and every unproven state is a fail-closed fault.*
+*As of main `a5e3eb9`, 2026-10-17. Every row traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). "Natively" means the lowered game linked with Plaid's runtime: no interpreter, no JIT, and every unproven state is a fail-closed fault.*
 
 **Two finish lines.**
 1. **ROM in, game runs:** you supply only a ROM. Plaid discovers the code, proves it closed under a declared assumption scope, lowers it to C and builds the executable. **Reached for Majora's Mask and F-Zero X** (the build needs no hand input beyond the scope flags), not yet for SM64 or OoT, and no game has been played to the end.
@@ -29,6 +29,7 @@ Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. 
 | Whole-ROM, no assumptions | OPEN, 4,820 blockers | OPEN, 16,338 with overlays | OPEN, 21,313 | OPEN, 2,995 |
 | How far it runs natively | 59.9 VI/s gameplay with input and saves | boot logo, title screen, file select (ADR-0182) | intro and Clock Town attract scene; erased-FlashRAM run passes the old heap-overlay fault and reaches VI 5358 at the 90 s limit, fault 0 (ADR-0187) | visible 65 s races, vehicle markings and shading, no fault (ADR-0186) |
 | Graphics | RT64 display-list HLE | RT64 display-list HLE | RT64 display-list HLE | compiled graphics microcode, raw RDP to RT64 (`--rsp-gfx`, ADR-0186) |
+| RSP microcode source | from the ROM; 20 s run, fault 0, nonzero PCM (ADR-0188) | ROM-only run refuses at VI 2 on a protected RSP DMA write, so the title and file select above predate it (ADR-0188) | from the ROM; 60 s run, fault 0, nonzero PCM (ADR-0188) | from the ROM, with `--rsp-gfx`; 20 s run, fault 0, nonzero PCM (ADR-0188) |
 | Audio | native: the game's own RSP microcode lowered to C, played via SDL (ADR-0169/0170) | native, lowered microcode (ADR-0182) | restored, PCM peak 32569 in a 60 s run; a real audio task matches ares (ADR-0189) | native, in the same race runs (ADR-0186) |
 | Saves | EEPROM | SRAM | FlashRAM | in the race runs (ADR-0186) |
 | Known stop points | none recorded in a 90 s run | beyond file select is untested | none since ADR-0187; the earlier stop (heap overlay at VI 3188) is fixed. This is finite execution, not a loader-lifetime proof | none in 65 s runs |
@@ -37,9 +38,9 @@ Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. 
 
 | Remaining hand input | Status | What retires it |
 | --- | --- | --- |
-| **RSP microcode** comes from IMEM snapshots saved by running the game, so every new game needs one or more snapshot runs | 🟨 in progress on branch `rsp-from-rom`; **not landed** | lower the microcode from the ROM's own bytes instead of from a run |
+| **RSP microcode** is derived from the ROM by default; IMEM snapshots are oracle-only (ADR-0188) | 🟨 partial: SM64, MM and F-Zero X run with ROM-derived microcode; OoT refuses at VI 2 on a protected RSP DMA write (ADR-0188) | resolve OoT's bootstrap path without a game exception, broaden task, overlay and DMA coverage, and prove the solver's general RSP policy |
 | Code segment address and entry point (SM64, OoT) | inferred for MM and F-Zero X (ADR-0183/0184) | run the same inference on SM64 and OoT, which lack a usable file table for it |
-| `--loads` files (SM64: 2, OoT: 2) | inferred for MM and F-Zero X; SM64's inference finds the engine segment but not goddard (ADR-0184) | broader load inference |
+| `--loads` files (SM64: 2, OoT: 2) | inferred for MM and F-Zero X; SM64's inference finds the engine segment but not goddard (ADR-0184). On unseen ROMs, Banjo-Kazooie is scoped OPEN with 1 blocker (ADR-0190..0192) and five others stop earlier ([`research/rom-sweep.md`](research/rom-sweep.md)) | broader load inference |
 | SM64 decomp map for three runtime names (ADR-0171) | local, never used to find code | identify them from the ROM's bytes (assumption 14) |
 | Scope flags (`--address-taken`, `--fr0`) | chosen by the user; `native.py` refuses to build unless the scope is `CLOSED` | none: the scope is the declared assumption set |
 | libultra as host runtime (HLE) | covers the functions SM64, OoT and MM call; a game calling another fails to link | differential-test each function (assumption 13) |
@@ -54,6 +55,12 @@ Only Windows has been tested with RT64. Only controller 1 works, with no rumble.
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0194 | `a5e3eb9` | Identification retains verified per-copy SDK scalar address bindings |
+| 0193 | `b6006cb` | Restoring a saved zero interrupt bit keeps an enabled one enabled |
+| 0192 | `37399f3` | Paired-stream executable slots derived and verified; Banjo-Kazooie 29 to 1 scoped blocker |
+| 0191 | `6d846df` | Independent SDK copies identified across disconnected images (partial) |
+| 0190 | `8a35ad3`, `40dde18` | Boot-produced executable images recovered, the second with pinned ares (partial) |
+| 0188 | `6758817` | RSP microcode derived from the ROM, with fetch-verified dispatch |
 | 0189 | `8139af6` | Lowered RSP code shares the host's state layout; Majora's Mask has sound |
 | 0187 | `32408f6` | Inactive heap overlays rebind under native-frame pins; MM passes its heap-overlay fault |
 | 0186 | `64fe72b` | Compiled graphics microcode feeds RT64 raw RDP; verified build packaged; F-Zero X races |
@@ -92,7 +99,7 @@ The save flag depends on the game: `--flash` (Majora's Mask), `--save` (EEPROM g
 
 [Progress history](docs/HISTORY.md)
 
-<sub>* **These percentages do not mean a game works or is proven.** Colors: green means the form matches ares and depends on no run-time assumption; amber means it matches ares but native code checks an assumption and aborts when it fails (loads and stores, indirect jumps and returns, overflow-trapping arithmetic, traps, `BREAK`); orange means it relies on an assumption nothing checks (all COP1 depends on `Status.FR = 0`); grey means not lowered. VR4300 instructions: instruction semantics only. A form counts when it passes discovery, the closure solver and native lowering in a test program (`plaid isa-coverage`) and matches the pinned ares interpreter in [spike096](spikes/096-native-slice/). Exceptions and interrupts are not modelled. The unfilled cells are COP0 moves, TLB instructions, `ERET`, `SYSCALL` and `CACHE`: they are not lowered in guest code, and libultra's uses of them are replaced by Plaid's own runtime (an assumption, listed below). RSP instructions: 100% means every RSP instruction lowers to C and matches ares in [spike097](spikes/097-rsp-slice/). The orange "In a real game" bar is the other half: it does not mean a game's RSP side is proven: microcode comes from IMEM snapshots taken by running the game, not from the ROM; graphics microcode runs natively with `--rsp-gfx`, while the default RT64 path interprets display lists at a high level; and RSP tasks complete synchronously. Milestones: states in [`docs/progress.json`](docs/progress.json); the total grows as milestones are added. ROMs CLOSED: commercial ROMs with whole-ROM closure and no assumptions.</sub>
+<sub>* **These percentages do not mean a game works or is proven.** Colors: green means the form matches ares and depends on no run-time assumption; amber means it matches ares but native code checks an assumption and aborts when it fails (loads and stores, indirect jumps and returns, overflow-trapping arithmetic, traps, `BREAK`); orange means it relies on an assumption nothing checks (all COP1 depends on `Status.FR = 0`); grey means not lowered. VR4300 instructions: instruction semantics only. A form counts when it passes discovery, the closure solver and native lowering in a test program (`plaid isa-coverage`) and matches the pinned ares interpreter in [spike096](spikes/096-native-slice/). Exceptions and interrupts are not modelled. The unfilled cells are COP0 moves, TLB instructions, `ERET`, `SYSCALL` and `CACHE`: they are not lowered in guest code, and libultra's uses of them are replaced by Plaid's own runtime (an assumption, listed below). RSP instructions: 100% means every RSP instruction lowers to C and matches ares in [spike097](spikes/097-rsp-slice/). The orange "In a real game" bar is the other half: it does not mean a game's RSP side is proven: microcode is derived from the ROM with every fetch checked (ADR-0188), but the candidate registry is incomplete and the solver's RSP policy is unproven; graphics microcode runs natively with `--rsp-gfx`, while the default RT64 path interprets display lists at a high level; and RSP tasks complete synchronously. Milestones: states in [`docs/progress.json`](docs/progress.json); the total grows as milestones are added. ROMs CLOSED: commercial ROMs with whole-ROM closure and no assumptions.</sub>
 
 ## Distance to no-assumption CLOSED
 
@@ -157,7 +164,6 @@ Inputs given by hand, outside the solver:
 - Code segment ROM offset, address, size and entry point, given by hand for SM64 and OoT; inferred from the ROM for Majora's Mask and F-Zero X (boot address from the CIC, size from the entry stub's BSS clear; ADR-0183, ADR-0184)
 - --loads files for executable loads, written by hand (SM64: 2, OoT: 2; Majora's Mask and F-Zero X: none). Without a file table, infer-loads finds segments from ROM ranges named in code; on SM64 it finds the engine segment but not goddard (ADR-0184)
 - SM64 function identification uses a local decomp map
-- RSP microcode comes from IMEM snapshots taken by running the game
 - Graphics use RT64 display-list HLE by default; --rsp-gfx executes compiled graphics microcode and gives its raw RDP commands to RT64 (ADR-0186)
 - libultra runs as a host runtime (HLE)
 
@@ -181,7 +187,7 @@ flowchart TD
   discover --> solve["solve<br/>closure proof in a declared scope"]
   solve -->|OPEN| stop[blockers report]
   solve -->|CLOSED| lower["plaid-lower<br/>one C function per guest function"]
-  snaps[IMEM snapshots from running the game] --> rsplower["lower-rsp<br/>RSP microcode to C"]
+  romtexts[RSP microcode found in the ROM's images] --> rsplower["lower-rsp<br/>RSP microcode to C"]
   subgraph exe[native executable]
     game[lowered game code]
     rsp[lowered RSP microcode]
@@ -209,6 +215,8 @@ ROMs stay local and are never committed. Per-ROM numbers and how to reproduce th
 | Majora's Mask (USA) | No hand-written input: `scripts/native.py` infers its loads and runtime, and it is `CLOSED` with its overlays under the address-taken scope (ADR-0183). Natively with RT64 it plays the mask intro and the Clock Town attract scene, and, since ADR-0187, passes its former heap-overlay stop and runs 90 s with no fault. Audio is restored (ADR-0189). |
 | F-Zero X (USA) | From the ROM alone, 27,621 blocks and zero blockers under the address-taken scope (ADR-0185). Native graphics microcode feeds RT64 raw RDP commands; visible 65-second races show vehicle markings and shading without a runtime fault (ADR-0186). |
 | Mario Party 2 (USA) | Boot window: 712 blocks and 29 blockers. 27 sit behind an `osInitialize` whose SDK build n64sym lacks; 2 are function-pointer calls. |
+| Banjo-Kazooie (USA) (Rev 1) | No hand input. Boot-produced images are recovered with pinned ares (ADR-0190) and 13 executable files that share one RAM slot come from the ROM's own catalog (ADR-0192): 33,796 blocks, scoped OPEN with 1 blocker, an unsupported `MFC0` Status read in `__osGetSR` at `80259d30`. It stops before lowering; native execution is unmeasured. |
+| Paper Mario, Star Fox 64, Mario Kart 64, GoldenEye 007, Rogue Squadron (USA) | Surveyed with the ROM-only pipeline (with Banjo-Kazooie above, six in all): every ROM is scoped OPEN and stops before lowering, on missing executable images and loads, system instructions or unproven indirect sites. Paper Mario is down to 164 blockers (ADR-0191). No runtime was reached. See [`research/rom-sweep.md`](research/rom-sweep.md). |
 
 <details>
 <summary><b>Native runs: finding and fixing what breaks</b></summary>
@@ -246,7 +254,7 @@ Known gaps:
 - Overlay binding is itself an assumption (ledger row 12), and every overlay's load base is found at run time, not proven. MM's heap-overlay stop is fixed (ADR-0187), but that is finite execution, not a lifetime proof.
 - The runtime covers the libultra functions that SM64, OoT and MM call. A game that calls a declared function the runtime lacks fails to link.
 - Saves are 4 Kbit EEPROM, 256 Kbit SRAM and 1 Mbit FlashRAM (no 16 Kbit EEPROM or Controller Pak). Only controller 1 works, and there is no rumble.
-- RSP microcode comes from running the game, not from ROM offsets: `--rsp-dump` saves each IMEM image no lowered code holds, and `runtime/rsp_texts.py` lowers it for the next build. A new game needs one or more of these runs. Graphics tasks use RT64 display-list HLE by default; `--rt64 --rsp-gfx` runs their compiled microcode and sends its raw RDP output to RT64. Audio plays through SDL with RT64, or goes to a WAV file.
+- RSP microcode is derived from the ROM (ADR-0188): candidate texts come from its images and SDK-style descriptors, a task selects one by a unique match on the words reachable from its entry, and every later fetch is checked against the lowered word. The candidate registry is incomplete, OoT refuses at VI 2 on a protected RSP DMA write, and `--rsp-dump` saves IMEM images only as oracle inputs. Graphics tasks use RT64 display-list HLE by default; `--rt64 --rsp-gfx` runs their compiled microcode and sends its raw RDP output to RT64. Audio plays through SDL with RT64, or goes to a WAV file.
 - Only Windows has been tested with RT64.
 
 ## Build
