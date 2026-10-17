@@ -717,3 +717,191 @@ Iteration timing control (single local runs, not a speedup claim): configured
 SM64 identify/discover/solve before were 0.683 / 6.814 / 1.081 seconds; accepted
 revision 0.350 / 6.468 / 1.076 seconds, with byte-identical complete maps.
 No owned compiler/oracle/validation/game processes remain after closeout.
+
+## BK shared-slot continuation (2026-10-17, partial)
+
+Branch `bk-closure-3`, prepared base main `6d846df` / WIP `8b2270b`.
+Single-worker experiment claim: identify the producer of the third harvested
+image and derive its executable alternates and text/data bounds from the
+loader/container, retaining the closed-world refusal until verified. The
+predecessor's local decoded pair at ROM fc9ef0/fcbacd matches the captured
+80385610 image; that observation alone does not establish the slot's universe.
+`research/trace-slot-writers.cpp` observes effective CPU store addresses and
+recent call arguments against pinned interpreter-only ares. All ROM, decoded
+bytes and trace outputs stay ignored under target/. No native artifact is
+authorized by this research checkpoint, and no Status constant is substituted.
+
+### Loader and source-catalog result (ADR-0192)
+
+The store observer built and ran against clean pinned ares
+`9408cb43d4948fc3ea6e152a307a34348df3fe04`, interpreter-only, NTSC/PIF reset,
+CIC-NUS-6103, neutral gamepad. Its first build exposed a WIP include error:
+ares_boot.cpp redefines/undefines main internally; including the original
+fixture driver directly fixes the harness without changing reference code.
+The 100,000,000-call experiment ends at analysis PC 8033fec0 (budget exhausted;
+the stop entry 80385610 itself is not fetched). Effective stores into the
+slot are observed at **8023e5f8 and 8023e7e4**. The call history and loader
+disassembly establish this chain:
+
+- 8024ffa0 selects the indexed 44-byte segment-table row at 80275120;
+- **80251da0** selects the physical source range from **803ffe10 + index*8**,
+  DMA-loads its compressed bytes through 802401d0, then calls **8023dd24 twice**;
+- 8023dd24 / 8023dda8 / 8023dd50 skip the six-byte 1172 header and invoke the
+  raw-DEFLATE implementation at 8023f290; output/source pointers advance;
+- the first stream supplies text, the second supplies data. The wrapper aligns
+  the destination to 16 bytes. The segment table independently agrees with
+  both decoded sizes and identifies the following BSS extent;
+- **80001bf0** initializes the actual physical source table using literal
+  LUI/ADDIU/SW sequences. The segment table's virtual ROM fields exceed the
+  physical ROM and must not select compressed sources.
+
+The original project-owned research parser and production Rust recognizer
+recover the literal-store catalog without supplied guest addresses or offsets.
+They then match its complete decoded pair census to a unique segment table in
+a boot-named ROM container. BK has **15 source pairs**: one resident engine,
+one empty entry and **13 executable files sharing 80385610**. Source starts,
+in catalog-index order 2..14, are fa6f80, fa8ee0, fac0e0, fb1810, fb5450,
+fb7480, fbc9c0, fc1ba0, fd91f0, fc77e0, fc9ef0, fcc120 and fd3400. These
+are output evidence, never production constants. The matching metadata comes
+from ROM container f1c830 at decoded offset 37aa0.
+
+An independent Python/zlib pass agrees with all 13 Rust declarations, including
+source ends, destinations and text/data lengths. Index 12's fc9ef0/fcbacd
+pair exactly matches all **34288 code/data bytes** of the predecessor's captured
+80385610 generation. Its final 16 captured bytes are nonzero runtime checksum
+state in the BSS extent: do not turn them into source bytes or assume BSS is
+still zero when first fetched. All seven old invalid candidates lie in that
+pair's data section. Each of the seven missing numeric targets is inside the
+text of other catalog members; the retained evidence records the per-target
+index census. This establishes a declared candidate set, not universal
+reachability or a lifetime proof for the loader.
+
+### Production change and verifiers
+
+`infer-loads` now emits rare_pair declarations for the shared files. Each
+composition decodes the bounded ROM range again, requires DEFLATE stream end
+and exact decoded size, and checks the declared text size against the first
+stream. Complete-catalog/metadata ambiguity and damaged catalogs refuse
+inference; valid suffixes of a damaged table are not admitted. The new encoding
+uses the existing ADR-0185 placed files, relocations and ADR-0187 verified
+binding/native-frame pins. Data remains available for table reads, while an
+instruction accessor excludes slot data from roots, CFG fallthrough and delay
+slots. Explicit execution into data stays an OPEN obligation. No runtime MIPS
+decoder/JIT, guessed SDK boundary or compatibility exception is added.
+
+Four deterministic Rust tests cover stream end/truncation/size failures;
+literal-store dataflow and delay slots; relocated catalog inference and
+missing/ambiguous metadata; composition, text-bound tampering, data-pointer
+relocation and code-shaped data-root/CFG refusal. Three independent research
+parser contracts also pass. The public CLI/native slot contract now tests raw
+and paired encodings: pinned-ares state fields (GPR/FPR/HI/LO, PC, FPU flags
+and the retained RAM slice) match through
+**7 -> 11 -> 7**. Each generation's actual slot writes are copied into that
+RAM slice, so the comparison covers all three text-memory results. The oracle
+requires no exception; tampered or ambiguous executable text faults. Existing
+heap-overlay/native-frame-pin contracts remain in the full runtime gate.
+No new CPU instruction semantics or event policy is claimed.
+
+The first complete normal ROM-only pipeline after pair inference reports
+1 -> 186 -> **1 scoped blocker**, preserving 87 runtime IDs. The last blocker
+is **MFC0 Status at 80259d30**, an existing exact __osGetSR SDK signature.
+Its caller 80246f70 tests Status bit 0x1000. The other seven original scope
+effects duplicated the invalid/data candidates and disappear with proper slot
+generations; none needs COP0 lowering. Runtime osSetIntMask/osGetIntMask still
+return fixed masks, and __osDisableInt/__osRestoreInt use a separate enable bit.
+A correct __osGetSR needs verified architectural Status, masks, thread context
+and event interactions, not another guessed constant. That work remains open.
+
+BK blocker classes:
+
+| Class | Before | After |
+| --- | ---: | ---: |
+| unsupported_scope_effect | 8 | 1 |
+| exception_or_unsupported_instruction (invalid candidates) | 7 | 0 |
+| unmapped_target | 7 | 0 |
+| unresolved_direct_target | 7 | 0 |
+| **Total** | **29** | **1** |
+
+The normal command is `python scripts/native.py target/local-inputs/bk.z64
+--name bk-slot-final --rt64 --seconds 60 --require-audio`. It still refuses at
+**solve OPEN**; lowering, native RSP extraction, compilation, visible game
+execution and audio validation are unreached. Native VI, fault/PC and PCM
+peak are **unmeasured**, not zero. No game window was opened or hidden.
+
+### Controls, timings and closeout
+
+| ROM | Scoped blockers before -> after |
+| --- | ---: |
+| BK | 29 -> 1 |
+| Star Fox 64 | 298 -> 298 |
+| Mario Kart 64 | 31 -> 31 |
+| Paper Mario | 164 -> 164 |
+| GoldenEye | 7 -> 7 |
+| Rogue Squadron | 211 -> 211 |
+
+The first checkpoint completely regenerated all nine non-BK control maps and
+their IDs: byte-identical to ADR-0191's accepted baselines. MM, F-Zero X and
+OoT remain scoped CLOSED; ROM-only SM64 remains OPEN/23. Separately configured
+SM64 also regenerates byte-identically and remains CLOSED. Final-tree reruns
+and the final local gate are recorded below. No control-game play is inferred
+from a map comparison.
+
+The catalog scan avoids decoding boot-named stream candidates when no source
+catalog exists. Single local infer-loads timings before -> after that shortcut
+and text-bound hardening (not a robust performance claim): BK 0.259 -> 0.060 s,
+Paper Mario 2.035 -> 1.937 s, MM 0.275 -> 0.308 s. Each declaration file is
+byte-identical across that comparison. No broad speedup is claimed from noisy
+single runs. The new paired inference itself took 0.054 s for BK in a separate
+warm check.
+
+Retained ignored artifacts: target/bk-slot/{oracle/,writers.jsonl,catalog.json,
+evidence.json,check-evidence.py,infer-{before,after}*.json,decisions-prefix.json,
+slots.log,sweep/,final-sweep/,gate/,final-core-gate/} and local runner scripts;
+target/native/bk-slot-{closure,final}/ hold the normal pipeline artifacts.
+The original DECISIONS byte prefix, including its non-UTF-8 byte, is preserved
+and SHA-256 checked. README and progress data are untouched. No push or main
+write is made. This is **partial implementation**, with Status semantics,
+whole-loader lifetime, exhaustive execution and native gameplay/audio unproven.
+
+Final-tree closeout: the normal BK command again returns OPEN/1, **33,796
+blocks, 87 runtime declarations and 13 paired slot loads plus two replayed
+fixed loads**. Its complete map is byte-identical to the initial paired-slot
+run, including after instruction/data-access hardening. A separate final solve
+stores the sole unsupported_scope_effect at 80259d30 in solve-final.json.
+All nine final non-BK maps and IDs regenerate byte-identically to their
+ADR-0191 baselines. Configured SM64 also independently regenerates identically
+and remains CLOSED (45,419 blocks). MM/F-Zero X/OoT remain CLOSED. The six-ROM
+scoped total is **740 -> 712**. No regression is attributed to normalization;
+these are exact complete-file comparisons using the original declaration
+newline convention.
+
+The complete gate passes, with final Rust checks rerun after the last production
+change and the runtime suite rerun after adding per-generation memory snapshots:
+
+| Local gate | Result | Measured seconds |
+| --- | --- | ---: |
+| cargo fmt --all -- --check | PASS | 0.867 |
+| cargo clippy --locked --workspace --all-targets -- -D warnings | PASS | 5.471 |
+| cargo test --locked --workspace | 729 passed, 1 ignored | 80.125 |
+| python scripts/test_cli.py | PASS | 14.026 |
+| python runtime/test_runtime.py | PASS; stronger memory-snapshot repeat also PASS | 170.154 (first complete run) |
+
+The strengthened runtime repeat was not separately stopwatch-timed. Its log
+timestamps span approximately 166 seconds; runtime-final.log is the accepted
+repeat evidence. The two original strict-Clippy findings (is_multiple_of and
+as_chunks style) are fixed. An attempted release rebuild while the first sweep
+held plaid.exe open hit Windows file locking; after that owned process exited,
+the final release rebuild passed (59.35 s). This is not a capability blocker.
+Four new Rust tests and three research-parser tests pass. The retained slot
+contract covers both encodings with three refusal/switch cases each. There is
+no new timing/interrupt semantic claim; the existing runtime event, RSP/ABI,
+overlay tamper and active-frame-pin verifiers remain green.
+
+Progress data did not change, so progress.py --check is not required. Final
+review checked decoded bounds, complete-catalog refusal, source/text metadata
+recomputation, data-root/CFG separation and preservation of existing encodings.
+Clean exact-pinned ares and the original DECISIONS byte prefix were checked
+again. All owned oracle/build/sweep/validation processes have exited; there is
+no owned game process. The user's later request to see a run was withdrawn
+before any emulator or native game window was launched. This is a verified
+partial milestone, not a missing-environment validation handoff.
