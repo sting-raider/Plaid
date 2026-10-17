@@ -54,12 +54,14 @@ Status semantics, including clearing EXL on return. Full Status observation
 also makes FR and CU1 visible. The existing FR=0 scope and lazy COP1 behavior
 must be accounted for before `__osGetSR` can return a complete word.
 
-Identification currently uses signature data relocations to reject lookalike
-functions, but its public match records retain only entry/name/size. A
-global-mask implementation must preserve the verified binding and SDK variant
-for each selected function, including separate SDK copies in disconnected
-images. It must not search for a game's globals at runtime or use one address
-for every matching copy.
+ADR-0194 retains optional per-copy scalar `data_bindings` in identification
+output, using verified adjacent materializations and agreement across all
+surviving variants. This supplies address evidence only. A global-mask
+implementation still needs an explicit verified SDK variant and a program
+map/lowering contract that requires the binding for that variant. Unknown or
+unsupported bindings cannot silently choose a fixed mask. Do not search for a
+game's globals at runtime or use one address for every matching copy. See
+`research/integration-receipts/20261017-sdk-data-bindings.md` for the contract.
 
 Every event-producing path needs an explicit eligibility boundary. In
 `runtime/plaid_rt.c`, `deliver_pending` currently gates posted events on IE

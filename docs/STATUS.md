@@ -1,5 +1,14 @@
 # Status
 
+## SDK scalar address evidence (ADR-0194)
+
+Identification retains optional per-function `data_bindings` for verified
+adjacent LUI plus ADDIU/ORI/LW/SW references. Every use and surviving signature
+variant must agree; unsupported or conflicting evidence supplies no binding.
+Separate SDK copies retain separate globals. These are address references,
+not verified global contents or a runtime mask implementation. Discovery still
+consumes the original declaration fields; BK remains scoped OPEN/1.
+
 ## Interrupt restore prerequisite (ADR-0193)
 
 `__osRestoreInt(0)` preserves an already-enabled IE bit. A retained synthetic

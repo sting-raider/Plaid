@@ -5723,3 +5723,21 @@ reference routines. No SDK code or game asset is copied.
 Do not admit __osGetSR or retire an assumption: verified mask bindings, full
 saved/live Status and event/thread semantics still remain open. See
 research/integration-receipts/20261017-interrupt-restore.md.
+## ADR-0194: Retain conservative per-copy SDK scalar address bindings
+
+Identification retains optional data_bindings for selected SDK functions.
+Require adjacent LUI plus ADDIU/ORI/LW/SW, valid register flow, instruction
+bytes and agreement across every use and surviving signature variant. Missing,
+unsupported, duplicate or conflicting evidence supplies no binding. Distinct
+SDK copies retain distinct globals; conflicting selection removes metadata.
+Reference-map names alone cannot create address evidence.
+
+This is static address evidence, not immutable global contents or a verified
+SDK mask variant. Existing declaration consumers ignore the optional field;
+ProgramMap, lowering and runtime consumption remain a separate boundary. Do not
+admit __osGetSR or replace missing bindings with a fixed mask.
+
+No upstream implementation or game code was copied. Synthetic Rust/CLI tests
+retain signed-low/ORI distinctions, disagreement and refusal cases. See
+research/integration-receipts/20261017-sdk-data-bindings.md for the artifact
+contract, pinned reference, controls and validation protocol.
