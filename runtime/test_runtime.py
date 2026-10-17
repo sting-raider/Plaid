@@ -593,6 +593,7 @@ def main():
     slot_contracts()
     from test_boot_execution import main as boot_execution_contracts
     boot_execution_contracts()
+    subprocess.run([sys.executable, str(ROOT / 'scripts/test_ares_boot.py')], check=True)
     dpc = OUT / 'dpc-contract.exe'
     subprocess.run([cc, '-O2', '-std=c11', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function',
                     '-I', str(ROOT / 'crates/plaid-lower/src'), str(ROOT / 'runtime/test_dpc.c'), '-o', str(dpc)], check=True)

@@ -22,6 +22,11 @@ pub enum LoadEncoding {
     Yaz0,
     /// Re-execute the bounded ROM-only boot transformation; no snapshot input.
     Boot,
+    /// Pinned ares reset boot; the payload selects the first fetched target.
+    /// `source` remains zero (the whole ROM), never a RAM snapshot path.
+    AresBoot {
+        entry: GuestAddr,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -208,6 +213,24 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
                 return Err("boot-produced load differs from replayed destination".into());
             }
             capture.bytes
+        }
+        LoadEncoding::AresBoot { entry } => {
+            if start != 0 || load.relocatable || load.linked.is_some() {
+                return Err("ares boot loads require the whole ROM and a fixed destination".into());
+            }
+            let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
+            let capture = crate::ares_boot::execute(&rom, entry.0)?;
+            let offset =
+                load.destination
+                    .start
+                    .0
+                    .checked_sub(capture.destination)
+                    .ok_or("ares load starts before the replayed image")? as usize;
+            capture
+                .bytes
+                .get(offset..offset.checked_add(size).ok_or("ares load range overflow")?)
+                .ok_or("ares load ends beyond the replayed image")?
+                .to_vec()
         }
     };
     if data.len() != size {

@@ -38,8 +38,12 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
     if rsp_dma_lifecycle_access: assert rsp_dmem_access
     if rsp_dma_pending_access: assert rsp_dma_lifecycle_access
     output = Path(directory)
-    assert subprocess.check_output(["git","rev-parse","HEAD"],cwd=REF,text=True).strip() == REV
-    subprocess.run(["git","-c","core.autocrlf=true","diff","--quiet","HEAD"],cwd=REF,check=True)
+    # Use the checkout's native stat implementation on DrvFS. Linux git can
+    # rehash the entire reference tree because its index stats differ.
+    git = shutil.which('git.exe') if str(REF).startswith('/mnt/') else None
+    git = git or 'git'
+    assert subprocess.check_output([git,"rev-parse","HEAD"],cwd=REF,text=True).strip() == REV
+    subprocess.run([git,"-c","core.autocrlf=true","diff","--quiet","HEAD"],cwd=REF,check=True)
     output.mkdir(parents=True,exist_ok=True)
     shutil.copyfile(REF / "LICENSE", output / "LICENSE")
     driver = Path(driver)

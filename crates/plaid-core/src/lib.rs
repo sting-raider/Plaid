@@ -42,6 +42,7 @@ pub mod cpu_mutation {
         )
     }
 }
+pub mod ares_boot;
 pub mod boot_execution;
 pub mod callbacks;
 pub mod declared_loads;

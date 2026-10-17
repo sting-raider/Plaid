@@ -349,3 +349,155 @@ semantics; generated-code overlays after the first transfer; whole-ROM closure
 and game execution for the other surveyed titles. This is a **partial** commit,
 not a validation handoff for unavailable tools: all requested local gates ran,
 but the boot/device semantics needed to achieve the main objective remain work.
+
+## Ares-driven post-boot harvest continuation (ADR-0190)
+
+Implementation claim, 2026-10-17, sole worker on `post-boot-loads`: use the
+pinned ares interpreter as an **analysis-time** executor, rather than extend
+Plaid's integer executor with a second CPU/device implementation. The declared
+profile is reset through the pinned NTSC PIF firmware, CIC selected by IPL3
+CRC32, 8 MiB RAM, deterministic entropy, controller 1 connected with neutral
+inputs, and no supplied save/snapshot state. Unknown IPL3 signatures refuse.
+Budgets are 100,000,000 instruction calls or 3,600 VI per boot; the normal
+pipeline permits at most eight discovery/closure rounds. Reaching the budget
+does not prove a controller input is required, and no input is synthesized.
+
+`scripts/ares_boot.cpp` uses the existing separate headless ares builder and
+passive successful fetch, RAM scalar/burst write and PI DMA observers. RAM
+producer tracking begins at the inferred game entry, after real IPL3 execution.
+At the first fetch of a requested missing KSEG0 target, it snapshots its
+contiguous, word-aligned produced RAM range; absent producers, other-device
+writers and stale resident I-cache words refuse capture. CPU writes are
+completed uncached writes/writebacks, not a claim of per-byte data-flow lineage.
+PI requests retain RAM destination, physical cartridge source and length;
+canonical consumed ROM ranges are explicitly PI-request-only, not an exhaustive
+list of CPU ROM reads. The whole canonical ROM and pinned firmware are hashed.
+Multiple requested target images can be harvested during one deterministic boot.
+New closure frontiers trigger a fresh deterministic replay, within the declared
+round limit; this is not an exhaustive executable-universe proof.
+
+`scripts/native.py` attempts the harvest only after normal scoped closure is
+OPEN, then repeats identify/discover/solve. Static declarations and existing
+images are preserved; overlaps are subtracted rather than overwritten. New
+`ares_boot` declarations retain whole-ROM source zero and the first fetch entry.
+Composition invokes the owned helper to regenerate bytes from the ROM, validates
+identity/budget/ranges/digest, and selects only a bounded subrange of that capture.
+No RAM snapshot file is accepted as an input or replay cache. An in-process memo
+avoids repeating the same entry within one composition. Native entry retains the
+existing executable-byte comparison and fault 8 on mismatch. No ares code,
+decoder, interpreter or JIT is linked into a native gameplay artifact.
+
+The small original `boot` executor remains a fallback for its retained synthetic
+contracts and pure integer boot paths; it has not gained CPU/device semantics.
+The ares source/license stays separate at the pinned revision; the builder keeps
+the complete ISC/BSD notices. Only project-owned observer/driver code is reused.
+
+### Final continuation receipt
+
+The standard pipeline was rerun from ROM-only inputs on the final mechanism.
+The archived `5c0ddb5` release binary and predecessor baseline maps supply the
+before side; GE was independently regenerated with that binary. The same scope
+and original ROM identities above apply. Every unchanged row below has a
+byte-identical complete map, not just matching counts.
+
+| ROM | Scoped blockers before -> after | Loads before -> after | Final pipeline wall seconds | Map |
+| --- | ---: | ---: | ---: | --- |
+| bk | 1 -> 72 | 0 -> 3 | 217.691 | expanded |
+| sf64 | 298 -> 298 | 0 -> 0 | 8.060 | identical |
+| mk64 | 31 -> 31 | 1 -> 1 | 9.142 | identical |
+| pm | 204 -> 204 | 16 -> 16 | 32.487 | identical |
+| ge | 7 -> 7 | 1 -> 1 | 0.595 | identical |
+| sm64 | 23 -> 23 | 1 -> 1 | 6.098 | identical |
+| mm | 0 -> 0 | 2 -> 2 | 80.949 | identical |
+| fzerox | 0 -> 0 | 10 -> 10 | 12.349 | identical |
+| oot | 0 -> 0 | 3 -> 3 | 58.214 | identical |
+
+SM64's 23 blockers are the original ROM-only default, not its separately
+configured historical CLOSED build. MM/F-Zero X/OoT retain scoped CLOSED.
+SF64/MK64/PM have no new capture in the 100-million-call no-input profile;
+GE's missing `70000510` is outside the KSEG0 harvest model. These are finite
+profile results, not proofs of input dependence or general unrecoverability.
+
+BK's first missing transfer is now resolved. Its successive blocker counts are
+**1 -> 223 -> 117 -> 72**, with blocks **276 -> 3,799 -> 31,951 -> 32,321**.
+This exposes previously absent executable candidates rather than reducing the
+original one-blocker boot map to closure. Runtime identification grows to 66.
+The three nonoverlapping declarations are:
+
+| Destination / size | First fetch entry | Instruction calls at capture | Declared image SHA-256 |
+| --- | --- | ---: | --- |
+| `8023d680 / 399a0` | `8023d680` | 24,290,457 | `5bfe89660f627f6eb4d439e80d4cc16e5ec11de08fccdedcf4b0f81bff9a9fb7` |
+| `80277020 / 10e5f0` | `8033e138` | 65,052,624 | `a6c78e0a71aec0e687500777a5a933220952c9e0d78e7e8b31586d978d40f485` |
+| `80385610 / 8600` | `8038b700` | 83,823,886 | `b1b41a1a39ce56f6010840b785a204d75655de21a1e1676a9833e63044de5c25` |
+
+The last no-input replay reaches analysis VI 187 at 100,000,000 instruction
+calls. Seven missing targets remain (`8038dd30`, `8038e374`, `8038e400`,
+`8038f128`, `8038f158`, `8038f1b0`, `80390544`). The scoped blocker classes are
+47 unsupported scope effects, eight unsupported/invalid instruction candidates,
+seven unmapped targets, seven unresolved direct targets, two unresolved indirect
+sites and one unresolved indirect target. `ERET` at `80002b5c` is an immediate
+system-boundary barrier. Some decoder candidates in the third range may be
+contiguous produced data reached by static overapproximation; this receipt does
+not assert those invalid words actually executed. Text/data classification,
+SDK boundary coverage and later executable loads remain work.
+
+The requested normal command ran with `--rt64 --seconds 60 --require-audio`,
+using name `ares-boot-bk-final`. It refuses at **solve OPEN, 72 blockers**.
+Lowering, compilation, RSP-from-ROM, the visible native window and audio
+validation are therefore unreached. **Native VI, fault/PC and PCM peak are
+unmeasured**, not zero. The analysis VI count is not a native gameplay result.
+
+Independent normal-pipeline and sweep runs produce byte-identical BK load
+declarations, including all three image digests and provenance. Runtime IDs are
+identical after LF/CRLF normalization. Their maps differ only by that raw ID
+file's SHA-256 in runtime evidence; replacing precisely that declaration digest
+makes the parsed maps identical. The seven retained baseline map comparisons
+and the independent GE map pair are byte-exact. The before-control digests
+printed above remain applicable; BK's sweep map digest is
+`8344ee63bf7893f277c4da6122ba4f684b5d69473bc3af9f0111b45508f118ff`.
+
+The versioned helper protocol is `plaid-ares-boot-harvest-v1`. Composition
+rejects other protocol versions, bad ROM/core identity, target/range/budget or
+digest mismatches. The final release replay is also rechecked after adding the
+protocol-version gate; snapshots cannot replace regeneration.
+
+Synthetic verification retains all predecessor differential/native contracts.
+New tests run a synthetic CPU store/fetch sequence twice with exact output,
+PC, CPU-write ranges and call count, then test budget refusal, absent producers,
+stale I-cache refusal, overlap subtraction/static-load preservation, and
+production rejection of synthetic IPL3 in all three byte orders. The initial
+state for that driver fixture is explicitly declared post-IPL; authentic reset
+of an open synthetic ROM remains unproven. The runtime gate invokes it.
+
+Iteration speed: BK's 24,290,457-call complete capture is byte-identical between
+the debugger-tracer implementation and passive instruction callback, including
+the stop record (SHA-256 `dc479110f736d3ae41c4c30191b5ffa490186584d9f1e71317b9a2ca8c566c5c`).
+Wall times are **14.591 -> 2.581 s** (5.65x), measured once amid local validation.
+The same full pinned-source HEAD diff takes **0.044 s** with native git on
+DrvFS; the Linux git version was interrupted after **>110 s**. No reference
+source check was skipped. MM's unchanged map/solve still dominates its 80.949 s
+pipeline; this task makes no speedup claim for discovery itself.
+
+Final local gate (same Rust/production tree; comments/docs do not affect it):
+
+- `cargo fmt --all -- --check`: exit 0, 0.755 s.
+- `cargo clippy --locked --workspace --all-targets -- -D warnings`: exit 0, 5.340 s.
+- `cargo test --locked --workspace`: exit 0, 81.443 s; 720 Rust tests.
+- `python scripts/test_cli.py`: exit 0, 8.090 s.
+- `python runtime/test_runtime.py`: exit 0, 122.024 s.
+
+Progress data did not change, so `tools/progress.py --check` was not required.
+README was not changed. ADR-0190 was rewritten as bytes while preserving the
+entire earlier DECISIONS.md prefix and its non-UTF-8 byte. No ROM/assets, push,
+main write, external messages or game-specific exception is included.
+
+Ignored evidence: `target/ares-boot/{sweep.json,sweep-final.log,verification.json,
+final-gate.json,benchmark.json,reference-check-timing.json,bk-final.log}` and the
+per-ROM loads/IDs/maps/solve/harvest receipts; final normal BK artifacts are in
+`target/native/ares-boot-bk-final/`. The ignored `sweep.py`, `verify.py`, `gate.py`
+and `bench.py` reproduce the local receipt. All owned compiler/oracle/validation
+processes are closed; no native game process was launched because closure stayed
+OPEN. This is a **partial implementation**, not a missing-environment handoff.
+Commercial native execution, exhaustive executable/overlay lifetime closure,
+input requirements beyond the finite budget and the newly exposed static
+candidates remain unproven. No assumption was retired.
