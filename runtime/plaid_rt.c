@@ -97,6 +97,8 @@ static unsigned pi_completion_count;
 static u32 pi_status; /* immediate raw ROM DMA: idle plus pending interrupt */
 static u32 si_status, si_dram, si_read_address, si_write_address;
 static plaid_joybus joybus;
+static int si_due; /* SI DMA in flight: 1 PIF to RAM, 2 RAM to PIF */
+static int si_finish(void);
 static int si_access(u32 p, int write, u64 *value);
 static rt_timer timers[MAX_TIMERS];
 static u8 *rom;
@@ -429,6 +431,7 @@ static void deliver_pending(void) {
   plaid_preempt = 0;
   for (ev = 0; ev < EV_COUNT; ev++)
     while (pending[ev] && event_eligible(ev)) {
+      if (ev == EV_SI && si_due && si_finish()) finish(1, "SI transfer outside the declared Joybus subset");
       pending[ev]--;
       if (ev == EV_PI) pi_status &= ~8u;
       if (ev == EV_SI) si_status &= ~0x1000u;
@@ -1574,9 +1577,28 @@ RT(osEepromLongWrite) {
 }
 
 /* Native SI transfers preserve the SDK's guest packet construction and cache
-   operations. Completion is immediate; interrupts remain pending until eligible. */
+   operations. As pinned ares orders them, the address write starts the DMA
+   (busy) and the bytes move with the interrupt: here at SI delivery or the
+   guest's next SI/PIF access, so the SDK's cache operations after the start
+   precede the transfer. */
+static int si_finish(void) {
+  int due = si_due;
+  si_due = 0;
+  if (due == 2) {
+    dma_read(si_dram, 64);
+    memcpy(joybus.ram, S->ram + si_dram, 64);
+    if (plaid_joy_parse(&joybus)) return 1;
+  } else {
+    if (plaid_joy_run(&joybus, eeprom, count_now(), controller_input())) return 1;
+    dma_wr(0xa0000000u | si_dram, joybus.ram, 64);
+    if (joybus.changed) { save_eeprom(); joybus.changed = 0; }
+  }
+  si_status = 0x1000;
+  return 0;
+}
 static int si_access(u32 p, int write, u64 *value) {
   u32 offset;
+  if (si_due && si_finish()) return 1;
   if (p >= 0x1fc007c0u) {
     offset = p - 0x1fc007c0u;
     if (write) {
@@ -1599,18 +1621,9 @@ static int si_access(u32 p, int write, u64 *value) {
   if (offset == 24) { si_status = 0; pending[EV_SI] = 0; return 0; }
   if (offset != 4 && offset != 16) return 1;
   if (((u32)*value & ~1u) != 0x1fc007c0u || si_dram > PLAID_RAM_SIZE - 64) return 1;
-  if (offset == 16) {
-    si_write_address = (u32)*value & ~1u;
-    dma_read(si_dram, 64);
-    memcpy(joybus.ram, S->ram + si_dram, 64);
-    if (plaid_joy_parse(&joybus)) return 1;
-  } else {
-    si_read_address = (u32)*value & ~1u;
-    if (plaid_joy_run(&joybus, eeprom, count_now(), controller_input())) return 1;
-    dma_wr(0xa0000000u | si_dram, joybus.ram, 64);
-    if (joybus.changed) { save_eeprom(); joybus.changed = 0; }
-  }
-  si_status = 0x1000;
+  if (offset == 16) { si_write_address = (u32)*value & ~1u; si_due = 2; }
+  else { si_read_address = (u32)*value & ~1u; si_due = 1; }
+  si_status = 1; /* DMA busy */
   pending[EV_SI] = 1; plaid_preempt = 1;
   return 0;
 }

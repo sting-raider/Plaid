@@ -587,6 +587,8 @@ def main():
     test_controller_policy.run(exe, cc, sys.modules[__name__])
     import test_joybus
     test_joybus.run(exe, cc, sys.modules[__name__])
+    import test_si_order
+    test_si_order.run(exe, cc, sys.modules[__name__])
     graphics_bridge(exe, cc)
     save_file(exe, cc)
     rsp_tasks(exe, cc)

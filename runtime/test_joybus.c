@@ -115,12 +115,20 @@ static void si_and_status(void) {
   wr32(block + 12, 0xfe000000u); wr32(block + 60, 1);
   v = dram; assert(si_access(0x04800000u, 1, &v) == 0);
   v = 0x1fc007c0u; assert(si_access(0x04800010u, 1, &v) == 0);
-  assert(si_status == 0x1000 && pending[EV_SI]);
+  /* the start leaves the DMA busy; the next SI access completes it first */
+  assert(si_status == 1 && pending[EV_SI] && si_due == 2);
+  v = 0; assert(si_access(0x04800018u, 0, &v) == 0 && (u32)v == 0x1000 && !si_due);
   v = 0; assert(si_access(0x04800018u, 1, &v) == 0 && si_status == 0 && !pending[EV_SI]);
   joybus.eeprom_busy_until = count_now() + 1000000000ull;
-  v = 0x1fc007c0u; assert(si_access(0x04800004u, 1, &v) == 0 && pending[EV_SI]);
-  assert(rd32(block + 4) == 0xff010300u && rd32(block + 8) == 0x008080ffu);
+  v = 0x1fc007c0u; assert(si_access(0x04800004u, 1, &v) == 0 && pending[EV_SI] && si_due == 1);
+  assert(rd32(block + 8) == 0xffffffffu);                        /* not yet in RAM */
   v = 0; assert(si_access(0x1fc007c0u + 8, 0, &v) == 0 && (u32)v == 0x008080ffu);
+  assert(rd32(block + 4) == 0xff010300u && rd32(block + 8) == 0x008080ffu);
+  /* delivery completes a transfer the guest has not touched again */
+  wr32(block + 8, 0xffffffffu);
+  v = 0x1fc007c0u; assert(si_access(0x04800004u, 1, &v) == 0 && si_due == 1);
+  running = NULL; deliver_pending(); running = &boot;
+  assert(!si_due && !pending[EV_SI] && rd32(block + 8) == 0x008080ffu);
   v = 0x1fc007c1u; assert(si_access(0x04800004u, 1, &v) == 0);  /* low bit ignored */
   v = 0x1fc00000u; assert(si_access(0x04800004u, 1, &v) == 1);  /* not PIF RAM */
   /* the HLE status query reports the same busy device, then idle */
