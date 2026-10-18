@@ -361,12 +361,16 @@ pub fn discover_address_taken(
     budget: usize,
 ) -> Result<crate::discovery::Discovery, String> {
     let runtime_entries: BTreeSet<GuestAddr> = runtime.iter().map(|(a, _, _)| *a).collect();
+    // The image's own words are data too: a decompressed or captured load
+    // (ADR-0190) is not plain ROM bytes (ADR-0197).
+    let words: Vec<u8> = image.words.iter().flat_map(|w| w.to_be_bytes()).collect();
     // A runtime function whose address is taken joins the dispatch set, so a
     // call through the pointer reaches the host runtime; its body is never a
     // discovery root (ADR-0185).
     let (mut runtime_taken, mut taken): (BTreeSet<GuestAddr>, BTreeSet<GuestAddr>) =
         rom_words(bytes, image, starts)
             .into_iter()
+            .chain(rom_words(&words, image, starts))
             .partition(|a| runtime_entries.contains(a));
     // each round starts from the last round's roots, so it does not repeat
     // the indirect passes that found them
@@ -416,7 +420,7 @@ pub fn discover_address_taken(
                     kind: crate::EvidenceKind::Static,
                     producer: ADDRESS_TAKEN.into(),
                     revision: "0".into(),
-                    detail: "function starts named by an aligned ROM word or a code constant in a decoded block, whose body can be CPU code (ADR-0153)".into(),
+                    detail: "function starts named by an aligned ROM or image word or a code constant in a decoded block, whose body can be CPU code (ADR-0153, ADR-0197)".into(),
                 },
             );
             for a in taken.iter().chain(&runtime_taken) {

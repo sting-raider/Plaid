@@ -38,6 +38,19 @@ def main():
     subprocess.run([str(exe), 'discover', str(path), '0x1000', '0x80000400', '0x10',
                     '0x80000400', str(mapped), str(declaration), '--loads', str(loads)],
                    check=True, capture_output=True)
+    # Explicit ABI declarations transport distinct bindings into the typed map.
+    document = json.loads(result.stdout)
+    for function in document['functions']:
+        function['status_global'] = function['data_bindings']['__OSGlobalIntMask']
+    declaration.write_text(json.dumps(document))
+    command = [str(exe),'discover',str(path),'0x1000','0x80000400','0x10',
+               '0x80000400',str(mapped),str(declaration),'--loads',str(loads)]
+    subprocess.run(command,check=True,capture_output=True)
+    assert [f['status_global'] for _,f in json.loads(mapped.read_bytes())['runtime_functions']] == [0x80008000,0x80018000]
+    for value in ['0x80000001','0x80800000','0x00002000',123]:
+        document['functions'][0]['status_global'] = value
+        declaration.write_text(json.dumps(document))
+        assert subprocess.run(command,capture_output=True).returncode != 0
     print('PASS runtime identification: separate scalar data bindings and original declaration consumer')
 
 

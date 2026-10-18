@@ -8,8 +8,7 @@ start and on a message send, a blocked receive yields, lowering a priority
 yields, osYieldThread queues behind an equal priority, and a VI retrace preempts a spinning thread at a loop safepoint.
 
 A second program checks the renderer bridge (ADR-0163) without a GPU: a stub
-plaid_gfx_* records the VI registers the runtime derives from an OSViMode and
-framebuffer, and the graphics task addresses and RAM it hands over. It also
+plaid_gfx_* records the VI registers the guest program wrote, and the graphics task addresses and RAM it hands over. It also
 checks controller 1 (ADR-0164): a scripted --press merged with the stub
 window's stick. A third program checks that --save keeps the EEPROM across
 runs (ADR-0165). A fourth runs an RSP task through lowered IMEM snapshots
@@ -60,7 +59,7 @@ def log_word(address):
 
 
 RUNTIME = ['osCreateMesgQueue', 'osCreateThread', 'osStartThread', 'osSendMesg', 'osRecvMesg',
-           'osSetThreadPri', 'osViSetEvent', 'osYieldThread']
+           'osSetThreadPri', 'osSetEventMesg', 'osYieldThread']
 PROGRAM = [
     *li(A.sp, 0x80007F00),
     *call('osCreateMesgQueue', Q, BUF, 4),
@@ -75,7 +74,7 @@ PROGRAM = [
     *call('osSendMesg', Q, 7, 1),  # wakes t2, which preempts
     *log(4),
     *call('osCreateMesgQueue', Q2, BUF2, 4),
-    *call('osViSetEvent', Q2, 0x99, 1),
+    *call('osSetEventMesg', 7, Q2, 0x99),  # OS_EVENT_VI
     *call('osCreateThread', T4, 4, 't4', 0, 0x8001FF00, 30),
     *call('osStartThread', T4),  # runs, blocks on the VI queue
     *log(5),
@@ -110,7 +109,10 @@ EXPECTED = [1, 2, 3, 7, 4, 5, 6, 0x10, 8, 0x99]
 MODE, TASK, DL, FB, PADS = 0x80004000, 0x80004100, 0x80006000, 0x80100000, 0x80004200
 COM = [0x311E, 320, 0x03E52239, 0x20D, 0xC15, 0x0C150C15, 0x006C02EC, 0x200, 0]
 FLD = [0x280, 0x400, 0x002501FF, 0x000E0204, 2]
-GFX_RUNTIME = ['osViSetMode', 'osViSwapBuffer', 'osSpTaskStartGo', 'osContGetReadData']
+GFX_RUNTIME = ['osSpTaskStartGo', 'osContGetReadData']
+# VI registers as libultra's VI manager programs them from that mode and FB
+SCREEN = [COM[0], (FB & 0x1FFFFFFF) + FLD[0], COM[1], FLD[4], 0, COM[2], COM[3], COM[4], COM[5], COM[6],
+          FLD[2], FLD[3], COM[7], FLD[1]]
 
 
 def poke(address, value):
@@ -119,11 +121,10 @@ def poke(address, value):
 
 GFX_PROGRAM = [
     *li(A.sp, 0x80007F00),
-    *[w for i, v in enumerate(COM) for w in poke(MODE + 4 + 4 * i, v)],
-    *[w for i, v in enumerate(FLD) for w in poke(MODE + 0x28 + 4 * i, v)],
+    *[w for i, v in enumerate(SCREEN) if i != 4 for w in poke(0xA4400000 + 4 * i, v)],
     *poke(TASK, 1), *poke(TASK + 0x10, 0x80005000), *poke(TASK + 0x18, 0x80005800), *poke(TASK + 0x30, DL),
     *poke(DL, 0xB8000000),
-    *call('osViSetMode', MODE), *call('osViSwapBuffer', FB), *call('osSpTaskStartGo', TASK),
+    *call('osSpTaskStartGo', TASK),
     *call('osContGetReadData', PADS),
     'spin', A.beq(A.zero, A.zero, 'spin'), A.nop,  # until the time limit
 ]
@@ -499,15 +500,40 @@ def raw_pi_dma(exe, cc):
     print('raw handle PI DMA: o32 stack size, cartridge bytes and return value; writes and out-of-range reads refused')
 
 
-def build(exe, cc, name, program, runtime, extra=()):
+SP_BOOT_PROGRAM = [*li(A.sp, 0x80007F00), *(w for a in (0xA4000000, 0xA4000040, 0xA4001000, 0xA4001FFC)
+                                            for w in log_word(a)), *A.DONE]
+
+
+def sp_boot(exe, cc):
+    """A native build starts DMEM and IMEM from the post-IPL state native.py
+    captures in pinned ares (ADR-0195), not from the PIF's ROM copy."""
+    rom = OUT / 'io.z64'
+    state = bytes((i * 7 + 3) & 0xFF for i in range(0x2000))
+    (OUT / 'sp_boot.h').write_text('static const u8 plaid_sp_boot[0x2000] = {' + ','.join(map(str, state)) + '};\n')
+    native = build(exe, cc, 'sp_boot', SP_BOOT_PROGRAM, [], ['-DPLAID_SP_BOOT="sp_boot.h"'])
+    run = subprocess.run([str(native), '--rom', str(rom), '--dump', hex(LOG), '4'],
+                         capture_output=True, text=True, timeout=30)
+    lines = {k: v for line in run.stdout.splitlines() if line.startswith('{') for k, v in json.loads(line).items()}
+    words = [int.from_bytes(state[o:o + 4], 'big') for o in (0, 0x40, 0x1000, 0x1FFC)]
+    assert run.returncode == 0 and lines.get('stop') == 'exit', (run.returncode, run.stdout, run.stderr)
+    assert lines['words'] == words, [hex(w) for w in lines['words']]
+    print('SP boot: DMEM and IMEM start from the declared post-IPL state, not ROM 0x40-0xfff')
+
+
+def build(exe, cc, name, program, runtime, extra=(), status_globals=None, fr0=False, data_bindings=None):
     (OUT / f'{name}.bin').write_bytes(A.assemble(program))
     labels = A.label_pcs(program)
     decl = dict(format='plaid-runtime-functions-v0', source='runtime test declaration',
                 functions=[dict(entry=hex(labels[n]), name=n, callbacks=['a2'] if n == 'osCreateThread' else [])
                            for n in runtime])
+    for function in decl['functions']:
+        if status_globals and function['name'] in status_globals:
+            function['status_global'] = hex(status_globals[function['name']])
+        if data_bindings and function['name'] in data_bindings:
+            function['data_bindings'] = {k: hex(v) for k, v in data_bindings[function['name']].items()}
     (OUT / f'{name}.runtime.json').write_text(json.dumps(decl))
     subprocess.run([str(exe), 'lower-c', str(OUT / f'{name}.bin'), hex(A.BASE), hex(A.BASE), hex(A.EXIT),
-                    str(OUT / f'{name}.c'), str(OUT / f'{name}.runtime.json')], check=True)
+                    str(OUT / f'{name}.c'), str(OUT / f'{name}.runtime.json'), *(['--fr0'] if fr0 else [])], check=True)
     native = OUT / (f'{name}-native.exe' if os.name == 'nt' else f'{name}-native')
     subprocess.run([cc, '-O2', '-std=gnu11', '-Wall', '-Werror', '-Wno-unused-label', '-Wno-unused-function',
                     '-DPLAID_SAFEPOINTS', f'-DPLAID_LOWERED="{name}.c"', '-I', str(OUT), *extra,
@@ -528,12 +554,10 @@ def graphics_bridge(exe, cc):
     assert lines['stub_open'] == 0x80
     assert 54 <= lines['vi'] <= 62, lines['vi']  # NTSC retraces in one second (ADR-0166)
     assert lines['stub_task'] == [0x80005000, 0x80005800, DL, 0xB8000000], lines['stub_task']
-    screen = [COM[0], (FB & 0x1FFFFFFF) + FLD[0], COM[1], FLD[4], 0, COM[2], COM[3], COM[4], COM[5], COM[6],
-              FLD[2], FLD[3], COM[7], FLD[1]]
-    assert lines['stub_screen'] == screen, (lines['stub_screen'], screen)
+    assert lines['stub_screen'] == SCREEN, (lines['stub_screen'], SCREEN)
     # pad 1: A|START (the later R press is not yet due), stick 16, -16; pad 2: errno 8 (absent)
     assert lines['words'] == [0x900010F0, 0, 0x00000800], [hex(w) for w in lines['words']]
-    print('renderer bridge: VI registers from OSViMode and framebuffer, graphics task addresses and big-endian RAM, '
+    print('renderer bridge: VI registers as the guest wrote them, graphics task addresses and big-endian RAM, '
           'controller 1 from scripted presses and the window,', lines['vi'], 'VI retraces in one second')
 
 
@@ -576,6 +600,18 @@ def main():
           'of a spinning thread match libultra order', json.dumps(dump))
     import test_interrupts
     test_interrupts.run(exe, cc, sys.modules[__name__])
+    import test_status
+    test_status.run(exe, cc, sys.modules[__name__])
+    import test_cache_writeback
+    test_cache_writeback.run(exe, cc, sys.modules[__name__])
+    import test_controller_policy
+    test_controller_policy.run(exe, cc, sys.modules[__name__])
+    import test_vi_dp
+    test_vi_dp.run(exe, cc, sys.modules[__name__])
+    import test_joybus
+    test_joybus.run(exe, cc, sys.modules[__name__])
+    import test_si_order
+    test_si_order.run(exe, cc, sys.modules[__name__])
     graphics_bridge(exe, cc)
     save_file(exe, cc)
     rsp_tasks(exe, cc)
@@ -586,7 +622,12 @@ def main():
     rsp_graphics(exe, cc)
     audio_dma(exe, cc)
     rcp_io(exe, cc)
+    sp_boot(exe, cc)
+    import test_boot_ram
+    test_boot_ram.run(exe, cc, sys.modules[__name__])
     raw_pi_dma(exe, cc)
+    import test_raw_pi
+    test_raw_pi.run(exe, cc, sys.modules[__name__])
     from test_overlays import main as overlay_verifiers
     overlay_verifiers()
     from test_heap_overlays import main as heap_contracts

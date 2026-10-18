@@ -43,7 +43,7 @@ use plaid_core::{
     trace::DiscoveryTrace,
 };
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     env, fs,
     io::{BufReader, Write},
     process::ExitCode,
@@ -824,7 +824,8 @@ fn run() -> Result<(), String> {
             output,
             runtime @ ..,
         ] if command == "discover" && runtime.len() <= 1 => {
-            let (runtime, evidence, reference_named) = runtime_declarations(runtime.first())?;
+            let (runtime, evidence, reference_named, status_globals, eeprom_timers) =
+                runtime_declarations(runtime.first())?;
             let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
             let range = GuestRange {
                 start: GuestAddr(number32(start)?),
@@ -977,6 +978,8 @@ fn run() -> Result<(), String> {
                 d.map.evidence.insert(id, evidence);
                 d.map.load_images.insert(image.base.image.clone(), spec);
             }
+            bind_status_globals(&mut d.map, &status_globals)?;
+            bind_eeprom_timers(&mut d.map, &eeprom_timers);
             // names only a reference map gives carry their own evidence, so the
             // solver can list them (ADR-0171)
             if let Some((id, evidence)) = &evidence
@@ -1145,7 +1148,8 @@ fn run() -> Result<(), String> {
         [command, image_path, base, entry, exit, output, runtime @ ..]
             if command == "lower-c" && runtime.len() <= 1 =>
         {
-            let (runtime, evidence, _) = runtime_declarations(runtime.first())?;
+            let (runtime, evidence, _, status_globals, eeprom_timers) =
+                runtime_declarations(runtime.first())?;
             // Synthetic-only native slice (ADR-0126): raw big-endian words at `base`.
             let bytes = fs::read(image_path).map_err(|e| e.to_string())?;
             let image = CodeImage {
@@ -1203,6 +1207,8 @@ fn run() -> Result<(), String> {
                 d.map.evidence.insert(id, evidence);
                 d.map.load_images.insert(code.base.image.clone(), spec);
             }
+            bind_status_globals(&mut d.map, &status_globals)?;
+            bind_eeprom_timers(&mut d.map, &eeprom_timers);
             d.map.cop1_fr0 = fr0;
             let c = plaid_lower::lower_c_with_preload(
                 &d.map,
@@ -1282,6 +1288,9 @@ fn run() -> Result<(), String> {
                         function["data_bindings"] = serde_json::json!(data.iter()
                             .map(|(name, address)| (name, format!("{:#010x}", address.0)))
                             .collect::<std::collections::BTreeMap<_, _>>());
+                    }
+                    if let Some(global) = found.status_globals.get(&m.entry) {
+                        function["status_global"] = serde_json::json!(format!("{:#010x}", global.0));
                     }
                     function
                 })
@@ -1531,6 +1540,8 @@ type RuntimeDeclarations = (
     Vec<(GuestAddr, String, Vec<u8>)>,
     Option<(String, Evidence)>,
     BTreeSet<String>,
+    BTreeMap<GuestAddr, GuestAddr>,
+    BTreeMap<GuestAddr, (GuestAddr, GuestAddr)>,
 );
 
 /// Read a `plaid-runtime-functions-v0` declaration (ADR-0129): host-provided
@@ -1656,7 +1667,13 @@ fn overlay_evidence_of(catalog: &[plaid_core::overlays::Overlay]) -> Evidence {
 
 fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, String> {
     let Some(path) = path else {
-        return Ok((Vec::new(), None, BTreeSet::new()));
+        return Ok((
+            Vec::new(),
+            None,
+            BTreeSet::new(),
+            BTreeMap::new(),
+            BTreeMap::new(),
+        ));
     };
     let bytes = fs::read(path).map_err(|e| e.to_string())?;
     let doc: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
@@ -1668,6 +1685,8 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
         .ok_or("runtime declarations need a source string")?;
     let mut functions = Vec::new();
     let mut reference_named = BTreeSet::new();
+    let mut status_globals = BTreeMap::new();
+    let mut eeprom_timers = BTreeMap::new();
     for f in doc["functions"]
         .as_array()
         .ok_or("runtime declarations need a functions array")?
@@ -1676,6 +1695,35 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
             return Err("each runtime function needs entry and name strings".into());
         };
         let mut callbacks = Vec::new();
+        if let Some(global) = f.get("status_global") {
+            if !matches!(name, "osCreateThread" | "osSetIntMask" | "osInitialize") {
+                return Err("Status global binding on an unsupported runtime ABI".into());
+            }
+            let global = number32(
+                global
+                    .as_str()
+                    .ok_or("Status global must be an address string")?,
+            )?;
+            if global & 3 != 0 || global & 0x1fff_ffff >= 0x800000 || !matches!(global >> 29, 4 | 5)
+            {
+                return Err("Status global must be aligned direct-mapped guest RAM".into());
+            }
+            let entry = GuestAddr(number32(entry)?);
+            if status_globals.insert(entry, GuestAddr(global)).is_some() {
+                return Err("duplicate Status global declaration".into());
+            }
+        }
+        if name == "osContInit"
+            && let (Some(queue), Some(message)) = (
+                f["data_bindings"]["__osEepromTimerQ"].as_str(),
+                f["data_bindings"]["__osEepromTimerMsg"].as_str(),
+            )
+        {
+            eeprom_timers.insert(
+                GuestAddr(number32(entry)?),
+                (GuestAddr(number32(queue)?), GuestAddr(number32(message)?)),
+            );
+        }
         for r in f["callbacks"].as_array().into_iter().flatten() {
             let register = match r.as_str() {
                 Some("a0") => 4,
@@ -1710,5 +1758,26 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
         functions,
         Some((format!("runtime:{hash}"), evidence)),
         reference_named,
+        status_globals,
+        eeprom_timers,
     ))
+}
+
+/// The queue libultra's osContInit creates (ADR-0196).
+fn bind_eeprom_timers(map: &mut ProgramMap, timers: &BTreeMap<GuestAddr, (GuestAddr, GuestAddr)>) {
+    for (address, function) in &mut map.runtime_functions {
+        function.eeprom_timer = timers.get(&address.pc).copied();
+    }
+}
+
+fn bind_status_globals(
+    map: &mut ProgramMap,
+    globals: &BTreeMap<GuestAddr, GuestAddr>,
+) -> Result<(), String> {
+    for (address, function) in &mut map.runtime_functions {
+        if let Some(global) = globals.get(&address.pc) {
+            function.status_global = Some(*global);
+        }
+    }
+    Ok(())
 }

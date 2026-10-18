@@ -1,5 +1,29 @@
 # Status
 
+## BK native startup and guest VI (ADR-0195 through ADR-0200)
+
+The ROM-only BK pipeline is now scoped **CLOSED/0** with 80,850 blocks and
+41 ROM-derived RSP texts. A visible 60-second audio-required run reaches VI
+3578, 1270 graphics tasks, 1785 audio tasks and 3750 PI transfers, fault 0,
+PCM peak 32767. Separate inspection confirms the Nintendo opening's blue
+background/sun/lens flare and Banjo's forest/waterfall backdrop are restored.
+
+Verified Status/global bindings, per-context interrupt masks, native SI/Joybus,
+post-IPL SP state, the EEPROM timer queue and image-word pointer discovery
+complete the scoped bring-up prerequisites. The game's VI manager now executes
+as guest code against modeled VI registers; Compare and the core scheduler
+remain runtime boundaries. The graphics defect came from missing IPL3-written
+RDRAM in the first 0x400 bytes, causing the guest to choose fallback clip
+distances. The builder now preserves that bounded startup-data prefix.
+
+This is finite native execution and visual coverage, not full gameplay,
+pixel-perfect rendering, verified mixing or whole-ROM completion. No assumption
+is retired. The current compiled-RSP graphics probe separately faults on its
+first task; the accepted BK run uses RT64 display-list rendering with compiled
+RSP audio. See research/native-bk-status.md and research/native-bk-graphics.md.
+
+The prerequisite reports below describe the earlier states they established.
+
 ## SDK scalar address evidence (ADR-0194)
 
 Identification retains optional per-function `data_bindings` for verified

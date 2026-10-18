@@ -60,7 +60,12 @@ int main(int argc, char** argv) {
   cpu.ipu.r[31].u64 = (u64)(s64)(s32)exit;
   int n = 0;
   for(; n < 1000000 && (u32)cpu.ipu.pc != exit; n++) if(cpu.instruction()) cpu.synchronize();
-  if((u32)cpu.ipu.pc != exit || cpu.scc.cause.exceptionCode) return 6;
+  if((u32)cpu.ipu.pc != exit || cpu.scc.cause.exceptionCode || cpu.scc.status.exceptionLevel || cpu.scc.status.errorLevel) {
+    std::fprintf(stderr, "oracle stopped pc=%08x cause=%u exl=%u erl=%u epc=%08x\n", (u32)cpu.ipu.pc,
+      (u32)cpu.scc.cause.exceptionCode, (u32)cpu.scc.status.exceptionLevel,
+      (u32)cpu.scc.status.errorLevel, (u32)cpu.scc.epc);
+    return 6;
+  }
   std::printf("{\"pc\":%u,\"regs\":[", (u32)cpu.ipu.pc);
   for(int r = 0; r < 32; r++) std::printf("%s%llu", r ? "," : "", (unsigned long long)cpu.ipu.r[r].u64);
   std::printf("],\"hi\":%llu,\"lo\":%llu,\"fpr\":[", (unsigned long long)cpu.ipu.hi.u64, (unsigned long long)cpu.ipu.lo.u64);
