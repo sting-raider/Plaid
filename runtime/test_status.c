@@ -83,7 +83,6 @@ static void contexts_and_events(void) {
   for (ev = EV_SP; ev <= EV_DP; ev++) {
     unsigned before = rd32(q + 8);
     events[ev] = (rt_event){q, (u32)ev, 1};
-    if (ev == EV_VI) { vi_event = events[ev]; vi_retrace = 1; }
     S->cp0_status = 0xff01; S->mi_mask = 0; ints_enabled = 1;
     post(ev); deliver_pending(); assert(pending[ev] == 1 && rd32(q + 8) == before);
     S->mi_mask = 1u << (ev - EV_SP); S->cp0_status &= ~0x400u;

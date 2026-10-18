@@ -54,7 +54,6 @@ pub(crate) fn discover_labelled(
                         callbacks: callbacks.clone(),
                         status_global: None,
                         eeprom_timer: None,
-                        vi_next: None,
                     };
                     (image.address(*a), f)
                 })

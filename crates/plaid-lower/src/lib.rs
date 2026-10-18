@@ -1297,11 +1297,6 @@ pub fn lower_c_parts(
             status_wrappers += &format!("int plaid_rt_osContInit_eeprom(plaid_state *s, u32 queue, u32 message);\nstatic inline int plaid_rt_{name}(plaid_state *s) {{ return plaid_rt_osContInit_eeprom(s, 0x{:08x}u, 0x{:08x}u); }}\n",queue.0,message.0);
             bound_names.insert(name.clone());
             name
-        } else if let Some(next) = f.vi_next {
-            let name = format!("vinext_{:08x}", a.pc.0);
-            status_wrappers += &format!("int plaid_rt_osViSwapBuffer_next(plaid_state *s, u32 next);\nstatic inline int plaid_rt_{name}(plaid_state *s) {{ return plaid_rt_osViSwapBuffer_next(s, 0x{:08x}u); }}\n",next.0);
-            bound_names.insert(name.clone());
-            name
         } else { f.name.clone() };
         (a.pc.0, name)
     }).collect();

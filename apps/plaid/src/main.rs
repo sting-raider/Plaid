@@ -824,7 +824,7 @@ fn run() -> Result<(), String> {
             output,
             runtime @ ..,
         ] if command == "discover" && runtime.len() <= 1 => {
-            let (runtime, evidence, reference_named, status_globals, eeprom_timers, vi_next) =
+            let (runtime, evidence, reference_named, status_globals, eeprom_timers) =
                 runtime_declarations(runtime.first())?;
             let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
             let range = GuestRange {
@@ -980,7 +980,6 @@ fn run() -> Result<(), String> {
             }
             bind_status_globals(&mut d.map, &status_globals)?;
             bind_eeprom_timers(&mut d.map, &eeprom_timers);
-            bind_vi_next(&mut d.map, &vi_next);
             // names only a reference map gives carry their own evidence, so the
             // solver can list them (ADR-0171)
             if let Some((id, evidence)) = &evidence
@@ -1149,7 +1148,7 @@ fn run() -> Result<(), String> {
         [command, image_path, base, entry, exit, output, runtime @ ..]
             if command == "lower-c" && runtime.len() <= 1 =>
         {
-            let (runtime, evidence, _, status_globals, eeprom_timers, vi_next) =
+            let (runtime, evidence, _, status_globals, eeprom_timers) =
                 runtime_declarations(runtime.first())?;
             // Synthetic-only native slice (ADR-0126): raw big-endian words at `base`.
             let bytes = fs::read(image_path).map_err(|e| e.to_string())?;
@@ -1210,7 +1209,6 @@ fn run() -> Result<(), String> {
             }
             bind_status_globals(&mut d.map, &status_globals)?;
             bind_eeprom_timers(&mut d.map, &eeprom_timers);
-            bind_vi_next(&mut d.map, &vi_next);
             d.map.cop1_fr0 = fr0;
             let c = plaid_lower::lower_c_with_preload(
                 &d.map,
@@ -1544,7 +1542,6 @@ type RuntimeDeclarations = (
     BTreeSet<String>,
     BTreeMap<GuestAddr, GuestAddr>,
     BTreeMap<GuestAddr, (GuestAddr, GuestAddr)>,
-    BTreeMap<GuestAddr, GuestAddr>,
 );
 
 /// Read a `plaid-runtime-functions-v0` declaration (ADR-0129): host-provided
@@ -1676,7 +1673,6 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
             BTreeSet::new(),
             BTreeMap::new(),
             BTreeMap::new(),
-            BTreeMap::new(),
         ));
     };
     let bytes = fs::read(path).map_err(|e| e.to_string())?;
@@ -1691,7 +1687,6 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
     let mut reference_named = BTreeSet::new();
     let mut status_globals = BTreeMap::new();
     let mut eeprom_timers = BTreeMap::new();
-    let mut vi_next = BTreeMap::new();
     for f in doc["functions"]
         .as_array()
         .ok_or("runtime declarations need a functions array")?
@@ -1729,11 +1724,6 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
                 (GuestAddr(number32(queue)?), GuestAddr(number32(message)?)),
             );
         }
-        if name == "osViSwapBuffer"
-            && let Some(next) = f["data_bindings"]["__osViNext"].as_str()
-        {
-            vi_next.insert(GuestAddr(number32(entry)?), GuestAddr(number32(next)?));
-        }
         for r in f["callbacks"].as_array().into_iter().flatten() {
             let register = match r.as_str() {
                 Some("a0") => 4,
@@ -1770,7 +1760,6 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
         reference_named,
         status_globals,
         eeprom_timers,
-        vi_next,
     ))
 }
 
@@ -1778,13 +1767,6 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
 fn bind_eeprom_timers(map: &mut ProgramMap, timers: &BTreeMap<GuestAddr, (GuestAddr, GuestAddr)>) {
     for (address, function) in &mut map.runtime_functions {
         function.eeprom_timer = timers.get(&address.pc).copied();
-    }
-}
-
-/// The VI context libultra's osViSwapBuffer writes (ADR-0198).
-fn bind_vi_next(map: &mut ProgramMap, next: &BTreeMap<GuestAddr, GuestAddr>) {
-    for (address, function) in &mut map.runtime_functions {
-        function.vi_next = next.get(&address.pc).copied();
     }
 }
 
