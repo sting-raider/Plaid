@@ -1,5 +1,15 @@
 # Status
 
+## Framebuffer readback and BK puzzle transitions (ADR-0201)
+
+Completed RT64 color/depth readbacks now return to native CPU RAM through the
+runtime's existing executable-write and cache-coherence guards. The fix covers
+both graphics entry points and uses no game-specific values. Two visible
+75-second BK runs finish with fault 0; title and new-game puzzle transitions
+show colored piece interiors. Synthetic coverage includes cache aliases,
+invalidation, same-value transfers, exact byte spans and refused writes.
+See research/native-framebuffer-readback.md for evidence and limits.
+
 ## BK native startup and guest VI (ADR-0195 through ADR-0200)
 
 The ROM-only BK pipeline is now scoped **CLOSED/0** with 80,850 blocks and

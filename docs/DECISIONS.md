@@ -5959,3 +5959,43 @@ executable-image loading. Deleting initialization kills the native test.
 Research, commands, measurements and remaining native-RSP graphics fault:
 research/native-bk-graphics.md. Final exact-tree gate results are recorded in
 the integration closeout and ignored target/bk-sky/ gate receipt.
+
+
+## ADR-0201: return completed renderer framebuffer transfers to native RAM
+
+BK's puzzle transitions showed outlines around black interiors because RT64
+resolved rendered pixels into bridge-private RDRAM, while the native CPU read
+its separate big-endian RAM. An isolated copyback experiment restores the
+colored interiors; disabling only that transfer reproduces the black result.
+The production correction applies to both display-list and raw-RDP submissions,
+with no ROM identity, guest address, pixel pattern or game-code exception.
+
+Report exact color/depth row spans immediately after the pinned RT64
+`State::fullSync` completes `copyNativeToRAM`. Return those completed host
+transfers synchronously before guest execution resumes, including equal-valued
+bytes. Convert RT64's word-swapped bytes by absolute physical address. For each
+span, the runtime first checks bounds and protected executable ranges, then
+preserves modeled resident D-cache bytes with the existing DMA write rule,
+then copies the bytes. Update the bridge's input snapshot only after success
+and only within that span. A partial transfer cannot repair an unrelated lost
+cache line. Value differences and whole-RAM copies are not write coverage.
+
+This is a census of completed renderer readback transfers, not a proof of each
+RDP pixel write or hardware-equivalent rendering/timing. RT64's existing
+render-to-RAM boundary remains an HLE assumption. Native CPU/RSP execution and
+scoped closure are unchanged; no interpreter/JIT, native-complete promotion or
+assumption retirement is introduced.
+
+The upstream reference remains RT64 43373749dac9bbc1b653e6a02aed40a9e1783bed,
+MIT (Copyright (c) 2024 RT64 Contributors). Extend the existing build-copy
+patch mechanism, preserve its notice, and leave `.refs` untouched. Reused
+upstream context is confined to that patch; transfer/cache code is Plaid-owned.
+
+Synthetic contracts verify partial/unaligned byte order and coverage,
+equal-valued transfers, refusal leaving the input snapshot unchanged, cached
+old versus uncached new data, explicit invalidate/refill, protected text,
+out-of-range writes and partial/full lost-line repair. Removing pre-write
+cache bookkeeping kills the regression. Two visible production 75-second BK
+runs reach fault 0; captured title and file-select transitions show colored
+piece interiors. Research, finite coverage and local gate receipts:
+research/native-framebuffer-readback.md and ignored target/bk-puzzle/.

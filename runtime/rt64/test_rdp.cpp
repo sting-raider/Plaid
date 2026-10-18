@@ -2,8 +2,76 @@
 #define SDL_MAIN_HANDLED
 #include "hle/rt64_rdp.h"
 #include "hle/rt64_interpreter.h"
+#include "readback.h"
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <vector>
+
+static Readback pendingReadback;
+
+void plaidReadback(uint32_t physical, uint32_t size) {
+    pendingReadback.record(physical, size);
+}
+
+struct WritebackCall {
+    uint32_t physical;
+    std::vector<uint8_t> bytes;
+};
+
+struct WritebackContext {
+    std::vector<uint8_t> ram;
+    std::vector<WritebackCall> calls;
+    int attempts = 0;
+    bool reject = false;
+};
+
+extern "C" int plaidTestWriteback(void *opaque, uint32_t physical, uint32_t size, const uint8_t *bytes) {
+    auto *context = static_cast<WritebackContext *>(opaque);
+    context->attempts++;
+    if (context->reject || physical > context->ram.size() || size > context->ram.size() - physical) return 1;
+    context->calls.push_back({physical, std::vector<uint8_t>(bytes, bytes + size)});
+    if (size) std::memcpy(context->ram.data() + physical, bytes, size);
+    return 0;
+}
+
+static int readbackContract() {
+    std::vector<uint8_t> rdram(16), seen(16), before;
+    WritebackContext context{std::vector<uint8_t>(16), {}, 0, false};
+    for (uint32_t p = 0; p < rdram.size(); p++) rdram[p ^ 3u] = uint8_t(0x40 + p);
+
+    // The patched fullSync hook reports physical spans; the helper must
+    // convert partial words by absolute RDRAM byte address, not span offset.
+    pendingReadback.clear();
+    plaidReadback(5, 3);
+    plaidReadback(9, 2);
+    if (pendingReadback.finish(rdram, seen, plaidTestWriteback, &context)) return 1;
+    if (context.calls.size() != 2 || context.calls[0].physical != 5 || context.calls[0].bytes != std::vector<uint8_t>({0x45, 0x46, 0x47}) ||
+        context.calls[1].physical != 9 || context.calls[1].bytes != std::vector<uint8_t>({0x49, 0x4a})) return 2;
+    if (seen != context.ram) return 3;
+
+    // Equal-valued transfers still reach the runtime callback; value diffs
+    // are not the readback-write census.
+    context.calls.clear();
+    pendingReadback.clear();
+    plaidReadback(5, 3);
+    if (pendingReadback.finish(rdram, seen, plaidTestWriteback, &context) || context.calls.size() != 1 || context.attempts != 3) return 4;
+
+    // Refusal and an out-of-range span leave seen unchanged.
+    pendingReadback.clear();
+    plaidReadback(5, 2);
+    before = seen;
+    context.reject = true;
+    if (!pendingReadback.finish(rdram, seen, plaidTestWriteback, &context) || seen != before) return 5;
+    context.reject = false;
+    pendingReadback.clear();
+    plaidReadback(15, 2);
+    const int attempts = context.attempts;
+    if (!pendingReadback.finish(rdram, seen, plaidTestWriteback, &context) || seen != before || context.attempts != attempts) return 6;
+    pendingReadback.clear();
+    std::puts("PASS RT64 readback spans preserve exact coverage, byte order and failure behavior");
+    return 0;
+}
 
 static int rectangles = 0;
 static bool rectangleValid = true;
@@ -15,6 +83,7 @@ static void rectangle(RT64::State *, RT64::DisplayList **dl) {
 static void interrupt() {}
 
 int main() {
+    if (int result = readbackContract()) return result;
     RT64::RDP rdp(nullptr);
     uint64_t original[RDP_TMEM_WORDS];
     std::memset(original, 0xa5, sizeof original);
