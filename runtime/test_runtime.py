@@ -607,6 +607,8 @@ def main():
     test_cache_writeback.run(exe, cc, sys.modules[__name__])
     import test_controller_policy
     test_controller_policy.run(exe, cc, sys.modules[__name__])
+    import test_vi_dp
+    test_vi_dp.run(exe, cc, sys.modules[__name__])
     import test_joybus
     test_joybus.run(exe, cc, sys.modules[__name__])
     import test_si_order

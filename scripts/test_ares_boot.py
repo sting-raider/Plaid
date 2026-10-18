@@ -89,7 +89,23 @@ def main():
             assert not harvest_boot.harvest(source, loads, program, {'header': {'boot_address': 0x80000400}, 'boot_image_size': 0x100}, receipt)
         finally:
             harvest_boot.capture_many = saved
-    print('PASS ares harvest composition: preserve static images, split overlaps, stop when all targets are covered')
+        # A jump table no image supplies is captured at its site's first fetch,
+        # and its piece is kept although it holds no code target.
+        loads.write_text(json.dumps({'source': 'synthetic', 'loads': [original]}))
+        table = {'table_start': 0x80001004, 'count': 1}
+        program.write_text(json.dumps({'direct_edges': [], 'indirect_sites': [],
+                                       'unresolved': [{'kind': 'pointer_table_source_missing', 'site': {'pc': 0x80000400},
+                                                       'evidence': ['table-candidates:t']}],
+                                       'evidence': {'table-candidates:t': {'detail': json.dumps(table)}}}))
+        requested = []
+        harvest_boot.capture_many = lambda rom, entries: requested.extend(entries) or [synthetic]
+        try:
+            assert harvest_boot.harvest(source, loads, program, {'header': {'boot_address': 0x80000400}, 'boot_image_size': 0x100}, receipt)
+            assert requested == [0x80000400], requested
+            assert json.loads(loads.read_text())['loads'][0] == dict(destination='0x80001000', size='0x8', rom='0x0', encoding='ares_boot', entry='0x80001000')
+        finally:
+            harvest_boot.capture_many = saved
+    print('PASS ares harvest composition: preserve static images, split overlaps, capture missing jump tables, stop when all targets are covered')
 
 
 if __name__ == '__main__':

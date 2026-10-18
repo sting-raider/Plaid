@@ -629,6 +629,10 @@ pub struct RuntimeFunction {
     /// osContInit creates that queue for osEepromLongWrite's delay.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub eeprom_timer: Option<(GuestAddr, GuestAddr)>,
+    /// osViSwapBuffer's `__osViNext`: libultra's osViSwapBuffer stores the
+    /// framebuffer in that context, where guest code may read it (ADR-0198).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vi_next: Option<GuestAddr>,
 }
 
 fn fetch_summaries_realizable(fetch_count: u64, summaries: &[(u64, u64, u64)]) -> bool {
@@ -830,6 +834,14 @@ impl ProgramMap {
                     }))
             {
                 return Err("invalid osContInit EEPROM timer binding".into());
+            }
+            if let Some(next) = f.vi_next
+                && (f.name != "osViSwapBuffer"
+                    || next.0 & 3 != 0
+                    || next.0 & 0x1fff_ffff >= 0x800000
+                    || !matches!(next.0 >> 29, 4 | 5))
+            {
+                return Err("invalid osViSwapBuffer __osViNext binding".into());
             }
             let mut chars = f.name.chars();
             if !chars
