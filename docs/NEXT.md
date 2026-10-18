@@ -1,5 +1,13 @@
 # Next
 
+## Preserve framebuffer readback coverage (ADR-0201)
+
+BK's black puzzle-piece interiors are corrected by generic completed-renderer
+readbacks. Retain the exact-span, byte-order, cache and protected-write tests;
+broaden gameplay/overlay validation without equating finite visual success
+with pixel-perfect rendering or whole-ROM closure. Remaining BK native-RSP
+graphics and higher startup-state work below still applies.
+
 ## Continue beyond BK's finite native bring-up (ADR-0200)
 
 BK now passes the normal ROM-only 60-second visible/audio-required pipeline,

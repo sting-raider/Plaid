@@ -6,10 +6,12 @@
 //
 // Plaid keeps guest RAM in big-endian byte order; RT64 reads RDRAM as 32-bit
 // host words (the Mupen64Plus layout). Before a task, words the guest changed
-// since the last task are copied in swapped; words only RT64 wrote (such as
-// framebuffers it resolved to RDRAM) are left alone.
+// since the last task are copied in swapped. Completed framebuffer readbacks
+// return through the runtime's memory protection and cache-coherence boundary.
 
 #include "hle/rt64_application.h"
+#define PLAID_GFX_API __declspec(dllexport)
+#include "readback.h"
 
 #include <SDL.h>
 
@@ -29,6 +31,7 @@ constexpr uint32_t RamSize = 0x800000;
 std::vector<uint8_t> rdram(RamSize), seen(RamSize), dmem(0x1000), imem(0x1000), header(0x40);
 uint32_t mi_intr, dpc[9], vi[14];
 std::unique_ptr<RT64::Application> app;
+Readback readback;
 
 std::mutex lock;
 std::condition_variable wake;
@@ -131,6 +134,9 @@ void renderer() {
 
 }  // namespace
 
+// Called only after the pinned renderer completes a RAM readback.
+void plaidReadback(uint32_t physical, uint32_t size) { readback.record(physical, size); }
+
 extern "C" {
 
 // Opens the window and renderer; 0 on success. rom_header: the first 0x40
@@ -145,16 +151,21 @@ __declspec(dllexport) int plaid_gfx_open(const uint8_t *rom_header) {
 
 // Renders one graphics task. ram: guest RAM in big-endian order; the
 // addresses are the OSTask's ucode, ucode_data and data_ptr.
-__declspec(dllexport) void plaid_gfx_task(const uint8_t *ram, uint32_t ucode, uint32_t ucode_data, uint32_t data_ptr) {
+__declspec(dllexport) int plaid_gfx_task(const uint8_t *ram, uint32_t ucode, uint32_t ucode_data, uint32_t data_ptr,
+                                      plaid_gfx_writeback writeback, void *context) {
+    readback.clear();
     run([=] {
         sync_ram(ram);
         app->interpreter->loadUCodeGBI(ucode & 0x3FFFFFF, ucode_data & 0x3FFFFFF, true);
         app->processDisplayLists(rdram.data(), data_ptr & 0x3FFFFFF, 0, true);
     });
+    return readback.finish(rdram, seen, writeback, context);
 }
 
 // Raw RDP commands produced by lowered RSP microcode, including partial lists.
-__declspec(dllexport) void plaid_gfx_rdp(const uint8_t *ram, const uint8_t *commands, uint32_t size, const uint8_t *dirty_pages) {
+__declspec(dllexport) int plaid_gfx_rdp(const uint8_t *ram, const uint8_t *commands, uint32_t size, const uint8_t *dirty_pages,
+                                     plaid_gfx_writeback writeback, void *context) {
+    readback.clear();
     run([=] {
         sync_ram(ram, dirty_pages);
         std::vector<uint32_t> words(size / 4);
@@ -163,6 +174,7 @@ __declspec(dllexport) void plaid_gfx_rdp(const uint8_t *ram, const uint8_t *comm
                 uint32_t(commands[p + 2]) << 8 | commands[p + 3];
         app->processDisplayLists(reinterpret_cast<uint8_t *>(words.data()), 0, size, false);
     });
+    return readback.finish(rdram, seen, writeback, context);
 }
 
 // Presents the screen for one VI retrace. regs: STATUS, ORIGIN, WIDTH, INTR,

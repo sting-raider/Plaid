@@ -133,20 +133,25 @@ for name in GFX_RUNTIME:
 GFX_STUB = r'''#include <stdio.h>
 #include <stdint.h>
 int plaid_gfx_open(const uint8_t *h) { printf("{\"stub_open\":%u}\n", h[0]); return 0; }
-void plaid_gfx_task(const uint8_t *ram, uint32_t ucode, uint32_t data, uint32_t dl) {
+int plaid_gfx_task(const uint8_t *ram, uint32_t ucode, uint32_t data, uint32_t dl,
+                   int (*writeback)(void *, uint32_t, uint32_t, const uint8_t *), void *context) {
   uint32_t p = dl & 0x1fffffff;
+  (void)writeback; (void)context;
   printf("{\"stub_task\":[%u,%u,%u,%u]}\n", ucode, data, dl,
          (uint32_t)ram[p] << 24 | (uint32_t)ram[p + 1] << 16 | (uint32_t)ram[p + 2] << 8 | ram[p + 3]);
+  return 0;
 }
-void plaid_gfx_rdp(const uint8_t *ram, const uint8_t *commands, uint32_t size, const uint8_t *dirty) {
+int plaid_gfx_rdp(const uint8_t *ram, const uint8_t *commands, uint32_t size, const uint8_t *dirty,
+                  int (*writeback)(void *, uint32_t, uint32_t, const uint8_t *), void *context) {
   uint32_t i, pages = 0;
-  (void)ram;
+  (void)ram; (void)writeback; (void)context;
   for (i = 0; i < 2048; i++) pages += dirty[i] != 0;
   printf("{\"stub_rdp\":[%u,%u", size, pages);
   for (i = 0; i < size; i += 4)
     printf(",%u", (uint32_t)commands[i] << 24 | (uint32_t)commands[i + 1] << 16 |
            (uint32_t)commands[i + 2] << 8 | commands[i + 3]);
   printf("]}\n");
+  return 0;
 }
 void plaid_gfx_screen(const uint32_t *r) {
   static int once;
@@ -613,6 +618,8 @@ def main():
     import test_si_order
     test_si_order.run(exe, cc, sys.modules[__name__])
     graphics_bridge(exe, cc)
+    import test_gfx_readback
+    test_gfx_readback.run(exe, cc, sys.modules[__name__])
     save_file(exe, cc)
     rsp_tasks(exe, cc)
     import test_rsp_rom

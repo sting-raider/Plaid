@@ -118,9 +118,9 @@ static u32 dpc_flags; /* DPC_STATUS without --rsp-gfx: 1 source, 2 freeze, 4 flu
 static int dp_held; /* a graphics task's DP interrupt, held while the RDP is frozen (ADR-0198) */
 /* With PLAID_RT64 the runtime links plaid_rt64.dll (runtime/rt64, ADR-0163). */
 #ifdef PLAID_RT64
+#include "gfx.h"
+static int gfx_writeback(void *context, u32 p, u32 n, const u8 *bytes);
 int plaid_gfx_open(const u8 *rom_header);
-void plaid_gfx_task(const u8 *ram, u32 ucode, u32 ucode_data, u32 data_ptr);
-void plaid_gfx_rdp(const u8 *ram, const u8 *commands, u32 size, const u8 *dirty_pages);
 void plaid_gfx_screen(const u32 *regs);
 int plaid_gfx_closed(void);
 u32 plaid_gfx_input(void); /* buttons << 16 | stick x << 8 | stick y */
@@ -148,10 +148,10 @@ static int rsp_dpc_consume(u32 current, u32 size, int dmem) {
     u32 i;
     if (size > sizeof commands) return 1;
     for (i = 0; i < size; i++) commands[i] = rsp.dmem[(current + i) & 0xfff];
-    plaid_gfx_rdp(S->ram, commands, size, rsp_gfx_dirty);
+    if (plaid_gfx_rdp(S->ram, commands, size, rsp_gfx_dirty, gfx_writeback, S)) return 1;
   } else {
     if (current > PLAID_RAM_SIZE || size > PLAID_RAM_SIZE - current) return 1;
-    plaid_gfx_rdp(S->ram, S->ram + current, size, rsp_gfx_dirty);
+    if (plaid_gfx_rdp(S->ram, S->ram + current, size, rsp_gfx_dirty, gfx_writeback, S)) return 1;
   }
   memset(rsp_gfx_dirty, 0, sizeof rsp_gfx_dirty);
   return 0;
@@ -856,6 +856,15 @@ static void dma_wrote(u32 p, u32 n) {
   }
 }
 static void dma_wr(u32 va, const u8 *bytes, u32 n) { if (n) dma_wrote(v2p(va), n); wr(va, bytes, n); }
+#ifdef PLAID_RT64
+/* A completed renderer readback bypasses D-cache, just like device DMA. */
+static int gfx_writeback(void *context, u32 p, u32 n, const u8 *bytes) {
+  plaid_state *s = (plaid_state *)context;
+  if (plaid_runtime_write(s, p, n, 0)) return 1;
+  if (n) { dma_wrote(p, n); memcpy(s->ram + p, bytes, n); }
+  return 0;
+}
+#endif
 RT(__osSetFpcCsr) {
   u32 was = S->fcsr | S->fcc << 23;
   if (plaid_status_fp(S, (u32)S->r[31] - 8, 1)) return 1;
@@ -1401,7 +1410,7 @@ RT(osSpTaskStartGo) {
     if (rsp_graphics) { sp_unknown = 0; memset(rsp_gfx_dirty, 1, sizeof rsp_gfx_dirty); rsp_task(); }
     else
 #endif
-      plaid_gfx_task(S->ram, rd32(task + 0x10), rd32(task + 0x18), rd32(task + 0x30));
+      if (plaid_gfx_task(S->ram, rd32(task + 0x10), rd32(task + 0x18), rd32(task + 0x30), gfx_writeback, S)) return 1;
 #endif
     post(EV_SP);
     /* a frozen RDP consumes nothing, so the DP interrupt waits for the thaw
