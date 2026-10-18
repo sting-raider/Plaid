@@ -29,7 +29,7 @@ def build_oracle():
                              cpu_instruction_access=True)
 
 
-def capture_many(rom, entries):
+def capture_many(rom, entries, exact=False):
     rom = Path(rom).resolve()
     data = rom.read_bytes()
     if len(data) < 4096 or len(data) > 64 * 1024 * 1024 or len(data) % 4:
@@ -42,7 +42,7 @@ def capture_many(rom, entries):
         with tempfile.TemporaryDirectory(prefix='plaid-canonical-') as temporary:
             path = Path(temporary) / 'input.z64'
             path.write_bytes(canonical)
-            return capture_many(path, entries)
+            return capture_many(path, entries, exact=exact)
     if data[:4] != bytes.fromhex('80371240'):
         raise ValueError('unrecognized N64 byte-order signature')
     crc = zlib.crc32(data[0x40:0x1000])
@@ -56,6 +56,8 @@ def capture_many(rom, entries):
             return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(p)], text=True).strip()
         command = ['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(Path(__file__).resolve()),
                    linux(rom), ','.join(hex(e) for e in entries), '--many']
+        if exact:
+            command.append('--exact-many')
         return json.loads(subprocess.check_output(command, text=True, timeout=300))
     # DrvFS index preloading is much slower than a serial source check.
     os.environ['GIT_CONFIG_COUNT'] = '1'
@@ -66,8 +68,11 @@ def capture_many(rom, entries):
     assert hashlib.sha256(firmware.read_bytes()).hexdigest() == 'fa7b09795ef1e54461e59f6f2d902368133e3f1cd980e34383e6a780d74beffd'
     with tempfile.TemporaryDirectory(prefix='plaid-ares-') as temporary:
         output = Path(temporary) / 'capture.json'
-        subprocess.run([str(exe), str(rom), str(firmware), hex(boot), ','.join(hex(e) for e in entries), str(BUDGET),
-                        'CIC-NUS-' + cics[crc], str(output)], check=True, timeout=180)
+        command = [str(exe), str(rom), str(firmware), hex(boot), ','.join(hex(e) for e in entries), str(BUDGET),
+                   'CIC-NUS-' + cics[crc], str(output)]
+        if exact:
+            command.append('exact-many')
+        subprocess.run(command, check=True, timeout=180)
         results = [json.loads(line) for line in output.read_text().splitlines()]
     for result in results:
         result.update(format='plaid-ares-boot-harvest-v1', revision=REV, budget=BUDGET, vi_budget=3600, rom_sha256=hashlib.sha256(data).hexdigest(),
@@ -86,7 +91,8 @@ if __name__ == '__main__':
     parser.add_argument('rom', type=Path)
     parser.add_argument('entry')
     parser.add_argument('--many', action='store_true')
+    parser.add_argument('--exact-many', action='store_true')
     args = parser.parse_args()
     entries = [int(v, 0) for v in args.entry.split(',')]
-    results = capture_many(args.rom, entries)
-    print(json.dumps(results if args.many else next((r for r in results if 'bytes' in r), results[-1]), separators=(',', ':')))
+    results = capture_many(args.rom, entries, exact=args.exact_many)
+    print(json.dumps(results if args.many or args.exact_many else next((r for r in results if 'bytes' in r), results[-1]), separators=(',', ':')))

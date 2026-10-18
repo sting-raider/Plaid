@@ -5999,3 +5999,49 @@ cache bookkeeping kills the regression. Two visible production 75-second BK
 runs reach fault 0; captured title and file-select transitions show colored
 piece interiors. Research, finite coverage and local gate receipts:
 research/native-framebuffer-readback.md and ignored target/bk-puzzle/.
+
+
+## ADR-0202: infer bounded raw section slots and exact cache SDK identities
+
+Recognize adjacent, independently passed raw-section descriptors with shared
+linked slots and contiguous ROM ranges. Require the section-reading call-site
+shape, tracked descriptor loads, alignment, exact file/text/data/BSS relationships
+and ROM/RAM bounds. This is structural candidate evidence, not a loader-lifetime
+proof. Re-read descriptors during composition; source, decoded size, link and
+text extent must match. Existing content-bound slot checks remain mandatory.
+Data after the format-owned text boundary cannot supply instructions or targets.
+
+Extend SDK identification with exact address-independent full-body SHA-256
+profiles for three reviewed cache routines and their supported variants.
+Store fingerprints only, never commercial instruction arrays. Include terminal
+delay slots in both the identity and guarded function extent; preserve valid
+same-name copies and reject conflicting identities. Runtime semantics and the
+declared HLE assumption remain unchanged. No arbitrary CACHE-scope exception,
+game-address exception or native-complete promotion is introduced.
+
+Paper Mario improves from scoped OPEN/164 to OPEN/142. Its remaining E000
+effect code needs TLB-aware source, binding and lifetime evidence; accepting
+an E000 pointer as ordinary KSEG RAM would be incorrect. Local decomp metadata
+at pmret/papermario 1104f1f71b824042a5fa1f958f2d861b603320fd was diagnostic
+only; it has no root license and no source/game code was copied. Production
+inference depends only on ROM bytes. Tests and evidence:
+research/paper-mario-native-frontier.md.
+
+## ADR-0203: batch exact first-fetch replays during load composition
+
+Compose accepted ares-produced loads with one reset replay for all missing
+entries. Capture every requested entry at its own first fetch, even if an
+earlier capture's produced range covers it. Preserve legacy range-cover harvest
+behavior separately. Validate all rows and the completion footer before any
+new capture enters the in-process memo; missing, duplicate, rejected, malformed
+or unrequested payloads fail closed. No on-disk cache or native guest executor
+is added. The pinned ares adapter remains an analysis-only separate build under
+its existing ISC notices; no new upstream code is copied or linked.
+
+The retained synthetic fixture changes a later entry between fetches and
+requires batch/independent bytes, hashes and capture steps to agree. A local
+three-entry Paper Mario comparison also preserves CPU-write and PI-DMA ranges:
+15.292 s / 76,282,317 interpreter calls becomes 7.557 s / 27,609,595 calls.
+Whole-pipeline harvest budgets remain unchanged; the result does not establish
+idle-loop termination or exhaustive executable coverage. Receipt:
+research/paper-mario-native-frontier.md and ignored target/paper-mario/.

@@ -27,6 +27,52 @@ def main():
             result = subprocess.run([str(exe),*map(str,args)],capture_output=True,text=True)
             assert (result.returncode == 0) == ok,(args,result.stdout,result.stderr)
             return result.stdout
+        # Independently named raw section descriptors supply exact slot text.
+        section_rom = bytearray(0x2200)
+        section_rom[:4] = bytes.fromhex('80371240')
+        section_rom[8:12] = (0x80000400).to_bytes(4, 'big')
+        def put_section(at, word):
+            section_rom[at:at+4] = word.to_bytes(4, 'big')
+        for at, target in [(0x1000, 0x80000480), (0x1010, 0x800004b0)]:
+            put_section(at, 0x3c040000 | target >> 16)
+            put_section(at+4, 0x0c000110)
+            put_section(at+8, 0x34840000 | target & 0xffff)
+        put_section(0x1020, 0x08000108) # bounded idle loop
+        put_section(0x1040, 0x0080802d)
+        for index in range(9):
+            put_section(0x1044+4*index, 0x8e020000 | 4*index)
+        put_section(0x1068, 0x03e00008)
+        for at, source in [(0x1080, 0x2000), (0x10b0, 0x2100)]:
+            fields = [source, source+0x100, 0x80100000, 0x80100000,
+                      0x80100080, 0x80100080, 0x80100100, 0x80100100,
+                      0x80100120, 0, 0, 0]
+            for index, word in enumerate(fields):
+                put_section(at+4*index, word)
+            put_section(source, 0x03e00008)
+            # A plausible function in data must remain outside slot text.
+            put_section(source+0x80, 0x03e00008)
+        section_path = directory/'sections.z64'; section_path.write_bytes(section_rom)
+        section_loads = directory/'sections-loads.json'
+        run('infer-loads', section_path, section_loads)
+        section_doc = json.loads(section_loads.read_bytes())
+        segments = [l for l in section_doc['loads'] if l['encoding']=='segment']
+        assert len(segments)==2 and all(l['text_size']=='0x80' and l['slot'] for l in segments)
+        # Keep this test scoped to the newly inferred format.
+        section_doc['loads'] = segments
+        section_loads.write_text(json.dumps(section_doc), encoding='utf-8')
+        section_map = directory/'sections-map.json'
+        section_args = ('discover', section_path, '0x1000', '0x80000400',
+                        '0x100', '0x80000400', section_map, '--loads', section_loads)
+        run(*section_args)
+        original_sections = section_loads.read_bytes()
+        section_doc['loads'][0]['text_size'] = '0x84'
+        section_loads.write_text(json.dumps(section_doc), encoding='utf-8')
+        run(*section_args, ok=False)
+        section_loads.write_bytes(original_sections)
+        section_doc = json.loads(original_sections)
+        section_doc['loads'][0]['slot'] = False
+        section_loads.write_text(json.dumps(section_doc), encoding='utf-8')
+        run(*section_args, ok=False)
         registers=[0]*32
         registers[16]=0xffffffffa0001000; registers[17]=0xffffffffa0002000
         loaded=registers.copy(); loaded[8]=0xffffffff89abcdef

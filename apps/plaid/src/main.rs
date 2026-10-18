@@ -1251,7 +1251,7 @@ fn run() -> Result<(), String> {
                 (
                     plaid_core::signatures::identify(&image, &sigs, wanted),
                     format!(
-                        "n64sym signature match (ADR-0133, ADR-0171), signatures sha256 {}",
+                        "n64sym signatures and exact SDK-body profiles (ADR-0133, ADR-0171, ADR-0202), signatures sha256 {}",
                         plaid_core::rom::sha256(&text)
                     ),
                     BTreeSet::new(),
@@ -1361,6 +1361,12 @@ fn run() -> Result<(), String> {
                 .ok_or("ROM ends before its boot window")?;
             let found = plaid_core::overlays::static_loads(bytes, base, rom.header.boot_address.0)?;
             let paired = plaid_core::paired_streams::infer(bytes, base);
+            let segments = plaid_core::segments::infer(
+                bytes,
+                base,
+                rom.header.boot_address,
+                RomOffset(0x1000),
+            );
             let stub = plaid_core::overlays::reset_stub(bytes, base.len() as u32);
             let mut loads: Vec<_> = stub
                 .map(|size| {
@@ -1396,6 +1402,16 @@ fn run() -> Result<(), String> {
                     "encoding": "rare_pair", "slot": true,
                 }));
             }
+            for file in &segments {
+                loads.push(serde_json::json!({
+                    "destination": format!("{:#x}", file.linked.0),
+                    "size": format!("{:#x}", file.end - file.source),
+                    "rom": format!("{:#x}", file.source),
+                    "descriptor": format!("{:#x}", file.descriptor.0),
+                    "text_size": format!("{:#x}", file.text),
+                    "encoding": "segment", "slot": true,
+                }));
+            }
             let mut evidence: Vec<_> = stub
                 .map(|size| format!("reset stub of {size:#x} bytes before the first file in the boot window"))
                 .into_iter()
@@ -1417,6 +1433,12 @@ fn run() -> Result<(), String> {
                 evidence.push(format!("1172 paired-stream catalog {:#x} index {}; metadata container {:#x}+{:#x}; text/data {:#x}/{:#x}, BSS {:#x}; decoded SHA256 {}",
                     file.source_table, file.index, file.metadata_source, file.metadata_offset,
                     file.text, file.data, file.bss, file.sha256));
+            }
+            for file in &segments {
+                evidence.push(format!(
+                    "named section descriptor {:#x}: ROM {:#x}..{:#x}, linked {:#x}, text {:#x}, BSS {:#x}",
+                    file.descriptor.0, file.source, file.end, file.linked.0, file.text, file.bss
+                ));
             }
             match plaid_core::boot_execution::execute(&rom) {
                 Ok(capture) => {
@@ -1586,11 +1608,19 @@ fn load_declarations(
                 end: RomOffset(field("rom_end")?),
                 text_size: u32::try_from(field("text_size")?).map_err(|e| e.to_string())?,
             },
+            Some("segment") => LoadEncoding::Segment {
+                descriptor: RomOffset(field("descriptor")?),
+                text_size: u32::try_from(field("text_size")?).map_err(|e| e.to_string())?,
+            },
             Some("boot") => LoadEncoding::Boot,
             Some("ares_boot") => LoadEncoding::AresBoot {
                 entry: GuestAddr(u32::try_from(field("entry")?).map_err(|e| e.to_string())?),
             },
-            _ => return Err("load encoding is raw, yaz0, rare_pair, boot or ares_boot".into()),
+            _ => {
+                return Err(
+                    "load encoding is raw, yaz0, rare_pair, segment, boot or ares_boot".into(),
+                );
+            }
         };
         loads.push(DeclaredLoad {
             destination: GuestRange {
