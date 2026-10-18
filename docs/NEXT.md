@@ -1,5 +1,15 @@
 # Next
 
+## Extend automatic coverage beyond the current native games
+
+The fresh five-ROM sweep remains OPEN. Start with Mario Kart 64's four missing
+code targets: establish their source/load path and bounds, then add a general
+recognizer and synthetic regressions. GoldenEye requires boot COP0/TLB mapping
+evidence; Paper Mario and Star Fox require broader executable image coverage;
+Rogue Squadron requires qualified pointer-table provenance. The retained
+results are in research/remaining-roms-20261018.md. Preserve the CLOSED gate
+and the current BK/MM/F-Zero X controls while extending coverage.
+
 ## Preserve framebuffer readback coverage (ADR-0201)
 
 BK's black puzzle-piece interiors are corrected by generic completed-renderer
