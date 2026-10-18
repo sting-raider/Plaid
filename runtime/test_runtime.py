@@ -8,8 +8,7 @@ start and on a message send, a blocked receive yields, lowering a priority
 yields, osYieldThread queues behind an equal priority, and a VI retrace preempts a spinning thread at a loop safepoint.
 
 A second program checks the renderer bridge (ADR-0163) without a GPU: a stub
-plaid_gfx_* records the VI registers the runtime derives from an OSViMode and
-framebuffer, and the graphics task addresses and RAM it hands over. It also
+plaid_gfx_* records the VI registers the guest program wrote, and the graphics task addresses and RAM it hands over. It also
 checks controller 1 (ADR-0164): a scripted --press merged with the stub
 window's stick. A third program checks that --save keeps the EEPROM across
 runs (ADR-0165). A fourth runs an RSP task through lowered IMEM snapshots
@@ -60,7 +59,7 @@ def log_word(address):
 
 
 RUNTIME = ['osCreateMesgQueue', 'osCreateThread', 'osStartThread', 'osSendMesg', 'osRecvMesg',
-           'osSetThreadPri', 'osViSetEvent', 'osYieldThread']
+           'osSetThreadPri', 'osSetEventMesg', 'osYieldThread']
 PROGRAM = [
     *li(A.sp, 0x80007F00),
     *call('osCreateMesgQueue', Q, BUF, 4),
@@ -75,7 +74,7 @@ PROGRAM = [
     *call('osSendMesg', Q, 7, 1),  # wakes t2, which preempts
     *log(4),
     *call('osCreateMesgQueue', Q2, BUF2, 4),
-    *call('osViSetEvent', Q2, 0x99, 1),
+    *call('osSetEventMesg', 7, Q2, 0x99),  # OS_EVENT_VI
     *call('osCreateThread', T4, 4, 't4', 0, 0x8001FF00, 30),
     *call('osStartThread', T4),  # runs, blocks on the VI queue
     *log(5),
@@ -110,7 +109,10 @@ EXPECTED = [1, 2, 3, 7, 4, 5, 6, 0x10, 8, 0x99]
 MODE, TASK, DL, FB, PADS = 0x80004000, 0x80004100, 0x80006000, 0x80100000, 0x80004200
 COM = [0x311E, 320, 0x03E52239, 0x20D, 0xC15, 0x0C150C15, 0x006C02EC, 0x200, 0]
 FLD = [0x280, 0x400, 0x002501FF, 0x000E0204, 2]
-GFX_RUNTIME = ['osViSetMode', 'osViSwapBuffer', 'osSpTaskStartGo', 'osContGetReadData']
+GFX_RUNTIME = ['osSpTaskStartGo', 'osContGetReadData']
+# VI registers as libultra's VI manager programs them from that mode and FB
+SCREEN = [COM[0], (FB & 0x1FFFFFFF) + FLD[0], COM[1], FLD[4], 0, COM[2], COM[3], COM[4], COM[5], COM[6],
+          FLD[2], FLD[3], COM[7], FLD[1]]
 
 
 def poke(address, value):
@@ -119,11 +121,10 @@ def poke(address, value):
 
 GFX_PROGRAM = [
     *li(A.sp, 0x80007F00),
-    *[w for i, v in enumerate(COM) for w in poke(MODE + 4 + 4 * i, v)],
-    *[w for i, v in enumerate(FLD) for w in poke(MODE + 0x28 + 4 * i, v)],
+    *[w for i, v in enumerate(SCREEN) if i != 4 for w in poke(0xA4400000 + 4 * i, v)],
     *poke(TASK, 1), *poke(TASK + 0x10, 0x80005000), *poke(TASK + 0x18, 0x80005800), *poke(TASK + 0x30, DL),
     *poke(DL, 0xB8000000),
-    *call('osViSetMode', MODE), *call('osViSwapBuffer', FB), *call('osSpTaskStartGo', TASK),
+    *call('osSpTaskStartGo', TASK),
     *call('osContGetReadData', PADS),
     'spin', A.beq(A.zero, A.zero, 'spin'), A.nop,  # until the time limit
 ]
@@ -553,12 +554,10 @@ def graphics_bridge(exe, cc):
     assert lines['stub_open'] == 0x80
     assert 54 <= lines['vi'] <= 62, lines['vi']  # NTSC retraces in one second (ADR-0166)
     assert lines['stub_task'] == [0x80005000, 0x80005800, DL, 0xB8000000], lines['stub_task']
-    screen = [COM[0], (FB & 0x1FFFFFFF) + FLD[0], COM[1], FLD[4], 0, COM[2], COM[3], COM[4], COM[5], COM[6],
-              FLD[2], FLD[3], COM[7], FLD[1]]
-    assert lines['stub_screen'] == screen, (lines['stub_screen'], screen)
+    assert lines['stub_screen'] == SCREEN, (lines['stub_screen'], SCREEN)
     # pad 1: A|START (the later R press is not yet due), stick 16, -16; pad 2: errno 8 (absent)
     assert lines['words'] == [0x900010F0, 0, 0x00000800], [hex(w) for w in lines['words']]
-    print('renderer bridge: VI registers from OSViMode and framebuffer, graphics task addresses and big-endian RAM, '
+    print('renderer bridge: VI registers as the guest wrote them, graphics task addresses and big-endian RAM, '
           'controller 1 from scripted presses and the window,', lines['vi'], 'VI retraces in one second')
 
 

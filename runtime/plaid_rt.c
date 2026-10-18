@@ -89,8 +89,6 @@ static u64 seq_counter;
 static int ints_enabled = 1;
 static u32 status_kernel_global; /* the SDK copy whose exception vectors are installed */
 static rt_event events[EV_COUNT];
-static rt_event vi_event;
-static u32 vi_retrace = 1;
 static int pending[EV_COUNT]; /* undelivered event counts */
 static struct { u32 mq, msg; } pi_completions[64];
 static unsigned pi_completion_count;
@@ -101,6 +99,8 @@ static int si_due; /* SI DMA in flight: 1 PIF to RAM, 2 RAM to PIF */
 static int si_finish(void);
 static int si_access(u32 p, int write, u64 *value);
 static rt_timer timers[MAX_TIMERS];
+static u64 compare_due; /* COP0 Compare as a Count deadline (ADR-0199) */
+static int compare_armed;
 static u8 *rom;
 static size_t rom_size;
 static u8 eeprom[2048];
@@ -112,8 +112,8 @@ static void save_file(const char *path, const u8 *bytes, size_t size);
 static int load_file(const char *path, u8 *bytes, size_t size);
 static struct timespec t0;
 static u64 time_base; /* osSetTime offset in count ticks */
-static u32 frame_buffer;
-static u32 vi_mode, vi_black, vi_regs[14]; /* see vi_update */
+static u32 vi_regs[14], vi_field; /* VI registers as the guest wrote them (ADR-0199) */
+static u64 vi_retrace_ns;
 static u32 dpc_flags; /* DPC_STATUS without --rsp-gfx: 1 source, 2 freeze, 4 flush, 0x400 start valid */
 static int dp_held; /* a graphics task's DP interrupt, held while the RDP is frozen (ADR-0198) */
 /* With PLAID_RT64 the runtime links plaid_rt64.dll (runtime/rt64, ADR-0163). */
@@ -199,7 +199,7 @@ static void finish(int code, const char *why) {
   }
   printf("{\"stop\":\"%s\",\"vi\":%lu,\"gfx_tasks\":%lu,\"audio_tasks\":%lu,\"pi_dma\":%lu,"
          "\"framebuffer\":\"%08x\",\"fault\":%u,\"fault_pc\":\"%08x\",\"ra\":\"%08x\",\"a0\":\"%08x\",\"a1\":\"%08x\",\"a2\":\"%08x\",\"t9\":\"%08x\",\"fcsr\":\"%08x\"",
-         why, vi_count, gfx_tasks, audio_tasks, dma_count, frame_buffer, S->fault, S->fault_pc,
+         why, vi_count, gfx_tasks, audio_tasks, dma_count, vi_regs[1], S->fault, S->fault_pc,
          (u32)S->r[31], (u32)S->r[4], (u32)S->r[5], (u32)S->r[6], (u32)S->r[25], S->fcsr | S->fcc << 23);
   if (S->fault == 7) /* a COP1 fault: the operands are in the FPRs */
     for (i = 0; i < 32; i++) printf("%s%016llx\"", i ? ",\"" : ",\"fpr\":[\"", (unsigned long long)S->f[i]);
@@ -437,9 +437,7 @@ static void deliver_pending(void) {
       pending[ev]--;
       if (ev == EV_PI) pi_status &= ~8u;
       if (ev == EV_SI) si_status &= ~0x1000u;
-      if (ev == EV_VI) {
-        if (vi_event.set && vi_count % vi_retrace == 0) mq_send(vi_event.mq, vi_event.msg, 0, 0);
-      } else if (events[ev].set) {
+      if (events[ev].set) {
         mq_send(events[ev].mq, events[ev].msg, 0, 0);
       }
     }
@@ -457,6 +455,10 @@ static void deliver_pending(void) {
       if (t->mq) mq_send(t->mq, t->msg, 0, 0);
       if (t->interval) t->due += t->interval; else t->used = 0;
     }
+  }
+  if (compare_armed && c >= compare_due) { /* the timer interrupt: libultra sends OS_EVENT_COUNTER */
+    compare_armed = 0;
+    if (events[3].set) mq_send(events[3].mq, events[3].msg, 0, 0);
   }
 }
 /* Host thread: VI retrace at 60 Hz, timers, and delivery while all block. */
@@ -487,9 +489,11 @@ static void *event_pump(void *unused) {
          stall longer than a frame drops the missed retraces */
       next_vi = now - next_vi < VI_PERIOD_NS ? next_vi + VI_PERIOD_NS : now + VI_PERIOD_NS;
       vi_count++;
+      vi_retrace_ns = now;
+      if (!(vi_regs[6] & 1)) vi_field ^= 1; /* an interlaced mode alternates fields */
       post(EV_VI);
 #ifdef PLAID_RT64
-      if (vi_mode) plaid_gfx_screen(vi_regs);
+      if (vi_regs[0] & 3) plaid_gfx_screen(vi_regs); /* a color depth: video on */
       if (plaid_gfx_closed()) finish(0, "window closed");
 #endif
     }
@@ -633,11 +637,6 @@ RT(osSetEventMesg) {
   if (ev < EV_COUNT) { events[ev].mq = arg(1); events[ev].msg = arg(2); events[ev].set = 1; }
   return 0;
 }
-RT(osViSetEvent) {
-  vi_event.mq = arg(0); vi_event.msg = arg(1); vi_event.set = 1;
-  vi_retrace = arg(2) ? arg(2) : 1;
-  return 0;
-}
 /* Interrupt masking: while disabled, events stay pending. */
 RT(__osDisableInt) { u32 was = (u32)ints_enabled; ints_enabled = 0; if (S->status_known) S->cp0_status &= ~1u; return ret(was); }
 RT(__osRestoreInt) { ints_enabled |= arg(0) & 1; if (S->status_known) S->cp0_status |= arg(0) & 1; if (ints_enabled) maybe_preempt(0); return 0; }
@@ -685,6 +684,15 @@ int plaid_rt_osSetIntMask_global(plaid_state *s, u32 global_address) {
 RT(osGetTime) { return ret64(count_now()); }
 RT(osGetCount) { return ret((u32)count_now()); }
 RT(osSetTime) { time_base = ((u64)arg(0) << 32 | arg(1)) - (count_now() - time_base); return 0; }
+/* __osSetCompare(value) writes COP0 Compare: the interrupt comes when Count
+   next equals it, a full wrap away if it equals Count now */
+RT(__osSetCompare) {
+  u64 c = count_now();
+  u32 left = arg(0) - (u32)c;
+  compare_due = c + (left ? left : 0x100000000ull);
+  compare_armed = 1;
+  return 0;
+}
 /* osSetTimer(t, countdown (a2:a3), interval (sp+16:sp+20), mq, msg) */
 RT(osSetTimer) {
   int i;
@@ -744,10 +752,7 @@ NO_VRU(osVoiceInit) NO_VRU(osVoiceSetWord) NO_VRU(osVoiceCheckWord) NO_VRU(osVoi
 NO_VRU(osVoiceMaskDictionary) NO_VRU(osVoiceStartReadData) NO_VRU(osVoiceStopReadData)
 NO_VRU(osVoiceGetReadData) NO_VRU(osVoiceControlGain)
 #define NOP(name) RT(name) { return nop(); }
-NOP(osCreateViManager)
 NOP(osCreatePiManager) NOP(osInvalICache) NOP(osSpTaskYield)
-/* shortcut: the VI scale registers are not modeled; RT64 scales the frame itself */
-NOP(osViSetXScale) NOP(osViSetYScale)
 /* The TLB as libultra's osMapTLB writes it (ADR-0162): 4 KiB-aligned even
    and odd pages, noncoherent cached, dirty and valid; -1 leaves a page invalid.
    Lowered code models global entries only, so an ASID is refused. */
@@ -765,66 +770,19 @@ RT(osUnmapTLBAll) { /* EntryHi in KSEG0 never matches a mapped address */
 }
 RT(osSpTaskYielded) { return ret(0); }
 RT(__osSpSetPc) { return ret(0); }
-/* VI registers as libultra's retrace handler writes them from the OSViMode
-   (comRegs at +4, fldRegs[0] at +0x28), the next framebuffer and the black
-   flag; the control word is the mode's as osViSetSpecialFeatures changed it.
-   shortcut: field 0 only, which SM64's non-interlaced LAN1 mode does not
-   need; interlaced modes would alternate fields. */
-static u32 vi_ctrl;
-static void vi_update(void) {
-  u32 m = vi_mode, f = m + 0x28;
-  if (!m) return;
-  vi_regs[0] = vi_ctrl;
-  vi_regs[1] = (frame_buffer & 0x1fffffffu) + rd32(f);
-  vi_regs[2] = rd32(m + 0x08);
-  vi_regs[3] = rd32(f + 0x10);
-  vi_regs[4] = 0;
-  vi_regs[5] = rd32(m + 0x0c);
-  vi_regs[6] = rd32(m + 0x10);
-  vi_regs[7] = rd32(m + 0x14);
-  vi_regs[8] = rd32(m + 0x18);
-  vi_regs[9] = vi_black ? 0 : rd32(m + 0x1c);
-  vi_regs[10] = rd32(f + 0x08);
-  vi_regs[11] = rd32(f + 0x0c);
-  vi_regs[12] = rd32(m + 0x20);
-  vi_regs[13] = rd32(f + 0x04);
+/* VI registers, as pinned ares vi/io.cpp (ADR-0199): libultra's own VI
+   manager and osVi* functions run as guest code and program them, and the
+   retrace is the VI interrupt. VI_V_CURRENT counts lines from the VI_V_INTR
+   line by host time; a field has the lines ares counts for VI_V_SYNC.
+   shortcut: the interrupt follows the NTSC period, not the programmed timing. */
+static const u32 vi_mask[14] = {0xffffu, 0xffffffu, 0xfffu, 0x3ffu, 0, 0x3fffffffu, 0x3ffu, 0x1f0fffu,
+                                0x0fff0fffu, 0x03ff03ffu, 0x03ff03ffu, 0x03ff03ffu, 0x0fff0fffu, 0x0fff0fffu};
+static u32 vi_line(void) {
+  u32 half = vi_regs[6], lines = half >= vi_field ? (half - vi_field) / 2 + 1 : 1;
+  u64 into = vi_retrace_ns ? now_ns() - vi_retrace_ns : 0;
+  u32 line = (u32)(((vi_regs[3] >> 1) + into * lines / VI_PERIOD_NS) % lines);
+  return (line << 1 | vi_field) & 0x3ffu;
 }
-RT(osViSetMode) { vi_mode = arg(0); vi_ctrl = rd32(vi_mode + 0x04); vi_update(); return 0; }
-/* osViSetSpecialFeatures(func): gamma (VI_CTRL bit 3), gamma dither (2),
-   divot (4) and the dither filter (16), which turns anti-aliasing off and
-   back to the mode's setting (bits 8-9), as libultra documents */
-RT(osViSetSpecialFeatures) {
-  u32 func = arg(0);
-  if (func & 0x01) vi_ctrl |= 0x8;
-  if (func & 0x02) vi_ctrl &= ~0x8u;
-  if (func & 0x04) vi_ctrl |= 0x4;
-  if (func & 0x08) vi_ctrl &= ~0x4u;
-  if (func & 0x10) vi_ctrl |= 0x10;
-  if (func & 0x20) vi_ctrl &= ~0x10u;
-  if (func & 0x40) vi_ctrl = (vi_ctrl | 0x10000u) & ~0x300u;
-  if (func & 0x80) vi_ctrl = (vi_ctrl & ~0x10000u) | (vi_mode ? rd32(vi_mode + 0x04) & 0x300u : 0);
-  vi_update();
-  return 0;
-}
-RT(osViBlack) { vi_black = arg(0) & 0xff; vi_update(); return 0; }
-RT(osViSwapBuffer) { frame_buffer = arg(0); vi_update(); return 0; }
-/* libultra's osViSwapBuffer also stores the framebuffer in __osViNext->framep,
-   where guest code may read it (ADR-0198) */
-int plaid_rt_osViSwapBuffer_next(plaid_state *s, u32 next) {
-  u32 context;
-  int result;
-  (void)s;
-  pthread_mutex_lock(&big);
-  context = rd32(next);
-  if (context) wr32(context + 4, arg(0));
-  result = rt_osViSwapBuffer();
-  pthread_mutex_unlock(&big);
-  return result;
-}
-/* swaps take effect at once here, so the current and next buffers are the
-   same; before any swap __osViInit's framep is K0BASE */
-RT(osViGetCurrentFramebuffer) { return ret(frame_buffer ? frame_buffer : 0x80000000u); }
-RT(osViGetNextFramebuffer) { return ret(frame_buffer ? frame_buffer : 0x80000000u); }
 static u32 v2p(u32 a) {
   u32 p;
   u8 seg;
@@ -1107,6 +1065,13 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
     u32 k = (p - 0x04600014u) >> 2;
     if (write) pi_bsd[k] = (u32)*v & pi_bsd_mask[k];
     else *v = pi_bsd[k];
+    return 0;
+  }
+  if (p >= 0x04400000u && p < 0x04500000u) { /* VI registers, mirrored every 0x40 bytes */
+    u32 r = (p & 0x3fu) >> 2;
+    if (!write) *v = r == 4 ? vi_line() : r < 14 ? vi_regs[r] : 0;
+    else if (r == 4) pending[EV_VI] = 0; /* VI_V_CURRENT: acknowledges the interrupt */
+    else if (r < 14) vi_regs[r] = (u32)*v & vi_mask[r];
     return 0;
   }
   if (p >= 0x04500000u && p < 0x04600000u) { /* AI registers, as ares ai/io.cpp */

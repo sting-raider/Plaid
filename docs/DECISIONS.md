@@ -5869,3 +5869,52 @@ framebuffer pixels, so the cause is still open.
 
 Tests: test_vi_dp.py checks the framep store and that a frozen RDP's DP event
 arrives only after the thaw. Removing either change fails it.
+
+## ADR-0199: libultra's VI code runs as guest code against VI registers
+
+Status: accepted. Milestone 5. Supersedes the VI parts of ADR-0163 and
+ADR-0198.
+
+The runtime replaced osCreateViManager, osViSetMode, osViSetSpecialFeatures,
+osViBlack, osViSwapBuffer, osViSetEvent, osViGetCurrentFramebuffer,
+osViGetNextFramebuffer and osViSetX/YScale (N64Recomp's list) with host
+models. Each was an assumption that the model has every side effect of the
+game's copy, and BK broke that twice: its own next-framebuffer read saw a
+context the HLE never wrote (ADR-0198), and the HLE's swap took effect at once
+where libultra's takes effect at the next retrace. These functions only
+program VI registers and libultra's own VI contexts, so they are no longer
+runtime functions. Each game's own VI manager thread, __osViInit,
+__osViSwapContext and getters run as lowered code.
+
+The runtime models the VI registers as pinned ares vi/io.cpp does: the bits
+each register keeps, a mirror every 0x40 bytes, a VI_V_CURRENT_LINE write
+acknowledging the interrupt, and a read giving the field and the half-line
+count for VI_V_SYNC, counted by host time from the VI_V_INTR line. An
+interlaced mode alternates fields at each retrace. The retrace is the VI
+interrupt, sent like any other event to the queue the guest registered with
+osSetEventMesg(OS_EVENT_VI); the renderer gets the registers as the guest last
+wrote them, and only while VI_CONTROL selects a color depth. The stop report's
+"framebuffer" is now VI_DRAM_ADDRESS.
+
+Running the VI manager makes its timer-interrupt branch reachable, and with it
+__osSetCompare, a COP0 Compare write that the static scope cannot contain. It
+is now a runtime function in the timer core: Count reaching Compare is the
+timer interrupt, sent as OS_EVENT_COUNTER to the registered queue, as
+libultra's handler sends it. osSetTimer remains a host timer, so the guest's
+own timer list stays empty and its handler finds nothing to do.
+
+Kept as shortcuts: the interrupt follows the fixed NTSC period, not the
+programmed VI timing, and it arrives at the frame boundary rather than at the
+VI_V_INTR line. The thread, message, interrupt-mask and timer core stays
+replaced: a static recompiler cannot cheaply resume lowered code at the
+arbitrary PC that libultra's exception handler would eret to.
+
+BK closes with the extra guest code (80,850 blocks) and its visible 60 s run
+is accepted: 1,273 graphics tasks, 1,789 audio tasks, no fault. The frames
+match the ADR-0198 build, so the black outdoor sky is not a VI effect.
+
+Tests: test_vi_dp.py checks the kept bits and the mirror; the retrace as
+OS_EVENT_VI near VI_V_INTR in field 0; Compare as OS_EVENT_COUNTER; and the
+DP freeze hold. The scheduling and renderer-bridge runtime tests now register
+OS_EVENT_VI and program the VI registers directly. The identification fixtures
+that name VI functions keep their own name list.

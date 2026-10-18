@@ -130,7 +130,6 @@ mod tests {
                     callbacks: Vec::new(),
                     status_global: (index < 2).then_some(GuestAddr(0x80002000)),
                     eeprom_timer: None,
-                    vi_next: None,
                 },
             );
         }

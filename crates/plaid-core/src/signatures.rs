@@ -24,9 +24,8 @@ pub use status::verify as verify_status_abi;
 pub const RUNTIME_FUNCTIONS: &[&str] = &[
     "__osInitialize_common", "osInitialize", "osGetMemSize",
     "osAiGetLength", "osAiGetStatus", "osAiSetFrequency", "osAiSetNextBuffer",
-    "osViSetXScale", "osViSetYScale", "osCreateViManager", "osViBlack",
-    "osViSetSpecialFeatures", "osViGetCurrentFramebuffer", "osViGetNextFramebuffer",
-    "osViSwapBuffer", "osViSetMode", "osViSetEvent",
+    // N64Recomp's osVi* and osCreateViManager are left out: the VI registers
+    // are modelled and libultra's VI manager runs as guest code (ADR-0199)
     "osDpSetNextBuffer",
     "osSpTaskLoad", "osSpTaskStartGo", "osSpTaskYield", "osSpTaskYielded", "__osSpSetPc",
     "osContInit", "osContStartReadData", "osContGetReadData", "osContStartQuery",
@@ -54,6 +53,9 @@ pub const RUNTIME_FUNCTIONS: &[&str] = &[
     "osGetIntMask",
     "osVirtualToPhysical",
     "osGetCount", "osSetCount", "__osSetFpcCsr",
+    // not in N64Recomp's list: COP0 Compare, which libultra's VI manager
+    // reaches through its timer interrupt once it runs as guest code (ADR-0199)
+    "__osSetCompare",
     "osInvalDCache", "osInvalICache", "osWritebackDCache", "osWritebackDCacheAll",
     "is_proutSyncPrintf", "__checkHardware_msp", "__checkHardware_kmc", "__checkHardware_isv",
     "__osInitialize_msp", "__osInitialize_kmc", "__osInitialize_isv", "__osRdbSend",
@@ -714,6 +716,14 @@ mod tests {
         )
     }
 
+    /// VI services named by these signature fixtures; the runtime no longer
+    /// replaces them (ADR-0199), but data evidence still identifies them.
+    const VI_GETTERS: &[&str] = &[
+        "osViGetCurrentFramebuffer",
+        "osViGetNextFramebuffer",
+        "osViSwapBuffer",
+    ];
+
     #[test]
     fn data_symbols_settle_lookalike_getters() {
         // lui t6, %hi(sym); lw t6, %lo(sym)(t6); then a read or a write of
@@ -727,10 +737,10 @@ mod tests {
         img.words[8..13].copy_from_slice(&get(0x1004)); // reads __osViNext
         img.words[16..21].copy_from_slice(&swap);
         let getter = sig_data("osViGetCurrentFramebuffer", &get(0), "__osViCurr");
-        let open = identify(&img, &parse(&getter).unwrap(), RUNTIME_FUNCTIONS);
+        let open = identify(&img, &parse(&getter).unwrap(), VI_GETTERS);
         assert!(open.matches.is_empty());
         let text = getter.clone() + &sig_data("osViSwapBuffer", &swap, "__osViNext");
-        let found = identify(&img, &parse(&text).unwrap(), RUNTIME_FUNCTIONS);
+        let found = identify(&img, &parse(&text).unwrap(), VI_GETTERS);
         let at: BTreeMap<_, _> = found
             .matches
             .iter()
@@ -745,7 +755,7 @@ mod tests {
         assert!(found.ambiguous.is_empty(), "{:?}", found.ambiguous);
         // a section-relative name may alias a global, so it decides nothing
         let alias = getter + &sig_data("osViSwapBuffer", &swap, "vimgr_data_0004");
-        let still = identify(&img, &parse(&alias).unwrap(), RUNTIME_FUNCTIONS);
+        let still = identify(&img, &parse(&alias).unwrap(), VI_GETTERS);
         assert!(still.ambiguous.contains("osViGetCurrentFramebuffer"));
         assert!(global("__osViNext") && !global("vimgr_data_0004") && global("osViSwapBuffer"));
     }
@@ -767,12 +777,12 @@ mod tests {
             + &sig_data("osViSwapBuffer", &anchor(0), "__osViCurr");
         let sigs = parse(&text).unwrap();
         // Two relocated copies inside one supplied component remain ambiguous.
-        assert!(identify(&img, &sigs, RUNTIME_FUNCTIONS).matches.is_empty());
+        assert!(identify(&img, &sigs, VI_GETTERS).matches.is_empty());
         img.holes.push(crate::program::GuestRange {
             start: GuestAddr(0x8000_0440),
             size: 0x40,
         });
-        let found = identify(&img, &sigs, RUNTIME_FUNCTIONS);
+        let found = identify(&img, &sigs, VI_GETTERS);
         assert_eq!(found.matches.len(), 4);
         assert!(found.ambiguous.is_empty());
         assert_eq!(
@@ -786,12 +796,12 @@ mod tests {
         // In each component a different named global still excludes a lookalike.
         let wrong = text + &sig_data("osViGetNextFramebuffer", &get(0), "__osViNext");
         assert_eq!(
-            identify(&img, &parse(&wrong).unwrap(), RUNTIME_FUNCTIONS).matches,
+            identify(&img, &parse(&wrong).unwrap(), VI_GETTERS).matches,
             found.matches
         );
         // Crossing a gap never supplies a complete signature.
         img.holes[0].start = GuestAddr(0x8000_0408);
-        assert_eq!(identify(&img, &sigs, RUNTIME_FUNCTIONS).matches.len(), 2);
+        assert_eq!(identify(&img, &sigs, VI_GETTERS).matches.len(), 2);
     }
 
     #[test]
@@ -845,7 +855,7 @@ mod tests {
         });
         let text = sig_data("osViGetCurrentFramebuffer", &get(0), "__osViCurr")
             + &sig_data("osViSwapBuffer", &swap, "__osViNext");
-        let found = identify(&img, &parse(&text).unwrap(), RUNTIME_FUNCTIONS);
+        let found = identify(&img, &parse(&text).unwrap(), VI_GETTERS);
         assert_eq!(found.matches.len(), 2);
         assert_eq!(found.matches[0].entry.0, 0x8000_0400);
         assert_eq!(found.matches[1].entry.0, 0x8000_0480);
