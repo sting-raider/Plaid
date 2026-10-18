@@ -1292,6 +1292,11 @@ pub fn lower_c_parts(
             status_wrappers += &format!("int plaid_rt_{}_global(plaid_state *s, u32 global);\nstatic inline int plaid_rt_{name}(plaid_state *s) {{ return plaid_rt_{}_global(s, 0x{:08x}u); }}\n",f.name,f.name,global.0);
             bound_names.insert(name.clone());
             name
+        } else if let Some((queue, message)) = f.eeprom_timer {
+            let name = format!("eeprom_{:08x}", a.pc.0);
+            status_wrappers += &format!("int plaid_rt_osContInit_eeprom(plaid_state *s, u32 queue, u32 message);\nstatic inline int plaid_rt_{name}(plaid_state *s) {{ return plaid_rt_osContInit_eeprom(s, 0x{:08x}u, 0x{:08x}u); }}\n",queue.0,message.0);
+            bound_names.insert(name.clone());
+            name
         } else { f.name.clone() };
         (a.pc.0, name)
     }).collect();

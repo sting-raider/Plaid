@@ -519,7 +519,7 @@ def sp_boot(exe, cc):
     print('SP boot: DMEM and IMEM start from the declared post-IPL state, not ROM 0x40-0xfff')
 
 
-def build(exe, cc, name, program, runtime, extra=(), status_globals=None, fr0=False):
+def build(exe, cc, name, program, runtime, extra=(), status_globals=None, fr0=False, data_bindings=None):
     (OUT / f'{name}.bin').write_bytes(A.assemble(program))
     labels = A.label_pcs(program)
     decl = dict(format='plaid-runtime-functions-v0', source='runtime test declaration',
@@ -528,6 +528,8 @@ def build(exe, cc, name, program, runtime, extra=(), status_globals=None, fr0=Fa
     for function in decl['functions']:
         if status_globals and function['name'] in status_globals:
             function['status_global'] = hex(status_globals[function['name']])
+        if data_bindings and function['name'] in data_bindings:
+            function['data_bindings'] = {k: hex(v) for k, v in data_bindings[function['name']].items()}
     (OUT / f'{name}.runtime.json').write_text(json.dumps(decl))
     subprocess.run([str(exe), 'lower-c', str(OUT / f'{name}.bin'), hex(A.BASE), hex(A.BASE), hex(A.EXIT),
                     str(OUT / f'{name}.c'), str(OUT / f'{name}.runtime.json'), *(['--fr0'] if fr0 else [])], check=True)

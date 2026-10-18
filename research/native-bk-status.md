@@ -181,7 +181,20 @@ Native 802820c0 then holds ROM 0xb70-0xc6f, the bytes ares DMAs there.
 The visible run now reaches the 60 s limit with no fault: VI 3545, 1,768
 audio tasks, 20 PI transfers. It issues no graphics task and its PCM is
 silent, so the window stays black and --require-audio rejects the build.
-Graphics task dispatch is the next barrier and has not been compared with ares.
+The stall was the main thread (id 6, entry 8023dbfc) waiting forever on
+__osEepromTimerQ (802847b8) after BK's first EEPROM write: the runtime's
+osContInit never created that queue, so the 12 ms delay's expiry was dropped.
+Pinned ares with a 512-byte EEPROM attached creates it in osContInit at VI
+137, completes eight delays and issues the first graphics task at VI 175.
+ADR-0196 binds the queue (a split LUI/ADDIU pair) and creates it natively.
+
+The visible run then passes the EEPROM writes (33 PI transfers) and stops at
+VI 17 with fault 3: 8034b620 calls 8034c360 through t9 with a0 800b0c88. ares
+makes the same call with the same a0 at VI 154, so the paths agree; 8034c360
+is code inside the harvested 80277020 image that discovery never reached, a
+call target outside the address-taken scope, probably via a pointer in data
+BK loads at run time. That is the next barrier; graphics and PCM are still
+unmeasured because the run stops before them.
 
 ## Sources, evidence and scope
 

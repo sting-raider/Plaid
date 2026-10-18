@@ -1498,6 +1498,23 @@ RT(osContInit) {
   cont_status(arg(2));
   return ret(0);
 }
+/* libultra's osContInit also creates __osEepromTimerQ with one message,
+   __osEepromTimerMsg, on which osEepromLongWrite waits out each write
+   (ADR-0196); like __osContinitialized, only on the first call */
+int plaid_rt_osContInit_eeprom(plaid_state *s, u32 queue, u32 message) {
+  static u32 created;
+  int result;
+  (void)s;
+  pthread_mutex_lock(&big);
+  result = rt_osContInit();
+  if (queue != created) {
+    wr32(queue, 0); wr32(queue + 4, 0); wr32(queue + 8, 0); wr32(queue + 0xc, 0);
+    wr32(queue + 0x10, 1); wr32(queue + 0x14, message);
+    created = queue;
+  }
+  pthread_mutex_unlock(&big);
+  return result;
+}
 RT(osContStartReadData) { post(EV_SI); return ret(0); }
 RT(osContStartQuery) { post(EV_SI); return ret(0); }
 RT(osContGetQuery) { cont_status(arg(0)); return 0; }
