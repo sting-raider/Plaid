@@ -12,6 +12,8 @@ Steps, each a plain `plaid` command whose output stays in target/native/<name>:
   lower-map      16 parts, compiled in parallel with gcc
   rsp-from-rom   derive and lower candidate microcode from ROM image pointers
   snapshots      oracle-only; never loaded by the default build
+  sp-boot        SP DMEM/IMEM as the ROM's IPL3 leaves them in pinned ares
+  ram-boot       IPL3's first 0x400 RDRAM bytes, before the game overwrites them
   validate       run once (visibly with --rt64); unknown microcode faults
   --rt64         also link the RT64 window build (target/rt64-shim/Release)
 
@@ -29,6 +31,7 @@ from pathlib import Path
 
 from native_audio import audio_peak
 from harvest_boot import harvest
+from ares_boot import capture_many
 
 ROOT = Path(__file__).resolve().parents[1]
 SIGNATURES = ROOT / '.refs/n64sym/src/builtin_signatures.sig'
@@ -59,6 +62,26 @@ def compile_source(source, flags, dependencies, compiler):
         finally:
             temporary.unlink(missing_ok=True)
     return obj
+
+
+def write_boot_state(capture, out, entry):
+    """Keep the bounded startup payload and its analysis provenance together."""
+    if (capture.get('boot_entry') != entry or not 0x80000000 <= entry < 0xc0000000 or
+            not 0x400 <= entry & 0x1fffffff < 0x800000):
+        raise ValueError('post-IPL entry does not leave the RDRAM prefix outside executable code')
+    for field, size in [('sp', 0x2000), ('ram_prefix', 0x400)]:
+        data = capture.get(field)
+        if (capture.get('entered') is not True or not isinstance(data, list) or len(data) != size or
+                any(type(b) is not int or not 0 <= b <= 255 for b in data)):
+            raise ValueError(f'pinned ares supplied no valid post-IPL {field}')
+    sp_boot, ram_boot = out / 'sp_boot.h', out / 'ram_boot.h'
+    sp_boot.write_text('static const u8 plaid_sp_boot[0x2000] = {' + ','.join(map(str, capture['sp'])) + '};\n')
+    ram_boot.write_text('static const u8 plaid_ram_boot[] = {' + ','.join(map(str, capture['ram_prefix'])) + '};\n')
+    receipt = {k: v for k, v in capture.items() if k not in ('sp', 'ram_prefix')}
+    receipt['startup_payloads'] = {field: {'size': len(capture[field]), 'sha256': hashlib.sha256(bytes(capture[field])).hexdigest()}
+                                   for field in ('sp', 'ram_prefix')}
+    (out / 'boot-state.json').write_text(json.dumps(receipt, indent=2) + '\n')
+    return sp_boot, ram_boot
 
 
 def main():
@@ -115,6 +138,12 @@ def main():
     if verdict['status'] != 'closed':
         sys.exit('not CLOSED under the address-taken scope: nothing is built')
 
+    # The native run starts SP memory as the ROM's own IPL3 leaves it (ADR-0195).
+    try:
+        sp_boot, ram_boot = write_boot_state(capture_many(rom, [entry])[-1], out, entry)
+    except ValueError as error:
+        sys.exit(str(error) + ': nothing is built')
+
     plaid('rsp-from-rom', rom, m, texts)
     rsp_manifest = json.loads((texts / 'rsp-files.json').read_text())
     c = out / f'{name}.c'
@@ -129,11 +158,11 @@ def main():
     parts = sorted(out.glob(f'{name}.part*.c'))
     with ThreadPoolExecutor(os.cpu_count()) as pool:
         part_objs = list(pool.map(lambda p: compile_cached(p, cc), parts))
-    rt = [*cc, '-DPLAID_RSP', '-DPLAID_RSP_ROM', '-I', ROOT / 'crates/plaid-lower/src', f'-DPLAID_LOWERED="{c.name}"', '-I', out]
+    rt = [*cc, '-DPLAID_RSP', '-DPLAID_RSP_ROM', '-I', ROOT / 'crates/plaid-lower/src', f'-DPLAID_LOWERED="{c.name}"', f'-DPLAID_SP_BOOT="{sp_boot.name}"', f'-DPLAID_RAM_BOOT="{ram_boot.name}"', '-I', out]
     # Keep runtime objects in the build directory, alongside the generated C.
     runtime_source = out / 'runtime.c'
     runtime_source.write_text(f'#include "{(ROOT / "runtime/plaid_rt.c").as_posix()}"\n')
-    runtime_deps = c.read_bytes() + (ROOT / 'runtime/plaid_rt.c').read_bytes() + (ROOT / 'runtime/dpc.h').read_bytes()
+    runtime_deps = c.read_bytes() + sp_boot.read_bytes() + ram_boot.read_bytes() + (ROOT / 'runtime/plaid_rt.c').read_bytes() + b''.join(p.read_bytes() for p in sorted((ROOT / 'runtime').glob('*.h')))
     main_obj = compile_cached(runtime_source, rt, runtime_deps)
     window_exe = RT64 / f'{name}{"-rsp" if a.rsp_gfx else ""}-rt64.exe'
     if a.rt64:

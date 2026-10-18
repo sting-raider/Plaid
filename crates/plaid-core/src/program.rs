@@ -622,6 +622,13 @@ pub struct RuntimeFunction {
     /// (ADR-0130).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub callbacks: Vec<u8>,
+    /// Verified SDK Status ABI and this copy's mutable global-mask binding.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_global: Option<GuestAddr>,
+    /// osContInit's `__osEepromTimerQ` and `__osEepromTimerMsg`: libultra's
+    /// osContInit creates that queue for osEepromLongWrite's delay.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eeprom_timer: Option<(GuestAddr, GuestAddr)>,
 }
 
 fn fetch_summaries_realizable(fetch_count: u64, summaries: &[(u64, u64, u64)]) -> bool {
@@ -806,6 +813,24 @@ impl ProgramMap {
         for (a, f) in &self.runtime_functions {
             address(a)?;
             refs(&f.evidence)?;
+            if let Some(global) = f.status_global
+                && (!matches!(
+                    f.name.as_str(),
+                    "osCreateThread" | "osSetIntMask" | "osInitialize"
+                ) || global.0 & 3 != 0
+                    || global.0 & 0x1fff_ffff >= 0x800000
+                    || !matches!(global.0 >> 29, 4 | 5))
+            {
+                return Err("invalid SDK Status global binding".into());
+            }
+            if let Some((queue, message)) = f.eeprom_timer
+                && (f.name != "osContInit"
+                    || [queue, message].iter().any(|a| {
+                        a.0 & 3 != 0 || a.0 & 0x1fff_ffff >= 0x800000 || !matches!(a.0 >> 29, 4 | 5)
+                    }))
+            {
+                return Err("invalid osContInit EEPROM timer binding".into());
+            }
             let mut chars = f.name.chars();
             if !chars
                 .next()

@@ -13,6 +13,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[path = "signature_bindings.rs"]
 mod bindings;
+#[path = "signature_status.rs"]
+mod status;
+pub use status::verify as verify_status_abi;
 
 /// Functions N64Recomp's runtime reimplements (`reimplemented_funcs` in
 /// N64Recomp `src/symbol_lists.cpp`, MIT, Copyright (c) 2024 Wiseguy), plus
@@ -21,19 +24,18 @@ mod bindings;
 pub const RUNTIME_FUNCTIONS: &[&str] = &[
     "__osInitialize_common", "osInitialize", "osGetMemSize",
     "osAiGetLength", "osAiGetStatus", "osAiSetFrequency", "osAiSetNextBuffer",
-    "osViSetXScale", "osViSetYScale", "osCreateViManager", "osViBlack",
-    "osViSetSpecialFeatures", "osViGetCurrentFramebuffer", "osViGetNextFramebuffer",
-    "osViSwapBuffer", "osViSetMode", "osViSetEvent",
+    // N64Recomp's osVi* and osCreateViManager are left out: the VI registers
+    // are modelled and libultra's VI manager runs as guest code (ADR-0199)
     "osDpSetNextBuffer",
     "osSpTaskLoad", "osSpTaskStartGo", "osSpTaskYield", "osSpTaskYielded", "__osSpSetPc",
     "osContInit", "osContStartReadData", "osContGetReadData", "osContStartQuery",
     "osContGetQuery", "osContSetCh",
-    "osEepromProbe", "osEepromWrite", "osEepromLongWrite", "osEepromRead", "osEepromLongRead",
+    "osEepromProbe", "osEepromWrite", "osEepromLongWrite", "osEepromRead", "osEepromLongRead", "__osEepStatus",
     "__osMotorAccess", "osMotorInit", "osMotorStart", "osMotorStop",
     "osPfsInitPak", "osPfsFreeBlocks", "osPfsAllocateFile", "osPfsDeleteFile",
-    "osPfsFileState", "osPfsFindFile", "osPfsReadWriteFile",
+    "osPfsFileState", "osPfsFindFile", "osPfsReadWriteFile", "__osPfsGetStatus",
     "osCartRomInit", "osCreatePiManager", "osPiReadIo", "osPiStartDma", "osEPiStartDma",
-    "osPiGetStatus", "osEPiRawStartDma", "osEPiReadIo",
+    "osPiGetStatus", "osPiRawStartDma", "osEPiRawStartDma", "osEPiReadIo",
     // N64Recomp's osFlash* are left out: the FlashRAM is modelled on the PI
     // bus and libultra's flash code runs as guest code (ADR-0183)
     "osCreateThread", "osStartThread", "osStopThread", "osDestroyThread",
@@ -45,12 +47,15 @@ pub const RUNTIME_FUNCTIONS: &[&str] = &[
     "osVoiceSetWord", "osVoiceCheckWord", "osVoiceStopReadData", "osVoiceInit",
     "osVoiceMaskDictionary", "osVoiceStartReadData", "osVoiceControlGain",
     "osVoiceGetReadData", "osVoiceClearDictionary",
-    "osSetIntMask", "__osDisableInt", "__osRestoreInt",
+    "osSetIntMask", "__osDisableInt", "__osRestoreInt", "__osGetSR",
     // in N64Recomp's `ignored_funcs`; OoT hands its address to the 64DD
     // driver (ADR-0183)
     "osGetIntMask",
     "osVirtualToPhysical",
     "osGetCount", "osSetCount", "__osSetFpcCsr",
+    // not in N64Recomp's list: COP0 Compare, which libultra's VI manager
+    // reaches through its timer interrupt once it runs as guest code (ADR-0199)
+    "__osSetCompare",
     "osInvalDCache", "osInvalICache", "osWritebackDCache", "osWritebackDCacheAll",
     "is_proutSyncPrintf", "__checkHardware_msp", "__checkHardware_kmc", "__checkHardware_isv",
     "__osInitialize_msp", "__osInitialize_kmc", "__osInitialize_isv", "__osRdbSend",
@@ -113,6 +118,8 @@ pub struct Identification {
     /// Verified scalar address references, distinct for each selected SDK copy.
     /// This is address evidence, not a claim that the global value is immutable.
     pub data_bindings: BTreeMap<GuestAddr, BTreeMap<String, GuestAddr>>,
+    /// Selected, verified global-mask SDK ABI, bound independently per copy.
+    pub status_globals: BTreeMap<GuestAddr, GuestAddr>,
 }
 
 /// Parse an n64sym `sig_v1` file.
@@ -252,11 +259,13 @@ pub fn identify(image: &CodeImage, signatures: &[Signature], wanted: &[&str]) ->
             .count()
     };
     let global = resolve(image, found.clone(), &|_| 0);
-    if image.holes.is_empty() {
-        return global;
-    }
-    let local = resolve(image, found, &namespace);
-    combine(global, local)
+    let mut out = if image.holes.is_empty() {
+        global
+    } else {
+        combine(global, resolve(image, found, &namespace))
+    };
+    status::annotate(image, signatures, &mut out);
+    out
 }
 
 fn combine(global: Identification, local: Identification) -> Identification {
@@ -302,6 +311,7 @@ fn combine(global: Identification, local: Identification) -> Identification {
         matches: matches.into_values().collect(),
         ambiguous,
         data_bindings,
+        status_globals: BTreeMap::new(),
     }
 }
 
@@ -507,6 +517,8 @@ pub fn with_reference_map(
     out.matches.retain(|m| !conflicts.contains(&m.name));
     out.data_bindings
         .retain(|entry, _| out.matches.iter().any(|m| m.entry == *entry));
+    out.status_globals
+        .retain(|entry, _| out.matches.iter().any(|m| m.entry == *entry));
     map_only.retain(|n| !conflicts.contains(n));
     out.ambiguous.extend(map.ambiguous);
     out.ambiguous.extend(conflicts);
@@ -704,6 +716,14 @@ mod tests {
         )
     }
 
+    /// VI services named by these signature fixtures; the runtime no longer
+    /// replaces them (ADR-0199), but data evidence still identifies them.
+    const VI_GETTERS: &[&str] = &[
+        "osViGetCurrentFramebuffer",
+        "osViGetNextFramebuffer",
+        "osViSwapBuffer",
+    ];
+
     #[test]
     fn data_symbols_settle_lookalike_getters() {
         // lui t6, %hi(sym); lw t6, %lo(sym)(t6); then a read or a write of
@@ -717,10 +737,10 @@ mod tests {
         img.words[8..13].copy_from_slice(&get(0x1004)); // reads __osViNext
         img.words[16..21].copy_from_slice(&swap);
         let getter = sig_data("osViGetCurrentFramebuffer", &get(0), "__osViCurr");
-        let open = identify(&img, &parse(&getter).unwrap(), RUNTIME_FUNCTIONS);
+        let open = identify(&img, &parse(&getter).unwrap(), VI_GETTERS);
         assert!(open.matches.is_empty());
         let text = getter.clone() + &sig_data("osViSwapBuffer", &swap, "__osViNext");
-        let found = identify(&img, &parse(&text).unwrap(), RUNTIME_FUNCTIONS);
+        let found = identify(&img, &parse(&text).unwrap(), VI_GETTERS);
         let at: BTreeMap<_, _> = found
             .matches
             .iter()
@@ -735,7 +755,7 @@ mod tests {
         assert!(found.ambiguous.is_empty(), "{:?}", found.ambiguous);
         // a section-relative name may alias a global, so it decides nothing
         let alias = getter + &sig_data("osViSwapBuffer", &swap, "vimgr_data_0004");
-        let still = identify(&img, &parse(&alias).unwrap(), RUNTIME_FUNCTIONS);
+        let still = identify(&img, &parse(&alias).unwrap(), VI_GETTERS);
         assert!(still.ambiguous.contains("osViGetCurrentFramebuffer"));
         assert!(global("__osViNext") && !global("vimgr_data_0004") && global("osViSwapBuffer"));
     }
@@ -757,12 +777,12 @@ mod tests {
             + &sig_data("osViSwapBuffer", &anchor(0), "__osViCurr");
         let sigs = parse(&text).unwrap();
         // Two relocated copies inside one supplied component remain ambiguous.
-        assert!(identify(&img, &sigs, RUNTIME_FUNCTIONS).matches.is_empty());
+        assert!(identify(&img, &sigs, VI_GETTERS).matches.is_empty());
         img.holes.push(crate::program::GuestRange {
             start: GuestAddr(0x8000_0440),
             size: 0x40,
         });
-        let found = identify(&img, &sigs, RUNTIME_FUNCTIONS);
+        let found = identify(&img, &sigs, VI_GETTERS);
         assert_eq!(found.matches.len(), 4);
         assert!(found.ambiguous.is_empty());
         assert_eq!(
@@ -776,12 +796,12 @@ mod tests {
         // In each component a different named global still excludes a lookalike.
         let wrong = text + &sig_data("osViGetNextFramebuffer", &get(0), "__osViNext");
         assert_eq!(
-            identify(&img, &parse(&wrong).unwrap(), RUNTIME_FUNCTIONS).matches,
+            identify(&img, &parse(&wrong).unwrap(), VI_GETTERS).matches,
             found.matches
         );
         // Crossing a gap never supplies a complete signature.
         img.holes[0].start = GuestAddr(0x8000_0408);
-        assert_eq!(identify(&img, &sigs, RUNTIME_FUNCTIONS).matches.len(), 2);
+        assert_eq!(identify(&img, &sigs, VI_GETTERS).matches.len(), 2);
     }
 
     #[test]
@@ -835,7 +855,7 @@ mod tests {
         });
         let text = sig_data("osViGetCurrentFramebuffer", &get(0), "__osViCurr")
             + &sig_data("osViSwapBuffer", &swap, "__osViNext");
-        let found = identify(&img, &parse(&text).unwrap(), RUNTIME_FUNCTIONS);
+        let found = identify(&img, &parse(&text).unwrap(), VI_GETTERS);
         assert_eq!(found.matches.len(), 2);
         assert_eq!(found.matches[0].entry.0, 0x8000_0400);
         assert_eq!(found.matches[1].entry.0, 0x8000_0480);
@@ -852,6 +872,7 @@ mod tests {
             }],
             ambiguous: BTreeSet::new(),
             data_bindings: BTreeMap::new(),
+            status_globals: BTreeMap::new(),
         };
         let identical = combine(declaration("osGetTime", 12), declaration("osGetTime", 12));
         assert_eq!(identical.matches.len(), 1);
@@ -888,6 +909,7 @@ mod tests {
             matches: vec![m("osEepromWrite", 0x400), m("osGetTime", 0x430)],
             ambiguous: BTreeSet::from(["osInitialize".to_string()]),
             data_bindings: BTreeMap::new(),
+            status_globals: BTreeMap::new(),
         };
         signatures.data_bindings.insert(
             GuestAddr(0x430),
@@ -902,6 +924,7 @@ mod tests {
             ],
             ambiguous: BTreeSet::from(["osSendMesg".to_string()]),
             data_bindings: BTreeMap::new(),
+            status_globals: BTreeMap::new(),
         };
         let (found, map_only) = with_reference_map(signatures, map);
         assert!(found.data_bindings.is_empty());

@@ -35,7 +35,7 @@ fn variant(image: &CodeImage, entry: u32, signature: &Signature) -> BTreeMap<Str
             let addresses: Option<Vec<_>> = high
                 .iter()
                 .zip(&low)
-                .map(|(&h, &l)| reference(image, entry, h, l))
+                .map(|(&h, &l)| reference(image, entry, signature.size, h, l))
                 .collect();
             let addresses = addresses?;
             addresses
@@ -46,18 +46,47 @@ fn variant(image: &CodeImage, entry: u32, signature: &Signature) -> BTreeMap<Str
         .collect()
 }
 
-fn reference(image: &CodeImage, entry: u32, high: u32, low: u32) -> Option<GuestAddr> {
-    // shortcut: only adjacent scalar references; extend when a verified consumer
-    // needs indexed/nonadjacent materializations and their register dataflow.
-    if high.checked_add(4) != Some(low) {
+fn reference(image: &CodeImage, entry: u32, size: u32, high: u32, low: u32) -> Option<GuestAddr> {
+    // shortcut: only straight-line scalar references; extend when a verified
+    // consumer needs indexed materializations.
+    if low <= high || low - high > 32 {
         return None;
     }
-    let high = image.instruction_word(GuestAddr(entry.checked_add(high)?))?;
-    let low = image.instruction_word(GuestAddr(entry.checked_add(low)?))?;
-    let register = high >> 16 & 31;
-    if high >> 26 != 15 || high >> 21 & 31 != 0 || register == 0 || low >> 21 & 31 != register {
+    let word = |offset: u32| image.instruction_word(GuestAddr(entry.checked_add(offset)?));
+    let split = low != high + 4;
+    let (start, end) = (entry.wrapping_add(high), entry.wrapping_add(low));
+    let (high_word, low_word) = (word(high)?, word(low)?);
+    let register = high_word >> 16 & 31;
+    if high_word >> 26 != 15
+        || high_word >> 21 & 31 != 0
+        || register == 0
+        || low_word >> 21 & 31 != register
+    {
         return None;
     }
+    // A pair split by other instructions (osContInit's __osEepromTimerQ) holds
+    // only when its LUI is not in a delay slot, nothing between writes the
+    // register or transfers control, and no transfer in the function enters it.
+    if split {
+        if high >= 4 && transfer(word(high - 4)?, start.wrapping_sub(4)).is_some() {
+            return None;
+        }
+        if !(high + 4..low)
+            .step_by(4)
+            .all(|o| word(o).is_some_and(|w| keeps(w, register)))
+        {
+            return None;
+        }
+        for o in (0..size).step_by(4) {
+            let w = word(o)?;
+            match transfer(w, entry.wrapping_add(o)) {
+                Some(Some(t)) if start < t && t <= end => return None,
+                Some(None) if w & 63 == 8 && w >> 21 & 31 != 31 => return None,
+                _ => {}
+            }
+        }
+    }
+    let (high, low) = (high_word, low_word);
     let address = match low >> 26 {
         9 | 13 if low >> 16 & 31 == 0 => return None,
         9 | 35 | 43 => (high << 16).wrapping_add(low as u16 as i16 as i32 as u32),
@@ -65,6 +94,37 @@ fn reference(image: &CodeImage, entry: u32, high: u32, low: u32) -> Option<Guest
         _ => return None,
     };
     Some(GuestAddr(address))
+}
+
+/// Neither writes GPR `register` nor transfers control.
+fn keeps(word: u32, register: u32) -> bool {
+    match word >> 26 {
+        0 => {
+            matches!(
+                word & 63,
+                0 | 2..=4 | 6 | 7 | 16 | 18 | 20 | 22 | 23 | 32..=39 | 42..=47 | 56 | 58..=60 | 62 | 63
+            ) && word >> 11 & 31 != register
+        }
+        8..=15 | 32..=39 | 55 => word >> 16 & 31 != register, // ALU immediates, LUI, loads
+        40..=46 | 49 | 53 | 57 | 61 | 63 => true,             // stores, FPU loads and stores
+        _ => false,
+    }
+}
+
+/// The control transfer at `pc`, with `None` for a register target.
+fn transfer(word: u32, pc: u32) -> Option<Option<u32>> {
+    let branch = pc
+        .wrapping_add(4)
+        .wrapping_add(((word & 0xffff) as i16 as i32 as u32) << 2);
+    match word >> 26 {
+        0 if matches!(word & 63, 8 | 9) => Some(None),
+        1 | 4..=7 | 20..=23 => Some(Some(branch)),
+        16..=18 if word >> 21 & 31 == 8 => Some(Some(branch)),
+        2 | 3 => Some(Some(
+            (pc.wrapping_add(4) & 0xf000_0000) | (word & 0x03ff_ffff) << 2,
+        )),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -111,6 +171,36 @@ mod tests {
                 [("global".into(), GuestAddr(address))].into()
             );
         }
+    }
+
+    #[test]
+    fn split_pairs_need_straight_line_dataflow() {
+        // osContInit's queue and message share one LUI value (lui a0; lui a1;
+        // addiu a1; addiu a0) and the queue's pair is split.
+        let words = [
+            0x3c048028, 0x3c058028, 0x24a547d0, 0x248447b8, 0x03e00008, 0,
+        ];
+        let (image, signature) = fixture(&words, vec![0], vec![12]);
+        assert_eq!(
+            collect(&image, 0x80000400, &[&signature])["global"],
+            GuestAddr(0x802847b8)
+        );
+        for (index, word) in [
+            (1, 0x3c048029), // the register is rewritten between the pair
+            (1, 0x10000001), // a branch between the pair
+            (4, 0x1000fffe), // a later branch enters the pair at its low half
+        ] {
+            let mut changed = words;
+            changed[index] = word;
+            let (image, signature) = fixture(&changed, vec![0], vec![12]);
+            assert!(collect(&image, 0x80000400, &[&signature]).is_empty());
+        }
+        // the LUI in a call's delay slot: the call's return is not straight-line
+        let words = [
+            0x0c000000, 0x3c048028, 0x3c058028, 0x24a547d0, 0x248447b8, 0,
+        ];
+        let (image, signature) = fixture(&words, vec![4], vec![16]);
+        assert!(collect(&image, 0x80000400, &[&signature]).is_empty());
     }
 
     #[test]

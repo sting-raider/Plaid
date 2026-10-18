@@ -9,6 +9,7 @@ static plaid_state state;
 int main(void) {
   const u32 queue = 0x80002000u, buffer = 0x80002020u, message = 0x12345678u;
   S = &state;
+  running = &boot;
   S->r[4] = queue; S->r[5] = buffer; S->r[6] = 4;
   assert(plaid_rt_osCreateMesgQueue(S) == 0);
   S->r[4] = EV_SP; S->r[5] = queue; S->r[6] = message;

@@ -28,6 +28,8 @@ typedef uint64_t u64; typedef int64_t s64;
 typedef struct { u32 mask, hi, lo[2]; } plaid_tlb_entry;
 typedef struct plaid_state_s {
   u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 fcsr; u32 llbit; u32 pc; u32 fault; u32 fault_pc;
+  /* Complete live Status exists only in a verified SDK thread context. */
+  u32 cp0_status, status_known, status_thread, mi_mask;
   u8 ram[PLAID_RAM_SIZE];
   /* The VR4300 D-cache as pinned ares models it (ADR-0183): 512 direct-mapped
      16-byte lines indexed by virtual address bits 4-12; dtag holds a resident
@@ -80,9 +82,20 @@ typedef struct { u32 start, end; int load; } plaid_range;
       bytes. Writes into a load revoke its verification, so entry compares
       again (ADR-0161); a write by the load's own code into it faults 2;
    9: a BREAK was reached (its exception handler is not modeled);
-   10: a conditional trap was taken (its exception handler is not modeled). */
+   10: a conditional trap was taken (its exception handler is not modeled);
+   11: Status observation/acquisition outside the supported SDK context. */
 static inline int plaid_fault(plaid_state *s, u32 pc, u32 code) {
   s->fault = code; s->fault_pc = pc; return 1;
+}
+/* The declared SDK ABI handles lazy COP1 acquisition before resuming an
+   instruction. Track its visible CU1 effect; an incompatible FR mode faults. */
+int plaid_status_acquire(plaid_state *s, u32 pc);
+static inline int plaid_status_fp(plaid_state *s, u32 pc, int fr0) {
+  if (s->status_known) {
+    if (((s->cp0_status >> 26) & 1) == (u32)fr0) return plaid_fault(s, pc, 11);
+    if (!(s->cp0_status & 0x20000000u)) return plaid_status_acquire(s, pc);
+  }
+  return 0;
 }
 "#;
 
@@ -387,6 +400,18 @@ int plaid_runtime_write(plaid_state *s, u32 p, u32 size, u32 pc) {
   if (size && plaid_protected(s, p, size, 0)) return plaid_fault(s, pc, 2);
   return 0;
 }
+int plaid_status_acquire(plaid_state *s, u32 pc) {
+  if (s->status_known) {
+    u32 p;
+    if (!(s->cp0_status & 0x20000000u)) {
+      p = (s->status_thread & 0x1fffffffu) + 0x18;
+      if (!s->status_thread || plaid_runtime_write(s, p, 4, pc)) return plaid_fault(s, pc, 11);
+      s->ram[p] = 0; s->ram[p + 1] = 0; s->ram[p + 2] = 0; s->ram[p + 3] = 1;
+      s->cp0_status |= 0x20000000u;
+    }
+  }
+  return 0;
+}
 "#;
 
 const HELPERS_TAIL: &str = r#"static inline int plaid_load(plaid_state *s, u64 va, u32 size, u32 pc, u64 *value) {
@@ -685,7 +710,7 @@ fn simple_lo(word: u32, pc: u32, fr0: bool, lo: Option<&str>) -> Result<String, 
             set(rt, "0".into())
         )
     };
-    Ok(match (word >> 26, word & 63) {
+    let code = match (word >> 26, word & 63) {
         (0, 15) => String::new(),
         (0, 48) => cond_trap(format!("(s64){a} >= (s64){b}")),
         (0, 49) => cond_trap(format!("{a} >= {b}")),
@@ -909,10 +934,19 @@ fn simple_lo(word: u32, pc: u32, fr0: bool, lo: Option<&str>) -> Result<String, 
                 "{pc:08x}: instruction {word:08x} is outside the lowered subset"
             ));
         }
+    };
+    Ok(if matches!(word >> 26, 17 | 49 | 53 | 57 | 61) {
+        format!(
+            "if (plaid_status_fp(s, 0x{pc:08x}u, {})) {{ return 1; }}\n{code}",
+            u8::from(fr0)
+        )
+    } else {
+        code
     })
 }
 
 struct Lowerer<'a> {
+    fr0: bool,
     /// Block starts of the function being emitted (exits included).
     labels: BTreeSet<u32>,
     /// Constant-proven indirect targets by site.
@@ -1052,11 +1086,23 @@ impl Lowerer<'_> {
             (17, _, _) if rs == 8 && rt & 2 != 0 => likely(format!(
                 "(s->fcsr &= ~0x3f000u, {}s->fcc)",
                 if rt & 1 == 0 { "!" } else { "" }
-            )),
+            ))
+            .map(|code| {
+                format!(
+                    "if (plaid_status_fp(s, 0x{pc:08x}u, {})) {{ return 1; }}\n{code}",
+                    u8::from(self.fr0)
+                )
+            }),
             (17, _, _) if rs == 8 => conditional(format!(
                 "(s->fcsr &= ~0x3f000u, {}s->fcc)",
                 if rt & 1 == 0 { "!" } else { "" }
-            )),
+            ))
+            .map(|code| {
+                format!(
+                    "if (plaid_status_fp(s, 0x{pc:08x}u, {})) {{ return 1; }}\n{code}",
+                    u8::from(self.fr0)
+                )
+            }),
             (1, _, 0) => conditional(format!("(s64){a} < 0")),
             (1, _, 1) => conditional(format!("(s64){a} >= 0")),
             // BLTZAL BGEZAL (likely: 18, 19) link first, then test rs, as ares.
@@ -1238,11 +1284,22 @@ pub fn lower_c_parts(
             .ok_or_else(|| format!("{pc:08x} has no supplied instruction word"))
     };
     let exits: BTreeSet<u32> = exits.iter().map(|e| e.0).collect();
-    let runtime: BTreeMap<u32, String> = map
-        .runtime_functions
-        .iter()
-        .map(|(a, f)| (a.pc.0, f.name.clone()))
-        .collect();
+    let mut status_wrappers = String::new();
+    let mut bound_names = BTreeSet::new();
+    let runtime: BTreeMap<u32, String> = map.runtime_functions.iter().map(|(a, f)| {
+        let name = if let Some(global) = f.status_global {
+            let name = format!("status_{:08x}", a.pc.0);
+            status_wrappers += &format!("int plaid_rt_{}_global(plaid_state *s, u32 global);\nstatic inline int plaid_rt_{name}(plaid_state *s) {{ return plaid_rt_{}_global(s, 0x{:08x}u); }}\n",f.name,f.name,global.0);
+            bound_names.insert(name.clone());
+            name
+        } else if let Some((queue, message)) = f.eeprom_timer {
+            let name = format!("eeprom_{:08x}", a.pc.0);
+            status_wrappers += &format!("int plaid_rt_osContInit_eeprom(plaid_state *s, u32 queue, u32 message);\nstatic inline int plaid_rt_{name}(plaid_state *s) {{ return plaid_rt_osContInit_eeprom(s, 0x{:08x}u, 0x{:08x}u); }}\n",queue.0,message.0);
+            bound_names.insert(name.clone());
+            name
+        } else { f.name.clone() };
+        (a.pc.0, name)
+    }).collect();
     let mut targets = BTreeMap::new();
     let mut returns = BTreeSet::new();
     let mut callees = vec![host.clone()];
@@ -1410,8 +1467,11 @@ pub fn lower_c_parts(
     );
     let mut declarations = String::new();
     for name in runtime.values() {
-        declarations += &format!("int plaid_rt_{name}(plaid_state *s);\n");
+        if !bound_names.contains(name) {
+            declarations += &format!("int plaid_rt_{name}(plaid_state *s);\n");
+        }
     }
+    declarations += &status_wrappers;
     for f in &functions {
         declarations += &format!("{link}int F_{f:08x}(plaid_state *s, u64 ret);\n");
     }
@@ -1492,6 +1552,7 @@ pub fn lower_c_parts(
         let mut out = String::new();
         let body = &bodies[f];
         let lowerer = Lowerer {
+            fr0: map.cop1_fr0,
             labels: body.iter().map(|b| b.pc.0).collect(),
             targets: &targets,
             returns: &returns,

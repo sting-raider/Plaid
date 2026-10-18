@@ -5741,3 +5741,221 @@ No upstream implementation or game code was copied. Synthetic Rust/CLI tests
 retain signed-low/ORI distinctions, disagreement and refusal cases. See
 research/integration-receipts/20261017-sdk-data-bindings.md for the artifact
 contract, pinned reference, controls and validation protocol.
+
+## ADR-0195: Post-IPL SP memory from the ROM's own IPL3 in pinned ares
+
+Status: accepted; declared assumption. Milestone 5.
+
+The PIF copies ROM 0x40-0xfff into DMEM, but the ROM's IPL3 then runs from
+DMEM and leaves both SP memories changed at the game entry. Games may read
+that state: BK requires DMEM word 0 = ffffffff and IMEM word 0 = 000017d7
+before it loads rspboot (ROM 0xb70 to 802820c0); with the PIF-only copy it
+never does, and its first audio task finds no boot microcode. In pinned ares
+DMEM 0x00-0x3f is all ff, DMEM 0x40-0xfff differs from the ROM copy in 3,957
+bytes and IMEM is fully written.
+
+At analysis time native.py runs pinned ares 9408cb43 from reset through the
+hash-checked NTSC PIF and the ROM's IPL3, under the CIC selected from its
+IPL3 CRC32 (ADR-0190's executor and refusals), to the first fetch of the
+inferred game entry, and records DMEM then IMEM at that instant. The native
+runtime starts SP memory from those 8 KiB (PLAID_SP_BOOT); builds without
+them keep the PIF copy. A run that never reaches the entry builds nothing.
+The native artifact contains the bytes only, never ares.
+
+Declared assumption: post-IPL SP memory is pinned ares' result of the ROM's
+IPL3 under deterministic entropy. It is retired by agreement with real
+hardware dumps per CIC. The run-time --rom is not checked against the build
+ROM, as for the rest of the artifact. Other IPL3 side effects (RDRAM
+configuration words, SP/MI registers) are not modelled by this decision.
+
+Tests: the synthetic ares fixture records 8 KiB of SP memory at the entry
+fetch, identical whether the run stops there or continues; the runtime test
+starts DMEM/IMEM from a declared state rather than ROM 0x40-0xfff. No
+upstream implementation or game code was copied.
+
+## ADR-0196: osContInit creates the EEPROM timer queue
+
+Status: accepted. Milestone 5.
+
+libultra's osContInit ends with osCreateMesgQueue(&__osEepromTimerQ,
+&__osEepromTimerMsg, 1); osEepromLongWrite waits on that queue for 12 ms
+after each block. The runtime's osContInit omitted it, so BK's first EEPROM
+write (blank save) armed a timer on an all-zero queue: the expiry send found
+msgCount 0, was dropped, and the main thread blocked forever. Only the idle
+thread and audio then ran; no graphics task was issued. Pinned ares with a
+512-byte EEPROM attached shows BK's own osContInit creating 802847b8 with
+message 802847d0 at VI 137, eight completed write delays at VI 143-150 and
+the first graphics task at VI 175. The analysis harness attaches no EEPROM,
+so its BK runs skip the save path; that harness difference is not a model
+input.
+
+Identification binds __osEepromTimerQ in most libultra variants only through
+a split pair: lui a0; lui a1; addiu a1; addiu a0. ADR-0194 bindings now accept
+a pair split by up to seven instructions when the LUI is not in a delay slot,
+nothing between writes its register or transfers control, and no transfer in
+the function (including a register jump other than jr ra) can enter the
+window. A ProgramMap runtime function carries the optional eeprom_timer
+(queue, message) for osContInit only; lowering calls
+plaid_rt_osContInit_eeprom, which creates the queue once. Variants whose
+osContInit does not reference the queue get no binding and no creation. A
+variant that references it in a form the binding still refuses would keep the
+old omission; it is not detected.
+
+Tests: split-pair acceptance plus clobber, inner branch, entering branch and
+delay-slot refusals; the controller-policy fixture creates the queue from
+declared bindings and a non-blocking send succeeds, while the unbound build
+leaves it invalid. No upstream implementation or game code was copied.
+
+## ADR-0197: Image words name address-taken functions; missing jump tables are harvested
+
+Status: accepted. Milestone 5.
+
+BK stopped at VI 17 with fault 3: 8034b620 calls 8034c360 through t9, a call
+pinned ares makes too (same a0, VI 154). 8034c360 lies in the harvested
+80277020 image and nothing named it: its address is a data word of the loaded
+image, not of the ROM bytes, because BK's code and data reach RAM through a
+load whose ROM form is not the plain words (ADR-0190 captures the produced
+RAM). ADR-0153 scanned only aligned ROM words and code constants.
+discover_address_taken now also scans the aligned words of every supplied
+image, under the same plausible_at filter, so a pointer that exists only after
+a load names its function.
+
+Scanning more words changed which functions discovery reached first, and the
+first-fetch harvest then no longer captured rodata 80277020..80284c20: six jump
+tables became pointer_table_source_missing. harvest_boot.py now also captures
+at the first fetch of each such table's site, and keeps a produced piece that
+overlaps a table, so a table's words come from the run that reads them rather
+than from fetch-order luck. BK gains the load 80277020 size 0xd730 (entry
+8025f11c) and closes with 41 ROM-derived RSP texts.
+
+Tests: a pointer that exists only in an image word, with empty ROM bytes, is
+address-taken (fails without the scan); test_ares_boot.py harvests a synthetic
+missing jump table. Other ROMs are not re-swept by this change.
+
+## ADR-0198: osViSwapBuffer's __osViNext->framep; a frozen RDP holds the DP interrupt
+
+Status: accepted. Milestone 5. Superseded for VI by the planned VI hardware
+model.
+
+With BK closed, the run was accepted with audio but issued no graphics task.
+Its main thread loops until osViGetCurrentFramebuffer() equals a 0x40-byte
+function at 80265150 that loads __osViNext->framep, a form no n64sym
+osViGetNextFramebuffer signature matches, so it runs as guest code. libultra's
+osViSwapBuffer stores the framebuffer in __osViNext->framep; the HLE kept it
+only on the host, so the guest read __osViInit's value forever.
+Identification already binds osViSwapBuffer's __osViNext (ADR-0194); the map
+carries it as vi_next, osViSwapBuffer only, and lowering calls
+plaid_rt_osViSwapBuffer_next, which writes framep and then swaps as before.
+
+BK then issued two graphics tasks and stalled. After each frame its scheduler
+sets DPC_STATUS freeze and clears it at a later retrace, and it takes the next
+task's DP interrupt as that frame's completion. In pinned ares (rdp/io.cpp) a
+frozen RDP consumes nothing and the DP interrupt follows the thaw's flush; the
+runtime posted it when the task started. A graphics task started while the RDP
+is frozen now holds its DP event until a DPC_STATUS write clears freeze, in
+both the RT64 and --rsp-gfx DPC models. ares and native then agree on the
+cadence: a swap and a graphics task every two retraces, alternating 803a5d00
+and 803c49c0.
+
+Left alone: swaps still take effect at once. The exact retrace-time
+__osViSwapContext was tried and BK does not need it, but it remains an
+assumption, and the planned VI hardware model retires it together with this
+binding. __osViNext->state's VI_STATE_BUFFER_UPDATED is not set,
+__osViCurr->framep is not written, and freeze does not hold the SP interrupt
+(an RSP FIFO microcode would stall on a full FIFO). The visible BK run now
+shows the logos, intro and title, but the outdoor sky is black in both RT64
+and --rsp-gfx. Its asset DMAs match ares exactly and the CPU writes no
+framebuffer pixels, so the cause is still open.
+
+Tests: test_vi_dp.py checks the framep store and that a frozen RDP's DP event
+arrives only after the thaw. Removing either change fails it.
+
+## ADR-0199: libultra's VI code runs as guest code against VI registers
+
+Status: accepted. Milestone 5. Supersedes the VI parts of ADR-0163 and
+ADR-0198.
+
+The runtime replaced osCreateViManager, osViSetMode, osViSetSpecialFeatures,
+osViBlack, osViSwapBuffer, osViSetEvent, osViGetCurrentFramebuffer,
+osViGetNextFramebuffer and osViSetX/YScale (N64Recomp's list) with host
+models. Each was an assumption that the model has every side effect of the
+game's copy, and BK broke that twice: its own next-framebuffer read saw a
+context the HLE never wrote (ADR-0198), and the HLE's swap took effect at once
+where libultra's takes effect at the next retrace. These functions only
+program VI registers and libultra's own VI contexts, so they are no longer
+runtime functions. Each game's own VI manager thread, __osViInit,
+__osViSwapContext and getters run as lowered code.
+
+The runtime models the VI registers as pinned ares vi/io.cpp does: the bits
+each register keeps, a mirror every 0x40 bytes, a VI_V_CURRENT_LINE write
+acknowledging the interrupt, and a read giving the field and the half-line
+count for VI_V_SYNC, counted by host time from the VI_V_INTR line. An
+interlaced mode alternates fields at each retrace. The retrace is the VI
+interrupt, sent like any other event to the queue the guest registered with
+osSetEventMesg(OS_EVENT_VI); the renderer gets the registers as the guest last
+wrote them, and only while VI_CONTROL selects a color depth. The stop report's
+"framebuffer" is now VI_DRAM_ADDRESS.
+
+Running the VI manager makes its timer-interrupt branch reachable, and with it
+__osSetCompare, a COP0 Compare write that the static scope cannot contain. It
+is now a runtime function in the timer core: Count reaching Compare is the
+timer interrupt, sent as OS_EVENT_COUNTER to the registered queue, as
+libultra's handler sends it. osSetTimer remains a host timer, so the guest's
+own timer list stays empty and its handler finds nothing to do.
+
+Kept as shortcuts: the interrupt follows the fixed NTSC period, not the
+programmed VI timing, and it arrives at the frame boundary rather than at the
+VI_V_INTR line. The thread, message, interrupt-mask and timer core stays
+replaced: a static recompiler cannot cheaply resume lowered code at the
+arbitrary PC that libultra's exception handler would eret to.
+
+BK closes with the extra guest code (80,850 blocks) and its visible 60 s run
+is accepted: 1,273 graphics tasks, 1,789 audio tasks, no fault. The frames
+match the ADR-0198 build, so the black outdoor sky is not a VI effect.
+
+Tests: test_vi_dp.py checks the kept bits and the mirror; the retrace as
+OS_EVENT_VI near VI_V_INTR in field 0; Compare as OS_EVENT_COUNTER; and the
+DP freeze hold. The scheduling and renderer-bridge runtime tests now register
+OS_EVENT_VI and program the VI registers directly. The identification fixtures
+that name VI functions keep their own name list.
+
+## ADR-0200: preserve IPL3's RDRAM prefix at native startup
+
+Status: accepted for the bounded native startup-data scope. Milestone 5.
+
+BK's visible native run reached its intro/title with audio and fault 0, but
+the Nintendo opening and outdoor sky had missing backgrounds. Task captures
+showed the expected display lists and colored vertices. Against pinned ares,
+the native projection's depth coefficients differed: -2 and -1875 instead of
+approximately -0.50032 and -5.00166. The guest projection routine observed
+zeroed low RDRAM and selected its fallback clip distances. Ares retained the
+bytes the ROM's IPL3 had written before game entry.
+
+Extend the existing first-entry analysis-time SP capture with physical RDRAM
+[0, 0x400), the vector/boot-parameter prefix below the normal game image.
+The native builder requires the matching entry outside that prefix, exact
+payload lengths and byte values; it emits ignored startup headers and a
+provenance/payload-hash receipt. The runtime initializes the prefix before
+installing its executable image. No game check, expected game word, projection
+routine or per-ROM exception is added or changed.
+
+This preserves a bounded observed startup-data state under the existing
+pinned-ares/NTSC/cold-start assumption. It does not certify higher RDRAM,
+cache/register/device state, boot execution roots or whole-ROM closure. The
+final artifact still executes compiled host code, with no guest interpreter
+or JIT. No assumption is retired.
+
+The normal ROM-only BK pipeline is scoped CLOSED/0 with 80,850 blocks and 41
+ROM-derived RSP texts. Its visible 60-second audio-required run reaches VI
+3578, 1270 graphics tasks, 1785 audio tasks and 3750 PI transfers, fault 0,
+PCM peak 32767. Separate visible inspection restores the Nintendo opening's
+blue background/sun/lens flare and Banjo's forest/waterfall backdrop. This is
+finite visual coverage, not pixel-perfect/full-playthrough or mixing proof.
+
+Tests retain entry-time prefix bytes even after the synthetic guest changes
+them, reject malformed startup payloads and overlapping entries, and check
+native reads through both KSEG aliases, later writes/guards and independent
+executable-image loading. Deleting initialization kills the native test.
+Research, commands, measurements and remaining native-RSP graphics fault:
+research/native-bk-graphics.md. Final exact-tree gate results are recorded in
+the integration closeout and ignored target/bk-sky/ gate receipt.

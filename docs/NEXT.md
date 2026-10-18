@@ -1,5 +1,28 @@
 # Next
 
+## Continue beyond BK's finite native bring-up (ADR-0200)
+
+BK now passes the normal ROM-only 60-second visible/audio-required pipeline,
+with scoped CLOSED/0 and restored opening/intro backgrounds. Preserve the
+deterministic startup-prefix, Status/mask, SI, VI and DP regressions. Broaden
+gameplay/input/overlay coverage; title-screen execution does not establish a
+full playthrough, pixel-perfect rendering or correct mixing.
+
+The current `--rsp-gfx` probe faults at IMEM 0xffc on its first BK graphics
+task; establish the exact generated-microcode/entry mismatch before claiming
+that path works. Above the modeled scheduler/interrupt/message/timer core,
+continue replacing SDK HLE with guest code and pinned-reference register
+models, starting with the PI manager and DMA completion. Diff guest-visible
+effects and keep mutation-capable tests before retiring each boundary.
+
+SM64's ROM-only OPEN/23 result is unchanged from before the VI move; use its
+documented configured build as a separate control. Finish the regression sweep
+without treating historical or differently configured runs as current evidence.
+Higher startup RDRAM, complete device/cache/register state and whole-ROM
+closure remain open. Research: native-bk-graphics.md and native-bk-status.md.
+
+The continuation notes below are historical, superseded by the current state.
+
 ## Continue BK after paired-slot discovery (ADR-0192)
 
 The next acceptance sequence and pinned-source observations are in

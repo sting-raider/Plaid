@@ -43,6 +43,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "status.h"
+#include "joybus.h"
 #ifdef _WIN32
 #include <windows.h>
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
@@ -70,6 +72,8 @@ typedef struct {
   pthread_cond_t wake;
   u64 r[32], hi, lo, f[32];
   u32 fcc, fcsr, llbit;
+  u32 status_global;
+  int status_known, ie;
 } rt_thread;
 
 typedef struct { u32 mq, msg; int set; } rt_event;
@@ -83,11 +87,20 @@ static rt_thread *running; /* NULL when every guest thread is blocked */
 static rt_thread boot;     /* the pre-thread boot context (main_func) */
 static u64 seq_counter;
 static int ints_enabled = 1;
+static u32 status_kernel_global; /* the SDK copy whose exception vectors are installed */
 static rt_event events[EV_COUNT];
-static rt_event vi_event;
-static u32 vi_retrace = 1;
 static int pending[EV_COUNT]; /* undelivered event counts */
+static struct { u32 mq, msg; } pi_completions[64];
+static unsigned pi_completion_count;
+static u32 pi_status; /* immediate raw ROM DMA: idle plus pending interrupt */
+static u32 si_status, si_dram, si_read_address, si_write_address;
+static plaid_joybus joybus;
+static int si_due; /* SI DMA in flight: 1 PIF to RAM, 2 RAM to PIF */
+static int si_finish(void);
+static int si_access(u32 p, int write, u64 *value);
 static rt_timer timers[MAX_TIMERS];
+static u64 compare_due; /* COP0 Compare as a Count deadline (ADR-0199) */
+static int compare_armed;
 static u8 *rom;
 static size_t rom_size;
 static u8 eeprom[2048];
@@ -99,8 +112,10 @@ static void save_file(const char *path, const u8 *bytes, size_t size);
 static int load_file(const char *path, u8 *bytes, size_t size);
 static struct timespec t0;
 static u64 time_base; /* osSetTime offset in count ticks */
-static u32 frame_buffer;
-static u32 vi_mode, vi_black, vi_regs[14]; /* see vi_update */
+static u32 vi_regs[14], vi_field; /* VI registers as the guest wrote them (ADR-0199) */
+static u64 vi_retrace_ns;
+static u32 dpc_flags; /* DPC_STATUS without --rsp-gfx: 1 source, 2 freeze, 4 flush, 0x400 start valid */
+static int dp_held; /* a graphics task's DP interrupt, held while the RDP is frozen (ADR-0198) */
 /* With PLAID_RT64 the runtime links plaid_rt64.dll (runtime/rt64, ADR-0163). */
 #ifdef PLAID_RT64
 int plaid_gfx_open(const u8 *rom_header);
@@ -184,7 +199,7 @@ static void finish(int code, const char *why) {
   }
   printf("{\"stop\":\"%s\",\"vi\":%lu,\"gfx_tasks\":%lu,\"audio_tasks\":%lu,\"pi_dma\":%lu,"
          "\"framebuffer\":\"%08x\",\"fault\":%u,\"fault_pc\":\"%08x\",\"ra\":\"%08x\",\"a0\":\"%08x\",\"a1\":\"%08x\",\"a2\":\"%08x\",\"t9\":\"%08x\",\"fcsr\":\"%08x\"",
-         why, vi_count, gfx_tasks, audio_tasks, dma_count, frame_buffer, S->fault, S->fault_pc,
+         why, vi_count, gfx_tasks, audio_tasks, dma_count, vi_regs[1], S->fault, S->fault_pc,
          (u32)S->r[31], (u32)S->r[4], (u32)S->r[5], (u32)S->r[6], (u32)S->r[25], S->fcsr | S->fcc << 23);
   if (S->fault == 7) /* a COP1 fault: the operands are in the FPRs */
     for (i = 0; i < 32; i++) printf("%s%016llx\"", i ? ",\"" : ",\"fpr\":[\"", (unsigned long long)S->f[i]);
@@ -244,10 +259,27 @@ static u64 count_now(void) { return now_ns() * 46875ull / 1000000ull + time_base
 static void save(rt_thread *t) {
   memcpy(t->r, S->r, sizeof t->r); memcpy(t->f, S->f, sizeof t->f);
   t->hi = S->hi; t->lo = S->lo; t->fcc = S->fcc; t->fcsr = S->fcsr; t->llbit = S->llbit;
+  t->ie = ints_enabled;
+  if (t->status_known) {
+    u32 global = rd32(status_kernel_global ? status_kernel_global : t->status_global);
+    wr32(t->guest + 0x118, status_saved(S->cp0_status, global));
+    wr32(t->guest + 0x128, status_saved_mi(S->mi_mask, global, rd32(t->guest + 0x128)));
+  }
 }
 static void restore(const rt_thread *t) {
   memcpy(S->r, t->r, sizeof t->r); memcpy(S->f, t->f, sizeof t->f);
   S->hi = t->hi; S->lo = t->lo; S->fcc = t->fcc; S->fcsr = t->fcsr; S->llbit = t->llbit;
+  S->status_known = (u32)t->status_known;
+  S->status_thread = t->status_known ? t->guest : 0;
+  ints_enabled = t->ie;
+  if (t->status_known) {
+    u32 saved = rd32(t->guest + 0x118), global = rd32(status_kernel_global ? status_kernel_global : t->status_global);
+    if (saved & 0x040000fcu) finish(1, "unsupported saved Status mode");
+    S->cp0_status = (saved & ~0xff02u) | (saved & global & 0xff00u);
+    S->mi_mask = rd32(t->guest + 0x128) & (global >> 16) & 0x3fu;
+    ints_enabled = S->cp0_status & 1;
+    if (pi_status & 8u) { pending[EV_PI] = 1; plaid_preempt = 1; }
+  }
 }
 static void apply_rounding(void) {
   static const int modes[4] = {FE_TONEAREST, FE_TOWARDZERO, FE_UPWARD, FE_DOWNWARD};
@@ -287,21 +319,27 @@ static void wait_for_baton(rt_thread *self) {
   apply_rounding();
 }
 /* The running thread gives up the baton (it is runnable, blocked or dead). */
-static void yield_from(rt_thread *self) {
+static void yield_from(rt_thread *self, int api_disabled) {
+  int previous_ie = ints_enabled;
+  if (api_disabled) { ints_enabled = 0; if (S->status_known) S->cp0_status &= ~1u; }
   save(self);
   hand_to(best_runnable());
   if (self->state != T_DEAD && self != &boot) wait_for_baton(self);
+  if (api_disabled && self->state != T_DEAD && self != &boot) {
+    ints_enabled |= previous_ie;
+    if (S->status_known) S->cp0_status |= (u32)previous_ie;
+  }
 }
 static void deliver_pending(void);
 /* After making threads runnable: run a strictly higher-priority one now. */
-static void maybe_preempt(void) {
+static void maybe_preempt(int api_disabled) {
   rt_thread *b;
   deliver_pending();
   b = best_runnable();
   if (running && b && b->pri > running->pri) {
     rt_thread *self = running;
     make_runnable(self);
-    yield_from(self);
+    yield_from(self, api_disabled);
   }
 }
 
@@ -324,7 +362,7 @@ static int block_on(u32 mq, int full) {
   if (!self || self == &boot) finish(1, "boot context blocked on a message queue");
   self->state = T_BLOCKED; self->wait_queue = mq; self->wait_full = full;
   self->seq = ++seq_counter;
-  yield_from(self);
+  yield_from(self, 1);
   return 0;
 }
 /* jam: put the message at the front. Returns -1 when full and not blocking. */
@@ -369,20 +407,47 @@ static int mq_recv(u32 mq, u32 msgp, int block) {
 /* ---- events ------------------------------------------------------------- */
 
 static void post(int ev) { pending[ev]++; plaid_preempt = 1; }
+static int event_eligible(int ev) {
+  if (ev == 14 && pending[ev]) finish(1, "PRENMI delivery is outside the cold-start Status ABI");
+  /* No running context: the HLE idle dispatcher accepts pending sources;
+     a blocked caller's disabled IE does not become the idle CPU's policy. */
+  if (!running) return 1;
+  if (!ints_enabled) return 0;
+  if (!S->status_known) return 1;
+  if (S->cp0_status & 6u) return 0;
+  if (ev >= EV_SP && ev <= EV_DP)
+    return (S->cp0_status & 0x400u) && (S->mi_mask & (1u << (ev - EV_SP)));
+  return (S->cp0_status & 0x8000u) != 0; /* Count/Compare timers */
+}
+static void pi_complete(u32 mq, u32 msg) {
+  if (!mq) return;
+  if (event_eligible(EV_PI)) { mq_send(mq, msg, 0, 0); return; }
+  if (pi_completion_count == 64) finish(1, "too many pending PI completions");
+  pi_completions[pi_completion_count].mq = mq;
+  pi_completions[pi_completion_count++].msg = msg;
+  plaid_preempt = 1;
+}
 static void deliver_pending(void) {
   int ev, i;
   u64 c;
-  if (!ints_enabled) return;
   plaid_preempt = 0;
   for (ev = 0; ev < EV_COUNT; ev++)
-    while (pending[ev]) {
+    while (pending[ev] && event_eligible(ev)) {
+      if (ev == EV_SI && si_due && si_finish()) finish(1, "SI transfer outside the declared Joybus subset");
       pending[ev]--;
-      if (ev == EV_VI) {
-        if (vi_event.set && vi_count % vi_retrace == 0) mq_send(vi_event.mq, vi_event.msg, 0, 0);
-      } else if (events[ev].set) {
+      if (ev == EV_PI) pi_status &= ~8u;
+      if (ev == EV_SI) si_status &= ~0x1000u;
+      if (events[ev].set) {
         mq_send(events[ev].mq, events[ev].msg, 0, 0);
       }
     }
+  if (event_eligible(EV_PI)) {
+    unsigned n;
+    for (n = 0; n < pi_completion_count; n++)
+      mq_send(pi_completions[n].mq, pi_completions[n].msg, 0, 0);
+    pi_completion_count = 0;
+  }
+  if (!event_eligible(10)) return;
   c = count_now();
   for (i = 0; i < MAX_TIMERS; i++) {
     rt_timer *t = &timers[i];
@@ -390,6 +455,10 @@ static void deliver_pending(void) {
       if (t->mq) mq_send(t->mq, t->msg, 0, 0);
       if (t->interval) t->due += t->interval; else t->used = 0;
     }
+  }
+  if (compare_armed && c >= compare_due) { /* the timer interrupt: libultra sends OS_EVENT_COUNTER */
+    compare_armed = 0;
+    if (events[3].set) mq_send(events[3].mq, events[3].msg, 0, 0);
   }
 }
 /* Host thread: VI retrace at 60 Hz, timers, and delivery while all block. */
@@ -420,9 +489,11 @@ static void *event_pump(void *unused) {
          stall longer than a frame drops the missed retraces */
       next_vi = now - next_vi < VI_PERIOD_NS ? next_vi + VI_PERIOD_NS : now + VI_PERIOD_NS;
       vi_count++;
+      vi_retrace_ns = now;
+      if (!(vi_regs[6] & 1)) vi_field ^= 1; /* an interlaced mode alternates fields */
       post(EV_VI);
 #ifdef PLAID_RT64
-      if (vi_mode) plaid_gfx_screen(vi_regs);
+      if (vi_regs[0] & 3) plaid_gfx_screen(vi_regs); /* a color depth: video on */
       if (plaid_gfx_closed()) finish(0, "window closed");
 #endif
     }
@@ -458,14 +529,14 @@ static void *thread_main(void *p) {
   if (r == 2) finish(0, "exit");
   if (r && r != RT_EXIT_THREAD) finish(1, "guest fault");
   self->state = T_DEAD; /* returned from its entry, or destroyed itself */
-  yield_from(self);
+  yield_from(self, 0);
   pthread_mutex_unlock(&big);
   return NULL;
 }
 int plaid_rt_safepoint(plaid_state *s) {
   (void)s;
   pthread_mutex_lock(&big);
-  maybe_preempt();
+  maybe_preempt(0);
   pthread_mutex_unlock(&big);
   return 0;
 }
@@ -488,6 +559,7 @@ RT(osCreateThread) {
   memset(t, 0, sizeof *t);
   pthread_cond_init(&t->wake, NULL);
   t->state = T_STOPPED; t->guest = arg(0); t->id = arg(1); t->entry = arg(2);
+  t->ie = 1;
   t->arg = arg(3); t->sp = arg(4); t->pri = (s32)arg(5);
   /* libultra starts a thread 16 bytes below the given top: the O32 save
      area its entry may store its argument registers into */
@@ -504,11 +576,11 @@ RT(osStartThread) {
   wr16(t->guest + 0x10, 2); /* OS_STATE_RUNNABLE */
   if (running == &boot) { /* the boot context ends here, as in libultra */
     boot.state = T_DEAD;
-    yield_from(&boot);
+    yield_from(&boot, 1);
     pthread_mutex_unlock(&big);
     for (;;) { struct timespec d = {3600, 0}; nanosleep(&d, NULL); }
   }
-  maybe_preempt();
+  maybe_preempt(1);
   return 0;
 }
 RT(osDestroyThread) {
@@ -525,9 +597,9 @@ RT(osSetThreadPri) {
   if (t->guest) wr32(t->guest + 4, (u32)t->pri);
   if (t == running) {
     rt_thread *b = best_runnable();
-    if (b && b->pri > t->pri) { make_runnable(t); yield_from(t); }
+    if (b && b->pri > t->pri) { make_runnable(t); yield_from(t, 1); }
   } else {
-    maybe_preempt();
+    maybe_preempt(1);
   }
   return 0;
 }
@@ -536,7 +608,7 @@ RT(osYieldThread) {
   rt_thread *self = running, *b;
   deliver_pending();
   b = best_runnable();
-  if (self && b && b->pri >= self->pri) { make_runnable(self); yield_from(self); }
+  if (self && b && b->pri >= self->pri) { make_runnable(self); yield_from(self, 1); }
   return 0;
 }
 RT(osGetThreadId) { rt_thread *t = thread_of(arg(0)); return ret(t ? t->id : 0); }
@@ -545,7 +617,7 @@ RT(osStopThread) {
   if (!t) return 0;
   if (t->state == T_BLOCKED) finish(1, "osStopThread on a blocked thread is not modeled");
   if (t->guest) wr16(t->guest + 0x10, 1); /* OS_STATE_STOPPED */
-  if (t == running) { t->state = T_STOPPED; yield_from(t); }
+  if (t == running) { t->state = T_STOPPED; yield_from(t, 1); }
   else if (t->state == T_RUNNABLE) t->state = T_STOPPED;
   return 0;
 }
@@ -556,31 +628,71 @@ RT(osCreateMesgQueue) {
   wr32(mq + 0x10, arg(2)); wr32(mq + 0x14, arg(1));
   return 0;
 }
-RT(osSendMesg) { int r = mq_send(arg(0), arg(1), arg(2) & 1, 0); maybe_preempt(); return ret((u32)r); }
-RT(osJamMesg) { int r = mq_send(arg(0), arg(1), arg(2) & 1, 1); maybe_preempt(); return ret((u32)r); }
-RT(osRecvMesg) { int r = mq_recv(arg(0), arg(1), arg(2) & 1); maybe_preempt(); return ret((u32)r); }
+RT(osSendMesg) { int r = mq_send(arg(0), arg(1), arg(2) & 1, 0); maybe_preempt(1); return ret((u32)r); }
+RT(osJamMesg) { int r = mq_send(arg(0), arg(1), arg(2) & 1, 1); maybe_preempt(1); return ret((u32)r); }
+RT(osRecvMesg) { int r = mq_recv(arg(0), arg(1), arg(2) & 1); maybe_preempt(1); return ret((u32)r); }
 RT(osSetEventMesg) {
   u32 ev = arg(0);
   if (getenv("PLAID_TRACE_MQ")) fprintf(stderr, "event %u %08x %08x\n", ev, arg(1), arg(2));
   if (ev < EV_COUNT) { events[ev].mq = arg(1); events[ev].msg = arg(2); events[ev].set = 1; }
   return 0;
 }
-RT(osViSetEvent) {
-  vi_event.mq = arg(0); vi_event.msg = arg(1); vi_event.set = 1;
-  vi_retrace = arg(2) ? arg(2) : 1;
-  return 0;
-}
 /* Interrupt masking: while disabled, events stay pending. */
-RT(__osDisableInt) { u32 was = (u32)ints_enabled; ints_enabled = 0; return ret(was); }
-RT(__osRestoreInt) { ints_enabled |= arg(0) & 1; if (ints_enabled) maybe_preempt(); return 0; }
+RT(__osDisableInt) { u32 was = (u32)ints_enabled; ints_enabled = 0; if (S->status_known) S->cp0_status &= ~1u; return ret(was); }
+RT(__osRestoreInt) { ints_enabled |= arg(0) & 1; if (S->status_known) S->cp0_status |= arg(0) & 1; if (ints_enabled) maybe_preempt(0); return 0; }
 RT(osSetIntMask) { return ret(0x003fff01u); }
 RT(osGetIntMask) { return ret(0x003fff01u); } /* the same unmasked OS_IM_ALL */
+RT(__osGetSR) {
+  if (!S->status_known) return plaid_fault(S, (u32)S->r[31] - 8, 11);
+  return ret(S->cp0_status);
+}
+int plaid_rt_osCreateThread_global(plaid_state *s, u32 global) {
+  rt_thread *t;
+  int result;
+  (void)s;
+  pthread_mutex_lock(&big);
+  result = rt_osCreateThread();
+  t = thread_of(arg(0));
+  t->status_known = 1;
+  t->status_global = global;
+  wr32(t->guest + 0x118, 0xff03u); /* verified SDK create, before ERET */
+  wr32(t->guest + 0x128, 0x3fu);
+  wr32(t->guest + 0x18, 0);
+  pthread_mutex_unlock(&big);
+  return result;
+}
+int plaid_rt_osSetIntMask_global(plaid_state *s, u32 global_address) {
+  u32 global, old;
+  int result;
+  (void)s;
+  pthread_mutex_lock(&big);
+  if (!S->status_known) {
+    result = plaid_fault(S, (u32)S->r[31] - 8, 11);
+  } else {
+    global = rd32(global_address);
+    old = status_old_mask(S->cp0_status, S->mi_mask, global);
+    status_set_mask(&S->cp0_status, &S->mi_mask, arg(0), global);
+    result = ret(old);
+    maybe_preempt(0);
+  }
+  pthread_mutex_unlock(&big);
+  return result;
+}
 
 /* ---- time --------------------------------------------------------------- */
 
 RT(osGetTime) { return ret64(count_now()); }
 RT(osGetCount) { return ret((u32)count_now()); }
 RT(osSetTime) { time_base = ((u64)arg(0) << 32 | arg(1)) - (count_now() - time_base); return 0; }
+/* __osSetCompare(value) writes COP0 Compare: the interrupt comes when Count
+   next equals it, a full wrap away if it equals Count now */
+RT(__osSetCompare) {
+  u64 c = count_now();
+  u32 left = arg(0) - (u32)c;
+  compare_due = c + (left ? left : 0x100000000ull);
+  compare_armed = 1;
+  return 0;
+}
 /* osSetTimer(t, countdown (a2:a3), interval (sp+16:sp+20), mq, msg) */
 RT(osSetTimer) {
   int i;
@@ -613,12 +725,23 @@ RT(osStopTimer) {
 RT(osGetMemSize) { return ret(PLAID_RAM_SIZE); }
 
 RT(osInitialize) {
+  if (S->status_known) S->cp0_status |= 0x20000000u;
+  if (plaid_ctc1(S, 0x01000800u, (u32)S->r[31])) return 1;
   wr32(0x80000300u, 1);           /* osTvType: NTSC */
   wr32(0x80000304u, 0);           /* osRomType: cartridge */
   wr32(0x80000308u, 0xb0000000u); /* osRomBase */
   wr32(0x8000030cu, 0);           /* osResetType: cold */
   wr32(0x80000318u, PLAID_RAM_SIZE); /* osMemSize */
   return 0;
+}
+int plaid_rt_osInitialize_global(plaid_state *s, u32 global) {
+  int result;
+  (void)s;
+  pthread_mutex_lock(&big);
+  result = rt_osInitialize();
+  status_kernel_global = global;
+  pthread_mutex_unlock(&big);
+  return result;
 }
 /* libultra 2.0K+ splits osInitialize; the common part is the whole effect here */
 RT(__osInitialize_common) { return rt_osInitialize(); }
@@ -629,10 +752,7 @@ NO_VRU(osVoiceInit) NO_VRU(osVoiceSetWord) NO_VRU(osVoiceCheckWord) NO_VRU(osVoi
 NO_VRU(osVoiceMaskDictionary) NO_VRU(osVoiceStartReadData) NO_VRU(osVoiceStopReadData)
 NO_VRU(osVoiceGetReadData) NO_VRU(osVoiceControlGain)
 #define NOP(name) RT(name) { return nop(); }
-NOP(osCreateViManager)
 NOP(osCreatePiManager) NOP(osInvalICache) NOP(osSpTaskYield)
-/* shortcut: the VI scale registers are not modeled; RT64 scales the frame itself */
-NOP(osViSetXScale) NOP(osViSetYScale)
 /* The TLB as libultra's osMapTLB writes it (ADR-0162): 4 KiB-aligned even
    and odd pages, noncoherent cached, dirty and valid; -1 leaves a page invalid.
    Lowered code models global entries only, so an ASID is refused. */
@@ -650,53 +770,19 @@ RT(osUnmapTLBAll) { /* EntryHi in KSEG0 never matches a mapped address */
 }
 RT(osSpTaskYielded) { return ret(0); }
 RT(__osSpSetPc) { return ret(0); }
-/* VI registers as libultra's retrace handler writes them from the OSViMode
-   (comRegs at +4, fldRegs[0] at +0x28), the next framebuffer and the black
-   flag; the control word is the mode's as osViSetSpecialFeatures changed it.
-   shortcut: field 0 only, which SM64's non-interlaced LAN1 mode does not
-   need; interlaced modes would alternate fields. */
-static u32 vi_ctrl;
-static void vi_update(void) {
-  u32 m = vi_mode, f = m + 0x28;
-  if (!m) return;
-  vi_regs[0] = vi_ctrl;
-  vi_regs[1] = (frame_buffer & 0x1fffffffu) + rd32(f);
-  vi_regs[2] = rd32(m + 0x08);
-  vi_regs[3] = rd32(f + 0x10);
-  vi_regs[4] = 0;
-  vi_regs[5] = rd32(m + 0x0c);
-  vi_regs[6] = rd32(m + 0x10);
-  vi_regs[7] = rd32(m + 0x14);
-  vi_regs[8] = rd32(m + 0x18);
-  vi_regs[9] = vi_black ? 0 : rd32(m + 0x1c);
-  vi_regs[10] = rd32(f + 0x08);
-  vi_regs[11] = rd32(f + 0x0c);
-  vi_regs[12] = rd32(m + 0x20);
-  vi_regs[13] = rd32(f + 0x04);
+/* VI registers, as pinned ares vi/io.cpp (ADR-0199): libultra's own VI
+   manager and osVi* functions run as guest code and program them, and the
+   retrace is the VI interrupt. VI_V_CURRENT counts lines from the VI_V_INTR
+   line by host time; a field has the lines ares counts for VI_V_SYNC.
+   shortcut: the interrupt follows the NTSC period, not the programmed timing. */
+static const u32 vi_mask[14] = {0xffffu, 0xffffffu, 0xfffu, 0x3ffu, 0, 0x3fffffffu, 0x3ffu, 0x1f0fffu,
+                                0x0fff0fffu, 0x03ff03ffu, 0x03ff03ffu, 0x03ff03ffu, 0x0fff0fffu, 0x0fff0fffu};
+static u32 vi_line(void) {
+  u32 half = vi_regs[6], lines = half >= vi_field ? (half - vi_field) / 2 + 1 : 1;
+  u64 into = vi_retrace_ns ? now_ns() - vi_retrace_ns : 0;
+  u32 line = (u32)(((vi_regs[3] >> 1) + into * lines / VI_PERIOD_NS) % lines);
+  return (line << 1 | vi_field) & 0x3ffu;
 }
-RT(osViSetMode) { vi_mode = arg(0); vi_ctrl = rd32(vi_mode + 0x04); vi_update(); return 0; }
-/* osViSetSpecialFeatures(func): gamma (VI_CTRL bit 3), gamma dither (2),
-   divot (4) and the dither filter (16), which turns anti-aliasing off and
-   back to the mode's setting (bits 8-9), as libultra documents */
-RT(osViSetSpecialFeatures) {
-  u32 func = arg(0);
-  if (func & 0x01) vi_ctrl |= 0x8;
-  if (func & 0x02) vi_ctrl &= ~0x8u;
-  if (func & 0x04) vi_ctrl |= 0x4;
-  if (func & 0x08) vi_ctrl &= ~0x4u;
-  if (func & 0x10) vi_ctrl |= 0x10;
-  if (func & 0x20) vi_ctrl &= ~0x10u;
-  if (func & 0x40) vi_ctrl = (vi_ctrl | 0x10000u) & ~0x300u;
-  if (func & 0x80) vi_ctrl = (vi_ctrl & ~0x10000u) | (vi_mode ? rd32(vi_mode + 0x04) & 0x300u : 0);
-  vi_update();
-  return 0;
-}
-RT(osViBlack) { vi_black = arg(0) & 0xff; vi_update(); return 0; }
-RT(osViSwapBuffer) { frame_buffer = arg(0); vi_update(); return 0; }
-/* swaps take effect at once here, so the current and next buffers are the
-   same; before any swap __osViInit's framep is K0BASE */
-RT(osViGetCurrentFramebuffer) { return ret(frame_buffer ? frame_buffer : 0x80000000u); }
-RT(osViGetNextFramebuffer) { return ret(frame_buffer ? frame_buffer : 0x80000000u); }
 static u32 v2p(u32 a) {
   u32 p;
   u8 seg;
@@ -716,21 +802,22 @@ static int dslot(u32 va) {
   return p < PLAID_RAM_SIZE && S->dtag[i] == ((p & ~0xfffu) | 1) ? (int)i : -1;
 }
 static void write_back_slot(int i) { if (S->dtag[i]) plaid_dwriteback(S, i); }
-static void dcache_all(int invalidate) { /* the Index operations over every line */
+static void dcache_all(void) { /* Index Writeback Invalidate D over every line */
   int i;
   for (i = 0; i < 512; i++) write_back_slot(i);
-  if (invalidate) { memset(S->dtag, 0, sizeof S->dtag); memset(S->dstale, 0, sizeof S->dstale); }
+  memset(S->dtag, 0, sizeof S->dtag); memset(S->dstale, 0, sizeof S->dstale);
+  memset(S->ddirty, 0, sizeof S->ddirty);
 }
 RT(osWritebackDCache) {
   u32 va = arg(0), n = arg(1), a;
   int i;
   if ((s32)n <= 0) return 0;
-  if (n >= DCACHE_SIZE) { dcache_all(0); return 0; }
+  if (n >= DCACHE_SIZE) { dcache_all(); return 0; }
   for (a = va & ~15u; a < va + n; a += 16)
     if ((i = dslot(a)) >= 0) write_back_slot(i);
   return 0;
 }
-RT(osWritebackDCacheAll) { dcache_all(0); return 0; }
+RT(osWritebackDCacheAll) { dcache_all(); return 0; }
 /* libultra writes back and invalidates partly covered lines and discards
    whole ones; a discarded store stays in RAM here but not on hardware, so
    its line is lost until DMA rewrites all of it */
@@ -738,7 +825,7 @@ RT(osInvalDCache) {
   u32 va = arg(0), n = arg(1), a;
   int i;
   if ((s32)n <= 0) return 0;
-  if (n >= DCACHE_SIZE) { dcache_all(1); return 0; }
+  if (n >= DCACHE_SIZE) { dcache_all(); return 0; }
   for (a = va & ~15u; a < va + n; a += 16)
     if ((i = dslot(a)) >= 0) {
       if (a >= va && a + 16 <= va + n) { if (S->ddirty[i]) S->line_lost[v2p(a) >> 4] = 1; }
@@ -771,21 +858,27 @@ static void dma_wrote(u32 p, u32 n) {
 static void dma_wr(u32 va, const u8 *bytes, u32 n) { if (n) dma_wrote(v2p(va), n); wr(va, bytes, n); }
 RT(__osSetFpcCsr) {
   u32 was = S->fcsr | S->fcc << 23;
+  if (plaid_status_fp(S, (u32)S->r[31] - 8, 1)) return 1;
   if (plaid_ctc1(S, arg(0), (u32)S->r[31])) return 1;
   return ret(was);
 }
 
 /* ---- PI DMA ------------------------------------------------------------- */
 
+/* libultra's PI DMA addresses the cartridge at K1_TO_PHYS(osRomBase | devAddr) */
+static u32 pi_rom_offset(u32 dev, u32 n) {
+  u32 p = (rd32(0x80000308u) | dev) & 0x1fffffffu;
+  if (p < 0x10000000u || (u64)(p - 0x10000000u) + n > rom_size) finish(1, "PI DMA outside the ROM");
+  return p - 0x10000000u;
+}
 /* osPiStartDma(mb, pri, direction, devAddr, vAddr, nbytes, mq) */
 RT(osPiStartDma) {
   u32 mb = arg(0), dir = arg(2), dev = arg(3), va = arg(4), n = arg(5), mq = arg(6);
   if (dir != 0) finish(1, "PI write to cartridge");
-  if ((u64)dev + n > rom_size) finish(1, "PI DMA outside the ROM");
-  dma_wr(va, rom + dev, n);
+  dma_wr(va, rom + pi_rom_offset(dev, n), n);
   dma_count++;
-  if (mq) mq_send(mq, mb, 0, 0);
-  maybe_preempt();
+  pi_complete(mq, mb);
+  maybe_preempt(1);
   return ret(0);
 }
 /* osCartRomInit(): the cartridge's OSPiHandle, with the PI domain 1 timing
@@ -799,8 +892,10 @@ RT(osCartRomInit) {
 /* ---- RCP memory and registers (ADR-0177) ------------------------------- */
 
 /* Uncached CPU words in SP memory and the PI registers, as pinned ares
-   (rsp/io.cpp, pi/io.cpp). The PIF leaves ROM 0x40-0xfff in DMEM and the
-   header's domain 1 timing in the PI. A task the runtime completes without
+   (rsp/io.cpp, pi/io.cpp). A native build starts SP memory as the ROM's
+   own IPL3 leaves it in pinned ares (PLAID_SP_BOOT, ADR-0195); otherwise
+   the PIF leaves ROM 0x40-0xfff in DMEM. The header's domain 1 timing is
+   in the PI. A task the runtime completes without
    running its microcode leaves SP memory unknown, and reading it then
    fails closed. PI DMA here completes before the caller resumes, so the
    status reads idle. On the PI bus the cartridge ROM reads as itself and
@@ -815,9 +910,25 @@ static u8 DMEM[4096], IMEM[4096];
 static int sp_unknown;
 static u32 pi_bsd[8]; /* DOM1 LAT PWD PGS RLS, DOM2 LAT PWD PGS RLS */
 static const u32 pi_bsd_mask[8] = {0xff, 0xff, 0xf, 0x3, 0xff, 0xff, 0xff, 0xff};
+#ifdef PLAID_SP_BOOT
+#include PLAID_SP_BOOT
+#endif
+#ifdef PLAID_RAM_BOOT
+#include PLAID_RAM_BOOT
+_Static_assert(sizeof plaid_ram_boot == 0x400, "post-IPL RDRAM prefix must contain 0x400 bytes");
+#endif
 static void io_boot(void) {
   u32 c = rom[0] << 24 | rom[1] << 16 | rom[2] << 8 | rom[3];
+#ifdef PLAID_RAM_BOOT
+  /* The IPL3 vector/boot-parameter prefix is data the game may still read.
+     This does not initialize higher RDRAM or certify all post-IPL state. */
+  memcpy(S->ram, plaid_ram_boot, sizeof plaid_ram_boot);
+#endif
+#ifdef PLAID_SP_BOOT
+  memcpy(DMEM, plaid_sp_boot, 0x1000); memcpy(IMEM, plaid_sp_boot + 0x1000, 0x1000);
+#else
   memcpy(DMEM + 0x40, rom + 0x40, 0xfc0);
+#endif
   pi_bsd[0] = c & 0xff; pi_bsd[1] = c >> 8 & 0xff; pi_bsd[2] = c >> 16 & 0xf; pi_bsd[3] = c >> 20 & 0x3;
 }
 /* ---- FlashRAM (ADR-0183) -------------------------------------------------
@@ -902,6 +1013,8 @@ static void flash_write_half(u16 d) {
 static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
   (void)s;
   if (size != 4) return 1;
+  if ((p >= 0x04800000u && p < 0x04800020u) || (p >= 0x1fc007c0u && p < 0x1fc00800u))
+    return si_access(p, write, v);
   if (p >= 0x08000000u && p < 0x10000000u && (fl.on || (write && (p & ~3u) == 0x08010000u))) {
     flash_address(p);
     if (write) { flash_write_half((u16)(*v >> 16)); flash_write_half((u16)*v); }
@@ -923,6 +1036,7 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
   }
   if (p >= 0x04100000u && p < 0x04100020u) { /* DPC registers, as ares rdp/io.cpp; RT64 draws, so the DP is
                                                   never busy and a command list is consumed when its end is written */
+    if (write && (p & 0x1fu) == 0x0cu && (*v & 4) && dp_held) { dp_held = 0; post(EV_DP); } /* the thaw */
 #if defined(PLAID_RSP) && defined(PLAID_RT64)
     if (rsp_graphics) {
       u32 value = (u32)*v;
@@ -933,32 +1047,40 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
       return result;
     }
 #endif
-    static u32 start, current, flags; /* flags: 1 source, 2 freeze, 4 flush, 0x400 start valid */
+    static u32 start, current;
     u32 r = (p & 0x1fu) >> 2, d = (u32)*v;
     if (!write) {
-      *v = r == 0 ? start : r == 1 || r == 2 ? current : r == 3 ? flags | 0x80u : 0;
+      *v = r == 0 ? start : r == 1 || r == 2 ? current : r == 3 ? dpc_flags | 0x80u : 0;
       return 0;
     }
-    if (r == 0) { if (!(flags & 0x400u)) start = d & 0xfffff8u; flags |= 0x400u; }
-    else if (r == 1) { current = d & 0xfffff8u; flags &= ~0x400u; }
+    if (r == 0) { if (!(dpc_flags & 0x400u)) start = d & 0xfffff8u; dpc_flags |= 0x400u; }
+    else if (r == 1) { current = d & 0xfffff8u; dpc_flags &= ~0x400u; }
     else if (r == 3) {
-      if (d & 1) flags &= ~1u;
-      if (d & 2) flags |= 1u;
-      if (d & 4) flags &= ~2u;
-      if (d & 8) flags |= 2u;
-      if (d & 16) flags &= ~4u;
-      if (d & 32) flags |= 4u;
+      if (d & 1) dpc_flags &= ~1u;
+      if (d & 2) dpc_flags |= 1u;
+      if (d & 4) dpc_flags &= ~2u;
+      if (d & 8) dpc_flags |= 2u;
+      if (d & 16) dpc_flags &= ~4u;
+      if (d & 32) dpc_flags |= 4u;
     }
     return 0;
   }
-  if (p == 0x04600010u) { /* PI_STATUS: idle; a write resets DMA or clears the interrupt, neither pending */
-    if (!write) *v = 0;
+  if (p == 0x04600010u) { /* DMA completes immediately; interrupt acknowledgment remains visible. */
+    if (!write) *v = pi_status;
+    else if (*v & 2) { pi_status &= ~8u; pending[EV_PI] = 0; }
     return 0;
   }
   if (p >= 0x04600014u && p <= 0x04600030u) {
     u32 k = (p - 0x04600014u) >> 2;
     if (write) pi_bsd[k] = (u32)*v & pi_bsd_mask[k];
     else *v = pi_bsd[k];
+    return 0;
+  }
+  if (p >= 0x04400000u && p < 0x04500000u) { /* VI registers, mirrored every 0x40 bytes */
+    u32 r = (p & 0x3fu) >> 2;
+    if (!write) *v = r == 4 ? vi_line() : r < 14 ? vi_regs[r] : 0;
+    else if (r == 4) pending[EV_VI] = 0; /* VI_V_CURRENT: acknowledges the interrupt */
+    else if (r < 14) vi_regs[r] = (u32)*v & vi_mask[r];
     return 0;
   }
   if (p >= 0x04500000u && p < 0x04600000u) { /* AI registers, as ares ai/io.cpp */
@@ -988,6 +1110,22 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
     return 0;
   }
   return 1;
+}
+
+RT(osPiGetStatus) {
+  u64 value = 0;
+  if (rt_io(S, 0x04600010u, 4, 0, &value)) return plaid_fault(S, (u32)S->r[31] - 8, 1);
+  return ret((u32)value);
+}
+RT(osPiRawStartDma) {
+  u32 direction = arg(0), offset = arg(1), destination = arg(2), size = arg(3);
+  if (direction != 0) finish(1, "PI write to cartridge");
+  if (!size || ((offset | destination | size) & 7u)) finish(1, "unaligned raw PI DMA is not modeled");
+  dma_wr(destination, rom + pi_rom_offset(offset, size), size);
+  dma_count++;
+  pi_status |= 8u;
+  if (S->status_known) { pending[EV_PI] = 1; plaid_preempt = 1; }
+  return ret(0);
 }
 
 /* osEPiStartDma(handle, mb, direction): the OSIoMesg holds the queue at +4,
@@ -1030,8 +1168,8 @@ static void epi_dma(u32 h, u32 dir, u32 dev, u32 va, u32 n) {
 RT(osEPiStartDma) {
   u32 mb = arg(1), mq = rd32(mb + 4);
   epi_dma(arg(0), arg(2), rd32(mb + 0xc), rd32(mb + 8), rd32(mb + 0x10));
-  if (mq) mq_send(mq, mb, 0, 0);
-  maybe_preempt();
+  pi_complete(mq, mb);
+  maybe_preempt(1);
   return ret(0);
 }
 /* osEPiRawStartDma(handle, direction, devAddr, dramAddr, size): the same
@@ -1243,6 +1381,12 @@ RT(osSpTaskLoad) {
 #endif
   return 0;
 }
+static int dp_frozen(void) {
+#if defined(PLAID_RSP) && defined(PLAID_RT64)
+  if (rsp_graphics) return rsp_dp.status & 2;
+#endif
+  return dpc_flags & 2;
+}
 /* Graphics tasks go to the renderer (RT64); with PLAID_RSP other tasks run
    their lowered microcode, otherwise they complete at once. */
 RT(osSpTaskStartGo) {
@@ -1260,7 +1404,9 @@ RT(osSpTaskStartGo) {
       plaid_gfx_task(S->ram, rd32(task + 0x10), rd32(task + 0x18), rd32(task + 0x30));
 #endif
     post(EV_SP);
-    post(EV_DP);
+    /* a frozen RDP consumes nothing, so the DP interrupt waits for the thaw
+       (ares rdp/io.cpp) */
+    if (dp_frozen()) dp_held = 1; else post(EV_DP);
   } else {
     audio_tasks++;
 #ifdef PLAID_RSP
@@ -1340,7 +1486,7 @@ static void ai_submit(u32 p, u32 n) {
 static void cont_status(u32 status) {
   int i;
   for (i = 0; i < 4; i++) {
-    u8 st[4] = {0, i == 0 ? 5 : 0, 0, i == 0 ? 0 : 8};
+    u8 st[4] = {0, i == 0 ? 5 : 0, i == 0 ? 2 : 0, i == 0 ? 0 : 8};
     wr(status + 4 * i, st, 4);
   }
 }
@@ -1350,19 +1496,40 @@ RT(osContInit) {
   cont_status(arg(2));
   return ret(0);
 }
+/* libultra's osContInit also creates __osEepromTimerQ with one message,
+   __osEepromTimerMsg, on which osEepromLongWrite waits out each write
+   (ADR-0196); like __osContinitialized, only on the first call */
+int plaid_rt_osContInit_eeprom(plaid_state *s, u32 queue, u32 message) {
+  static u32 created;
+  int result;
+  (void)s;
+  pthread_mutex_lock(&big);
+  result = rt_osContInit();
+  if (queue != created) {
+    wr32(queue, 0); wr32(queue + 4, 0); wr32(queue + 8, 0); wr32(queue + 0xc, 0);
+    wr32(queue + 0x10, 1); wr32(queue + 0x14, message);
+    created = queue;
+  }
+  pthread_mutex_unlock(&big);
+  return result;
+}
 RT(osContStartReadData) { post(EV_SI); return ret(0); }
 RT(osContStartQuery) { post(EV_SI); return ret(0); }
 RT(osContGetQuery) { cont_status(arg(0)); return 0; }
 RT(osContSetCh) { return ret(0); }
 /* No Rumble Pak: PFS_ERR_NOPACK */
 RT(osMotorInit) { return ret(1); }
+RT(__osPfsGetStatus) { return ret(1); } /* every channel has no Controller Pak */
 RT(__osMotorAccess) { return ret(1); }
+/* Both SDK wrappers use the same no-accessory policy as __osMotorAccess. */
+RT(osMotorStart) { return rt___osMotorAccess(); }
+RT(osMotorStop) { return rt___osMotorAccess(); }
 /* Controller 1: scripted presses (--press, by VI frame) OR the renderer
    window's keyboard. shortcut: scripts set buttons only, not the stick. */
 #define MAX_PRESSES 32
 static struct { u32 buttons, at, frames; } presses[MAX_PRESSES];
 static int n_presses;
-RT(osContGetReadData) {
+static u32 controller_input(void) {
   u32 b = 0, stick = 0;
   int i;
   for (i = 0; i < n_presses; i++)
@@ -1371,6 +1538,11 @@ RT(osContGetReadData) {
   stick = plaid_gfx_input();
   b |= stick >> 16;
 #endif
+  return (b << 16) | (stick & 0xffffu);
+}
+RT(osContGetReadData) {
+  u32 input = controller_input(), b = input >> 16, stick = input;
+  int i;
   for (i = 0; i < 4; i++) { /* OSContPad: button, stick_x, stick_y, errno */
     u8 pad[6] = {0, 0, 0, 0, i == 0 ? 0 : 8, 0};
     if (i == 0) { pad[0] = (u8)(b >> 8); pad[1] = (u8)b; pad[2] = (u8)(stick >> 8); pad[3] = (u8)stick; }
@@ -1406,6 +1578,11 @@ static int load_file(const char *path, u8 *bytes, size_t size) {
   return n == size ? 0 : -1;
 }
 RT(osEepromProbe) { return ret(1); } /* EEPROM_TYPE_4K */
+RT(__osEepStatus) {
+  wr16(arg(1), 0x8000); /* 4 Kbit device, no response error */
+  wr16(arg(1) + 2, count_now() < joybus.eeprom_busy_until ? 0x8000 : 0); /* busy as the SI path */
+  return ret(0);
+}
 RT(osEepromRead) { wr(arg(2), eeprom + 8 * (arg(1) & 63), 8); return ret(0); }
 RT(osEepromWrite) {
   u32 i;
@@ -1425,6 +1602,58 @@ RT(osEepromLongWrite) {
   for (i = 0; i < n; i++) eeprom[a + i] = (u8)(rd32((b + i) & ~3u) >> (24 - 8 * ((b + i) & 3)));
   save_eeprom();
   return ret(0);
+}
+
+/* Native SI transfers preserve the SDK's guest packet construction and cache
+   operations. As pinned ares orders them, the address write starts the DMA
+   (busy) and the bytes move with the interrupt: here at SI delivery or the
+   guest's next SI/PIF access, so the SDK's cache operations after the start
+   precede the transfer. */
+static int si_finish(void) {
+  int due = si_due;
+  si_due = 0;
+  if (due == 2) {
+    dma_read(si_dram, 64);
+    memcpy(joybus.ram, S->ram + si_dram, 64);
+    if (plaid_joy_parse(&joybus)) return 1;
+  } else {
+    if (plaid_joy_run(&joybus, eeprom, count_now(), controller_input())) return 1;
+    dma_wr(0xa0000000u | si_dram, joybus.ram, 64);
+    if (joybus.changed) { save_eeprom(); joybus.changed = 0; }
+  }
+  si_status = 0x1000;
+  return 0;
+}
+static int si_access(u32 p, int write, u64 *value) {
+  u32 offset;
+  if (si_due && si_finish()) return 1;
+  if (p >= 0x1fc007c0u) {
+    offset = p - 0x1fc007c0u;
+    if (write) {
+      unsigned byte;
+      for (byte = 0; byte < 4; byte++) joybus.ram[offset + byte] = (u8)(*value >> (24 - byte * 8));
+      if (offset == 60 && plaid_joy_parse(&joybus)) return 1;
+    } else {
+      *value = (u32)joybus.ram[offset] << 24 | (u32)joybus.ram[offset + 1] << 16
+        | (u32)joybus.ram[offset + 2] << 8 | joybus.ram[offset + 3];
+    }
+    return 0;
+  }
+  offset = p - 0x04800000u;
+  if (!write) {
+    *value = offset == 0 ? si_dram : offset == 4 ? si_read_address
+      : offset == 16 ? si_write_address : offset == 24 ? si_status : 0;
+    return 0;
+  }
+  if (offset == 0) { si_dram = (u32)*value & 0xfffff8u; return 0; }
+  if (offset == 24) { si_status = 0; pending[EV_SI] = 0; return 0; }
+  if (offset != 4 && offset != 16) return 1;
+  if (((u32)*value & ~1u) != 0x1fc007c0u || si_dram > PLAID_RAM_SIZE - 64) return 1;
+  if (offset == 16) { si_write_address = (u32)*value & ~1u; si_due = 2; }
+  else { si_read_address = (u32)*value & ~1u; si_due = 1; }
+  si_status = 1; /* DMA busy */
+  pending[EV_SI] = 1; plaid_preempt = 1;
+  return 0;
 }
 
 /* ---- 64-bit helpers: o32 pairs, high word first ------------------------- */
