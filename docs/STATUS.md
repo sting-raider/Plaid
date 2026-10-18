@@ -1,5 +1,15 @@
 # Status
 
+## Remaining-ROM automatic pipeline sweep (2026-10-18)
+
+The five additional local ROMs remain scoped OPEN at production commit
+109f467: GoldenEye 7 blockers, Mario Kart 64 30, Paper Mario 164, Star Fox 64
+298 and Rogue Squadron 210. Each automatic pipeline refuses native emission;
+native gameplay/audio for these titles was not reached. This is a fresh
+ROM-only test, with no supplied loads or symbol files. Finite native coverage
+for SM64/OoT with extra inputs is distinct from the ROM-only BK/MM/F-Zero X
+results. See research/remaining-roms-20261018.md for commands and diagnoses.
+
 ## Framebuffer readback and BK puzzle transitions (ADR-0201)
 
 Completed RT64 color/depth readbacks now return to native CPU RAM through the
