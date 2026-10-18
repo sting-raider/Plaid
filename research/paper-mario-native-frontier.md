@@ -5,7 +5,53 @@ User input is only the local, ignored ROM `target/local-inputs/pm.z64`:
 SHA-256 `9ec6d2a5c2fca81ab86312328779fd042b5f3b920bf65df9f6b87b376883cb5b`.
 No symbols, load declarations, snapshots or per-game addresses are builder inputs.
 
-## Verified improvement
+## Copy-source refinement (ADR-0204, 2026-10-19)
+
+Starting from production base `1a465af`, the fresh automatic pipeline now finds
+34 files and 47,892 blocks. All three formerly missing code targets and their
+four direct edges resolve. The scoped result improves from OPEN/142 to
+OPEN/136: every remaining blocker is an indirect site. The original 125 JR-at
+effect wrappers and ten JR-v0 dispatches remain; newly discovered partner code
+adds one JR-v0 site at 0x802bd850 (ROM 0x317770). No native C or executable is
+emitted, and no Paper Mario gameplay, graphics or audio success is claimed.
+
+The new source candidates are two heap-loader files, ROM
+[0x316c00,0x316d90) and [0x316d90,0x316f30), linked at 0x802ae000, and eleven
+world-partner files linked at 0x802bd100. These are receipt observations only.
+The heap wrappers pass constant source/end/destination arguments to a common
+copy helper and immediately call the loaded destination. Its conditional-loop
+layout supplies chunk and remainder copy-call shapes. The indexed partner
+consumer supplies the same helper arguments from fields 0/4/8 of a row selected
+with an index scaled by 64. Its leading null record is skipped; trailing fields,
+including flags, remain opaque. Source order in the table need not be ROM order.
+
+The general recognizers require aligned bounded sources, compatible adjacent
+files and surviving argument provenance. Helper analysis is a 128-word linear
+affine scan with delay-slot effects and call clobbers, not a control-flow proof.
+The indexed catalog scans at most 256 records; this is a resource budget, not
+a valid-index or completeness certificate. Existing raw text-bound heuristics
+and exact native byte bindings remain mandatory. No assumption is retired.
+
+`infer-call-loads` reconstructs the map's source images, checks ROM identity and
+unchanged original declarations, and appends deterministic slot candidates.
+It preserves newer fixed declarations and is idempotent even against the older
+map after an append. The builder refines before another boot harvest; supplied
+`--loads` files retain their existing behavior. Authored tests cover alternate
+addresses/strides, clobbers, delay slots, unknown calls, branch aliases, scan
+bounds, malformed runs and stale/foreign CLI sources. Removing the immediate
+destination-call equality kills the corresponding negative regression.
+
+The fresh pipeline takes 492.322 s including its release rebuild; this is not
+a controlled speed comparison with the smaller earlier frontier. Iteration
+also exposed a repeated failed overlay probe: a ROM's negative file-table
+result is now retained between rounds. A controlled later discovery round
+took 60.517 s with the repeated probe and 55.778 s with the known-negative
+result. Both serialized maps have SHA-256
+`9cd0b1bca2dc42e5594c8f6a1bc53335404571d427809c6796e677fc032faf5c`.
+The successful-overlay path still probes each changed image; other discovery
+errors still stop the builder. Retained orchestration tests cover these paths.
+
+## Earlier section-overlay improvement (ADR-0202/0203)
 
 The previous automatic pipeline was scoped OPEN/164 with 41,816 blocks and
 19 loads. The new discovery finds two additional raw-section slot files and
@@ -64,18 +110,17 @@ stopping at that loop without interrupt/event evidence would be unsound.
 
 ## Remaining work
 
-The three missing targets are 0x802ae000, 0x802bd7dc and 0x802be070. Local
-metadata associates them with heap shims and world-partner overlays. Recover
-their source/load transformations and bounds from the ROM before adding them.
+The formerly missing targets 0x802ae000, 0x802bd7dc and 0x802be070 now resolve
+through the guarded raw source candidates described above.
 
-Of the 135 indirect sites, 125 effect wrappers load function pointers from
+Of the 136 indirect sites, 125 effect wrappers load function pointers from
 a table whose targets use E000 virtual addresses. The table has 135 six-word
 rows, with 127 executable candidates fitting one 4-KiB page each. Its loader
 maps physical effect slots through the TLB before copying code. The present
 KSEG slot model cannot safely represent this by merely accepting E000 as RAM.
 Resolve the executable sources, virtual/physical binding and mapping lifetime,
 then close the finite function-table dispatch with immutable provenance or
-checked dispatch/write guards. The other ten sites are indexed dispatches
+checked dispatch/write guards. The other eleven sites are indexed dispatches
 whose table bounds and target identities still need proof.
 
 The effects also call E020 shims: a JAL executing at E000 uses that PC region
@@ -86,6 +131,21 @@ must join the executable model. Binding must distinguish virtual link, physical
 frame and mapping generation; writes and remaps must revoke it, with active
 native frames pinned. The existing KSEG masks in overlay binding/verifiers
 cannot provide those guarantees by themselves.
+
+The existing native data path already translates through the 32-entry TLB,
+including page masks, valid/dirty checks and even/odd selection (`plaid_tlb`
+and `plaid_addr` in plaid-lower). The missing composition is executable lookup:
+`plaid_link`, overlay verification, write revocation and active-frame pins still
+derive backing RAM from KSEG addresses. `osMapTLB` and `osUnmapTLBAll` currently
+have no executable mapping-generation protocol. Retained operation-generation
+research is not a runtime lifetime implementation.
+
+The next synthetic contract should preserve virtual PCs and JAL return values
+while binding candidate text to a separately translated physical frame and TLB
+generation. Cover E000-to-E020 calls, two frames at one virtual link, same-value
+TLB rewrites, inactive remap/reverification, active remap refusal, unmap/invalid
+odd pages and text writes through aliases. A first implementation may refuse
+unsupported mappings, but cannot silently mask E000 into a physical address.
 
 ## Validation and provenance
 

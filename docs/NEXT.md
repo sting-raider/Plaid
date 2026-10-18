@@ -2,11 +2,11 @@
 
 ## Continue Paper Mario ROM-only closure
 
-The user selected Paper Mario. Section descriptors and cache SDK identities
-reduce its frontier to OPEN/142, with 45,140 blocks and 21 loads. Next recover
-the heap-shim/world-partner loads behind its three missing targets. Model the
+The user selected Paper Mario. General copy-source refinement resolves its
+three missing targets; the frontier is OPEN/136 with 47,892 blocks and 34 loads.
+Next model the
 E000 effects' ROM sources, TLB page bindings and mapping lifetime before closing
-their 125 function-table tail dispatches; ten indexed dispatches also remain.
+their 125 function-table tail dispatches; eleven indexed dispatches also remain.
 Preserve the CLOSED gate and existing native controls. See
 research/paper-mario-native-frontier.md. No Paper Mario native run is accepted.
 

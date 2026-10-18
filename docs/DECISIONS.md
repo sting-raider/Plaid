@@ -6045,3 +6045,48 @@ three-entry Paper Mario comparison also preserves CPU-write and PI-DMA ranges:
 Whole-pipeline harvest budgets remain unchanged; the result does not establish
 idle-loop termination or exhaustive executable coverage. Receipt:
 research/paper-mario-native-frontier.md and ignored target/paper-mario/.
+
+
+## ADR-0204: Refine raw copy-call and indexed source candidates
+
+The ROM-only builder can revisit its rebuilt discovery image before another
+oracle harvest. `infer-call-loads` checks the ROM identity and every original
+load declaration, reconstructs authoritative bytes, and appends deterministic
+raw slot candidates. Repeated refinement is idempotent. A changed original
+source requires rediscovery, and fixed executable ranges are not overwritten.
+Explicit user-supplied load files are not changed by the automatic pipeline.
+
+A wrapper witness supplies constant aligned ROM start/end and RAM destination
+to a common helper, then immediately calls that destination. Distinct wrappers
+must name adjacent source ranges sharing the helper and destination. The helper
+has a bounded 128-word linear affine scan: its downstream calls exhibit
+(source, destination, chunk) followed by (source+chunk, destination+chunk,
+end-source-chunk). Calls with unknown arguments are skipped as witnesses but
+still kill caller-saved values; conditional loops and their delay slots are
+scanned structurally. This is candidate evidence, not a path or copy proof.
+
+The same helper shape supports an indexed descriptor consumer: an index scaled
+by a power-of-two stride selects a row, and loads at offsets 0/4/8 supply the
+outer helper's source/end/destination arguments. A contiguous bounded run may
+start with one whole zero record. At least two distinct nonoverlapping files
+sharing a destination must have adjacent ROM extents. Other fields are opaque;
+the 256-row limit is a resource budget, not a verified valid-index bound.
+
+These declarations retain the existing raw text-bound heuristic and exact
+native executable-byte binding. They neither certify catalog completeness nor
+retire the static-image, loader-lifetime or runtime-ABI assumptions. No MIPS
+executor or game-specific addresses are added. E000 executable translations
+still require a separate virtual/physical/generation binding model.
+
+Authored tests cover address and stride changes, argument/row clobbers, delay
+slots, unknown calls, branch aliases, unsupported transfers, scan budgets,
+source bounds, malformed/overlapping rows and stale/foreign CLI inputs.
+Removing the wrapper destination-call equality makes its negative regression
+fail. Paper Mario measurements and remaining obligations are recorded in
+research/paper-mario-native-frontier.md.
+
+A negative ROM file-table result is retained across discovery rounds to avoid
+replaying boot loads for the same failed overlay probe. Successful overlay
+discovery still inspects each rebuilt image; other failures still stop the
+builder. A controlled round improves from 60.517 to 55.778 seconds with an
+identical serialized map; the receipt records the hash and scope.

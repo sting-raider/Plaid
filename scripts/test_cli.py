@@ -27,6 +27,10 @@ def main():
             result = subprocess.run([str(exe),*map(str,args)],capture_output=True,text=True)
             assert (result.returncode == 0) == ok,(args,result.stdout,result.stderr)
             return result.stdout
+        from test_copy_call_cli import run_contract
+        run_contract(run, directory)
+        from test_native_discovery import run_contract as native_discovery_contract
+        native_discovery_contract()
         # Independently named raw section descriptors supply exact slot text.
         section_rom = bytearray(0x2200)
         section_rom[:4] = bytes.fromhex('80371240')
