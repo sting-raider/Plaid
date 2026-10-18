@@ -17,6 +17,16 @@ def missing_targets(program, loads, base, size):
                   and not any(lo <= t < hi for lo, hi in covered))
 
 
+def missing_tables(program):
+    """(site, start, end) of jump tables whose words no image supplies."""
+    out = []
+    for item in program.get('unresolved', []):
+        if item['kind'] == 'pointer_table_source_missing':
+            table = json.loads(program['evidence'][item['evidence'][0]]['detail'])
+            out.append((item['site']['pc'], table['table_start'], table['table_start'] + 4 * table['count']))
+    return out
+
+
 def harvest(rom, loads_path, map_path, info, receipt_path):
     """Append source-derived declarations; callers must rediscover and solve."""
     loads_path = Path(loads_path)
@@ -24,10 +34,12 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
     program = json.loads(Path(map_path).read_text())
     base, size = info['header']['boot_address'], info.get('boot_image_size') or 0x100000
     targets = missing_targets(program, loads, base, size)
-    if not targets:
+    # A table is read when its jump site runs: capture there (ADR-0197).
+    tables = missing_tables(program)
+    if not targets and not tables:
         return False
     try:
-        captures = capture_many(rom, targets)
+        captures = capture_many(rom, sorted(set(targets) | {site for site, _, _ in tables}))
     except ValueError as error:
         Path(receipt_path).write_text(json.dumps({'targets': targets, 'refusal': str(error)}, indent=2) + '\n')
         return False
@@ -47,7 +59,7 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
             pieces = [(a, b) for left, right in pieces
                       for a, b in ((left, min(right, start)), (max(left, end), right)) if a < b]
         for start, end in pieces:
-            if not any(start <= t < end for t in targets):
+            if not any(start <= t < end for t in targets) and not any(start < hi and lo < end for _, lo, hi in tables):
                 continue
             image = data[start - lo:end - lo]
             loads['loads'].append({'destination': hex(start), 'size': hex(end - start), 'rom': '0x0',

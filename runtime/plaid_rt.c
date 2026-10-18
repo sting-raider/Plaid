@@ -114,6 +114,8 @@ static struct timespec t0;
 static u64 time_base; /* osSetTime offset in count ticks */
 static u32 frame_buffer;
 static u32 vi_mode, vi_black, vi_regs[14]; /* see vi_update */
+static u32 dpc_flags; /* DPC_STATUS without --rsp-gfx: 1 source, 2 freeze, 4 flush, 0x400 start valid */
+static int dp_held; /* a graphics task's DP interrupt, held while the RDP is frozen (ADR-0198) */
 /* With PLAID_RT64 the runtime links plaid_rt64.dll (runtime/rt64, ADR-0163). */
 #ifdef PLAID_RT64
 int plaid_gfx_open(const u8 *rom_header);
@@ -806,6 +808,19 @@ RT(osViSetSpecialFeatures) {
 }
 RT(osViBlack) { vi_black = arg(0) & 0xff; vi_update(); return 0; }
 RT(osViSwapBuffer) { frame_buffer = arg(0); vi_update(); return 0; }
+/* libultra's osViSwapBuffer also stores the framebuffer in __osViNext->framep,
+   where guest code may read it (ADR-0198) */
+int plaid_rt_osViSwapBuffer_next(plaid_state *s, u32 next) {
+  u32 context;
+  int result;
+  (void)s;
+  pthread_mutex_lock(&big);
+  context = rd32(next);
+  if (context) wr32(context + 4, arg(0));
+  result = rt_osViSwapBuffer();
+  pthread_mutex_unlock(&big);
+  return result;
+}
 /* swaps take effect at once here, so the current and next buffers are the
    same; before any swap __osViInit's framep is K0BASE */
 RT(osViGetCurrentFramebuffer) { return ret(frame_buffer ? frame_buffer : 0x80000000u); }
@@ -1054,6 +1069,7 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
   }
   if (p >= 0x04100000u && p < 0x04100020u) { /* DPC registers, as ares rdp/io.cpp; RT64 draws, so the DP is
                                                   never busy and a command list is consumed when its end is written */
+    if (write && (p & 0x1fu) == 0x0cu && (*v & 4) && dp_held) { dp_held = 0; post(EV_DP); } /* the thaw */
 #if defined(PLAID_RSP) && defined(PLAID_RT64)
     if (rsp_graphics) {
       u32 value = (u32)*v;
@@ -1064,21 +1080,21 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
       return result;
     }
 #endif
-    static u32 start, current, flags; /* flags: 1 source, 2 freeze, 4 flush, 0x400 start valid */
+    static u32 start, current;
     u32 r = (p & 0x1fu) >> 2, d = (u32)*v;
     if (!write) {
-      *v = r == 0 ? start : r == 1 || r == 2 ? current : r == 3 ? flags | 0x80u : 0;
+      *v = r == 0 ? start : r == 1 || r == 2 ? current : r == 3 ? dpc_flags | 0x80u : 0;
       return 0;
     }
-    if (r == 0) { if (!(flags & 0x400u)) start = d & 0xfffff8u; flags |= 0x400u; }
-    else if (r == 1) { current = d & 0xfffff8u; flags &= ~0x400u; }
+    if (r == 0) { if (!(dpc_flags & 0x400u)) start = d & 0xfffff8u; dpc_flags |= 0x400u; }
+    else if (r == 1) { current = d & 0xfffff8u; dpc_flags &= ~0x400u; }
     else if (r == 3) {
-      if (d & 1) flags &= ~1u;
-      if (d & 2) flags |= 1u;
-      if (d & 4) flags &= ~2u;
-      if (d & 8) flags |= 2u;
-      if (d & 16) flags &= ~4u;
-      if (d & 32) flags |= 4u;
+      if (d & 1) dpc_flags &= ~1u;
+      if (d & 2) dpc_flags |= 1u;
+      if (d & 4) dpc_flags &= ~2u;
+      if (d & 8) dpc_flags |= 2u;
+      if (d & 16) dpc_flags &= ~4u;
+      if (d & 32) dpc_flags |= 4u;
     }
     return 0;
   }
@@ -1391,6 +1407,12 @@ RT(osSpTaskLoad) {
 #endif
   return 0;
 }
+static int dp_frozen(void) {
+#if defined(PLAID_RSP) && defined(PLAID_RT64)
+  if (rsp_graphics) return rsp_dp.status & 2;
+#endif
+  return dpc_flags & 2;
+}
 /* Graphics tasks go to the renderer (RT64); with PLAID_RSP other tasks run
    their lowered microcode, otherwise they complete at once. */
 RT(osSpTaskStartGo) {
@@ -1408,7 +1430,9 @@ RT(osSpTaskStartGo) {
       plaid_gfx_task(S->ram, rd32(task + 0x10), rd32(task + 0x18), rd32(task + 0x30));
 #endif
     post(EV_SP);
-    post(EV_DP);
+    /* a frozen RDP consumes nothing, so the DP interrupt waits for the thaw
+       (ares rdp/io.cpp) */
+    if (dp_frozen()) dp_held = 1; else post(EV_DP);
   } else {
     audio_tasks++;
 #ifdef PLAID_RSP

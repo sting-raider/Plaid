@@ -5805,3 +5805,67 @@ Tests: split-pair acceptance plus clobber, inner branch, entering branch and
 delay-slot refusals; the controller-policy fixture creates the queue from
 declared bindings and a non-blocking send succeeds, while the unbound build
 leaves it invalid. No upstream implementation or game code was copied.
+
+## ADR-0197: Image words name address-taken functions; missing jump tables are harvested
+
+Status: accepted. Milestone 5.
+
+BK stopped at VI 17 with fault 3: 8034b620 calls 8034c360 through t9, a call
+pinned ares makes too (same a0, VI 154). 8034c360 lies in the harvested
+80277020 image and nothing named it: its address is a data word of the loaded
+image, not of the ROM bytes, because BK's code and data reach RAM through a
+load whose ROM form is not the plain words (ADR-0190 captures the produced
+RAM). ADR-0153 scanned only aligned ROM words and code constants.
+discover_address_taken now also scans the aligned words of every supplied
+image, under the same plausible_at filter, so a pointer that exists only after
+a load names its function.
+
+Scanning more words changed which functions discovery reached first, and the
+first-fetch harvest then no longer captured rodata 80277020..80284c20: six jump
+tables became pointer_table_source_missing. harvest_boot.py now also captures
+at the first fetch of each such table's site, and keeps a produced piece that
+overlaps a table, so a table's words come from the run that reads them rather
+than from fetch-order luck. BK gains the load 80277020 size 0xd730 (entry
+8025f11c) and closes with 41 ROM-derived RSP texts.
+
+Tests: a pointer that exists only in an image word, with empty ROM bytes, is
+address-taken (fails without the scan); test_ares_boot.py harvests a synthetic
+missing jump table. Other ROMs are not re-swept by this change.
+
+## ADR-0198: osViSwapBuffer's __osViNext->framep; a frozen RDP holds the DP interrupt
+
+Status: accepted. Milestone 5. Superseded for VI by the planned VI hardware
+model.
+
+With BK closed, the run was accepted with audio but issued no graphics task.
+Its main thread loops until osViGetCurrentFramebuffer() equals a 0x40-byte
+function at 80265150 that loads __osViNext->framep, a form no n64sym
+osViGetNextFramebuffer signature matches, so it runs as guest code. libultra's
+osViSwapBuffer stores the framebuffer in __osViNext->framep; the HLE kept it
+only on the host, so the guest read __osViInit's value forever.
+Identification already binds osViSwapBuffer's __osViNext (ADR-0194); the map
+carries it as vi_next, osViSwapBuffer only, and lowering calls
+plaid_rt_osViSwapBuffer_next, which writes framep and then swaps as before.
+
+BK then issued two graphics tasks and stalled. After each frame its scheduler
+sets DPC_STATUS freeze and clears it at a later retrace, and it takes the next
+task's DP interrupt as that frame's completion. In pinned ares (rdp/io.cpp) a
+frozen RDP consumes nothing and the DP interrupt follows the thaw's flush; the
+runtime posted it when the task started. A graphics task started while the RDP
+is frozen now holds its DP event until a DPC_STATUS write clears freeze, in
+both the RT64 and --rsp-gfx DPC models. ares and native then agree on the
+cadence: a swap and a graphics task every two retraces, alternating 803a5d00
+and 803c49c0.
+
+Left alone: swaps still take effect at once. The exact retrace-time
+__osViSwapContext was tried and BK does not need it, but it remains an
+assumption, and the planned VI hardware model retires it together with this
+binding. __osViNext->state's VI_STATE_BUFFER_UPDATED is not set,
+__osViCurr->framep is not written, and freeze does not hold the SP interrupt
+(an RSP FIFO microcode would stall on a full FIFO). The visible BK run now
+shows the logos, intro and title, but the outdoor sky is black in both RT64
+and --rsp-gfx. Its asset DMAs match ares exactly and the CPU writes no
+framebuffer pixels, so the cause is still open.
+
+Tests: test_vi_dp.py checks the framep store and that a frozen RDP's DP event
+arrives only after the thaw. Removing either change fails it.

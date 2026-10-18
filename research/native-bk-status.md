@@ -196,6 +196,20 @@ call target outside the address-taken scope, probably via a pointer in data
 BK loads at run time. That is the next barrier; graphics and PCM are still
 unmeasured because the run stops before them.
 
+ADR-0197 closes that gap: the pointer to 8034c360 is a word of the loaded
+80277020 image, not of the ROM bytes, and address-taken discovery now scans
+image words; jump tables missing their words are harvested at their site's
+first fetch. BK closes (41 ROM-derived RSP texts) and the visible run is
+accepted with audio, but issues no graphics task. ADR-0198: BK reads
+__osViNext->framep through its own code, which the HLE osViSwapBuffer never
+wrote, and its scheduler freezes the RDP between frames, so the DP interrupt
+must wait for the thaw, as in pinned ares. The visible 60 s run now shows the
+N64 and Rare logos, the intro and the title screen: 1,260 graphics tasks,
+1,780 audio tasks, 3,702 PI transfers, no fault. The outdoor sky is black in
+both the RT64 and --rsp-gfx paths. BK's non-audio ROM loads match ares in
+order and size, and the headless build's framebuffers stay empty (the CPU
+draws no sky), so the missing sky is still open.
+
 ## Sources, evidence and scope
 
 References are exactly refs.lock.toml: ares

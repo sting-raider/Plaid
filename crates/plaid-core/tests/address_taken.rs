@@ -104,6 +104,56 @@ fn register_calls_close_only_over_plausible_address_taken_functions() {
 }
 
 #[test]
+fn a_pointer_in_the_image_but_not_the_rom_is_address_taken() {
+    // a decompressed or captured load: the ROM holds its bytes only encoded,
+    // so f is named by a data word of the image alone (ADR-0197)
+    let f = BASE + 8 * 4;
+    let mut image = image();
+    image.words = vec![
+        0x3c08_8000, // lui t0, 0x8000
+        0x8d19_002c, // lw t9, 0x2c(t0): the data word below
+        0x0320_f809, // jalr t9
+        0,
+        0x1000_ffff, // b .
+        0,
+        0x03e0_0008, // pad: jr ra
+        0,
+        0x2482_0001, // f: addiu v0, a0, 1
+        0x03e0_0008, // jr ra
+        0,
+        f, // data: &f
+    ];
+    let rom = RomIdentity {
+        sha256: "e".repeat(64),
+        size: 4096,
+    };
+    let map = discover_address_taken(
+        rom,
+        &[],
+        &image,
+        &[GuestAddr(BASE)],
+        &[],
+        None,
+        &Default::default(),
+        100,
+    )
+    .unwrap()
+    .map;
+    assert_eq!(
+        map.address_taken.keys().map(|a| a.pc).collect::<Vec<_>>(),
+        [GuestAddr(f)]
+    );
+    assert_eq!(
+        open_sites(
+            &map,
+            &image,
+            Scope::DeclaredStaticImagesGuardedRamAddressTaken
+        ),
+        0
+    );
+}
+
+#[test]
 fn a_constant_built_across_blocks_is_address_taken() {
     // GCC schedules the `lui` into a branch delay slot and the `addiu` into
     // the branch target's block (ADR-0182)
