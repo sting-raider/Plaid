@@ -8,7 +8,8 @@ Steps, each a plain `plaid` command whose output stays in target/native/<name>:
   identify       libultra functions the host runtime replaces
   discover       with the ROM's relocatable overlays when it has a file table
   solve          the address-taken scope must be CLOSED, else nothing is built
-                 when OPEN, harvest missing images with pinned ares and retry
+                 when OPEN, refine copy-call sources, then harvest with pinned
+                 ares and retry; each candidate still needs native byte binding
   lower-map      16 parts, compiled in parallel with gcc
   rsp-from-rom   derive and lower candidate microcode from ROM image pointers
   snapshots      oracle-only; never loaded by the default build
@@ -45,6 +46,22 @@ def run(*args, **kw):
 
 def plaid(*args, **kw):
     return run(ROOT / 'target/release/plaid', *args, **kw)
+
+
+def discover_map(arguments, overlay_support):
+    """File-table presence is immutable across refinements of the same ROM."""
+    if overlay_support is False:
+        plaid(*arguments)
+        return False
+    tried = subprocess.run([str(ROOT / 'target/release/plaid'), *map(str, arguments), '--overlays'],
+                           cwd=ROOT, capture_output=True, text=True)
+    if tried.returncode != 0:
+        if 'file table' not in tried.stderr:
+            sys.exit(tried.stderr)
+        plaid(*arguments)
+        return False
+    print(tried.stdout.strip().splitlines()[-1])
+    return True
 
 
 def compile_source(source, flags, dependencies, compiler):
@@ -114,23 +131,21 @@ def main():
     # the main image ends where the entry stub's BSS clear begins; else IPL3's 1 MiB
     window = [rom, '0x1000', entry, hex(info.get('boot_image_size') or 0x100000)]
     m = out / 'map.json'
+    overlay_support = None
     for attempt in range(8):
         # A ROM with no file table and no reset stub has no loads to declare.
         with_loads = ['--loads', loads] if json.loads(loads.read_text())['loads'] else []
         with open(out / 'id.json', 'w') as f:
             plaid('identify', *window, SIGNATURES, *with_loads, stdout=f)
         discover = ['discover', *window, entry, m, out / 'id.json', *with_loads, '--address-taken', '--fr0']
-        tried = subprocess.run([str(ROOT / 'target/release/plaid'), *map(str, discover), '--overlays'],
-                               cwd=ROOT, capture_output=True, text=True)
-        if tried.returncode != 0:
-            if 'file table' not in tried.stderr:
-                sys.exit(tried.stderr)
-            plaid(*discover)  # no file table, so no overlay catalog
-        else:
-            print(tried.stdout.strip().splitlines()[-1])
+        overlay_support = discover_map(discover, overlay_support)
         verdict = json.loads(plaid('solve', rom, m, '--address-taken', capture_output=True, text=True).stdout)
         if verdict['status'] == 'closed' or a.loads or attempt == 7:
             break
+        previous_loads = loads.read_bytes()
+        plaid('infer-call-loads', rom, m, loads)
+        if loads.read_bytes() != previous_loads:
+            continue
         print('solve', verdict['status'], len(verdict['blockers']), 'blockers; analysis-time boot harvest', flush=True)
         if not harvest(rom, loads, m, info, out / f'boot-harvest-{attempt}.json'):
             break
