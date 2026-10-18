@@ -824,7 +824,7 @@ fn run() -> Result<(), String> {
             output,
             runtime @ ..,
         ] if command == "discover" && runtime.len() <= 1 => {
-            let (runtime, evidence, reference_named, status_globals) =
+            let (runtime, evidence, reference_named, status_globals, eeprom_timers) =
                 runtime_declarations(runtime.first())?;
             let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
             let range = GuestRange {
@@ -979,6 +979,7 @@ fn run() -> Result<(), String> {
                 d.map.load_images.insert(image.base.image.clone(), spec);
             }
             bind_status_globals(&mut d.map, &status_globals)?;
+            bind_eeprom_timers(&mut d.map, &eeprom_timers);
             // names only a reference map gives carry their own evidence, so the
             // solver can list them (ADR-0171)
             if let Some((id, evidence)) = &evidence
@@ -1147,7 +1148,8 @@ fn run() -> Result<(), String> {
         [command, image_path, base, entry, exit, output, runtime @ ..]
             if command == "lower-c" && runtime.len() <= 1 =>
         {
-            let (runtime, evidence, _, status_globals) = runtime_declarations(runtime.first())?;
+            let (runtime, evidence, _, status_globals, eeprom_timers) =
+                runtime_declarations(runtime.first())?;
             // Synthetic-only native slice (ADR-0126): raw big-endian words at `base`.
             let bytes = fs::read(image_path).map_err(|e| e.to_string())?;
             let image = CodeImage {
@@ -1206,6 +1208,7 @@ fn run() -> Result<(), String> {
                 d.map.load_images.insert(code.base.image.clone(), spec);
             }
             bind_status_globals(&mut d.map, &status_globals)?;
+            bind_eeprom_timers(&mut d.map, &eeprom_timers);
             d.map.cop1_fr0 = fr0;
             let c = plaid_lower::lower_c_with_preload(
                 &d.map,
@@ -1538,6 +1541,7 @@ type RuntimeDeclarations = (
     Option<(String, Evidence)>,
     BTreeSet<String>,
     BTreeMap<GuestAddr, GuestAddr>,
+    BTreeMap<GuestAddr, (GuestAddr, GuestAddr)>,
 );
 
 /// Read a `plaid-runtime-functions-v0` declaration (ADR-0129): host-provided
@@ -1663,7 +1667,13 @@ fn overlay_evidence_of(catalog: &[plaid_core::overlays::Overlay]) -> Evidence {
 
 fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, String> {
     let Some(path) = path else {
-        return Ok((Vec::new(), None, BTreeSet::new(), BTreeMap::new()));
+        return Ok((
+            Vec::new(),
+            None,
+            BTreeSet::new(),
+            BTreeMap::new(),
+            BTreeMap::new(),
+        ));
     };
     let bytes = fs::read(path).map_err(|e| e.to_string())?;
     let doc: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
@@ -1676,6 +1686,7 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
     let mut functions = Vec::new();
     let mut reference_named = BTreeSet::new();
     let mut status_globals = BTreeMap::new();
+    let mut eeprom_timers = BTreeMap::new();
     for f in doc["functions"]
         .as_array()
         .ok_or("runtime declarations need a functions array")?
@@ -1701,6 +1712,17 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
             if status_globals.insert(entry, GuestAddr(global)).is_some() {
                 return Err("duplicate Status global declaration".into());
             }
+        }
+        if name == "osContInit"
+            && let (Some(queue), Some(message)) = (
+                f["data_bindings"]["__osEepromTimerQ"].as_str(),
+                f["data_bindings"]["__osEepromTimerMsg"].as_str(),
+            )
+        {
+            eeprom_timers.insert(
+                GuestAddr(number32(entry)?),
+                (GuestAddr(number32(queue)?), GuestAddr(number32(message)?)),
+            );
         }
         for r in f["callbacks"].as_array().into_iter().flatten() {
             let register = match r.as_str() {
@@ -1737,7 +1759,15 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
         Some((format!("runtime:{hash}"), evidence)),
         reference_named,
         status_globals,
+        eeprom_timers,
     ))
+}
+
+/// The queue libultra's osContInit creates (ADR-0196).
+fn bind_eeprom_timers(map: &mut ProgramMap, timers: &BTreeMap<GuestAddr, (GuestAddr, GuestAddr)>) {
+    for (address, function) in &mut map.runtime_functions {
+        function.eeprom_timer = timers.get(&address.pc).copied();
+    }
 }
 
 fn bind_status_globals(

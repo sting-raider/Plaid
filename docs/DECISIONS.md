@@ -5772,3 +5772,36 @@ Tests: the synthetic ares fixture records 8 KiB of SP memory at the entry
 fetch, identical whether the run stops there or continues; the runtime test
 starts DMEM/IMEM from a declared state rather than ROM 0x40-0xfff. No
 upstream implementation or game code was copied.
+
+## ADR-0196: osContInit creates the EEPROM timer queue
+
+Status: accepted. Milestone 5.
+
+libultra's osContInit ends with osCreateMesgQueue(&__osEepromTimerQ,
+&__osEepromTimerMsg, 1); osEepromLongWrite waits on that queue for 12 ms
+after each block. The runtime's osContInit omitted it, so BK's first EEPROM
+write (blank save) armed a timer on an all-zero queue: the expiry send found
+msgCount 0, was dropped, and the main thread blocked forever. Only the idle
+thread and audio then ran; no graphics task was issued. Pinned ares with a
+512-byte EEPROM attached shows BK's own osContInit creating 802847b8 with
+message 802847d0 at VI 137, eight completed write delays at VI 143-150 and
+the first graphics task at VI 175. The analysis harness attaches no EEPROM,
+so its BK runs skip the save path; that harness difference is not a model
+input.
+
+Identification binds __osEepromTimerQ in most libultra variants only through
+a split pair: lui a0; lui a1; addiu a1; addiu a0. ADR-0194 bindings now accept
+a pair split by up to seven instructions when the LUI is not in a delay slot,
+nothing between writes its register or transfers control, and no transfer in
+the function (including a register jump other than jr ra) can enter the
+window. A ProgramMap runtime function carries the optional eeprom_timer
+(queue, message) for osContInit only; lowering calls
+plaid_rt_osContInit_eeprom, which creates the queue once. Variants whose
+osContInit does not reference the queue get no binding and no creation. A
+variant that references it in a form the binding still refuses would keep the
+old omission; it is not detected.
+
+Tests: split-pair acceptance plus clobber, inner branch, entering branch and
+delay-slot refusals; the controller-policy fixture creates the queue from
+declared bindings and a non-blocking send succeeds, while the unbound build
+leaves it invalid. No upstream implementation or game code was copied.
