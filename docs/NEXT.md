@@ -1,10 +1,21 @@
 # Next
 
+## Continue Paper Mario ROM-only closure
+
+The user selected Paper Mario. Section descriptors and cache SDK identities
+reduce its frontier to OPEN/142, with 45,140 blocks and 21 loads. Next recover
+the heap-shim/world-partner loads behind its three missing targets. Model the
+E000 effects' ROM sources, TLB page bindings and mapping lifetime before closing
+their 125 function-table tail dispatches; ten indexed dispatches also remain.
+Preserve the CLOSED gate and existing native controls. See
+research/paper-mario-native-frontier.md. No Paper Mario native run is accepted.
+
 ## Extend automatic coverage beyond the current native games
 
-The fresh five-ROM sweep remains OPEN. Start with Mario Kart 64's four missing
-code targets: establish their source/load path and bounds, then add a general
-recognizer and synthetic regressions. GoldenEye requires boot COP0/TLB mapping
+The fresh five-ROM sweep remains OPEN. After Paper Mario, investigate Mario
+Kart 64's four missing code targets: establish their source/load path and bounds,
+then add a general recognizer and synthetic regressions. GoldenEye requires
+boot COP0/TLB mapping
 evidence; Paper Mario and Star Fox require broader executable image coverage;
 Rogue Squadron requires qualified pointer-table provenance. The retained
 results are in research/remaining-roms-20261018.md. Preserve the CLOSED gate

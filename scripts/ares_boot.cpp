@@ -16,6 +16,7 @@ static u32 boot;
 static std::set<u32> targets;
 static u64 steps = 0;
 static FILE* result;
+static bool exactMany = false;
 static std::vector<std::array<u32, 3>> dma;
 static std::vector<u8> sp; // DMEM then IMEM at the first entry fetch
 static std::vector<u8> ram_prefix; // IPL3's vector/boot-parameter area, before game entry
@@ -78,13 +79,17 @@ static void observe(u64 address, u32 word) {
     std::fprintf(result, "],\"bytes\":[");
     for(u32 a = lo; a < hi; a++) std::fprintf(result, "%s%u", a == lo ? "" : ",", (u32)rdram.ram.read<Byte>(a, RBusDevice::ARES_DEBUGGER));
     std::fprintf(result, "]}\n");
-    for(auto it = targets.begin(); it != targets.end();) {
-      if(*it >= (0x80000000u | lo) && *it < (0x80000000u | hi)) it = targets.erase(it);
-      else ++it;
+    if(!exactMany) {
+      for(auto it = targets.begin(); it != targets.end();) {
+        if(*it >= (0x80000000u | lo) && *it < (0x80000000u | hi)) it = targets.erase(it);
+        else ++it;
+      }
     }
 }
 int main(int argc, char** argv) {
-  if(argc != 8) return 2;
+  if(argc != 8 && argc != 9) return 2;
+  if(argc == 9 && std::strcmp(argv[8], "exact-many") != 0) return 2;
+  exactMany = argc == 9;
   auto bytes = nall::file::read(argv[1]);
   auto firmware = nall::file::read(argv[2]);
   boot = std::strtoul(argv[3], nullptr, 0);

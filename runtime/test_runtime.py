@@ -609,6 +609,8 @@ def main():
     test_status.run(exe, cc, sys.modules[__name__])
     import test_cache_writeback
     test_cache_writeback.run(exe, cc, sys.modules[__name__])
+    import test_cache_ranges
+    test_cache_ranges.run(exe, cc, sys.modules[__name__])
     import test_controller_policy
     test_controller_policy.run(exe, cc, sys.modules[__name__])
     import test_vi_dp

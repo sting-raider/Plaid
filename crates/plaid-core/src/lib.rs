@@ -78,6 +78,7 @@ pub mod root_provenance;
 pub mod rsp_cpu_imem;
 pub mod rsp_cpu_tlb;
 pub mod rsp_rom;
+pub mod segments;
 pub mod signatures;
 pub mod software_interrupt;
 pub mod solver;

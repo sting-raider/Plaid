@@ -62,9 +62,12 @@ def main():
         source, output = directory / 'fixture.z64', directory / 'capture.json'
         source.write_bytes(rom)
 
-        def run(target, budget):
-            subprocess.run([str(exe), str(source), str(firmware), '0x80000400', target,
-                            str(budget), 'fixture', str(output)], check=True, timeout=30)
+        def run(target, budget, exact=False):
+            command = [str(exe), str(source), str(firmware), '0x80000400', target,
+                       str(budget), 'fixture', str(output)]
+            if exact:
+                command.append('exact-many')
+            subprocess.run(command, check=True, timeout=30)
             return output.read_bytes()
 
         first = run('0x80001000', 1000)
@@ -106,6 +109,51 @@ def main():
                 raise AssertionError('synthetic IPL3 was accepted for reset boot')
             except ValueError as error:
                 assert str(error) == 'unsupported IPL3 CRC32 e8b8467d; no guessed CIC', str(error)
+
+        # Exact batching must retain each first-fetch state when one entry
+        # mutates another entry in the same produced range. The legacy batch
+        # behavior still treats the first harvested range as covering both.
+        words = [
+            0x3c08a000, 0x35081000,       # t0 = KSEG1 0x1000
+            0x3c09ad09, 0x35290020,       # t1 = sw t1,0x20(t0)
+            0xad090000,                   # initial target1 word
+            0x3c092402, 0x3529002a,       # t1 = addiu v0,zero,42 (mutation value)
+            0x3c0a0320, 0x354a0008,       # t2 = jr t9
+            0xad0a0004,                   # initial word at 0x1004
+            0xad000008, 0xad00000c, 0xad000010, 0xad000014,
+            0xad000018, 0xad00001c,       # fill the contiguous produced range
+            0x3c0b2402, 0x356b0001,       # t3 = initial target2 word
+            0xad0b0020,                   # initial word at 0x1020
+            0x3c198000, 0x37391020,       # t9 = KSEG0 0x1020
+            0x3c188000, 0x37181000,       # t8 = KSEG0 0x1000
+            0x03000008, 0,                # jump to first target
+            0xad090020,                   # target1 writes target2 after its fetch
+            0x03200008, 0,                # jump to target2
+        ]
+        rom[0x1000:0x1000 + 4 * len(words)] = struct.pack(f'>{len(words)}I', *words)
+        source.write_bytes(rom)
+
+        legacy = [json.loads(line) for line in run('0x80001000,0x80001020', 1000).splitlines()]
+        assert [row['entry'] for row in legacy if 'bytes' in row] == [0x80001000], legacy
+        assert legacy[-1]['remaining'] == 0, legacy[-1]
+
+        batched = [json.loads(line) for line in run('0x80001000,0x80001020', 1000, exact=True).splitlines()]
+        first_capture, second_capture = [row for row in batched if 'bytes' in row]
+        assert [first_capture['entry'], second_capture['entry']] == [0x80001000, 0x80001020], batched
+        independent_first = [json.loads(line) for line in run('0x80001000', 1000, exact=True).splitlines()][0]
+        independent_second = [json.loads(line) for line in run('0x80001020', 1000, exact=True).splitlines()][0]
+
+        def first_fetch_identity(row):
+            import hashlib
+            return (row['entry'], row['destination'], row['steps'], row['cpu_writes'],
+                    row['pi_dma'], row['bytes'], hashlib.sha256(bytes(row['bytes'])).hexdigest())
+
+        assert first_fetch_identity(first_capture) == first_fetch_identity(independent_first)
+        assert first_fetch_identity(second_capture) == first_fetch_identity(independent_second)
+        assert first_capture['steps'] < second_capture['steps'], (first_capture['steps'], second_capture['steps'])
+        assert first_capture['bytes'][0x20:0x24] == [0x24, 0x02, 0x00, 0x01], first_capture['bytes'][0x20:0x24]
+        assert second_capture['bytes'][0x20:0x24] == [0x24, 0x02, 0x00, 0x2a], second_capture['bytes'][0x20:0x24]
+        assert batched[-1]['remaining'] == 0, batched[-1]
     print('PASS ares harvest: deterministic synthetic text, exact RAM/PC/CPU-write ranges, SP memory at entry, budget refusal (declared post-IPL fixture)')
 
     # A recovered range can overlap known images. Only missing components are

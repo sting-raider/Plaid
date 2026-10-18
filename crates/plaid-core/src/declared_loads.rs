@@ -25,6 +25,11 @@ pub enum LoadEncoding {
         end: RomOffset,
         text_size: u32,
     },
+    /// Raw section descriptor; the text extent is rechecked during decoding.
+    Segment {
+        descriptor: RomOffset,
+        text_size: u32,
+    },
     /// Re-execute the bounded ROM-only boot transformation; no snapshot input.
     Boot,
     /// Pinned ares reset boot; the payload selects the first fetched target.
@@ -60,9 +65,10 @@ impl DeclaredLoad {
     /// `bytes`: a slot alternate's synthesized one, else the Zelda64 trailer.
     pub fn layout(&self, bytes: &[u8]) -> Result<crate::overlays::Layout, String> {
         match (self.linked, self.encoding) {
-            (Some(_), LoadEncoding::RarePair { text_size, .. }) => {
-                crate::overlays::slot_layout_bounded(bytes, self.destination.start.0, text_size)
-            }
+            (
+                Some(_),
+                LoadEncoding::RarePair { text_size, .. } | LoadEncoding::Segment { text_size, .. },
+            ) => crate::overlays::slot_layout_bounded(bytes, self.destination.start.0, text_size),
             (Some(_), _) => Ok(crate::overlays::slot_layout(
                 bytes,
                 self.destination.start.0,
@@ -81,7 +87,8 @@ pub fn slot_targets(loads: &[DeclaredLoad], target: u32) -> Vec<u32> {
         .filter_map(|l| {
             let off = target.wrapping_sub(l.linked?.0);
             let size = match l.encoding {
-                LoadEncoding::RarePair { text_size, .. } => text_size,
+                LoadEncoding::RarePair { text_size, .. }
+                | LoadEncoding::Segment { text_size, .. } => text_size,
                 _ => l.destination.size,
             };
             (off < size).then(|| l.destination.start.0 + off)
@@ -221,6 +228,21 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
             }
             data
         }
+        LoadEncoding::Segment {
+            descriptor,
+            text_size,
+        } => {
+            let record = crate::segments::read(bytes, descriptor)?;
+            if !load.relocatable
+                || load.linked != Some(record.linked)
+                || record.source as usize != start
+                || (record.end - record.source) as usize != size
+                || record.text != text_size
+            {
+                return Err("segment load differs from its source descriptor".into());
+            }
+            bytes[start..start + size].to_vec()
+        }
         LoadEncoding::Boot => {
             if start != 0 || load.relocatable || load.linked.is_some() {
                 return Err(
@@ -267,7 +289,7 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
             return Err("a slot alternate runs only through a binding".into());
         }
         let layout = match load.encoding {
-            LoadEncoding::RarePair { text_size, .. } => {
+            LoadEncoding::RarePair { text_size, .. } | LoadEncoding::Segment { text_size, .. } => {
                 crate::overlays::slot_layout_bounded(&data, linked.0, text_size)?
             }
             _ => crate::overlays::slot_layout(&data, linked.0),
@@ -314,6 +336,18 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
             return Err("declared loads overlap or are out of destination order".into());
         }
         previous_end = load.destination.end();
+    }
+    let ares_entries: std::collections::BTreeSet<_> = spec
+        .loads
+        .iter()
+        .filter_map(|load| match load.encoding {
+            LoadEncoding::AresBoot { entry } => Some(entry.0),
+            _ => None,
+        })
+        .collect();
+    if !ares_entries.is_empty() {
+        let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
+        crate::ares_boot::execute_many(&rom, &ares_entries.iter().copied().collect::<Vec<_>>())?;
     }
     // The composite spans the base and every load; bytes no load or base
     // window supplies are holes (ADR-0150), never code or table bytes.
@@ -373,6 +407,74 @@ mod tests {
             relocatable: false,
             linked: None,
         }
+    }
+
+    #[test]
+    fn section_descriptor_bounds_text_and_rejects_changed_declarations() {
+        let mut rom = vec![0; 0x2100];
+        let fields: [u32; 12] = [
+            0x2000,
+            0x2100,
+            0x8010_0000,
+            0x8010_0000,
+            0x8010_0080,
+            0x8010_0080,
+            0x8010_0100,
+            0x8010_0100,
+            0x8010_0120,
+            0,
+            0,
+            0,
+        ];
+        for (n, word) in fields.into_iter().enumerate() {
+            rom[0x1000 + 4 * n..0x1004 + 4 * n].copy_from_slice(&word.to_be_bytes());
+        }
+        // Text and data both look like code: only the format owns the boundary.
+        for bytes in rom[0x2000..].as_chunks_mut::<4>().0 {
+            bytes.copy_from_slice(&0x2402_0007u32.to_be_bytes());
+        }
+        let mut alternate = load(
+            0x8080_0000,
+            0x2000,
+            0x100,
+            LoadEncoding::Segment {
+                descriptor: RomOffset(0x1000),
+                text_size: 0x80,
+            },
+        );
+        alternate.relocatable = true;
+        alternate.linked = Some(GuestAddr(0x8010_0000));
+        let data = decoded(&rom, &alternate).unwrap();
+        assert_eq!(alternate.layout(&data).unwrap().text, 0x80);
+        assert_eq!(
+            slot_targets(&[alternate.clone()], 0x8010_007c),
+            [0x8080_007c]
+        );
+        assert!(slot_targets(&[alternate.clone()], 0x8010_0080).is_empty());
+        for change in 0..6 {
+            let mut changed = alternate.clone();
+            match change {
+                0 => changed.source.0 += 4,
+                1 => changed.destination.size -= 4,
+                2 => changed.linked = Some(GuestAddr(0x8010_0004)),
+                3 => changed.relocatable = false,
+                4 => {
+                    changed.encoding = LoadEncoding::Segment {
+                        descriptor: RomOffset(0x1004),
+                        text_size: 0x80,
+                    }
+                }
+                _ => {
+                    changed.encoding = LoadEncoding::Segment {
+                        descriptor: RomOffset(0x1000),
+                        text_size: 0x84,
+                    }
+                }
+            }
+            assert!(decoded(&rom, &changed).is_err(), "changed field {change}");
+        }
+        rom[0x1010..0x1014].copy_from_slice(&0x8010_0084u32.to_be_bytes());
+        assert!(decoded(&rom, &alternate).is_err());
     }
 
     #[test]

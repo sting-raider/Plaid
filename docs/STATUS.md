@@ -1,5 +1,16 @@
 # Status
 
+## Paper Mario closure work (ADR-0202/0203)
+
+The selected next ROM remains scoped OPEN, reduced from 164 to 142 blockers:
+45,140 blocks and 21 inferred loads. ROM-derived section descriptors recover
+pause/file-menu code, and exact SDK-body identities cover three cache routines.
+Native emission is still refused: three missing targets and 135 indirect
+dispatch sites remain. E000 effects need a verified TLB-backed load/binding
+model. Exact-entry batching cuts the three-entry replay from 15.292 to 7.557 s
+with identical capture contents and provenance. See
+research/paper-mario-native-frontier.md for evidence, tests and limits.
+
 ## Remaining-ROM automatic pipeline sweep (2026-10-18)
 
 The five additional local ROMs remain scoped OPEN at production commit
