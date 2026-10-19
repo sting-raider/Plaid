@@ -69,6 +69,27 @@ pub fn ra_calls(map: &ProgramMap, image: &CodeImage) -> Vec<(CodeAddress, CodeAd
         }
     }
     calls
+        .into_iter()
+        .flat_map(|(site, target)| {
+            let copies = if target.image != image.base.image
+                || target.generation != image.base.generation
+                || image.instruction_word(target.pc).is_some()
+            {
+                vec![target.pc.0]
+            } else {
+                image.slot_copies(target.pc.0)
+            };
+            copies.into_iter().map(move |pc| {
+                (
+                    site.clone(),
+                    CodeAddress {
+                        pc: GuestAddr(pc),
+                        ..target.clone()
+                    },
+                )
+            })
+        })
+        .collect()
 }
 
 /// Intra-function successors of every block start: non-call direct edges and
@@ -118,6 +139,14 @@ fn body_from(
     succ: &BTreeMap<CodeAddress, Vec<CodeAddress>>,
     entry: &CodeAddress,
 ) -> BTreeSet<CodeAddress> {
+    body_within(succ, entry, |_| true)
+}
+
+fn body_within(
+    succ: &BTreeMap<CodeAddress, Vec<CodeAddress>>,
+    entry: &CodeAddress,
+    accepts: impl Fn(&CodeAddress) -> bool,
+) -> BTreeSet<CodeAddress> {
     let mut body = BTreeSet::new();
     let mut pending = vec![entry.clone()];
     while let Some(start) = pending.pop() {
@@ -125,7 +154,7 @@ fn body_from(
             continue;
         };
         if body.insert(start) {
-            pending.extend(next.iter().cloned());
+            pending.extend(next.iter().filter(|a| accepts(a)).cloned());
         }
     }
     body
@@ -150,6 +179,28 @@ pub fn function_bodies<'a>(
     entries
         .into_iter()
         .map(|e| (e.clone(), body_from(&succ, e)))
+        .collect()
+}
+
+/// Native function bodies stop at a binding boundary: a tail into another
+/// content-bound image enters that image's native wrapper instead. Return
+/// closure still uses the unrestricted graph to propagate continuations.
+pub fn function_bodies_partitioned<'a>(
+    map: &ProgramMap,
+    image: &CodeImage,
+    entries: impl IntoIterator<Item = &'a CodeAddress>,
+    partition: impl Fn(&CodeAddress) -> Option<usize>,
+) -> BTreeMap<CodeAddress, BTreeSet<CodeAddress>> {
+    let succ = successors(map, image);
+    entries
+        .into_iter()
+        .map(|entry| {
+            let region = partition(entry);
+            (
+                entry.clone(),
+                body_within(&succ, entry, |target| partition(target) == region),
+            )
+        })
         .collect()
 }
 

@@ -2,13 +2,13 @@
 
 ## Continue Paper Mario ROM-only closure
 
-The user selected Paper Mario. General copy-source refinement resolves its
-three missing targets; the frontier is OPEN/136 with 47,892 blocks and 34 loads.
-Next model the
-E000 effects' ROM sources, TLB page bindings and mapping lifetime before closing
-their 125 function-table tail dispatches; eleven indexed dispatches also remain.
-Preserve the CLOSED gate and existing native controls. See
-research/paper-mario-native-frontier.md. No Paper Mario native run is accepted.
+The user selected Paper Mario. The frontier is OPEN/18 with 55,666 blocks and
+162 loads after ROM-only TLB effect/bridge source inference and guarded tail
+cells. Finish the remaining bounded indexed dispatch proofs, including
+precomputed table addresses, loop guards and constant variable shifts. Recover
+any missing data provenance through general loader/initialization analysis.
+Preserve the CLOSED gate, mapped-code byte/generation/pin checks, and existing
+native controls. No Paper Mario native run is accepted.
 
 ## Extend automatic coverage beyond the current native games
 

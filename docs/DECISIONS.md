@@ -6090,3 +6090,18 @@ replaying boot loads for the same failed overlay probe. Successful overlay
 discovery still inspects each rebuilt image; other failures still stop the
 builder. A controlled round improves from 60.517 to 55.778 seconds with an
 identical serialized map; the receipt records the hash and scope.
+
+## ADR-0205: unchanged TLB executable sources and guarded tail cells
+
+Keep raw mapped executable bytes unchanged in compact analysis slots; derive
+J/JAL regions from architectural virtual PCs. Native bindings retain separate
+virtual and physical deltas, winning TLB entry and monotonically advanced
+generation. Inactive mapping/code changes revoke; changes affecting active
+frames fail before mutation. Bind/protect source cells that justify finite tail
+dispatch, without freezing unrelated data. Infer source candidates from bounded
+indexed mapping/copy consumers, including sparse records; resource budgets are
+not index or universe proofs. Native CFG bodies stop at binding boundaries while
+return analysis propagates continuations through tails. Pinned ares supplies
+semantic/reference behavior; no reference code or game code/assets were copied.
+Paper Mario remains OPEN/18 and unaccepted. See
+research/native-tlb-executable-bindings.md for evidence and limits.

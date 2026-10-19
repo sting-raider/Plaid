@@ -330,6 +330,7 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
         out.indirect_sites.insert(site);
     }
     out = crate::tables::analyze(&out, image)?;
+    out = crate::tail_cells::analyze(&out, image)?;
     // New candidate edges may themselves enter a prefix and break dominance.
     let index = MapIndex::new(&out);
     let sites = out
@@ -361,7 +362,9 @@ pub fn verify_static_in(
     image: &CodeImage,
     site: &IndirectSite,
 ) -> bool {
-    verify_constant_in(index, map, image, site) || crate::tables::verify_in(index, map, image, site)
+    verify_constant_in(index, map, image, site)
+        || crate::tables::verify_in(index, map, image, site)
+        || crate::tail_cells::verify_in(index, map, image, site)
 }
 
 /// Recompute the certificate using current CFG and bytes; producer labels alone

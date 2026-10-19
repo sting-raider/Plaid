@@ -837,8 +837,10 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         // A verified jump table closes only under the guarded scope, whose
         // native artifact store-protects table bytes (ADR-0132).
         let table = scope.guarded()
-            && source(images, &site.site)
-                .is_some_and(|image| crate::tables::verify_in(&index, map, image, site));
+            && source(images, &site.site).is_some_and(|image| {
+                crate::tables::verify_in(&index, map, image, site)
+                    || crate::tail_cells::verify_in(&index, map, image, site)
+            });
         if table {
             tables.insert(site.site.clone());
         }

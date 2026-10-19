@@ -117,7 +117,7 @@ fn cpu_code(image: &CodeImage, pc: GuestAddr) -> bool {
             return false;
         }
         let target = if i.is_jump_with_address() {
-            Some((at.wrapping_add(4) & 0xf000_0000) | ((w & 0x03ff_ffff) << 2))
+            Some(image.jump_target(GuestAddr(at), w).0)
         } else if i.is_branch() {
             Some(
                 at.wrapping_add(4)

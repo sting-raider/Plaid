@@ -19,6 +19,11 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum LoadEncoding {
     Raw,
+    /// Unmodified raw bytes executed at a TLB-translated virtual link.
+    /// Storage placement is analysis-only; no relocation is applied.
+    TlbRaw {
+        text_size: u32,
+    },
     Yaz0,
     /// Two adjacent 1172 streams: text followed by data, bounded by the catalog.
     RarePair {
@@ -65,6 +70,31 @@ impl DeclaredLoad {
     /// `bytes`: a slot alternate's synthesized one, else the Zelda64 trailer.
     pub fn layout(&self, bytes: &[u8]) -> Result<crate::overlays::Layout, String> {
         match (self.linked, self.encoding) {
+            (Some(linked), LoadEncoding::TlbRaw { text_size }) => {
+                if (0x8000_0000..0xc000_0000).contains(&linked.0)
+                    || !self.relocatable
+                    || !linked.0.is_multiple_of(4)
+                    || u64::from(linked.0) + bytes.len() as u64 > 0x1_0000_0000
+                    || linked.0 < 0x8000_0000
+                        && u64::from(linked.0) + bytes.len() as u64 > 0x8000_0000
+                    || text_size == 0
+                    || !text_size.is_multiple_of(4)
+                    || text_size as usize > bytes.len()
+                {
+                    return Err("TLB raw load needs bounded text and a mapped virtual link".into());
+                }
+                Ok(crate::overlays::Layout {
+                    text: text_size,
+                    data: bytes.len() as u32 - text_size,
+                    rodata: 0,
+                    bss: 0,
+                    file_size: bytes.len() as u32,
+                    relocations: Vec::new(),
+                })
+            }
+            (None, LoadEncoding::TlbRaw { .. }) => {
+                Err("TLB raw load requires a content-bound slot".into())
+            }
             (
                 Some(_),
                 LoadEncoding::RarePair { text_size, .. } | LoadEncoding::Segment { text_size, .. },
@@ -88,7 +118,8 @@ pub fn slot_targets(loads: &[DeclaredLoad], target: u32) -> Vec<u32> {
             let off = target.wrapping_sub(l.linked?.0);
             let size = match l.encoding {
                 LoadEncoding::RarePair { text_size, .. }
-                | LoadEncoding::Segment { text_size, .. } => text_size,
+                | LoadEncoding::Segment { text_size, .. }
+                | LoadEncoding::TlbRaw { text_size } => text_size,
                 _ => l.destination.size,
             };
             (off < size).then(|| l.destination.start.0 + off)
@@ -213,7 +244,7 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
     let start = usize::try_from(load.source.0).map_err(|_| "load source too large")?;
     let size = load.destination.size as usize;
     let data = match load.encoding {
-        LoadEncoding::Raw => bytes
+        LoadEncoding::Raw | LoadEncoding::TlbRaw { .. } => bytes
             .get(start..start.checked_add(size).ok_or("load source overflow")?)
             .ok_or("load source outside the ROM")?
             .to_vec(),
@@ -288,6 +319,10 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
         if !load.relocatable {
             return Err("a slot alternate runs only through a binding".into());
         }
+        if matches!(load.encoding, LoadEncoding::TlbRaw { .. }) {
+            load.layout(&data)?;
+            return Ok(data);
+        }
         let layout = match load.encoding {
             LoadEncoding::RarePair { text_size, .. } | LoadEncoding::Segment { text_size, .. } => {
                 crate::overlays::slot_layout_bounded(&data, linked.0, text_size)?
@@ -295,6 +330,9 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
             _ => crate::overlays::slot_layout(&data, linked.0),
         };
         return layout.apply(&data, linked.0, load.destination.start.0);
+    }
+    if matches!(load.encoding, LoadEncoding::TlbRaw { .. }) {
+        return Err("TLB raw load requires a content-bound slot".into());
     }
     Ok(data)
 }

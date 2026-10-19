@@ -1607,6 +1607,9 @@ fn load_declarations(
         };
         let encoding = match l["encoding"].as_str() {
             Some("raw") => LoadEncoding::Raw,
+            Some("tlb_raw") => LoadEncoding::TlbRaw {
+                text_size: u32::try_from(field("text_size")?).map_err(|e| e.to_string())?,
+            },
             Some("yaz0") => LoadEncoding::Yaz0,
             Some("rare_pair") => LoadEncoding::RarePair {
                 end: RomOffset(field("rom_end")?),
@@ -1622,7 +1625,8 @@ fn load_declarations(
             },
             _ => {
                 return Err(
-                    "load encoding is raw, yaz0, rare_pair, segment, boot or ares_boot".into(),
+                    "load encoding is raw, tlb_raw, yaz0, rare_pair, segment, boot or ares_boot"
+                        .into(),
                 );
             }
         };
