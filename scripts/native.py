@@ -122,7 +122,9 @@ def main():
     for d in (out, texts):
         d.mkdir(parents=True, exist_ok=True)
 
-    run('cargo', 'build', '-q', '--release', '-p', 'plaid')
+    build_env = os.environ.copy()
+    build_env.setdefault('CARGO_PROFILE_RELEASE_INCREMENTAL', 'true')
+    run('cargo', 'build', '-q', '--release', '-p', 'plaid', env=build_env)
     info = json.loads(plaid('rom-info', rom, capture_output=True, text=True).stdout)
     entry = info['header']['boot_address']  # the header entry, less a CIC-6103/6106 offset
     loads = a.loads.resolve() if a.loads else out / 'loads.json'

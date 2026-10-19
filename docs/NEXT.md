@@ -2,11 +2,12 @@
 
 ## Continue Paper Mario ROM-only closure
 
-The user selected Paper Mario. The frontier is OPEN/18 with 55,666 blocks and
+The user selected Paper Mario. The frontier is OPEN/17 with 56,495 blocks and
 162 loads after ROM-only TLB effect/bridge source inference and guarded tail
-cells. Finish the remaining bounded indexed dispatch proofs, including
-precomputed table addresses, loop guards and constant variable shifts. Recover
-any missing data provenance through general loader/initialization analysis.
+cells and scheduled pointer/constant-SLLV proofs. Finish the remaining bounded
+indexed dispatch proofs, including loop-preheader base/pointer invariants,
+matching index values and preservation through calls. The previous 18 table
+extents all have qualified ROM-backed bytes; retain source-bound snapshots.
 Preserve the CLOSED gate, mapped-code byte/generation/pin checks, and existing
 native controls. No Paper Mario native run is accepted.
 

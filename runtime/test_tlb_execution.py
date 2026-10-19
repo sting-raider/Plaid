@@ -72,11 +72,16 @@ def _fixture(A):
     return raw, labels, one, two
 
 
-def _native_harness(module0, module1, labels):
+def _native_harness(module0, module1, labels, preentry_tamper=False):
     def bytes_c(ws):
         return ','.join(f'0x{byte:02x}' for w in ws for byte in w.to_bytes(4, 'big'))
     def entry_lo(pa):
         return f'(({pa}u >> 6) | (3u << 3) | (1u << 2) | (1u << 1) | 1u)'
+    tamper = f's->ram[0x{P1 + 0x20:08x}u] ^= 1u;' if preentry_tamper else ''
+    rejected = f'''  assert(run_result != 0 && s.fault == 3);
+  assert(find_tlb(&s, 1) < 0);
+  assert(plaid_runtime_write(&s, 0x{P1 + 0x18:08x}u, 4, 0x{PC:08x}u) == 0);
+  return 0;''' if preentry_tamper else ''
 
     return f'''#include <assert.h>
 #include <stdio.h>
@@ -103,16 +108,21 @@ int plaid_rt_map(plaid_state *s) {{
   if (plaid_load(s, s->r[29] + 16, 4, 0x{labels['map']:08x}u, &lo1)) return 1;
   s->r[8] = SX32((u32)lo1);
   plaid_tlb_entry e = {{(u32)s->r[5], (u32)s->r[6], {{(u32)s->r[7], (u32)lo1}}}};
-  return plaid_tlb_write(s, (u32)s->r[4], e, 0x{labels['map']:08x}u);
+  int result = plaid_tlb_write(s, (u32)s->r[4], e, 0x{labels['map']:08x}u);
+  if (!result && (u32)s->r[4] == 1u) {{ {tamper} }}
+  return result;
 }}
 int main(void) {{
   static plaid_state s;
   plaid_tlb_entry e, bad;
+  plaid_tlb_entry before_tlb[32];
+  u64 before_tlb_generation[32];
   u64 generation;
   u32 old_delta, old_backing, old_tlb;
   int k0, k1;
   plaid_load_images(&s); s.r[31] = SX32(0x{EXIT:08x}u);
   int run_result = plaid_run(&s);
+{rejected}
   if (run_result || s.fault) {{ fprintf(stderr, "plaid_run=%d fault=%u pc=%08x fault_pc=%08x\\n", run_result, s.fault, s.pc, s.fault_pc); return 20; }}
   assert(s.pc == 0x{EXIT:08x}u && (u32)s.r[2] == 11);
   assert((u32)s.r[3] == 0xE0000010u);
@@ -120,6 +130,20 @@ int main(void) {{
   assert(k0 >= 0 && k1 >= 0 && s.ovl_active[k0] == 0 && s.ovl_active[k1] == 0);
   binding(&s, k0, 0, 0x{E0:08x}u, 0x{P0:08x}u);
   binding(&s, k1, 1, 0x{E1:08x}u, 0x{P1:08x}u);
+  /* An earlier index cannot shadow another active binding or revoke this inactive one. */
+  memcpy(before_tlb, s.tlb, sizeof before_tlb);
+  memcpy(before_tlb_generation, s.tlb_generation, sizeof before_tlb_generation);
+  u32 before_delta0 = s.ovl_delta[k0], before_backing0 = s.ovl_backing[k0], before_tlb0 = s.ovl_tlb[k0];
+  u32 before_delta1 = s.ovl_delta[k1], before_backing1 = s.ovl_backing[k1], before_tlb1 = s.ovl_tlb[k1];
+  u64 before_ovl_generation0 = s.ovl_generation[k0], before_ovl_generation1 = s.ovl_generation[k1];
+  e = s.tlb[0]; e.hi = 0x{E1:08x}u; s.ovl_active[k1] = 1;
+  assert(plaid_tlb_write(&s, 0, e, 0x{PC:08x}u) == 1 && s.fault == 2);
+  assert(!memcmp(before_tlb, s.tlb, sizeof before_tlb));
+  assert(!memcmp(before_tlb_generation, s.tlb_generation, sizeof before_tlb_generation));
+  assert(s.ovl_ok[k0] && s.ovl_ok[k1] && !s.ovl_active[k0] && s.ovl_active[k1]);
+  assert(s.ovl_delta[k0] == before_delta0 && s.ovl_backing[k0] == before_backing0 && s.ovl_tlb[k0] == before_tlb0 && s.ovl_generation[k0] == before_ovl_generation0);
+  assert(s.ovl_delta[k1] == before_delta1 && s.ovl_backing[k1] == before_backing1 && s.ovl_tlb[k1] == before_tlb1 && s.ovl_generation[k1] == before_ovl_generation1);
+  s.ovl_active[k1] = 0; s.fault = s.fault_pc = 0;
   /* Tail-pointer cells in module data are byte-bound and protected; nearby
      mutable data stays writable. Refusal happens before changing any bytes. */
   assert(s.prot[(0x{P1:08x}u + 0x20u) >> 2] == 255);
@@ -187,11 +211,49 @@ int main(void) {{
   /* Generation overflow is rejected before either the TLB or binding changes. */
   bad = s.tlb[1]; generation = s.ovl_generation[k1];
   old_delta = s.ovl_delta[k1]; old_backing = s.ovl_backing[k1]; old_tlb = s.ovl_tlb[k1];
+  u64 before_single_tlb_generation = s.tlb_generation[1];
   s.tlb_generation[1] = UINT64_MAX;
   assert(plaid_tlb_write(&s, 1, bad, 0x{PC:08x}u) == 1 && s.fault == 1);
   assert(!memcmp(&s.tlb[1], &bad, sizeof bad));
   assert(s.tlb_generation[1] == UINT64_MAX && s.ovl_ok[k1] && s.ovl_generation[k1] == generation);
   assert(s.ovl_delta[k1] == old_delta && s.ovl_backing[k1] == old_backing && s.ovl_tlb[k1] == old_tlb);
+
+  /* Restore both inactive bindings, then make index 31 the late overflow. */
+  s.tlb_generation[1] = before_single_tlb_generation;
+  memcpy(s.ram + 0x{P_ALIAS:08x}u, raw0, sizeof raw0);
+  e = s.tlb[0]; e.hi = 0x{E0:08x}u; e.lo[0] = {entry_lo(P_ALIAS)}; e.lo[1] = {entry_lo(P_ALIAS + 0x1000)};
+  assert(plaid_tlb_write(&s, 0, e, 0x{PC:08x}u) == 0);
+  assert(plaid_link(&s, 0x{E0:08x}u) == plaid_ovls[k0].link);
+  binding(&s, k0, 0, 0x{E0:08x}u, 0x{P_ALIAS:08x}u);
+  assert(s.ovl_ok[k1] && !s.ovl_active[k0] && !s.ovl_active[k1]);
+
+  plaid_tlb_entry before_clear_tlb[32];
+  u64 before_clear_generation[32];
+  u64 before_clear_overlay0 = s.ovl_generation[k0], before_clear_overlay1 = s.ovl_generation[k1];
+  u32 before_clear_delta0 = s.ovl_delta[k0], before_clear_backing0 = s.ovl_backing[k0], before_clear_tlb0 = s.ovl_tlb[k0];
+  u32 before_clear_delta1 = s.ovl_delta[k1], before_clear_backing1 = s.ovl_backing[k1], before_clear_tlb1 = s.ovl_tlb[k1];
+  s.tlb_generation[31] = UINT64_MAX;
+  memcpy(before_clear_tlb, s.tlb, sizeof before_clear_tlb);
+  memcpy(before_clear_generation, s.tlb_generation, sizeof before_clear_generation);
+  for (u32 i = 0; i < 31; i++) assert(s.tlb_generation[i] != UINT64_MAX);
+  assert(s.tlb_generation[31] == UINT64_MAX);
+  s.fault = s.fault_pc = 0;
+  assert(plaid_tlb_clear(&s, 0x{PC:08x}u) == 1 && s.fault == 1);
+  assert(!memcmp(before_clear_tlb, s.tlb, sizeof before_clear_tlb));
+  assert(!memcmp(before_clear_generation, s.tlb_generation, sizeof before_clear_generation));
+  assert(s.ovl_ok[k0] && s.ovl_ok[k1]);
+  assert(s.ovl_generation[k0] == before_clear_overlay0 && s.ovl_generation[k1] == before_clear_overlay1);
+  assert(s.ovl_delta[k0] == before_clear_delta0 && s.ovl_backing[k0] == before_clear_backing0 && s.ovl_tlb[k0] == before_clear_tlb0);
+  assert(s.ovl_delta[k1] == before_clear_delta1 && s.ovl_backing[k1] == before_clear_backing1 && s.ovl_tlb[k1] == before_clear_tlb1);
+  s.tlb_generation[31] = 0; s.fault = s.fault_pc = 0;
+  memcpy(before_clear_generation, s.tlb_generation, sizeof before_clear_generation);
+  assert(plaid_tlb_clear(&s, 0x{PC:08x}u) == 0);
+  for (u32 i = 0; i < 32; i++) {{
+    assert(s.tlb_generation[i] == before_clear_generation[i] + 1);
+    assert(s.tlb[i].mask == 0 && s.tlb[i].hi == 0x80000000u && !s.tlb[i].lo[0] && !s.tlb[i].lo[1]);
+  }}
+  assert(!s.ovl_ok[k0] && !s.ovl_ok[k1]);
+  assert(plaid_link(&s, 0x{E0:08x}u) == 1 && plaid_link(&s, 0x{E1:08x}u) == 1);
   return 0;
 }}
 '''
@@ -262,7 +324,14 @@ def main():
     expected = _ares_run(raw_path)
     assert expected.returncode == 0, (expected.stdout, expected.stderr)
     assert json.loads(actual.stdout) == json.loads(expected.stdout), (actual.stdout, expected.stdout)
-    print('PASS TLB executable slots: native full state matches pinned ares; virtual RA, TLB rebind/unmap/write pins, fail-closed mappings, tamper and generation overflow verified')
+    tamper_harness = OUT / 'preentry-tamper.c'
+    tamper_harness.write_text(_native_harness(module0, module1, labels, preentry_tamper=True))
+    tamper_native = OUT / ('preentry-tamper.exe' if os.name == 'nt' else 'preentry-tamper')
+    subprocess.run([cc, '-O2', '-std=c11', '-Wall', '-Werror', '-Wno-unused-label',
+                    '-Wno-unused-function', f'-DPLAID_LOWERED="{native_c.name}"', '-I', str(OUT), str(tamper_harness), '-o', str(tamper_native)], check=True)
+    tampered = subprocess.run([str(tamper_native)], capture_output=True, text=True, timeout=30)
+    assert tampered.returncode == 0, (tampered.returncode, tampered.stdout, tampered.stderr)
+    print('PASS TLB execution: full state matches pinned ares; remap/clear transactions, pre-entry guarded-data tamper, fail-closed mappings and writable unrelated data verified')
 
 
 if __name__ == '__main__':

@@ -664,6 +664,8 @@ def main():
     tlb_unmap(exe, cc)
     from test_tlb_execution import main as tlb_execution_contracts
     tlb_execution_contracts()
+    from test_indexed_dispatch import main as indexed_dispatch_contracts
+    indexed_dispatch_contracts()
     from test_boot_execution import main as boot_execution_contracts
     boot_execution_contracts()
     subprocess.run([sys.executable, str(ROOT / 'scripts/test_ares_boot.py')], check=True)
