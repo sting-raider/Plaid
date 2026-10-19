@@ -12,6 +12,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 // a switch over a few hundred cases is ordinary compiler output (ADR-0183)
 const MAX_ENTRIES: u32 = 1024;
+// Bound recursion separately from the shared instruction-read budget.
+const MAX_PATH_FRAMES: usize = 32;
 
 #[derive(Serialize)]
 struct TableEvidence {
@@ -811,7 +813,7 @@ impl Walk<'_, '_> {
             .map(|b| b.start.pc)
             .max()?;
         let entry = self.image.address(start);
-        if path.len() >= 16 {
+        if path.len() >= MAX_PATH_FRAMES {
             return None;
         }
         if self.entered(start.0 + 1, anchor.0 + 4) {

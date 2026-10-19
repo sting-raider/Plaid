@@ -1,8 +1,8 @@
 # Status
 
-## Paper Mario closure work (ADR-0202 through ADR-0208)
+## Paper Mario closure work (ADR-0202 through ADR-0209)
 
-The selected ROM remains scoped OPEN/16, with 56,799 blocks and 162 loads.
+The selected ROM remains scoped OPEN/15, with 56,799 blocks and 162 loads.
 ROM-only indexed TLB/copy consumers identify 127 effect files and the shared
 bridge. Guarded constant-cell tail dispatch closes the former effect-wrapper
 frontier. Native TLB execution retains virtual PC/return addresses and distinct
@@ -15,9 +15,11 @@ unchanged loop predicates now have an inductive proof and native reference
 contracts. Inferred case-entry origins and candidate evidence now survive outer
 discovery rounds; every incoming indirect case edge is checked while explicit,
 address-taken and callback entries retain unknown-state barriers. Five sites
-recover 84 candidate edges, but their remaining paths still prevent closure.
+recover 84 candidate edges; extending the general bounded path search closes
+one 56-entry dispatch. The remaining paths still prevent ROM closure.
 Preservation through guest calls needs further proof. No Paper Mario
-native run is accepted. See research/derived-entry-discovery.md,
+native run is accepted. See research/table-path-budget.md,
+research/derived-entry-discovery.md,
 research/loop-table-dispatch.md,
 research/scheduled-table-dispatch.md,
 research/paper-mario-native-frontier.md and
