@@ -444,6 +444,11 @@ impl Need {
         {
             return None;
         }
+        // Early pointer/scale transfers also overwrite any older flag value.
+        // Only SLTIU below can discharge a flag as a matching range guard.
+        if word >> 26 != 11 {
+            self.flags.retain(|(flag, _, _)| *flag != d);
+        }
         if Some(d) == self.address {
             if word >> 26 != 0 || word & 63 != 33 {
                 return None;
@@ -965,6 +970,15 @@ impl Walk<'_, '_> {
                         let in_range = matches!(op, 4 | 20) && edge.kind == EdgeKind::Fallthrough
                             || matches!(op, 5 | 21) && edge.kind == EdgeKind::Branch;
                         let flag = (s.max(t), in_range, site);
+                        // No intervening definition survived the flag tracking:
+                        // this edge cannot satisfy both zero and nonzero.
+                        if need
+                            .flags
+                            .iter()
+                            .any(|(r, truth, _)| *r == flag.0 && *truth != flag.1)
+                        {
+                            continue;
+                        }
                         if !need.flags.contains(&flag) {
                             need.flags.push(flag);
                         }

@@ -238,11 +238,31 @@ fn scheduled_gcc_table_shapes_close() {
 }
 
 #[test]
+fn a_scheduled_loop_may_retain_its_original_bound() {
+    // A zero AT loops forever; only the original nonzero guard can dispatch.
+    let i = scheduled(&[(13, 0)]);
+    assert_eq!(table_targets(&i), Some(vec![0x80000040, 0x80000050]));
+    let mut m = map(&i);
+    m.entries.insert(
+        i.address(GuestAddr(0x80000030)),
+        m.entries.values().next().unwrap().clone(),
+    );
+    let m = analyze_indirect(&m, &i).unwrap();
+    let site = m
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == 0x80000020)
+        .unwrap();
+    assert!(!plaid_core::tables::verify(&m, &i, site));
+}
+
+#[test]
 fn scheduled_shapes_that_break_the_bound_are_rejected() {
     for patch in [
         (1, 0x24840001),  // the interval rewrites the index
         (13, 0x2c810007), // the rebound slot is a different bound
-        (13, 0),          // the rebound branch does not re-establish the bound
+        (13, 0x24840001), // the loop changes the guarded index
+        (13, 0x24010001), // the loop overwrites the zero flag
         (5, 0x254a0004),  // the scaled index is rewritten before the add
     ] {
         assert_eq!(table_targets(&scheduled(&[patch])), None, "{patch:x?}");

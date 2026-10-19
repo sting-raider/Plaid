@@ -6193,3 +6193,17 @@ RED/GREEN, changed-word, scope and abort-PC regressions pass; normal native
 call-loop state matches pinned ares. Paper Mario is OPEN/13 with 56,799 blocks
 and 162 loads; one five-entry dispatch closes and no new blocker appears.
 Native emission remains refused. See research/checked-break-callee-paths.md.
+
+
+## ADR-0212: preserve flag value versions before pruning impossible paths
+
+A backward path requiring the same unchanged GPR to be both zero and nonzero
+is infeasible. Skip only that incoming edge after hashing its branch and
+executed delay slot; keep all other predecessor and full-cycle checks.
+Every non-SLTIU GPR write must first kill old flag constraints, including
+pointer/scale transfers that return early. Retained baseline and naive-rule
+counterexamples catch stale guard booleans; native valid/invalid-index loops
+match pinned ares. Paper Mario remains OPEN/13 with 56,807 blocks and 162
+loads: eight more blocks are discovered but no blocker site closes. Callee
+and external-entry obligations still prevent native emission. See
+research/branch-flag-feasibility.md for evidence, timing and control limits.
