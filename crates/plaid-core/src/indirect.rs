@@ -7,6 +7,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     ops::Bound::{self, Excluded, Included, Unbounded},
 };
@@ -86,12 +87,16 @@ fn span<'a, V>(
 /// What the per-site proofs look up in a map, built once so that analysing
 /// every site of a large map stays linear (ADR-0173).
 pub struct MapIndex<'a> {
+    source: &'a ProgramMap,
     /// Blocks by image and generation, sorted by start, with the largest size.
     blocks: BTreeMap<(&'a str, u64), (Vec<&'a BasicBlock>, u32)>,
     /// Entries and indirect candidates or observations.
     jumped: BTreeSet<Key<'a>>,
     /// Direct edges by target.
     edges: BTreeMap<Key<'a>, Vec<&'a DirectEdge>>,
+    indirect: BTreeMap<Key<'a>, Vec<&'a IndirectSite>>,
+    external: BTreeSet<Key<'a>>,
+    callbacks: RefCell<BTreeMap<(String, u64), BTreeSet<CodeAddress>>>,
 }
 
 impl<'a> MapIndex<'a> {
@@ -121,10 +126,51 @@ impl<'a> MapIndex<'a> {
         for e in &map.direct_edges {
             edges.entry(key(&e.target)).or_default().push(e);
         }
+        let mut indirect: BTreeMap<_, Vec<_>> = BTreeMap::new();
+        let mut sources: BTreeMap<_, Vec<&IndirectSite>> = BTreeMap::new();
+        for site in &map.indirect_sites {
+            sources.entry(key(&site.site)).or_default().push(site);
+            for target in site.candidates.keys().chain(
+                site.observed
+                    .keys()
+                    .filter(|target| !site.candidates.contains_key(*target)),
+            ) {
+                indirect.entry(key(target)).or_default().push(site);
+            }
+        }
+        // Derived entry metadata is only a routing witness. Its source must
+        // still exist as a candidate edge; malformed/missing metadata retains
+        // the ordinary external-entry barrier.
+        let mut external: BTreeSet<_> = map
+            .entries
+            .keys()
+            .filter(|target| {
+                !map.derived_entries.get(*target).is_some_and(|parents| {
+                    map.derived_entry_evidence_valid(target)
+                        && !parents.is_empty()
+                        && parents.iter().all(|parent| {
+                            parent.image == target.image
+                                && parent.generation == target.generation
+                                && sources.get(&key(parent)).is_some_and(|sites| {
+                                    sites.iter().any(|site| {
+                                        site.link_register.is_none()
+                                            && site.candidates.contains_key(*target)
+                                    })
+                                })
+                        })
+                })
+            })
+            .map(key)
+            .collect();
+        external.extend(map.address_taken.keys().map(key));
         Self {
+            source: map,
             blocks,
             jumped,
             edges,
+            indirect,
+            external,
+            callbacks: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -152,6 +198,33 @@ impl<'a> MapIndex<'a> {
     /// Whether an entry or indirect candidate or observation is `at`.
     pub(crate) fn jumped_to(&self, at: &CodeAddress) -> bool {
         self.jumped.contains(&key(at))
+    }
+
+    /// True external entries and SDK callbacks remain unknown-state barriers.
+    /// A derived decode root instead has all its indirect incoming edges
+    /// checked by the table proof. Callback facts are recomputed from bytes,
+    /// not inferred from an editable entry-origin tag.
+    pub(crate) fn external_entry(&self, image: &CodeImage, at: &CodeAddress) -> bool {
+        if self.external.contains(&key(at)) {
+            return true;
+        }
+        if !self
+            .source
+            .runtime_functions
+            .values()
+            .any(|function| !function.callbacks.is_empty())
+        {
+            return false;
+        }
+        self.callbacks
+            .borrow_mut()
+            .entry((image.base.image.clone(), image.base.generation))
+            .or_insert_with(|| crate::callbacks::targets(self.source, image))
+            .contains(at)
+    }
+
+    pub(crate) fn indirect_to(&self, at: &CodeAddress) -> Vec<&'a IndirectSite> {
+        self.indirect.get(&key(at)).cloned().unwrap_or_default()
     }
 
     /// Whether an entry or indirect candidate or observation is in `lo..=hi`.

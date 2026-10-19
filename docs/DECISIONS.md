@@ -6133,3 +6133,20 @@ captured-pointer/guard fixtures match pinned ares, including a changed current
 index register whose old value was already captured. Paper Mario remains
 OPEN/16 with 56,799 blocks; no native artifact or run is accepted. See
 research/loop-table-dispatch.md for evidence and remaining entry/call work.
+
+
+## ADR-0208: retain independently evidenced internal decode entries
+
+Keep inferred decoder roots distinct from external inputs across inner and
+outer discovery rounds, retaining candidate/evidence history before analysis.
+An internal-entry tag must agree with independent content-addressed entry
+witnesses; ordinary entry facts survive merges and cannot be erased by adding
+a candidate-parent tag. Recheck all incoming candidate and observed JR paths,
+including delay slots, executable identity and placed-slot binding. Calls,
+returns, address-taken functions, SDK callbacks and unknown entry state retain
+their proof barriers. Complete target-set and source-byte checks still govern
+closure. Authored regressions include a formerly accepted merged explicit-root
+forgery; the native case-backedge loop matches pinned ares. Paper Mario remains
+OPEN/16 with 56,799 blocks and 162 loads; five sites retain 84 recovered
+candidate edges but no new closed proofs. No native run is accepted. See
+research/derived-entry-discovery.md for evidence, timing and limits.
