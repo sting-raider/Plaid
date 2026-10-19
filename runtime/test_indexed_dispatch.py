@@ -126,7 +126,7 @@ def _preserved_base_fixture(A, guarded_break=False, abort=False):
 
 
 
-def _invariant_flag_fixture(A, index):
+def _invariant_flag_fixture(A, index, calls=False):
     # An invalid captured index stays on the zero-flag loop path. The loop
     # never writes that flag; valid indices dispatch once and exit.
     items = [A.lui(A.s0, 0x8000), A.LO(A.s0, A.s0, 'input'), A.lw(A.a0, 0, A.s0),
@@ -137,9 +137,12 @@ def _invariant_flag_fixture(A, index):
              A.lw(A.v0, 0, A.s2), A.jr(A.v0), A.nop,
              'body', A.addiu(A.t0, A.t0, 1), A.addiu(A.t1, A.zero, 3),
              A.bne(A.t0, A.t1, 'header'), A.nop, A.j('done'), A.nop,
-             'case0', A.addiu(A.s1, A.zero, 1), A.j('done'), A.nop,
-             'case1', A.addiu(A.s1, A.zero, 10), A.j('done'), A.nop,
+             'case0', A.addiu(A.s1, A.s1 if calls else A.zero, 1),
+             *([A.jal('leaf'), A.nop] if calls else []), A.j('body' if calls else 'done'), A.nop,
+             'case1', A.addiu(A.s1, A.s1 if calls else A.zero, 10),
+             *([A.jal('leaf'), A.nop] if calls else []), A.j('body' if calls else 'done'), A.nop,
              'done', A.lui(A.gp, 0x8000), A.sw(A.s1, 0x1000, A.gp), *A.DONE,
+             'leaf', A.addiu(A.a0, A.zero, 99), A.addiu(A.v1, A.zero, 85), A.jr(A.ra), A.nop,
              'table', *[lambda pc, labels, i=i: labels[f'case{i}'] for i in range(2)],
              'input', index]
     return A.assemble(items)
@@ -161,6 +164,9 @@ def main():
                                       ('flag-valid0', False, False),
                                       ('flag-valid1', False, False),
                                       ('flag-invalid', False, False),
+                                      ('flag-call0', False, False),
+                                      ('flag-call1', False, False),
+                                      ('flag-call-invalid', False, False),
                                       ('preserved-base', False, False),
                                       ('preserved-break', False, False),
                                       ('callee-break', False, False),
@@ -169,6 +175,9 @@ def main():
         fixture = {'flag-valid0': lambda asm: _invariant_flag_fixture(asm, 0),
                    'flag-valid1': lambda asm: _invariant_flag_fixture(asm, 1),
                    'flag-invalid': lambda asm: _invariant_flag_fixture(asm, 3),
+                   'flag-call0': lambda asm: _invariant_flag_fixture(asm, 0, True),
+                   'flag-call1': lambda asm: _invariant_flag_fixture(asm, 1, True),
+                   'flag-call-invalid': lambda asm: _invariant_flag_fixture(asm, 3, True),
                    'preheader': _preheader_fixture, 'captured': _captured_fixture,
                    'case-backedges': _case_backedge_fixture,
                    'long-case': lambda asm: _case_backedge_fixture(asm, 24),
@@ -200,13 +209,16 @@ def main():
         state = json.loads(actual.stdout)
         assert state == json.loads(expected.stdout), (actual.stdout, expected.stdout)
         value = 11 if name in ('case-backedges', 'long-case', 'preserved-base', 'preserved-break') else 10 if name in ('preheader', 'captured') else 1111
-        value = {'flag-valid0': 1, 'flag-valid1': 10, 'flag-invalid': 0}.get(name, value)
+        value = {'flag-valid0': 1, 'flag-valid1': 10, 'flag-invalid': 0,
+                 'flag-call0': 3, 'flag-call1': 30, 'flag-call-invalid': 0}.get(name, value)
         accumulator = 20 if name in ('preserved-base', 'preserved-break') else 17
         assert state['pc'] == EXIT and state['regs'][accumulator] == value and state['ram'][0] == value
         if name in ('preserved-base', 'preserved-break'):
             assert state['ram'][4] == 42
         if name == 'captured':
             assert state['regs'][4] == 3
+        if name in ('flag-call0', 'flag-call1'):
+            assert state['regs'][4] == 99 and state['regs'][3] == 85
 
     bad = OUT / 'wrong-scale.bin'
     bad.write_bytes(_fixture(A, True, shift=3))

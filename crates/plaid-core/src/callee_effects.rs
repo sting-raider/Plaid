@@ -29,13 +29,32 @@ pub(crate) fn no_gpr_write(
     register: u8,
     budget: usize,
 ) -> Option<NoWrite> {
+    no_gpr_write_in(index, image, entry, register, budget, None)
+}
+
+/// Prove the same source effect while permitting words in `caller_slot`, the
+/// current placed alternate at the call site. Other placed alternates remain
+/// outside this proof. The caller still owns binding identity and lifetime
+/// checks; this only extends the source-effect read set.
+pub(crate) fn no_gpr_write_in(
+    index: &MapIndex<'_>,
+    image: &CodeImage,
+    entry: GuestAddr,
+    register: u8,
+    budget: usize,
+    caller_slot: Option<usize>,
+) -> Option<NoWrite> {
     if !(1..=30).contains(&register) || !entry.0.is_multiple_of(4) {
+        return None;
+    }
+    if caller_slot.is_some_and(|slot| slot >= image.slots.len()) {
         return None;
     }
     let mut proof = Proof {
         index,
         image,
         register,
+        caller_slot,
         limit: budget.min(MAX_WORD_READS),
         reads: 0,
         words: BTreeMap::new(),
@@ -51,6 +70,7 @@ struct Proof<'a, 'm> {
     index: &'a MapIndex<'m>,
     image: &'a CodeImage,
     register: u8,
+    caller_slot: Option<usize>,
     limit: usize,
     reads: usize,
     words: BTreeMap<u32, u32>,
@@ -78,7 +98,8 @@ impl Proof<'_, '_> {
                 .image
                 .slots
                 .iter()
-                .any(|(placed, _, _)| placed.contains(pc))
+                .enumerate()
+                .any(|(slot, (placed, _, _))| placed.contains(pc) && Some(slot) != self.caller_slot)
             || !self.normal_block(pc, false)
         {
             return None;
@@ -288,7 +309,11 @@ mod tests {
     }
 
     fn jal(word_index: usize) -> u32 {
-        (3 << 26) | (((BASE + word_index as u32 * 4) >> 2) & 0x03ff_ffff)
+        jal_target(BASE + word_index as u32 * 4)
+    }
+
+    fn jal_target(target: u32) -> u32 {
+        (3 << 26) | ((target >> 2) & 0x03ff_ffff)
     }
 
     fn beq(offset_words: i16) -> u32 {
@@ -427,6 +452,157 @@ mod tests {
         long[MAX_WORD_READS - 1] = 0x03e0_0008;
         long[MAX_WORD_READS] = 0;
         assert!(prove(long, 8).is_none());
+    }
+
+    fn add_slot(image: &mut CodeImage, start: u32, linked: u32, size: u32, text: u32) {
+        image.slots.push((
+            crate::program::GuestRange {
+                start: GuestAddr(start),
+                size,
+            },
+            linked,
+            text,
+        ));
+    }
+
+    #[test]
+    fn permits_only_the_explicit_current_slot_for_complete_nested_paths() {
+        let (map, mut image) = proof(vec![0; 48]);
+        let placed = BASE + 0x20;
+        let linked = BASE + 0x1000;
+        add_slot(&mut image, placed, linked, 40, 40);
+        add_slot(&mut image, BASE + 0x80, BASE + 0x2000, 8, 8);
+        let words = &mut image.words;
+        words[8] = jal_target(linked + 16);
+        words[10] = 0x03e0_0008;
+        words[12] = jal_target(linked + 32);
+        words[14] = 0x03e0_0008;
+        words[16] = 0x03e0_0008;
+
+        let index = MapIndex::new(&map);
+        assert!(no_gpr_write(&index, &image, GuestAddr(placed), 8, MAX_WORD_READS).is_none());
+        let summary = no_gpr_write_in(
+            &index,
+            &image,
+            GuestAddr(placed),
+            8,
+            MAX_WORD_READS,
+            Some(0),
+        )
+        .unwrap();
+        assert!(summary.words.contains_key(&placed));
+        assert!(summary.words.contains_key(&(placed + 32)));
+        assert!(
+            no_gpr_write_in(
+                &index,
+                &image,
+                GuestAddr(placed),
+                8,
+                MAX_WORD_READS,
+                Some(2),
+            )
+            .is_none()
+        );
+        assert!(
+            no_gpr_write_in(
+                &index,
+                &image,
+                GuestAddr(placed),
+                8,
+                MAX_WORD_READS,
+                Some(1),
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn rejects_fixed_to_other_slot_and_current_to_other_slot_calls() {
+        let (map, mut image) = proof(vec![0; 48]);
+        let first = BASE + 0x20;
+        let first_link = BASE + 0x1000;
+        let other = BASE + 0x40;
+        let other_link = BASE + 0x2000;
+        add_slot(&mut image, first, first_link, 16, 16);
+        add_slot(&mut image, other, other_link, 8, 8);
+
+        // The fixed entry at BASE calls the other placed alternate.
+        image.words[0] = jal_target(other_link);
+        image.words[2] = 0x03e0_0008;
+        image.words[16] = 0x03e0_0008;
+        let index = MapIndex::new(&map);
+        assert!(
+            no_gpr_write_in(&index, &image, GuestAddr(BASE), 8, MAX_WORD_READS, Some(0),).is_none()
+        );
+
+        // The currently allowed alternate also cannot transfer to another.
+        image.words[8] = jal_target(other_link);
+        image.words[10] = 0x03e0_0008;
+        assert!(
+            no_gpr_write_in(&index, &image, GuestAddr(first), 8, MAX_WORD_READS, Some(0),)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn current_slot_text_bound_still_rejects_placed_data_tail() {
+        let (map, mut image) = proof(vec![0; 16]);
+        let placed = BASE + 0x20;
+        add_slot(&mut image, placed, BASE + 0x1000, 16, 8);
+        let index = MapIndex::new(&map);
+        assert!(
+            no_gpr_write_in(
+                &index,
+                &image,
+                GuestAddr(placed),
+                8,
+                MAX_WORD_READS,
+                Some(0),
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn explicit_current_slot_mode_still_rejects_register_clobbers() {
+        let (map, mut image) = proof(vec![0; 16]);
+        let placed = BASE + 0x20;
+        add_slot(&mut image, placed, BASE + 0x1000, 8, 8);
+        image.words[8] = addiu(8);
+        image.words[9] = 0x03e0_0008;
+        assert!(
+            no_gpr_write_in(
+                &MapIndex::new(&map),
+                &image,
+                GuestAddr(placed),
+                8,
+                MAX_WORD_READS,
+                Some(0),
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn raw_kseg_slot_can_call_fixed_text_under_the_same_source_proof() {
+        let slot = BASE + 0x1000;
+        let (map, mut image) = proof(vec![0; 1028]);
+        add_slot(&mut image, slot, slot, 16, 16);
+        image.words[((slot - BASE) / 4) as usize] = jal_target(BASE + 0x100);
+        image.words[(slot + 8 - BASE) as usize / 4] = 0x03e0_0008;
+        image.words[0x100 / 4] = 0x03e0_0008;
+
+        let summary = no_gpr_write_in(
+            &MapIndex::new(&map),
+            &image,
+            GuestAddr(slot),
+            8,
+            MAX_WORD_READS,
+            Some(0),
+        )
+        .unwrap();
+        assert!(summary.words.contains_key(&slot));
+        assert!(summary.words.contains_key(&(BASE + 0x100)));
     }
 
     #[test]

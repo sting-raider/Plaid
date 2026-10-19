@@ -1,8 +1,8 @@
 # Status
 
-## Paper Mario closure work (ADR-0202 through ADR-0212)
+## Paper Mario closure work (ADR-0202 through ADR-0213)
 
-The selected ROM remains scoped OPEN/13, with 56,807 blocks and 162 loads.
+The selected ROM remains scoped OPEN/12, with 56,807 blocks and 162 loads.
 ROM-only indexed TLB/copy consumers identify 127 effect files and the shared
 bridge. Guarded constant-cell tail dispatch closes the former effect-wrapper
 frontier. Native TLB execution retains virtual PC/return addresses and distinct
@@ -21,8 +21,11 @@ table bases across direct guest calls, closing another 24-entry dispatch.
 Standalone BREAK paths end at the existing checked abort boundary; this closes
 a further five-entry dispatch without adding an assumption. Flag-value tracking now rejects overwritten guard booleans and prunes
 contradictory zero/nonzero paths, exposing eight more blocks. Captured
-pointer/flag effects through calls, save/restore and other paths still need proof. No Paper Mario
-native run is accepted. See research/branch-flag-feasibility.md,
+pointer/flag values now survive calls with checked no-write effects in fixed
+text or the same placed alternate, closing one five-entry dispatch. Save/restore
+and other pointer relations still need proof. No Paper Mario native run is
+accepted. See research/captured-callee-values.md,
+research/branch-flag-feasibility.md,
 research/checked-break-callee-paths.md,
 research/callee-register-preservation.md,
 research/table-path-budget.md,

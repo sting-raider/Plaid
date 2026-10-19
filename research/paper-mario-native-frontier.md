@@ -1,7 +1,14 @@
 # Paper Mario ROM-only native frontier
 
-Latest scoped result: OPEN/13, 56,807 blocks and 162 loads (ADR-0212).
+Latest scoped result: OPEN/12, 56,807 blocks and 162 loads (ADR-0213).
 Native Paper Mario emission remains refused.
+
+Captured pointer/flag values survive bounded guest calls only when each live
+GPR has a rechecked no-write effect. Same-alternate source reads are admitted;
+other alternate reads remain refused. This closes the five-entry dispatch at
+80aac6f0, with four distinct targets and no new blocker sites. See
+research/captured-callee-values.md for the authored reference contracts and
+remaining proof limits.
 
 Base: `8566a88dfe08d17d700a1800b18e5c7283f1229d`, 2026-10-18.
 User input is only the local, ignored ROM `target/local-inputs/pm.z64`:

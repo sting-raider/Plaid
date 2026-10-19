@@ -6207,3 +6207,24 @@ match pinned ares. Paper Mario remains OPEN/13 with 56,807 blocks and 162
 loads: eight more blocks are discovered but no blocker site closes. Callee
 and external-entry obligations still prevent native emission. See
 research/branch-flag-feasibility.md for evidence, timing and control limits.
+
+
+## ADR-0213: Preserve captured table values through checked guest calls
+
+Extend bounded no-write callee effects to every still-live backward table
+obligation, including captured addresses and flags. A matched index/bound is
+already discharged; no ABI preservation is inferred for its old GPR. Source
+reads may traverse fixed text and the explicitly current placed alternate,
+never another alternate or its data tail. Each GPR consumes the same shared
+4096-read budget; full Need induction, source hashes, caller-slot transfers,
+external entries, return closure and global binding/lifetime gates remain.
+All callee instructions execute natively; this adds no assumption.
+
+Authored captured-call baseline RED, 14 module and25 focused integration
+tests, native full-state/RAM pinned-ares contracts and a caught pending-address
+deletion mutation support the effect rule. Independent Luna xhigh review found
+no correctness issues and independently ran module/flag/native tests. The
+ROM-only inferred-input probe improves OPEN13 to OPEN12 at unchanged56807
+blocks/162loads, closing the five-word/four-target dispatch80aac6f0. No native
+Paper Mario artifact or run is accepted. Exact committed-tree local gates
+remain required. See research/captured-callee-values.md for limits/receipts.
