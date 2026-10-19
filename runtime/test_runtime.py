@@ -525,6 +525,24 @@ def sp_boot(exe, cc):
     print('SP boot: DMEM and IMEM start from the declared post-IPL state, not ROM 0x40-0xfff')
 
 
+def tlb_unmap(exe, cc):
+    names = ['osMapTLB', 'osUnmapTLB', 'osVirtualToPhysical']
+    program = [*li(A.sp, 0x80007F00),
+               *call('osMapTLB', 5, 0, 0x00400000, 0x4000, 0xFFFFFFFF, 0xFFFFFFFF),
+               *call('osMapTLB', 6, 0, 0x00600000, 0x8000, 0xFFFFFFFF, 0xFFFFFFFF),
+               *call('osVirtualToPhysical', 0x00400020), *log_v0(),
+               *call('osUnmapTLB', 5),
+               *call('osVirtualToPhysical', 0x00400020), *log_v0(),
+               *call('osVirtualToPhysical', 0x00600020), *log_v0(), *A.DONE]
+    for name in names:
+        program += [name, A.jr(A.ra), A.nop]
+    native = build(exe, cc, 'tlb_unmap', program, names)
+    result = subprocess.run([str(native), '--dump', hex(LOG), '3'], capture_output=True, text=True, timeout=30)
+    lines = {k: v for line in result.stdout.splitlines() if line.startswith('{') for k, v in json.loads(line).items()}
+    assert result.returncode == 0 and lines.get('words') == [0x4020, 0xFFFFFFFF, 0x8020], (result.stdout, result.stderr)
+    print('SDK TLB unmap: only the indexed mapping is invalidated; an independent mapping survives')
+
+
 def build(exe, cc, name, program, runtime, extra=(), status_globals=None, fr0=False, data_bindings=None):
     (OUT / f'{name}.bin').write_bytes(A.assemble(program))
     labels = A.label_pcs(program)
@@ -643,6 +661,9 @@ def main():
     heap_contracts()
     from test_slots import main as slot_contracts
     slot_contracts()
+    tlb_unmap(exe, cc)
+    from test_tlb_execution import main as tlb_execution_contracts
+    tlb_execution_contracts()
     from test_boot_execution import main as boot_execution_contracts
     boot_execution_contracts()
     subprocess.run([sys.executable, str(ROOT / 'scripts/test_ares_boot.py')], check=True)

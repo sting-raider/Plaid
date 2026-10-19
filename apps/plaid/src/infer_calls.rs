@@ -78,10 +78,11 @@ pub fn refine(rom_path: &str, map_path: &str, loads_path: &str) -> Result<(), St
         );
     }
     let mut found = BTreeMap::new();
-    for image in rom_images(&rom, &map)? {
-        for candidate in plaid_core::copy_calls::infer(rom.bytes(), &map, &image)
+    let images = rom_images(&rom, &map)?;
+    for image in &images {
+        for candidate in plaid_core::copy_calls::infer(rom.bytes(), &map, image)
             .into_iter()
-            .chain(plaid_core::copy_catalogs::infer(rom.bytes(), &map, &image))
+            .chain(plaid_core::copy_catalogs::infer(rom.bytes(), &map, image))
         {
             let key = (candidate.source.0, candidate.end.0, candidate.destination.0);
             found
@@ -115,6 +116,37 @@ pub fn refine(rom_path: &str, map_path: &str, loads_path: &str) -> Result<(), St
             "ROM-only copy-call/v1 candidate {source:#x}..{end:#x} at {destination:#x}; helper {:#x}, callers {:?}, rebuilt image {image}; exact native slot binding required",
             candidate.helper.0, candidate.callers
         ));
+    }
+    let mut mapped_sources = std::collections::BTreeSet::new();
+    for image in &images {
+        for candidate in plaid_core::tlb_catalogs::infer(rom.bytes(), &map, image) {
+            let (source, end, virtual_base) = (
+                candidate.source.0,
+                candidate.end.0,
+                candidate.virtual_base.0,
+            );
+            let size = end
+                .checked_sub(source)
+                .ok_or("mapped copy source range underflow")?;
+            if !mapped_sources.insert((source, end, virtual_base))
+                || declared.loads.iter().any(|load| {
+                    load.source.0 == source
+                        && u64::from(load.destination.size) == size
+                        && load.linked == Some(candidate.virtual_base)
+                })
+            {
+                continue;
+            }
+            doc["loads"]
+                .as_array_mut()
+                .ok_or("loads array missing")?
+                .push(serde_json::json!({
+                    "destination": format!("{virtual_base:#x}"), "size": format!("{size:#x}"),
+                    "rom": format!("{source:#x}"), "encoding": "tlb_raw", "slot": true,
+                    "text_size": format!("{:#x}", candidate.text_size),
+                }));
+            evidence.push(format!("ROM-only mapped-copy candidate {source:#x}..{end:#x} at {virtual_base:#x}, entry {:#x}, witness {:?}; unchanged source bytes and native TLB binding required", candidate.entry.0, (candidate.caller, candidate.helper, candidate.table)));
+        }
     }
     if evidence.is_empty() {
         println!("no new copy-call load candidates");

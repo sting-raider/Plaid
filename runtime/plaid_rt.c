@@ -760,13 +760,15 @@ static u32 tlb_lo(u32 paddr) { return paddr == 0xffffffffu ? 1 : (paddr >> 6) | 
 RT(osMapTLB) {
   u32 pm = arg(1);
   if (arg(5) != 0xffffffffu) finish(1, "osMapTLB with an ASID");
-  S->tlb[arg(0) & 31] = (plaid_tlb_entry){pm, arg(2) & ~(pm | 0x1fffu), {tlb_lo(arg(3)), tlb_lo(arg(4))}};
-  return 0;
+  return plaid_tlb_write(S, arg(0), (plaid_tlb_entry){pm, arg(2) & ~(pm | 0x1fffu), {tlb_lo(arg(3)), tlb_lo(arg(4))}}, S->pc);
 }
 RT(osUnmapTLBAll) { /* EntryHi in KSEG0 never matches a mapped address */
-  int i;
-  for (i = 0; i < 32; i++) S->tlb[i] = (plaid_tlb_entry){0, 0x80000000u, {0, 0}};
-  return 0;
+  return plaid_tlb_clear(S, S->pc);
+}
+RT(osUnmapTLB) {
+  /* The SDK invalidates this indexed entry with a KSEG0 EntryHi and zero
+     EntryLo values. Its PageMask cannot affect any supported mapped access. */
+  return plaid_tlb_write(S, arg(0), (plaid_tlb_entry){0, 0x80000000u, {0, 0}}, S->pc);
 }
 RT(osSpTaskYielded) { return ret(0); }
 RT(__osSpSetPc) { return ret(0); }

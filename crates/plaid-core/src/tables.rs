@@ -760,8 +760,10 @@ pub fn verify_in(
     let Some((_, Some(words), detail)) = evidence(index, image, site) else {
         return false;
     };
-    let targets: std::collections::BTreeSet<_> =
-        words.iter().map(|w| image.address(GuestAddr(*w))).collect();
+    let targets: std::collections::BTreeSet<_> = words
+        .iter()
+        .map(|w| image.address(GuestAddr(image.slot_view(site.site.pc, *w))))
+        .collect();
     detail == e.detail
         && words.iter().all(|w| w.is_multiple_of(4))
         && site
@@ -813,7 +815,7 @@ pub(crate) fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap,
             for (n, target) in words.into_iter().enumerate() {
                 if target.is_multiple_of(4) {
                     site.candidates
-                        .entry(image.address(GuestAddr(target)))
+                        .entry(image.address(GuestAddr(image.slot_view(old.site.pc, target))))
                         .or_default()
                         .insert(id.clone());
                 } else {

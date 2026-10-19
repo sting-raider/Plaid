@@ -19,6 +19,27 @@ pub fn verifier(
     link: u32,
     id: u32,
 ) -> Result<String, String> {
+    verifier_guarded(bytes, layout, compared, link, id, &[])
+}
+
+/// Also compare noncontiguous data ranges whose values justify native dispatch.
+/// These ranges are protected alongside text after a successful binding.
+pub fn verifier_guarded(
+    bytes: &[u8],
+    layout: &Layout,
+    compared: usize,
+    link: u32,
+    id: u32,
+    guarded: &[(u32, u32)],
+) -> Result<String, String> {
+    if guarded.iter().any(|&(start, end)| {
+        start >= end
+            || !start.is_multiple_of(4)
+            || !end.is_multiple_of(4)
+            || end as usize > bytes.len()
+    }) {
+        return Err("overlay guarded data lies outside its source".into());
+    }
     if compared < layout.text as usize || compared == 0 || compared > bytes.len() {
         return Err("overlay verifier must compare all executable text within its source".into());
     }
@@ -94,6 +115,12 @@ int plaid_overlay_verify_{id}(const uint8_t *ram, size_t ram_size, uint32_t base
             _ => return Err("unsupported overlay relocation".into()),
         }
     }
+    for &(start, end) in guarded {
+        out += &format!(
+            "  if (memcmp(ram + p + {start}u, expected + {start}u, {}u)) valid = 0;\n",
+            end - start
+        );
+    }
     out += &format!(
         "  if (memcmp(ram + p, expected, {compared}u)) valid = 0;\n  free(expected);\n  for (i = {}u; valid && i < {span}u; i++) if (ram[p + i]) valid = 0;\n  return valid;\n}}\n",
         bytes.len()
@@ -121,5 +148,9 @@ mod tests {
         for compared in [8, 12] {
             assert!(verifier(&[0; 12], &layout, compared, 0x80000000, 0).is_ok());
         }
+        for guarded in [vec![(8, 16)], vec![(8, 8)], vec![(9, 12)]] {
+            assert!(verifier_guarded(&[0; 12], &layout, 8, 0x80000000, 0, &guarded).is_err());
+        }
+        assert!(verifier_guarded(&[0; 12], &layout, 8, 0x80000000, 0, &[(8, 12)]).is_ok());
     }
 }

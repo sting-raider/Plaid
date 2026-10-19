@@ -45,6 +45,7 @@ typedef struct plaid_state_s {
      bytes of declared load n; built once before the first guarded write */
   u8 prot[PLAID_RAM_SIZE / 4]; u8 prot_ready;
   plaid_tlb_entry tlb[32]; /* written by the runtime's osMapTLB family */
+  u64 tlb_generation[32];
   /* uncached access to RCP memory, registers and the PI buses (physical
      0x04000000-0x1fffffff), set by the runtime: 0 done, else fault 1;
      NULL leaves them all faulting (ADR-0177) */
@@ -53,6 +54,7 @@ typedef struct plaid_state_s {
      binding made by byte verification, revoked by a write into its text
      (prot 255) (ADR-0181) */
   u32 ovl_delta[1024]; u8 ovl_ok[1024];
+  u32 ovl_backing[1024], ovl_tlb[1024]; u64 ovl_generation[1024];
   u32 ovl_active[1024]; /* native frames pin their overlay binding (ADR-0187) */
 } plaid_state;
 /* A host runtime with preemptive scheduling builds with PLAID_SAFEPOINTS and
@@ -116,6 +118,8 @@ const HELPERS: &str = r#"/* 1 when a write must abort: the base image's code and
    the next entry into its code compares the bytes again (ADR-0161). */
 int plaid_ovl_write(plaid_state *s, u32 p, u32 pc);
 u32 plaid_link(plaid_state *s, u32 t);
+int plaid_tlb_write(plaid_state *s, u32 index, plaid_tlb_entry entry, u32 pc);
+int plaid_tlb_clear(plaid_state *s, u32 pc);
 static inline int plaid_protected(plaid_state *s, u32 p, u32 size, u32 pc) {
   u32 w, q = pc & 0x1fffffffu;
   u8 own = 0, k;
@@ -139,7 +143,7 @@ static inline int plaid_protected(plaid_state *s, u32 p, u32 size, u32 pc) {
    it: relocated immediates are read from the bytes the game's loader wrote
    (ADR-0181). */
 static inline u32 plaid_ow(plaid_state *s, u32 n, u32 pc) {
-  const u8 *m = s->ram + ((pc + s->ovl_delta[n]) & 0x1fffffffu);
+  const u8 *m = s->ram + (pc + s->ovl_backing[n]);
   return (u32)m[0] << 24 | (u32)m[1] << 16 | (u32)m[2] << 8 | m[3];
 }
 /* Mapped data (KUSEG, KSSEG, KSEG3) through the TLB as pinned ares matches
@@ -148,10 +152,11 @@ static inline u32 plaid_ow(plaid_state *s, u32 n, u32 pc) {
    an invalid page and a store to a clean one (ADR-0162). The D-cache is
    indexed by vaddr[12:4], so a 4 KiB page whose virtual bit 12 differs from
    its physical one caches the line at another index: class 3. */
-static inline int plaid_tlb(plaid_state *s, u32 v, int write, u32 *p, u8 *seg) {
+static inline int plaid_tlb_lookup(plaid_state *s, u32 v, int write, u32 *p, u8 *seg, u32 *index,
+                                   u32 changed, const plaid_tlb_entry *replacement) {
   u32 i, pm, m, lo;
   for (i = 0; i < 32; i++) {
-    const plaid_tlb_entry *e = &s->tlb[i];
+    const plaid_tlb_entry *e = replacement && i == changed ? replacement : &s->tlb[i];
     pm = e->mask & (0xaaau << 13);
     m = pm | pm >> 1 | 0x1fffu;
     if ((v & ~m) != (e->hi & ~m)) continue;
@@ -160,9 +165,14 @@ static inline int plaid_tlb(plaid_state *s, u32 v, int write, u32 *p, u8 *seg) {
     if (!(lo & 2) || (write && !(lo & 4))) return 1;
     *p = (((lo >> 6) & 0xffffffu) << 12) + (v & (m >> 1));
     *seg = ((lo >> 3) & 7) == 2 ? 2 : (v ^ *p) & 0x1000u ? 3 : 1;
+    *index = i;
     return 0;
   }
   return 1;
+}
+static inline int plaid_tlb(plaid_state *s, u32 v, int write, u32 *p, u8 *seg) {
+  u32 index;
+  return plaid_tlb_lookup(s, v, write, p, seg, &index, 0, NULL);
 }
 /* RAM under slot i's bytes m is about to change without the cache: keep the
    cached bytes, which RAM still holds, as the line's older copy (ADR-0183) */
@@ -505,21 +515,37 @@ fn relink(overlay: bool) -> &'static str {
 /// `plaid_ovl_write`, which revokes a binding when its text is written.
 fn overlay_runtime(
     overlays: &[(u32, u32)],
+    virtual_bases: &[Option<u32>],
     layouts: &[(Vec<u8>, plaid_core::overlays::Layout)],
     compared: &[usize],
+    guarded: &[Vec<(u32, u32)>],
     functions: &BTreeSet<u32>,
     image: &CodeImage,
 ) -> Result<String, String> {
     if overlays.is_empty() {
-        return Ok("int plaid_ovl_write(plaid_state *s, u32 p, u32 pc) { (void)s; (void)p; (void)pc; return 1; }\n".into());
+        return Ok(format!(
+            "int plaid_ovl_write(plaid_state *s, u32 p, u32 pc) {{ (void)s; (void)p; (void)pc; return 1; }}\nstatic int plaid_tlb_change(plaid_state *s, u32 index, const plaid_tlb_entry *entry, int clear, u32 pc) {{ (void)s; (void)index; (void)entry; (void)clear; (void)pc; return 0; }}\n{TLB_WRITES}"
+        ));
     }
     let mut out = String::from(
-        "typedef struct { u32 f, w, probe; } plaid_ovl_fn;\ntypedef struct { u32 link, text; int (*verify)(const uint8_t *, size_t, uint32_t); u32 n; const plaid_ovl_fn *f; } plaid_ovl;\n",
+        "typedef struct { u32 f, w, probe; } plaid_ovl_fn;\ntypedef struct { u32 start, end; } plaid_ovl_range;\ntypedef struct { u32 link, text, mapped, virtual_base, span, guards; const plaid_ovl_range *ranges; int (*verify)(const uint8_t *, size_t, uint32_t); u32 n; const plaid_ovl_fn *f; } plaid_ovl;\n",
     );
     let mut table = Vec::new();
     for (k, (&(link, _), (bytes, layout))) in overlays.iter().zip(layouts).enumerate() {
         // a slot alternate is checked over its text (ADR-0185)
-        out += &overlay::verifier(bytes, layout, compared[k], link, k as u32)?;
+        out += &overlay::verifier_guarded(bytes, layout, compared[k], link, k as u32, &guarded[k])?;
+        let ranges: Vec<_> = std::iter::once((0, layout.text))
+            .chain(guarded[k].iter().copied())
+            .collect();
+        let span = ranges.iter().map(|r| r.1).max().unwrap_or(layout.text);
+        out += &format!(
+            "static const plaid_ovl_range plaid_ovl_ranges_{k}[] = {{{}}};\n",
+            ranges
+                .iter()
+                .map(|(s, e)| format!("{{{s}u,{e}u}}"))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
         let relocated: BTreeSet<u32> = layout.relocations.iter().map(|r| link + r.offset).collect();
         let entries: Vec<_> = functions
             .range(link..link + layout.text)
@@ -540,8 +566,11 @@ fn overlay_runtime(
             }
         );
         table.push(format!(
-            "{{0x{link:08x}u, {}u, plaid_overlay_verify_{k}, {}u, plaid_ovl_fn_{k}}}",
+            "{{0x{link:08x}u, {}u, {}u, {}u, {span}u, {}u, plaid_ovl_ranges_{k}, plaid_overlay_verify_{k}, {}u, plaid_ovl_fn_{k}}}",
             layout.text,
+            u8::from(virtual_bases[k].is_some()),
+            virtual_bases[k].unwrap_or(0),
+            ranges.len(),
             entries.len()
         ));
     }
@@ -551,66 +580,165 @@ fn overlay_runtime(
         table.len()
     );
     out += OVERLAY_RUNTIME;
+    out += TLB_WRITES;
     Ok(out)
 }
 
-const OVERLAY_RUNTIME: &str = r#"/* A write into bound overlay text revokes the binding; from the overlay's
-   own code it aborts, as a write to code does (ADR-0181). */
-int plaid_ovl_write(plaid_state *s, u32 p, u32 pc) {
-  u32 k, w, a;
-  for (k = 0; k < PLAID_OVLS; k++) {
-    if (!s->ovl_ok[k]) continue;
-    a = (plaid_ovls[k].link + s->ovl_delta[k]) & 0x1fffffffu;
-    if (p - a >= plaid_ovls[k].text) continue;
-    if (pc - plaid_ovls[k].link < plaid_ovls[k].text) return 1;
-    s->ovl_ok[k] = 0;
-    for (w = a >> 2; w < (a + plaid_ovls[k].text) >> 2; w++) s->prot[w] = 0;
+const TLB_WRITES: &str = r#"/* Every modeled mapping mutation advances its identity, including an equal
+   rewrite. Preflight before changing any entry or revoking a binding. */
+int plaid_tlb_write(plaid_state *s, u32 index, plaid_tlb_entry entry, u32 pc) {
+  index &= 31u;
+  if (s->tlb_generation[index] == UINT64_MAX) return plaid_fault(s, pc, 1);
+  if (plaid_tlb_change(s, index, &entry, 0, pc)) return 1;
+  s->tlb[index] = entry; s->tlb_generation[index]++;
+  return 0;
+}
+int plaid_tlb_clear(plaid_state *s, u32 pc) {
+  u32 i;
+  for (i = 0; i < 32; i++)
+    if (s->tlb_generation[i] == UINT64_MAX) return plaid_fault(s, pc, 1);
+  if (plaid_tlb_change(s, 0, NULL, 1, pc)) return 1;
+  for (i = 0; i < 32; i++) {
+    s->tlb[i] = (plaid_tlb_entry){0, 0x80000000u, {0, 0}};
+    s->tlb_generation[i]++;
   }
   return 0;
 }
-/* The link address of real address t in bound overlay text, binding the
-   unique overlay whose verified bytes put a function entry at t; 1 (no
-   case) for an unbound link address or an ambiguous binding; else t. */
+"#;
+
+const OVERLAY_RUNTIME: &str = r#"/* A mapped executable must have one contiguous physical backing and one
+   winning TLB entry throughout its text. Probe every 4 KiB boundary, not
+   only the endpoints: an earlier entry may shadow a page in the middle. */
+static int plaid_ovl_mapping(plaid_state *s, u32 k, u32 *base, u32 *index,
+                             u32 changed, const plaid_tlb_entry *replacement) {
+  u32 v = plaid_ovls[k].virtual_base, n = plaid_ovls[k].span;
+  u32 p, i, offset = 0; u8 seg;
+  if (!n || n > PLAID_RAM_SIZE || v > UINT32_MAX - (n - 1)) return 1;
+  for (;;) {
+    if (plaid_tlb_lookup(s, v + offset, 0, &p, &seg, &i, changed, replacement)) return 1;
+    if (!offset) { *base = p; *index = i; }
+    else if (i != *index || p != *base + offset) return 1;
+    if (*base > PLAID_RAM_SIZE - n) return 1;
+    if (offset == n - 1) return 0;
+    offset = ((v + offset) | 0xfffu) - v + 1;
+    if (offset >= n) offset = n - 1;
+  }
+}
+static int plaid_ovl_contains(u32 k, u32 offset) {
+  u32 r;
+  for (r = 0; r < plaid_ovls[k].guards; r++)
+    if (offset >= plaid_ovls[k].ranges[r].start && offset < plaid_ovls[k].ranges[r].end) return 1;
+  return 0;
+}
+static void plaid_ovl_protect(plaid_state *s, u32 k, u32 a, u8 value) {
+  u32 r, w;
+  for (r = 0; r < plaid_ovls[k].guards; r++)
+    for (w = (a + plaid_ovls[k].ranges[r].start) >> 2; w < (a + plaid_ovls[k].ranges[r].end) >> 2; w++)
+      s->prot[w] = value;
+}
+static void plaid_ovl_revoke(plaid_state *s, u32 k) {
+  u32 a = plaid_ovls[k].link + s->ovl_backing[k];
+  s->ovl_ok[k] = 0;
+  plaid_ovl_protect(s, k, a, 0);
+}
+static int plaid_ovl_changed(plaid_state *s, u32 k, u32 index,
+                              const plaid_tlb_entry *entry, int clear) {
+  u32 a = 0, i = 0;
+  if (!s->ovl_ok[k] || !s->ovl_tlb[k]) return 0;
+  return clear || s->ovl_tlb[k] == index + 1 ||
+    plaid_ovl_mapping(s, k, &a, &i, index, entry) ||
+    i + 1 != s->ovl_tlb[k] || a != plaid_ovls[k].link + s->ovl_backing[k];
+}
+static int plaid_tlb_change(plaid_state *s, u32 index, const plaid_tlb_entry *entry, int clear, u32 pc) {
+  u32 k;
+  for (k = 0; k < PLAID_OVLS; k++)
+    if (s->ovl_active[k] && plaid_ovl_changed(s, k, index, entry, clear)) return plaid_fault(s, pc, 2);
+  for (k = 0; k < PLAID_OVLS; k++)
+    if (plaid_ovl_changed(s, k, index, entry, clear)) plaid_ovl_revoke(s, k);
+  return 0;
+}
+/* Physical aliases of active mapped text cannot invalidate native frames.
+   Preflight all bindings before revoking any overlapping inactive copy. */
+int plaid_ovl_write(plaid_state *s, u32 p, u32 pc) {
+  u32 k, a;
+  for (k = 0; k < PLAID_OVLS; k++) {
+    if (!s->ovl_ok[k]) continue;
+    a = plaid_ovls[k].link + s->ovl_backing[k];
+    if (!plaid_ovl_contains(k, p - a)) continue;
+    if (p - a >= plaid_ovls[k].text) return 1; /* proof-bearing data stays immutable */
+    if ((s->ovl_tlb[k] && s->ovl_active[k]) || pc - plaid_ovls[k].link < plaid_ovls[k].text) return 1;
+  }
+  for (k = 0; k < PLAID_OVLS; k++)
+    if (s->ovl_ok[k] && plaid_ovl_contains(k, p - (plaid_ovls[k].link + s->ovl_backing[k])))
+      plaid_ovl_revoke(s, k);
+  return 0;
+}
+/* Translate only after source bytes and mapping identity agree. Compiled
+   addresses name native functions; virtual addresses remain guest-visible. */
 u32 plaid_link(plaid_state *s, u32 t) {
-  u32 k, j, b, a, w, p = t & 0x1fffffffu, hk = 0, hb = 0;
+  u32 k, j, b = 0, a, w, i = 0, p = t & 0x1fffffffu, hk = 0, hb = 0, hi = 0;
   int ram = t >= 0x80000000u && t < 0xa0000000u && p < PLAID_RAM_SIZE && !(t & 3u), hit = 0;
   u8 m = 0;
+  if (t & 3u) return 1;
   if (!s->prot_ready) plaid_build_prot(s);
   if (ram) {
     m = s->prot[p >> 2];
     if (m && m != 255) return t;
   }
-  for (k = 0; k < PLAID_OVLS; k++)
-    if (s->ovl_ok[k] && t - (plaid_ovls[k].link + s->ovl_delta[k]) < plaid_ovls[k].text)
+  for (k = 0; k < PLAID_OVLS; k++) {
+    if (!s->ovl_ok[k]) continue;
+    if (s->ovl_tlb[k]) {
+      a = 0; i = 0;
+      if (s->ovl_generation[k] != s->tlb_generation[s->ovl_tlb[k] - 1] ||
+          plaid_ovl_mapping(s, k, &a, &i, 0, NULL) || i + 1 != s->ovl_tlb[k] ||
+          a != plaid_ovls[k].link + s->ovl_backing[k]) {
+        if (s->ovl_active[k]) return 1;
+        plaid_ovl_revoke(s, k); continue;
+      }
+    }
+    if (t - (plaid_ovls[k].link + s->ovl_delta[k]) < plaid_ovls[k].text)
       return t - s->ovl_delta[k];
-  if (ram && !m) {
-    w = (u32)s->ram[p] << 24 | (u32)s->ram[p + 1] << 16 | (u32)s->ram[p + 2] << 8 | s->ram[p + 3];
-    for (k = 0; k < PLAID_OVLS; k++)
-      for (j = 0; j < plaid_ovls[k].n; j++) {
+  }
+  for (k = 0; k < PLAID_OVLS; k++) {
+    if (plaid_ovls[k].mapped) {
+      if (t - plaid_ovls[k].virtual_base >= plaid_ovls[k].text) continue;
+      a = 0; i = 0;
+      if (plaid_ovl_mapping(s, k, &a, &i, 0, NULL)) continue;
+      b = 0x80000000u + a;
+    } else if (!ram || m) continue;
+    for (j = 0; j < plaid_ovls[k].n; j++) {
+      if (plaid_ovls[k].mapped) {
+        if (t - plaid_ovls[k].virtual_base != plaid_ovls[k].f[j].f - plaid_ovls[k].link) continue;
+      } else {
+        w = (u32)s->ram[p] << 24 | (u32)s->ram[p + 1] << 16 | (u32)s->ram[p + 2] << 8 | s->ram[p + 3];
         if (plaid_ovls[k].f[j].probe && plaid_ovls[k].f[j].w != w) continue;
         b = t - (plaid_ovls[k].f[j].f - plaid_ovls[k].link);
-        if (!plaid_ovls[k].verify(s->ram, PLAID_RAM_SIZE, b)) continue;
-        if (hit) return 1; /* two overlays or two copies fit: ambiguous */
-        hit = 1; hk = k; hb = b;
       }
-    if (hit && !s->ovl_active[hk]) {
-      a = hb & 0x1fffffffu;
-      for (w = a >> 2; w < (a + plaid_ovls[hk].text) >> 2; w++)
-        if (s->prot[w]) return 1;
-      /* An inactive binding may move; no native frame can still use its delta. */
-      if (s->ovl_ok[hk]) {
-        b = (plaid_ovls[hk].link + s->ovl_delta[hk]) & 0x1fffffffu;
-        for (w = b >> 2; w < (b + plaid_ovls[hk].text) >> 2; w++) s->prot[w] = 0;
-      }
-      for (w = a >> 2; w < (a + plaid_ovls[hk].text) >> 2; w++) s->prot[w] = 255;
-      s->ovl_delta[hk] = hb - plaid_ovls[hk].link;
-      s->ovl_ok[hk] = 1;
-      return t - s->ovl_delta[hk];
+      if (!plaid_ovls[k].verify(s->ram, PLAID_RAM_SIZE, b)) continue;
+      if (hit) return 1;
+      hit = 1; hk = k; hb = b; hi = plaid_ovls[k].mapped ? i + 1 : 0;
     }
-    if (hit) return 1; /* an active native frame pins the existing copy */
   }
+  if (hit && !s->ovl_active[hk]) {
+    a = hb & 0x1fffffffu;
+    /* First reject overlap, allowing only this candidate's previous copy. */
+    for (w = a >> 2; w < (a + plaid_ovls[hk].span) >> 2; w++)
+      if (plaid_ovl_contains(hk, (w << 2) - a) && s->prot[w] &&
+          !(s->ovl_ok[hk] && s->prot[w] == 255 &&
+          plaid_ovl_contains(hk, (w << 2) - (plaid_ovls[hk].link + s->ovl_backing[hk])))) return 1;
+    if (s->ovl_ok[hk]) plaid_ovl_revoke(s, hk);
+    plaid_ovl_protect(s, hk, a, 255);
+    s->ovl_delta[hk] = (hi ? plaid_ovls[hk].virtual_base : hb) - plaid_ovls[hk].link;
+    s->ovl_backing[hk] = a - plaid_ovls[hk].link;
+    s->ovl_tlb[hk] = hi;
+    s->ovl_generation[hk] = hi ? s->tlb_generation[hi - 1] : 0;
+    s->ovl_ok[hk] = 1;
+    return t - s->ovl_delta[hk];
+  }
+  if (hit) return 1;
   for (k = 0; k < PLAID_OVLS; k++)
-    if (t - plaid_ovls[k].link < plaid_ovls[k].text) return 1;
+    if (t - plaid_ovls[k].link < plaid_ovls[k].text ||
+        (plaid_ovls[k].mapped && t - plaid_ovls[k].virtual_base < plaid_ovls[k].text)) return 1;
   return t;
 }
 "#;
@@ -946,6 +1074,7 @@ fn simple_lo(word: u32, pc: u32, fr0: bool, lo: Option<&str>) -> Result<String, 
 }
 
 struct Lowerer<'a> {
+    image: &'a CodeImage,
     fr0: bool,
     /// Block starts of the function being emitted (exits included).
     labels: BTreeSet<u32>,
@@ -993,7 +1122,7 @@ impl Lowerer<'_> {
             .unwrap_or_else(|_| format!("return plaid_fault(s, 0x{pc:08x}u, 3);"))
     }
     /// A guest call: the callee returns 0 only after a checked return to `link`.
-    fn call(&self, target: u32, link: u32, pc: u32) -> Result<String, String> {
+    fn call(&self, target: u32, link: u32, pc: u32, bound: bool) -> Result<String, String> {
         if let Some(name) = self.runtime.get(&target) {
             return Ok(format!(
                 "{{ int r = plaid_rt_{name}(s); if (r) return r; }} {}",
@@ -1006,13 +1135,31 @@ impl Lowerer<'_> {
             ));
         }
         // Another overlay's link address names whatever RAM holds there.
-        if self.ovl_of(target).is_some_and(|k| Some(k) != self.ovl) {
+        if !bound && self.ovl_of(target).is_some_and(|k| Some(k) != self.ovl) {
             return Ok(format!("return plaid_fault(s, 0x{pc:08x}u, 3);"));
         }
         Ok(format!(
             "{{ int r = F_{target:08x}(s, {}); if (r) return r; }} {}",
             self.link(link),
             self.fallthrough(link, pc)
+        ))
+    }
+    /// A tail transfer keeps the entering call's continuation and balances
+    /// overlay pins through the callee's ordinary native wrapper.
+    fn tail(&self, target: u32, pc: u32) -> Result<String, String> {
+        if self.labels.contains(&target) {
+            return self.goto(target);
+        }
+        if let Some(name) = self.runtime.get(&target) {
+            return Ok(format!(
+                "{{ int r = plaid_rt_{name}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;"
+            ));
+        }
+        if self.functions.contains(&target) {
+            return Ok(format!("return F_{target:08x}(s, ret);"));
+        }
+        Err(format!(
+            "{pc:08x}: tail target {target:08x} has no native function or label"
         ))
     }
     fn control(&self, word: u32, pc: u32, slot: &str) -> Result<String, String> {
@@ -1022,7 +1169,7 @@ impl Lowerer<'_> {
         let branch = pc
             .wrapping_add(4)
             .wrapping_add_signed(i32::from(word as u16 as i16) * 4);
-        let jump = (pc.wrapping_add(4) & 0xf000_0000) | ((word & 0x03ff_ffff) << 2);
+        let jump = self.image.jump_target(GuestAddr(pc), word).0;
         let conditional = |cond: String| -> Result<String, String> {
             Ok(format!(
                 "{{ int t = {cond}; {slot} if (t) {} }} {}",
@@ -1050,7 +1197,7 @@ impl Lowerer<'_> {
             (0, 8, _) => {
                 let mut cases = String::new();
                 for &t in proven()? {
-                    cases += &format!(" case {}: {}", sx(t), self.goto(t)?);
+                    cases += &format!(" case {}: {}", sx(t), self.tail(t, pc)?);
                 }
                 Ok(format!(
                     "{{ u64 t = {a}; {slot} {}switch (t) {{{cases} }} return plaid_fault(s, 0x{pc:08x}u, 3); }}",
@@ -1068,7 +1215,7 @@ impl Lowerer<'_> {
                 }
                 let mut cases = String::new();
                 for &t in proven()? {
-                    cases += &format!(" case {}: {}", sx(t), self.call(t, after, pc)?);
+                    cases += &format!(" case {}: {}", sx(t), self.call(t, after, pc, true)?);
                 }
                 Ok(format!(
                     "{{ u64 t = {a}; {} {slot} {}switch (t) {{{cases} }} return plaid_fault(s, 0x{pc:08x}u, 3); }}",
@@ -1108,7 +1255,7 @@ impl Lowerer<'_> {
             // BLTZAL BGEZAL (likely: 18, 19) link first, then test rs, as ares.
             (1, _, 16..=19) => {
                 let test = format!("(s64){a} {} 0", if rt & 1 == 0 { "<" } else { ">=" });
-                let call = self.call(branch, after, pc)?;
+                let call = self.call(branch, after, pc, false)?;
                 let link = set(31, self.link(after));
                 Ok(if rt & 2 == 0 {
                     format!(
@@ -1127,7 +1274,17 @@ impl Lowerer<'_> {
                 "{slot} {{ int r = plaid_rt_{}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;",
                 self.runtime[&jump]
             )),
-            (2, _, _) => Ok(format!("{slot} {}", self.goto(jump)?)),
+            (2, _, _) if self.targets.contains_key(&pc) => {
+                let k = self.dispatch[proven()?];
+                Ok(format!(
+                    "{slot} return plaid_call_{k}(s, {}, ret, 0x{pc:08x}u);",
+                    sx(jump)
+                ))
+            }
+            (2, _, _) if self.ovl_of(jump).is_some_and(|k| Some(k) != self.ovl) => {
+                Ok(format!("{slot} return plaid_fault(s, 0x{pc:08x}u, 3);"))
+            }
+            (2, _, _) => Ok(format!("{slot} {}", self.tail(jump, pc)?)),
             (3, _, _) if self.targets.contains_key(&pc) => {
                 let k = self.dispatch[proven()?];
                 Ok(format!(
@@ -1141,7 +1298,7 @@ impl Lowerer<'_> {
             (3, _, _) => Ok(format!(
                 "s->r[31] = {}; {slot} {}",
                 self.link(after),
-                self.call(jump, after, pc)?
+                self.call(jump, after, pc, false)?
             )),
             (4, _, _) => conditional(format!("{a} == {b}")),
             (5, _, _) => conditional(format!("{a} != {b}")),
@@ -1244,6 +1401,23 @@ pub fn lower_c_parts(
     let relocatable: Vec<&plaid_core::declared_loads::DeclaredLoad> =
         declared.iter().filter(|l| l.relocatable).collect();
     let overlays: Vec<(u32, u32)> = relocatable.iter().map(|l| range(l)).collect();
+    let virtual_bases: Vec<Option<u32>> = relocatable
+        .iter()
+        .map(|l| match l.encoding {
+            plaid_core::declared_loads::LoadEncoding::TlbRaw { .. } => l
+                .linked
+                .map(|a| a.0)
+                .ok_or("TLB executable lacks its virtual base")
+                .map(Some),
+            _ if l
+                .linked
+                .is_some_and(|a| !(0x80000000..0xc0000000).contains(&a.0)) =>
+            {
+                Err("mapped executable slots require tlb_raw encoding")
+            }
+            _ => Ok(None),
+        })
+        .collect::<Result<_, _>>()?;
     if overlays.len() > 1024 {
         return Err("at most 1024 relocatable overlays are supported".into());
     }
@@ -1330,9 +1504,16 @@ pub fn lower_c_parts(
             returns.insert(site.site.pc.0);
             continue;
         }
-        if site.link_register.is_some() {
-            callees.extend(site.candidates.keys().cloned());
-        }
+        callees.extend(
+            site.candidates
+                .keys()
+                .filter(|t| {
+                    site.link_register.is_some()
+                        || proof.producer == "plaid-tail-cell-jr/v0"
+                        || ovl_of(site.site.pc.0) != ovl_of(t.pc.0)
+                })
+                .cloned(),
+        );
         targets.insert(
             site.site.pc.0,
             site.candidates
@@ -1344,7 +1525,10 @@ pub fn lower_c_parts(
     // A call into a slot dispatches over the alternates RAM may hold there,
     // through the binding (ADR-0185); other calls name their callee.
     let blocks: BTreeSet<u32> = map.blocks.iter().map(|b| b.start.pc.0).collect();
-    for e in map.direct_edges.iter().filter(|e| e.kind == EdgeKind::Call) {
+    for e in map.direct_edges.iter().filter(|e| {
+        e.kind == EdgeKind::Call
+            || e.kind == EdgeKind::Jump && ovl_of(e.site.pc.0) != ovl_of(e.target.pc.0)
+    }) {
         let slot: BTreeSet<u32> = plaid_core::declared_loads::slot_targets(declared, e.target.pc.0)
             .into_iter()
             .filter(|t| blocks.contains(t))
@@ -1359,11 +1543,13 @@ pub fn lower_c_parts(
     // A proven register-call constant can name the linked slot too. Its
     // native dispatcher must contain the placed alternatives, not a phantom
     // function at the shared address.
-    for site in map
-        .indirect_sites
-        .iter()
-        .filter(|s| s.link_register.is_some())
-    {
+    for site in map.indirect_sites.iter().filter(|s| {
+        s.link_register.is_some()
+            || s.closed_proof
+                .as_ref()
+                .and_then(|id| map.evidence.get(id))
+                .is_some_and(|e| e.producer == "plaid-tail-cell-jr/v0")
+    }) {
         if let Some(set) = targets.get_mut(&site.site.pc.0) {
             let expanded: BTreeSet<u32> = set
                 .iter()
@@ -1415,11 +1601,25 @@ pub fn lower_c_parts(
         ));
     }
     // Jump tables are store-protected like code (ADR-0132).
+    let mut guarded = vec![Vec::new(); overlays.len()];
     let index = plaid_core::indirect::MapIndex::new(map);
     for site in &map.indirect_sites {
-        if let Some((start, count)) = plaid_core::tables::table_range(&index, map, image, site)
-            && ovl_of(start.0).is_none()
+        let cell = plaid_core::tail_cells::source_cell_range_in(&index, map, image, site)
+            .map(|range| (range.start, range.size / 4));
+        if let Some((start, count)) =
+            plaid_core::tables::table_range(&index, map, image, site).or(cell)
         {
+            if let Some(k) = ovl_of(start.0) {
+                let end = start
+                    .0
+                    .checked_add(count * 4)
+                    .ok_or("overlay table range overflow")?;
+                if end > overlays[k].1 {
+                    return Err("overlay table exceeds its declared source".into());
+                }
+                guarded[k].push((start.0 - overlays[k].0, end - overlays[k].0));
+                continue;
+            }
             code.push(format!(
                 "{{{}, {}, {}}}",
                 physical(start.0)?,
@@ -1477,14 +1677,22 @@ pub fn lower_c_parts(
     }
     out += &declarations;
     shared += &declarations;
-    out += &overlay_runtime(&overlays, &layouts, &compared, &functions, image)?;
+    out += &overlay_runtime(
+        &overlays,
+        &virtual_bases,
+        &layouts,
+        &compared,
+        &guarded,
+        &functions,
+        image,
+    )?;
     // A JALR with several proven targets calls one dispatcher per target set
     // instead of inlining a call per target at every site (ADR-0174).
     let mut dispatch = BTreeMap::new();
     for (&pc, ts) in &targets {
         let w = word(pc)?;
         let jalr = w >> 26 == 0 && w & 63 == 9;
-        if !(jalr && ts.len() >= 2 || w >> 26 == 3) || dispatch.contains_key(ts) {
+        if !(jalr && ts.len() >= 2 || matches!(w >> 26, 2 | 3)) || dispatch.contains_key(ts) {
             continue;
         }
         let k = dispatch.len();
@@ -1536,10 +1744,11 @@ pub fn lower_c_parts(
     let mut seen = BTreeSet::new();
     // Address-taken calls repeat the same callees; analyze each identity once.
     let mut body_entries = BTreeSet::new();
-    let bodies = returns::function_bodies(
+    let bodies = returns::function_bodies_partitioned(
         map,
         image,
         callees.iter().filter(|f| body_entries.insert(*f)),
+        |a| ovl_of(a.pc.0),
     );
     // Blocks by start; `map.blocks` is ordered by start, so a body's blocks
     // come out in map order.
@@ -1552,6 +1761,7 @@ pub fn lower_c_parts(
         let mut out = String::new();
         let body = &bodies[f];
         let lowerer = Lowerer {
+            image,
             fr0: map.cop1_fr0,
             labels: body.iter().map(|b| b.pc.0).collect(),
             targets: &targets,

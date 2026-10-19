@@ -177,3 +177,14 @@ Paper Mario symbol/layout metadata at pmret/papermario commit
 `1104f1f71b824042a5fa1f958f2d861b603320fd` oriented diagnosis only. That
 repository has no root license; none of its source or game code is reused,
 and its metadata is neither a production dependency nor a native-build input.
+
+## ADR-0205: mapped source and tail-cell frontier
+
+ROM-only refinement adds 128 unchanged TLB source alternatives: 127 sparse
+effect records and one shared bridge. Discovery now has 55,666 blocks and 162
+loads, scoped OPEN/18 (all remaining blockers are indexed JR dispatches). The
+125 prior effect wrappers close through rechecked constant-cell proofs and
+content/generation-bound native dispatch. No native artifact or accepted game
+run is emitted. See native-tlb-executable-bindings.md for authored reference
+contracts, runtime lifetime guards, measurements and limits. Ignored receipt:
+`target/paper-mario/0205/frontier-result.json` and `solve.json`.

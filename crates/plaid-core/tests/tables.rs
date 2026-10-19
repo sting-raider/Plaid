@@ -34,6 +34,42 @@ fn map(i: &CodeImage) -> ProgramMap {
 }
 
 #[test]
+fn virtual_slot_tables_discover_their_own_placed_case_blocks() {
+    let mut i = image();
+    let placed = 0x8001_0000;
+    let linked = 0xe000_0000;
+    i.base.pc = GuestAddr(placed);
+    i.words[3] = 0x3c08_e000;
+    i.words[64..].copy_from_slice(&[linked + 0x40, linked + 0x50, linked + 0x40]);
+    i.slots = vec![(
+        GuestRange {
+            start: i.base.pc,
+            size: i.words.len() as u32 * 4,
+        },
+        linked,
+        0x100,
+    )];
+    let d = discover_image(rom(), &i, &[i.base.pc], 1000).unwrap();
+    let s = d
+        .map
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == placed + 0x20)
+        .unwrap();
+    assert!(plaid_core::tables::verify(&d.map, &i, s));
+    assert_eq!(
+        s.candidates.keys().map(|a| a.pc.0).collect::<Vec<_>>(),
+        [placed + 0x40, placed + 0x50]
+    );
+    for offset in [0x40, 0x50] {
+        assert!(d.map.blocks.iter().any(|b| b.start.pc.0 == placed + offset));
+    }
+    let mut changed = i;
+    changed.words[65] = linked + 0x60;
+    assert!(!plaid_core::tables::verify(&d.map, &changed, s));
+}
+
+#[test]
 fn guarded_pointer_table_closes_only_under_the_guarded_scope() {
     let i = image();
     let m = analyze_indirect(&map(&i), &i).unwrap();

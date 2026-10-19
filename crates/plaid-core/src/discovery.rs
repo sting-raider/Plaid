@@ -47,6 +47,25 @@ impl CodeImage {
             })
             .unwrap_or(address)
     }
+    /// Architectural PC of a word held in an analysis slot alternate.
+    pub fn linked_pc(&self, pc: GuestAddr) -> GuestAddr {
+        GuestAddr(
+            self.slots
+                .iter()
+                .find_map(|(placed, linked, _)| {
+                    let offset = pc.0.wrapping_sub(placed.start.0);
+                    (offset < placed.size).then(|| linked.wrapping_add(offset))
+                })
+                .unwrap_or(pc.0),
+        )
+    }
+    /// J/JAL keeps the executing virtual PC region. An internal target stays
+    /// in this alternate's storage; an external linked target remains virtual.
+    pub fn jump_target(&self, pc: GuestAddr, word: u32) -> GuestAddr {
+        let virtual_pc = self.linked_pc(pc).0;
+        let target = (virtual_pc.wrapping_add(4) & 0xf000_0000) | ((word & 0x03ff_ffff) << 2);
+        GuestAddr(self.slot_view(pc, target))
+    }
     /// Every placed copy of `address` when it is in a slot's linked text:
     /// a pointer there names whichever alternate is loaded (ADR-0185).
     pub fn slot_copies(&self, address: u32) -> Vec<u32> {
@@ -308,7 +327,7 @@ pub fn direct_cfg_bounded(
                 // Rabbitizer treats PC=0 as an unspecified address for J. Use
                 // literal ISA arithmetic so low-address synthetic inputs work.
                 let target = GuestAddr(if i.is_jump_with_address() {
-                    (pc.0.wrapping_add(4) & 0xf0000000) | ((word & 0x03ffffff) << 2)
+                    image.jump_target(pc, word).0
                 } else {
                     pc.0.wrapping_add(4)
                         .wrapping_add_signed(i32::from(word as i16) * 4)

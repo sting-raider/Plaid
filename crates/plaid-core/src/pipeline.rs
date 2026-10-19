@@ -132,6 +132,19 @@ fn discover_bounded(
             map.indirect_sites = sites;
         }
         let old_count = roots.len();
+        // Linked calls into a content-bound slot discover every supplied text
+        // alternate. Keep the edge's architectural target; native dispatch
+        // chooses the byte-verified alternate when the call executes.
+        for edge in map.direct_edges.iter().filter(|e| e.kind == EdgeKind::Call) {
+            for target in image.slot_copies(edge.target.pc.0) {
+                if target != edge.target.pc.0
+                    && image.instruction_word(GuestAddr(target)).is_some()
+                    && !boundary.contains(&GuestAddr(target))
+                {
+                    roots.insert(GuestAddr(target));
+                }
+            }
+        }
         // Proven callback arguments are functions the runtime enters (ADR-0130).
         for target in crate::callbacks::targets(&map, image) {
             if image.word(target.pc).is_some() {
@@ -140,12 +153,17 @@ fn discover_bounded(
         }
         for site in &map.indirect_sites {
             for target in site.candidates.keys() {
-                if target.image == image.base.image
-                    && target.generation == image.base.generation
-                    && image.word(target.pc).is_some()
-                    && !boundary.contains(&target.pc)
-                {
-                    roots.insert(target.pc);
+                if target.image == image.base.image && target.generation == image.base.generation {
+                    let copies = if site.link_register.is_some() {
+                        image.slot_copies(target.pc.0)
+                    } else {
+                        vec![target.pc.0]
+                    };
+                    for target in copies.into_iter().map(GuestAddr) {
+                        if image.instruction_word(target).is_some() && !boundary.contains(&target) {
+                            roots.insert(target);
+                        }
+                    }
                 }
             }
         }
