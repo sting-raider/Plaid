@@ -37,6 +37,45 @@ def _fixture(A, variable_shift=False, shift=2, overwrite=False):
     return A.assemble(items)
 
 
+def _preheader_fixture(A):
+    items = [A.lui(A.t1, 0x8000),
+             lambda pc, labels: A.addiu(A.t1, A.t1, labels['table'] & 0xFFFF),
+             A.lui(A.s0, 0x8000),
+             lambda pc, labels: A.addiu(A.s0, A.s0, labels['inputs'] & 0xFFFF),
+             'retry', A.lw(A.a0, 0, A.s0), A.sltiu(A.t4, A.a0, 3),
+             A.beq(A.t4, A.zero, 'retry'), A.addiu(A.s0, A.s0, 4),
+             A.sll(A.t2, A.a0, 2), A.addu(A.t3, A.t1, A.t2),
+             A.lw(A.v0, 0, A.t3), A.jr(A.v0), A.nop,
+             'case0', A.addiu(A.s1, A.zero, 1), A.j('done'), A.nop,
+             'case1', A.addiu(A.s1, A.zero, 10), A.j('done'), A.nop,
+             'case2', A.addiu(A.s1, A.zero, 100), 'done',
+             A.lui(A.gp, 0x8000), A.sw(A.s1, 0x1000, A.gp), *A.DONE,
+             'table', *[lambda pc, labels, i=i: labels[f'case{i}'] for i in range(3)],
+             'inputs', 4, 1]
+    return A.assemble(items)
+
+
+def _captured_fixture(A):
+    items = [A.lui(A.s0, 0x8000),
+             lambda pc, labels: A.addiu(A.s0, A.s0, labels['inputs'] & 0xFFFF),
+             A.lw(A.a0, 0, A.s0), A.addiu(A.s0, A.s0, 4),
+             A.sltiu(A.t4, A.a0, 3), A.lui(A.t1, 0x8000),
+             lambda pc, labels: A.addiu(A.t1, A.t1, labels['table'] & 0xFFFF),
+             A.sll(A.t2, A.a0, 2), A.addu(A.t3, A.t1, A.t2),
+             'retry', A.lw(A.v1, 0, A.s0), A.addiu(A.a0, A.a0, 1),
+             A.beq(A.v1, A.zero, 'retry'), A.addiu(A.s0, A.s0, 4),
+             A.beq(A.t4, A.zero, 'default'), A.nop,
+             A.lw(A.v0, 0, A.t3), A.jr(A.v0), A.nop,
+             'case0', A.addiu(A.s1, A.zero, 1), A.j('done'), A.nop,
+             'case1', A.addiu(A.s1, A.zero, 10), A.j('done'), A.nop,
+             'case2', A.addiu(A.s1, A.zero, 100), A.j('done'), A.nop,
+             'default', A.addiu(A.s1, A.zero, 1000), 'done',
+             A.lui(A.gp, 0x8000), A.sw(A.s1, 0x1000, A.gp), *A.DONE,
+             'table', *[lambda pc, labels, i=i: labels[f'case{i}'] for i in range(3)],
+             'inputs', 1, 0, 1]
+    return A.assemble(items)
+
+
 def main():
     spec = importlib.util.spec_from_file_location('indexed_asm', SLICE / 'run.py')
     A = importlib.util.module_from_spec(spec)
@@ -47,9 +86,12 @@ def main():
     if not exe.exists() or not cc:
         raise RuntimeError('indexed dispatch contract requires plaid and a C compiler')
     for name, variable, overwrite in [('precomputed', False, False), ('sllv', True, False),
+                                      ('preheader', False, False),
+                                      ('captured', False, False),
                                       ('table-write', True, True)]:
         raw = OUT / f'{name}.bin'
-        raw.write_bytes(_fixture(A, variable, overwrite=overwrite))
+        fixture = {'preheader': _preheader_fixture, 'captured': _captured_fixture}.get(name)
+        raw.write_bytes(fixture(A) if fixture else _fixture(A, variable, overwrite=overwrite))
         native_c = OUT / f'{name}.c'
         lowered = subprocess.run([str(exe), 'lower-c', str(raw), hex(BASE), hex(BASE),
                                   hex(EXIT), str(native_c), '--address-taken'],
@@ -67,7 +109,10 @@ def main():
         assert actual.returncode == expected.returncode == 0, (actual.stdout, actual.stderr, expected.stderr)
         state = json.loads(actual.stdout)
         assert state == json.loads(expected.stdout), (actual.stdout, expected.stdout)
-        assert state['pc'] == EXIT and state['regs'][17] == 1111 and state['ram'][0] == 1111
+        value = 10 if name in ('preheader', 'captured') else 1111
+        assert state['pc'] == EXIT and state['regs'][17] == value and state['ram'][0] == value
+        if name == 'captured':
+            assert state['regs'][4] == 3
 
     bad = OUT / 'wrong-scale.bin'
     bad.write_bytes(_fixture(A, True, shift=3))
@@ -76,7 +121,7 @@ def main():
     rejected = subprocess.run([str(exe), 'lower-c', str(bad), hex(BASE), hex(BASE),
                                hex(EXIT), str(rejected_c), '--address-taken'], capture_output=True, text=True)
     assert rejected.returncode != 0 and not rejected_c.exists(), (rejected.stdout, rejected.stderr)
-    print('PASS indexed dispatch: precomputed/SLLV loops match pinned ares full state; table writes fault and wrong stride refuses emission')
+    print('PASS indexed dispatch: scheduled, SLLV, preheader-base and captured-value loops match pinned ares; table writes fault and wrong stride refuses emission')
 
 
 if __name__ == '__main__':

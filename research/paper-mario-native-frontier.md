@@ -199,3 +199,14 @@ relations and calls need further proof. Native emission remains refused.
 Authored native/ares contracts and retained clobber/definition counterexamples
 are documented in scheduled-table-dispatch.md. Receipts remain ignored under
 `target/paper-mario/0206/`.
+
+## ADR-0207: unchanged loop predicates
+
+The corrected fresh ROM-only pass is scoped OPEN/16, 56,799 blocks and 162
+loads. The 42-entry dispatch now closes with nine distinct targets, exposing
+304 additional blocks; no new blocker sites appear. Exact complete backward
+predicates can be inductive across a repeated block/start/anchor/end frame,
+provided non-cycle paths ground the proof. A base-only shortcut was rejected
+by a retained guard-count counterexample. Native preheader and captured-value
+loops match pinned ares. Remaining sites still block native emission; see
+loop-table-dispatch.md. Receipts are ignored under `target/paper-mario/0207/`.
