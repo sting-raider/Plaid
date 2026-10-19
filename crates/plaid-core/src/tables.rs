@@ -698,6 +698,10 @@ fn guarded(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
     let mut walk = Walk {
         map,
         image,
+        slot: image
+            .slots
+            .iter()
+            .position(|(placed, _, _)| placed.contains(pc)),
         steps: 0,
         seen: BTreeMap::new(),
         results: BTreeSet::new(),
@@ -750,6 +754,8 @@ fn guarded(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
 struct Walk<'m, 'a> {
     map: &'m MapIndex<'a>,
     image: &'m CodeImage,
+    /// Pending pointer obligations cannot cross executable slot bindings.
+    slot: Option<usize>,
     steps: usize,
     /// Every instruction word the proof read, by pc.
     seen: BTreeMap<u32, u32>,
@@ -768,6 +774,15 @@ impl Walk<'_, '_> {
     fn word(&mut self, pc: u32) -> Option<u32> {
         self.steps += 1;
         if self.steps > 4096 {
+            return None;
+        }
+        if self
+            .image
+            .slots
+            .iter()
+            .position(|(placed, _, _)| placed.contains(GuestAddr(pc)))
+            != self.slot
+        {
             return None;
         }
         let word = self.image.word(GuestAddr(pc))?;
@@ -811,7 +826,7 @@ impl Walk<'_, '_> {
                 return self.finish(&need);
             }
         }
-        if self.map.jumped_to(&entry) {
+        if self.map.external_entry(self.image, &entry) {
             return None;
         }
         if let Some(previous) = path
@@ -824,7 +839,8 @@ impl Walk<'_, '_> {
             return (need == previous.need).then_some(());
         }
         let edges = self.map.edges_to(&entry);
-        if edges.is_empty() {
+        let indirect = self.map.indirect_to(&entry);
+        if edges.is_empty() && indirect.is_empty() {
             return None;
         }
         path.push(WalkFrame {
@@ -833,6 +849,29 @@ impl Walk<'_, '_> {
             end: end.0,
             need: need.clone(),
         });
+        for edge in indirect {
+            if edge.site.image != here
+                || edge.site.generation != generation
+                || edge.link_register.is_some()
+                || edge.delay_slot != DelaySlot::Always
+            {
+                return None;
+            }
+            let site = edge.site.pc;
+            let jump = self.word(site.0)?;
+            // Only a canonical non-return JR transfers unchanged register state.
+            if jump & 0xfc1f_ffff != 8 || matches!(field(jump, 21), 0 | 31) {
+                return None;
+            }
+            let mut incoming = need.clone();
+            let slot = GuestAddr(site.0.checked_add(4)?);
+            incoming.step(slot, self.word(slot.0)?)?;
+            if incoming.done() {
+                self.finish(&incoming)?;
+            } else {
+                self.block(site, site, incoming, path)?;
+            }
+        }
         for edge in edges {
             if edge.site.image != here
                 || edge.site.generation != generation
@@ -1019,7 +1058,6 @@ pub(crate) fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap,
         if let Some(words) = words {
             let mut site = old.clone();
             out.indirect_sites.remove(old);
-            let fresh = site.candidates.is_empty() && site.closed_proof.is_none();
             let aligned = words.iter().all(|w| w.is_multiple_of(4));
             for (n, target) in words.into_iter().enumerate() {
                 if target.is_multiple_of(4) {
@@ -1040,8 +1078,7 @@ pub(crate) fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap,
             }
             // Closing is only a claim; `verify` rechecks it and only the
             // guarded scope accepts it.
-            if (fresh || site.closed_proof.as_deref() == Some(id.as_str()))
-                && aligned
+            if aligned
                 && site.link_register.is_none()
                 && site
                     .observed

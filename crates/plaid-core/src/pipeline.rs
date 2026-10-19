@@ -2,7 +2,7 @@
 use crate::{
     GuestAddr,
     discovery::{CodeImage, Discovery, direct_cfg_bounded},
-    indirect::{MapIndex, analyze_indirect, verify_static_in},
+    indirect::analyze_indirect,
     program::*,
 };
 use std::collections::{BTreeMap, BTreeSet};
@@ -41,6 +41,22 @@ pub(crate) fn discover_labelled(
     budget: usize,
     label: bool,
 ) -> Result<Discovery, String> {
+    discover_seeded(rom, image, entries, runtime, evidence, budget, label, None)
+}
+
+/// Retain inferred decoder roots and candidate history without making them
+/// arbitrary external entries on an outer address-taken discovery round.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn discover_seeded(
+    rom: RomIdentity,
+    image: &CodeImage,
+    entries: &[GuestAddr],
+    runtime: &[(GuestAddr, String, Vec<u8>)],
+    evidence: Option<(String, Evidence)>,
+    budget: usize,
+    label: bool,
+    previous: Option<&ProgramMap>,
+) -> Result<Discovery, String> {
     let declared = match (runtime.is_empty(), evidence) {
         (true, _) => None,
         (false, None) => return Err("runtime declarations need evidence".into()),
@@ -61,7 +77,15 @@ pub(crate) fn discover_labelled(
             Some((id, evidence, functions))
         }
     };
-    discover_bounded(rom, image, entries, declared.as_ref(), budget, label)
+    discover_bounded(
+        rom,
+        image,
+        entries,
+        declared.as_ref(),
+        budget,
+        label,
+        previous,
+    )
 }
 
 type Declared = (String, Evidence, BTreeMap<CodeAddress, RuntimeFunction>);
@@ -73,13 +97,27 @@ fn discover_bounded(
     declared: Option<&Declared>,
     budget: usize,
     label: bool,
+    previous: Option<&ProgramMap>,
 ) -> Result<Discovery, String> {
     let boundary: BTreeSet<GuestAddr> = declared
         .map(|(_, _, f)| f.keys().map(|a| a.pc).collect())
         .unwrap_or_default();
     let boundary = &boundary;
     let mut roots: BTreeSet<_> = entries.iter().copied().collect();
-    let mut history: Option<ProgramMap> = None;
+    let mut external = roots.clone();
+    if let Some(previous) = previous {
+        for entry in previous
+            .entries
+            .keys()
+            .filter(|a| a.image == image.base.image && a.generation == image.base.generation)
+        {
+            roots.insert(entry.pc);
+            if !previous.derived_entries.contains_key(entry) {
+                external.insert(entry.pc);
+            }
+        }
+    }
+    let mut history = previous.cloned();
     let mut last = None;
     for _ in 0..budget.clamp(1, 512) {
         let mut discovery = direct_cfg_bounded(
@@ -93,7 +131,7 @@ fn discover_bounded(
             discovery.map.evidence.insert(id.clone(), evidence.clone());
             discovery.map.runtime_functions = functions.clone();
         }
-        let mut map = analyze_indirect(&discovery.map, image)?;
+        let mut map = discovery.map.clone();
         if let Some(previous) = &history {
             // Repartitioning replaces block shapes, but inferred possible targets
             // and their original evidence survive even if a proof is revoked.
@@ -117,21 +155,26 @@ fn discover_bounded(
                     s
                 })
                 .collect();
-            let index = MapIndex::new(&map);
-            let sites = map
-                .indirect_sites
-                .iter()
-                .map(|s| {
-                    let mut s = s.clone();
-                    if !verify_static_in(&index, &map, image, &s) {
-                        s.closed_proof = None;
-                    }
-                    s
-                })
-                .collect();
-            map.indirect_sites = sites;
         }
-        let old_count = roots.len();
+        // A decoder seed is derived only while every real external origin
+        // remains excluded. Candidate edges are rechecked against current bytes.
+        for site in &map.indirect_sites {
+            if site.link_register.is_none() {
+                for target in site.candidates.keys() {
+                    if map.entries.contains_key(target) && !external.contains(&target.pc) {
+                        map.derived_entries
+                            .entry(target.clone())
+                            .or_default()
+                            .insert(site.site.clone());
+                    }
+                }
+            }
+        }
+        for (entry, sources) in map.derived_entries.clone() {
+            map.record_derived_entry(entry, sources)?;
+        }
+        map = analyze_indirect(&map, image)?;
+        let old_count = (roots.len(), external.len());
         // Linked calls into a content-bound slot discover every supplied text
         // alternate. Keep the edge's architectural target; native dispatch
         // chooses the byte-verified alternate when the call executes.
@@ -142,6 +185,7 @@ fn discover_bounded(
                     && !boundary.contains(&GuestAddr(target))
                 {
                     roots.insert(GuestAddr(target));
+                    external.insert(GuestAddr(target));
                 }
             }
         }
@@ -149,6 +193,7 @@ fn discover_bounded(
         for target in crate::callbacks::targets(&map, image) {
             if image.word(target.pc).is_some() {
                 roots.insert(target.pc);
+                external.insert(target.pc);
             }
         }
         for site in &map.indirect_sites {
@@ -162,14 +207,19 @@ fn discover_bounded(
                     for target in copies.into_iter().map(GuestAddr) {
                         if image.instruction_word(target).is_some() && !boundary.contains(&target) {
                             roots.insert(target);
+                            if site.link_register.is_some() {
+                                external.insert(target);
+                            }
                         }
                     }
                 }
             }
         }
+        map.derived_entries
+            .retain(|entry, _| !external.contains(&entry.pc));
         map.validate()?;
         discovery.map = map.clone();
-        if roots.len() == old_count {
+        if (roots.len(), external.len()) == old_count {
             // Return certificates only label the fixed point; they add no roots.
             if label {
                 discovery.map = crate::returns::annotate(&discovery.map, image)?;

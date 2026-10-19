@@ -201,6 +201,29 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
             merged
         })
         .collect();
+    out.derived_entries.clear();
+    for entry in left.entries.keys().chain(right.entries.keys()) {
+        let left_present = left.entries.contains_key(entry);
+        let right_present = right.entries.contains_key(entry);
+        let left_sources = left.derived_entries.get(entry);
+        let right_sources = right.derived_entries.get(entry);
+        // An entry with no origin classification on either side is external or
+        // unknown. Preserve that uncertainty across merge in either direction.
+        if out.address_taken.contains_key(entry)
+            || (left_present && left_sources.is_none())
+            || (right_present && right_sources.is_none())
+        {
+            continue;
+        }
+        let sources: BTreeSet<_> = left_sources
+            .into_iter()
+            .chain(right_sources)
+            .flat_map(|sources| sources.iter().cloned())
+            .collect();
+        if !sources.is_empty() {
+            out.derived_entries.insert(entry.clone(), sources);
+        }
+    }
     // Multiple byte extents or direct destinations for an identical identity
     // remain visible. Different generations/images are intentionally distinct.
     // Index only the exact identity keys used by the quadratic conflict scan.

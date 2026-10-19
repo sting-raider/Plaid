@@ -372,20 +372,18 @@ pub fn discover_address_taken(
             .into_iter()
             .chain(rom_words(&words, image, starts))
             .partition(|a| runtime_entries.contains(a));
-    // each round starts from the last round's roots, so it does not repeat
-    // the indirect passes that found them
-    let mut seeds: BTreeSet<GuestAddr> = BTreeSet::new();
+    // Decoder seeds keep their incoming candidate edges across outer rounds.
+    let mut history = None;
     loop {
         let roots: Vec<_> = entries
             .iter()
             .chain(&taken)
-            .chain(&seeds)
             .copied()
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect();
         // return certificates add no roots, so they label only the last round
-        let mut d = crate::pipeline::discover_labelled(
+        let mut d = crate::pipeline::discover_seeded(
             rom.clone(),
             image,
             &roots,
@@ -393,15 +391,9 @@ pub fn discover_address_taken(
             evidence.clone(),
             budget,
             false,
+            history.as_ref(),
         )?;
         let before = taken.len();
-        seeds.extend(
-            d.map
-                .entries
-                .keys()
-                .filter(|a| a.image == image.base.image && a.generation == image.base.generation)
-                .map(|a| a.pc),
-        );
         for a in block_constants(image, &d.map, starts).into_keys() {
             if runtime_entries.contains(&a) {
                 runtime_taken.insert(a);
@@ -434,6 +426,7 @@ pub fn discover_address_taken(
             }
             return Ok(d);
         }
+        history = Some(d.map);
     }
 }
 

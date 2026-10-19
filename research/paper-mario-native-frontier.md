@@ -210,3 +210,17 @@ provided non-cycle paths ground the proof. A base-only shortcut was rejected
 by a retained guard-count counterexample. Native preheader and captured-value
 loops match pinned ares. Remaining sites still block native emission; see
 loop-table-dispatch.md. Receipts are ignored under `target/paper-mario/0207/`.
+
+
+## ADR-0208: retain internal-entry origins through discovery
+
+The fresh ROM-only pass remains OPEN/16 with 56,799 blocks and 162 loads.
+Five sites now retain 84 previously lost candidate edges, but the current
+all-path proof still rejects their remaining predecessors. Discovery preserves
+inferred case roots and candidate evidence through outer address-taken rounds;
+ordinary external entry facts and current SDK callbacks remain barriers. A
+tag-only forgery after merging an explicit entry was reproduced and retained
+as a regression; independent entry evidence prevents that reclassification.
+The authored native case-backedge loop matches pinned ares. Calls and some
+other loop paths still need proof; finite candidates are not closure. See
+derived-entry-discovery.md and ignored `target/paper-mario/0208/` receipts.

@@ -83,6 +83,16 @@ pub struct Evidence {
     pub detail: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EntryDerivation {
+    entry: CodeAddress,
+    sources: BTreeSet<CodeAddress>,
+}
+
+const DERIVED_ENTRY_PRODUCER: &str = "plaid-derived-entry/v0";
+const DERIVED_ENTRY_REVISION: &str = "0";
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Region {
@@ -571,6 +581,10 @@ pub struct ProgramMap {
     pub blocks: BTreeSet<BasicBlock>,
     #[serde(with = "pairs")]
     pub entries: BTreeMap<CodeAddress, EvidenceRefs>,
+    /// Entries decoded because they were candidates of non-link indirect sites.
+    /// Missing metadata leaves entry origin unknown/external.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", with = "pairs")]
+    pub derived_entries: BTreeMap<CodeAddress, BTreeSet<CodeAddress>>,
     pub direct_edges: BTreeSet<DirectEdge>,
     pub indirect_sites: BTreeSet<IndirectSite>,
     #[serde(with = "unique_map")]
@@ -698,6 +712,76 @@ fn fetch_summaries_realizable(fetch_count: u64, summaries: &[(u64, u64, u64)]) -
 }
 
 impl ProgramMap {
+    /// Reclassifies an entry after its independent origins have been excluded.
+    pub(crate) fn record_derived_entry(
+        &mut self,
+        target: CodeAddress,
+        sources: BTreeSet<CodeAddress>,
+    ) -> Result<(), String> {
+        if !self.entries.contains_key(&target) || sources.is_empty() {
+            return Err("derived entry requires an existing entry and nonempty sources".into());
+        }
+        let detail = serde_json::to_string(&EntryDerivation {
+            entry: target.clone(),
+            sources: sources.clone(),
+        })
+        .map_err(|error| format!("serialize derived entry evidence: {error}"))?;
+        let id = format!("derived-entry:{}", crate::rom::sha256(detail.as_bytes()));
+        let evidence = Evidence {
+            kind: EvidenceKind::Static,
+            producer: DERIVED_ENTRY_PRODUCER.into(),
+            revision: DERIVED_ENTRY_REVISION.into(),
+            detail,
+        };
+        if self
+            .evidence
+            .get(&id)
+            .is_some_and(|existing| existing != &evidence)
+        {
+            return Err("derived entry evidence id conflicts with existing evidence".into());
+        }
+        self.evidence.insert(id.clone(), evidence);
+        self.entries.insert(target.clone(), [id].into());
+        self.derived_entries.insert(target, sources);
+        Ok(())
+    }
+
+    pub(crate) fn derived_entry_evidence_valid(&self, target: &CodeAddress) -> bool {
+        let Some(sources) = self
+            .derived_entries
+            .get(target)
+            .filter(|sources| !sources.is_empty())
+        else {
+            return false;
+        };
+        let Some(refs) = self.entries.get(target).filter(|refs| !refs.is_empty()) else {
+            return false;
+        };
+        let mut witnessed_sources = BTreeSet::new();
+        for id in refs {
+            let Some(evidence) = self.evidence.get(id).filter(|evidence| {
+                evidence.kind == EvidenceKind::Static
+                    && evidence.producer == DERIVED_ENTRY_PRODUCER
+                    && evidence.revision == DERIVED_ENTRY_REVISION
+                    && *id
+                        == format!(
+                            "derived-entry:{}",
+                            crate::rom::sha256(evidence.detail.as_bytes())
+                        )
+            }) else {
+                return false;
+            };
+            let Ok(witness) = serde_json::from_str::<EntryDerivation>(&evidence.detail) else {
+                return false;
+            };
+            if witness.entry != *target || witness.sources.is_empty() {
+                return false;
+            }
+            witnessed_sources.extend(witness.sources);
+        }
+        witnessed_sources == *sources
+    }
+
     pub fn new(rom: RomIdentity) -> Self {
         Self {
             schema_version: SCHEMA_VERSION,
@@ -706,6 +790,7 @@ impl ProgramMap {
             regions: BTreeSet::new(),
             blocks: BTreeSet::new(),
             entries: BTreeMap::new(),
+            derived_entries: BTreeMap::new(),
             direct_edges: BTreeSet::new(),
             indirect_sites: BTreeSet::new(),
             overlays: BTreeMap::new(),
@@ -806,6 +891,35 @@ impl ProgramMap {
         for (a, e) in &self.entries {
             address(a)?;
             refs(e)?;
+        }
+        for (target, sources) in &self.derived_entries {
+            address(target)?;
+            if !self.entries.contains_key(target)
+                || sources.is_empty()
+                || !self.derived_entry_evidence_valid(target)
+            {
+                return Err("invalid derived entry origin".into());
+            }
+            for source in sources {
+                address(source)?;
+                if source.image != target.image || source.generation != target.generation {
+                    return Err(
+                        "derived entry source and target have different execution identity".into(),
+                    );
+                }
+                if !self.indirect_sites.iter().any(|site| {
+                    site.site == *source
+                        && site.link_register.is_none()
+                        && site.candidates.contains_key(target)
+                }) {
+                    return Err(
+                        "derived entry origin lacks a matching non-link indirect candidate".into(),
+                    );
+                }
+            }
+            if self.address_taken.contains_key(target) {
+                return Err("address-taken entry cannot be classified as derived".into());
+            }
         }
         // one host function may stand for several identical copies (ADR-0171),
         // so a repeated name must declare the same callbacks
