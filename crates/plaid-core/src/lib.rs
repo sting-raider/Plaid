@@ -47,6 +47,7 @@ pub mod cpu_mutation {
 pub mod ares_boot;
 pub mod boot_execution;
 pub mod callbacks;
+mod callee_effects;
 pub mod declared_loads;
 pub mod discovery;
 pub mod evidence_manifest;

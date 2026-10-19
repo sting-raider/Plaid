@@ -6162,3 +6162,20 @@ The native long case chain matches pinned ares. Fresh ROM-only Paper Mario is
 OPEN/15 with 56,799 blocks and 162 loads: one 56-entry dispatch closes and no
 new blocker sites appear. Native emission remains refused. See
 research/table-path-budget.md for the diagnostic, regressions and timings.
+
+
+## ADR-0210: bounded guest-callee no-write summaries
+
+Carry an already-discharged table index/guard and pending base across a direct
+JAL only when a bounded traversal of all reachable callee instructions proves
+that none writes the required GPR. Check nested direct calls and delay slots;
+reject unknown transfers, recursion, missing text, unsupported traps and slot
+ambiguity. Count every read against the shared 4,096-word budget and include
+all callee words in source verification. Retain full-predicate loop induction.
+Every incoming return source must belong to a proven callee at that exact
+continuation. Independent checked-return/control-flow contracts still apply;
+no guest ABI assumption or omitted guest execution is introduced. Authored
+native calls, RAM stores and stack effects match pinned ares. Paper Mario is
+OPEN/14 with 56,799 blocks and 162 loads; a 24-entry dispatch closes, with no
+new blocker sites. No native run is accepted. See
+research/callee-register-preservation.md for tests, limits and timings.

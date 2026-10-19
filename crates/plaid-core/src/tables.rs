@@ -388,6 +388,19 @@ struct Need {
 }
 
 impl Need {
+    /// The captured index/guard are discharged; only the base's earlier value
+    /// remains unknown. This never changes the full state used for induction.
+    fn pending_base(&self) -> Option<u8> {
+        (self.address.is_none()
+            && self.operands.is_none()
+            && self.scaled.is_none()
+            && self.flags.is_empty()
+            && self.constants.is_empty()
+            && matches!((self.index, self.bound), (Some(x), Some((r, _, _))) if x == r))
+        .then_some(self.base)
+        .flatten()
+    }
+
     fn done(&self) -> bool {
         self.address.is_none()
             && self.operands.is_none()
@@ -851,6 +864,7 @@ impl Walk<'_, '_> {
             end: end.0,
             need: need.clone(),
         });
+        let mut returns = BTreeSet::new();
         for edge in indirect {
             if edge.site.image != here
                 || edge.site.generation != generation
@@ -861,6 +875,12 @@ impl Walk<'_, '_> {
             }
             let site = edge.site.pc;
             let jump = self.word(site.0)?;
+            // Checked returns duplicate the call's continuation edge. Require
+            // each source to occur in a no-write callee proof below.
+            if jump == 0x03e0_0008 {
+                returns.insert(site.0);
+                continue;
+            }
             // Only a canonical non-return JR transfers unchanged register state.
             if jump & 0xfc1f_ffff != 8 || matches!(field(jump, 21), 0 | 31) {
                 return None;
@@ -875,18 +895,47 @@ impl Walk<'_, '_> {
             }
         }
         for edge in edges {
-            if edge.site.image != here
-                || edge.site.generation != generation
-                || !matches!(
-                    edge.kind,
-                    EdgeKind::Branch | EdgeKind::Jump | EdgeKind::Fallthrough
-                )
-            {
+            if edge.site.image != here || edge.site.generation != generation {
                 return None;
             }
             let mut need = need.clone();
             let site = edge.site.pc.0;
             let word = self.word(site)?;
+            if edge.kind == EdgeKind::ReturnContinuation {
+                let register = need.pending_base()?;
+                if word >> 26 != 3
+                    || edge.delay_slot != DelaySlot::None
+                    || site.checked_add(8) != Some(start.0)
+                    || self.entered(site + 4, site + 8)
+                {
+                    return None;
+                }
+                let target = self.image.jump_target(edge.site.pc, word);
+                let effect = crate::callee_effects::no_gpr_write(
+                    self.map,
+                    self.image,
+                    target,
+                    register,
+                    4096usize.checked_sub(self.steps)?,
+                )?;
+                returns.retain(|pc| effect.words.get(pc) != Some(&0x03e0_0008));
+                self.steps += effect.reads;
+                self.seen.extend(effect.words);
+                let slot = self.word(site + 4)?;
+                need.step(GuestAddr(site + 4), slot)?;
+                if need.done() {
+                    self.finish(&need)?;
+                } else {
+                    self.block(edge.site.pc, GuestAddr(site), need, path)?;
+                }
+                continue;
+            }
+            if !matches!(
+                edge.kind,
+                EdgeKind::Branch | EdgeKind::Jump | EdgeKind::Fallthrough
+            ) {
+                return None;
+            }
             if !decode(word, edge.site.pc).has_delay_slot() {
                 // plain fallthrough: the site is the predecessor's last word
                 if edge.kind != EdgeKind::Fallthrough || site.checked_add(4) != Some(start.0) {
@@ -927,6 +976,9 @@ impl Walk<'_, '_> {
                 _ => return None,
             }
             self.block(edge.site.pc, GuestAddr(site), need, path)?;
+        }
+        if !returns.is_empty() {
+            return None;
         }
         path.pop();
         Some(())

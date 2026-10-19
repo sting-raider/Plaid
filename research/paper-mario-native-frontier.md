@@ -1,5 +1,8 @@
 # Paper Mario ROM-only native frontier
 
+Latest scoped result: OPEN/14, 56,799 blocks and 162 loads (ADR-0210).
+Native Paper Mario emission remains refused.
+
 Base: `8566a88dfe08d17d700a1800b18e5c7283f1229d`, 2026-10-18.
 User input is only the local, ignored ROM `target/local-inputs/pm.z64`:
 SHA-256 `9ec6d2a5c2fca81ab86312328779fd042b5f3b920bf65df9f6b87b376883cb5b`.
@@ -235,3 +238,16 @@ re-verification. No blocker sites are added. Native long-chain state matches
 pinned ares, while clobber, unknown-entry and resource-limit negatives remain
 rejected. No native Paper Mario artifact or run is accepted. See
 table-path-budget.md and ignored target/paper-mario/0209 receipts.
+
+
+## ADR-0210: no-write guest-callee summaries
+
+The fresh ROM-only pass is OPEN/14, with the same 56,799 blocks and 162 loads.
+A pending table base can now cross a direct call whose bounded, source-rechecked
+callee traversal proves that no reachable instruction writes the register.
+This closes the 24-entry dispatch at 80132e00, with four distinct targets and
+no new blocker sites. Unknown effects and save/restore of the required register
+still reject; no guest ABI exception is introduced. Native leaf/nested call
+loops, RAM stores and stack effects match pinned ares. No native Paper Mario
+artifact or run is accepted. See callee-register-preservation.md and ignored
+target/paper-mario/0210 receipts.
