@@ -1,6 +1,6 @@
 # Paper Mario ROM-only native frontier
 
-Latest scoped result: OPEN/13, 56,799 blocks and 162 loads (ADR-0211).
+Latest scoped result: OPEN/13, 56,807 blocks and 162 loads (ADR-0212).
 Native Paper Mario emission remains refused.
 
 Base: `8566a88dfe08d17d700a1800b18e5c7283f1229d`, 2026-10-18.
@@ -264,3 +264,17 @@ No new assumption or guest ABI rule is introduced. Native normal paths match
 pinned ares; the taken BREAK fixture aborts at the exact PC. No native Paper
 Mario artifact or run is accepted. See checked-break-callee-paths.md and
 ignored target/paper-mario/0211 receipts.
+
+
+## ADR-0212: branch-flag values and infeasible predecessor paths
+
+The fresh discovery/solve pass remains OPEN/13 with 56,807 blocks and 162
+loads, exposing eight more blocks without changing the blocker sites. A path
+cannot require an unchanged flag register to be both zero and nonzero. Every
+non-SLTIU GPR write now clears old flag constraints before pointer/scale
+transfers return early. Retained tests catch an unsafe naive pruning rule and
+an existing stale-guard counterexample even without a cycle. Native valid and
+invalid-index paths match pinned ares. Candidate target recovery is still not
+closure: additional callee/entry effects remain unresolved. No native Paper
+Mario artifact or run is accepted. See branch-flag-feasibility.md and ignored
+target/paper-mario/0212 receipts.

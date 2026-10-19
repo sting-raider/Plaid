@@ -125,6 +125,25 @@ def _preserved_base_fixture(A, guarded_break=False, abort=False):
     return A.assemble(items)
 
 
+
+def _invariant_flag_fixture(A, index):
+    # An invalid captured index stays on the zero-flag loop path. The loop
+    # never writes that flag; valid indices dispatch once and exit.
+    items = [A.lui(A.s0, 0x8000), A.LO(A.s0, A.s0, 'input'), A.lw(A.a0, 0, A.s0),
+             A.sltiu(A.s4, A.a0, 2), A.lui(A.v1, 0x8000),
+             lambda pc, labels: A.addiu(A.v1, A.v1, labels['table'] & 0xFFFF),
+             A.sll(A.v0, A.a0, 2), A.addu(A.s2, A.v0, A.v1),
+             'header', A.beql(A.s4, A.zero, 'body'), A.nop,
+             A.lw(A.v0, 0, A.s2), A.jr(A.v0), A.nop,
+             'body', A.addiu(A.t0, A.t0, 1), A.addiu(A.t1, A.zero, 3),
+             A.bne(A.t0, A.t1, 'header'), A.nop, A.j('done'), A.nop,
+             'case0', A.addiu(A.s1, A.zero, 1), A.j('done'), A.nop,
+             'case1', A.addiu(A.s1, A.zero, 10), A.j('done'), A.nop,
+             'done', A.lui(A.gp, 0x8000), A.sw(A.s1, 0x1000, A.gp), *A.DONE,
+             'table', *[lambda pc, labels, i=i: labels[f'case{i}'] for i in range(2)],
+             'input', index]
+    return A.assemble(items)
+
 def main():
     spec = importlib.util.spec_from_file_location('indexed_asm', SLICE / 'run.py')
     A = importlib.util.module_from_spec(spec)
@@ -139,12 +158,18 @@ def main():
                                       ('captured', False, False),
                                       ('case-backedges', False, False),
                                       ('long-case', False, False),
+                                      ('flag-valid0', False, False),
+                                      ('flag-valid1', False, False),
+                                      ('flag-invalid', False, False),
                                       ('preserved-base', False, False),
                                       ('preserved-break', False, False),
                                       ('callee-break', False, False),
                                       ('table-write', True, True)]:
         raw = OUT / f'{name}.bin'
-        fixture = {'preheader': _preheader_fixture, 'captured': _captured_fixture,
+        fixture = {'flag-valid0': lambda asm: _invariant_flag_fixture(asm, 0),
+                   'flag-valid1': lambda asm: _invariant_flag_fixture(asm, 1),
+                   'flag-invalid': lambda asm: _invariant_flag_fixture(asm, 3),
+                   'preheader': _preheader_fixture, 'captured': _captured_fixture,
                    'case-backedges': _case_backedge_fixture,
                    'long-case': lambda asm: _case_backedge_fixture(asm, 24),
                    'preserved-base': _preserved_base_fixture,
@@ -175,6 +200,7 @@ def main():
         state = json.loads(actual.stdout)
         assert state == json.loads(expected.stdout), (actual.stdout, expected.stdout)
         value = 11 if name in ('case-backedges', 'long-case', 'preserved-base', 'preserved-break') else 10 if name in ('preheader', 'captured') else 1111
+        value = {'flag-valid0': 1, 'flag-valid1': 10, 'flag-invalid': 0}.get(name, value)
         accumulator = 20 if name in ('preserved-base', 'preserved-break') else 17
         assert state['pc'] == EXIT and state['regs'][accumulator] == value and state['ram'][0] == value
         if name in ('preserved-base', 'preserved-break'):
@@ -189,7 +215,7 @@ def main():
     rejected = subprocess.run([str(exe), 'lower-c', str(bad), hex(BASE), hex(BASE),
                                hex(EXIT), str(rejected_c), '--address-taken'], capture_output=True, text=True)
     assert rejected.returncode != 0 and not rejected_c.exists(), (rejected.stdout, rejected.stderr)
-    print('PASS indexed dispatch: scheduled, SLLV, preheader, captured, case-backedge and preserved-base call loops match pinned ares; callee BREAK and table writes fault and wrong stride refuses emission')
+    print('PASS indexed dispatch: scheduled, SLLV, preheader, captured, case-backedge, invariant-flag and preserved-base call loops match pinned ares; callee BREAK and table writes fault and wrong stride refuses emission')
 
 
 if __name__ == '__main__':
