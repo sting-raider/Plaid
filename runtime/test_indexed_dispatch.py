@@ -97,7 +97,7 @@ def _case_backedge_fixture(A, chain=0):
     return A.assemble(items)
 
 
-def _preserved_base_fixture(A):
+def _preserved_base_fixture(A, guarded_break=False, abort=False):
     # A leaf writes other registers and RAM; the nested caller spills/restores
     # RA. Both preserve s1 because none of their instructions writes it.
     items = [A.lui(A.s1, 0x8000),
@@ -113,8 +113,11 @@ def _preserved_base_fixture(A):
              'case0', A.jal('leaf'), A.nop, A.addiu(A.s4, A.s4, 1), A.j('retry'), A.nop,
              'case1', A.jal('nested'), A.nop, A.addiu(A.s4, A.s4, 10), A.j('retry'), A.nop,
              'done', A.lui(A.gp, 0x8000), A.sw(A.s4, 0x1000, A.gp), *A.DONE,
-             'leaf', A.addiu(A.v0, A.zero, 42), A.sw(A.v0, 0, A.s2),
+             'leaf', *([A.addiu(A.t7, A.zero, 0 if abort else 3),
+                        A.beq(A.a0, A.t7, 'abort'), A.nop] if guarded_break else []),
+             A.addiu(A.v0, A.zero, 42), A.sw(A.v0, 0, A.s2),
              A.jr(A.ra), A.addiu(A.v1, A.v1, 1),
+             *(['abort', 0x0007000D] if guarded_break else []),
              'nested', A.addiu(A.sp, A.sp, -8), A.sw(A.ra, 4, A.sp),
              A.jal('leaf'), A.nop, A.lw(A.ra, 4, A.sp), A.jr(A.ra), A.addiu(A.sp, A.sp, 8),
              'table', *[lambda pc, labels, i=i: labels[f'case{i}'] for i in range(2)],
@@ -137,12 +140,16 @@ def main():
                                       ('case-backedges', False, False),
                                       ('long-case', False, False),
                                       ('preserved-base', False, False),
+                                      ('preserved-break', False, False),
+                                      ('callee-break', False, False),
                                       ('table-write', True, True)]:
         raw = OUT / f'{name}.bin'
         fixture = {'preheader': _preheader_fixture, 'captured': _captured_fixture,
                    'case-backedges': _case_backedge_fixture,
                    'long-case': lambda asm: _case_backedge_fixture(asm, 24),
-                   'preserved-base': _preserved_base_fixture}.get(name)
+                   'preserved-base': _preserved_base_fixture,
+                   'preserved-break': lambda asm: _preserved_base_fixture(asm, True),
+                   'callee-break': lambda asm: _preserved_base_fixture(asm, True, True)}.get(name)
         raw.write_bytes(fixture(A) if fixture else _fixture(A, variable, overwrite=overwrite))
         native_c = OUT / f'{name}.c'
         lowered = subprocess.run([str(exe), 'lower-c', str(raw), hex(BASE), hex(BASE),
@@ -154,6 +161,12 @@ def main():
                         f'-DPLAID_LOWERED="{native_c.name}"', f'-DPLAID_EXIT=0x{EXIT:x}u',
                         '-I', str(OUT), str(SLICE / 'harness.c'), '-o', str(native)], check=True)
         actual = subprocess.run([str(native)], capture_output=True, text=True, timeout=30)
+        if name == 'callee-break':
+            fault = json.loads(actual.stdout)
+            words = raw.read_bytes()
+            break_offset = words.index(bytes.fromhex('0007000d'))
+            assert actual.returncode == 6 and fault == {'fault': 9, 'fault_pc': BASE + break_offset}, actual.stdout
+            continue
         if overwrite:
             assert actual.returncode == 6 and json.loads(actual.stdout)['fault'] == 2, actual.stdout
             continue
@@ -161,10 +174,10 @@ def main():
         assert actual.returncode == expected.returncode == 0, (actual.stdout, actual.stderr, expected.stderr)
         state = json.loads(actual.stdout)
         assert state == json.loads(expected.stdout), (actual.stdout, expected.stdout)
-        value = 11 if name in ('case-backedges', 'long-case', 'preserved-base') else 10 if name in ('preheader', 'captured') else 1111
-        accumulator = 20 if name == 'preserved-base' else 17
+        value = 11 if name in ('case-backedges', 'long-case', 'preserved-base', 'preserved-break') else 10 if name in ('preheader', 'captured') else 1111
+        accumulator = 20 if name in ('preserved-base', 'preserved-break') else 17
         assert state['pc'] == EXIT and state['regs'][accumulator] == value and state['ram'][0] == value
-        if name == 'preserved-base':
+        if name in ('preserved-base', 'preserved-break'):
             assert state['ram'][4] == 42
         if name == 'captured':
             assert state['regs'][4] == 3
@@ -176,7 +189,7 @@ def main():
     rejected = subprocess.run([str(exe), 'lower-c', str(bad), hex(BASE), hex(BASE),
                                hex(EXIT), str(rejected_c), '--address-taken'], capture_output=True, text=True)
     assert rejected.returncode != 0 and not rejected_c.exists(), (rejected.stdout, rejected.stderr)
-    print('PASS indexed dispatch: scheduled, SLLV, preheader, captured, case-backedge and preserved-base call loops match pinned ares; table writes fault and wrong stride refuses emission')
+    print('PASS indexed dispatch: scheduled, SLLV, preheader, captured, case-backedge and preserved-base call loops match pinned ares; callee BREAK and table writes fault and wrong stride refuses emission')
 
 
 if __name__ == '__main__':

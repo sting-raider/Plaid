@@ -1,6 +1,6 @@
 # Paper Mario ROM-only native frontier
 
-Latest scoped result: OPEN/14, 56,799 blocks and 162 loads (ADR-0210).
+Latest scoped result: OPEN/13, 56,799 blocks and 162 loads (ADR-0211).
 Native Paper Mario emission remains refused.
 
 Base: `8566a88dfe08d17d700a1800b18e5c7283f1229d`, 2026-10-18.
@@ -251,3 +251,16 @@ still reject; no guest ABI exception is introduced. Native leaf/nested call
 loops, RAM stores and stack effects match pinned ares. No native Paper Mario
 artifact or run is accepted. See callee-register-preservation.md and ignored
 target/paper-mario/0210 receipts.
+
+
+## ADR-0211: terminate checked BREAK paths in callee proofs
+
+The fresh ROM-only pass is OPEN/13 with unchanged block/load counts. The
+five-entry dispatch at 80131e30 now closes; its callee chain has guarded BREAK
+paths that cannot return normally. The proof hashes each BREAK word and ends
+that path under the existing guarded-scope native fault-9 contract. Ordinary
+scope still rejects BREAK; delay-slot and BREAK-only callees remain refused.
+No new assumption or guest ABI rule is introduced. Native normal paths match
+pinned ares; the taken BREAK fixture aborts at the exact PC. No native Paper
+Mario artifact or run is accepted. See checked-break-callee-paths.md and
+ignored target/paper-mario/0211 receipts.

@@ -20,6 +20,8 @@ pub(crate) struct NoWrite {
 ///
 /// This only proves a GPR effect on normal checked returns. It does not prove
 /// memory, timing, return-target, or whole-program control-flow closure.
+/// BREAK paths terminate under the existing checked-abort scope; the global
+/// solver still rejects BREAK in scopes that do not admit that boundary.
 pub(crate) fn no_gpr_write(
     index: &MapIndex<'_>,
     image: &CodeImage,
@@ -82,6 +84,12 @@ impl Proof<'_, '_> {
             return None;
         }
         let word = self.image.instruction_word(pc)?;
+        // BREAK terminates native execution under the existing guarded scope
+        // (ADR-0138); it cannot reach a normal call continuation.
+        if crate::solver::is_break(word) {
+            self.words.insert(pc.0, word);
+            return Some(word);
+        }
         let instruction = decode(word, pc);
         let opcode = word >> 26;
         if !instruction.is_valid()
@@ -101,7 +109,8 @@ impl Proof<'_, '_> {
         let slot = GuestAddr(pc.0.checked_add(4)?);
         let word = self.read(slot)?;
         let instruction = decode(word, slot);
-        if instruction.has_delay_slot()
+        if crate::solver::is_break(word)
+            || instruction.has_delay_slot()
             || instruction.is_branch()
             || instruction.is_jump()
             || instruction.is_jump_with_address()
@@ -140,6 +149,9 @@ impl Proof<'_, '_> {
             let Some(word) = self.read(pc) else {
                 return false;
             };
+            if crate::solver::is_break(word) {
+                continue;
+            }
             let instruction = decode(word, pc);
             let opcode = word >> 26;
 
@@ -415,6 +427,18 @@ mod tests {
         long[MAX_WORD_READS - 1] = 0x03e0_0008;
         long[MAX_WORD_READS] = 0;
         assert!(prove(long, 8).is_none());
+    }
+
+    #[test]
+    fn guarded_break_ends_a_path_without_establishing_a_normal_return() {
+        let words = vec![beq(3), 0, 0x03e0_0008, 0, 0x0007_000d];
+        let summary = prove(words.clone(), 8).unwrap();
+        assert_eq!(summary.get(&(BASE + 16)), Some(&0x0007_000d));
+        let mut changed = words;
+        changed[4] = addiu(8);
+        assert!(prove(changed, 8).is_none());
+        assert!(prove(vec![0x0007_000d], 8).is_none());
+        assert!(prove(vec![0x03e0_0008, 0x0007_000d], 8).is_none());
     }
 
     #[test]
