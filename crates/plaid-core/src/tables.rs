@@ -357,9 +357,13 @@ fn pattern(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
 }
 
 /// What one dispatch path must still establish, walking backwards from the
-/// table add (ADR-0180).
+/// table load (ADR-0180, ADR-0206).
 #[derive(Clone)]
 struct Need {
+    /// Register holding the address used by the dispatch load.
+    address: Option<u8>,
+    /// The `addu` operands once the address definition is found.
+    operands: Option<(u8, u8)>,
     /// Register that must hold `index << 2`, until its SLL is found.
     scaled: Option<u8>,
     /// The shifted register, once the SLL is found.
@@ -377,12 +381,17 @@ struct Need {
     /// whose table GCC fills over the whole masked range; a C array called
     /// through `jalr` may be shorter than its mask.
     masks: bool,
+    /// Constants still required at earlier definitions, by GPR.
+    constants: BTreeMap<u8, u32>,
 }
 
 impl Need {
     fn done(&self) -> bool {
-        self.scaled.is_none()
+        self.address.is_none()
+            && self.operands.is_none()
+            && self.scaled.is_none()
             && self.base.is_none()
+            && self.constants.is_empty()
             && matches!((self.index, self.bound), (Some(x), Some((r, _, _))) if x == r)
     }
 
@@ -403,14 +412,138 @@ impl Need {
         else {
             return Some(());
         };
-        // Once the bound is known, the compared value must be the one shifted.
-        if let (Some((r, _, _)), Some(_)) = (self.bound, self.scaled)
-            && d == r
+        // A guard found before the pointer's definition must constrain the
+        // value consumed by its shift, even while the address is unresolved.
+        if self.index.is_none() && self.bound.is_some_and(|(r, _, _)| r == d) {
+            return None;
+        }
+        // Constant propagation consumes a definition. Until shared obligations
+        // are modeled together, it must not hide a pointer/index definition.
+        if self.constants.contains_key(&d)
+            && (self.address == Some(d)
+                || self.operands.is_some_and(|(a, b)| d == a || d == b)
+                || self.scaled == Some(d)
+                || self.base == Some(d)
+                || self.index == Some(d)
+                || self.flags.iter().any(|(flag, _, _)| *flag == d))
         {
             return None;
         }
+        if Some(d) == self.address {
+            if word >> 26 != 0 || word & 63 != 33 {
+                return None;
+            }
+            let (a, b) = (field(word, 21), field(word, 16));
+            if a == 0 || b == 0 || a == b {
+                return None;
+            }
+            self.address = None;
+            self.operands = Some((a, b));
+            return Some(());
+        }
+        if let Some(required) = self.constants.remove(&d) {
+            let mut require = |register: u8, value: u32| -> Option<()> {
+                if register == 0 {
+                    (value == 0).then_some(())
+                } else if self.constants.insert(register, value).is_some() {
+                    None
+                } else {
+                    Some(())
+                }
+            };
+            match word >> 26 {
+                // ADDIU is invertible modulo 2^32.
+                9 => {
+                    let source = field(word, 21);
+                    let before = required.wrapping_sub(i32::from(word as i16) as u32);
+                    require(source, before)?;
+                }
+                // ORI/XORI with zero as one source are exact constant loads;
+                // with zero immediate they preserve the other source.
+                13 | 14 => {
+                    let source = field(word, 21);
+                    let immediate = word as u16 as u32;
+                    if source == 0 {
+                        if immediate != required {
+                            return None;
+                        }
+                    } else if immediate == 0 {
+                        require(source, required)?;
+                    } else {
+                        return None;
+                    }
+                }
+                15 => {
+                    if (word & 0xffff) << 16 != required {
+                        return None;
+                    }
+                }
+                0 => match word & 63 {
+                    // ADDU/OR with a zero operand preserve the other source.
+                    33 | 37 => {
+                        let (a, b) = (field(word, 21), field(word, 16));
+                        let source = if a == 0 {
+                            b
+                        } else if b == 0 {
+                            a
+                        } else {
+                            return None;
+                        };
+                        require(source, required)?;
+                    }
+                    _ => return None,
+                },
+                _ => return None,
+            }
+            return Some(());
+        }
+        if let Some((a, b)) = self.operands
+            && (d == a || d == b)
+            && self.scaled.is_none()
+            && self.base.is_none()
+            && self.index.is_none()
+        {
+            let other = if d == a { b } else { a };
+            if word >> 26 == 0 && word & 63 == 0 && (word >> 6) & 31 == 2 {
+                let index = field(word, 16);
+                if index == other || index == 0 {
+                    return None;
+                }
+                self.scaled = Some(d);
+                self.base = Some(other);
+                self.operands = None;
+            } else if word >> 26 == 0 && word & 63 == 4 {
+                let (index, amount) = (field(word, 16), field(word, 21));
+                if index == other
+                    || index == 0
+                    || amount == 0
+                    || amount == d
+                    || amount == index
+                    || amount == other
+                {
+                    return None;
+                }
+                self.scaled = Some(d);
+                self.base = Some(other);
+                self.operands = None;
+            } else if word >> 26 == 15 || word >> 26 == 9 && field(word, 21) == d {
+                self.base = Some(d);
+                self.scaled = Some(other);
+                self.operands = None;
+            } else {
+                return None;
+            }
+        }
         if Some(d) == self.scaled {
-            if word >> 26 != 0 || word & 63 != 0 || (word >> 6) & 31 != 2 {
+            let immediate_shift =
+                word >> 26 == 0 && word & 63 == 0 && field(word, 21) == 0 && (word >> 6) & 31 == 2;
+            let variable_shift = word >> 26 == 0
+                && word & 63 == 4
+                && field(word, 21) != 0
+                && field(word, 21) != d
+                && field(word, 21) != field(word, 16)
+                && self.constants.insert(field(word, 21), 2).is_none();
+            if !immediate_shift && !variable_shift {
                 return None;
             }
             let x = field(word, 16);
@@ -459,15 +592,79 @@ impl Need {
     }
 }
 
-/// Jump tables whose GCC scheduling the shape in [`pattern`] does not
-/// accept (ADR-0180): every CFG path into the dispatch must establish that
-/// the add's operands are a LUI-built base and `index << 2`, after a branch
-/// that selects the dispatch only when `sltiu flag, index, count` is set,
-/// with the index unchanged between the compare and the shift, or an ANDI
-/// mask that defines the index before its shift. Paths are
-/// followed through each edge's delay slot only when that edge executes it.
-/// Entries into the walked instructions, entry points, calls, returns,
-/// loops and paths that disagree fail closed.
+struct DispatchLoad {
+    pc: GuestAddr,
+    word: u32,
+    gap: Vec<(u32, u32)>,
+}
+
+/// Find the surviving LW definition without crossing a control transfer or
+/// permitting an alternate entry between that definition and its use.
+fn nearest_dispatch_load(
+    map: &MapIndex,
+    image: &CodeImage,
+    pc: GuestAddr,
+    jump: u32,
+) -> Option<DispatchLoad> {
+    let target_register = field(jump, 21);
+    if target_register == 0 {
+        return None;
+    }
+    let start = map
+        .containing(&image.address(pc))
+        .into_iter()
+        .filter(|block| !block.delay_slot_entry)
+        .map(|block| block.start.pc)
+        .max()?;
+    let mut at = pc.0.checked_sub(4)?;
+    let mut gap = Vec::new();
+    loop {
+        if at < start.0 {
+            return None;
+        }
+        let word = image.word(GuestAddr(at))?;
+        let instruction = decode(word, GuestAddr(at));
+        if !instruction.is_valid()
+            || instruction.has_delay_slot()
+            || instruction.is_trap()
+            || matches!(instruction.opcode_name(), "syscall" | "break" | "eret")
+        {
+            return None;
+        }
+        if instruction.destination_gpr() == Some(u32::from(target_register)) {
+            if word >> 26 != 35 || field(word, 16) != target_register {
+                return None;
+            }
+            let lo = at.checked_add(4)?;
+            let hi = pc.0.checked_add(4)?;
+            if lo.checked_add(3)? < hi
+                && (map.jumped_in(image.base.image.as_str(), image.base.generation, lo, hi - 4)
+                    || map
+                        .edges_in(image.base.image.as_str(), image.base.generation, lo, hi - 4)
+                        .next()
+                        .is_some())
+            {
+                return None;
+            }
+            gap.reverse();
+            return Some(DispatchLoad {
+                pc: GuestAddr(at),
+                word,
+                gap,
+            });
+        }
+        gap.push((at, word));
+        if at == start.0 {
+            return None;
+        }
+        at = at.checked_sub(4)?;
+    }
+}
+
+/// Recover the base, scaled index and matching guard over every predecessor
+/// path, including scheduled pointer definitions before the guard. Edge delay
+/// slots execute only where the CFG says they do. Unknown entries, calls,
+/// unresolved cycles and paths that disagree fail closed.
 fn guarded(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<TableEvidence> {
     if site.site.image != image.base.image || site.site.generation != image.base.generation {
         return None;
@@ -477,50 +674,35 @@ fn guarded(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
     if jump >> 26 != 0 || !matches!(jump & 63, 8 | 9) {
         return None;
     }
-    let delay_nop = image.word(GuestAddr(pc.0.checked_sub(4)?))? == 0;
-    let load_pc = GuestAddr(pc.0.checked_sub(if delay_nop { 8 } else { 4 })?);
-    let load = image.word(load_pc)?;
-    let add_pc = GuestAddr(load_pc.0.checked_sub(4)?);
-    let add = image.word(add_pc)?;
-    if load >> 26 != 35
-        || field(load, 16) != field(jump, 21)
-        || add >> 26 != 0
-        || add & 63 != 33
-        || field(add, 11) != field(load, 21)
-    {
+    let DispatchLoad {
+        pc: load_pc,
+        word: load,
+        gap,
+    } = nearest_dispatch_load(map, image, pc, jump)?;
+    if field(load, 16) != field(jump, 21) {
         return None;
     }
-    let (a, b) = (field(add, 21), field(add, 16));
-    if a == 0 || b == 0 || a == b {
-        return None;
-    }
-    let mut proven = None;
-    for (scaled, base) in [(a, b), (b, a)] {
-        let need = Need {
-            scaled: Some(scaled),
-            index: None,
-            base: Some(base),
-            base_low: 0,
-            base_value: None,
-            flags: Vec::new(),
-            bound: None,
-            masks: jump & 63 == 8,
-        };
-        let mut walk = Walk {
-            map,
-            image,
-            steps: 0,
-            seen: BTreeMap::new(),
-            results: BTreeSet::new(),
-        };
-        if walk.block(pc, add_pc, need, &mut Vec::new()).is_some() {
-            if proven.is_some() {
-                return None;
-            }
-            proven = Some(walk);
-        }
-    }
-    let walk = proven?;
+    let need = Need {
+        address: Some(field(load, 21)),
+        operands: None,
+        scaled: None,
+        index: None,
+        base: None,
+        base_low: 0,
+        base_value: None,
+        flags: Vec::new(),
+        bound: None,
+        masks: jump & 63 == 8,
+        constants: BTreeMap::new(),
+    };
+    let mut walk = Walk {
+        map,
+        image,
+        steps: 0,
+        seen: BTreeMap::new(),
+        results: BTreeSet::new(),
+    };
+    walk.block(pc, load_pc, need, &mut Vec::new())?;
     let mut tables = walk
         .results
         .iter()
@@ -537,10 +719,13 @@ fn guarded(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
         return None;
     }
     let mut prefix = Vec::new();
-    for (at, word) in
-        walk.seen
-            .iter()
-            .chain([(&add_pc.0, &add), (&load_pc.0, &load), (&pc.0, &jump)])
+    for (at, word) in walk.seen.iter() {
+        prefix.extend(at.to_be_bytes());
+        prefix.extend(word.to_be_bytes());
+    }
+    for (at, word) in std::iter::once((load_pc.0, load))
+        .chain(gap)
+        .chain(std::iter::once((pc.0, jump)))
     {
         prefix.extend(at.to_be_bytes());
         prefix.extend(word.to_be_bytes());

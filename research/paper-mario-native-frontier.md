@@ -188,3 +188,14 @@ content/generation-bound native dispatch. No native artifact or accepted game
 run is emitted. See native-tlb-executable-bindings.md for authored reference
 contracts, runtime lifetime guards, measurements and limits. Ignored receipt:
 `target/paper-mario/0205/frontier-result.json` and `solve.json`.
+
+## ADR-0206: scheduled indexed dispatch
+
+The fresh ROM-only pass is scoped OPEN/17, 56,495 blocks and 162 loads.
+Recovering scheduled pointers before guards and exact constant SLLV shifts
+closes the prior 95-entry site and exposes 829 more blocks. All remaining
+blockers are indexed JR dispatches; loop-preheader values, current-index
+relations and calls need further proof. Native emission remains refused.
+Authored native/ares contracts and retained clobber/definition counterexamples
+are documented in scheduled-table-dispatch.md. Receipts remain ignored under
+`target/paper-mario/0206/`.

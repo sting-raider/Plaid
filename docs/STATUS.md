@@ -1,15 +1,18 @@
 # Status
 
-## Paper Mario closure work (ADR-0202 through ADR-0205)
+## Paper Mario closure work (ADR-0202 through ADR-0206)
 
-The selected ROM remains scoped OPEN/18, with 55,666 blocks and 162 loads.
+The selected ROM remains scoped OPEN/17, with 56,495 blocks and 162 loads.
 ROM-only indexed TLB/copy consumers identify 127 effect files and the shared
 bridge. Guarded constant-cell tail dispatch closes the former effect-wrapper
 frontier. Native TLB execution retains virtual PC/return addresses and distinct
 physical backing, verifies source bytes, tracks mapping generations, and pins
 active frames. Authored native state/checkpoints match pinned ares; remap,
 write, protected-cell and overflow contracts pass. Remaining indexed dispatches
-still prevent native emission. No Paper Mario native run is accepted. See
+still prevent native emission. Scheduled pointer and constant-SLLV proofs now
+have authored native/ares contracts and retained clobber counterexamples;
+loop-preheader values and calls need further proof. No Paper Mario native run
+is accepted. See research/scheduled-table-dispatch.md,
 research/paper-mario-native-frontier.md and
 research/native-tlb-executable-bindings.md.
 

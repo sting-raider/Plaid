@@ -6105,3 +6105,18 @@ return analysis propagates continuations through tails. Pinned ares supplies
 semantic/reference behavior; no reference code or game code/assets were copied.
 Paper Mario remains OPEN/18 and unaccepted. See
 research/native-tlb-executable-bindings.md for evidence and limits.
+
+## ADR-0206: scheduled bounded indexed dispatch proofs
+
+Recover a dispatch register's surviving LW and its table-pointer definition
+over the existing bounded all-predecessor proof, including pointers scheduled
+before their guard. Accept SLLV only with an exact proven constant shift of 2.
+Keep matching index values across definitions, reject shared unresolved
+constant/base obligations, and recheck CFG/source/generation/snapshot evidence.
+Unknown calls, entries and unresolved cycles remain open. Retained authored
+counterexamples and native full-state/checkpoint comparisons with pinned ares
+cover the extension; table writes fault and wrong strides refuse emission.
+Paper Mario remains OPEN/17 with 56,495 blocks and no accepted native run.
+The native builder defaults its Cargo subprocess to measured release
+incremental compilation while preserving explicit user overrides.
+See research/scheduled-table-dispatch.md and research/native-build-iteration.md.
