@@ -358,7 +358,7 @@ fn pattern(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
 
 /// What one dispatch path must still establish, walking backwards from the
 /// table load (ADR-0180, ADR-0206).
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 struct Need {
     /// Register holding the address used by the dispatch load.
     address: Option<u8>,
@@ -757,6 +757,13 @@ struct Walk<'m, 'a> {
     results: BTreeSet<(u32, u32, u32, u8)>,
 }
 
+struct WalkFrame {
+    start: u32,
+    anchor: u32,
+    end: u32,
+    need: Need,
+}
+
 impl Walk<'_, '_> {
     fn word(&mut self, pc: u32) -> Option<u32> {
         self.steps += 1;
@@ -777,7 +784,7 @@ impl Walk<'_, '_> {
         anchor: GuestAddr,
         end: GuestAddr,
         mut need: Need,
-        path: &mut Vec<u32>,
+        path: &mut Vec<WalkFrame>,
     ) -> Option<()> {
         let (here, generation) = (self.image.base.image.as_str(), self.image.base.generation);
         let address = self.image.address(anchor);
@@ -788,7 +795,8 @@ impl Walk<'_, '_> {
             .filter(|b| !b.delay_slot_entry)
             .map(|b| b.start.pc)
             .max()?;
-        if path.contains(&start.0) || path.len() >= 16 {
+        let entry = self.image.address(start);
+        if path.len() >= 16 {
             return None;
         }
         if self.entered(start.0 + 1, anchor.0 + 4) {
@@ -803,15 +811,28 @@ impl Walk<'_, '_> {
                 return self.finish(&need);
             }
         }
-        let entry = self.image.address(start);
         if self.map.jumped_to(&entry) {
             return None;
+        }
+        if let Some(previous) = path
+            .iter()
+            .find(|frame| frame.start == start.0 && frame.anchor == anchor.0 && frame.end == end.0)
+        {
+            // Compare predicates at the block's start after processing every
+            // instruction. Backedge-only branch flags may have been killed by
+            // definitions in the block. All non-cycle paths still need a witness.
+            return (need == previous.need).then_some(());
         }
         let edges = self.map.edges_to(&entry);
         if edges.is_empty() {
             return None;
         }
-        path.push(start.0);
+        path.push(WalkFrame {
+            start: start.0,
+            anchor: anchor.0,
+            end: end.0,
+            need: need.clone(),
+        });
         for edge in edges {
             if edge.site.image != here
                 || edge.site.generation != generation
@@ -853,7 +874,10 @@ impl Walk<'_, '_> {
                     if (s == 0) != (t == 0) && need.bound.is_none() {
                         let in_range = matches!(op, 4 | 20) && edge.kind == EdgeKind::Fallthrough
                             || matches!(op, 5 | 21) && edge.kind == EdgeKind::Branch;
-                        need.flags.push((s.max(t), in_range, site));
+                        let flag = (s.max(t), in_range, site);
+                        if !need.flags.contains(&flag) {
+                            need.flags.push(flag);
+                        }
                     }
                 }
                 // non-linking compares against zero, J and COP1 branches

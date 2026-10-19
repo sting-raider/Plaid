@@ -281,6 +281,91 @@ fn the_guard_delay_slot_cannot_change_the_index_before_scaling() {
 }
 
 #[test]
+fn a_preheader_base_survives_only_proven_unchanged_loop_backedges() {
+    let code = [
+        lui(AT),
+        lw(A0, T3, 0),
+        sltiu(T8, A0, 3),
+        branch(4, T8, 0, 0x0c, 0x04),
+        0,
+        sll(T9, A0),
+        addu(V0, AT, T9),
+        lw(T9, V0, TABLE),
+        jr(T9),
+        0,
+    ];
+    assert_eq!(targets(&code, 0x20), Some(vec![0x50, 0x60]));
+    let mut changed = code;
+    changed[3] = branch(20, T8, 0, 0x0c, 0x04);
+    changed[4] = addiu(AT, AT, 1);
+    assert_eq!(targets(&changed, 0x20), None);
+    let mut uninitialized = code;
+    uninitialized[0] = 0;
+    assert_eq!(targets(&uninitialized, 0x20), None);
+
+    let image = image(&code);
+    let map = direct_cfg(rom(), &image, &[image.base.pc, GuestAddr(0x80000004)], 1000)
+        .unwrap()
+        .map;
+    let map = analyze_indirect(&map, &image).unwrap();
+    let site = map
+        .indirect_sites
+        .iter()
+        .find(|site| site.site.pc.0 == 0x80000020)
+        .unwrap();
+    assert!(!plaid_core::tables::verify(&map, &image, site));
+}
+
+#[test]
+fn a_captured_pointer_and_guard_survive_only_unchanged_loop_edges() {
+    let code = [
+        sltiu(T8, A0, 3),
+        lui(AT),
+        sll(T9, A0),
+        addu(T3, AT, T9),
+        lw(V1, 16, 0),
+        branch(4, V1, 0, 0x14, 0x10),
+        0,
+        branch(4, T8, 0, 0x1c, EXIT),
+        0,
+        lw(T9, T3, TABLE),
+        jr(T9),
+        0,
+    ];
+    assert_eq!(targets(&code, 0x28), Some(vec![0x50, 0x60]));
+    let mut pointer_changed = code;
+    pointer_changed[6] = addiu(T3, T3, 4);
+    assert_eq!(targets(&pointer_changed, 0x28), None);
+    let mut guard_changed = code;
+    guard_changed[6] = addiu(T8, 0, 1);
+    assert_eq!(targets(&guard_changed, 0x28), None);
+    let mut later_index_changed = code;
+    later_index_changed[6] = addiu(A0, A0, 1);
+    assert_eq!(targets(&later_index_changed, 0x28), Some(vec![0x50, 0x60]));
+}
+
+#[test]
+fn a_backedge_cannot_replace_a_small_guard_with_a_larger_count() {
+    let code = [
+        lui(AT),
+        sltiu(T8, A0, 3),
+        sll(T9, A0),
+        addu(V0, AT, T9),
+        branch(5, V1, 0, 0x10, 0x2c),
+        addiu(V1, 0, 0),
+        branch(4, T8, 0, 0x18, EXIT),
+        0,
+        lw(T9, V0, TABLE),
+        jr(T9),
+        0,
+        sltiu(T8, A0, 7),
+        0x0800_0002,
+        0,
+    ];
+    assert_eq!(targets(&code, 0x24), None);
+}
+
+#[test]
 fn verification_recomputes_source_generation_and_dispatch_bytes() {
     let (image, map) = analyzed(&precomputed_address());
     let site = map

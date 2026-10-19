@@ -6120,3 +6120,16 @@ Paper Mario remains OPEN/17 with 56,495 blocks and no accepted native run.
 The native builder defaults its Cargo subprocess to measured release
 incremental compilation while preserving explicit user overrides.
 See research/scheduled-table-dispatch.md and research/native-build-iteration.md.
+
+## ADR-0207: inductive unchanged table-dispatch predicates
+
+Permit a repeated backward CFG frame only when the full pending proof state
+matches at the exact same block start, anchor and exclusive end, after block
+transfer. All non-cycle predecessors must still ground the proof. Preserve
+entry/call barriers, resource limits and complete source/target rechecking.
+Reject the base-only shortcut: an authored counterexample can replace a
+three-entry guard with seven on a later iteration. Native preheader and
+captured-pointer/guard fixtures match pinned ares, including a changed current
+index register whose old value was already captured. Paper Mario remains
+OPEN/16 with 56,799 blocks; no native artifact or run is accepted. See
+research/loop-table-dispatch.md for evidence and remaining entry/call work.
