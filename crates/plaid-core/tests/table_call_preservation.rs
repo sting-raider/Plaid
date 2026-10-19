@@ -131,3 +131,54 @@ fn an_unrelated_return_cannot_supply_a_call_continuation() {
     map.indirect_sites.insert(unrelated);
     assert!(!plaid_core::tables::verify(&map, &image, site(&map)));
 }
+
+#[test]
+fn a_guarded_break_path_cannot_return_with_a_changed_base() {
+    let mut image = image();
+    image.words[0x180 / 4..0x1a0 / 4].copy_from_slice(&[
+        0x1480_0003,
+        0,
+        0x0007_000d,
+        0,
+        0x2402_002a,
+        0xae42_0000,
+        0x03e0_0008,
+        0x2463_0001,
+    ]);
+    let map = map(&image, &[image.base.pc]);
+    assert!(plaid_core::tables::verify(&map, &image, site(&map)));
+    let plain = plaid_core::solver::solve(
+        &map,
+        std::slice::from_ref(&image),
+        plaid_core::solver::Scope::DeclaredStaticImages,
+    )
+    .unwrap();
+    assert_ne!(plain.status, plaid_core::solver::ClosureStatus::Closed);
+    assert!(
+        plain
+            .blockers
+            .iter()
+            .any(|b| b.site.as_ref().is_some_and(|s| s.pc.0 == BASE + 0x188))
+    );
+    let guarded = plaid_core::solver::solve(
+        &map,
+        std::slice::from_ref(&image),
+        plaid_core::solver::Scope::DeclaredStaticImagesGuardedRam,
+    )
+    .unwrap();
+    assert_eq!(
+        guarded.status,
+        plaid_core::solver::ClosureStatus::Closed,
+        "{:?}",
+        guarded.blockers
+    );
+    assert!(guarded.assumptions.iter().any(|s| s.contains("BREAK")));
+    let mut changed = image.clone();
+    changed.words[0x188 / 4] = 0x3c11_7000;
+    let changed_map = self::map(&changed, &[changed.base.pc]);
+    assert!(!plaid_core::tables::verify(
+        &changed_map,
+        &changed,
+        site(&changed_map)
+    ));
+}

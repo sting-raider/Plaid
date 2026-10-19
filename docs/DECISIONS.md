@@ -6179,3 +6179,17 @@ native calls, RAM stores and stack effects match pinned ares. Paper Mario is
 OPEN/14 with 56,799 blocks and 162 loads; a 24-entry dispatch closes, with no
 new blocker sites. No native run is accepted. See
 research/callee-register-preservation.md for tests, limits and timings.
+
+
+## ADR-0211: terminate callee proof paths at checked BREAK
+
+A standalone BREAK cannot reach a normal call continuation in the existing
+guarded native model: lowering aborts with fault 9 at that PC (ADR-0138).
+Count and hash that exact mapped word, then stop the callee path. It is not
+a normal-return witness. BREAK-only functions and delay-slot BREAK still
+reject; ordinary scope still has the BREAK-site blocker. No handler/resumption,
+guest ABI assumption or new exception semantics is introduced. Authored
+RED/GREEN, changed-word, scope and abort-PC regressions pass; normal native
+call-loop state matches pinned ares. Paper Mario is OPEN/13 with 56,799 blocks
+and 162 loads; one five-entry dispatch closes and no new blocker appears.
+Native emission remains refused. See research/checked-break-callee-paths.md.
