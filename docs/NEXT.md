@@ -2,11 +2,12 @@
 
 ## Continue Paper Mario ROM-only closure
 
-The user selected Paper Mario. The frontier is OPEN/15 with 56,799 blocks and
+The user selected Paper Mario. The frontier is OPEN/14 with 56,799 blocks and
 162 loads after ROM-only TLB effect/bridge source inference and guarded tail
 cells and scheduled pointer/constant-SLLV proofs. Finish the remaining bounded
-indexed dispatch proofs, including matching index values and preservation
-through calls. Derived case-entry origins and candidates now survive discovery
+indexed dispatch proofs, including matching index values and callee save/restore
+effects. No-write callees now preserve pending base registers without a guest
+ABI assumption. Derived case-entry origins and candidates now survive discovery
 rounds, with every incoming indirect case edge checked. Five sites retain
 84 newly recovered candidates; the longer bounded path proof closes one
 56-entry site. Remaining sites still need closure proofs. Unchanged complete
