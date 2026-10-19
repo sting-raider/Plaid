@@ -224,3 +224,14 @@ as a regression; independent entry evidence prevents that reclassification.
 The authored native case-backedge loop matches pinned ares. Calls and some
 other loop paths still need proof; finite candidates are not closure. See
 derived-entry-discovery.md and ignored `target/paper-mario/0208/` receipts.
+
+
+## ADR-0209: longer bounded predecessor paths
+
+The fresh ROM-only pass is OPEN/15 with 56,799 blocks and 162 loads. The
+call-free 56-entry dispatch at 800e9de4 had reached the previous 16-frame proof
+limit; the general 32-frame limit permits a fresh certificate and complete
+re-verification. No blocker sites are added. Native long-chain state matches
+pinned ares, while clobber, unknown-entry and resource-limit negatives remain
+rejected. No native Paper Mario artifact or run is accepted. See
+table-path-budget.md and ignored target/paper-mario/0209 receipts.

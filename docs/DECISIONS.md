@@ -6150,3 +6150,15 @@ forgery; the native case-backedge loop matches pinned ares. Paper Mario remains
 OPEN/16 with 56,799 blocks and 162 loads; five sites retain 84 recovered
 candidate edges but no new closed proofs. No native run is accepted. See
 research/derived-entry-discovery.md for evidence, timing and limits.
+
+
+## ADR-0209: bounded longer predecessor paths for table proofs
+
+Raise the backward table walk's general frame cap from 16 to 32 while retaining
+the independent 4,096 instruction-read budget and every semantic proof check.
+An authored 24-block case path now reaches its initializer; clobbered bases,
+unknown entries, changed cycle predicates and over-budget paths still reject.
+The native long case chain matches pinned ares. Fresh ROM-only Paper Mario is
+OPEN/15 with 56,799 blocks and 162 loads: one 56-entry dispatch closes and no
+new blocker sites appear. Native emission remains refused. See
+research/table-path-budget.md for the diagnostic, regressions and timings.

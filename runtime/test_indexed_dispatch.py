@@ -76,7 +76,7 @@ def _captured_fixture(A):
     return A.assemble(items)
 
 
-def _case_backedge_fixture(A):
+def _case_backedge_fixture(A, chain=0):
     # Each decoded case returns to the guarded header with the initialized
     # table base intact. These roots are internal indirect edges.
     items = [A.lui(A.t1, 0x8000),
@@ -87,8 +87,10 @@ def _case_backedge_fixture(A):
              A.beq(A.t4, A.zero, 'done'), A.addiu(A.s0, A.s0, 4),
              A.sll(A.t2, A.a0, 2), A.addu(A.t3, A.t1, A.t2),
              A.lw(A.v0, 0, A.t3), A.jr(A.v0), A.nop,
-             'case0', A.addiu(A.s1, A.s1, 1), A.j('retry'), A.nop,
+             'case0', A.addiu(A.s1, A.s1, 1), A.j('chain0' if chain else 'retry'), A.nop,
              'case1', A.addiu(A.s1, A.s1, 10), A.j('retry'), A.nop,
+             *[word for n in range(chain) for word in
+               [f'chain{n}', A.j(f'chain{n + 1}' if n + 1 < chain else 'retry'), A.nop]],
              'done', A.lui(A.gp, 0x8000), A.sw(A.s1, 0x1000, A.gp), *A.DONE,
              'table', *[lambda pc, labels, i=i: labels[f'case{i}'] for i in range(2)],
              'inputs', 0, 1, 2]
@@ -108,10 +110,12 @@ def main():
                                       ('preheader', False, False),
                                       ('captured', False, False),
                                       ('case-backedges', False, False),
+                                      ('long-case', False, False),
                                       ('table-write', True, True)]:
         raw = OUT / f'{name}.bin'
         fixture = {'preheader': _preheader_fixture, 'captured': _captured_fixture,
-                   'case-backedges': _case_backedge_fixture}.get(name)
+                   'case-backedges': _case_backedge_fixture,
+                   'long-case': lambda asm: _case_backedge_fixture(asm, 24)}.get(name)
         raw.write_bytes(fixture(A) if fixture else _fixture(A, variable, overwrite=overwrite))
         native_c = OUT / f'{name}.c'
         lowered = subprocess.run([str(exe), 'lower-c', str(raw), hex(BASE), hex(BASE),
@@ -130,7 +134,7 @@ def main():
         assert actual.returncode == expected.returncode == 0, (actual.stdout, actual.stderr, expected.stderr)
         state = json.loads(actual.stdout)
         assert state == json.loads(expected.stdout), (actual.stdout, expected.stdout)
-        value = 11 if name == 'case-backedges' else 10 if name in ('preheader', 'captured') else 1111
+        value = 11 if name in ('case-backedges', 'long-case') else 10 if name in ('preheader', 'captured') else 1111
         assert state['pc'] == EXIT and state['regs'][17] == value and state['ram'][0] == value
         if name == 'captured':
             assert state['regs'][4] == 3
