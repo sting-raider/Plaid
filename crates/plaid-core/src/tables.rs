@@ -388,17 +388,24 @@ struct Need {
 }
 
 impl Need {
-    /// The captured index/guard are discharged; only the base's earlier value
-    /// remains unknown. This never changes the full state used for induction.
-    fn pending_base(&self) -> Option<u8> {
-        (self.address.is_none()
-            && self.operands.is_none()
-            && self.scaled.is_none()
-            && self.flags.is_empty()
-            && self.constants.is_empty()
-            && matches!((self.index, self.bound), (Some(x), Some((r, _, _))) if x == r))
-        .then_some(self.base)
-        .flatten()
+    /// Values still needed before this point; a matched captured index/bound
+    /// has already been discharged. Induction still compares the complete Need.
+    fn pending_registers(&self) -> BTreeSet<u8> {
+        let mut registers: BTreeSet<_> = self.constants.keys().copied().collect();
+        registers.extend(self.address);
+        registers.extend(self.scaled);
+        registers.extend(self.base);
+        if let Some((a, b)) = self.operands {
+            registers.extend([a, b]);
+        }
+        if self.bound.is_none() {
+            registers.extend(self.index);
+        }
+        if self.index.is_none() {
+            registers.extend(self.bound.map(|(r, _, _)| r));
+        }
+        registers.extend(self.flags.iter().map(|(r, _, _)| *r));
+        registers
     }
 
     fn done(&self) -> bool {
@@ -907,7 +914,10 @@ impl Walk<'_, '_> {
             let site = edge.site.pc.0;
             let word = self.word(site)?;
             if edge.kind == EdgeKind::ReturnContinuation {
-                let register = need.pending_base()?;
+                let registers = need.pending_registers();
+                if registers.is_empty() {
+                    return None;
+                }
                 if word >> 26 != 3
                     || edge.delay_slot != DelaySlot::None
                     || site.checked_add(8) != Some(start.0)
@@ -916,16 +926,21 @@ impl Walk<'_, '_> {
                     return None;
                 }
                 let target = self.image.jump_target(edge.site.pc, word);
-                let effect = crate::callee_effects::no_gpr_write(
-                    self.map,
-                    self.image,
-                    target,
-                    register,
-                    4096usize.checked_sub(self.steps)?,
-                )?;
-                returns.retain(|pc| effect.words.get(pc) != Some(&0x03e0_0008));
-                self.steps += effect.reads;
-                self.seen.extend(effect.words);
+                for register in registers {
+                    let budget = 4096usize.checked_sub(self.steps)?;
+                    let effect = if self.slot.is_some() {
+                        crate::callee_effects::no_gpr_write_in(
+                            self.map, self.image, target, register, budget, self.slot,
+                        )
+                    } else {
+                        crate::callee_effects::no_gpr_write(
+                            self.map, self.image, target, register, budget,
+                        )
+                    }?;
+                    returns.retain(|pc| effect.words.get(pc) != Some(&0x03e0_0008));
+                    self.steps += effect.reads;
+                    self.seen.extend(effect.words);
+                }
                 let slot = self.word(site + 4)?;
                 need.step(GuestAddr(site + 4), slot)?;
                 if need.done() {

@@ -104,3 +104,62 @@ fn overwriting_a_guard_with_a_pointer_is_invalid_even_without_a_cycle() {
         );
     }
 }
+
+fn call_image() -> CodeImage {
+    let mut image = image();
+    for at in [0x60usize, 0x70] {
+        image.words[at / 4..(at + 16) / 4].copy_from_slice(&[0x0c00_0024, 0, 0x0800_0010, 0]);
+    }
+    image.words[0x90 / 4..0xa0 / 4].copy_from_slice(&[0x2404_0063, 0x2403_0055, 0x03e0_0008, 0]);
+    image
+}
+#[test]
+fn captured_pointer_and_flag_survive_a_nonwriting_callee() {
+    assert!(verified(&call_image(), None));
+}
+#[test]
+fn the_callee_must_preserve_every_pending_value() {
+    for register in [18u32, 20] {
+        let mut changed = call_image();
+        changed.words[0x90 / 4] = 0x2400_0001 | register << 16;
+        assert!(!verified(&changed, None));
+    }
+    let mut slot = call_image();
+    slot.words[0x64 / 4] = 0x2412_0001; // corrupt the captured pointer in the caller slot
+    assert!(!verified(&slot, None));
+    // This slot runs only after a valid dispatch, so setting its flag to one
+    // cannot enable an out-of-range first dispatch. Ordinary transfer kills it.
+    slot.words[0x64 / 4] = 0x2414_0001;
+    assert!(verified(&slot, None));
+}
+#[test]
+fn a_callee_may_use_the_current_slot_but_never_another_alternate() {
+    let mut same = call_image();
+    same.slots.push((
+        GuestRange {
+            start: GuestAddr(BASE),
+            size: 0x120,
+        },
+        BASE,
+        0x100,
+    ));
+    assert!(verified(&same, None));
+    let mut other = call_image();
+    other.slots.push((
+        GuestRange {
+            start: GuestAddr(BASE),
+            size: 0x90,
+        },
+        BASE,
+        0x90,
+    ));
+    other.slots.push((
+        GuestRange {
+            start: GuestAddr(BASE + 0x90),
+            size: 0x10,
+        },
+        BASE + 0x90,
+        0x10,
+    ));
+    assert!(!verified(&other, None));
+}
