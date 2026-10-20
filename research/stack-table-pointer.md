@@ -43,12 +43,12 @@ identity, multiple live cells, nested-call memory summaries and general aliases.
 
 ## Evidence and outcome
 
-The positive Rust fixture is red on the base; four new Rust tests cover source
+The positive Rust fixture is red on the base; five new Rust tests cover source
 clobber, source rechecks, guarded predecessor edges, independent entries, wrong
 cells, frame bounds, SP changes, partial/floating/unknown stores, cache/COP0 and
-calls. Four mutants are killed by semantic failures (exit 101): absent forwarding,
-ignored aliasing writes, ignored frame bounds and ignored call barrier. Restored
-focused suites pass. Three new native fixtures (indices 0, 1 and invalid 3) are
+calls. Five mutants are killed by semantic failures (exit 101): absent forwarding,
+ignored aliasing writes, ignored frame bounds, ignored call barrier and skipped allocation transfer. Restored
+focused suites pass. Four new native fixtures (indices 0, 1, invalid 3 and an SP-derived base) are
 refused by the base and match pinned ares checkpoint CPU/PC/FPU/RAM state on the
 candidate. Existing fault and protected-table-write contracts remain retained.
 Pinned ares `9408cb43d4948fc3ea6e152a307a34348df3fe04` ADDU/LW/SW source
@@ -62,7 +62,7 @@ and the two stack-cell cases still lack the complete index and alias proof.
 No Paper Mario native artifact or VI/fault/PCM run is emitted while OPEN.
 This is a validated partial implementation, not PM closure.
 
-Baseline discovery/solve took 25.654/9.956 s; warm candidate 30.796/17.077 s
+Baseline discovery/solve took 25.654/9.956 s; final warm candidate 27.074/12.754 s
 with other work running. These are operational samples, not a controlled speed
 claim. A cold helper build made the first discovery take 304.543 s; a subsequent
 redundant rebuild was stopped (its solve exited 1 after 86.014 s). Reusing the
@@ -75,3 +75,20 @@ Receipts and scripts live under ignored `target/paper-mario/0217/`, including
 control comparisons, diagnostic disassembly and `gate/result.json`. The final
 exact-tree gate receipt records counts and results; no progress data or README
 change is made.
+
+## Review correction retained before final validation
+
+Review found that discharging frame ownership must still execute the normal
+backward GPR transfer of the allocating ADDIU. An early return skipped SP pointer
+arithmetic and flag invalidation. A retained synthetic counterexample would
+certify a valid decoy at the pre-allocation address while the actual allocated
+address contains unaligned targets. The correction retains the ordinary transfer;
+the fifth mutant restores the early return and is killed by that counterexample.
+A fourth native fixture derives the table base from allocated SP and matches
+pinned ares. The interrupted pre-review gate is retained separately; the complete
+final gate runs on the corrected committed tree.
+
+Final refusal diagnostics additionally identify the first stack site's index
+reload from a separate cell and the second site's potentially aliasing floating
+store. Neither can be discharged by pointer-cell forwarding alone. Diagnostic
+instrumentation is restored before the committed final gate.

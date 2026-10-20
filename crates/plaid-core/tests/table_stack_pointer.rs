@@ -126,3 +126,22 @@ fn a_call_cannot_carry_an_unproven_stack_cell() {
     image.words[0xc0 / 4] = 0x03e0_0008;
     assert!(!verifies(&image));
 }
+
+#[test]
+fn allocating_the_frame_still_transfers_sp_as_a_pointer_operand() {
+    let mut input = image();
+    input.words.resize(0x300 / 4, 0);
+    input.words[..5].copy_from_slice(&[
+        0x3c1d_8000, // SP = base + 0x200
+        0x27bd_0200,
+        0x27bd_ffe0, // actual table is base + 0x1e0
+        0x0004_5080,
+        0x03aa_5821, // t3 = SP + index*4
+    ]);
+    input.words[0x1e0 / 4..0x1e8 / 4].copy_from_slice(&[BASE + 0x80, BASE + 0xa0]);
+    assert!(verifies(&input));
+    // Skipping the allocation's ordinary GPR transfer would certify this decoy.
+    input.words[0x200 / 4..0x208 / 4].copy_from_slice(&[BASE + 0x80, BASE + 0xa0]);
+    input.words[0x1e0 / 4..0x1e8 / 4].fill(BASE + 1);
+    assert!(!verifies(&input));
+}

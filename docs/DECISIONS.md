@@ -6333,9 +6333,13 @@ spill/reload and allocation, join the rechecked certificate. No runtime MIPS
 execution or game-specific fact is added. Index-cell versions, multiple live
 cells, nested-call memory effects and broad alias proofs remain unsupported.
 
-Four new Rust tests and three native valid/invalid-index checkpoint comparisons
-against pinned ares verify this general rule. Four semantic mutants are killed.
+Five new Rust tests and four native index/SP-base checkpoint comparisons
+against pinned ares verify this general rule. Five semantic mutants are killed.
 Fresh PM remains scoped OPEN/7 (56,851 blocks, 162 loads), with an identical
 ProgramMap. All three remaining groups remain refused; no PM native artifact
 or run is accepted. This is partial progress. No reference code is copied.
 See research/stack-table-pointer.md and ignored target/paper-mario/0217 receipts.
+
+Frame ownership does not consume SP arithmetic: the allocating ADDIU must still
+run the ordinary pointer/flag transfer. A decoy-table counterexample and native
+SP-derived-base fixture verify this review correction before the final gate.

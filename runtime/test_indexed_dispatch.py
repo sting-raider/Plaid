@@ -129,14 +129,16 @@ def _preserved_base_fixture(A, guarded_break=False, abort=False, repeated=False)
 
 
 
-def _stack_pointer_fixture(A, index=1):
+def _stack_pointer_fixture(A, index=1, sp_operand=False):
     # The source register is dead after SW. Only the exact cell and allocated
     # frame carry the scheduled pointer across the later guard.
-    items = [A.lui(A.sp, 0x8000), A.addiu(A.sp, A.sp, 0x1040),
+    items = [A.lui(A.sp, 0x8000),
+             (lambda pc, labels: A.addiu(A.sp, A.sp, (labels['table'] + 32) & 0xFFFF))
+             if sp_operand else A.addiu(A.sp, A.sp, 0x1040),
              A.addiu(A.sp, A.sp, -32), A.addiu(A.a0, A.zero, index),
              A.lui(A.t1, 0x8000),
              lambda pc, labels: A.addiu(A.t1, A.t1, labels['table'] & 0xFFFF),
-             A.sll(A.t2, A.a0, 2), A.addu(A.t3, A.t1, A.t2),
+             A.sll(A.t2, A.a0, 2), A.addu(A.t3, A.sp if sp_operand else A.t1, A.t2),
              A.sw(A.t3, 16, A.sp), A.addiu(A.t3, A.zero, 99),
              A.sltiu(A.t4, A.a0, 2), A.beq(A.t4, A.zero, 'default'), A.nop,
              A.lw(A.t5, 16, A.sp), A.lw(A.v0, 0, A.t5), A.jr(A.v0), A.nop,
@@ -145,7 +147,8 @@ def _stack_pointer_fixture(A, index=1):
              'default', A.addiu(A.s1, A.zero, 1000),
              'done', A.addiu(A.sp, A.sp, 32),
              A.lui(A.gp, 0x8000), A.sw(A.s1, 0x1000, A.gp), *A.DONE,
-             'table', *[lambda pc, labels, i=i: labels[f'case{i}'] for i in range(2)]]
+             'table', *[lambda pc, labels, i=i: labels[f'case{i}'] for i in range(2)],
+             *([0] * 6 if sp_operand else [])]
     return A.assemble(items)
 
 
@@ -214,6 +217,7 @@ def main():
                                       ('affine-shift', False, False),
                                       ('stack-pointer0', False, False),
                                       ('stack-pointer1', False, False),
+                                      ('stack-pointer-sp', False, False),
                                       ('stack-pointer-invalid', False, False),
                                       ('preserved-base', False, False),
                                       ('reused-effects', False, False),
@@ -223,6 +227,7 @@ def main():
         raw = OUT / f'{name}.bin'
         fixture = {'stack-pointer0': lambda asm: _stack_pointer_fixture(asm, 0),
                    'stack-pointer1': _stack_pointer_fixture,
+                   'stack-pointer-sp': lambda asm: _stack_pointer_fixture(asm, sp_operand=True),
                    'stack-pointer-invalid': lambda asm: _stack_pointer_fixture(asm, 3),
                    'reused-effects': lambda asm: _preserved_base_fixture(asm, repeated=True),
                    'flag-valid0': lambda asm: _invariant_flag_fixture(asm, 0),
@@ -265,7 +270,7 @@ def main():
         state = json.loads(actual.stdout)
         assert state == json.loads(expected.stdout), (actual.stdout, expected.stdout)
         value = 11 if name in ('case-backedges', 'long-case', 'preserved-base', 'preserved-break', 'reused-effects') else 10 if name in ('preheader', 'captured') else 1111
-        value = {'stack-pointer0': 1, 'stack-pointer1': 10, 'stack-pointer-invalid': 1000,
+        value = {'stack-pointer0': 1, 'stack-pointer1': 10, 'stack-pointer-sp': 10, 'stack-pointer-invalid': 1000,
                  'flag-valid0': 1, 'flag-valid1': 10, 'flag-invalid': 0,
                  'flag-call0': 3, 'flag-call1': 30, 'flag-call-invalid': 0,
                  'affine-index': 111, 'affine-calls': 111, 'affine-shift': 110}.get(name, value)
@@ -273,7 +278,7 @@ def main():
         assert state['pc'] == EXIT and state['regs'][accumulator] == value and state['ram'][0] == value
         if name in ('preserved-base', 'preserved-break', 'reused-effects'):
             assert state['ram'][4] == 42
-        if name.startswith('stack-pointer'):
+        if name.startswith('stack-pointer') and name != 'stack-pointer-sp':
             assert state['regs'][29] == 0xFFFFFFFF80001040 and state['regs'][11] == 99
         if name == 'captured':
             assert state['regs'][4] == 3

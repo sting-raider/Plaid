@@ -464,7 +464,8 @@ impl Need {
                 return None;
             }
             self.frame_bytes = None;
-            return Some(());
+            // Allocation also defines a GPR: retain its pointer arithmetic and
+            // kill any prior SP branch flag through the ordinary transfer.
         }
         let Some(d) = instruction
             .destination_gpr()

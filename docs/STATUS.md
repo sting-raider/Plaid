@@ -37,7 +37,7 @@ repeated-call native state matches pinned ares. Save/restore,
 stack-cell provenance, remaining predecessor paths and other pointer relations
 still need proof. Frame-local SW/LW pointer reloads now have a source-rechecked
 all-path allocation/SP proof; every intervening store or unknown call refuses.
-The three authored native index cases match pinned ares and four mutants are
+The four authored native cases match pinned ares and five mutants are
 caught. Fresh PM remains OPEN/7 with an identical ProgramMap (partial ADR-0217).
 No Paper Mario native run is accepted. See research/stack-table-pointer.md,
 research/table-effect-reuse.md,
