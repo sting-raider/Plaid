@@ -23,3 +23,21 @@ For manual local iteration use:
 $env:CARGO_PROFILE_RELEASE_INCREMENTAL='true'
 cargo build --locked --release -p plaid
 ```
+
+## Test build layout and dev profile (2026-10-21)
+
+Base `1ea8aff4`, Rust 1.98.0 MSVC, 20 threads, one shared target directory.
+`cargo test --locked --workspace`; "rebuild" touches `crates/plaid-core/src/lib.rs`
+then reruns `--no-run`. All variants pass the same 886 tests.
+
+| Variant | Rebuild | Test run |
+| --- | ---: | ---: |
+| 84 plaid-core test binaries (before) | 40.7 s | 173.7 s |
+| one `tests/core` binary | 11.0 s | 172.6 s |
+| + `debug = "line-tables-only"`, dependencies without debug info | 8.4 s | 152.2 s |
+| + `opt-level = 1` (kept) | 8.1 s | 18.1 s |
+
+The test run was bound by one unoptimized binary (167 s). `opt-level = 1`
+keeps overflow checks and debug assertions. A build after a profile change
+costs 276 s instead of about 126 s; a warm target directory avoids it.
+Receipts: ignored `target/paper-mario/0222/bench`.

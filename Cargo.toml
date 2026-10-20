@@ -5,3 +5,12 @@ members = [
     "crates/plaid-lower",
     "apps/plaid",
 ]
+
+# Proof and analysis tests run in about a tenth of the unoptimized time;
+# overflow checks and debug assertions stay on (research/native-build-iteration.md).
+[profile.dev]
+debug = "line-tables-only"
+opt-level = 1
+
+[profile.dev.package."*"]
+debug = false
