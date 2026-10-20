@@ -506,7 +506,7 @@ The library's cached exception-root history v2 (`RESTORE_FORMAT` and
 snapshot SHA256 label. Each boundary cuts all old resident/backing observer
 parents; it does not invalidate hardware cache or authenticate the snapshot bytes.
 V0/v1 continue rejecting restore. Test the complete source/report boundary with
-`cargo test --locked -p plaid-core --test exception_root_lifetime_composition`.
+`cargo test --locked -p plaid-core --test core exception_root_lifetime_composition::`.
 
 For composed D-cache resident reads and writebacks:
 
