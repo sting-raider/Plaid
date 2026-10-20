@@ -18,6 +18,10 @@ Spike096 is the synthetic native slice (milestone 1). `plaid lower-c
 `DeclaredStaticImagesGuardedRam` and emits C via `crates/plaid-lower`. Run
 `python spikes/096-native-slice/run.py` (add `--rebuild` after driver changes);
 it needs a C compiler on PATH (`gcc`, `clang` or `CC`) and WSL for the ares oracle.
+`run.py --oracle --build-only` builds the oracle and stops before replaying the 096
+programs, whose `.bin` inputs exist only after a full spike run. The runtime tests
+`test_interrupts`, `test_slots`, `test_status` and `test_boot_execution` use it to build a
+missing oracle, so they also work in a fresh checkout.
 
 Spike097 is the same check for RSP microcode, scalar and vector (ADR-0167/0168). `plaid lower-rsp
 <rom> <offset> <size> <imem> <name> <out.c> [--raw]` lowers a microcode text.
@@ -161,6 +165,38 @@ When a change touches a retained synthetic contract, run the relevant `spikes/*/
 When reference semantics matter, reproduce against the exact revision in `refs.lock.toml` rather than an arbitrary upstream checkout.
 
 Historical CI is supporting evidence only. It is not a substitute for validation of the exact candidate tree being proposed for `main`.
+
+### Running one test file
+
+The `plaid-core` integration tests are modules of one test binary,
+`crates/plaid-core/tests/core/main.rs`, so they link once and share one parallel
+runner. Select one file with
+`cargo test --locked -p plaid-core --test core <file>::` (for example
+`--test core tables::`); `--test <file>` no longer names a target for these files.
+A new integration test is a file under `crates/plaid-core/tests/core/` plus a `mod`
+line in `main.rs`. The `plaid-lower` tests under `crates/plaid-lower/tests/` are
+unchanged and still separate targets.
+
+### Dev and test build profile
+
+`[profile.dev]` in the workspace `Cargo.toml` sets `opt-level = 1` and
+`debug = "line-tables-only"`, and dependencies build without debug info. Overflow
+checks and debug assertions stay on. With the single test binary above, the
+measurement in [`../research/native-build-iteration.md`](../research/native-build-iteration.md)
+(`cargo test --locked --workspace`, Rust 1.98.0 MSVC, 20 threads, one shared target
+directory, same 886 tests) went from 40.7 s to 8.1 s for a rebuild after touching
+`crates/plaid-core/src/lib.rs`, and from 173.7 s to 18.1 s for the test run. The
+first build after a profile change cost 276 s instead of about 126 s, so keep a warm
+target directory.
+
+### Pinned ares oracle cache
+
+A pinned ares oracle is fully determined by its recorded build inputs. A build
+also stores the oracle under `~/.cache/plaid/ares-oracle/<sha256 of the inputs>`
+(inside WSL on Windows); `PLAID_ORACLE_CACHE` overrides that directory. A checkout
+whose own copy is missing or stale takes the matching cached one instead of
+rebuilding, which otherwise took about 3.5 minutes per oracle in WSL for the
+native-slice and boot oracles.
 
 ## Main CLI
 
