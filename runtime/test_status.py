@@ -27,7 +27,7 @@ def run(exe, cc, T):
         return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(path)], text=True).strip()
     if not oracle.exists():
         if os.name == 'nt':
-            subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(T.ROOT / 'spikes/096-native-slice/run.py'), '--oracle'], check=True)
+            subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(T.ROOT / 'spikes/096-native-slice/run.py'), '--oracle', '--build-only'], check=True)
         else:
             A.builder().build(T.ROOT / 'spikes/096-native-slice/driver.cpp', oracle.parent)
     metadata = json.loads((oracle.parent / 'build.json').read_text())

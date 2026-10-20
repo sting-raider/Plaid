@@ -681,6 +681,8 @@ def oracle():
     oracle_exe = OUT / 'oracle/oracle'
     if '--rebuild' in sys.argv or not oracle_exe.exists():
         oracle_exe = builder().build(HERE / 'driver.cpp', OUT / 'oracle')
+    if '--build-only' in sys.argv:
+        return
     for name in PROGRAMS:
         out = subprocess.run([str(oracle_exe), str(OUT / f'{name}.bin'), hex(EXIT), *(['fr0'] if name in FR0 else [])],
             capture_output=True, text=True, timeout=120)

@@ -46,7 +46,7 @@ def run(exe, cc, T):
         def linux(path):
             return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(path)], text=True).strip()
         if not oracle.exists():
-            subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(T.ROOT / 'spikes/096-native-slice/run.py'), '--oracle'], check=True)
+            subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(T.ROOT / 'spikes/096-native-slice/run.py'), '--oracle', '--build-only'], check=True)
         command = ['wsl', '-d', 'Ubuntu', '--exec', linux(oracle), linux(raw), hex(A.EXIT)]
     else:
         if not oracle.exists():
