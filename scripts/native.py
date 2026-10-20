@@ -158,10 +158,10 @@ def main():
     if verdict['status'] != 'closed' and a.residual_dispatch:
         verdict = json.loads(plaid('solve', rom, m, '--residual-dispatch', capture_output=True, text=True).stdout)
         print('residual-dispatch solve', verdict['status'], len(verdict['blockers']), 'blockers,', len(verdict.get('residual_sites', [])), 'residual sites')
-        if verdict['status'] == 'closed':
-            (out / 'native-manifest.json').write_text(json.dumps({'mode': 'residual-dispatch', 'native_complete': False, 'residual_sites': [f"{s['pc']:08x}" for s in verdict.get('residual_sites', [])]}, indent=2) + '\n')
     if verdict['status'] != 'closed':
         sys.exit('not CLOSED under the address-taken scope: nothing is built')
+    if a.residual_dispatch:
+        (out / 'native-manifest.json').write_text(json.dumps({'mode': 'residual-dispatch', 'native_complete': False, 'residual_sites': [f"{s['pc']:08x}" for s in verdict.get('residual_sites', [])]}, indent=2) + '\n')
 
     # The native run starts SP memory as the ROM's own IPL3 leaves it (ADR-0195).
     try:
