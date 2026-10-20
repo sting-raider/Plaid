@@ -100,6 +100,10 @@ pub struct MapIndex<'a> {
 }
 
 impl<'a> MapIndex<'a> {
+    pub(crate) fn source(&self) -> &'a ProgramMap {
+        self.source
+    }
+
     pub fn new(map: &'a ProgramMap) -> Self {
         let mut blocks: BTreeMap<(&str, u64), (Vec<&BasicBlock>, u32)> = BTreeMap::new();
         for b in &map.blocks {
@@ -402,8 +406,8 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
         }
         out.indirect_sites.insert(site);
     }
-    out = crate::tables::analyze(&out, image)?;
     out = crate::tail_cells::analyze(&out, image)?;
+    out = crate::tables::analyze(&out, image)?;
     // New candidate edges may themselves enter a prefix and break dominance.
     let index = MapIndex::new(&out);
     let sites = out

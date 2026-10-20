@@ -360,6 +360,24 @@ pub fn discover_address_taken(
     starts: &BTreeSet<u32>,
     budget: usize,
 ) -> Result<crate::discovery::Discovery, String> {
+    discover_address_taken_with_loads(
+        rom, bytes, image, entries, runtime, evidence, starts, None, budget,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn discover_address_taken_with_loads(
+    rom: crate::program::RomIdentity,
+    bytes: &[u8],
+    image: &CodeImage,
+    entries: &[GuestAddr],
+    runtime: &[(GuestAddr, String, Vec<u8>)],
+    evidence: Option<(String, crate::program::Evidence)>,
+    starts: &BTreeSet<u32>,
+    loads: Option<&crate::pipeline::LoadContext>,
+    budget: usize,
+) -> Result<crate::discovery::Discovery, String> {
+    crate::pipeline::validate_load_context(image, loads)?;
     let runtime_entries: BTreeSet<GuestAddr> = runtime.iter().map(|(a, _, _)| *a).collect();
     // The image's own words are data too: a decompressed or captured load
     // (ADR-0190) is not plain ROM bytes (ADR-0197).
@@ -392,6 +410,7 @@ pub fn discover_address_taken(
             budget,
             false,
             history.as_ref(),
+            loads,
         )?;
         let before = taken.len();
         for a in block_constants(image, &d.map, starts).into_keys() {

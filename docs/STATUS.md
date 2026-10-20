@@ -1,8 +1,8 @@
 # Status
 
-## Paper Mario closure work (ADR-0202 through ADR-0214)
+## Paper Mario closure work (ADR-0202 through ADR-0215)
 
-The selected ROM remains scoped OPEN/11, with 56,813 blocks and 162 loads.
+The selected ROM remains scoped OPEN/9, with 56,851 blocks and 162 loads.
 ROM-only indexed TLB/copy consumers identify 127 effect files and the shared
 bridge. Guarded constant-cell tail dispatch closes the former effect-wrapper
 frontier. Native TLB execution retains virtual PC/return addresses and distinct
@@ -25,8 +25,13 @@ pointer/flag values now survive calls with checked no-write effects in fixed
 text or the same placed alternate, closing one five-entry dispatch. A bounded
 low-word affine relation now proves paired index/byte-offset updates and closes
 another five-entry dispatch. Fixed-text return sources require an exact checked
-callee witness. Save/restore, mapped callee bindings and other pointer relations
+callee witness. Mapped callee effects now recheck unique declared linked/placed text and every
+constant-cell tail target, retaining source cells, normal return witnesses and
+path-local binding authority. Fresh discovery carries declared sources through
+all proof rounds; two more dispatches close and expose 38 blocks. Save/restore,
+stack-cell provenance, remaining predecessor paths and other pointer relations
 still need proof. No Paper Mario native run is accepted. See
+research/mapped-callee-effects.md,
 research/affine-table-index.md,
 research/captured-callee-values.md,
 research/branch-flag-feasibility.md,

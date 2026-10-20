@@ -29,6 +29,43 @@ pub fn discover_image_with_runtime(
     discover_labelled(rom, image, entries, runtime, evidence, budget, true)
 }
 
+/// Discovery with declared load provenance available to every proof round.
+#[allow(clippy::too_many_arguments)]
+pub fn discover_image_with_loads(
+    rom: RomIdentity,
+    image: &CodeImage,
+    entries: &[GuestAddr],
+    runtime: &[(GuestAddr, String, Vec<u8>)],
+    evidence: Option<(String, Evidence)>,
+    loads: Option<&LoadContext>,
+    budget: usize,
+) -> Result<Discovery, String> {
+    validate_load_context(image, loads)?;
+    discover_seeded(
+        rom, image, entries, runtime, evidence, budget, true, None, loads,
+    )
+}
+
+/// Declared sources and their evidence; distinct from observed DMA mappings.
+pub type LoadContext = (crate::declared_loads::LoadImage, BTreeMap<String, Evidence>);
+
+pub(crate) fn validate_load_context(
+    image: &CodeImage,
+    loads: Option<&LoadContext>,
+) -> Result<(), String> {
+    if let Some((spec, evidence)) = loads
+        && (evidence.keys().any(String::is_empty)
+            || spec.loads.iter().any(|load| {
+                load.evidence.is_empty()
+                    || load.evidence.iter().any(|id| !evidence.contains_key(id))
+            })
+            || !crate::declared_loads::verify_slots(image, Some(spec)))
+    {
+        return Err("load context does not match image slots or evidence".into());
+    }
+    Ok(())
+}
+
 /// As [`discover_image_with_runtime`]; with `label` false the fixed point is
 /// left without return certificates, for callers that iterate further and
 /// label once at the end with [`crate::returns::annotate`].
@@ -41,7 +78,9 @@ pub(crate) fn discover_labelled(
     budget: usize,
     label: bool,
 ) -> Result<Discovery, String> {
-    discover_seeded(rom, image, entries, runtime, evidence, budget, label, None)
+    discover_seeded(
+        rom, image, entries, runtime, evidence, budget, label, None, None,
+    )
 }
 
 /// Retain inferred decoder roots and candidate history without making them
@@ -56,6 +95,7 @@ pub(crate) fn discover_seeded(
     budget: usize,
     label: bool,
     previous: Option<&ProgramMap>,
+    loads: Option<&LoadContext>,
 ) -> Result<Discovery, String> {
     let declared = match (runtime.is_empty(), evidence) {
         (true, _) => None,
@@ -85,11 +125,13 @@ pub(crate) fn discover_seeded(
         budget,
         label,
         previous,
+        loads,
     )
 }
 
 type Declared = (String, Evidence, BTreeMap<CodeAddress, RuntimeFunction>);
 
+#[allow(clippy::too_many_arguments)]
 fn discover_bounded(
     rom: RomIdentity,
     image: &CodeImage,
@@ -98,6 +140,7 @@ fn discover_bounded(
     budget: usize,
     label: bool,
     previous: Option<&ProgramMap>,
+    loads: Option<&LoadContext>,
 ) -> Result<Discovery, String> {
     let boundary: BTreeSet<GuestAddr> = declared
         .map(|(_, _, f)| f.keys().map(|a| a.pc).collect())
@@ -130,6 +173,13 @@ fn discover_bounded(
         if let Some((id, evidence, functions)) = declared {
             discovery.map.evidence.insert(id.clone(), evidence.clone());
             discovery.map.runtime_functions = functions.clone();
+        }
+        if let Some((spec, evidence)) = loads {
+            discovery.map.evidence.extend(evidence.clone());
+            discovery
+                .map
+                .load_images
+                .insert(image.base.image.clone(), spec.clone());
         }
         let mut map = discovery.map.clone();
         if let Some(previous) = &history {

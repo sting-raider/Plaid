@@ -190,23 +190,28 @@ pub fn verify_in(
     image: &CodeImage,
     site: &IndirectSite,
 ) -> bool {
-    let Some(evidence_id) = site.closed_proof.as_deref() else {
-        return false;
-    };
-    let Some(evidence) = map.evidence.get(evidence_id) else {
-        return false;
-    };
+    verified_certificate_in(index, map, image, site).is_some()
+}
+
+/// Return the exact source certificate only when the current map and bytes
+/// still recheck the closed tail-cell witness.
+pub(crate) fn verified_certificate_in(
+    index: &MapIndex,
+    map: &ProgramMap,
+    image: &CodeImage,
+    site: &IndirectSite,
+) -> Option<TailCellCertificate> {
+    let evidence_id = site.closed_proof.as_deref()?;
+    let evidence = map.evidence.get(evidence_id)?;
     if evidence.kind != EvidenceKind::Static
         || evidence.producer != PRODUCER
         || evidence.revision != "0"
     {
-        return false;
+        return None;
     }
-    let Some((certificate, detail, id)) = detail(index, image, site) else {
-        return false;
-    };
+    let (certificate, detail, id) = detail(index, image, site)?;
     let targets: BTreeSet<_> = certificate.targets.iter().cloned().collect();
-    evidence_id == id.as_str()
+    let valid = evidence_id == id.as_str()
         && evidence.detail == detail
         && site.candidates.keys().cloned().collect::<BTreeSet<_>>() == targets
         && site
@@ -217,7 +222,8 @@ pub fn verify_in(
         && certificate
             .targets
             .iter()
-            .all(|target| mapped_target(map, target))
+            .all(|target| mapped_target(map, target));
+    valid.then_some(certificate)
 }
 
 /// The one source word that a verified native tail dispatch must bind/protect.

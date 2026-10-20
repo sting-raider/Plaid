@@ -293,3 +293,22 @@ invalid-index paths match pinned ares. Candidate target recovery is still not
 closure: additional callee/entry effects remain unresolved. No native Paper
 Mario artifact or run is accepted. See branch-flag-feasibility.md and ignored
 target/paper-mario/0212 receipts.
+
+
+## ADR-0215: traversal-local mapped callee effects
+
+Fresh canonical-main and candidate discovery/solve use only the ROM-derived
+loads/runtime declarations: scoped OPEN/11 -> OPEN/9, 56,813 -> 56,851 blocks,
+162 loads unchanged. Two indexed dispatches close; no new blocker site appears.
+Raw linked callees can now bind exact unique declared text and follow rechecked
+constant-cell tails with all-target no-write effects. Source cells, declaration
+identity and actual return witnesses remain in the table proof. Binding authority
+is local to each traversed path and restored after calls: the inherited red test
+proved a real leak into later placed calls/fallthrough and remains a negative.
+
+Discovery must carry declared provenance before analysis, including every fresh
+outer round; attaching it only to the final map loses the proof opportunity.
+Other predecessor paths and save/restore/stack-cell relations remain unresolved.
+No native Paper Mario artifact, VI/fault/PCM result or accepted run is produced.
+See mapped-callee-effects.md and ignored target/paper-mario/0215-recovery/ for
+baseline/candidate timings, map/solver controls, mutation and local gate receipts.
