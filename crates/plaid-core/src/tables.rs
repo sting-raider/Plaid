@@ -8,7 +8,7 @@ use crate::{
     rom::sha256,
 };
 use serde::Serialize;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
 // a switch over a few hundred cases is ordinary compiler output (ADR-0183)
 const MAX_ENTRIES: u32 = 1024;
@@ -763,6 +763,7 @@ fn guarded(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
         seen: BTreeMap::new(),
         bindings: BTreeMap::new(),
         results: BTreeSet::new(),
+        effects: BTreeMap::new(),
     };
     walk.block(pc, load_pc, need, &mut Vec::new())?;
     let mut tables = walk
@@ -829,6 +830,9 @@ struct Walk<'m, 'a> {
     bindings: BTreeMap<u32, (u32, u32, u64)>,
     /// Per proven path: (base value, count, guard branch pc, index register).
     results: BTreeSet<(u32, u32, u32, u8)>,
+    /// Map, image and caller slot are immutable within this walk. Cached effects
+    /// retain their source words/bindings and are never shared with a verifier.
+    effects: BTreeMap<(GuestAddr, u8), crate::callee_effects::NoWrite>,
 }
 
 struct WalkFrame {
@@ -992,20 +996,25 @@ impl Walk<'_, '_> {
                 }
                 let target = self.image.jump_target(edge.site.pc, word);
                 for register in registers {
-                    let budget = 4096usize.checked_sub(self.steps)?;
-                    let effect = crate::callee_effects::no_gpr_write_bound(
-                        self.map,
-                        self.map.source(),
-                        self.image,
-                        target,
-                        register,
-                        budget,
-                        self.slot,
-                    )?;
+                    let key = (target, register);
+                    if let Entry::Vacant(entry) = self.effects.entry(key) {
+                        let budget = 4096usize.checked_sub(self.steps)?;
+                        let effect = crate::callee_effects::no_gpr_write_bound(
+                            self.map,
+                            self.map.source(),
+                            self.image,
+                            target,
+                            register,
+                            budget,
+                            self.slot,
+                        )?;
+                        self.steps += effect.reads;
+                        entry.insert(effect);
+                    }
+                    let effect = &self.effects[&key];
                     returns.retain(|pc| !effect.returns.contains(pc));
-                    self.steps += effect.reads;
-                    self.bindings.extend(effect.bindings);
-                    self.seen.extend(effect.words);
+                    self.bindings.extend(&effect.bindings);
+                    self.seen.extend(&effect.words);
                 }
                 let slot = self.word(site + 4)?;
                 need.step(GuestAddr(site + 4), slot)?;
