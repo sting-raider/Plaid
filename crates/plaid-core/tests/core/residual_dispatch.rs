@@ -140,3 +140,38 @@ fn every_other_blocker_still_refuses_under_the_residual_scope() {
             .any(|b| !b.kind.starts_with("unresolved_indirect"))
     );
 }
+
+#[test]
+fn residual_dispatch_does_not_hide_an_unmapped_candidate() {
+    let image = image();
+    let mut map = map(&image);
+    let original = map
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc == GuestAddr(BASE + 12))
+        .unwrap()
+        .clone();
+    map.indirect_sites.remove(&original);
+    let mut site = original;
+    site.candidates.insert(
+        CodeAddress {
+            pc: GuestAddr(BASE + 0x1000),
+            ..image.base.clone()
+        },
+        map.entries[&image.base].clone(),
+    );
+    map.indirect_sites.insert(site);
+    let report = solve(
+        &map,
+        &[image],
+        Scope::DeclaredStaticImagesGuardedRamResidualDispatch,
+    )
+    .unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    assert!(
+        report
+            .blockers
+            .iter()
+            .any(|b| b.kind == "unresolved_indirect_target")
+    );
+}

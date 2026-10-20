@@ -884,8 +884,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             );
         }
         for target in site.candidates.keys().chain(site.observed.keys()) {
-            if !residual
-                && !starts.contains(target)
+            if !starts.contains(target)
                 && !(site.link_register.is_some() && map.runtime_functions.contains_key(target))
                 && !(site.link_register.is_some() && into_slot(target))
             {
