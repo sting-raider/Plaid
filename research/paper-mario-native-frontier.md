@@ -354,6 +354,6 @@ proves authored synthetic dispatches only with unchanged SP, all-path enclosing
 allocation and no intervening potentially aliasing write or call. Even different
 virtual stack offsets are refused without physical non-aliasing evidence.
 The two PM stack sites still lack the complete index/alias relation; no site is
-closed and no new blocker appears. Three native index cases match pinned ares;
-four semantic mutants are caught. No PM artifact or VI/fault/PCM run is accepted.
+closed and no new blocker appears. Four native index/SP-base cases match pinned ares;
+five semantic mutants are caught. No PM artifact or VI/fault/PCM run is accepted.
 See research/stack-table-pointer.md and ignored target/paper-mario/0217 receipts.
