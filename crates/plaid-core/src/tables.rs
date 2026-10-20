@@ -387,6 +387,10 @@ struct Need {
     masks: bool,
     /// Constants still required at earlier definitions, by GPR.
     constants: BTreeMap<u8, u32>,
+    /// Exact word cell awaiting its defining SW, relative to unchanged SP.
+    stack_pointer: Option<i16>,
+    /// The reload must belong to a frame allocated on every incoming path.
+    frame_bytes: Option<u32>,
 }
 
 impl Need {
@@ -414,7 +418,9 @@ impl Need {
     }
 
     fn done(&self) -> bool {
-        self.address.is_none()
+        self.stack_pointer.is_none()
+            && self.frame_bytes.is_none()
+            && self.address.is_none()
             && self.operands.is_none()
             && self.scaled.is_none()
             && self.relation.is_none()
@@ -432,6 +438,33 @@ impl Need {
             || matches!(instruction.opcode_name(), "syscall" | "break" | "eret")
         {
             return None;
+        }
+        // Until the defining SW, reject every other store: even a different
+        // virtual address or stack offset could alias under a guest mapping.
+        if let Some(offset) = self.stack_pointer {
+            if word >> 26 == 43 && field(word, 21) == 29 && word as i16 == offset {
+                let source = field(word, 16);
+                if matches!(source, 0 | 29) {
+                    return None;
+                }
+                self.address = Some(source);
+                self.stack_pointer = None;
+            } else if matches!(word >> 26, 16 | 40..=47 | 56..=63) {
+                return None;
+            }
+        }
+        if self.frame_bytes.is_some() && instruction.destination_gpr() == Some(29) {
+            let allocation = -i32::from(word as i16);
+            if self.stack_pointer.is_some()
+                || word >> 26 != 9
+                || field(word, 21) != 29
+                || allocation <= 0
+                || (allocation as u32) < self.frame_bytes?
+            {
+                return None;
+            }
+            self.frame_bytes = None;
+            return Some(());
         }
         let Some(d) = instruction
             .destination_gpr()
@@ -480,6 +513,22 @@ impl Need {
             self.flags.retain(|(flag, _, _)| *flag != d);
         }
         if Some(d) == self.address {
+            if word >> 26 == 35 && field(word, 21) == 29 {
+                let offset = word as i16;
+                if offset < 0
+                    || offset % 4 != 0
+                    || self.frame_bytes.is_some()
+                    || self.pending_registers().contains(&29)
+                {
+                    return None;
+                }
+                // ADDU below must still prove the restored pointer. This does
+                // not claim that SW/LW preserve an arbitrary 64-bit GPR.
+                self.address = None;
+                self.stack_pointer = Some(offset);
+                self.frame_bytes = Some(offset as u32 + 4);
+                return Some(());
+            }
             if word >> 26 != 0 || word & 63 != 33 {
                 return None;
             }
@@ -751,6 +800,8 @@ fn guarded(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
         bound: None,
         masks: jump & 63 == 8,
         constants: BTreeMap::new(),
+        stack_pointer: None,
+        frame_bytes: None,
     };
     let mut walk = Walk {
         map,
@@ -983,6 +1034,10 @@ impl Walk<'_, '_> {
             let site = edge.site.pc.0;
             let word = self.word(site)?;
             if edge.kind == EdgeKind::ReturnContinuation {
+                // Register-only effects cannot prove stack memory or SP lineage.
+                if need.frame_bytes.is_some() {
+                    return None;
+                }
                 let registers = need.pending_registers();
                 if registers.is_empty() {
                     return None;
