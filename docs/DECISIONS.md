@@ -6344,6 +6344,33 @@ Frame ownership does not consume SP arithmetic: the allocating ADDIU must still
 run the ordinary pointer/flag transfer. A decoy-table counterexample and native
 SP-derived-base fixture verify this review correction before the final gate.
 
+## ADR-0218: Validation-only residual-dispatch mode
+
+Decision: `plaid solve|lower-map --residual-dispatch` (scope
+`DeclaredStaticImagesGuardedRamResidualDispatch`, `scripts/native.py
+--residual-dispatch`) accepts a map whose only remaining blockers are
+`unresolved_indirect_site`. Each such site is lowered as fail-closed dispatch
+over every lowered entry through the existing `plaid_call_*` dispatch and its
+mapped-code byte/generation/pin guards; any other target faults 3 and no guest
+instruction is ever interpreted. Every other blocker still refuses. The report
+and manifest record `native_complete: false`, the mode and the residual site
+list, so the artifact is never accepted as fully native. The default scope,
+the closed-world gate and native-mode acceptance are unchanged.
+
+Why: it lets a ROM with a few unproven sites run natively far enough to find
+the next real blocker (the exact site, target and state at the fault) instead
+of continuing to prove sites blind.
+
+Verification: Rust solver tests (only the residual scope closes; default
+refuses; every other blocker still refuses; residual list reported) and a
+runtime contract in which a lowered-entry target matches pinned ares and a
+non-entry target faults 3. Mutation: disabling the residual gate's refusal
+makes the acceptance/refusal test fail.
+
+Runtime fixes found by the first Paper Mario run are general hardware/SDK
+behaviour: every libultra Controller Pak operation reports PFS_ERR_NOPACK,
+CPU writes to cartridge space are ignored (pinned ares), and EPi DMA accepts a
+full cartridge address.
 
 ## ADR-0219: Revoke inactive fixed text through the shared CPU/device write gate
 

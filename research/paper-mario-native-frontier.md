@@ -357,3 +357,15 @@ The two PM stack sites still lack the complete index/alias relation; no site is
 closed and no new blocker appears. Four native index/SP-base cases match pinned ares;
 five semantic mutants are caught. No PM artifact or VI/fault/PCM run is accepted.
 See research/stack-table-pointer.md and ignored target/paper-mario/0217 receipts.
+
+## Residual-dispatch run (ADR-0218)
+
+`native.py --residual-dispatch --rt64 --require-audio` on the selected ROM:
+solve closes with 0 blockers and 7 residual sites; the artifact builds and runs
+(VI 1, gfx tasks 1, audio tasks 0, PI DMAs 12, framebuffer 00000280) then faults
+3 at the boot-stub dispatch site: its target is not a lowered entry. The stub
+reads a cartridge word, adds it to a constant and jumps; the target region is
+not covered by any lowered entry (entries end before it). Hypothesis: main
+program code is produced at boot (relocation/decompression) and must be
+captured by the boot-generated-text path. The fault is the correct fail-closed
+result. PCM peak: n/a (no audio task). Receipts: target/paper-mario/0218.
