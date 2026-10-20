@@ -7,7 +7,7 @@ use crate::{
     indirect::{code_pointer, signed_word, transfer},
     program::ProgramMap,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 /// Bounded lexical expressions in already decoded code. Branches may skip
 /// definitions, so even a fully known expression supplies no closure proof.
@@ -17,7 +17,7 @@ pub(crate) fn scan(
     map: &ProgramMap,
     starts: &BTreeSet<u32>,
 ) -> BTreeMap<GuestAddr, GuestAddr> {
-    let words: BTreeMap<_, _> = map
+    let words: HashMap<_, _> = map
         .blocks
         .iter()
         .filter(|b| {
@@ -29,10 +29,15 @@ pub(crate) fn scan(
         .filter_map(|pc| image.instruction_word(pc).map(|w| (pc, w)))
         .collect();
     let mut roots = BTreeMap::new();
-    for (&start, &first) in &words {
-        if first >> 26 != 15 {
-            continue;
-        }
+    // Only seed near an uncached-cartridge LUI; scanning every ordinary
+    // address construction repeatedly made unchanged control ROMs slower.
+    let seeds: BTreeSet<_> = words
+        .iter()
+        .filter(|(_, word)| **word >> 26 == 15 && (0xb000..0xbfc0).contains(&(**word & 0xffff)))
+        .flat_map(|(pc, _)| (0..64).filter_map(move |n| pc.0.checked_sub(n * 4).map(GuestAddr)))
+        .filter(|pc| words.get(pc).is_some_and(|w| w >> 26 == 15))
+        .collect();
+    for start in seeds {
         let mut values = [None; 32];
         values[0] = Some(0);
         let mut from_rom = [false; 32];
@@ -177,7 +182,7 @@ mod tests {
             "a speculative ROM read cannot certify a PI target"
         );
         assert!(
-            solver::solve(&map, &[image.clone()], Scope::WholeRom)
+            solver::solve(&map, std::slice::from_ref(&image), Scope::WholeRom)
                 .unwrap()
                 .blockers
                 .iter()
