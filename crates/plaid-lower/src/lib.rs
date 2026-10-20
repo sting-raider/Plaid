@@ -26,6 +26,11 @@ typedef uint64_t u64; typedef int64_t s64;
 #define PLAID_RAM_SIZE 0x800000u
 /* one TLB entry as TLBWI writes it: PageMask, EntryHi, EntryLo0/1 (ADR-0162) */
 typedef struct { u32 mask, hi, lo[2]; } plaid_tlb_entry;
+typedef struct { u32 start, end; } plaid_text_range;
+typedef struct plaid_native_frame_s {
+  struct plaid_native_frame_s *prev, *next;
+  const plaid_text_range *ranges; u32 count;
+} plaid_native_frame;
 typedef struct plaid_state_s {
   u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 fcsr; u32 llbit; u32 pc; u32 fault; u32 fault_pc;
   /* Complete live Status exists only in a verified SDK thread context. */
@@ -43,7 +48,8 @@ typedef struct plaid_state_s {
   u8 load_ok[64]; /* declared load verified in RAM (ADR-0136) */
   /* per RAM word, from plaid_code: 0 data, 1 executable, 2 + n executable
      bytes of declared load n; built once before the first guarded write */
-  u8 prot[PLAID_RAM_SIZE / 4]; u8 prot_ready;
+  u8 prot[PLAID_RAM_SIZE / 4]; u8 prot_ready, text_dirty;
+  plaid_native_frame *native_frames; /* includes suspended SDK threads */
   plaid_tlb_entry tlb[32]; /* written by the runtime's osMapTLB family */
   u64 tlb_generation[32];
   /* uncached access to RCP memory, registers and the PI buses (physical
@@ -107,12 +113,46 @@ static void plaid_build_prot(plaid_state *s) {
   u32 i, w;
   for (i = 0; i < sizeof plaid_code / sizeof plaid_code[0]; i++)
     for (w = plaid_code[i].start >> 2; w < (plaid_code[i].end + 3) >> 2 && w < PLAID_RAM_SIZE / 4; w++)
-      if (s->prot[w] != 1) s->prot[w] = plaid_code[i].load < 0 ? 1 : (u8)(2 + plaid_code[i].load);
+      if (s->prot[w] != 253) s->prot[w] = plaid_code[i].load == -2 ? 253 : plaid_code[i].load < 0 ? 1 : (u8)(2 + plaid_code[i].load);
   s->prot_ready = 1;
 }
 "#;
 
-const HELPERS: &str = r#"/* 1 when a write must abort: the base image's code and jump tables always,
+const HELPERS: &str = r#"/* Native frames pin their complete fixed-text bodies, including continuations.
+   The intrusive list permits SDK threads to suspend/resume out of stack order. */
+/* Keep the intentional stack-frame registration out of GCC's dangling-pointer
+   heuristic; the wrapper always unregisters before its local frame expires. */
+#if defined(__GNUC__)
+__attribute__((noinline))
+#endif
+static void plaid_text_pin(plaid_state *s, plaid_native_frame *f) {
+  f->prev = 0; f->next = s->native_frames;
+  if (f->next) f->next->prev = f;
+  s->native_frames = f;
+}
+static inline void plaid_text_unpin(plaid_state *s, plaid_native_frame *f) {
+  if (f->prev) f->prev->next = f->next; else s->native_frames = f->next;
+  if (f->next) f->next->prev = f->prev;
+}
+static inline int plaid_text_active(plaid_state *s, u32 p, u32 size) {
+  plaid_native_frame *f; u32 i;
+  for (f = s->native_frames; f; f = f->next)
+    for (i = 0; i < f->count; i++)
+      if (p < f->ranges[i].end && p + size > f->ranges[i].start) return 1;
+  return 0;
+}
+/* Only revoked words need comparing; changed text is never executed. */
+static inline int plaid_text_enter(plaid_state *s, u32 p, const u32 *words, u32 count, u32 pc) {
+  u32 i, j;
+  if (!s->text_dirty) return 0;
+  for (i = 0; i < count; i++) if (s->prot[(p >> 2) + i] == 254) {
+    for (j = 0; j < 4; j++)
+      if (s->ram[p + 4 * i + j] != (u8)(words[i] >> (24 - 8 * j))) return plaid_fault(s, pc, 8);
+    s->prot[(p >> 2) + i] = 1;
+  }
+  return 0;
+}
+/* 1 when a write must abort: the base image's code and jump tables always,
    and a verified declared load's code when the writer at pc is that load's
    own code. Any other write into a verified load revokes its verification;
    the next entry into its code compares the bytes again (ADR-0161). */
@@ -127,13 +167,18 @@ static inline int plaid_protected(plaid_state *s, u32 p, u32 size, u32 pc) {
   if (pc >= 0x80000000u && pc < 0xc0000000u && q < PLAID_RAM_SIZE) own = s->prot[q >> 2];
   for (w = p >> 2; w <= (p + size - 1) >> 2; w++) {
     k = s->prot[w];
-    if (k == 1) return 1;
+    if (k == 253) return 1; /* proof-bearing base data */
+    if (k == 1 || k == 254) {
+      if (plaid_text_active(s, w << 2, 4)) return 1;
+      s->prot[w] = 254; s->text_dirty = 1;
+      continue;
+    }
     if (k == 255) {
       if (plaid_ovl_write(s, w << 2, pc)) return 1;
       continue;
     }
     if (k > 1 && s->load_ok[k - 2]) {
-      if (k == own) return 1;
+      if (k == own || plaid_text_active(s, w << 2, 4)) return 1;
       s->load_ok[k - 2] = 0;
     }
   }
@@ -1624,7 +1669,7 @@ pub fn lower_c_parts(
                 "{{{}, {}, {}}}",
                 physical(start.0)?,
                 physical(start.0 + count * 4 - 1)? + 1,
-                load_of(start.0).map_or(-1, |l| l as i64)
+                load_of(start.0).map_or(-2, |l| l as i64)
             ));
         }
     }
@@ -1801,7 +1846,25 @@ pub fn lower_c_parts(
             );
             format!("static int B_{:08x}", f.pc.0)
         } else {
-            format!("{link}int F_{:08x}", f.pc.0)
+            let ranges = body
+                .iter()
+                .filter_map(|b| by_start.get(b))
+                .flatten()
+                .map(|b| {
+                    Ok(format!(
+                        "{{{}u, {}u}}",
+                        physical(b.start.pc.0)?,
+                        physical(b.start.pc.0 + b.size - 1)? + 1
+                    ))
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            out += &format!(
+                "static int B_{0:08x}(plaid_state *s, u64 ret);\n{link}int F_{0:08x}(plaid_state *s, u64 ret) {{\n  static const plaid_text_range ranges[] = {{{1}}};\n  plaid_native_frame frame = {{0, 0, ranges, {2}}};\n  int r;\n  plaid_text_pin(s, &frame);\n  r = B_{0:08x}(s, ret);\n  plaid_text_unpin(s, &frame);\n  return r;\n}}\n",
+                f.pc.0,
+                ranges.join(", "),
+                ranges.len()
+            );
+            format!("static int B_{:08x}", f.pc.0)
         };
         out += &format!(
             "{body_name}(plaid_state *s, u64 ret) {{\n  (void)ret;\n  goto L_{:08x};\n",
@@ -1823,7 +1886,20 @@ pub fn lower_c_parts(
                         "  if (!s->ovl_ok[{k}]) return plaid_fault(s, 0x{start:08x}u, 8);\n"
                     )
                 }
-                (None, None) => {}
+                (None, None) => {
+                    if load_of(start).is_none() {
+                        let words = (start..end)
+                            .step_by(4)
+                            .map(|pc| word(pc).map(|w| format!("0x{w:08x}u")))
+                            .collect::<Result<Vec<_>, _>>()?;
+                        out += &format!(
+                            "  {{ static const u32 words[] = {{{}}}; if (plaid_text_enter(s, {}u, words, {}, 0x{start:08x}u)) return 1; }}\n",
+                            words.join(", "),
+                            physical(start)?,
+                            words.len()
+                        );
+                    }
+                }
                 _ => return Err(format!("{start:08x}: block crosses an overlay boundary")),
             }
             if let Some(l) = load_of(start) {
