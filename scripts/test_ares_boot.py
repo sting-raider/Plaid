@@ -45,9 +45,16 @@ def boot_header_contract():
 def main():
     if os.name == 'nt':
         script = subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(Path(__file__).resolve())], text=True).strip()
-        subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', script], check=True, timeout=300)
+        subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', script], check=True, timeout=600)
         return
     boot_header_contract()
+    for coverage in ([], [None], [[1]], [[4, 4]], [[0, 3]], [[False, 4]], [[0, 0x100000000]]):
+        try:
+            capture_many('never-read.z64', [], covered=coverage)
+        except ValueError as error:
+            assert 'coverage ranges' in str(error), error
+        else:
+            raise AssertionError(f'invalid coverage accepted: {coverage}')
     exe = build_oracle()
     firmware = ROOT / '.refs/ares/ares/System/Nintendo 64/pif.ntsc.rom'
     rom = bytearray(0x3000)
@@ -62,11 +69,15 @@ def main():
         source, output = directory / 'fixture.z64', directory / 'capture.json'
         source.write_bytes(rom)
 
-        def run(target, budget, exact=False):
+        def run(target, budget, exact=False, covered=None):
             command = [str(exe), str(source), str(firmware), '0x80000400', target,
                        str(budget), 'fixture', str(output)]
             if exact:
                 command.append('exact-many')
+            if covered is not None:
+                coverage = directory / 'covered.txt'
+                coverage.write_text(''.join(f'{lo} {hi}\n' for lo, hi in covered))
+                command.extend(['uncovered', str(coverage)])
             subprocess.run(command, check=True, timeout=30)
             return output.read_bytes()
 
@@ -77,6 +88,15 @@ def main():
         assert bytes(image['bytes']) == struct.pack('>3I', 0x2402002a, 0x03e00008, 0), image
         assert image['cpu_writes'] == [[0x1000, 0x100c]] and image['pi_dma'] == [], image
         assert image['steps'] == 13 and stop['remaining'] == 0, (image, stop)
+        # No named target: an indirect fetch beyond supplied images must still
+        # discover precisely the same completed producer, at its first fetch.
+        unknown = [json.loads(line) for line in run('', 1000, covered=[(0x80000400, 0x80000500)]).splitlines()]
+        assert unknown[0] == image and unknown[-1]['uncovered_entry'] == image['entry'], unknown
+        # Coverage prevents recapture; a short budget must not invent bytes.
+        covered = [json.loads(line) for line in run('', 20, covered=[(0x80000400, 0x80001100)]).splitlines()]
+        assert len(covered) == 1 and covered[0]['uncovered_entry'] is None, covered
+        short = [json.loads(line) for line in run('', 4, covered=[(0x80000400, 0x80000500)]).splitlines()]
+        assert len(short) == 1 and short[0]['steps'] == 4 and short[0]['uncovered_entry'] is None, short
         # SP memory is taken at the entry fetch, before any guest instruction.
         entry = [json.loads(line) for line in run('0x80000400', 1000).splitlines()][-1]
         assert len(stop['sp']) == 0x2000 and stop['sp'] == entry['sp'] and entry['steps'] == 1, entry['steps']
@@ -88,6 +108,8 @@ def main():
         assert len(refused) == 1 and refused[0]['remaining'] == 1 and refused[0]['steps'] == 4
         refused = [json.loads(line) for line in run('0x80000400', 1000).splitlines()]
         assert refused[0]['reason'] == 'no completed RAM producer' and not any('bytes' in r for r in refused)
+        refused = [json.loads(line) for line in run('', 1000, covered=[(0x80000404, 0x80000500)]).splitlines()]
+        assert refused[0]['reason'] == 'no completed RAM producer' and not any('bytes' in r for r in refused)
         # Fetching 1000 fills I-cache, then its store changes RAM at 1008.
         # Capturing 1008 must reject that stale instruction generation.
         stale = words.copy()
@@ -96,6 +118,8 @@ def main():
         rom[0x1000:0x1000 + 4 * len(stale)] = struct.pack(f'>{len(stale)}I', *stale)
         source.write_bytes(rom)
         refused = [json.loads(line) for line in run('0x80001008', 1000).splitlines()]
+        assert refused[0]['reason'] == 'stale instruction cache' and not any('bytes' in r for r in refused), refused
+        refused = [json.loads(line) for line in run('', 1000, covered=[(0x80000400, 0x80001008)]).splitlines()]
         assert refused[0]['reason'] == 'stale instruction cache' and not any('bytes' in r for r in refused), refused
         # Synthetic fixtures cannot bypass production's ROM-derived CIC selection,
         # in any of the three accepted ROM byte orders.
@@ -172,6 +196,22 @@ def main():
             declarations = json.loads(loads.read_text())['loads']
             assert declarations == [dict(destination='0x80001000', size='0x8', rom='0x0', encoding='ares_boot', entry='0x80001000'), original]
             assert not harvest_boot.harvest(source, loads, program, {'header': {'boot_address': 0x80000400}, 'boot_image_size': 0x100}, receipt)
+        finally:
+            harvest_boot.capture_many = saved
+        # An unproven indirect has no named target. Discovery still asks for
+        # the first uncovered fetch and composes it through guarded ares_boot.
+        loads.write_text(json.dumps({'source': 'synthetic', 'loads': [original]}))
+        program.write_text(json.dumps({'direct_edges': [], 'indirect_sites': [{'closed_proof': None, 'candidates': [], 'observed': []}]}))
+        requested = []
+        def capture_unknown(rom, entries, covered):
+            requested.append((entries, covered))
+            return [synthetic, {'uncovered_entry': synthetic['entry']}]
+        harvest_boot.capture_many = capture_unknown
+        try:
+            assert harvest_boot.harvest(source, loads, program, {'header': {'boot_address': 0x80000400}, 'boot_image_size': 0x100}, receipt)
+            assert requested == [([], [(0x80000000, 0x80000400), (0x80000400, 0x80000500), (0x80001008, 0x8000100c)])], requested
+            assert json.loads(loads.read_text())['loads'][0]['encoding'] == 'ares_boot'
+            assert json.loads(receipt.read_text())['uncovered_entry'] == synthetic['entry']
         finally:
             harvest_boot.capture_many = saved
         # A jump table no image supplies is captured at its site's first fetch,

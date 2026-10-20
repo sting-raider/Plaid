@@ -369,3 +369,19 @@ not covered by any lowered entry (entries end before it). Hypothesis: main
 program code is produced at boot (relocation/decompression) and must be
 captured by the boot-generated-text path. The fault is the correct fail-closed
 result. PCM peak: n/a (no audio task). Receipts: target/paper-mario/0218.
+
+
+## ADR-0220 investigation claim (in progress)
+
+Hypothesis: an indirect boot transfer reaches completed executable RAM outside
+the inferred image ranges, so ADR-0190 misses it because no known missing target
+names it. Test with the pinned ares reset replay, stopping at the first uncovered
+KSEG0 RAM fetch after boot entry. Preserve completed-producer and instruction-cache
+checks, then replay and content-guard any new declaration through `ares_boot`.
+No per-ROM production facts or native guest executor will be added.
+
+Predecessor review reproduced a fail-open residual gate: a known unmapped candidate
+was suppressed along with its unproven site. Commit c4ac852b retains this target
+blocker in every scope (three focused tests pass). Residual manifests must also be
+written when the ordinary scope happens to close. Cartridge-write latch/timing
+effects and untested absent-Pak/full-address EPi paths remain under review.

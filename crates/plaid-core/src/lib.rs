@@ -12,6 +12,7 @@ pub mod cpu_sp_conditional;
 pub mod cpu_sp_subword;
 pub mod data_roots;
 pub mod dcache_writeback;
+mod rom_pointer_roots;
 pub mod cpu_mutation {
     pub use super::cpu_mutation_impl::{
         CompletedCop1StoreEffect, Cop1MutationWitness, Cop1SourceLane, Cop1StoreKind,

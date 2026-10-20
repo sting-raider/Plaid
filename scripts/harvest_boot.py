@@ -6,9 +6,15 @@ from pathlib import Path
 from ares_boot import capture_many
 
 
+def coverage(loads, base, size, slots=False):
+    # The native scope replaces exception entry; IPL startup snapshots already
+    # reserve this prefix (write_boot_state), so vectors are not new game text.
+    return [(0x80000000, 0x80000400), (base, base + size)] + [(int(l['destination'], 0), int(l['destination'], 0) + int(l['size'], 0))
+                                  for l in loads['loads'] if slots or not l.get('slot')]
+
+
 def missing_targets(program, loads, base, size):
-    covered = [(base, base + size)] + [(int(l['destination'], 0), int(l['destination'], 0) + int(l['size'], 0))
-                                      for l in loads['loads'] if not l.get('slot')]
+    covered = coverage(loads, base, size)
     targets = {e['target']['pc'] for e in program['direct_edges']}
     for site in program['indirect_sites']:
         for name in ('candidates', 'observed'):
@@ -36,15 +42,23 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
     targets = missing_targets(program, loads, base, size)
     # A table is read when its jump site runs: capture there (ADR-0197).
     tables = missing_tables(program)
-    if not targets and not tables:
+    # Finite map candidates cannot name a dynamically computed destination.
+    # Observe its first uncovered RAM fetch without granting target closure.
+    unknown_indirect = any(s.get('closed_proof') is None for s in program['indirect_sites'])
+    if not targets and not tables and not unknown_indirect:
         return False
     try:
-        captures = capture_many(rom, sorted(set(targets) | {site for site, _, _ in tables}))
+        entries = sorted(set(targets) | {site for site, _, _ in tables})
+        captures = capture_many(rom, entries, covered=coverage(loads, base, size, slots=True)) if unknown_indirect else capture_many(rom, entries)
     except ValueError as error:
         Path(receipt_path).write_text(json.dumps({'targets': targets, 'refusal': str(error)}, indent=2) + '\n')
         return False
     receipt = {'targets': targets, 'captures': []}
     added = False
+    uncovered = next((c['uncovered_entry'] for c in captures if c.get('uncovered_entry') is not None), None)
+    if uncovered is not None:
+        targets = sorted(set(targets) | {uncovered})
+        receipt['uncovered_entry'] = uncovered
     for capture in captures:
         receipt['captures'].append({k: v for k, v in capture.items() if k != 'bytes'})
         if 'bytes' not in capture:

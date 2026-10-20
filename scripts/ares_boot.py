@@ -29,7 +29,13 @@ def build_oracle():
                              cpu_instruction_access=True)
 
 
-def capture_many(rom, entries, exact=False):
+def capture_many(rom, entries, exact=False, covered=None):
+    if covered is not None:
+        if (exact or not isinstance(covered, (list, tuple)) or not covered or
+                any(not isinstance(r, (list, tuple)) or len(r) != 2 or
+                    any(type(v) is not int or not 0 <= v <= 0xffffffff or v % 4 for v in r) or r[0] >= r[1]
+                    for r in covered)):
+            raise ValueError('uncovered fetch capture requires aligned, nonempty coverage ranges and no exact mode')
     rom = Path(rom).resolve()
     data = rom.read_bytes()
     if len(data) < 4096 or len(data) > 64 * 1024 * 1024 or len(data) % 4:
@@ -42,7 +48,7 @@ def capture_many(rom, entries, exact=False):
         with tempfile.TemporaryDirectory(prefix='plaid-canonical-') as temporary:
             path = Path(temporary) / 'input.z64'
             path.write_bytes(canonical)
-            return capture_many(path, entries, exact=exact)
+            return capture_many(path, entries, exact=exact, covered=covered)
     if data[:4] != bytes.fromhex('80371240'):
         raise ValueError('unrecognized N64 byte-order signature')
     crc = zlib.crc32(data[0x40:0x1000])
@@ -58,7 +64,10 @@ def capture_many(rom, entries, exact=False):
                    linux(rom), ','.join(hex(e) for e in entries), '--many']
         if exact:
             command.append('--exact-many')
-        return json.loads(subprocess.check_output(command, text=True, timeout=300))
+        if covered is not None:
+            command.extend(['--covered', json.dumps(covered)])
+        # Includes a cold reference build; the actual replay below stays bounded.
+        return json.loads(subprocess.check_output(command, text=True, timeout=600))
     # DrvFS index preloading is much slower than a serial source check.
     os.environ['GIT_CONFIG_COUNT'] = '1'
     os.environ['GIT_CONFIG_KEY_0'] = 'core.preloadindex'
@@ -72,6 +81,10 @@ def capture_many(rom, entries, exact=False):
                    'CIC-NUS-' + cics[crc], str(output)]
         if exact:
             command.append('exact-many')
+        if covered is not None:
+            coverage = Path(temporary) / 'covered.txt'
+            coverage.write_text(''.join(f'{lo} {hi}\n' for lo, hi in covered))
+            command.extend(['uncovered', str(coverage)])
         subprocess.run(command, check=True, timeout=180)
         results = [json.loads(line) for line in output.read_text().splitlines()]
     for result in results:
@@ -92,7 +105,8 @@ if __name__ == '__main__':
     parser.add_argument('entry')
     parser.add_argument('--many', action='store_true')
     parser.add_argument('--exact-many', action='store_true')
+    parser.add_argument('--covered', type=json.loads)
     args = parser.parse_args()
-    entries = [int(v, 0) for v in args.entry.split(',')]
-    results = capture_many(args.rom, entries, exact=args.exact_many)
+    entries = [int(v, 0) for v in args.entry.split(',') if v]
+    results = capture_many(args.rom, entries, exact=args.exact_many, covered=args.covered)
     print(json.dumps(results if args.many or args.exact_many else next((r for r in results if 'bytes' in r), results[-1]), separators=(',', ':')))

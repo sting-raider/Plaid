@@ -413,7 +413,10 @@ pub fn discover_address_taken_with_loads(
             loads,
         )?;
         let before = taken.len();
-        for a in block_constants(image, &d.map, starts).into_keys() {
+        for a in block_constants(image, &d.map, starts)
+            .into_keys()
+            .chain(crate::rom_pointer_roots::scan(bytes, image, &d.map, starts).into_keys())
+        {
             if runtime_entries.contains(&a) {
                 runtime_taken.insert(a);
             } else {
@@ -431,7 +434,7 @@ pub fn discover_address_taken_with_loads(
                     kind: crate::EvidenceKind::Static,
                     producer: ADDRESS_TAKEN.into(),
                     revision: "0".into(),
-                    detail: "function starts named by an aligned ROM or image word or a code constant in a decoded block, whose body can be CPU code (ADR-0153, ADR-0197)".into(),
+                    detail: "function starts named by an aligned ROM or image word or a code constant in a decoded block, including speculative ROM-word expressions (discovery only, not target certificates), whose body can be CPU code (ADR-0153, ADR-0197, ADR-0220)".into(),
                 },
             );
             for a in taken.iter().chain(&runtime_taken) {

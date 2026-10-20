@@ -881,11 +881,7 @@ RT(__osSetFpcCsr) {
 /* libultra's PI DMA addresses the cartridge at K1_TO_PHYS(osRomBase | devAddr) */
 static u32 pi_rom_offset(u32 dev, u32 n) {
   u32 p = (rd32(0x80000308u) | dev) & 0x1fffffffu;
-  if (p < 0x10000000u || (u64)(p - 0x10000000u) + n > rom_size) {
-    static char why[96];
-    snprintf(why, sizeof why, "PI DMA outside the ROM: address %08x size %x", p, n);
-    finish(1, why);
-  }
+  if (p < 0x10000000u || (u64)(p - 0x10000000u) + n > rom_size) finish(1, "PI DMA outside the ROM");
   return p - 0x10000000u;
 }
 /* osPiStartDma(mb, pri, direction, devAddr, vAddr, nbytes, mq) */
@@ -1188,11 +1184,7 @@ static void epi_dma(u32 h, u32 dir, u32 dev, u32 va, u32 n) {
     if (base != 0x10000000u) finish(1, "PI DMA through a non-cartridge handle");
     if (dir != 0) finish(1, "PI write to cartridge");
     dev = ((base | dev) & 0x1fffffffu) - 0x10000000u; /* libultra ORs the handle base in; a full cart address is the same */
-    if ((u64)dev + n > rom_size) {
-      static char why[96];
-      snprintf(why, sizeof why, "PI DMA outside the ROM: offset %08x size %x", dev, n);
-      finish(1, why);
-    }
+    if ((u64)dev + n > rom_size) finish(1, "PI DMA outside the ROM");
     dma_wr(va, rom + dev, n);
   }
   dma_count++;
