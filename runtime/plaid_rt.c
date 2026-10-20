@@ -45,6 +45,7 @@
 #include <time.h>
 #include "status.h"
 #include "joybus.h"
+#include "pi_bus.h"
 #ifdef _WIN32
 #include <windows.h>
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
@@ -93,6 +94,7 @@ static int pending[EV_COUNT]; /* undelivered event counts */
 static struct { u32 mq, msg; } pi_completions[64];
 static unsigned pi_completion_count;
 static u32 pi_status; /* immediate raw ROM DMA: idle plus pending interrupt */
+static plaid_pi_bus pi_bus;
 static u32 si_status, si_dram, si_read_address, si_write_address;
 static plaid_joybus joybus;
 static int si_due; /* SI DMA in flight: 1 PIF to RAM, 2 RAM to PIF */
@@ -1028,6 +1030,14 @@ static void flash_write_half(u16 d) {
 static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
   (void)s;
   if (size != 4) return 1;
+  if (!write && p >= 0x05000000u && p < 0x1fc00000u) {
+    u32 value;
+    u64 due = pi_bus.due;
+    if (plaid_pi_bus_read_pending(&pi_bus, count_now(), &value)) {
+      while (count_now() < due) {} /* ares readWord steps the remaining write clocks */
+      *v = (u64)(s64)(s32)value; return 0;
+    }
+  }
   if ((p >= 0x04800000u && p < 0x04800020u) || (p >= 0x1fc007c0u && p < 0x1fc00800u))
     return si_access(p, write, v);
   if (p >= 0x08000000u && p < 0x10000000u && (fl.on || (write && (p & ~3u) == 0x08010000u))) {
@@ -1081,7 +1091,7 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
     return 0;
   }
   if (p == 0x04600010u) { /* DMA completes immediately; interrupt acknowledgment remains visible. */
-    if (!write) *v = pi_status;
+    if (!write) *v = pi_status | (plaid_pi_bus_busy(&pi_bus, count_now()) ? 2u : 0u);
     else if (*v & 2) { pi_status &= ~8u; pending[EV_PI] = 0; }
     return 0;
   }
@@ -1114,8 +1124,8 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
     } else if (r == 4) ai.rate = 48681812u / (((u32)*v & 0x3fffu) + 1); /* NTSC VI clock / (rate + 1) */
     return 0; /* AI_STATUS write: the interrupt is an event here; AI_BITRATE: 16-bit output */
   }
-  /* Cartridge ROM space (and the absent IS-Viewer at 0x13ff0000) ignores writes, as pinned ares. */
-  if (write && p >= 0x10000000u && p < 0x1fc00000u) return 0;
+  /* Read-only cartridge space still changes the PI latch and busy deadline. */
+  if (write && p >= 0x10000000u && p < 0x1fc00000u) { plaid_pi_bus_write(&pi_bus, (u32)*v, count_now()); return 0; }
   if (write) return 1;
   if (p >= 0x05000000u && p < 0x08000000u) { /* no device: the address's low half twice (pi/bus.hpp) */
     *v = (u64)(s64)(s32)((p & 0xfffeu) << 16 | (p & 0xfffeu));

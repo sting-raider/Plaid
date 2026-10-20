@@ -489,6 +489,8 @@ def raw_pi_dma(exe, cc):
     rom = OUT / 'io.z64'
     original = rom.read_bytes()
     for name, direction, offset, stop in [('raw_pi', 0, 0x40, 'exit'),
+                                          ('raw_pi_phys', 0, 0x10000040, 'exit'),
+                                          ('raw_pi_kseg1', 0, 0xb0000040, 'exit'),
                                           ('raw_pi_write', 1, 0x40, 'PI write to cartridge'),
                                           ('raw_pi_oob', 0, len(original), 'PI DMA outside the ROM')]:
         program = [*li(A.sp, 0x80007F00), *poke(handle + 0xC, 0xB0000000),
@@ -653,6 +655,8 @@ def main():
     import test_boot_ram
     test_boot_ram.run(exe, cc, sys.modules[__name__])
     raw_pi_dma(exe, cc)
+    import test_pi_bus
+    test_pi_bus.run(exe, cc, sys.modules[__name__])
     import test_raw_pi
     test_raw_pi.run(exe, cc, sys.modules[__name__])
     from test_overlays import main as overlay_verifiers
