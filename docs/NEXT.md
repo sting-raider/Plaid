@@ -941,3 +941,10 @@ explicit primitive verifier rejects missing/unexpected sessions and reuses full
 source projection checks. Integrate that preserved input at future certificate
 boundaries and retain stronger entry/ROM checks plus typed adapters for other
 domains; a manifest over an incomplete sensor does not establish closure.
+
+## After ADR-0218
+
+The Paper Mario residual-dispatch run faults 3 at the boot stub jump: the
+target is main-program code that no lowered entry covers (apparently generated
+or relocated at boot). Next: discover and lower that code (boot-generated text
+capture) so the run proceeds to the remaining residual sites.

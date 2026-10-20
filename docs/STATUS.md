@@ -278,3 +278,12 @@ Anything else rejects the whole program. A store into executable bytes (fault
 write-back D-cache makes the result state-dependent) aborts instead of
 executing, as does a return whose `$ra` is not its call's continuation (fault 5) or an
 overflowing trapping add (fault 6) a COP1 operation outside the modeled subset: a NaN or subnormal operand, an out-of-range conversion or an enabled FPU exception (fault 7), entry into a declared load whose bytes are not in RAM (fault 8), a reached `BREAK` (fault 9), or a taken conditional trap (fault 10).
+
+## Residual-dispatch validation mode (ADR-0218)
+
+An explicit opt-in `--residual-dispatch` mode relaxes only the unresolved
+indirect-site blocker for native validation runs. Its artifacts and manifest are
+`native_complete: false` and are never accepted as fully native; the default
+path is unchanged. The first Paper Mario run closes with 0 blockers and 7
+residual sites, builds, and faults 3 at a site whose computed target is code
+absent from every lowered entry (VI 1, 1 gfx task, 0 audio tasks).
