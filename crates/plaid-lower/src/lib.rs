@@ -46,8 +46,8 @@ typedef struct plaid_state_s {
   u32 dtag[512]; u8 ddirty[512]; u16 dstale[512]; u8 dold[512][16];
   u8 line_lost[PLAID_RAM_SIZE / 16];
   u8 load_ok[64]; /* declared load verified in RAM (ADR-0136) */
-  /* per RAM word, from plaid_code: 0 data, 1 executable, 2 + n executable
-     bytes of declared load n; built once before the first guarded write */
+  /* Per RAM word: 0 data, 1 fixed text, 2+n declared load n,
+     253 immutable proof data, 254 revoked fixed text, 255 bound overlay. */
   u8 prot[PLAID_RAM_SIZE / 4]; u8 prot_ready, text_dirty;
   plaid_native_frame *native_frames; /* includes suspended SDK threads */
   plaid_tlb_entry tlb[32]; /* written by the runtime's osMapTLB family */
@@ -76,7 +76,7 @@ int plaid_rt_safepoint(plaid_state *s);
 typedef struct { u32 start, end; int load; } plaid_range;
 #define SX32(v) ((u64)(s64)(s32)(u32)(v))
 /* fault 1: address/alignment outside the supported model; 2: store to
-   executable bytes (declared immutable); 3: transfer without a proven target;
+   active native text or immutable proof data; 3: transfer without a proven target;
    4: an RDRAM access whose result depends on D-cache state: uncached
    (KSEG1) to a resident line with stores not yet written back, cached to a
    resident line RAM has overtaken, a line resident at two indexes, or a
@@ -86,8 +86,8 @@ typedef struct { u32 start, end; int load; } plaid_range;
    6: an overflow-trapping add/subtract that would raise an exception;
    7: a COP1 operation outside the modeled subset: a NaN or subnormal
       operand, an out-of-range conversion, or an enabled FPU exception;
-   8: code of a declared load entered while RAM does not hold its declared
-      bytes. Writes into a load revoke its verification, so entry compares
+   8: fixed text or code of a declared load entered while RAM does not hold
+      its compiled bytes. Writes into a load revoke its verification, so entry compares
       again (ADR-0161); a write by the load's own code into it faults 2;
    9: a BREAK was reached (its exception handler is not modeled);
    10: a conditional trap was taken (its exception handler is not modeled);
@@ -113,7 +113,7 @@ static void plaid_build_prot(plaid_state *s) {
   u32 i, w;
   for (i = 0; i < sizeof plaid_code / sizeof plaid_code[0]; i++)
     for (w = plaid_code[i].start >> 2; w < (plaid_code[i].end + 3) >> 2 && w < PLAID_RAM_SIZE / 4; w++)
-      if (s->prot[w] != 253) s->prot[w] = plaid_code[i].load == -2 ? 253 : plaid_code[i].load < 0 ? 1 : (u8)(2 + plaid_code[i].load);
+      if (s->prot[w] != 253 && (s->prot[w] != 1 || plaid_code[i].load == -2)) s->prot[w] = plaid_code[i].load == -2 ? 253 : plaid_code[i].load < 0 ? 1 : (u8)(2 + plaid_code[i].load);
   s->prot_ready = 1;
 }
 "#;
@@ -123,7 +123,7 @@ const HELPERS: &str = r#"/* Native frames pin their complete fixed-text bodies, 
 /* Keep the intentional stack-frame registration out of GCC's dangling-pointer
    heuristic; the wrapper always unregisters before its local frame expires. */
 #if defined(__GNUC__)
-__attribute__((noinline))
+__attribute__((noinline, unused))
 #endif
 static void plaid_text_pin(plaid_state *s, plaid_native_frame *f) {
   f->prev = 0; f->next = s->native_frames;
@@ -152,10 +152,8 @@ static inline int plaid_text_enter(plaid_state *s, u32 p, const u32 *words, u32 
   }
   return 0;
 }
-/* 1 when a write must abort: the base image's code and jump tables always,
-   and a verified declared load's code when the writer at pc is that load's
-   own code. Any other write into a verified load revokes its verification;
-   the next entry into its code compares the bytes again (ADR-0161). */
+/* Proof-bearing data and active native text refuse writes. Inactive text
+   revokes its byte verification; the next entry checks it again (ADR-0219). */
 int plaid_ovl_write(plaid_state *s, u32 p, u32 pc);
 u32 plaid_link(plaid_state *s, u32 t);
 int plaid_tlb_write(plaid_state *s, u32 index, plaid_tlb_entry entry, u32 pc);
@@ -711,7 +709,7 @@ int plaid_ovl_write(plaid_state *s, u32 p, u32 pc) {
     a = plaid_ovls[k].link + s->ovl_backing[k];
     if (!plaid_ovl_contains(k, p - a)) continue;
     if (p - a >= plaid_ovls[k].text) return 1; /* proof-bearing data stays immutable */
-    if ((s->ovl_tlb[k] && s->ovl_active[k]) || pc - plaid_ovls[k].link < plaid_ovls[k].text) return 1;
+    if (s->ovl_active[k] || pc - plaid_ovls[k].link < plaid_ovls[k].text) return 1;
   }
   for (k = 0; k < PLAID_OVLS; k++)
     if (s->ovl_ok[k] && plaid_ovl_contains(k, p - (plaid_ovls[k].link + s->ovl_backing[k])))

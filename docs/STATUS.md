@@ -1,5 +1,16 @@
 # Status
 
+## Shared CPU/RSP executable-write policy (ADR-0219)
+
+OoT type-4 startup patches eight bytes of its RSP boot program in RDRAM. The
+same bytes were conservatively decoded as immutable base CPU text. Inactive
+fixed text is now revocable through the shared CPU/device write gate, with
+compiled-byte verification before subsequent execution. Active native frames,
+including suspended threads and relocated overlays, remain protected; fixed
+proof-bearing data remains immutable. Synthetic state matches pinned ares and
+five policy mutations are caught. Final ROM validation is pending; see
+research/rsp-from-rom.md. Solver maps and assumptions are unchanged.
+
 ## Paper Mario closure work (ADR-0202 through ADR-0217)
 
 The selected ROM remains scoped OPEN/7, with 56,851 blocks and 162 loads.

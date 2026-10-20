@@ -6343,3 +6343,42 @@ See research/stack-table-pointer.md and ignored target/paper-mario/0217 receipts
 Frame ownership does not consume SP arithmetic: the allocating ADDIU must still
 run the ordinary pointer/flag transfer. A decoy-table counterexample and native
 SP-derived-base fixture verify this review correction before the final gate.
+
+
+## ADR-0219: Revoke inactive fixed text through the shared CPU/device write gate
+
+Date: 2026-10-21. ADR-0218 is reserved by the separate Paper Mario worker.
+
+An RSP task may modify its own microcode's RDRAM copy. Those bytes can also be
+conservatively discovered as possible CPU entries. Treating every such decoded
+base-image block as permanently immutable faults a legitimate SP DMA. Removing
+the possible CPU entry, suppressing protection for microcode, or selecting a
+policy by ROM identity would weaken the supported execution model.
+
+Fixed CPU text now uses the existing shared write boundary for CPU stores and
+runtime/device DMA. A write into inactive fixed text marks its words revoked.
+Before executing a block, its revoked words must equal the original compiled
+words; differing bytes fault 8. Restoration can revalidate them. There is no
+guest decoder, interpreter, JIT, or alternate instruction implementation.
+
+Every fixed native function pins its complete emitted body, including return
+continuations, until all exits unwind. Stack-local frames form an intrusive
+list so suspended SDK threads remain pinned and may leave in non-LIFO order.
+Writes overlapping any active body fault 2. Fixed proof-bearing table/cell data
+has a separate immutable protection tag; declared-load tags retain their byte
+verification and additionally respect active fixed frames. Active relocatable
+overlays also refuse runtime writes, regardless of whether they use a TLB.
+
+The RSP callback still calls plaid_runtime_write without a policy exception.
+The closed-world solver, default maps, discovery, and assumption ledger do not
+change. This extends dynamic write verification; it is not a static lifetime
+proof or whole-ROM acceptance. Source reference: pinned ares
+9408cb43d4948fc3ea6e152a307a34348df3fe04, ares/n64/rsp/dma.cpp.
+No upstream code was copied.
+
+Synthetic coverage: CPU/RSP inactive revocation, ordinary-data DMA, stale entry
+refusal, restoration/re-entry, actual active native call, suspended frame list,
+immutable proof data, and active overlay runtime writes. Accepted CPU state
+matches pinned ares. Five semantic policy mutations are rejected. Final game
+and gate receipts are recorded in research/rsp-from-rom.md and ignored
+ target/oot/0219; incomplete runs do not establish acceptance.
