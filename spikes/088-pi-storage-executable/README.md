@@ -25,7 +25,7 @@ python spikes/088-pi-storage-executable/run.py
 python spikes/088-pi-storage-executable/run.py --verify-existing
 python spikes/088-pi-storage-executable/test_consumer.py
 python spikes/088-pi-storage-executable/test_retained.py
-cargo test --locked -p plaid-core --test pi_history
+cargo test --locked -p plaid-core --test core pi_history::
 ```
 
 `check_retained.py` is a delta check on an already validated complete source.
