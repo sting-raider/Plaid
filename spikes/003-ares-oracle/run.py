@@ -93,7 +93,14 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
     if rsp_scalar_store_access: inputs["rsp_scalar_store_access"]=True
     exe = output / "oracle"
     manifest = output / "build.json"
-    if not manifest.exists() or json.loads(manifest.read_text()) != inputs or not exe.exists():
+    # The inputs fully determine the oracle, so every checkout shares one copy.
+    shared = Path(os.environ.get("PLAID_ORACLE_CACHE", Path.home() / ".cache/plaid/ares-oracle"))
+    shared /= hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
+    built = lambda d: (d / "build.json").exists() and json.loads((d / "build.json").read_text()) == inputs and (d / "oracle").exists()
+    if not built(output) and built(shared):
+        shutil.copy2(shared / "oracle", exe)
+        shutil.copyfile(shared / "build.json", manifest)
+    if not built(output):
         flags = ["-O1","-std=c++20","-msse4.1","-DSLJIT_HAVE_CONFIG_PRE=1","-DSLJIT_HAVE_CONFIG_POST=1"]
         includes = [REF / p for p in ("ares","nall",".","thirdparty","thirdparty/xxhash","ares/n64/system")]
         queue_header = output/"include/nall/priority-queue.hpp"
@@ -355,6 +362,11 @@ struct PlaidQueueDispatchScope {
                 print("\n".join((output / "build.log").read_text().splitlines()[-30:]))
                 raise
         manifest.write_text(json.dumps(inputs,indent=2)+"\n")
+        shared.mkdir(parents=True,exist_ok=True)
+        for name in ("oracle","build.json"):
+            temporary = shared / f"{name}.{os.getpid()}.tmp"
+            shutil.copy2(output / name, temporary)
+            os.replace(temporary, shared / name)
     return exe
 
 
