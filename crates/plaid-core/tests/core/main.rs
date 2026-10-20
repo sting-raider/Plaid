@@ -43,6 +43,7 @@ mod programmap_merge_conflict_equivalence;
 mod programmap_merge_scalability;
 mod region_physical_alignment;
 mod region_physical_span;
+mod residual_dispatch;
 mod rom;
 mod software_interrupt;
 mod solver;

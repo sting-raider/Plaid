@@ -668,6 +668,8 @@ def main():
     tlb_execution_contracts()
     from test_indexed_dispatch import main as indexed_dispatch_contracts
     indexed_dispatch_contracts()
+    from test_residual_dispatch import main as residual_dispatch_contracts
+    residual_dispatch_contracts()
     from test_indexed_slot_calls import main as indexed_slot_call_contracts
     indexed_slot_call_contracts()
     from test_boot_execution import main as boot_execution_contracts
