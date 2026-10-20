@@ -6289,3 +6289,28 @@ protection remain mandatory. Synthetic callee/table/source controls, four killed
 mutants, and authored native full-state pinned-ares contracts verify this slice.
 No upstream implementation is copied; the ares ISC oracle stays separately built.
 See research/mapped-callee-effects.md and ignored target/paper-mario/0215-recovery/.
+
+
+## ADR-0216: Reuse source-bound callee effects within an immutable table walk
+
+A successful bounded no-write effect may be reused for the same architectural
+callee target and required GPR during one backward table walk. Map, source image
+and caller slot are immutable in that walk and form the rest of the query
+identity. No cache crosses walks, discovery rounds or certificate verification.
+Each verifier redoes the source proof from current declarations and bytes.
+
+Cache misses consume the existing shared 4,096-read budget. Hits perform no new
+source traversal but still contribute every instruction/cell word, linked/placed
+binding and normal return witness to the enclosing certificate. Existing call
+delay-slot, all-predecessor, binding-generation, active-frame and closed-world
+gates remain mandatory. There is no ABI assumption or resource-limit increase.
+
+This general reuse closes two resource-limited Paper Mario dispatches: scoped
+OPEN/9 -> OPEN/7, still 56,851 blocks and 162 loads. Three independent entry
+barriers, two callee register-effect proofs and two stack-cell pointer proofs
+remain refused. Native emission remains gated. Authored repeated-call native
+state matches pinned ares. Four caught mutants cover absent reuse, missing
+source words and missing target/GPR cache identity; a shared-return negative
+ensures target identity is tested independently of return-witness rejection.
+No reference implementation is copied. See research/table-effect-reuse.md and
+target/paper-mario/0216 receipts. No README or progress milestone changes.

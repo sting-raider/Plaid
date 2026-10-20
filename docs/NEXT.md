@@ -2,7 +2,7 @@
 
 ## Continue Paper Mario ROM-only closure
 
-The user selected Paper Mario. The frontier is OPEN/9 with 56,851 blocks and
+The user selected Paper Mario. The frontier is OPEN/7 with 56,851 blocks and
 162 loads after ROM-only TLB effect/bridge source inference and guarded tail
 cells and scheduled pointer/constant-SLLV proofs. Finish the remaining bounded
 indexed dispatch proofs, including matching index values and callee save/restore
@@ -12,6 +12,13 @@ GPR; another five-entry dispatch closes. Paired index/offset updates now have a
 low-word affine proof, closing a further five-entry dispatch. Mapped callee effects now bind unique declared linked text and rechecked
 constant-cell tails, with path-local binding authority and exact source/return
 witnesses. Two dispatches close; other predecessor paths still need proof.
+Walk-local source-bound callee effect reuse closes two resource-limited sites
+without increasing the shared read budget (ADR-0216). The remaining groups are
+three independent address-taken entry/base-initialization barriers, two callee
+register-effect/save-restore proofs, and two captured stack-cell pointers.
+Do not turn the three address-taken roots into internal entries without proving
+their independent origins impossible. See research/table-effect-reuse.md for
+the scripted final-round classification, mutations and local receipts.
 Continue bounded save/restore, stack-cell and captured-index/entry proofs while
 retaining mapping generations and active-frame pins. A source binding is not
 permission to infer an SDK boundary. See research/mapped-callee-effects.md.
