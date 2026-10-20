@@ -25,6 +25,12 @@ pub enum Scope {
     /// functions; a native artifact dispatches over that set and faults 3
     /// on any other target.
     DeclaredStaticImagesGuardedRamAddressTaken,
+    /// VALIDATION ONLY (ADR-0218): the address-taken scope, except that an
+    /// indirect site with no closure proof is accepted as a residual site. A
+    /// native artifact dispatches it over every lowered entry and faults 3 on
+    /// any other target. The report stays `native_complete: false` and lists
+    /// the residual sites; every other blocker still refuses.
+    DeclaredStaticImagesGuardedRamResidualDispatch,
 }
 
 impl Scope {
@@ -34,6 +40,7 @@ impl Scope {
             Scope::DeclaredStaticImages
                 | Scope::DeclaredStaticImagesGuardedRam
                 | Scope::DeclaredStaticImagesGuardedRamAddressTaken
+                | Scope::DeclaredStaticImagesGuardedRamResidualDispatch
         )
     }
     /// The guarded scope's checked assumptions apply.
@@ -42,6 +49,14 @@ impl Scope {
             self,
             Scope::DeclaredStaticImagesGuardedRam
                 | Scope::DeclaredStaticImagesGuardedRamAddressTaken
+                | Scope::DeclaredStaticImagesGuardedRamResidualDispatch
+        )
+    }
+    fn address_taken(self) -> bool {
+        matches!(
+            self,
+            Scope::DeclaredStaticImagesGuardedRamAddressTaken
+                | Scope::DeclaredStaticImagesGuardedRamResidualDispatch
         )
     }
 }
@@ -71,6 +86,10 @@ pub struct SolveReport {
     pub assumptions: Vec<String>,
     pub blockers: BTreeSet<Blocker>,
     pub discharged: BTreeSet<Unresolved>,
+    /// Residual-dispatch mode only (ADR-0218): sites lowered as fail-closed
+    /// dispatch over every lowered entry instead of a closed-target proof.
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub residual_sites: BTreeSet<CodeAddress>,
 }
 
 /// Closure admission with independently preserved discovery-source expectations.
@@ -813,7 +832,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         .iter()
         .map(|image| (image.base.image.as_str(), load_starts(map, image)))
         .collect();
-    let address_taken_ok = scope == Scope::DeclaredStaticImagesGuardedRamAddressTaken
+    let address_taken_ok = scope.address_taken()
         && !map.address_taken.is_empty()
         && map.address_taken.keys().all(|a| {
             (starts.contains(a) || map.runtime_functions.contains_key(a))
@@ -823,6 +842,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 })
         });
     let mut uses_address_taken = false;
+    let mut residual_sites = BTreeSet::new();
     for site in &map.indirect_sites {
         // Return certificates hold only under the guarded scope's checked
         // call/return assumption; every other scope keeps such sites OPEN.
@@ -850,7 +870,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             !returns && !table && !constant && address_taken_ok && site.link_register.is_some();
         uses_address_taken |= dispatched;
         let proof_valid = returns || table || constant || dispatched;
-        if !proof_valid {
+        let residual =
+            !proof_valid && scope == Scope::DeclaredStaticImagesGuardedRamResidualDispatch;
+        if residual {
+            residual_sites.insert(site.site.clone());
+        }
+        if !proof_valid && !residual {
             add(
                 "unresolved_indirect_site",
                 Some(site.site.clone()),
@@ -859,7 +884,8 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             );
         }
         for target in site.candidates.keys().chain(site.observed.keys()) {
-            if !starts.contains(target)
+            if !residual
+                && !starts.contains(target)
                 && !(site.link_register.is_some() && map.runtime_functions.contains_key(target))
                 && !(site.link_register.is_some() && into_slot(target))
             {
@@ -1183,6 +1209,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             map.address_taken.len()
         ));
     }
+    if !residual_sites.is_empty() {
+        assumptions.push(format!(
+            "VALIDATION ONLY (ADR-0218): {} indirect site(s) have no closure proof; a native artifact dispatches each over every lowered entry and faults 3 on any other target. The artifact is not natively complete.",
+            residual_sites.len()
+        ));
+    }
     if forwarded_callbacks {
         assumptions.push(
             "A wrapper that forwards its own argument to a runtime callback (ADR-0149) is entered only by its direct callers, and no store through a pointer writes the stack slot where it spills that argument (C object rules for an argument home); the native runtime enters only the proven targets and faults 3 on any other."
@@ -1317,5 +1349,6 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         assumptions,
         blockers,
         discharged,
+        residual_sites,
     })
 }
