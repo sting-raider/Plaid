@@ -657,6 +657,8 @@ def main():
     test_raw_pi.run(exe, cc, sys.modules[__name__])
     from test_overlays import main as overlay_verifiers
     overlay_verifiers()
+    from test_text_writes import main as text_write_contracts
+    text_write_contracts()
     from test_heap_overlays import main as heap_contracts
     heap_contracts()
     from test_slots import main as slot_contracts
