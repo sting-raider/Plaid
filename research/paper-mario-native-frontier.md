@@ -1,7 +1,15 @@
 # Paper Mario ROM-only native frontier
 
-Latest scoped result: OPEN/12, 56,807 blocks and 162 loads (ADR-0213).
+Latest scoped result: OPEN/11, 56,813 blocks and 162 loads (ADR-0214).
 Native Paper Mario emission remains refused.
+
+A low-word affine proof relates separately updated byte offsets and guarded
+indices. Exact fixed-text JR RA sources are checked against callee no-write
+witnesses when returning to a placed caller. This closes the five-entry site
+8093c2e0 and adds six blocks, without new blocker sites. The first private probe
+was OPEN/15 because the final table verifier could not read a fixed callee's
+return; that failed proof also invalidated a dependent return certificate.
+The corrected final probe is OPEN/11. See research/affine-table-index.md.
 
 Captured pointer/flag values survive bounded guest calls only when each live
 GPR has a rechecked no-write effect. Same-alternate source reads are admitted;

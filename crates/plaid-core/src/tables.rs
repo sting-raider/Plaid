@@ -368,6 +368,8 @@ struct Need {
     operands: Option<(u8, u8)>,
     /// Register that must hold `index << 2`, until its SLL is found.
     scaled: Option<u8>,
+    /// A byte offset and guarded index may advance as separate loop variables.
+    relation: Option<crate::affine_word::AffineWord>,
     /// The shifted register, once the SLL is found.
     index: Option<u8>,
     /// Register that must be a LUI-built constant, until its LUI is found.
@@ -395,13 +397,16 @@ impl Need {
         registers.extend(self.address);
         registers.extend(self.scaled);
         registers.extend(self.base);
+        if let Some(relation) = &self.relation {
+            registers.extend(relation.registers());
+        }
         if let Some((a, b)) = self.operands {
             registers.extend([a, b]);
         }
         if self.bound.is_none() {
             registers.extend(self.index);
         }
-        if self.index.is_none() {
+        if self.index.is_none() && self.relation.is_none() {
             registers.extend(self.bound.map(|(r, _, _)| r));
         }
         registers.extend(self.flags.iter().map(|(r, _, _)| *r));
@@ -412,6 +417,7 @@ impl Need {
         self.address.is_none()
             && self.operands.is_none()
             && self.scaled.is_none()
+            && self.relation.is_none()
             && self.base.is_none()
             && self.constants.is_empty()
             && matches!((self.index, self.bound), (Some(x), Some((r, _, _))) if x == r)
@@ -434,11 +440,6 @@ impl Need {
         else {
             return Some(());
         };
-        // A guard found before the pointer's definition must constrain the
-        // value consumed by its shift, even while the address is unresolved.
-        if self.index.is_none() && self.bound.is_some_and(|(r, _, _)| r == d) {
-            return None;
-        }
         // Constant propagation consumes a definition. Until shared obligations
         // are modeled together, it must not hide a pointer/index definition.
         if self.constants.contains_key(&d)
@@ -447,7 +448,29 @@ impl Need {
                 || self.scaled == Some(d)
                 || self.base == Some(d)
                 || self.index == Some(d)
+                || self
+                    .relation
+                    .as_ref()
+                    .is_some_and(|r| r.registers().any(|r| r == d))
                 || self.flags.iter().any(|(flag, _, _)| *flag == d))
+        {
+            return None;
+        }
+        if let Some(relation) = &mut self.relation {
+            relation.step(pc, word, &mut self.constants)?;
+            if relation.is_nonzero_constant() {
+                return None;
+            }
+            if relation.is_zero() {
+                self.index = Some(self.bound?.0);
+                self.relation = None;
+            }
+        }
+        // An affine goal carries the earlier index value through its terms.
+        // Otherwise it must still survive unchanged until the SLL is found.
+        if self.index.is_none()
+            && self.relation.is_none()
+            && self.bound.is_some_and(|(r, _, _)| r == d)
         {
             return None;
         }
@@ -615,6 +638,12 @@ impl Need {
             }
             self.bound = Some((r, count, guard));
         }
+        if self.index.is_none()
+            && let (Some(offset), Some((index, _, _))) = (self.scaled, self.bound)
+        {
+            self.relation = Some(crate::affine_word::AffineWord::scaled_index(offset, index));
+            self.scaled = None;
+        }
         Some(())
     }
 }
@@ -713,6 +742,7 @@ fn guarded(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
         address: Some(field(load, 21)),
         operands: None,
         scaled: None,
+        relation: None,
         index: None,
         base: None,
         base_low: 0,
@@ -798,6 +828,30 @@ struct WalkFrame {
 }
 
 impl Walk<'_, '_> {
+    /// A fixed-text return may duplicate a slot call's continuation. Its exact
+    /// source must still be covered by the callee effect proof below.
+    fn incoming_jump(&mut self, pc: u32) -> Option<u32> {
+        if self.slot.is_none()
+            || self
+                .image
+                .slots
+                .iter()
+                .any(|(placed, _, _)| placed.contains(GuestAddr(pc)))
+        {
+            return self.word(pc);
+        }
+        self.steps += 1;
+        if self.steps > 4096 {
+            return None;
+        }
+        let word = self.image.instruction_word(GuestAddr(pc))?;
+        if word != 0x03e0_0008 {
+            return None;
+        }
+        self.seen.insert(pc, word);
+        Some(word)
+    }
+
     fn word(&mut self, pc: u32) -> Option<u32> {
         self.steps += 1;
         if self.steps > 4096 {
@@ -886,7 +940,7 @@ impl Walk<'_, '_> {
                 return None;
             }
             let site = edge.site.pc;
-            let jump = self.word(site.0)?;
+            let jump = self.incoming_jump(site.0)?;
             // Checked returns duplicate the call's continuation edge. Require
             // each source to occur in a no-write callee proof below.
             if jump == 0x03e0_0008 {

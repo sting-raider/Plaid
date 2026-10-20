@@ -147,6 +147,25 @@ def _invariant_flag_fixture(A, index, calls=False):
              'input', index]
     return A.assemble(items)
 
+def _affine_index_fixture(A, calls=False, stride=4, shift_initial=None):
+    items = ([A.addu(A.s4, A.zero, A.zero), A.addu(A.s5, A.zero, A.zero)]
+             if shift_initial is None else
+             [A.addiu(A.s4, A.zero, 1), A.addu(A.t0, A.s4, A.zero),
+              A.addiu(A.a2, A.zero, shift_initial), A.addiu(A.a2, A.a2, 1),
+              (A.a2 << 21) | (A.t0 << 16) | (A.s5 << 11) | 4])
+    items += ['header', A.sltiu(A.v0, A.s4, 3), A.beq(A.v0, A.zero, 'done'), A.nop,
+             A.lui(A.v0, 0x8000), A.addu(A.v0, A.v0, A.s5),
+             lambda pc, labels: A.lw(A.v0, labels['table'] & 0xFFFF, A.v0), A.jr(A.v0), A.nop]
+    for i, value in enumerate((1, 10, 100)):
+        items += [f'case{i}', A.addiu(A.s1, A.s1, value),
+                  *([A.jal('leaf'), A.nop] if calls else []), A.j('step'), A.nop]
+    items += ['step', A.addiu(A.s5, A.s5, stride), A.addiu(A.s4, A.s4, 1), A.j('header'), A.nop,
+              'done', A.lui(A.gp, 0x8000), A.sw(A.s1, 0x1000, A.gp), *A.DONE,
+              'leaf', A.addiu(A.a0, A.zero, 99), A.jr(A.ra), A.nop,
+              'table', *[lambda pc, labels, i=i: labels[f'case{i}'] for i in range(3)]]
+    return A.assemble(items)
+
+
 def main():
     spec = importlib.util.spec_from_file_location('indexed_asm', SLICE / 'run.py')
     A = importlib.util.module_from_spec(spec)
@@ -167,6 +186,9 @@ def main():
                                       ('flag-call0', False, False),
                                       ('flag-call1', False, False),
                                       ('flag-call-invalid', False, False),
+                                      ('affine-index', False, False),
+                                      ('affine-calls', False, False),
+                                      ('affine-shift', False, False),
                                       ('preserved-base', False, False),
                                       ('preserved-break', False, False),
                                       ('callee-break', False, False),
@@ -178,6 +200,9 @@ def main():
                    'flag-call0': lambda asm: _invariant_flag_fixture(asm, 0, True),
                    'flag-call1': lambda asm: _invariant_flag_fixture(asm, 1, True),
                    'flag-call-invalid': lambda asm: _invariant_flag_fixture(asm, 3, True),
+                   'affine-index': _affine_index_fixture,
+                   'affine-calls': lambda asm: _affine_index_fixture(asm, True),
+                   'affine-shift': lambda asm: _affine_index_fixture(asm, shift_initial=1),
                    'preheader': _preheader_fixture, 'captured': _captured_fixture,
                    'case-backedges': _case_backedge_fixture,
                    'long-case': lambda asm: _case_backedge_fixture(asm, 24),
@@ -210,7 +235,8 @@ def main():
         assert state == json.loads(expected.stdout), (actual.stdout, expected.stdout)
         value = 11 if name in ('case-backedges', 'long-case', 'preserved-base', 'preserved-break') else 10 if name in ('preheader', 'captured') else 1111
         value = {'flag-valid0': 1, 'flag-valid1': 10, 'flag-invalid': 0,
-                 'flag-call0': 3, 'flag-call1': 30, 'flag-call-invalid': 0}.get(name, value)
+                 'flag-call0': 3, 'flag-call1': 30, 'flag-call-invalid': 0,
+                 'affine-index': 111, 'affine-calls': 111, 'affine-shift': 110}.get(name, value)
         accumulator = 20 if name in ('preserved-base', 'preserved-break') else 17
         assert state['pc'] == EXIT and state['regs'][accumulator] == value and state['ram'][0] == value
         if name in ('preserved-base', 'preserved-break'):
@@ -223,6 +249,20 @@ def main():
     bad = OUT / 'wrong-scale.bin'
     bad.write_bytes(_fixture(A, True, shift=3))
     rejected_c = OUT / 'wrong-scale.c'
+    rejected_c.unlink(missing_ok=True)
+    rejected = subprocess.run([str(exe), 'lower-c', str(bad), hex(BASE), hex(BASE),
+                               hex(EXIT), str(rejected_c), '--address-taken'], capture_output=True, text=True)
+    assert rejected.returncode != 0 and not rejected_c.exists(), (rejected.stdout, rejected.stderr)
+    bad = OUT / 'wrong-affine-shift.bin'
+    bad.write_bytes(_affine_index_fixture(A, shift_initial=0))
+    rejected_c = OUT / 'wrong-affine-shift.c'
+    rejected_c.unlink(missing_ok=True)
+    rejected = subprocess.run([str(exe), 'lower-c', str(bad), hex(BASE), hex(BASE),
+                               hex(EXIT), str(rejected_c), '--address-taken'], capture_output=True, text=True)
+    assert rejected.returncode != 0 and not rejected_c.exists(), (rejected.stdout, rejected.stderr)
+    bad = OUT / 'wrong-affine-step.bin'
+    bad.write_bytes(_affine_index_fixture(A, stride=8))
+    rejected_c = OUT / 'wrong-affine-step.c'
     rejected_c.unlink(missing_ok=True)
     rejected = subprocess.run([str(exe), 'lower-c', str(bad), hex(BASE), hex(BASE),
                                hex(EXIT), str(rejected_c), '--address-taken'], capture_output=True, text=True)
