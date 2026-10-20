@@ -26,7 +26,7 @@ Synthetic source/CLI/independent-model regressions:
 cargo build --locked -p plaid
 python spikes/087-storage-writer-fetch-history/test_consumer.py
 python spikes/087-storage-writer-fetch-history/test_legacy_projection.py
-cargo test --locked -p plaid-core --test pi_history
+cargo test --locked -p plaid-core --test core pi_history::
 ```
 
 Use the existing ignored local capture workflow with `--history storage`. The
