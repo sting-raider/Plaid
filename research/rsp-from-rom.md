@@ -500,7 +500,60 @@ Six mutation checks now pass, including removal of active-overlay runtime-write
 protection. Focused DMA and IMEM-DMA native state also matches the retained,
 pin-verified ares oracle; its driver hash differs only by checkout CRLF bytes.
 The current SM64 identification/map independently remains OPEN on
-runtime_status_abi, so regression work uses retained accepted scopes and the
-retained ADR-0188 compatibility runtime, with freshly generated ADR-0219 CPU
-objects. That limitation must accompany regression results; it is not a new
-solver proof or evidence that current ROM-only SM64 is accepted.
+runtime_status_abi. Its regression rebuild uses the retained accepted CPU scope
+and ADR-0188 compatibility runtime, with newly generated ADR-0219 CPU objects.
+F-Zero/MM controls reuse their retained native executables. These finite controls
+do not prove fresh ROM-only closure or full gameplay acceptance.
+
+
+### Final validation receipt (2026-10-21)
+
+All windows were visible, nonzero visible window handles were collected, guest
+limits were at most 60 seconds, and every run had a process deadline. The PCM
+checker is the same `native_audio.audio_peak` function used by --require-audio.
+
+| Control | Seconds | VI | Graphics | Audio counter | CPU fault | PCM peak |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Fresh OoT/current runtime | 60 maximum; refuses in 0.906 wall s | 3 | 0 | 1 (type 4) | 0 | empty, 0 frames |
+| New ADR-0219 CPU objects / retained SM64 scope | 20 | 1153 | 543 | 1142 | 0 | 28452 |
+| Retained F-Zero ROM-derived RSP executable (--rsp-gfx) | 20 | 1099 | 789 | 1088 | 0 | 17476 |
+| Retained MM ROM-derived RSP executable | 60 | 3430 | 1193 | 3077 | 0 | 32767 |
+
+F-Zero/MM reuse retained binaries as allowed by the task. Their legacy graphics
+ABI takes four arguments, while the current RT64 DLL takes six. An initial
+F-Zero run against the current DLL crashed without a guest fault receipt; it is
+not a successful regression. The accepted controls use unchanged copies of the
+retained binaries paired with the preserved `target/rt64-shim/legacy-fzerox`
+DLLs. SM64's newly generated CPU artifact uses the same compatible pair. OoT's
+fresh current-runtime artifact uses the current DLL. All executable/DLL hashes,
+window handles, PCM frames and full status rows are in final-validation.json.
+The retained F-Zero map is currently OPEN/3, and the later ADR-0217 map is OPEN/1;
+no candidate was emitted by weakening the CLOSED gate. A redundant fresh MM
+compile was stopped after its retained control passed; generated source and two
+completed CPU objects remain ignored for reuse. These are declared scope and
+artifact-compatibility limits, not claims of fresh closure for all games.
+
+The exact final production code passes cargo fmt --all -- --check (1.735 s),
+locked workspace/all-target Clippy with -D warnings (1.843 s), locked workspace
+tests (271.328 s: 886 passed, 1 ignored, 92 suites), scripts/test_cli.py (10.047 s),
+full runtime/test_runtime.py (705.359 s, including a cold pinned-ares boot build),
+and tools/progress.py --check (0.391 s). The earlier CLI lock and stale-generator
+failures are retained separately; they were resolved before this final gate.
+Focused CPU state, heap/overlay state, DMA and IMEM-DMA match pinned ares. All
+six semantic mutants fail assertions. Source review checked body/continuation
+pins, non-LIFO suspended-frame removal, bounds, word identity, proof-data tags,
+and matched generated-state layouts. No reference code was copied.
+
+Iteration measurements: overlapping eight-way game compilations exhausted this
+16 GiB host, so redundant work was stopped and subsequent compiles used two
+workers. OOT's cold current build took 552.188 s under that initial contention.
+An exact-source SM64 part using the existing compile cache took 26.172 s uncached
+versus 0.031 s cached; both objects have SHA-256
+b43589559bdd66c4808c5742b9b1ed031c0212b0b0f0f747997bc3d4b6945b38.
+RSP objects were reused without relowering or snapshot substitution. No runtime
+speed claim is inferred from different workloads or the contended cold build.
+
+No progress data, README, solver/discovery source, default map, assumption count,
+main branch or remote was changed. DECISIONS.md's complete historical blob is
+preserved byte-for-byte, including its non-UTF-8 byte. No ROM/generated game
+assets are in git. Own validation/build processes are stopped at closeout.

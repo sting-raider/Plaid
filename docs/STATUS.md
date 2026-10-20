@@ -11,7 +11,11 @@ proof-bearing data remains immutable. Synthetic state matches pinned ares and
 six policy mutations are caught. A fresh visible current-runtime OoT run passes
 the write, confirms the patched RAM words, and stops at unlowered RSP IMEM
 0x080: VI 3, CPU fault 0, no graphics or PCM. It is not audio accepted. See
-research/rsp-from-rom.md. Solver maps and assumptions are unchanged.
+research/rsp-from-rom.md. Full local gates pass (886 Rust tests; one ignored).
+Visible audio controls pass for newly lowered SM64 and retained F-Zero/MM
+artifacts; MM ran 60 seconds. Their retained scopes and compatible legacy DLL
+pair do not establish fresh ROM-only closure. Solver maps and assumptions are
+unchanged.
 
 ## Paper Mario closure work (ADR-0202 through ADR-0217)
 
