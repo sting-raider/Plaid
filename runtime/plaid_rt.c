@@ -879,7 +879,11 @@ RT(__osSetFpcCsr) {
 /* libultra's PI DMA addresses the cartridge at K1_TO_PHYS(osRomBase | devAddr) */
 static u32 pi_rom_offset(u32 dev, u32 n) {
   u32 p = (rd32(0x80000308u) | dev) & 0x1fffffffu;
-  if (p < 0x10000000u || (u64)(p - 0x10000000u) + n > rom_size) finish(1, "PI DMA outside the ROM");
+  if (p < 0x10000000u || (u64)(p - 0x10000000u) + n > rom_size) {
+    static char why[96];
+    snprintf(why, sizeof why, "PI DMA outside the ROM: address %08x size %x", p, n);
+    finish(1, why);
+  }
   return p - 0x10000000u;
 }
 /* osPiStartDma(mb, pri, direction, devAddr, vAddr, nbytes, mq) */
@@ -1110,6 +1114,8 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
     } else if (r == 4) ai.rate = 48681812u / (((u32)*v & 0x3fffu) + 1); /* NTSC VI clock / (rate + 1) */
     return 0; /* AI_STATUS write: the interrupt is an event here; AI_BITRATE: 16-bit output */
   }
+  /* Cartridge ROM space (and the absent IS-Viewer at 0x13ff0000) ignores writes, as pinned ares. */
+  if (write && p >= 0x10000000u && p < 0x1fc00000u) return 0;
   if (write) return 1;
   if (p >= 0x05000000u && p < 0x08000000u) { /* no device: the address's low half twice (pi/bus.hpp) */
     *v = (u64)(s64)(s32)((p & 0xfffeu) << 16 | (p & 0xfffeu));
@@ -1171,7 +1177,12 @@ static void epi_dma(u32 h, u32 dir, u32 dev, u32 va, u32 n) {
   } else {
     if (base != 0x10000000u) finish(1, "PI DMA through a non-cartridge handle");
     if (dir != 0) finish(1, "PI write to cartridge");
-    if ((u64)dev + n > rom_size) finish(1, "PI DMA outside the ROM");
+    dev = ((base | dev) & 0x1fffffffu) - 0x10000000u; /* libultra ORs the handle base in; a full cart address is the same */
+    if ((u64)dev + n > rom_size) {
+      static char why[96];
+      snprintf(why, sizeof why, "PI DMA outside the ROM: offset %08x size %x", dev, n);
+      finish(1, why);
+    }
     dma_wr(va, rom + dev, n);
   }
   dma_count++;
@@ -1531,6 +1542,11 @@ RT(osContSetCh) { return ret(0); }
 /* No Rumble Pak: PFS_ERR_NOPACK */
 RT(osMotorInit) { return ret(1); }
 RT(__osPfsGetStatus) { return ret(1); } /* every channel has no Controller Pak */
+/* The same policy for every libultra pak operation: PFS_ERR_NOPACK. */
+#define PFS_NOPACK(name) RT(name) { return ret(1); }
+PFS_NOPACK(osPfsInitPak) PFS_NOPACK(osPfsFreeBlocks) PFS_NOPACK(osPfsAllocateFile)
+PFS_NOPACK(osPfsDeleteFile) PFS_NOPACK(osPfsFileState) PFS_NOPACK(osPfsFindFile)
+PFS_NOPACK(osPfsReadWriteFile)
 RT(__osMotorAccess) { return ret(1); }
 /* Both SDK wrappers use the same no-accessory policy as __osMotorAccess. */
 RT(osMotorStart) { return rt___osMotorAccess(); }

@@ -1631,11 +1631,7 @@ pub fn lower_c_parts(
     callees.retain(|f| !runtime.contains_key(&f.pc.0));
     let functions: BTreeSet<u32> = callees.iter().map(|f| f.pc.0).collect();
     // A residual site dispatches over every lowered entry, never beyond (ADR-0218).
-    let every_entry: BTreeSet<u32> = functions
-        .iter()
-        .chain(runtime.keys())
-        .copied()
-        .collect();
+    let every_entry: BTreeSet<u32> = functions.iter().chain(runtime.keys()).copied().collect();
     for &pc in &residual {
         targets.insert(pc, every_entry.clone());
     }

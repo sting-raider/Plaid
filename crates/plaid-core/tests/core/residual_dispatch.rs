@@ -87,13 +87,27 @@ fn only_the_residual_scope_accepts_an_unproven_indirect_site() {
         Scope::DeclaredStaticImagesGuardedRamResidualDispatch,
     )
     .unwrap();
-    assert_eq!(residual.status, ClosureStatus::Closed, "{:?}", residual.blockers);
+    assert_eq!(
+        residual.status,
+        ClosureStatus::Closed,
+        "{:?}",
+        residual.blockers
+    );
     assert!(!residual.native_complete);
     assert_eq!(
-        residual.residual_sites.iter().map(|s| s.pc).collect::<Vec<_>>(),
+        residual
+            .residual_sites
+            .iter()
+            .map(|s| s.pc)
+            .collect::<Vec<_>>(),
         [GuestAddr(BASE + 12)]
     );
-    assert!(residual.assumptions.iter().any(|a| a.contains("VALIDATION ONLY")));
+    assert!(
+        residual
+            .assumptions
+            .iter()
+            .any(|a| a.contains("VALIDATION ONLY"))
+    );
 }
 
 #[test]
@@ -102,7 +116,11 @@ fn every_other_blocker_still_refuses_under_the_residual_scope() {
     // An unsupported instruction (MTC0) in the jump's delay slot.
     image.words[4] = 0x4080_6000;
     let map = map(&image);
-    let plain = kinds(&map, &image, Scope::DeclaredStaticImagesGuardedRamAddressTaken);
+    let plain = kinds(
+        &map,
+        &image,
+        Scope::DeclaredStaticImagesGuardedRamAddressTaken,
+    );
     let other: Vec<_> = plain
         .iter()
         .filter(|k| !k.starts_with("unresolved_indirect"))
