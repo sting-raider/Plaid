@@ -17,6 +17,10 @@ static std::set<u32> targets;
 static u64 steps = 0;
 static FILE* result;
 static bool exactMany = false;
+static bool seekUncovered = false;
+static std::vector<std::array<u32, 2>> covered;
+static u32 uncoveredEntry = 0;
+static std::array<std::array<u32, 2>, 2> previousFetches{};
 static std::vector<std::array<u32, 3>> dma;
 static std::vector<u8> sp; // DMEM then IMEM at the first entry fetch
 static std::vector<u8> ram_prefix; // IPL3's vector/boot-parameter area, before game entry
@@ -39,6 +43,8 @@ static void ranges(FILE* f, u32 lo, u32 hi, u8 mask) {
 }
 static void observe(u64 address, u32 word) {
     u32 pc = address;
+    auto previous = previousFetches;
+    previousFetches = {previous[1], {pc, word}};
     if(pc == boot && !entered) {
       entered = true; std::fill(written.begin(), written.end(), 0);
       for(u32 a = 0; a < 0x400; a++)
@@ -49,7 +55,11 @@ static void observe(u64 address, u32 word) {
         for(int s = 24; s >= 0; s -= 8) sp.push_back(u8(w >> s));
       }
     }
-    if(!targets.contains(pc) || !entered) return;
+    if(!entered) return;
+    bool uncovered = seekUncovered && pc >= 0x80000000u && pc < 0x80800000u
+      && std::none_of(covered.begin(), covered.end(), [&](auto r) { return r[0] <= pc && pc < r[1]; });
+    if(!targets.contains(pc) && !uncovered) return;
+    if(uncovered) { uncoveredEntry = pc; seekUncovered = false; }
     targets.erase(pc); // Only the first fetch can authorize this generation.
     auto reject = [&](const char* reason) {
       std::fprintf(result, "{\"rejected_entry\":%u,\"steps\":%llu,\"reason\":\"%s\"}\n", pc, (unsigned long long)steps, reason);
@@ -76,7 +86,7 @@ static void observe(u64 address, u32 word) {
     ranges(result, lo, hi, 1);
     std::fprintf(result, ",\"pi_dma\":[");
     for(size_t i = 0; i < dma.size(); i++) std::fprintf(result, "%s[%u,%u,%u]", i ? "," : "", dma[i][0], dma[i][1], dma[i][2]);
-    std::fprintf(result, "],\"bytes\":[");
+    std::fprintf(result, "],\"previous_fetches\":[[%u,%u],[%u,%u]],\"bytes\":[", previous[0][0], previous[0][1], previous[1][0], previous[1][1]);
     for(u32 a = lo; a < hi; a++) std::fprintf(result, "%s%u", a == lo ? "" : ",", (u32)rdram.ram.read<Byte>(a, RBusDevice::ARES_DEBUGGER));
     std::fprintf(result, "]}\n");
     if(!exactMany) {
@@ -87,9 +97,21 @@ static void observe(u64 address, u32 word) {
     }
 }
 int main(int argc, char** argv) {
-  if(argc != 8 && argc != 9) return 2;
+  if(argc != 8 && argc != 9 && argc != 10) return 2;
   if(argc == 9 && std::strcmp(argv[8], "exact-many") != 0) return 2;
   exactMany = argc == 9;
+  if(argc == 10) {
+    if(std::strcmp(argv[8], "uncovered")) return 2;
+    FILE* f = std::fopen(argv[9], "rb"); if(!f) return 2;
+    u32 lo, hi;
+    while(std::fscanf(f, "%u %u", &lo, &hi) == 2) {
+      if(lo >= hi || (lo | hi) & 3) { std::fclose(f); return 2; }
+      covered.push_back({lo, hi});
+    }
+    bool valid = std::feof(f) && !covered.empty(); std::fclose(f);
+    if(!valid) return 2;
+    seekUncovered = true;
+  }
   auto bytes = nall::file::read(argv[1]);
   auto firmware = nall::file::read(argv[2]);
   boot = std::strtoul(argv[3], nullptr, 0);
@@ -131,11 +153,16 @@ int main(int argc, char** argv) {
   plaidPiDmaObserver = [](u32 kind,u32 a,u32 p,u32 n,u32,u32) { if(kind == 1) dma.push_back({a,p,n}); };
   plaidCpuInstructionObserver = [](bool before, u64 pc, u32 word) { if(before) observe(pc, word); };
   u32 vis = 0;
-  for(; steps < budget && vis < 3600 && !targets.empty(); steps++) {
+  for(; steps < budget && vis < 3600 && (!targets.empty() || seekUncovered) && !uncoveredEntry; steps++) {
     if(cpu.instruction()) cpu.synchronize();
     if(vi.refreshed) { vis++; vi.refreshed = false; }
   }
-  std::fprintf(result, "{\"stop_pc\":%u,\"steps\":%llu,\"vi\":%u,\"entered\":%s,\"remaining\":%zu,\"sp\":[", (u32)cpu.ipu.pc, (unsigned long long)steps, vis, entered ? "true" : "false", targets.size());
+  std::fprintf(result, "{");
+  if(argc == 10) {
+    if(uncoveredEntry) std::fprintf(result, "\"uncovered_entry\":%u,", uncoveredEntry);
+    else std::fprintf(result, "\"uncovered_entry\":null,");
+  }
+  std::fprintf(result, "\"stop_pc\":%u,\"steps\":%llu,\"vi\":%u,\"entered\":%s,\"remaining\":%zu,\"sp\":[", (u32)cpu.ipu.pc, (unsigned long long)steps, vis, entered ? "true" : "false", targets.size());
   for(size_t i = 0; i < sp.size(); i++) std::fprintf(result, "%s%u", i ? "," : "", (u32)sp[i]);
   std::fprintf(result, "],\"boot_entry\":%u,\"ram_prefix\":[", boot);
   for(size_t i = 0; i < ram_prefix.size(); i++) std::fprintf(result, "%s%u", i ? "," : "", (u32)ram_prefix[i]);

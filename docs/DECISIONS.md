@@ -6409,3 +6409,29 @@ immutable proof data, and active overlay runtime writes. Accepted CPU state
 matches pinned ares. Six semantic policy mutations are rejected. Bounded game
 and passing full-gate receipts are recorded in research/rsp-from-rom.md and ignored
  target/oot/0219; incomplete runs do not establish acceptance.
+
+## ADR-0220: Boot fetch coverage and ROM-word discovery expressions (partial)
+
+Pinned ares confirms that the first residual-validation fault reaches existing
+IPL-loaded text, rather than a newly decompressed main image. Bounded lexical
+expressions may propose address-taken discovery roots from uncached cartridge
+words. These are speculative roots, never target certificates: PI latches and
+branch paths can disagree with the guessed value, and whole-ROM closure still
+refuses the unresolved site. Calls stop the scan; unknown writes kill values;
+alignment, ROM bounds and the existing CPU-function/layout filter remain.
+Native execution retains fail-closed dispatch and existing load content guards.
+No game-specific production values are introduced.
+
+The ADR-0190 adapter can additionally stop at the first uncovered KSEG0 RAM
+fetch after boot entry. Coverage includes the native-excluded vector prefix
+and declared executable slots. Completed-producer/cache checks remain mandatory;
+only uncovered pieces are composed through replayed, guarded ares_boot loads.
+This finite neutral-input run supplies discovery/provenance, not closure.
+
+Review corrections to ADR-0218 retain known missing-candidate blockers, write
+the residual manifest even when ordinary closure succeeds, and preserve PI
+write latch/busy effects. The existing immediate DMA/HLE timing scope remains.
+An inherited diagnostic change broke the raw EPi failure contract and is
+restored. Absent-Pak and full-cartridge-address paths now have regressions.
+Pinned oracle builds cache independently fingerprinted C++ objects so adapter
+edits do not rebuild unchanged core objects. Final measurements/gates follow.

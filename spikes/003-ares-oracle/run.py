@@ -357,7 +357,28 @@ struct PlaidQueueDispatchScope {
             sources = [driver,output / "core.cpp",output / "n64.cpp",REF / "ares/component/processor/sm5k/sm5k.cpp",
                 REF / "ares/ares/memory/fixed-allocator.cpp",REF / "nall/nall/nall.cpp",REF / "thirdparty/sljitAllocator.cpp"]
             try:
-                subprocess.run(["g++",*flags,*include_flags,*map(str,sources),*map(str,objects),"-pthread","-ldl","-o",str(exe)],check=True,stdout=log,stderr=subprocess.STDOUT)
+                # Adapter edits must not rebuild the unchanged pinned core.
+                # All reference/options/recipe inputs still invalidate its objects.
+                recipe = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+                headers = b''.join(p.read_bytes() for p in sorted((output / 'include').rglob('*')) if p.is_file())
+                for source in sources:
+                    dependencies = dict(inputs)
+                    if source != driver:
+                        dependencies.pop('driver')
+                    digest = hashlib.sha256(json.dumps([dependencies, flags, include_flags, recipe], sort_keys=True).encode()
+                                            + headers + source.read_bytes()).hexdigest()
+                    obj, stamp = output / (source.name + '.o'), output / (source.name + '.sha256')
+                    if not obj.exists() or not stamp.exists() or stamp.read_text() != digest:
+                        temporary = obj.with_suffix('.tmp.o')
+                        stamp.unlink(missing_ok=True)
+                        try:
+                            subprocess.run(["g++",*flags,*include_flags,"-c",str(source),"-o",str(temporary)],check=True,stdout=log,stderr=subprocess.STDOUT)
+                            temporary.replace(obj)
+                            stamp.write_text(digest)
+                        finally:
+                            temporary.unlink(missing_ok=True)
+                    objects.append(obj)
+                subprocess.run(["g++",*map(str,objects),"-pthread","-ldl","-o",str(exe)],check=True,stdout=log,stderr=subprocess.STDOUT)
             except subprocess.CalledProcessError:
                 print("\n".join((output / "build.log").read_text().splitlines()[-30:]))
                 raise
