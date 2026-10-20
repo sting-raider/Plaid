@@ -1366,7 +1366,7 @@ pub fn lower_c(
     let [image] = images else {
         return Err("exactly one code image is supported".into());
     };
-    lower_c_with_preload(map, images, image, entry, exits)
+    lower_c_with_preload(map, images, image, entry, exits, false)
 }
 
 /// Lower with `preload` as the RAM contents the host installs before entry
@@ -1378,8 +1378,9 @@ pub fn lower_c_with_preload(
     preload: &CodeImage,
     entry: GuestAddr,
     exits: &[GuestAddr],
+    residual_dispatch: bool,
 ) -> Result<String, String> {
-    Ok(lower_c_parts(map, images, preload, entry, exits, 1)?.remove(0))
+    Ok(lower_c_parts(map, images, preload, entry, exits, 1, residual_dispatch)?.remove(0))
 }
 
 /// [`lower_c_with_preload`] as `parts` translation units that compile in
@@ -1393,10 +1394,14 @@ pub fn lower_c_parts(
     entry: GuestAddr,
     exits: &[GuestAddr],
     parts: usize,
+    residual_dispatch: bool,
 ) -> Result<Vec<String>, String> {
     let link = if parts > 1 { "" } else { "static " };
-    // Address-taken dispatch is its own scope (ADR-0153).
-    let scope = if map.address_taken.is_empty() {
+    // Address-taken dispatch is its own scope (ADR-0153); residual dispatch is
+    // the validation-only relaxation of it (ADR-0218).
+    let scope = if residual_dispatch {
+        Scope::DeclaredStaticImagesGuardedRamResidualDispatch
+    } else if map.address_taken.is_empty() {
         Scope::DeclaredStaticImagesGuardedRam
     } else {
         Scope::DeclaredStaticImagesGuardedRamAddressTaken
@@ -1520,7 +1525,12 @@ pub fn lower_c_parts(
     let mut targets = BTreeMap::new();
     let mut returns = BTreeSet::new();
     let mut callees = vec![host.clone()];
+    let mut residual = BTreeSet::new();
     for site in &map.indirect_sites {
+        if report.residual_sites.contains(&site.site) {
+            residual.insert(site.site.pc.0);
+            continue;
+        }
         let proof = site
             .closed_proof
             .as_ref()
@@ -1620,6 +1630,15 @@ pub fn lower_c_parts(
     callees.extend(entered.iter().cloned());
     callees.retain(|f| !runtime.contains_key(&f.pc.0));
     let functions: BTreeSet<u32> = callees.iter().map(|f| f.pc.0).collect();
+    // A residual site dispatches over every lowered entry, never beyond (ADR-0218).
+    let every_entry: BTreeSet<u32> = functions
+        .iter()
+        .chain(runtime.keys())
+        .copied()
+        .collect();
+    for &pc in &residual {
+        targets.insert(pc, every_entry.clone());
+    }
 
     let mut code = Vec::new();
     for block in &map.blocks {

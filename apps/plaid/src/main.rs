@@ -144,6 +144,15 @@ fn run() -> Result<(), String> {
             .position(|a| a == "--address-taken")
             .map(|i| args.remove(i))
             .is_some();
+    // `lower-c`/`lower-map --residual-dispatch`: VALIDATION ONLY (ADR-0218).
+    let residual_dispatch = args
+        .first()
+        .is_some_and(|c| c == "lower-c" || c == "lower-map")
+        && args
+            .iter()
+            .position(|a| a == "--residual-dispatch")
+            .map(|i| args.remove(i))
+            .is_some();
     // `discover --overlays` adds the ROM's own relocatable overlays at their
     // link addresses (ADR-0172, ADR-0179).
     let overlays = args.first().is_some_and(|c| c == "discover")
@@ -771,7 +780,15 @@ fn run() -> Result<(), String> {
                 [] => Scope::WholeRom,
                 [f] if f == "--guarded-ram" => Scope::DeclaredStaticImagesGuardedRam,
                 [f] if f == "--address-taken" => Scope::DeclaredStaticImagesGuardedRamAddressTaken,
-                _ => return Err("solve accepts only --guarded-ram or --address-taken".into()),
+                [f] if f == "--residual-dispatch" => {
+                    Scope::DeclaredStaticImagesGuardedRamResidualDispatch
+                }
+                _ => {
+                    return Err(
+                        "solve accepts only --guarded-ram, --address-taken or --residual-dispatch"
+                            .into(),
+                    );
+                }
             };
             let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
             let map =
@@ -1141,6 +1158,7 @@ fn run() -> Result<(), String> {
                 GuestAddr(number32(entry)?),
                 &[GuestAddr(number32(exit)?)],
                 parts,
+                residual_dispatch,
             )?;
             let stem = output.strip_suffix(".c").unwrap_or(output);
             for (k, c) in units.iter().enumerate() {
@@ -1227,6 +1245,7 @@ fn run() -> Result<(), String> {
                 &image,
                 GuestAddr(number32(entry)?),
                 &[GuestAddr(number32(exit)?)],
+                residual_dispatch,
             )?;
             fs::write(output, c).map_err(|e| e.to_string())?;
             println!("lowered {} blocks", d.map.blocks.len());
