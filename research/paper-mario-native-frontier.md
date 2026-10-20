@@ -342,3 +342,18 @@ same return. Repeated-call native CPU/PC/FPU/RAM state matches pinned ares.
 See research/table-effect-reuse.md and ignored target/paper-mario/0216 for
 operational before/after timings, controls and the exact-tree gate receipt.
 No Paper Mario native artifact or accepted VI/fault/PCM run is emitted.
+
+
+## ADR-0217: frame-local pointer reloads (partial)
+
+The fresh warm ROM-only map is identical to baseline: scoped OPEN/7, 56,851
+blocks and 162 loads. Independent address-taken entry/base initialization
+remains a barrier. Callee save/restore still needs width-aware and nested-memory
+proofs from actual instructions. Exact frame-local SW/LW pointer forwarding now
+proves authored synthetic dispatches only with unchanged SP, all-path enclosing
+allocation and no intervening potentially aliasing write or call. Even different
+virtual stack offsets are refused without physical non-aliasing evidence.
+The two PM stack sites still lack the complete index/alias relation; no site is
+closed and no new blocker appears. Three native index cases match pinned ares;
+four semantic mutants are caught. No PM artifact or VI/fault/PCM run is accepted.
+See research/stack-table-pointer.md and ignored target/paper-mario/0217 receipts.

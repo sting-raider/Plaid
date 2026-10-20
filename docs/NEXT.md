@@ -19,6 +19,11 @@ register-effect/save-restore proofs, and two captured stack-cell pointers.
 Do not turn the three address-taken roots into internal entries without proving
 their independent origins impossible. See research/table-effect-reuse.md for
 the scripted final-round classification, mutations and local receipts.
+ADR-0217 adds exact frame-local SW/LW table-pointer forwarding with all-path
+allocation/SP checks and no intervening write/call/cache/mapping effects. It
+closes the synthetic cases; fresh PM remains OPEN/7 with an identical map.
+Stack index/cell version relations and nested-callee memory effects remain
+unproven. See research/stack-table-pointer.md.
 Continue bounded save/restore, stack-cell and captured-index/entry proofs while
 retaining mapping generations and active-frame pins. A source binding is not
 permission to infer an SDK boundary. See research/mapped-callee-effects.md.
@@ -133,7 +138,7 @@ exception, and broaden task/overlay/DMA coverage. The complete:false registry
 and general solver RSP-policy obligation stay open. Snapshots may compare
 behavior as oracles, never supply the default native build's microcode.
 
-## Milestone plan (ADR-0125, ADR-0126) — read this first
+## Milestone plan (ADR-0125, ADR-0126) â€” read this first
 
 This section overrides the per-cluster continuation notes below wherever they
 conflict. Those notes record open obligations; they are not a work queue.
