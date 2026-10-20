@@ -6253,3 +6253,39 @@ issues. The final ROM probe improves OPEN12 to OPEN11, adding six blocks and
 closing one five-entry table; the earlier OPEN15 failed-verifier probe is
 retained. No Paper Mario artifact or run is accepted. See
 research/affine-table-index.md for receipts, timings and remaining proof gaps.
+
+
+## ADR-0215: Bind mapped callee effects to traversal-local sources
+
+A bounded no-write callee proof may resolve a linked entry only through one
+unambiguous declared load and its matching placed text, image and generation.
+The source declaration, linked/placed addresses, all traversed words, constant
+source cells and canonical return PCs participate in the enclosing table proof.
+Identical linked and placed addresses still retain their source witness.
+
+A mapped traversal owns its binding authority. Returning from it restores the
+caller's context; each queued branch/tail path carries its own context. A prior
+raw call cannot authorize a later numeric placed call or fallthrough. Mapped
+fallthrough cannot escape its text into adjacent analysis storage. The inherited
+red test demonstrated a real proof-wide authority leak and remains a regression.
+
+Canonical non-return JR tails require the existing exact rechecked constant-cell
+certificate and no-write effects through every target under the shared bounded
+read/depth limits. Unknown transfers, ambiguity, clobbers, stale source/cell/
+generation evidence and unrelated return sources reject. This proves register
+effects, not a guest ABI or complete call/return, memory or timing semantics.
+
+Discovery now carries declared source context before every indirect-analysis
+round, including outer address-taken and added-slot/layout rounds. Public legacy
+entry points default to no context. Slot/content validation occurs at the public
+boundary, not per register; declared loads remain distinct from observed DMA.
+Tail-cell proofs run before table proofs, with the final all-producer recheck.
+
+The fresh ROM-only Paper Mario probe improves scoped OPEN/11 to OPEN/9 and
+56,813 to 56,851 blocks, with 162 loads. Native emission remains refused. No
+runtime guest instruction execution, game-specific rule, SDK boundary or new
+assumption is introduced; mapping generations, active-frame pins and source-cell
+protection remain mandatory. Synthetic callee/table/source controls, four killed
+mutants, and authored native full-state pinned-ares contracts verify this slice.
+No upstream implementation is copied; the ares ISC oracle stays separately built.
+See research/mapped-callee-effects.md and ignored target/paper-mario/0215-recovery/.

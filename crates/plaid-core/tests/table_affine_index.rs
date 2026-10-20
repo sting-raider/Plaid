@@ -40,7 +40,7 @@ fn image() -> CodeImage {
 fn mapped(image: &CodeImage, extra: Option<u32>) -> ProgramMap {
     let mut entries = vec![image.base.pc];
     entries.extend(extra.map(|pc| GuestAddr(BASE + pc)));
-    discover_image(
+    let mut map = discover_image(
         RomIdentity {
             sha256: "f".repeat(64),
             size: 4096,
@@ -50,7 +50,38 @@ fn mapped(image: &CodeImage, extra: Option<u32>) -> ProgramMap {
         10000,
     )
     .unwrap()
-    .map
+    .map;
+    let evidence: EvidenceRefs = [map.evidence.keys().next().unwrap().clone()].into();
+    if !image.slots.is_empty() {
+        map.load_images.insert(
+            image.base.image.clone(),
+            plaid_core::declared_loads::LoadImage {
+                base_offset: RomOffset(0),
+                base: GuestRange {
+                    start: image.base.pc,
+                    size: image.words.len() as u32 * 4,
+                },
+                loads: image
+                    .slots
+                    .iter()
+                    .map(
+                        |(range, linked, text)| plaid_core::declared_loads::DeclaredLoad {
+                            destination: range.clone(),
+                            source: RomOffset(0),
+                            encoding: plaid_core::declared_loads::LoadEncoding::RarePair {
+                                end: RomOffset(4),
+                                text_size: *text,
+                            },
+                            evidence: evidence.clone(),
+                            relocatable: true,
+                            linked: Some(GuestAddr(*linked)),
+                        },
+                    )
+                    .collect(),
+            },
+        );
+    }
+    plaid_core::indirect::analyze_indirect(&map, image).unwrap()
 }
 fn verified(image: &CodeImage, extra: Option<u32>) -> bool {
     let map = mapped(image, extra);
@@ -183,4 +214,242 @@ fn fixed_return_reads_do_not_admit_another_alternate_or_a_data_tail() {
     assert!(!verified(&other, None));
     call.slots[0].0.size = 0x120; // leaf bytes now lie beyond this binding's text
     assert!(!verified(&call, None));
+}
+
+fn bound_bridge_image() -> CodeImage {
+    let mut call = image();
+    call.words[0x40 / 4..0x50 / 4].copy_from_slice(&[0x0c00_1000, 0, 0x0800_001c, 0]);
+    call.words[0xb0 / 4..0xc4 / 4].copy_from_slice(&[
+        0x3c01_8000, // linked bridge cell 80004010
+        0x8c21_4010,
+        0x0020_0008,
+        0,
+        BASE + 0xe0,
+    ]);
+    call.words[0xe0 / 4..0xec / 4].copy_from_slice(&[0x2404_0063, 0x03e0_0008, 0]);
+    call.slots = vec![
+        (
+            GuestRange {
+                start: GuestAddr(BASE),
+                size: 0xa0,
+            },
+            BASE,
+            0xa0,
+        ),
+        (
+            GuestRange {
+                start: GuestAddr(BASE + 0xb0),
+                size: 0x20,
+            },
+            BASE + 0x4000,
+            0x10,
+        ),
+    ];
+    call
+}
+
+#[test]
+fn a_mapped_bridge_needs_checked_tail_targets_and_register_effects() {
+    let call = bound_bridge_image();
+    let map = mapped(&call, Some(0xb0));
+    let bridge = map
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == BASE + 0xb8)
+        .unwrap();
+    assert!(plaid_core::tail_cells::verify(&map, &call, bridge));
+    let site = map
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == BASE + 0x28)
+        .unwrap();
+    assert!(plaid_core::tables::verify(&map, &call, site));
+}
+
+#[test]
+fn bound_bridge_calls_reject_clobbers_ambiguity_and_nontext_entries() {
+    let mut clobber = bound_bridge_image();
+    clobber.words[0xe0 / 4] = 0x2415_0063;
+    assert!(!verified(&clobber, Some(0xb0)));
+    let mut ambiguous = bound_bridge_image();
+    ambiguous.words.resize(0x180 / 4, 0);
+    ambiguous.slots.push((
+        GuestRange {
+            start: GuestAddr(BASE + 0x140),
+            size: 0x20,
+        },
+        BASE + 0x4000,
+        0x10,
+    ));
+    assert!(!verified(&ambiguous, Some(0xb0)));
+    for target in [0x0c00_002c, 0x0c00_1004] {
+        // other placed PC, linked data tail
+        let mut bad = bound_bridge_image();
+        bad.words[0x40 / 4] = target;
+        assert!(!verified(&bad, Some(0xb0)));
+    }
+}
+
+#[test]
+fn a_bound_bridge_rechecks_the_cell_and_target_certificate() {
+    let call = bound_bridge_image();
+    let map = mapped(&call, Some(0xb0));
+    let site = map
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == BASE + 0x28)
+        .unwrap();
+    let mut changed = call.clone();
+    changed.words[0xc0 / 4] = BASE + 0xe8;
+    assert!(!plaid_core::tables::verify(&map, &changed, site));
+    let mut changed = call;
+    changed.base.generation += 1;
+    assert!(!plaid_core::tables::verify(&map, &changed, site));
+}
+
+#[test]
+fn bound_bridge_source_identity_is_part_of_the_table_certificate() {
+    let call = bound_bridge_image();
+    let map = mapped(&call, Some(0xb0));
+    let site = map
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == BASE + 0x28)
+        .unwrap();
+    assert!(plaid_core::tables::verify(&map, &call, site));
+    assert!(map.loads.is_empty()); // Observed transfers are a different contract.
+    let mut changed = map.clone();
+    changed.load_images.clear();
+    assert!(!plaid_core::tables::verify(&changed, &call, site));
+    let mut changed = map.clone();
+    changed.load_images.values_mut().next().unwrap().loads[1]
+        .source
+        .0 += 4;
+    assert!(!plaid_core::tables::verify(&changed, &call, site));
+    let mut changed = map.clone();
+    let spec = changed.load_images.values_mut().next().unwrap();
+    spec.loads.push(spec.loads[1].clone());
+    assert!(!plaid_core::tables::verify(&changed, &call, site));
+}
+
+#[test]
+fn fresh_discovery_keeps_declared_binding_sources_through_all_proof_rounds() {
+    let mut image = bound_bridge_image();
+    image.base.image = image.content_identity();
+    let seeded = mapped(&image, Some(0xb0));
+    let spec = seeded.load_images[&image.base.image].clone();
+    let id = spec.loads[0].evidence.iter().next().unwrap().clone();
+    let context = (spec, [(id.clone(), seeded.evidence[&id].clone())].into());
+    let entries = [image.base.pc, GuestAddr(BASE + 0xb0)];
+    for address_taken in [false, true] {
+        let discovery = if address_taken {
+            plaid_core::data_roots::discover_address_taken_with_loads(
+                seeded.rom.clone(),
+                &[],
+                &image,
+                &entries,
+                &[],
+                None,
+                &Default::default(),
+                Some(&context),
+                10000,
+            )
+        } else {
+            plaid_core::pipeline::discover_image_with_loads(
+                seeded.rom.clone(),
+                &image,
+                &entries,
+                &[],
+                None,
+                Some(&context),
+                10000,
+            )
+        }
+        .unwrap();
+        let site = discovery
+            .map
+            .indirect_sites
+            .iter()
+            .find(|s| s.site.pc.0 == BASE + 0x28)
+            .unwrap();
+        assert!(plaid_core::tables::verify(&discovery.map, &image, site));
+        assert_eq!(discovery.map.load_images[&image.base.image], context.0);
+    }
+    // Independently inferred sources may have distinct evidence records.
+    let mut multiple = context.clone();
+    multiple.0.loads[1].evidence = ["second-source".into()].into();
+    assert!(
+        plaid_core::pipeline::discover_image_with_loads(
+            seeded.rom.clone(),
+            &image,
+            &entries,
+            &[],
+            None,
+            Some(&multiple),
+            10000,
+        )
+        .is_err()
+    );
+    multiple
+        .1
+        .insert("second-source".into(), seeded.evidence[&id].clone());
+    let discovered = plaid_core::pipeline::discover_image_with_loads(
+        seeded.rom.clone(),
+        &image,
+        &entries,
+        &[],
+        None,
+        Some(&multiple),
+        10000,
+    )
+    .unwrap();
+    assert!(discovered.map.evidence.contains_key("second-source"));
+    let mut changed = image.clone();
+    changed.words[0xe0 / 4] ^= 1;
+    assert!(
+        plaid_core::pipeline::discover_image_with_loads(
+            seeded.rom.clone(),
+            &changed,
+            &entries,
+            &[],
+            None,
+            Some(&context),
+            10000,
+        )
+        .is_err()
+    );
+    let mut changed = context.clone();
+    changed.0.loads[1].linked = Some(GuestAddr(BASE + 0x5000));
+    assert!(
+        plaid_core::pipeline::discover_image_with_loads(
+            seeded.rom,
+            &image,
+            &entries,
+            &[],
+            None,
+            Some(&changed),
+            10000,
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn an_identity_placed_binding_still_hashes_its_declared_source() {
+    let mut image = bound_bridge_image();
+    image.slots[1].1 = BASE + 0xb0;
+    image.words[0x40 / 4] = 0x0c00_002c;
+    image.words[0xb4 / 4] = 0x8c21_00c0;
+    let map = mapped(&image, Some(0xb0));
+    let site = map
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == BASE + 0x28)
+        .unwrap();
+    assert!(plaid_core::tables::verify(&map, &image, site));
+    let mut changed = map.clone();
+    changed.load_images.values_mut().next().unwrap().loads[1]
+        .source
+        .0 += 4;
+    assert!(!plaid_core::tables::verify(&changed, &image, site));
 }

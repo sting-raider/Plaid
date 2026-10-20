@@ -30,7 +30,7 @@ use plaid_core::{
         PiQueueHistoryReport, inspect_pi_queue_boot_history, verify_pi_queue_boot_history_report,
     },
     pif_history::{PifHistoryReport, inspect_pif_boot_history, verify_pif_boot_history_report},
-    pipeline::discover_image_with_runtime,
+    pipeline::discover_image_with_loads,
     program::Evidence,
     program::{GuestRange, ProgramMap, RomOffset},
     rom::CanonicalRom,
@@ -874,6 +874,8 @@ fn run() -> Result<(), String> {
                 image = plaid_core::declared_loads::compose(rom.bytes(), spec)?.1;
                 overlay_evidence = Some((id, overlay_evidence_of(&catalog)));
             }
+            let source_context =
+                discovery_load_context(declared.as_ref(), overlay_evidence.as_ref());
             let mut entries = vec![GuestAddr(number32(entry)?)];
             let roots = if data_roots {
                 plaid_core::data_roots::scan(rom.bytes(), &image)
@@ -882,7 +884,7 @@ fn run() -> Result<(), String> {
             };
             entries.extend(roots.iter().copied());
             let mut d = if address_taken {
-                plaid_core::data_roots::discover_address_taken(
+                plaid_core::data_roots::discover_address_taken_with_loads(
                     rom.identity.clone(),
                     rom.bytes(),
                     &image,
@@ -890,15 +892,17 @@ fn run() -> Result<(), String> {
                     &runtime,
                     evidence.clone(),
                     &load_starts(declared.as_ref()),
+                    source_context.as_ref(),
                     1_000_000,
                 )?
             } else {
-                discover_image_with_runtime(
+                discover_image_with_loads(
                     rom.identity.clone(),
                     &image,
                     &entries,
                     &runtime,
                     evidence.clone(),
+                    source_context.as_ref(),
                     1_000_000,
                 )?
             };
@@ -933,7 +937,7 @@ fn run() -> Result<(), String> {
                     }
                     entries.extend(more);
                     d = if address_taken {
-                        plaid_core::data_roots::discover_address_taken(
+                        plaid_core::data_roots::discover_address_taken_with_loads(
                             rom.identity.clone(),
                             rom.bytes(),
                             &image,
@@ -941,15 +945,17 @@ fn run() -> Result<(), String> {
                             &runtime,
                             evidence.clone(),
                             &load_starts(declared.as_ref()),
+                            source_context.as_ref(),
                             1_000_000,
                         )?
                     } else {
-                        discover_image_with_runtime(
+                        discover_image_with_loads(
                             rom.identity.clone(),
                             &image,
                             &entries,
                             &runtime,
                             evidence.clone(),
+                            source_context.as_ref(),
                             1_000_000,
                         )?
                     };
@@ -962,12 +968,13 @@ fn run() -> Result<(), String> {
                 if !layout.is_empty() {
                     roots.extend(layout.iter().copied());
                     entries.extend(layout);
-                    d = discover_image_with_runtime(
+                    d = discover_image_with_loads(
                         rom.identity.clone(),
                         &image,
                         &entries,
                         &runtime,
                         evidence.clone(),
+                        source_context.as_ref(),
                         1_000_000,
                     )?;
                 }
@@ -1183,8 +1190,9 @@ fn run() -> Result<(), String> {
                 Some((spec, _)) => plaid_core::declared_loads::compose(&bytes, spec)?.1,
                 None => image.clone(),
             };
+            let source_context = discovery_load_context(declared.as_ref(), None);
             let mut d = if address_taken {
-                plaid_core::data_roots::discover_address_taken(
+                plaid_core::data_roots::discover_address_taken_with_loads(
                     rom,
                     &bytes,
                     &code,
@@ -1192,15 +1200,17 @@ fn run() -> Result<(), String> {
                     &runtime,
                     evidence,
                     &load_starts(declared.as_ref()),
+                    source_context.as_ref(),
                     1_000_000,
                 )?
             } else {
-                discover_image_with_runtime(
+                discover_image_with_loads(
                     rom,
                     &code,
                     &[GuestAddr(number32(entry)?)],
                     &runtime,
                     evidence,
+                    source_context.as_ref(),
                     1_000_000,
                 )?
             };
@@ -1575,6 +1585,18 @@ type RuntimeDeclarations = (
 type LoadDeclarations = Option<(plaid_core::declared_loads::LoadImage, (String, Evidence))>;
 
 /// Parse `plaid-loads-v0`: loads applied over the base window (ADR-0136).
+fn discovery_load_context(
+    declared: Option<&(plaid_core::declared_loads::LoadImage, (String, Evidence))>,
+    extra: Option<&(String, Evidence)>,
+) -> Option<plaid_core::pipeline::LoadContext> {
+    let (spec, (id, evidence)) = declared?;
+    let mut sources = BTreeMap::from([(id.clone(), evidence.clone())]);
+    if let Some((id, evidence)) = extra {
+        sources.insert(id.clone(), evidence.clone());
+    }
+    Some((spec.clone(), sources))
+}
+
 fn load_declarations(
     path: Option<&String>,
     base_offset: RomOffset,

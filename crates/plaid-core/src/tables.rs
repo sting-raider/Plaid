@@ -761,6 +761,7 @@ fn guarded(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
             .position(|(placed, _, _)| placed.contains(pc)),
         steps: 0,
         seen: BTreeMap::new(),
+        bindings: BTreeMap::new(),
         results: BTreeSet::new(),
     };
     walk.block(pc, load_pc, need, &mut Vec::new())?;
@@ -783,6 +784,15 @@ fn guarded(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
     for (at, word) in walk.seen.iter() {
         prefix.extend(at.to_be_bytes());
         prefix.extend(word.to_be_bytes());
+    }
+    if !walk.bindings.is_empty() {
+        prefix.extend(b"callee-bindings-v0");
+        for (raw, (linked, placed, source)) in &walk.bindings {
+            prefix.extend(raw.to_be_bytes());
+            prefix.extend(linked.to_be_bytes());
+            prefix.extend(placed.to_be_bytes());
+            prefix.extend(source.to_be_bytes());
+        }
     }
     for (at, word) in std::iter::once((load_pc.0, load))
         .chain(gap)
@@ -816,6 +826,7 @@ struct Walk<'m, 'a> {
     steps: usize,
     /// Every instruction word the proof read, by pc.
     seen: BTreeMap<u32, u32>,
+    bindings: BTreeMap<u32, (u32, u32, u64)>,
     /// Per proven path: (base value, count, guard branch pc, index register).
     results: BTreeSet<(u32, u32, u32, u8)>,
 }
@@ -982,17 +993,18 @@ impl Walk<'_, '_> {
                 let target = self.image.jump_target(edge.site.pc, word);
                 for register in registers {
                     let budget = 4096usize.checked_sub(self.steps)?;
-                    let effect = if self.slot.is_some() {
-                        crate::callee_effects::no_gpr_write_in(
-                            self.map, self.image, target, register, budget, self.slot,
-                        )
-                    } else {
-                        crate::callee_effects::no_gpr_write(
-                            self.map, self.image, target, register, budget,
-                        )
-                    }?;
-                    returns.retain(|pc| effect.words.get(pc) != Some(&0x03e0_0008));
+                    let effect = crate::callee_effects::no_gpr_write_bound(
+                        self.map,
+                        self.map.source(),
+                        self.image,
+                        target,
+                        register,
+                        budget,
+                        self.slot,
+                    )?;
+                    returns.retain(|pc| !effect.returns.contains(pc));
                     self.steps += effect.reads;
+                    self.bindings.extend(effect.bindings);
                     self.seen.extend(effect.words);
                 }
                 let slot = self.word(site + 4)?;
