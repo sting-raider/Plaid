@@ -312,3 +312,33 @@ Other predecessor paths and save/restore/stack-cell relations remain unresolved.
 No native Paper Mario artifact, VI/fault/PCM result or accepted run is produced.
 See mapped-callee-effects.md and ignored target/paper-mario/0215-recovery/ for
 baseline/candidate timings, map/solver controls, mutation and local gate receipts.
+
+## ADR-0216: reuse immutable callee effect queries
+
+The fresh ROM-only pass improves scoped OPEN/9 to OPEN/7, retaining 56,851
+blocks and 162 loads. Two dispatches close, with three distinct targets each;
+no new blockers appear. The final-round refusal classification is scripted in
+ignored `target/paper-mario/0216/classify.py` and `classification.json` from
+`traced/discover.log` plus the exact map and solver result:
+
+| Sites (diagnostic only) | Missing proof before ADR-0216 | Result |
+| --- | --- | --- |
+| `80a0893c`, `80a089b8`, `80a08aa8` | Base initialization across independent address-taken case entries | Still refused: unknown entry state must not be relabeled internal. |
+| `80ac21d4`, `80ae427c` | Repeated mapped-callee effect traversals exhaust the shared read budget | Closed by walk-local effect reuse; five/six entries. |
+| `8003c488`, `8082cf20` | Callee register preservation, including save/restore memory effects | Still refused. |
+| `80b2c178`, `80b2c344` | Stack-cell pointer/index provenance and intervening writes | Still refused. |
+
+The three-site group was examined first; its independent origins prevent a
+sound relaxation. The next largest actionable group closes with one general
+rule: reuse successful source-bound effects for the same target/GPR within an
+immutable map/image/caller-slot walk. Misses retain the existing bounded source
+traversal; hits keep all source words/bindings and exact return witnesses in
+the table certificate. Verification always starts a fresh cache. No ABI rule,
+runtime fallback, budget increase or game-specific production fact is added.
+
+The authored budget positive is red before implementation. Four mutants are
+killed, including a target-key counterexample whose two entries share the
+same return. Repeated-call native CPU/PC/FPU/RAM state matches pinned ares.
+See research/table-effect-reuse.md and ignored target/paper-mario/0216 for
+operational before/after timings, controls and the exact-tree gate receipt.
+No Paper Mario native artifact or accepted VI/fault/PCM run is emitted.
