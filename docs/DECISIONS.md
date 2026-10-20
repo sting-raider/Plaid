@@ -6379,6 +6379,6 @@ No upstream code was copied.
 Synthetic coverage: CPU/RSP inactive revocation, ordinary-data DMA, stale entry
 refusal, restoration/re-entry, actual active native call, suspended frame list,
 immutable proof data, and active overlay runtime writes. Accepted CPU state
-matches pinned ares. Five semantic policy mutations are rejected. Final game
+matches pinned ares. Six semantic policy mutations are rejected. Final game
 and gate receipts are recorded in research/rsp-from-rom.md and ignored
  target/oot/0219; incomplete runs do not establish acceptance.
