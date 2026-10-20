@@ -6314,3 +6314,28 @@ source words and missing target/GPR cache identity; a shared-return negative
 ensures target identity is tested independently of return-witness rejection.
 No reference implementation is copied. See research/table-effect-reuse.md and
 target/paper-mario/0216 receipts. No README or progress milestone changes.
+
+
+## ADR-0217: Prove exact frame-local table-pointer reloads without alias assumptions
+
+A backward pending table pointer may cross an exact SW/LW stack-cell pair only
+when every incoming path proves unchanged SP and an enclosing negative ADDIU
+SP,SP allocation. Nonnegative aligned offsets must fit all four bytes inside
+the frame. Every other store, CACHE or COP0 operation while the cell is pending
+refuses; distinct virtual addresses alone do not prove distinct physical bytes.
+Register-only call summaries cannot discharge cell or frame obligations.
+Independent entries, unsupported SP definitions and unmatched cycles still refuse.
+
+The saved source must independently satisfy the existing ADDU/scale/base/index
+proof. ADDU's sign-extended result survives SW/LW; no arbitrary 64-bit register
+or guest ABI preservation is assumed. Source words, including dead clobbers,
+spill/reload and allocation, join the rechecked certificate. No runtime MIPS
+execution or game-specific fact is added. Index-cell versions, multiple live
+cells, nested-call memory effects and broad alias proofs remain unsupported.
+
+Four new Rust tests and three native valid/invalid-index checkpoint comparisons
+against pinned ares verify this general rule. Four semantic mutants are killed.
+Fresh PM remains scoped OPEN/7 (56,851 blocks, 162 loads), with an identical
+ProgramMap. All three remaining groups remain refused; no PM native artifact
+or run is accepted. This is partial progress. No reference code is copied.
+See research/stack-table-pointer.md and ignored target/paper-mario/0217 receipts.

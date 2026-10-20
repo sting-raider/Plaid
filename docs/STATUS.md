@@ -1,6 +1,6 @@
 # Status
 
-## Paper Mario closure work (ADR-0202 through ADR-0216)
+## Paper Mario closure work (ADR-0202 through ADR-0217)
 
 The selected ROM remains scoped OPEN/7, with 56,851 blocks and 162 loads.
 ROM-only indexed TLB/copy consumers identify 127 effect files and the shared
@@ -35,7 +35,11 @@ binding identities and exact return witnesses are retained; each verifier
 recomputes its own cache. Four semantic mutations are caught, and authored
 repeated-call native state matches pinned ares. Save/restore,
 stack-cell provenance, remaining predecessor paths and other pointer relations
-still need proof. No Paper Mario native run is accepted. See
+still need proof. Frame-local SW/LW pointer reloads now have a source-rechecked
+all-path allocation/SP proof; every intervening store or unknown call refuses.
+The three authored native index cases match pinned ares and four mutants are
+caught. Fresh PM remains OPEN/7 with an identical ProgramMap (partial ADR-0217).
+No Paper Mario native run is accepted. See research/stack-table-pointer.md,
 research/table-effect-reuse.md,
 research/mapped-callee-effects.md,
 research/affine-table-index.md,
