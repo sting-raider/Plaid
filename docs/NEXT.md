@@ -1,13 +1,15 @@
 # Next
 
-## Validate RSP self-patching under native text revocation
+## Extend ROM-derived RSP coverage after self-patching
 
 ADR-0219 identifies the OoT type-4 startup conflict as RSP boot microcode also
 discovered as possible fixed CPU text. Keep both interpretations safe: revoke
 inactive CPU text on writes, byte-check before entry, and pin active native
-frames across SDK scheduling. Finish current-map visible OoT and retained-game
-regressions with audio; record any subsequent fail-closed blocker without
-adding a game exception. See research/rsp-from-rom.md.
+frames across SDK scheduling. The visible current-map OoT run confirms the
+patch and stops at unlowered IMEM 0x080 (image hash 123cbfb9), CPU fault 0,
+VI 3, no graphics/PCM. Establish the ROM source or transformation of this
+next task image and extend fetch-verified native coverage; keep unknown images
+fail closed and require audio for acceptance. See research/rsp-from-rom.md.
 
 ## Continue Paper Mario ROM-only closure
 

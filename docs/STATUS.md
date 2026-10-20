@@ -8,7 +8,9 @@ fixed text is now revocable through the shared CPU/device write gate, with
 compiled-byte verification before subsequent execution. Active native frames,
 including suspended threads and relocated overlays, remain protected; fixed
 proof-bearing data remains immutable. Synthetic state matches pinned ares and
-five policy mutations are caught. Final ROM validation is pending; see
+six policy mutations are caught. A fresh visible current-runtime OoT run passes
+the write, confirms the patched RAM words, and stops at unlowered RSP IMEM
+0x080: VI 3, CPU fault 0, no graphics or PCM. It is not audio accepted. See
 research/rsp-from-rom.md. Solver maps and assumptions are unchanged.
 
 ## Paper Mario closure work (ADR-0202 through ADR-0217)

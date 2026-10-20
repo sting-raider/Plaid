@@ -472,3 +472,35 @@ moved to a receipt-local release CLI before retrying. A current-runtime game
 rebuild also exposes retained maps with obsolete VI HLE names; those are being
 regenerated under current identification, with the retained CPU load scope.
 Final acceptance remains pending until the visible runs and final gate finish.
+
+
+### Confirmed OoT continuation
+
+Current identification over the retained CPU load scope produces a scoped CLOSED
+map: 155,928 blocks, 14,884 indirect sites, zero scoped blockers. Production core
+sources are unchanged. All CPU objects were regenerated with ADR-0219; RSP
+objects remain exclusively the retained ROM-derived manifest's native objects.
+The current runtime was linked without compatibility stubs or skipped checks.
+
+The bounded visible run (`--seconds 60`, 120 s external deadline) exits 1 after
+0.906 s at VI 3: zero graphics, one type-4 task counted in audio_tasks, CPU fault
+0. Window handle 6755260 was observed visible. The RAM dump is exactly
+08000439 / 8c11ffc4, proving the original SP DMA patch completed. Execution then
+refuses unknown lowered RSP code at IMEM 0x080, image hash 123cbfb9. The snapshot
+is retained under `oot-current/next-blocker-snaps`. PCM has zero frames and the
+same audio_peak check used by `--require-audio` rejects it. This is progress past
+the protection conflict, not an accepted audible/gameplay run.
+
+Next-blocker hypothesis: the ROM-derived native registry lacks the IMEM image
+installed during the first type-4 task; authenticate its ROM source/transform
+before adding coverage. Do not bypass the fetch guard or load snapshots into a
+native build.
+
+Six mutation checks now pass, including removal of active-overlay runtime-write
+protection. Focused DMA and IMEM-DMA native state also matches the retained,
+pin-verified ares oracle; its driver hash differs only by checkout CRLF bytes.
+The current SM64 identification/map independently remains OPEN on
+runtime_status_abi, so regression work uses retained accepted scopes and the
+retained ADR-0188 compatibility runtime, with freshly generated ADR-0219 CPU
+objects. That limitation must accompany regression results; it is not a new
+solver proof or evidence that current ROM-only SM64 is accepted.
