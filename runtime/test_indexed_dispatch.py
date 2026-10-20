@@ -97,7 +97,7 @@ def _case_backedge_fixture(A, chain=0):
     return A.assemble(items)
 
 
-def _preserved_base_fixture(A, guarded_break=False, abort=False):
+def _preserved_base_fixture(A, guarded_break=False, abort=False, repeated=False):
     # A leaf writes other registers and RAM; the nested caller spills/restores
     # RA. Both preserve s1 because none of their instructions writes it.
     items = [A.lui(A.s1, 0x8000),
@@ -110,10 +110,13 @@ def _preserved_base_fixture(A, guarded_break=False, abort=False):
              A.beq(A.t4, A.zero, 'done'), A.addiu(A.s0, A.s0, 4),
              A.sll(A.t2, A.a0, 2), A.addu(A.t3, A.s1, A.t2),
              A.lw(A.v0, 0, A.t3), A.jr(A.v0), A.nop,
-             'case0', A.jal('leaf'), A.nop, A.addiu(A.s4, A.s4, 1), A.j('retry'), A.nop,
-             'case1', A.jal('nested'), A.nop, A.addiu(A.s4, A.s4, 10), A.j('retry'), A.nop,
+             'case0', *([A.jal('leaf'), A.nop] * (8 if repeated else 1)),
+             A.addiu(A.s4, A.s4, 1), A.j('retry'), A.nop,
+             'case1', *([A.jal('nested'), A.nop] * (8 if repeated else 1)),
+             A.addiu(A.s4, A.s4, 10), A.j('retry'), A.nop,
              'done', A.lui(A.gp, 0x8000), A.sw(A.s4, 0x1000, A.gp), *A.DONE,
-             'leaf', *([A.addiu(A.t7, A.zero, 0 if abort else 3),
+             'leaf', *([A.nop] * 300 if repeated else []),
+             *([A.addiu(A.t7, A.zero, 0 if abort else 3),
                         A.beq(A.a0, A.t7, 'abort'), A.nop] if guarded_break else []),
              A.addiu(A.v0, A.zero, 42), A.sw(A.v0, 0, A.s2),
              A.jr(A.ra), A.addiu(A.v1, A.v1, 1),
@@ -190,11 +193,13 @@ def main():
                                       ('affine-calls', False, False),
                                       ('affine-shift', False, False),
                                       ('preserved-base', False, False),
+                                      ('reused-effects', False, False),
                                       ('preserved-break', False, False),
                                       ('callee-break', False, False),
                                       ('table-write', True, True)]:
         raw = OUT / f'{name}.bin'
-        fixture = {'flag-valid0': lambda asm: _invariant_flag_fixture(asm, 0),
+        fixture = {'reused-effects': lambda asm: _preserved_base_fixture(asm, repeated=True),
+                   'flag-valid0': lambda asm: _invariant_flag_fixture(asm, 0),
                    'flag-valid1': lambda asm: _invariant_flag_fixture(asm, 1),
                    'flag-invalid': lambda asm: _invariant_flag_fixture(asm, 3),
                    'flag-call0': lambda asm: _invariant_flag_fixture(asm, 0, True),
@@ -233,13 +238,13 @@ def main():
         assert actual.returncode == expected.returncode == 0, (actual.stdout, actual.stderr, expected.stderr)
         state = json.loads(actual.stdout)
         assert state == json.loads(expected.stdout), (actual.stdout, expected.stdout)
-        value = 11 if name in ('case-backedges', 'long-case', 'preserved-base', 'preserved-break') else 10 if name in ('preheader', 'captured') else 1111
+        value = 11 if name in ('case-backedges', 'long-case', 'preserved-base', 'preserved-break', 'reused-effects') else 10 if name in ('preheader', 'captured') else 1111
         value = {'flag-valid0': 1, 'flag-valid1': 10, 'flag-invalid': 0,
                  'flag-call0': 3, 'flag-call1': 30, 'flag-call-invalid': 0,
                  'affine-index': 111, 'affine-calls': 111, 'affine-shift': 110}.get(name, value)
-        accumulator = 20 if name in ('preserved-base', 'preserved-break') else 17
+        accumulator = 20 if name in ('preserved-base', 'preserved-break', 'reused-effects') else 17
         assert state['pc'] == EXIT and state['regs'][accumulator] == value and state['ram'][0] == value
-        if name in ('preserved-base', 'preserved-break'):
+        if name in ('preserved-base', 'preserved-break', 'reused-effects'):
             assert state['ram'][4] == 42
         if name == 'captured':
             assert state['regs'][4] == 3

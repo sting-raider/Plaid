@@ -1,4 +1,4 @@
-# Walk-local callee effect reuse (ADR-0216, partial)
+# Walk-local callee effect reuse (ADR-0216)
 
 Base: `171a6f578c761c8b2ccd1f99d8d9077e21b52998`.
 Branch: `experiment/pm-closure-0216`; primary-integrator review only.
@@ -32,5 +32,46 @@ external-entry group was considered first because it has the most sites;
 removing its barriers would be unsound. The next largest actionable group is
 the two resource-limited proofs. Unproven paths remain refused.
 
-No Paper Mario native artifact or run is accepted. This is a progress checkpoint;
-implementation, mutation checks, controls and the final gate remain pending.
+## Rule and verification
+
+Each backward walk owns a cache keyed by architectural target and required GPR.
+Its immutable map, image and caller slot supply the rest of the query identity.
+Only successful bounded no-write proofs enter it. A miss consumes the existing
+shared 4,096-read budget; a hit performs no new source traversal. Every hit still
+contributes the effect's exact instruction/cell words, linked/placed/source
+bindings and actual return witnesses to the enclosing certificate. Caches never
+cross walks, discovery rounds or producer verification. The verifier builds a
+fresh walk and rechecks the current bytes, declarations and indirect evidence.
+The resource limit now measures performed work instead of charging for a
+successful source traversal repeatedly. No budget constant is increased.
+
+The rule names no game, address, symbol, table extent or ABI. It does not skip
+guest instructions, infer save/restore, grant a new binding, or change runtime
+generations, frame pins, source-cell protection or native dispatch guards.
+
+The authored repeated-call positive fails before the change and passes after it.
+Three Rust tests retain changed-byte rechecks, caller/callee clobbers, distinct
+targets and shared-return entries. Four mutations are killed by semantic test
+failures (exit 101): disable reuse, omit source words, ignore the register key,
+ignore the target key. The last mutant initially survived because the independent
+return-witness gate rejected its fixture anyway; a clobbering prefix sharing the
+same return exposes the actual unsafe reuse. Restored focused suites pass.
+
+An authored native loop makes sixteen calls through long guest leaf/nested
+bodies, writes RAM and saves/restores RA. Its complete captured CPU/PC/FPU/RAM
+state equals pinned ares `9408cb43d4948fc3ea6e152a307a34348df3fe04`.
+The existing BREAK, protected-table-write and invalid-scale/stride controls
+remain in that suite. The pinned ISC JAL/JR/LW/SW/ADDU source was inspected;
+no upstream code is copied or linked into native mode.
+
+Fresh candidate discovery/solve is scoped OPEN/7, still 56,851 blocks and 162
+loads. Both resource-limited sites close: five/six table entries, three distinct
+targets each. There are no new blockers. Discovery/solve took 28.866/12.203 s;
+the earlier 25.725/10.945 s untraced and 27.327/15.846 s traced baseline runs
+are operational measurements with concurrent work, not a controlled speed claim.
+No Paper Mario native artifact or VI/fault/PCM run is accepted while OPEN.
+
+Ignored final receipts are under `target/paper-mario/0216/`: `classification.json`,
+`mutations.json`, `mutation-restored.log`, `candidate/`, control comparisons and
+`gate/result.json`. Final exact-tree gate results belong in that machine-readable
+receipt. No progress milestone or README change is made.
