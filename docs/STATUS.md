@@ -242,7 +242,7 @@ with 2,995 blockers; the scoped result still has 14 assumptions.
 | Layer | State | Main gap | Evidence |
 | --- | --- | --- | --- |
 | Discovery (ROM -> ProgramMap) | ROM normalization, direct CFG, local and cross-block indirect proofs, function partitioning and return certificates (ADR-0127), trace import, conflict-aware merge | Jump tables beyond the bounded recognizer; overlays and DMA | `crates/plaid-core/tests/`, `crates/plaid-lower/tests/` |
-| Closure proof (solver) | Fail-closed whole-ROM solver; assumption scopes `DeclaredStaticImages` and `DeclaredStaticImagesGuardedRam` reach CLOSED for synthetic programs | Whole-ROM closure without assumptions remains open | `tests/pipeline.rs`, ADR-0126 |
+| Closure proof (solver) | Fail-closed whole-ROM solver; assumption scopes `DeclaredStaticImages` and `DeclaredStaticImagesGuardedRam` reach CLOSED for synthetic programs | Whole-ROM closure without assumptions remains open | `crates/plaid-core/tests/core/pipeline.rs`, ADR-0126 |
 | Executable provenance | PI/SP/PIF/cache/TLB/RSP byte lineage over pinned ares histories; 20M-fetch commercial boot prefix retained locally | Paused by ADR-0125 until a milestone needs it | [`STATUS-LOG.md`](STATUS-LOG.md) |
 | Native lowering | CLOSED map -> C; integer, COP1, checked calls/returns and native RSP scalar/vector code | Remaining system instructions | spikes096/097/098; ADR-0157..0169 |
 | Runtime and rendering | Plaid runtime + RT64: threads, timing, input, saves, native RSP audio and graphics tasks | Runtime ABI/timing assumptions, additional devices and non-Windows hosts | `runtime/test_runtime.py`; ADR-0158..0186 |
