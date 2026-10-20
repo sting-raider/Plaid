@@ -1,5 +1,14 @@
 # Next
 
+## Validate RSP self-patching under native text revocation
+
+ADR-0219 identifies the OoT type-4 startup conflict as RSP boot microcode also
+discovered as possible fixed CPU text. Keep both interpretations safe: revoke
+inactive CPU text on writes, byte-check before entry, and pin active native
+frames across SDK scheduling. Finish current-map visible OoT and retained-game
+regressions with audio; record any subsequent fail-closed blocker without
+adding a game exception. See research/rsp-from-rom.md.
+
 ## Continue Paper Mario ROM-only closure
 
 The user selected Paper Mario. The frontier is OPEN/7 with 56,851 blocks and

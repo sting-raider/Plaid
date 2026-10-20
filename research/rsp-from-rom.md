@@ -429,3 +429,46 @@ All five gates and progress consistency pass on the restored production tree.
 No own native/game/compiler process remains. Branch rsp-from-rom; no push or
 canonical main write. This is accepted for three finite ROM paths, partial
 corpus support because OoT refuses; no whole-ROM claim.
+
+
+## ADR-0219: RSP boot self-patch versus conservatively decoded CPU text
+
+Isolated branch `experiment/oot-rsp-0219`, prepared base `48c0ac8a`. Receipts:
+`X:/Plaid/target/oot/0219`. No main write or push. No ROM bytes or generated
+game assets are committed. The Paper Mario worktree and solver/table sources
+are outside this change's ownership.
+
+The retained visible ROM-only executable reproduces CPU fault 2 / RSP fault 1
+at IMEM 0x0c0: VI 3, zero graphics, one non-graphics task, no PCM. A diagnostic
+linked against the exact retained runtime ABI reproduces at VI 2. The task type
+is 4. SP DMA uses IMEM source 0x10d0, physical RDRAM 0x65c0, SP_WR_LEN operand
+zero: one rounded eight-byte transfer, destination [0x65c0,0x65c8). The map has
+an exact eight-byte base block there, load=-1, prot=1. This is the RDRAM copy of
+the RSP boot microcode, not BSS, heap reuse, or a relocatable overlay binding.
+Its first instruction changes from 08000411 to 08000439; the delay-slot word
+8c11ffc4 is retained. ROM-derived RSP boot candidates contain both replacement
+jump sequences. Pinned ares dma.cpp writes IMEM doublewords into RDRAM directly.
+
+RSP DMA already used `plaid_runtime_write`: changing only its callback would
+not solve the ownership error. ADR-0219 generalizes fixed-text lifetime checks
+for all shared writers, preserving possible CPU entries. Active function bodies
+are pinned, inactive fixed words revoke, and subsequent block entry compares
+revoked words to the compiled instruction words. Fixed table/cell proof data
+stays immutable. Active relocated text is protected for runtime writes too.
+No instruction executes through a guest fallback and no ROM-specific condition
+is introduced. Default solver/discovery code and maps are unchanged.
+
+`runtime/test_text_writes.py` verifies CPU and IMEM-to-RDRAM DMA policy, memory
+bytes, fault PCs, DMA register updates, stale-entry refusal, restoration,
+complete native-frame unwind, suspended non-LIFO pins, and immutable proof data.
+The accepted CPU register/PC/RAM checkpoint matches pinned ares. The existing
+heap-overlay contract additionally checks active runtime-write refusal before
+inactive revocation. Mutations removing active pins, re-entry comparison,
+revocation, immutable-data checks, and suspended-list unlinking all fail.
+
+The initial full gate passed fmt, Clippy and Rust; CLI hit a Windows executable
+lock while an independent discovery held plaid.exe open. The diagnostic was
+moved to a receipt-local release CLI before retrying. A current-runtime game
+rebuild also exposes retained maps with obsolete VI HLE names; those are being
+regenerated under current identification, with the retained CPU load scope.
+Final acceptance remains pending until the visible runs and final gate finish.

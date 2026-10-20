@@ -72,6 +72,8 @@ def main():
                             's.prot[0x7fc4u >> 2] = 1; assert(plaid_link(&s, 0x80007fc0u) == 1);\n'
                             'assert(s.ovl_ok[0] && s.ovl_delta[0] == 0xffa03000u && s.prot[0x3000u >> 2] == 255);\n'
                             's.prot[0x7fc4u >> 2] = 0;\n'
+                            's.ovl_active[0] = 1; assert(plaid_runtime_write(&s, 0x3000u, 4, 0) == 1 && s.fault == 2 && s.ovl_ok[0]);\n'
+                            's.ovl_active[0] = 0; s.fault = 0;\n'
                             'assert(plaid_runtime_write(&s, 0x3000u, 4, 0) == 0 && !s.ovl_ok[0]);\n'
                             'assert(s.prot[0x3000u >> 2] == 0);\n' if mode == 'move' else
                             'assert(r == 6 && s.fault == 3);\n') + 'return r; }\n')
