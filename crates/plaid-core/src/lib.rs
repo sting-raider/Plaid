@@ -44,6 +44,7 @@ pub mod cpu_mutation {
         )
     }
 }
+mod affine_word;
 pub mod ares_boot;
 pub mod boot_execution;
 pub mod callbacks;

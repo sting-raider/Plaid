@@ -6228,3 +6228,28 @@ ROM-only inferred-input probe improves OPEN13 to OPEN12 at unchanged56807
 blocks/162loads, closing the five-word/four-target dispatch80aac6f0. No native
 Paper Mario artifact or run is accepted. Exact committed-tree local gates
 remain required. See research/captured-callee-values.md for limits/receipts.
+
+
+## ADR-0214: Prove affine table offsets and checked fixed returns
+
+Track a normalized low-word byte-offset minus four-times-index expression
+while proving bounded tables backward. Supported nontrapping arithmetic may
+substitute terms; only an exact zero expression discharges the relation.
+Full-width range guards, complete path induction, every pending GPR's callee
+effect, source/table hashes and global binding/lifetime gates remain required.
+Constant definitions have one owner; SLLV adds an exact shift requirement.
+
+For a placed caller, an incoming fixed-text source may be read only as an
+exact JR RA covered by its checked no-write callee effect. The read consumes
+the existing budget and participates in the source hash. Other alternates,
+data tails and unmatched returns retain their rejection rules. No native
+runtime guest execution, ROM constants, ABI assumption or new acceptance
+exception is added.
+
+Authored baseline/shift/fixed-return counterexamples, forward arithmetic
+verification, native full-state pinned-ares contracts and a caught exact-zero
+mutation support the rule. Independent Luna xhigh reviews find no correctness
+issues. The final ROM probe improves OPEN12 to OPEN11, adding six blocks and
+closing one five-entry table; the earlier OPEN15 failed-verifier probe is
+retained. No Paper Mario artifact or run is accepted. See
+research/affine-table-index.md for receipts, timings and remaining proof gaps.

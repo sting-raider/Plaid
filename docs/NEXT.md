@@ -2,13 +2,18 @@
 
 ## Continue Paper Mario ROM-only closure
 
-The user selected Paper Mario. The frontier is OPEN/12 with 56,807 blocks and
+The user selected Paper Mario. The frontier is OPEN/11 with 56,813 blocks and
 162 loads after ROM-only TLB effect/bridge source inference and guarded tail
 cells and scheduled pointer/constant-SLLV proofs. Finish the remaining bounded
 indexed dispatch proofs, including matching index values and callee save/restore
 effects and captured pointer/index relations. Captured pointer/flag values now
 survive same-binding calls only with rechecked no-write effects for every live
-GPR; another five-entry dispatch closes. Cross-alternate effects remain refused.
+GPR; another five-entry dispatch closes. Paired index/offset updates now have a
+low-word affine proof, closing a further five-entry dispatch. Cross-alternate
+effects remain refused. Four remaining calls name raw TLB bridge entries whose
+placed blocks exist; establish binding-aware callee effects while retaining
+mapping generations, active-frame pins and source/return witnesses. This is
+an address-representation gap, not permission to infer an SDK boundary.
 Infeasible flag paths are now pruned only while their GPR value survives.
 No-write callees now preserve pending base registers without a guest
 ABI assumption. Standalone BREAK paths stop at the existing native abort.
