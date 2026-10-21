@@ -108,6 +108,25 @@ fn an_observed_target_is_discovered_and_dispatched_but_not_certified() {
 }
 
 #[test]
+fn an_executed_target_needs_no_preceding_return() {
+    // f follows a wait loop, not a return: no layout clue, yet it was called.
+    let mut image = image();
+    image.words[6] = 0x1000_ffff; // b .
+    let f = image.address(GuestAddr(F));
+    assert!(!plaid_core::data_roots::plausible(&image, GuestAddr(F)));
+    let map = discover(&image, &[F]);
+    assert!(map.address_taken.contains_key(&f));
+    let scope = Scope::DeclaredStaticImagesGuardedRamAddressTaken;
+    assert!(!blocker(&map, &image, scope, "unresolved_indirect_site"));
+    // Without the replay's evidence the same entry voids the address-taken set.
+    let mut unseen = map.clone();
+    for refs in unseen.address_taken.values_mut() {
+        refs.retain(|id| !id.starts_with("observed-call:"));
+    }
+    assert!(blocker(&unseen, &image, scope, "unresolved_indirect_site"));
+}
+
+#[test]
 fn implausible_observed_targets_are_not_roots() {
     let image = image();
     for target in [BASE + 0x1000, F + 2] {
@@ -117,4 +136,25 @@ fn implausible_observed_targets_are_not_roots() {
             "{target:08x}"
         );
     }
+}
+
+#[test]
+fn observed_targets_that_fail_executed_start_are_not_roots() {
+    let mut image = image();
+    image.words[8] = 0; // aligned, in-image, but not an executed instruction
+    assert!(!plaid_core::data_roots::executed_start(
+        &image,
+        GuestAddr(F)
+    ));
+    let map = discover(&image, &[F]);
+    assert!(
+        !map.address_taken
+            .keys()
+            .any(|address| address.pc == GuestAddr(F))
+    );
+    assert!(
+        !map.blocks
+            .iter()
+            .any(|block| block.start == image.address(GuestAddr(F)))
+    );
 }
