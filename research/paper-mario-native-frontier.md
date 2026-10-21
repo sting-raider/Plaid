@@ -484,3 +484,15 @@ Mutation check: after successful source parsing, temporarily clearing the
 source list and rebuilding kills the focused contract at its expected DMA
 candidate assertion (`AssertionError: []`), in 35.3 s including rebuild.
 The original source bytes were restored before the final full gate.
+
+## ADR-0226 validation result (2026-10-21)
+
+The ADR-0226 synthetic tests prove both halves of the exception: an observed
+entry following a `j .` loop passes discovery and guarded address-taken solve
+when it passes `executed_start`, while removing the observed-call evidence
+reopens the indirect-site blocker. An observed address with a zero first word
+is rejected. Mutation checks fail when either the discovery `executed_start`
+filter or solver evidence exception is removed. No Paper Mario rerun was made
+on this branch; the expected next replay target is `8002605c`. Production
+logic uses generic evidence and instruction predicates, with no game-specific
+addresses or constants.

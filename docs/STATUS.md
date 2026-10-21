@@ -305,3 +305,6 @@ residual dispatch does not include. With residual candidate dispatch and PI
 DMA into TLB-mapped buffers (ADR-0223, ADR-0224) it reaches VI 3 and its
 first audio task, then stops on audio RSP microcode that ROM-derived
 extraction has not found (CPU fault 0).
+ADR-0226 validates replay-observed call entries without a return-layout clue
+only when they pass `executed_start`; solver dispatch requires that replay
+evidence, and observations remain open-site evidence rather than certificates.

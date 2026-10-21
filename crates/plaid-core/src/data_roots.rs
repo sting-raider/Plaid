@@ -102,6 +102,16 @@ pub fn scan(bytes: &[u8], image: &CodeImage) -> BTreeSet<GuestAddr> {
         .collect()
 }
 
+/// A target the replay called needs no layout clue, which stands in for
+/// execution elsewhere; its body must still be CPU code (ADR-0226).
+pub fn executed_start(image: &CodeImage, pc: GuestAddr) -> bool {
+    pc.0.is_multiple_of(4)
+        && image
+            .instruction_word(pc)
+            .is_some_and(|w| w != 0 && crate::discovery::decode(w, pc).is_valid())
+        && cpu_code(image, pc)
+}
+
 /// Whether the words from `pc` to its first `jr ra` and delay slot can be
 /// CPU code: every word decodes, none is a COP2 or COP3 access, which the
 /// VR4300 lacks, and every direct jump or branch lands in the image (RSP
@@ -343,6 +353,9 @@ pub fn layout(image: &CodeImage, map: &ProgramMap) -> BTreeSet<GuestAddr> {
 
 /// Producer of the address-taken evidence (ADR-0153).
 pub const ADDRESS_TAKEN: &str = "plaid-address-taken/v0";
+/// Producer of the evidence that the analysis-time replay called a target
+/// (ADR-0222, ADR-0226).
+pub const OBSERVED_CALL: &str = "plaid-ares-observed-call/v0";
 
 /// Discovery whose roots also include the address-taken functions: ROM words
 /// first, then constants from decoded blocks, until no new function appears.
@@ -407,7 +420,7 @@ pub fn discover_address_taken_with_loads(
                 observed
                     .iter()
                     .copied()
-                    .filter(|&a| plausible_at(image, a, starts)),
+                    .filter(|&a| executed_start(image, a)),
             )
             .partition(|a| runtime_entries.contains(a));
     // Decoder seeds keep their incoming candidate edges across outer rounds.
@@ -457,11 +470,25 @@ pub fn discover_address_taken_with_loads(
                     detail: "function starts named by an aligned ROM or image word or a code constant in a decoded block, including speculative ROM-word expressions and targets unproven transfers took in the analysis-time ares replay (discovery only, not target certificates), whose body can be CPU code (ADR-0153, ADR-0197, ADR-0220, ADR-0222)".into(),
                 },
             );
+            let called = format!("observed-call:{}", rom.sha256);
+            if taken.iter().any(|a| observed.contains(a)) {
+                d.map.evidence.insert(
+                    called.clone(),
+                    crate::program::Evidence {
+                        kind: crate::EvidenceKind::Trace,
+                        producer: OBSERVED_CALL.into(),
+                        revision: "0".into(),
+                        detail: "call targets an unproven call took in the analysis-time pinned ares replay (ADR-0222, ADR-0226)".into(),
+                    },
+                );
+            }
             for a in taken.iter().chain(&runtime_taken) {
                 let address = image.address(*a);
-                d.map
-                    .address_taken
-                    .insert(address.clone(), [id.clone()].into());
+                let mut refs: crate::program::EvidenceRefs = [id.clone()].into();
+                if observed.contains(a) {
+                    refs.insert(called.clone());
+                }
+                d.map.address_taken.insert(address.clone(), refs);
                 if let Some(refs) = d.map.entries.get_mut(&address) {
                     refs.insert(id.clone());
                 }

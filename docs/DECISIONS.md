@@ -6542,3 +6542,19 @@ requires fail-before-side-effects refusal without its source. It also rejects
 empty/out-of-RAM/out-of-ROM ranges and ignores an unnamed source containing an
 internal pointer. Integration measurements and mutation results are recorded
 in the research note.
+
+## ADR-0226: Replay evidence validates observed call entries
+
+Date: 2026-10-21.
+
+An observed call target is evidence that execution reached an entry, so
+discovery may accept it without the usual preceding `jr ra` layout clue. The
+entry must still pass `executed_start`: it is aligned, begins with a valid
+instruction, and its body is CPU code. Discovery records the replay evidence
+separately from static address-taken evidence. The guarded address-taken
+solver accepts this alternative only when that evidence is present; an
+observation alone does not close the originating indirect site's target set.
+
+Synthetic regressions cover a called entry after a `j .` wait loop, rejection
+when its replay evidence is removed, rejection when `executed_start` fails,
+and mutation checks showing both discovery and solver clauses are required.

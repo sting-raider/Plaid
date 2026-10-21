@@ -838,7 +838,14 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             (starts.contains(a) || map.runtime_functions.contains_key(a))
                 && source(images, a).is_some_and(|image| {
                     let starts = &load_starts[image.base.image.as_str()];
+                    // A replayed call stands in for the layout clue (ADR-0226).
+                    let called = map.address_taken[a].iter().any(|id| {
+                        map.evidence
+                            .get(id)
+                            .is_some_and(|e| e.producer == crate::data_roots::OBSERVED_CALL)
+                    });
                     crate::data_roots::plausible_at(image, a.pc, starts)
+                        || called && crate::data_roots::executed_start(image, a.pc)
                 })
         });
     let mut uses_address_taken = false;

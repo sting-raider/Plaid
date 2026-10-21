@@ -982,3 +982,11 @@ Paper Mario's residual run reaches VI 3 and submits its first audio task,
 whose RSP microcode is not among the ROM-derived texts. Next: find where that
 microcode comes from in the ROM and extend extraction generally (compare the
 unfinished OoT microcode work on `experiment/oot-rsp-0221`).
+
+## After ADR-0226
+
+Observed call targets after non-return layout code can now pass discovery and
+the guarded address-taken solver when replay evidence is present and
+`executed_start` succeeds. The synthetic regressions and mutation checks pass.
+Next: rebase with the ADR-0225 RSP source work, then rerun the Paper Mario
+validation run to confirm it passes the observed target at `8002605c`.
