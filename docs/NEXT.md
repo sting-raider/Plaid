@@ -1,5 +1,10 @@
 # Next
 
+## After short RSP overlays (ADR-0243)
+
+Mario Kart 64 faults 3 at 80040c8c after VI 526: an indirect jump reaches a
+target that discovery did not find. Find the target and its source.
+
 ## After boot EntryHi (ADR-0242)
 
 Mario Kart 64 stops at VI 2 with --rsp-gfx on an unlowered word of its

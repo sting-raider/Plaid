@@ -7041,3 +7041,25 @@ scripts/test_ares_boot.py rejects a missing or out-of-range EntryHi.
 
 Mario Kart 64 now runs past startup: VI 2, 865 PI DMAs and its first graphics
 task, then stops with --rsp-gfx on an unlowered word of its graphics microcode.
+
+## ADR-0243: Overlays an SDK overlay table names need not look like whole texts
+
+Status: accepted. ROM-derived RSP candidates include overlays named by SDK
+overlay-table entries (offset from the ucode, length, IMEM destination). Both
+the entry scan and the content filter required 128 bytes and the whole-text
+heuristics (two RSP-specific operations in the first 256 bytes). Mario Kart
+64's graphics microcode swaps a 104-byte overlay into IMEM 0x7a8 (table entry
+0x1370, 0x68 bytes), so no lowered text held IMEM 0x7b4 and the run stopped at
+VI 2 with "unlowered RSP code".
+
+Table entries may now name overlays of 64 bytes or more. Such an overlay
+passes when every word is lowerable code and at least one is an RSP-specific
+operation (COP0 SP register access or a vector instruction). Pointer-hint
+texts keep the stricter whole-text filter. Runtime matching is unchanged:
+lowered code still runs only where IMEM holds exactly its words.
+
+crates/plaid-lower/tests/rsp_rom.rs covers a 104-byte overlay accepted only
+with an RSP operation, rejected when shorter than 64 bytes or holding a
+non-code word, and still rejected by the whole-text filter. Mario Kart 64
+builds 45 RSP texts (was 38) and runs to VI 526: 224 graphics and 517 audio
+tasks, then faults 3 at 80040c8c (an indirect jump to an undiscovered target).

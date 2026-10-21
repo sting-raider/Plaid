@@ -1,4 +1,4 @@
-use plaid_lower::rsp::{lower_rsp, plausible_text, reachable_words};
+use plaid_lower::rsp::{lower_rsp, plausible_overlay, plausible_text, reachable_words};
 
 fn reach(words: &[u32], imem: u32) -> plaid_lower::rsp::RspReachability {
     reachable_words(
@@ -72,4 +72,22 @@ fn content_filter_requires_rsp_operations_and_decodable_entry_words() {
             .collect::<Vec<_>>()
     ));
     assert!(!plausible_text(&bytes[..64]));
+}
+
+#[test]
+fn table_named_overlays_need_only_code_and_one_rsp_operation() {
+    let bytes = |words: &[u32]| {
+        words
+            .iter()
+            .flat_map(|w| w.to_be_bytes())
+            .collect::<Vec<_>>()
+    };
+    let mut words = [0u32; 26]; // 104 bytes, below the whole-text minimum
+    assert!(!plausible_overlay(&bytes(&words)));
+    words[0] = 0x4008_3000; // mfc0 t0, SP_DMA_BUSY
+    assert!(plausible_overlay(&bytes(&words)));
+    assert!(!plausible_text(&bytes(&words)));
+    assert!(!plausible_overlay(&bytes(&words[..15])));
+    words[25] = 0xffff_ffff;
+    assert!(!plausible_overlay(&bytes(&words)));
 }
