@@ -42,6 +42,25 @@ def boot_header_contract():
     print('PASS native startup headers: exact bounded bytes, entry/length/byte refusal, provenance and payload hashes')
 
 
+def projection_contract():
+    site = {'site': {'pc': 0x8080042c}, 'closed_proof': None, 'link_register': 31}
+    load = {'destination': {'start': 0x80800400, 'size': 0x100}, 'linked': 0x80000400,
+            'relocatable': True, 'encoding': 'raw', 'source': 0x1000}
+    program = {'indirect_sites': [site], 'load_images': {'fixture': {
+        'base': {'start': 0x80002000, 'size': 0x100}, 'loads': [load]}}}
+    bindings = harvest_boot.replay_bindings(program, 0x80002000, 0x100)
+    assert harvest_boot.replay_sites(program, bindings) == [0x8000042c, 0xa000042c]
+    for changed in [[], bindings + [(0x80800400, 0x80001400, 0x100, 0x1000)],
+                    [(0x80800400, 0x80000400, 0x100, -1)]]:
+        try:
+            harvest_boot.replay_sites(program, changed)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('missing/ambiguous/unsupported binding accepted')
+    print('PASS relocated replay site projection: runtime PCs, aliases, ambiguous and unsupported refusal')
+
+
 def main():
     if os.name == 'nt':
         script = subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(Path(__file__).resolve())], text=True).strip()
@@ -55,6 +74,14 @@ def main():
             assert 'coverage ranges' in str(error), error
         else:
             raise AssertionError(f'invalid coverage accepted: {coverage}')
+    for bindings in ([None], [[0, 0, 0, None]], [[0, 0, 4, True]], [[0, 0, 4, -3]], [[0, 0xfffffffc, 8, None]]):
+        try:
+            capture_many('never-read.z64', [], covered=[(0, 4)], sites=[0], bindings=bindings)
+        except ValueError as error:
+            assert 'bindings' in str(error)
+        else:
+            raise AssertionError('invalid replay binding accepted')
+    projection_contract()
     exe = build_oracle()
     firmware = ROOT / '.refs/ares/ares/System/Nintendo 64/pif.ntsc.rom'
     rom = bytearray(0x3000)
@@ -69,7 +96,7 @@ def main():
         source, output = directory / 'fixture.z64', directory / 'capture.json'
         source.write_bytes(rom)
 
-        def run(target, budget, exact=False, covered=None, sites=None, check=True):
+        def run(target, budget, exact=False, covered=None, sites=None, bindings=None, check=True):
             command = [str(exe), str(source), str(firmware), '0x80000400', target,
                        str(budget), 'fixture', str(output)]
             if exact:
@@ -82,6 +109,10 @@ def main():
                 listed = directory / 'sites.txt'
                 listed.write_text(''.join(f'{s}\n' for s in sites))
                 command.append(str(listed))
+            if bindings is not None:
+                bound = directory / 'bindings.txt'
+                bound.write_text(''.join(f'{a} {b} {n} {r}\n' for a, b, n, r in bindings))
+                command.append(str(bound))
             if not check:
                 return subprocess.run(command, timeout=30).returncode
             subprocess.run(command, check=True, timeout=30)
@@ -104,7 +135,43 @@ def main():
                                                      sites=[0x8000042c, 0x80000430]).splitlines()]
         assert observed[0] == image and observed[-1]['indirect_targets'] == [[0x8000042c, 0x80001000]], observed[-1]
         assert 'indirect_targets' not in unknown[-1], unknown[-1]
+        # The fixture's call is fixed at runtime 420+0xc; give it a synthetic
+        # map placement. Source bytes identify which shared-slot image is live.
+        def bound_observation(bindings, sites=None):
+            return json.loads(run('', 1000, covered=[(0x80000400, 0x80000500)],
+                                  sites=sites or [0x8000042c], bindings=bindings).splitlines()[-1])
+        fixed = [[0x80000400, 0x80000400, 0x100, -2], [0x80001000, 0x80001000, 12, -2]]
+        relocated = [[0x80800400, 0x80000400, 4 * len(words), 0x1000], fixed[1]]
+        assert bound_observation(fixed)['indirect_targets'] == [[0x8000042c, 0x80001000]]
+        assert bound_observation(relocated)['indirect_targets'] == [[0x8080042c, 0x80001000]]
+        # Equal runtime slot, wrong ROM source: only the matching image wins.
+        wrong = [0x80810400, 0x80000400, 4 * len(words), 0x1100]
+        assert bound_observation(relocated + [wrong])['indirect_targets'] == [[0x8080042c, 0x80001000]]
+        ambiguous = [0x80810400, 0x80000400, 4 * len(words), 0x1000]
+        assert bound_observation(relocated + [ambiguous])['indirect_targets'] == []
+        assert bound_observation([wrong, fixed[1]])['indirect_targets'] == []
+        # Targets must be translated under the same live binding, including
+        # uncached aliases. Mutated/unmatched and ambiguous targets are refused.
+        target_binding = [0x80811000, 0xa0001000, 12, 0x1200]
+        rom[0x1200:0x120c] = bytes(image['bytes'])
+        source.write_bytes(rom)
+        assert bound_observation([relocated[0], target_binding])['indirect_targets'] == [[0x8080042c, 0x80811000]]
+        assert bound_observation([relocated[0], target_binding, [0x80821000, 0x80001000, 12, 0x1200]])['indirect_targets'] == []
+        assert bound_observation([relocated[0], [0x80811000, 0x80001000, 12, 0x1300]])['indirect_targets'] == []
+        assert bound_observation([[0x80800400, 0xa0000400, 4 * len(words), 0x1000], fixed[1]])['indirect_targets'] == [[0x8080042c, 0x80001000]]
+        source.write_bytes(rom)
+
         assert run('', 1000, covered=[(0x80000400, 0x80000500)], sites=[0x8000042e], check=False) == 2
+        # A finite budget can miss a later site. Coverage records that miss;
+        # a sufficient budget observes it without manufacturing unvisited sites.
+        short_sites = json.loads(run('', 4, covered=[(0x80000400, 0x80001100)],
+                                     sites=[0x8000042c, 0x80000430]).splitlines()[-1])
+        later_sites = json.loads(run('', 20, covered=[(0x80000400, 0x80001100)],
+                                     sites=[0x8000042c, 0x80000430]).splitlines()[-1])
+        assert short_sites['stop_reason'] == 'instruction_budget' and short_sites['observed_runtime_sites'] == []
+        assert short_sites['unobserved_runtime_sites'] == [0x8000042c, 0x80000430]
+        assert later_sites['observed_runtime_sites'] == [0x8000042c]
+        assert later_sites['unobserved_runtime_sites'] == [0x80000430]
         # Coverage prevents recapture; a short budget must not invent bytes.
         covered = [json.loads(line) for line in run('', 20, covered=[(0x80000400, 0x80001100)]).splitlines()]
         assert len(covered) == 1 and covered[0]['uncovered_entry'] is None, covered
@@ -216,7 +283,7 @@ def main():
         loads.write_text(json.dumps({'source': 'synthetic', 'loads': [original]}))
         program.write_text(json.dumps({'direct_edges': [], 'indirect_sites': [{'closed_proof': None, 'candidates': [], 'observed': []}]}))
         requested = []
-        def capture_unknown(rom, entries, covered, sites):
+        def capture_unknown(rom, entries, covered, sites, bindings):
             requested.append((entries, covered))
             return [synthetic, {'uncovered_entry': synthetic['entry']}]
         harvest_boot.capture_many = capture_unknown
@@ -250,14 +317,14 @@ def main():
             {'site': {'pc': 0x80000420}, 'closed_proof': None, 'link_register': 31, 'candidates': [], 'observed': []},
             {'site': {'pc': 0x80000430}, 'closed_proof': None, 'link_register': None, 'candidates': [], 'observed': []}]}))
         asked = []
-        def capture_observed(rom, entries, covered, sites):
+        def capture_observed(rom, entries, covered, sites, bindings):
             asked.append(sites)
             return [{'uncovered_entry': None, 'indirect_targets': [[0x80000420, 0x80000460]]}]
         harvest_boot.capture_many = capture_observed
         try:
             info = {'header': {'boot_address': 0x80000400}, 'boot_image_size': 0x100}
             assert harvest_boot.harvest(source, loads, program, info, receipt)
-            assert asked == [[0x80000420]], asked
+            assert asked == [[0x80000420, 0xa0000420]], asked
             assert json.loads(loads.read_text())['observed_roots'] == [{'site': '0x80000420', 'target': '0x80000460'}]
             assert json.loads(receipt.read_text())['observed_roots'] == [[0x80000420, 0x80000460]]
             assert not harvest_boot.harvest(source, loads, program, info, receipt)
@@ -268,7 +335,7 @@ def main():
         loads.write_text(json.dumps({'source': 'synthetic', 'loads': [original]}))
         dmas = [[0x2000, 0x10000100, 0x100], [0x2000, 0x10000100, 0x100], [0x420, 0x10000200, 0x40],
                 [0x3000, 0x10000300, 0x6], [0x3004, 0x10000300, 0x8], [0x4000, 0x10002ff0, 0x20]]
-        harvest_boot.capture_many = lambda rom, entries, covered, sites: [{'uncovered_entry': None, 'pi_dma': dmas}]
+        harvest_boot.capture_many = lambda rom, entries, covered, sites, bindings: [{'uncovered_entry': None, 'pi_dma': dmas}]
         dma_rom = directory / 'dma.z64'
         dma_rom.write_bytes(bytes(0x3000))
         try:

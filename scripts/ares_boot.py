@@ -7,11 +7,14 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 REV = '9408cb43d4948fc3ea6e152a307a34348df3fe04'
 BUDGET = 100_000_000
+# Open-call coverage may extend observation, never the snapshot contract.
+SITE_BUDGET = 1_000_000_000
 
 
 def build_oracle():
@@ -29,7 +32,15 @@ def build_oracle():
                              cpu_instruction_access=True)
 
 
-def capture_many(rom, entries, exact=False, covered=None, sites=None):
+def capture_many(rom, entries, exact=False, covered=None, sites=None, bindings=None):
+    if bindings is not None and (sites is None or not isinstance(bindings, (list, tuple)) or
+            any(not isinstance(b, (list, tuple)) or len(b) != 4 or
+                any(type(v) is not int or not 0 <= v <= 0xffffffff or v % 4 for v in b[:3]) or
+                b[2] == 0 or b[0] + b[2] > 0x100000000 or b[1] + b[2] > 0x100000000 or
+                (b[3] is not None and (type(b[3]) is not int or b[3] < -1 or b[3] % 4 and b[3] != -1))
+                for b in bindings)):
+        raise ValueError('invalid replay bindings')
+    budget = SITE_BUDGET if sites else BUDGET
     if sites is not None and (covered is None or not isinstance(sites, (list, tuple)) or
                               any(type(s) is not int or not 0 <= s <= 0xffffffff or s % 4 for s in sites)):
         raise ValueError('indirect-target observation requires aligned site addresses and coverage ranges')
@@ -51,7 +62,7 @@ def capture_many(rom, entries, exact=False, covered=None, sites=None):
         with tempfile.TemporaryDirectory(prefix='plaid-canonical-') as temporary:
             path = Path(temporary) / 'input.z64'
             path.write_bytes(canonical)
-            return capture_many(path, entries, exact=exact, covered=covered, sites=sites)
+            return capture_many(path, entries, exact=exact, covered=covered, sites=sites, bindings=bindings)
     if data[:4] != bytes.fromhex('80371240'):
         raise ValueError('unrecognized N64 byte-order signature')
     crc = zlib.crc32(data[0x40:0x1000])
@@ -71,8 +82,10 @@ def capture_many(rom, entries, exact=False, covered=None, sites=None):
             command.extend(['--covered', json.dumps(covered)])
         if sites is not None:
             command.extend(['--sites', json.dumps(sites)])
+        if bindings is not None:
+            command.extend(['--bindings', json.dumps(bindings)])
         # Includes a cold reference build; the actual replay below stays bounded.
-        return json.loads(subprocess.check_output(command, text=True, timeout=600))
+        return json.loads(subprocess.check_output(command, text=True, timeout=1200))
     # DrvFS index preloading is much slower than a serial source check.
     os.environ['GIT_CONFIG_COUNT'] = '1'
     os.environ['GIT_CONFIG_KEY_0'] = 'core.preloadindex'
@@ -82,7 +95,7 @@ def capture_many(rom, entries, exact=False, covered=None, sites=None):
     assert hashlib.sha256(firmware.read_bytes()).hexdigest() == 'fa7b09795ef1e54461e59f6f2d902368133e3f1cd980e34383e6a780d74beffd'
     with tempfile.TemporaryDirectory(prefix='plaid-ares-') as temporary:
         output = Path(temporary) / 'capture.json'
-        command = [str(exe), str(rom), str(firmware), hex(boot), ','.join(hex(e) for e in entries), str(BUDGET),
+        command = [str(exe), str(rom), str(firmware), hex(boot), ','.join(hex(e) for e in entries), str(budget),
                    'CIC-NUS-' + cics[crc], str(output)]
         if exact:
             command.append('exact-many')
@@ -94,10 +107,16 @@ def capture_many(rom, entries, exact=False, covered=None, sites=None):
                 listed = Path(temporary) / 'sites.txt'
                 listed.write_text(''.join(f'{s}\n' for s in sites))
                 command.append(str(listed))
-        subprocess.run(command, check=True, timeout=180)
+        if bindings is not None:
+            bound = Path(temporary) / 'bindings.txt'
+            bound.write_text(''.join(f'{a} {b} {n} {r if r is not None else -2}\n' for a, b, n, r in bindings))
+            command.append(str(bound))
+        started = time.perf_counter()
+        subprocess.run(command, check=True, timeout=900)
+        replay_seconds = round(time.perf_counter() - started, 3)
         results = [json.loads(line) for line in output.read_text().splitlines()]
     for result in results:
-        result.update(format='plaid-ares-boot-harvest-v1', revision=REV, budget=BUDGET, vi_budget=3600, rom_sha256=hashlib.sha256(data).hexdigest(),
+        result.update(format='plaid-ares-boot-harvest-v1', revision=REV, budget=budget, vi_budget=3600, replay_seconds=replay_seconds, rom_sha256=hashlib.sha256(data).hexdigest(),
                   firmware_sha256=hashlib.sha256(firmware.read_bytes()).hexdigest(), cic=cics[crc],
                   initial_state='cpu_power_pif_entry', controller='gamepad1_neutral')
         if 'bytes' in result:
@@ -116,7 +135,8 @@ if __name__ == '__main__':
     parser.add_argument('--exact-many', action='store_true')
     parser.add_argument('--covered', type=json.loads)
     parser.add_argument('--sites', type=json.loads)
+    parser.add_argument('--bindings', type=json.loads)
     args = parser.parse_args()
     entries = [int(v, 0) for v in args.entry.split(',') if v]
-    results = capture_many(args.rom, entries, exact=args.exact_many, covered=args.covered, sites=args.sites)
+    results = capture_many(args.rom, entries, exact=args.exact_many, covered=args.covered, sites=args.sites, bindings=args.bindings)
     print(json.dumps(results if args.many or args.exact_many else next((r for r in results if 'bytes' in r), results[-1]), separators=(',', ':')))

@@ -33,6 +33,57 @@ def missing_tables(program):
     return out
 
 
+def replay_bindings(program, base, size):
+    """Map declared storage to execution addresses; ROM spans guard slot identity.
+
+    Compressed/relocating overlays without a fixed linked source are deliberately
+    unsupported here. They cannot acquire observations by numeric coincidence.
+    """
+    if len(program.get('load_images', {})) > 1:
+        raise ValueError('replay requires one unambiguous composed load image')
+    bindings = []
+    for spec in program.get('load_images', {}).values():
+        bindings.append([spec['base']['start'], spec['base']['start'], spec['base']['size'], None])
+        for load in spec['loads']:
+            start, length = load['destination']['start'], load['destination']['size']
+            linked = load.get('linked')
+            source = None
+            if load.get('relocatable'):
+                encoding = load['encoding']
+                source = -1
+                if linked is not None and encoding == 'raw':
+                    source = load['source']
+                elif linked is not None and isinstance(encoding, dict):
+                    for kind in ('segment', 'tlb_raw'):
+                        if kind in encoding:
+                            length = encoding[kind]['text_size']
+                            source = load['source']
+                if linked is None:
+                    # Unknown runtime placement: never observe the synthetic PC.
+                    continue
+            bindings.append([start, linked if linked is not None else start, length, source])
+    if not bindings:
+        bindings.append([base, base, size, None])
+    return sorted(set(tuple(b) for b in bindings), key=lambda b: (*b[:3], -2 if b[3] is None else b[3]))
+
+
+def replay_sites(program, bindings):
+    sites = set()
+    for site in program['indirect_sites']:
+        if site.get('closed_proof') is not None or site.get('link_register') is None:
+            continue
+        pc = site['site']['pc']
+        matches = {runtime + pc - mapped for mapped, runtime, size, source in bindings
+                   if mapped <= pc < mapped + size and source != -1}
+        if len(matches) != 1:
+            raise ValueError(f'open call {pc:08x} has no unique supported replay binding')
+        runtime = matches.pop()
+        sites.add(runtime)
+        if 0x80000000 <= runtime < 0xc0000000:
+            sites.add(runtime ^ 0x20000000)  # cached/uncached physical alias
+    return sorted(sites)
+
+
 def harvest(rom, loads_path, map_path, info, receipt_path):
     """Append source-derived declarations; callers must rediscover and solve."""
     loads_path = Path(loads_path)
@@ -51,14 +102,14 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
         entries = sorted(set(targets) | {site for site, _, _ in tables})
         # Calls only: a computed jr is often a return or an in-function jump,
         # whose target is no function start (ADR-0222).
-        sites = sorted({s['site']['pc'] for s in program['indirect_sites']
-                        if s.get('closed_proof') is None and s.get('link_register') is not None})
-        captures = (capture_many(rom, entries, covered=coverage(loads, base, size, slots=True), sites=sites)
+        bindings = replay_bindings(program, base, size)
+        sites = replay_sites(program, bindings)
+        captures = (capture_many(rom, entries, covered=coverage(loads, base, size, slots=True), sites=sites, bindings=bindings)
                     if unknown_indirect else capture_many(rom, entries))
     except ValueError as error:
         Path(receipt_path).write_text(json.dumps({'targets': targets, 'refusal': str(error)}, indent=2) + '\n')
         return False
-    receipt = {'targets': targets, 'captures': []}
+    receipt = {'targets': targets, 'runtime_sites': sites, 'bindings': bindings, 'captures': []}
     added = False
     uncovered = next((c['uncovered_entry'] for c in captures if c.get('uncovered_entry') is not None), None)
     if uncovered is not None:

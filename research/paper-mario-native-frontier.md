@@ -604,3 +604,112 @@ Ignored local receipts: `target/paper-mario/0222/native-0226.log`,
 `9408cb43d4948fc3ea6e152a307a34348df3fe04`; Rabbitizer at
 `724a49a5b4dbfb99f1a9e6992e63964fd29c90c8`. No ROM, captured RAM,
 generated game code, WAV or disassembly asset is committed.
+
+
+## ADR-0227 integration claim (2026-10-21)
+
+Base: b6e3a4f2d833564d63da789177aed3a707cfcbc5. Owner: this direct-integration
+session, branch experiment/relocated-sites-0227 in target/pm-boot-0222.
+Hypothesis: projecting unresolved call sites through the composed map's declared
+linked loads, identifying shared-slot source bytes at the observation, and
+extending replay only for an uncovered call frontier can supply discovery
+roots for the later checksum call without granting target closure.
+Touching scripts/ares_boot.{py,cpp}, scripts/harvest_boot.py, synthetic tests,
+DECISIONS/STATUS/NEXT and this note; no README or audio-runtime changes.
+
+
+### ADR-0227 implementation and measured coverage
+
+The map's load_images declaration supplies storage, linked runtime ranges and
+ROM sources. Open calls are requested at linked PCs and KSEG aliases. At the
+instruction observation, both site and target are projected back through the
+same declarations. Linked sources must match replay RAM byte-for-byte and
+have no conflicting resident I-cache words. Equal-byte shared-slot alternatives
+remain ambiguous and produce no root. Fixed sites retain declared addresses.
+Raw slots conservatively compare their whole range; segment/TLB-raw bindings
+use format-owned text extents. Unsupported compressed/dynamic placements and
+non-direct-mapped source reads are not guessed. Production has no game-specific
+addresses, constants or branches.
+
+Observations remain call discovery roots, never target closure certificates.
+The default 100M replay can extend to 1B instruction calls/3600 VI while listed
+runtime sites lack admitted observations. Earlier uncovered-image stops still
+end the round. After 100M only call observation continues: no late snapshot is
+emitted that the existing Rust composition verifier could not reproduce.
+Receipts list seen/missed runtime sites, stop reason and measured replay time.
+The outer discovery loop remains bounded; a budget ceiling is not coverage.
+
+A comparison uses the retained pre-change PM map/loads and the same newly
+projected sites in both runs. At 100M instructions it stops at VI 123 in
+5.539 s and misses 808be154 -> 8002ac00. At 1B it stops at VI 769 in 36.535 s
+and includes that exact pair. This establishes later-call coverage without
+assuming VI equivalence between ares and native execution. The measured cost
+is 30.996 s; no speedup is claimed. The pipeline's earlier extended harvest
+round took 46.423 s under concurrent validation. Unvisited sites stay explicitly
+unobserved.
+
+Synthetic tests cover fixed/relocated sites, shared-slot source selection,
+equal-byte ambiguity, target projection, KSEG aliases, missing/unsupported and
+malformed bindings, finite-budget misses and later observations. Three adapter
+mutations are caught: discard map offsets (33.28 s), bypass source identity
+(52.60 s), admit ambiguous matches (46.57 s). Ignored mutant drivers never
+replace production. Reusing one mutation build directory avoids repeated core
+builds: the abandoned separate-directory cold setup spent over three minutes;
+the resumed three checks took 132.45 s total. These concurrent harness timings
+are not a controlled core-performance benchmark.
+
+### Visible Paper Mario result and next stop
+
+In active Windows console session 3, with the RT64 window visible:
+
+```
+python scripts/native.py "<local Paper Mario (USA).z64>" --residual-dispatch --rt64 --seconds 60
+```
+
+Fresh discovery has 59,613 blocks and 29 observed call roots. Ordinary scoped
+closure is still OPEN; the residual manifest has eight sites and retains
+native_complete: false. The run passes the relocated checksum call, reaches
+VI 654, 642 graphics tasks, 652 audio tasks and 7,314 PI DMAs, then fault 3 at
+map PC 80a08aa8. The whole pipeline takes approximately 556.765 s by receipt
+file timestamps, exit 1. A second visible direct invocation of the executable
+takes approximately 11.753 s and reproduces the counters and fault. Framebuffer
+buffer selection differs; pixel/state equivalence is not claimed. Captured
+WAV: 348,312 stereo signed-16-bit frames, 32,006 Hz, peak zero. Audio-task
+execution does not establish audible output or gameplay acceptance.
+
+The next instruction is 00400008, JR v0 at runtime PC 802c8aa8 (ROM 0xed458),
+with v0=802c8ab8 and ra=802c5424. Its raw slot is linked at 802c3000; the target
+is in the same slot, map PC 80a08ab8. The map site has no candidates, observed
+targets or closed_proof. This is an in-function transfer, not a linked call;
+the call-only observer must not promote it to a function root merely to advance
+the run. Recover/verify its dispatch and reachable case coverage next. Silent
+PCM remains an independent frontier.
+
+### Integration validation and receipts
+
+The full local gate uses GATE_TREE=X:/Plaid/target/pm-boot-0222 and
+GATE_OUT=X:/Plaid/target/paper-mario/0222/adr-0227/gate-final with
+X:/Plaid/target/paper-mario/0222/gate.py. Its gate.json/logs retain per-command
+timings for fmt, locked workspace Clippy, workspace tests, CLI and full runtime
+(including pinned-ares harvest contracts). All five must pass on the final
+integration tree before its exact-parent CAS. An initial gate was interrupted
+while correcting a documentation UTF-8 read; it is not the final gate receipt. A subsequent test link failed with internal
+LLVM anonymous-symbol references in cached plaid-core objects. Its logs are
+preserved as gate-link-failure.*; affected core/lower development artifacts
+were cleaned before the full final-gate retry. No Rust source was changed.
+
+BK/F-Zero X/MM are rediscovered from retained loads/SDK declarations and
+compared with exact parent b6e3a4f2 in a detached local baseline checkout.
+Historical map closure is not substituted for fresh parent-tree comparison.
+Discovery/solver and harvest-refinement counts are retained in controls/ and
+controls-baseline/. These controls are not new visible game runs or gameplay
+acceptance. Current-tree pre-existing OPEN results are reported separately
+from changes introduced by this observer.
+
+Ignored receipt directory: target/paper-mario/0222/adr-0227/ (native.log,
+repeat.log, stop.json, audio.wav, coverage.json, mutations.json, controls/,
+controls-baseline/, gate-final/). DECISIONS was appended as bytes, preserving
+its original CRLF and non-UTF-8 prefix. README is unchanged. Ares remains the
+separately built pinned ISC 9408cb43d4948fc3ea6e152a307a34348df3fe04 oracle;
+Rabbitizer remains 724a49a5b4dbfb99f1a9e6992e63964fd29c90c8. No reference code,
+ROM, RAM snapshot, generated game code, disassembly or WAV is committed.
