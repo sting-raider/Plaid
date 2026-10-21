@@ -6715,3 +6715,36 @@ one earlier osMapTLB barrier, then correctly rejects a deeper guest overwrite;
 no site receives a certificate merely because it has candidate targets. The
 classification and exact validation receipts are in
 research/paper-mario-native-frontier.md. Default native emission remains refused.
+
+## ADR-0233: Residual run-time dispatch is the default native build
+
+Status: accepted, 2026-10-21, by the user's direction.
+
+Per-site proofs of indirect targets (ADR-0202..0231) dominated the cost of each
+new ROM: Paper Mario needed about ten ADRs to reach a fault-free run, and four
+surveyed ROMs never reached a build at all, while the validation-only residual
+mode (ADR-0218) already ran Paper Mario for 60 s with video and audio. N64Recomp
+uses the same model: lower every discovered function and look indirect targets
+up at run time.
+
+Decision: `scripts/native.py` now builds by default whenever the address-taken
+solve is CLOSED, or the residual solve leaves unproven indirect transfer sites
+as its only blockers. Those sites are lowered as the existing ADR-0218/0223
+fail-closed dispatch: a target outside the lowered entries faults 3, so there is
+still no interpreter, JIT or emulation fallback. Every other blocker class
+(direct targets, unmapped code, unsupported instructions, overlays, loads)
+still refuses the build. `--strict` restores the former behaviour and builds
+only a CLOSED map.
+
+Every build now writes `native-manifest.json`: `mode: closed` with
+`native_complete: true`, or `mode: residual-dispatch` with
+`native_complete: false` and the residual site list. A dispatch build is never
+described as fully native; AGENTS.md invariant 3 and the native-mode acceptance
+list now say so. Default build names no longer carry a `-residual` suffix.
+
+Proof work continues as a way to move sites from dispatch to closed target
+sets, not as a precondition for a build. The synthetic native-builder contract
+(`scripts/test_native_discovery.py`) checks the closed manifest, the residual
+default with its site list, and `--strict` refusing an OPEN map before any
+manifest is written. `runtime/test_residual_dispatch.py` keeps the lowering
+contract: lowered entries match pinned ares, other targets fault 3.

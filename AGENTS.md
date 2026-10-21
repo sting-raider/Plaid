@@ -8,7 +8,7 @@ Build an automatic N64 ROM-to-native recompilation system. The final native game
 
 1. **Correctness is defined by tests and reference behavior, never by model confidence.**
 2. **No hidden emulation in native mode.** Compiler-time tracing, emulator instrumentation, and differential testing are allowed. The final native artifact may not silently fall back to guest instruction execution.
-3. **Closed-world gate.** Do not emit a "fully native" artifact while any executable target, overlay, relocation, or indirect control-flow edge required by the supported execution model remains unresolved.
+3. **Closed-world gate.** Do not call an artifact "fully native" (`native_complete: true`) while any executable target, overlay, relocation, or indirect control-flow edge required by the supported execution model remains unresolved. By default (ADR-0233) a build may still be emitted when its only unresolved edges are indirect transfer sites: they dispatch at run time over the lowered entries and fault on any other target, never falling back to emulation, and the manifest records `native_complete: false` with the site list.
 4. **No ROMs or copyrighted game assets in git.** Tests should use synthetic inputs, legal open test ROMs, hashes, metadata, or user-supplied local paths ignored by git.
 5. **Do not copy code across repositories casually.** Check the source license first. Record reuse decisions in `docs/DECISIONS.md` and preserve required notices.
 6. **No game-specific hacks disguised as general analysis.** A compatibility exception must be documented, isolated, justified, and preferably generalized before merge.
@@ -115,7 +115,7 @@ Do not weaken the validation standard to avoid a handoff.
 A native build is accepted only when:
 
 - every reachable direct control transfer resolves;
-- every supported indirect control transfer has a closed target set or an equivalent proven native dispatch representation;
+- every supported indirect control transfer has a closed target set or an equivalent proven native dispatch representation (a residual-dispatch build, ADR-0233, is accepted as a build but not as natively complete);
 - executable overlays and their relocations are known;
 - executable DMA/copy behavior is accounted for;
 - no runtime guest instruction decoder is linked into native mode;

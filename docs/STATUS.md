@@ -1,5 +1,22 @@
 # Status
 
+## Residual dispatch is the default build (ADR-0233)
+
+`scripts/native.py` now builds whenever the only blockers left are unproven
+indirect transfer sites; they dispatch at run time over the lowered entries and
+fault 3 elsewhere. `--strict` keeps the CLOSED-only build. Every build writes
+`native-manifest.json` (`mode`, `native_complete`, residual sites).
+
+Sweep of seven local ROMs with the new default (2026-10-21, visible 60 s runs
+where a build was emitted; details in `research/rom-sweep.md`):
+Paper Mario builds by default and runs to VI 2908 (2875 graphics tasks, 2904
+audio tasks), then faults 3 on an indirect call into an undiscovered occupant
+of a shared slot. OoT is CLOSED and stops at ROM-derived RSP microcode it does
+not find (VI 4). GoldenEye (7 blockers), Mario Kart 64 (27), Star Fox 64 (296)
+and Rogue Squadron (225) still do not build: their blockers are COP0/TLB/ERET
+code the solver's integer scope excludes, code never discovered, and table
+proof gaps, not residual indirect sites. Mario Party 2 fails in `identify`.
+
 ## TLB host register effects (ADR-0231, partial)
 
 Callee proofs can carry GPR requirements across the three explicitly supported

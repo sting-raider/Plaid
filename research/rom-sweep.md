@@ -905,3 +905,22 @@ again. All owned oracle/build/sweep/validation processes have exited; there is
 no owned game process. The user's later request to see a run was withdrawn
 before any emulator or native game window was launched. This is a verified
 partial milestone, not a missing-environment validation handoff.
+
+## Default residual dispatch sweep (ADR-0233, 2026-10-21)
+
+Tree: `experiment/default-dispatch-0233` on main `496b7e43`; command
+`python scripts/native.py <rom> --rt64 --seconds 60`, visible window. Times are
+whole-pipeline wall clock on the laptop.
+
+| ROM | Ordinary solve | Residual solve | Result |
+| --- | --- | --- | --- |
+| GoldenEye 007 | OPEN 7 | OPEN 7, 0 sites | 348 blocks; boot harvest stops at `mtc0` (`40820000`); 6 unsupported_scope_effect, 1 indirect target at TLB-mapped `70000510` |
+| Mario Kart 64 | OPEN 30 | OPEN 27, 3 sites | 18 unsupported_scope_effect, 4 unmapped, 4 unresolved direct, 1 `eret` (156 s) |
+| Star Fox 64 | OPEN 298 | OPEN 296, 2 sites | 136 unmapped, 157 unresolved direct targets (273 s) |
+| Rogue Squadron | OPEN 243 | OPEN 225, 18 sites | 87 unresolved indirect targets, 61 invalid pointer-table entries, 54 unsupported_scope_effect (422 s) |
+| Paper Mario | OPEN 8 | CLOSED, 8 sites | built; VI 2908, 2875 gfx / 2904 audio tasks, 30185 PI DMAs, fault 3 at map `80916450` calling `80240310` (1186 s) |
+| Ocarina of Time | CLOSED | not needed | built; stops at unknown ROM-derived RSP microcode, VI 4 (883 s) |
+| Mario Party 2 | n/a | n/a | `plaid identify` exits non-zero |
+
+Classification: `research/classify-dispatch-sweep.py` (residual-solve blocker kinds).
+No ROM, map or generated code is committed.
