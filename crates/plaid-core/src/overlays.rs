@@ -629,7 +629,8 @@ pub fn static_loads(rom: &[u8], base: &[u8], at: u32) -> Result<Vec<StaticLoad>,
         if table.is_none() {
             // without a table, a file is a ROM range the code names, read raw
             for (start, end) in rom_ranges(&image, at, rom.len()) {
-                if !placed.contains(&start) {
+                // an executable load is word-aligned code; other ranges are data
+                if start % 4 == 0 && (end - start) % 4 == 0 && !placed.contains(&start) {
                     by_start.entry(start).or_insert(RomFile {
                         virtual_start: start,
                         virtual_end: end,
@@ -1018,6 +1019,38 @@ mod tests {
         let rom = static_rom(false);
         let far = static_loads(&rom, &rom[0x1000..0x1100], 0x80000400).unwrap();
         assert!(far.is_empty(), "{far:#x?}");
+    }
+
+    #[test]
+    fn a_tableless_range_is_a_load_only_when_word_aligned() {
+        let load_from = |start: u32| {
+            let mut rom = static_rom(true);
+            rom[0x40..0x80].fill(0); // no file table: ranges come from code constants
+            // the code file's words start at `start`, aligned or not
+            let code: Vec<u8> = rom[0x2000..0x2020].to_vec();
+            rom[0x2000..0x2021].fill(0);
+            let at = start as usize;
+            rom[at..at + 0x20].copy_from_slice(&code);
+            for (n, w) in [
+                0x3c05_0000,                     // lui a1, 0
+                0x24a5_0000 | (start & 0xffff),  // addiu a1, a1, start
+                0x3c07_0000,                     // lui a3, 0
+                0x24e7_0000 | (start + 0x20),    // addiu a3, a3, start + 0x20
+                0x3c06_8010,                     // lui a2, 0x8010
+                0x24c6_0000,                     // addiu a2, a2, 0
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                put(&mut rom, 0x1080 + n * 4, w);
+            }
+            static_loads(&rom, &rom[0x1000..0x1100], 0x80000400).unwrap()
+        };
+        let aligned = load_from(0x2000);
+        assert!(aligned.iter().any(|l| l.file.rom_start == 0x2000), "{aligned:#x?}");
+        // an odd ROM range cannot be executable code (it would fail GuestRange)
+        let odd = load_from(0x2001);
+        assert!(odd.iter().all(|l| l.file.rom_start % 4 == 0 && l.size % 4 == 0), "{odd:#x?}");
     }
 
     #[test]
