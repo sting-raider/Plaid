@@ -893,6 +893,7 @@ fn run() -> Result<(), String> {
             }
             let source_context =
                 discovery_load_context(declared.as_ref(), overlay_evidence.as_ref());
+            let observed = observed_roots(loads_path.as_ref())?;
             let mut entries = vec![GuestAddr(number32(entry)?)];
             let roots = if data_roots {
                 plaid_core::data_roots::scan(rom.bytes(), &image)
@@ -910,6 +911,7 @@ fn run() -> Result<(), String> {
                     evidence.clone(),
                     &load_starts(declared.as_ref()),
                     source_context.as_ref(),
+                    &observed,
                     1_000_000,
                 )?
             } else {
@@ -963,6 +965,7 @@ fn run() -> Result<(), String> {
                             evidence.clone(),
                             &load_starts(declared.as_ref()),
                             source_context.as_ref(),
+                            &observed,
                             1_000_000,
                         )?
                     } else {
@@ -1209,6 +1212,7 @@ fn run() -> Result<(), String> {
                 None => image.clone(),
             };
             let source_context = discovery_load_context(declared.as_ref(), None);
+            let observed = observed_roots(loads_path.as_ref())?;
             let mut d = if address_taken {
                 plaid_core::data_roots::discover_address_taken_with_loads(
                     rom,
@@ -1219,6 +1223,7 @@ fn run() -> Result<(), String> {
                     evidence,
                     &load_starts(declared.as_ref()),
                     source_context.as_ref(),
+                    &observed,
                     1_000_000,
                 )?
             } else {
@@ -1721,6 +1726,35 @@ fn load_declarations(
         },
         (id, evidence),
     )))
+}
+
+/// Targets that unproven indirect transfers took in the analysis-time pinned
+/// ares replay, from a loads file's `observed_roots` (ADR-0222). They root
+/// address-taken discovery and never certify a transfer.
+fn observed_roots(path: Option<&String>) -> Result<BTreeSet<GuestAddr>, String> {
+    let Some(path) = path else {
+        return Ok(BTreeSet::new());
+    };
+    let doc: serde_json::Value =
+        serde_json::from_slice(&fs::read(path).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    let Some(rows) = doc.get("observed_roots") else {
+        return Ok(BTreeSet::new());
+    };
+    rows.as_array()
+        .ok_or("observed_roots must be an array")?
+        .iter()
+        .map(|row| {
+            let field = |name: &str| {
+                row[name]
+                    .as_str()
+                    .ok_or(format!("each observed root needs a {name} string"))
+                    .and_then(number32)
+            };
+            field("site")?;
+            Ok(GuestAddr(field("target")?))
+        })
+        .collect()
 }
 
 /// Evidence for loads placed from the ROM's own overlay catalog.

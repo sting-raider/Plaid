@@ -361,10 +361,23 @@ pub fn discover_address_taken(
     budget: usize,
 ) -> Result<crate::discovery::Discovery, String> {
     discover_address_taken_with_loads(
-        rom, bytes, image, entries, runtime, evidence, starts, None, budget,
+        rom,
+        bytes,
+        image,
+        entries,
+        runtime,
+        evidence,
+        starts,
+        None,
+        &BTreeSet::new(),
+        budget,
     )
 }
 
+/// [`discover_address_taken`] over declared loads, with `observed` targets
+/// that unproven indirect transfers took in the analysis-time pinned ares
+/// replay (ADR-0222): roots like any address-taken function, never target
+/// certificates.
 #[allow(clippy::too_many_arguments)]
 pub fn discover_address_taken_with_loads(
     rom: crate::program::RomIdentity,
@@ -375,6 +388,7 @@ pub fn discover_address_taken_with_loads(
     evidence: Option<(String, crate::program::Evidence)>,
     starts: &BTreeSet<u32>,
     loads: Option<&crate::pipeline::LoadContext>,
+    observed: &BTreeSet<GuestAddr>,
     budget: usize,
 ) -> Result<crate::discovery::Discovery, String> {
     crate::pipeline::validate_load_context(image, loads)?;
@@ -389,6 +403,12 @@ pub fn discover_address_taken_with_loads(
         rom_words(bytes, image, starts)
             .into_iter()
             .chain(rom_words(&words, image, starts))
+            .chain(
+                observed
+                    .iter()
+                    .copied()
+                    .filter(|&a| plausible_at(image, a, starts)),
+            )
             .partition(|a| runtime_entries.contains(a));
     // Decoder seeds keep their incoming candidate edges across outer rounds.
     let mut history = None;
@@ -434,7 +454,7 @@ pub fn discover_address_taken_with_loads(
                     kind: crate::EvidenceKind::Static,
                     producer: ADDRESS_TAKEN.into(),
                     revision: "0".into(),
-                    detail: "function starts named by an aligned ROM or image word or a code constant in a decoded block, including speculative ROM-word expressions (discovery only, not target certificates), whose body can be CPU code (ADR-0153, ADR-0197, ADR-0220)".into(),
+                    detail: "function starts named by an aligned ROM or image word or a code constant in a decoded block, including speculative ROM-word expressions and targets unproven transfers took in the analysis-time ares replay (discovery only, not target certificates), whose body can be CPU code (ADR-0153, ADR-0197, ADR-0220, ADR-0222)".into(),
                 },
             );
             for a in taken.iter().chain(&runtime_taken) {

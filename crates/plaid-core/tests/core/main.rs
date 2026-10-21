@@ -30,6 +30,7 @@ mod load_region_binding;
 mod load_region_destination_binding;
 mod loads;
 mod merge;
+mod observed_roots;
 mod origin_model;
 mod overlay_region_binding;
 mod paired_stream_catalogs;

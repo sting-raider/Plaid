@@ -20,6 +20,8 @@ static bool exactMany = false;
 static bool seekUncovered = false;
 static std::vector<std::array<u32, 2>> covered;
 static u32 uncoveredEntry = 0;
+static std::set<u32> openSites;
+static std::set<std::pair<u32, u32>> observedTargets;
 static std::array<std::array<u32, 2>, 2> previousFetches{};
 static std::vector<std::array<u32, 3>> dma;
 static std::vector<u8> sp; // DMEM then IMEM at the first entry fetch
@@ -56,6 +58,10 @@ static void observe(u64 address, u32 word) {
       }
     }
     if(!entered) return;
+    // An unproven indirect transfer's target, read from its register before it
+    // executes: discovery evidence, never a target certificate (ADR-0222).
+    if(openSites.contains(pc) && word >> 26 == 0 && ((word & 63) == 8 || (word & 63) == 9))
+      observedTargets.insert({pc, (u32)cpu.ipu.r[word >> 21 & 31].u64});
     bool uncovered = seekUncovered && pc >= 0x80000000u && pc < 0x80800000u
       && std::none_of(covered.begin(), covered.end(), [&](auto r) { return r[0] <= pc && pc < r[1]; });
     if(!targets.contains(pc) && !uncovered) return;
@@ -97,10 +103,10 @@ static void observe(u64 address, u32 word) {
     }
 }
 int main(int argc, char** argv) {
-  if(argc != 8 && argc != 9 && argc != 10) return 2;
+  if(argc < 8 || argc > 11) return 2;
   if(argc == 9 && std::strcmp(argv[8], "exact-many") != 0) return 2;
   exactMany = argc == 9;
-  if(argc == 10) {
+  if(argc >= 10) {
     if(std::strcmp(argv[8], "uncovered")) return 2;
     FILE* f = std::fopen(argv[9], "rb"); if(!f) return 2;
     u32 lo, hi;
@@ -111,6 +117,16 @@ int main(int argc, char** argv) {
     bool valid = std::feof(f) && !covered.empty(); std::fclose(f);
     if(!valid) return 2;
     seekUncovered = true;
+  }
+  if(argc == 11) {
+    FILE* f = std::fopen(argv[10], "rb"); if(!f) return 2;
+    u32 site;
+    while(std::fscanf(f, "%u", &site) == 1) {
+      if(site & 3) { std::fclose(f); return 2; }
+      openSites.insert(site);
+    }
+    bool valid = std::feof(f); std::fclose(f);
+    if(!valid) return 2;
   }
   auto bytes = nall::file::read(argv[1]);
   auto firmware = nall::file::read(argv[2]);
@@ -158,9 +174,17 @@ int main(int argc, char** argv) {
     if(vi.refreshed) { vis++; vi.refreshed = false; }
   }
   std::fprintf(result, "{");
-  if(argc == 10) {
+  if(argc >= 10) {
     if(uncoveredEntry) std::fprintf(result, "\"uncovered_entry\":%u,", uncoveredEntry);
     else std::fprintf(result, "\"uncovered_entry\":null,");
+  }
+  if(argc == 11) {
+    std::fprintf(result, "\"indirect_targets\":[");
+    bool comma = false;
+    for(auto [site, target] : observedTargets) {
+      std::fprintf(result, "%s[%u,%u]", comma ? "," : "", site, target); comma = true;
+    }
+    std::fprintf(result, "],");
   }
   std::fprintf(result, "\"stop_pc\":%u,\"steps\":%llu,\"vi\":%u,\"entered\":%s,\"remaining\":%zu,\"sp\":[", (u32)cpu.ipu.pc, (unsigned long long)steps, vis, entered ? "true" : "false", targets.size());
   for(size_t i = 0; i < sp.size(); i++) std::fprintf(result, "%s%u", i ? "," : "", (u32)sp[i]);
