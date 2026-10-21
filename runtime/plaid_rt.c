@@ -880,7 +880,7 @@ static int gfx_writeback(void *context, u32 p, u32 n, const u8 *bytes) {
 #endif
 RT(__osSetFpcCsr) {
   u32 was = S->fcsr | S->fcc << 23;
-  if (plaid_status_fp(S, (u32)S->r[31] - 8, 1)) return 1;
+  if (plaid_status_cop1(S, (u32)S->r[31] - 8)) return 1;
   if (plaid_ctc1(S, arg(0), (u32)S->r[31])) return 1;
   return ret(was);
 }

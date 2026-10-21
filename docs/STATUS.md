@@ -1,5 +1,16 @@
 # Status
 
+## COP1 control registers and Status.FR (ADR-0238)
+
+Native Status writes already track FR correctly. CFC1/CTC1 and their HLE
+__osSetFpcCsr equivalent now check CU1 independently of the map's FPR layout,
+as pinned ares does. FPR operations retain fault 11 for real FR mismatches.
+Both layouts match complete synthetic reference state across native FR
+transitions; old-gate mutations fail. The first fresh visible MK64 compiled-RSP
+build passes its old fault 11, then faults 1 at 800d1be8 writing PIF RAM
+bfc007fc: VI/graphics/audio/PI DMA zero. It remains a four-site residual
+validation artifact, with no rendered frame or gameplay acceptance.
+See research/status-fr-control-registers.md for evidence and limitations.
 ## Continuation-only frame pins (ADR-0239)
 
 Suspended native frames pin only the text reachable from their pending call's

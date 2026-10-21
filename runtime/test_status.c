@@ -129,12 +129,36 @@ static void fr_outside_sdk_context(void) {
   S->status_known = known;
 }
 
+static void control_registers_in_both_fr_modes(void) {
+  u32 mode, known;
+  for (known = 0; known <= 1; known++) for (mode = 1; mode <= 2; mode++) {
+    S->status_known = known; S->status_thread = 0; S->fr_mode = mode;
+    S->cp0_status = mode == 2 ? 0x24000000u : 0x20000000u;
+    S->fcsr = 0; S->fcc = 0; S->fault = 0;
+    S->r[31] = 0x80000408u; S->r[4] = 0x01000800u;
+    assert(plaid_rt___osSetFpcCsr(S) == 0 && S->r[2] == 0);
+    assert(S->fcsr == 0x01000800u && !S->fcc && S->fr_mode == mode);
+    S->r[4] = 0x00800003u;
+    assert(plaid_rt___osSetFpcCsr(S) == 0 && S->r[2] == 0x01000800u);
+    assert(S->fcsr == 3 && S->fcc == 1 && S->fr_mode == mode);
+    /* The control-register exception must not admit a real layout mismatch. */
+    assert(plaid_status_fp(S, 0x80000410u, mode == 2) == 1 && S->fault == 11);
+    S->fault = 0;
+  }
+  S->cp0_status = 0x04000000u; S->status_known = 1; S->status_thread = 0;
+  S->r[4] = 0; /* CU1 off outside an SDK context still refuses before CTC1. */
+  assert(plaid_rt___osSetFpcCsr(S) == 1 && S->fault == 11);
+  assert(S->fcsr == 3 && S->fcc == 1);
+  S->fault = 0; S->fcsr = 0; S->fcc = 0; S->status_known = 0; S->fr_mode = 0;
+}
+
 int main(int argc, char **argv) {
   unsigned batch = argc == 2 ? (unsigned)strtoul(argv[1], NULL, 0) : 0, i;
   assert(batch < sizeof status_cases / sizeof status_cases[0] / 16);
   S = &state; running = &boot;
   contexts_and_events();
   fr_outside_sdk_context();
+  control_registers_in_both_fr_modes();
   memset(timers, 0, sizeof timers); memset(pending, 0, sizeof pending);
   for (i = 16; i < 24; i++) S->r[i] = 0x1234567800000000ull + i;
   S->hi = 0x123456789abcdef0ull; S->lo = 0xfedcba9876543210ull;

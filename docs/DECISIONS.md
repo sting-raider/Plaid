@@ -6915,6 +6915,37 @@ zero: fmt 1.3 s, Clippy 1.0 s, full workspace 12.6 s, CLI 8.7 s, runtime
 296.9 s (320.5 s total). Cargo test compiled and ran 910 passing tests,
 one ignored. README/history follow-up is validated separately before CAS.
 
+## ADR-0238: COP1 control-register access is independent of Status.FR
+
+Status: accepted, 2026-10-22.
+
+The suspected missed Status.FR transition is disproved: ADR-0235 already
+updates fr_mode after native Status writes; boot receipts and SDK restores
+establish their declared modes. MK64 writes its CU1-enabled boot Status back
+without clearing FR, then calls __osSetFpcCsr before starting a thread. That
+helper wrongly demanded FR=0 for CFC1/CTC1, which do not access FPR storage.
+
+Decision: share the existing CU1 acquisition/refusal policy through
+plaid_status_cop1, and use it for lowered CFC1/CTC1 and __osSetFpcCsr.
+FPR-layout-sensitive operations retain their fail-closed Status.FR check.
+No writer behavior, runtime ABI assumption, game constant, guest decoder,
+exception-delivery policy or native completeness claim changes.
+
+Pinned ares 9408cb43d4948fc3ea6e152a307a34348df3fe04 confirms CU1-only
+control-register access. Original synthetic native code in both map layouts
+matches its complete reported GPR/FPR/HI/LO/PC/FCSR/Status and coherent RAM
+across native FR transitions. FPR sentinels remain intact. Restoring the old
+FR gate faults 11 in both layouts; a separate HLE mutation aborts its new
+regression. Genuine FR mismatches and unsupported CU1 acquisition still
+fault 11. Existing mask/event/thread and COP0/ERET contracts remain required.
+
+The first fresh visible MK64 --rsp-gfx run passes the old fault and stops
+at a new fault 1, PC 800d1be8, writing word 8 to PIF RAM bfc007fc. VI,
+graphics/audio tasks and PI DMA remain zero; no rendered frame or gameplay
+is accepted. Four residual sites and native_complete:false remain unchanged.
+Reference/license decision and complete game/gate receipts:
+research/status-fr-control-registers.md. ares remains a separately licensed
+ISC oracle; no reference implementation is copied into production.
 ## ADR-0239: Suspended native frames pin only their reachable continuation
 
 Status: accepted. ADR-0219 pins every block of a fixed-text native function
