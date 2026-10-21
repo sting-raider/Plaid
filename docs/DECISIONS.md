@@ -6469,3 +6469,41 @@ and rejects a misaligned site list; the harvest test lists only calls and adds
 a repeated observation once. Dropping the roots, skipping plausibility,
 disabling the oracle record and listing jumps are all caught. The Paper Mario
 result is in research/paper-mario-native-frontier.md.
+
+## ADR-0223: Residual sites dispatch over their own candidate targets
+
+Date: 2026-10-21. Validation-only, extending ADR-0218.
+
+A residual site dispatched only over lowered function entries. A jump table
+whose case labels the map lists as candidates, but cannot prove closed, faulted
+on every case, and its case blocks were not lowered at all: function bodies
+follow only proven indirect edges, so the labels had no native code.
+
+A residual jump now also reaches its candidate and observed targets when the
+lowering computes function bodies, and its dispatch set includes them: block
+starts for a jump (as `goto` labels), entries for a call. A jump candidate that
+is not a label of the current function is left to the fault-3 default instead
+of refusing the build. The default scope never passes residual sites, so its
+bodies and dispatch are unchanged; manifests stay `native_complete: false`.
+
+Verification: a lowering test strips the closure proof from a proven jump:
+default lowering refuses it, residual lowering emits its candidate as a label
+and keeps the fault-3 default. Excluding residual jumps from bodies and
+dropping their own targets from dispatch are both caught.
+
+## ADR-0224: PI DMA into a TLB-mapped destination
+
+Date: 2026-10-21.
+
+libultra starts a PI transfer with `osVirtualToPhysical(dramAddr)`, so a DMA
+into a TLB-mapped buffer is written at the physical page the current TLB maps,
+contiguously from there. The host DMA translated the address only for D-cache
+bookkeeping and then refused the virtual address as outside KSEG0/KSEG1.
+
+The host DMA now writes the translated physical address through the existing
+runtime write gate (fixed-text, proof-data and declared-load protections are
+unchanged). KSEG0 and KSEG1 destinations translate as before; an unmapped or
+out-of-RAM destination is still refused. Verification: a raw PI DMA test maps
+a 4 KiB page with `osMapTLB`, transfers ROM bytes into its virtual address and
+reads them back through KSEG0; the previous code stops with "runtime write
+refused" on it, as Paper Mario did.

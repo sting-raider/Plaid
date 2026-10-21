@@ -420,3 +420,15 @@ tasks) and faults 3 at residual site `8004e544`, a five-case `jr v0` switch
 case labels, all block starts, and the fault value `8004e5a8` is one of them;
 residual lowering dispatches only over function entries and ignores them.
 Pipeline time 13.2 minutes. Receipts: ignored target/paper-mario/0222.
+
+## ADR-0223 and ADR-0224 results (2026-10-21)
+
+With residual sites dispatching over their own candidates (ADR-0223), the
+five-case switch at `8004e544` runs natively and the run continues to 260 PI
+DMAs, then stops with "runtime write refused": `osEPiStartDma` targets
+`e0200000`, a TLB-mapped buffer (ROM `0x325ad0`, 0x940 bytes). With the host DMA
+writing the TLB-translated physical page (ADR-0224) the run reaches VI 3 with
+one gfx task, submits its first audio task (261 PI DMAs) and stops cleanly with
+"unknown or ambiguous ROM-derived RSP microcode": the audio task's microcode is
+not among the 16 ROM-derived RSP texts. CPU fault 0. Receipts: ignored
+target/paper-mario/0222.

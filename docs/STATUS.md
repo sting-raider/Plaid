@@ -292,4 +292,7 @@ sites, passes the boot stub (154 PI DMAs, 11 threads) and faults 3 at a
 checksum-computed call whose target function discovery never reached.
 With observed call targets as discovery roots (ADR-0222) it passes that check
 (235 PI DMAs) and faults 3 at a residual switch whose known case labels the
-residual dispatch does not include.
+residual dispatch does not include. With residual candidate dispatch and PI
+DMA into TLB-mapped buffers (ADR-0223, ADR-0224) it reaches VI 3 and its
+first audio task, then stops on audio RSP microcode that ROM-derived
+extraction has not found (CPU fault 0).
