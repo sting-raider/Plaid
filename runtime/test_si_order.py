@@ -6,12 +6,30 @@ import subprocess
 
 
 def run(exe, cc, T):
+    base = _run(exe, cc, T, 'si-order', 0)
+    # A game's own osInitialize ends the PIF boot handshake (ADR-0241). The
+    # oracle starts its PIF before IPL, not in WaitTerminateBoot as the
+    # runtime does, so the boot variant must reproduce the verified result.
+    assert _run(exe, cc, T, 'si-order-boot', 1) == base
+    A = T.A
+    twice = [*T.li(A.sp, 0x80007f00), *T.li(A.t2, 0xbfc007fc), *T.li(A.t1, 8),
+             A.sw(A.t1, 0, A.t2), A.sw(A.t1, 0, A.t2), *A.DONE]
+    native = T.build(exe, cc, 'pif-terminate-twice', twice, [])
+    actual = subprocess.run([str(native)], capture_output=True, text=True, timeout=30)
+    stop = next(json.loads(line) for line in actual.stdout.splitlines() if '"stop"' in line)
+    assert actual.returncode == 1 and stop['fault'] == 1, (actual.stdout, actual.stderr)
+    print('PIF boot: a terminate-boot command clears the command byte and leaves SI DMA matching pinned ares; a second one is refused')
+
+
+def _run(exe, cc, T, name, terminate):
     A, out = T.A, T.OUT
     cache = lambda op, base, offset: 47 << 26 | base << 21 | op << 16 | offset
     wait = lambda label: [label, A.lw(A.t3, 24, A.t2), A.andi(A.t3, A.t3, 1), A.bne(A.t3, A.zero, label), A.nop]
     # port 2 has no device in either model, so only DMA/cache ordering is compared
     request = [0x00010300, 0xfffffffe] + [0] * 13 + [1]
     program = [*T.li(A.sp, 0x80007f00), *T.li(A.gp, 0x80001000), *T.li(A.t0, 0x80001100), *T.li(A.t2, 0xa4800000)]
+    if terminate:
+        program += [*T.li(A.t3, 0xbfc007fc), *T.li(A.t1, 8), A.sw(A.t1, 0, A.t3)]
     for n, word in enumerate(request):
         program += [*T.li(A.t1, word), A.sw(A.t1, 4 * n, A.t0)]
     program += [*T.call('osWritebackDCache', 0x80001100, 64), *T.li(A.t2, 0xa4800000)]
@@ -24,31 +42,34 @@ def run(exe, cc, T):
     for n in range(16):
         program += [A.lw(A.t1, 4 * n, A.t0), A.sw(A.t1, 4 * n, A.gp)]
     # libultra-shaped bodies for ares: hit writeback (25) and hit invalidate (17) by line
-    for name, op in (('osWritebackDCache', 25), ('osInvalDCache', 17)):
-        program += [name, name + '_line', cache(op, A.a0, 0), A.addiu(A.a1, A.a1, -16),
-                    A.bgtz(A.a1, name + '_line'), A.addiu(A.a0, A.a0, 16), A.jr(A.ra), A.nop]
+    for fn, op in (('osWritebackDCache', 25), ('osInvalDCache', 17)):
+        program += [fn, fn + '_line', cache(op, A.a0, 0), A.addiu(A.a1, A.a1, -16),
+                    A.bgtz(A.a1, fn + '_line'), A.addiu(A.a0, A.a0, 16), A.jr(A.ra), A.nop]
     program = program[:program.index('osWritebackDCache')] + [*A.DONE] + program[program.index('osWritebackDCache'):]
-    native = T.build(exe, cc, 'si-order', program, ['osWritebackDCache', 'osInvalDCache'])
+    native = T.build(exe, cc, name, program, ['osWritebackDCache', 'osInvalDCache'])
     actual = subprocess.run([str(native), '--dump', '0x80001000', '64'], capture_output=True, text=True, timeout=30)
     rows = [json.loads(line) for line in actual.stdout.splitlines() if line.startswith('{')]
     stop = next(row for row in rows if 'stop' in row)
     assert actual.returncode == 0 and stop['fault'] == 0 and stop['stop'] == 'exit', (actual.stdout, actual.stderr)
     memory = next(row['words'] for row in rows if 'dump' in row)
+    if terminate:
+        return memory
     oracle = T.ROOT / 'target/native-slice/oracle/oracle'
     metadata = json.loads((oracle.parent / 'build.json').read_text())
     assert metadata['revision'] == A.builder().REV
     for key, source in [('driver', '096-native-slice'), ('fixture_driver', '003-ares-oracle')]:
         assert metadata[key] == hashlib.sha256((T.ROOT / f'spikes/{source}/driver.cpp').read_bytes()).hexdigest()
-    args = [str(oracle), str(out / 'si-order.bin'), hex(A.EXIT)]
+    args = [str(oracle), str(out / f'{name}.bin'), hex(A.EXIT)]
     if os.name == 'nt':
         def linux(p): return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(p)], text=True).strip()
-        args = ['wsl', '-d', 'Ubuntu', '--exec', linux(oracle), linux(out / 'si-order.bin'), hex(A.EXIT)]
+        args = ['wsl', '-d', 'Ubuntu', '--exec', linux(oracle), linux(out / f'{name}.bin'), hex(A.EXIT)]
     reference = subprocess.run(args, capture_output=True, text=True, timeout=120)
     assert reference.returncode == 0, (reference.stdout, reference.stderr)
     expected = json.loads(reference.stdout)
     assert expected['pc'] == A.EXIT and expected['ram'] == memory, ([hex(w) for w in expected['ram']], [hex(w) for w in memory])
     assert memory[0] == 0x00018300 and memory[1] == 0xfffffffe, [hex(w) for w in memory[:2]]
     print('SI order: a cache invalidate after the SI start precedes the transfer; absent-port reply and RAM match pinned ares')
+    return memory
 
 
 if __name__ == '__main__':

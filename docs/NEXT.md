@@ -1,5 +1,11 @@
 # Next
 
+## After PIF terminate-boot (ADR-0241)
+
+Mario Kart 64 reads EntryHi at 800d1c80 to save it around a TLB write. Seed
+the TLB staging registers from the ares post-IPL capture (as Status is) and
+stop runtime calls from forgetting EntryHi where the replaced libultra
+functions provably preserve it.
 ## After RSP candidate identity (ADR-0240)
 
 Banjo-Kazooie runs again but with 2 residual sites: since 94a4d7cb (ADR-0205)

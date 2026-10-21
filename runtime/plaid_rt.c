@@ -98,6 +98,9 @@ static plaid_pi_bus pi_bus;
 static u32 si_status, si_dram, si_read_address, si_write_address;
 static plaid_joybus joybus;
 static int si_due; /* SI DMA in flight: 1 PIF to RAM, 2 RAM to PIF */
+/* After IPL3 the PIF waits for the CPU's terminate-boot bit (pinned ares
+   pif/hle.cpp WaitTerminateBoot); osInitialize sends it. */
+static int pif_booted;
 static int si_finish(void);
 static int si_access(u32 p, int write, u64 *value);
 static rt_timer timers[MAX_TIMERS];
@@ -729,6 +732,7 @@ RT(osStopTimer) {
 RT(osGetMemSize) { return ret(PLAID_RAM_SIZE); }
 
 RT(osInitialize) {
+  pif_booted = 1;
   if (S->status_known) S->cp0_status |= 0x20000000u;
   if (plaid_ctc1(S, 0x01000800u, (u32)S->r[31])) return 1;
   wr32(0x80000300u, 1);           /* osTvType: NTSC */
@@ -1670,6 +1674,9 @@ static int si_access(u32 p, int write, u64 *value) {
     if (write) {
       unsigned byte;
       for (byte = 0; byte < 4; byte++) joybus.ram[offset + byte] = (u8)(*value >> (24 - byte * 8));
+      /* ares clears the command byte and enters Run on its next PIF step;
+         here that happens at once. A second terminate is not modeled. */
+      if (offset == 60 && !pif_booted && (joybus.ram[63] & 0x08)) { joybus.ram[63] = 0; pif_booted = 1; return 0; }
       if (offset == 60 && plaid_joy_parse(&joybus)) return 1;
     } else {
       *value = (u32)joybus.ram[offset] << 24 | (u32)joybus.ram[offset + 1] << 16
