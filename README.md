@@ -14,7 +14,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 ## Where it stands
 
-*As of main `c63eb84`, 2026-10-22. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
+*As of main `f9ec01f`, 2026-10-22. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
@@ -39,6 +39,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0238 | `f9ec01f` | `CFC1`/`CTC1` need only the FPU enabled, not a matching FR mode (matches ares); Mario Kart 64 moves past fault 11 to a PIF RAM write |
 | 0239 | `c63eb84` | Suspended native frames pin only the code they can still run; fixes the Majora's Mask VI 0 regression |
 | 0237 | `0c4d9010` | Bounded ERET and aligned executable loads; MK64 builds with four residual sites, then faults 11 before VI; ISA 204/209 |
 | 0236 | `438a0c2` | Replay-authenticated mapped instruction sources and guarded physical backing; GoldenEye reaches 3,716 blocks, both new games still refuse |
