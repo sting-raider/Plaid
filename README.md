@@ -10,105 +10,54 @@
 
 </div>
 
-Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. It analyzes a ROM into a closed executable program, lowers it to C, and links it into a native x86-64 or ARM64 application. There is no emulator, interpreter or JIT in the final build. Emulators are used only as analysis instruments and test oracles.
+Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give it a ROM; it finds the game's code, proves what it can about it, translates it to C and links it into a native x86-64 or ARM64 program. The final build has no emulator, interpreter or JIT. Emulators (ares, Mupen64Plus) are used only while analysing and as test oracles. Anything Plaid cannot prove stops the game with a fault code instead of falling back to emulation.
 
-## Progress report
+## Where it stands
 
-*As of main `78b0eda`, 2026-10-21. Every row traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). "Natively" means the lowered game linked with Plaid's runtime: no interpreter, no JIT, and every unproven state is a fail-closed fault.*
+*As of main `78b0eda`, 2026-10-21. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
 
-**Two finish lines.**
-1. **ROM in, game runs:** you supply only a ROM. Plaid discovers the code, proves it closed under a declared assumption scope, lowers it to C and builds the executable. **Reached for Majora's Mask and F-Zero X** (the build needs no hand input beyond the scope flags) and, in a finite 60 s run, for Banjo-Kazooie (ADR-0195..0200), not yet for SM64 or OoT, and no game has been played to the end. Paper Mario runs a visible 60 s with sound only in the validation-only `--residual-dispatch` build (ADR-0218..0231); its default build is refused until 8 indirect sites are proven.
-2. **ROM in, provably complete with zero assumptions:** the whole ROM is `CLOSED` with no assumption. **Not reached: 0 of 16 assumptions retired, no ROM is whole-ROM `CLOSED`.** This is about whole-program proof, not instruction translation: every VR4300 form Plaid lowers and every RSP instruction matches ares (see [Status](#status)). Of the 16 assumptions, 12 are checked while the game runs and stop it with a fault code if broken; 4 are trusted unchecked (2, 9, 13, 14 in the ledger below).
+| Game | Hand input | Native build | Longest native run | Next gap |
+| --- | --- | --- | --- | --- |
+| Super Mario 64 (USA) | code segment, 2 load files, a local symbol map for 3 names | ✅ | full-speed gameplay with input, EEPROM saves and audio, no stop in 90 s | infer its loads from the ROM |
+| Majora's Mask (USA) | **none** | ✅ | intro and Clock Town attract scene, 90 s, fault 0, audio (ADR-0187, ADR-0189) | longer play |
+| F-Zero X (USA) | **none** | ✅ | 65 s races with compiled graphics microcode and audio, fault 0 (ADR-0186) | longer play |
+| Banjo-Kazooie (USA) (Rev 1) | **none** | ✅ | 60 s: Nintendo opening and title, audio, fault 0; puzzle transitions in 75 s runs (ADR-0200, ADR-0201) | compiled-RSP graphics faults on its first task |
+| Paper Mario (USA) | **none** | 🟨 validation build only | 60 s: storybook intro, VI 3590, audio, fault 0 (ADR-0230) | prove 8 indirect jumps so the normal build is emitted (ADR-0231) |
+| Ocarina of Time (USA 1.2) | code segment, 2 load files (earlier builds) | 🟨 | title and file select in older builds (ADR-0182); the ROM-only build stops at VI 3 | lower the RSP code it reaches at IMEM `0x080` (ADR-0219) |
+| GoldenEye 007, Mario Kart 64, Star Fox 64, Rogue Squadron (USA) | **none** | ❌ | not reached: analysis still OPEN (7, 30, 298, 210 blockers) | see [`research/rom-sweep.md`](research/rom-sweep.md) |
 
-### Per game
+"Native build ✅" means analysis is `CLOSED` under a declared scope (usually `--address-taken`) and `native.py` emits the executable. The Paper Mario validation build (`--residual-dispatch`, ADR-0218) also runs only native code, but sends the few indirect jumps it cannot prove through a fail-closed lookup, so it is marked `native_complete: false`.
 
-| | Super Mario 64 (USA) | Ocarina of Time (USA 1.2) | Majora's Mask (USA) | F-Zero X (USA) | Banjo-Kazooie (USA) (Rev 1) | Paper Mario (USA) |
-| --- | --- | --- | --- | --- | --- | --- |
-| Inputs by hand | code segment, 2 `--loads`, local decomp map for 3 runtime names | code segment, 2 `--loads` (earlier builds) | **none**: loads and runtime inferred from the ROM (ADR-0183) | **none**: inferred from the ROM (ADR-0184/0185) | **none**: ROM-only pipeline (ADR-0190..0192, ADR-0195..0200) | **none**: ROM-only pipeline (ADR-0220..0230) |
-| Closure, scope `--address-taken` | ✅ `CLOSED`, 45,419 blocks (ADR-0153..0156) | ✅ `CLOSED`: fixed image 29,542 blocks (ADR-0175); with 468 overlays 154,414 blocks (ADR-0180) | ✅ `CLOSED` with overlays (ADR-0183) | ✅ `CLOSED`, 27,621 blocks, 0 scoped blockers (ADR-0185) | ✅ `CLOSED`, 80,850 blocks, 0 blockers (ADR-0195..0200) | OPEN: 8 unproven indirect sites in three classes (ADR-0231); validation-only `--residual-dispatch` build dispatches them fail-closed, `native_complete: false` |
-| Whole-ROM, no assumptions | OPEN, 4,820 blockers | OPEN, 16,338 with overlays | OPEN, 21,313 | OPEN, 2,995 | not in the ledger below | not in the ledger below |
-| How far it runs natively | 59.9 VI/s gameplay with input and saves | boot logo, title screen, file select (ADR-0182) | intro and Clock Town attract scene; erased-FlashRAM run passes the old heap-overlay fault and reaches VI 5358 at the 90 s limit, fault 0 (ADR-0187) | visible 65 s races, vehicle markings and shading, no fault (ADR-0186) | visible 60 s run: Nintendo opening and title, VI 3578, 1270 graphics tasks, 1785 audio tasks, fault 0 (ADR-0200); new-game puzzle transitions draw colored interiors in two 75 s runs (ADR-0201) | residual build only: visible 60 s run, storybook intro, VI 3590, 3579 graphics tasks, 3588 audio tasks, fault 0 (ADR-0230) |
-| Graphics | RT64 display-list HLE | RT64 display-list HLE | RT64 display-list HLE | compiled graphics microcode, raw RDP to RT64 (`--rsp-gfx`, ADR-0186) | RT64 display-list HLE; the compiled-RSP graphics probe faults on its first task | RT64 display-list HLE |
-| RSP microcode source | from the ROM; 20 s run, fault 0, nonzero PCM (ADR-0188) | ROM-only run passes the former protected RSP DMA write (ADR-0219) and stops at unlowered RSP IMEM 0x080: VI 3, CPU fault 0, no graphics or PCM, so the title and file select above predate it | from the ROM; 60 s run, fault 0, nonzero PCM (ADR-0188) | from the ROM, with `--rsp-gfx`; 20 s run, fault 0, nonzero PCM (ADR-0188) | from the ROM: 41 ROM-derived RSP texts, 60 s run, fault 0, PCM peak 32767 (ADR-0188) | from the ROM, including an audio boot filled by PI DMA (ADR-0225); 17 ROM-derived RSP texts |
-| Audio | native: the game's own RSP microcode lowered to C, played via SDL (ADR-0169/0170) | native, lowered microcode (ADR-0182) | restored, PCM peak 32569 in a 60 s run; a real audio task matches ares (ADR-0189) | native, in the same race runs (ADR-0186) | compiled RSP audio, PCM peak 32767 in the 60 s run | compiled RSP audio, PCM peak 32121 in the 60 s run; captured audio tasks match ares |
-| Saves | EEPROM | SRAM | FlashRAM | in the race runs (ADR-0186) | EEPROM (ADR-0196) | untested |
-| Known stop points | none recorded in a 90 s run | beyond file select is untested | none since ADR-0187; the earlier stop (heap overlay at VI 3188) is fixed. This is finite execution, not a loader-lifetime proof | none in 65 s runs | none in the 60 s and 75 s runs. Finite execution, not full gameplay, pixel-perfect rendering or verified mixing | none in two 60 s residual runs; the default (proven) build is not emitted yet |
+### What is proven and what is assumed
 
-### Distance to "ROM in, game runs"
-
-| Remaining hand input | Status | What retires it |
-| --- | --- | --- |
-| **RSP microcode** is derived from the ROM by default; IMEM snapshots are oracle-only (ADR-0188) | 🟨 partial: SM64, MM, F-Zero X and BK run with ROM-derived microcode; OoT passes its protected RSP DMA write since ADR-0219 and stops at unlowered RSP IMEM 0x080 (VI 3, no graphics or PCM) | lower the RSP code OoT reaches at IMEM 0x080, broaden task, overlay and DMA coverage, and prove the solver's general RSP policy |
-| Code segment address and entry point (SM64, OoT) | inferred for MM and F-Zero X (ADR-0183/0184) | run the same inference on SM64 and OoT, which lack a usable file table for it |
-| `--loads` files (SM64: 2, OoT: 2) | inferred for MM and F-Zero X; SM64's inference finds the engine segment but not goddard (ADR-0184). On unseen ROMs, Banjo-Kazooie is scoped `CLOSED` and runs natively (ADR-0190..0200), Paper Mario is scoped OPEN with 8 indirect sites left and runs only as a residual-dispatch validation build (ADR-0202..0231) and four others are scoped OPEN with no native emission ([`research/rom-sweep.md`](research/rom-sweep.md)) | broader load inference |
-| SM64 decomp map for three runtime names (ADR-0171) | local, never used to find code | identify them from the ROM's bytes (assumption 14) |
-| Scope flags (`--address-taken`, `--fr0`) | chosen by the user; `native.py` refuses to build unless the scope is `CLOSED`, except the validation-only `--residual-dispatch` mode, which also builds a map whose only blockers are unresolved indirect sites and records `native_complete: false` (ADR-0218) | none: the scope is the declared assumption set |
-| libultra as host runtime (HLE) | covers the functions SM64, OoT and MM call; a game calling another fails to link | differential-test each function (assumption 13) |
-
-Only Windows has been tested with RT64. Only controller 1 works, with no rumble.
-
-### Distance to "zero assumptions"
-
-**0 of 16 assumptions retired.** No ROM is whole-ROM `CLOSED`; every commercial ROM still has thousands of blockers, most of them unresolved indirect sites. Recent work (ADR-0180, ADR-0181, ADR-0187) shrank the scoped proofs and the run-time failures, and retired none. The full ledger and blocker table are generated below; the largest items are code immutability and overlay lifetimes (1, 12), the excluded interrupts, DMA and RSP (2), and per-site proofs of indirect targets (4..6).
+- **Instructions.** Every VR4300 form Plaid lowers and all 119 RSP instructions match the pinned ares interpreter in differential tests. The chart under [Coverage](#coverage) has the breakdown.
+- **Whole programs.** No ROM is yet proven complete with zero assumptions: **0 of 16** assumptions are retired. 12 of the 16 are checked while the game runs and stop it with a fault code if broken (for example, an indirect jump reaching an unknown target). 4 are trusted without a check: interrupts, DMA and the RSP are left out of the analysis (2); the FPU runs with `Status.FR = 0` (9); libultra is replaced by Plaid's own runtime (13); and three SM64 function names come from a symbol map (14). The [ledger](#assumption-ledger) lists all 16.
 
 ### Recent landings
 
 | ADR | Commit | What |
 | --- | --- | --- |
-| 0231 | `78b0eda` | TLB host register effects bound into callee proofs; Paper Mario's 8 residual sites classified (save/restore alias proofs, table-base initialization, stack lineage), none closed yet |
-| 0230 | `c3c1edb` | Completed raw occupants discovered inside covered shared slots; Paper Mario's residual run plays 60 s fault-free: storybook intro, VI 3590, nonzero PCM |
-| 0229 | `db99954` | Incomplete switch paths retained as residual candidates; Paper Mario VI 654 to 659 |
-| 0227 | `c7ee4de` | Replay observes relocated call sites through declared bindings, with bounded coverage; Paper Mario VI 648 to 654 |
-| 0226 | `1f284c4` | Replay-observed call entries accepted without layout clues, in discovery and solver; Paper Mario VI 4 to 648 |
-| 0225 | `7d6ae3c` | RSP microcode sources recorded from PI DMAs; Paper Mario's audio task boot found and audio RSP runs natively |
-| 0223, 0224 | `23465c8`, `273d50e`, `da21038` | Residual sites dispatch over their own candidate and observed targets, and host PI DMA writes the physical page of a TLB-mapped destination; Paper Mario's residual run reaches VI 3 and its first audio task, then stops on audio RSP microcode not yet found in the ROM |
-| 0222 | `0b6c13a`, `1e93b08` | Observed call targets as address-taken discovery roots; Paper Mario's residual run passes its ROM integrity check and stops at a `jr` switch |
-| 0220 | `4896e16`, `fdd43ff` | Boot fetch coverage and ROM-word discovery roots; Paper Mario's residual run passes the boot stub (partial) |
-| 0219 | `12f70c0`, `1ea8aff` | Inactive fixed text revoked through the shared CPU/device write gate; OoT passes its RSP self-patch |
-| 0218 | `0fa9c9a`, `bf825b6` | Validation-only `--residual-dispatch` mode; Controller Pak reports no pak, cartridge-space CPU writes ignored, full cartridge addresses in EPi DMA |
-| 0217 | `66a52d8` | Frame-local table-pointer reloads proven without alias assumptions (partial) |
-| 0216 | `7f09341` | Source-bound callee effects reused within one immutable table walk |
-| 0215 | `171a6f5` | Mapped callee effects bound to checked source paths |
-| 0214 | `8645d1c` | Paired table index and byte-offset updates proven; checked fixed returns |
-| 0213 | `7c12a36` | Captured table values preserved through checked guest calls |
-| 0212 | `2342395` | Branch flag values versioned; impossible paths pruned |
-| 0211 | `309b091` | Callee proof paths end at a checked BREAK |
-| 0210 | `2144c30` | No-write guest-callee summaries carry table bases |
-| 0209 | `bbf99fc` | Longer bounded predecessor paths for table proofs |
-| 0208 | `4075dcc` | Independently evidenced internal decode entries retained |
-| 0207 | `9d19914` | Inductive unchanged table-dispatch predicates |
-| 0206 | `5cc8d13` | Scheduled bounded indexed dispatch proofs |
-| 0205 | `94a4d7c` | Unchanged TLB executable sources and guarded tail cells |
-| 0204 | `435d7ec` | Raw copy-call and indexed source candidates refined |
-| 0202, 0203 | `1a465af` | Bounded raw section slots, exact cache SDK identities, batched first-fetch replays |
-| 0201 | `109f467` | Completed renderer framebuffer transfers return to native RAM |
-| 0195..0200 | `76df640` | Banjo-Kazooie reaches its native intro with restored backgrounds (post-IPL SP memory, EEPROM timer queue, VI code as guest code, IPL3 RDRAM prefix) |
-| 0194 | `a5e3eb9` | Identification retains verified per-copy SDK scalar address bindings |
-| 0193 | `b6006cb` | Restoring a saved zero interrupt bit keeps an enabled one enabled |
-| 0192 | `37399f3` | Paired-stream executable slots derived and verified; Banjo-Kazooie 29 to 1 scoped blocker |
-| 0191 | `6d846df` | Independent SDK copies identified across disconnected images (partial) |
-| 0190 | `8a35ad3`, `40dde18` | Boot-produced executable images recovered, the second with pinned ares (partial) |
-| 0188 | `6758817` | RSP microcode derived from the ROM, with fetch-verified dispatch |
-| 0189 | `8139af6` | Lowered RSP code shares the host's state layout; Majora's Mask has sound |
-| 0187 | `32408f6` | Inactive heap overlays rebind under native-frame pins; MM passes its heap-overlay fault |
-| 0186 | `64fe72b` | Compiled graphics microcode feeds RT64 raw RDP; verified build packaged; F-Zero X races |
-| 0185 | `39ed3cc` | Executable files sharing a RAM slot are verified and lowered; F-Zero X `CLOSED` |
-| 0184 | `583f07c` | Boot image and segments inferred from the ROM alone |
-| 0183 | `edb3ca0` | ROM in, native out; Majora's Mask plays its intro |
-| 0182 | `3cd1b2b` | OoT reaches its title and file select with RT64 |
-| 0181 | `00cb683` | Relocatable overlays run natively through a verified binding |
-| 0180 | `42513ef` | Jump-table bounds proven over every path; OoT + overlays `CLOSED` |
-| 0179 | `9e652ab` | Discovery places relocatable overlays at their link addresses |
+| 0231 | `78b0eda` | TLB host register effects bound into callee proofs; Paper Mario's 8 remaining indirect jumps classified (save/restore alias proofs, table-base initialization, stack lineage) |
+| 0230 | `c3c1edb` | Code loaded into an already-covered memory slot is discovered; Paper Mario plays 60 s fault-free with audio |
+| 0229 | `db99954` | Incomplete switch paths kept as candidates; Paper Mario VI 654 to 659 |
+| 0227 | `c7ee4de` | Analysis replay watches relocated call sites at their run-time address; Paper Mario VI 648 to 654 |
+| 0226 | `1f284c4` | Calls the replay observed are accepted as function entries; Paper Mario VI 4 to 648 |
+| 0225 | `7d6ae3c` | RSP microcode found in RAM filled by cartridge DMA; Paper Mario's audio runs natively |
+| 0223, 0224 | `23465c8`, `273d50e` | Unproven sites dispatch over their own candidates; DMA into TLB-mapped buffers |
+| 0218..0222 | `0fa9c9a`..`1e93b08` | Validation-only residual dispatch, boot code capture, observed call roots |
+| 0219 | `1ea8aff` | Shared CPU/RSP code-write gate; OoT passes its RSP self-patch |
+| 0195..0200 | `76df640` | Banjo-Kazooie reaches its native intro |
+| 0188 | `6758817` | RSP microcode derived from the ROM, with every fetch checked |
 
-### How to play
+Older decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md) and [`docs/HISTORY.md`](docs/HISTORY.md).
 
-You supply the ROM; ROMs are never committed. `python scripts/native.py <rom> --rt64 [--rsp-gfx]` builds the executable and writes a `Play <name>.cmd` launcher beside it. Built executables live in `target/rt64-shim/Release/` next to `plaid_rt64.dll` and `SDL2.dll`. For example, Majora's Mask is `target/rt64-shim/Release/mm-rt64.exe`; from the repo root:
+## How to play
+
+You supply the ROM; ROMs are never committed. `python scripts/native.py <rom> --rt64 [--rsp-gfx]` builds the executable and writes a `Play <name>.cmd` launcher beside it. Built executables live in `target/rt64-shim/Release/` next to `plaid_rt64.dll` and `SDL2.dll`. For example, Majora's Mask:
 
 ```powershell
 .\target\rt64-shim\Release\mm-rt64.exe --rom <your mm.z64> --flash <save.fla> --stop-at none
 ```
-
-Keyboard controls (RT64 window; `--press` scripts are ORed with it):
 
 | Key | Button |
 | --- | --- |
@@ -119,17 +68,48 @@ Keyboard controls (RT64 window; `--press` scripts are ORed with it):
 | W / S / A / D | D-pad |
 | Arrow keys | Control stick |
 
-The save flag depends on the game: `--flash` (Majora's Mask), `--save` (EEPROM games). Build details: [`runtime/README.md`](runtime/README.md).
+Saves: `--flash` for FlashRAM games, `--save` for EEPROM. `--press` scripts are ORed with the keyboard. Only Windows has been tested with RT64; only controller 1 works, with no rumble. Build details: [`runtime/README.md`](runtime/README.md).
 
-## Status
+## How it works
+
+```mermaid
+flowchart TD
+  rom[Untouched ROM] --> discover["discover<br/>CFG, indirect proofs, libultra identification, inferred loads"]
+  discover --> solve["solve<br/>closure proof in a declared scope"]
+  solve -->|OPEN| stop[blockers report]
+  solve -->|CLOSED| lower["plaid-lower<br/>one C function per guest function"]
+  romtexts[RSP microcode found in the ROM's images] --> rsplower["lower-rsp<br/>RSP microcode to C"]
+  subgraph exe[native executable]
+    game[lowered game code]
+    rsp[lowered RSP microcode]
+    rt[Plaid runtime: libultra on the host]
+    rt64[RT64: graphics]
+  end
+  lower --> game
+  rsplower --> rsp
+  oracle[ares and Mupen64Plus: oracles only] -.->|differential tests| lower
+  oracle -.-> rsplower
+```
+
+Nothing in the compiler or runtime is keyed to a game: no game names, addresses or patches. `scripts/native.py <rom>` runs the whole pipeline. It infers where the code is and what loads where from the ROM; pinned ares replays the boot at analysis time to find code the game builds or copies itself. Libultra functions are identified by signature and become calls into Plaid's C runtime ([`runtime/`](runtime/)): threads, message queues, timers, PI DMA, controllers, saves and RSP tasks. Graphics go through [RT64](https://github.com/rt64/rt64), either from display lists or, with `--rsp-gfx`, from the game's own graphics microcode compiled to C. Audio always runs the game's own RSP microcode compiled to C.
+
+Known gaps:
+
+- Overlay load bases are found at run time, not proven (assumption 12).
+- The runtime covers the libultra functions these games call; a game calling one it lacks fails to link.
+- Saves: 4 Kbit EEPROM, 256 Kbit SRAM, 1 Mbit FlashRAM. No 16 Kbit EEPROM; the Controller Pak always reports no pak.
+- The ROM-derived RSP microcode registry is incomplete (OoT), and RSP tasks complete synchronously.
+
+## Coverage
 
 [![instruction coverage and assumptions](docs/coverage.svg)](docs/PROGRESS.md)
 
-[Progress history](docs/HISTORY.md)
+<sub>**These bars cover instruction translation only. They do not mean a game works.** Green: matches ares with no conditions. Amber: matches ares, and the native code checks a condition at run time and faults if it fails (loads and stores, indirect jumps and returns, trapping arithmetic, traps, `BREAK`). Orange: matches ares but relies on something nothing checks (all COP1 assumes `Status.FR = 0`). Grey: not lowered (COP0 moves, TLB, `ERET`, `SYSCALL`, `CACHE`); libultra's uses of them are replaced by Plaid's runtime. A form counts when it passes discovery, the solver and lowering in a test program (`plaid isa-coverage`) and matches ares in [spike096](spikes/096-native-slice/); RSP instructions are checked in [spike097](spikes/097-rsp-slice/). The RSP "In a real game" bar is orange because the candidate registry and the solver's RSP policy are not proven, even though microcode is taken from the ROM with every fetch checked (ADR-0188). [Progress history](docs/HISTORY.md).</sub>
 
-<sub>* **These percentages do not mean a game works or is proven.** Colors: green means the form matches ares and depends on no run-time assumption; amber means it matches ares but native code checks an assumption and aborts when it fails (loads and stores, indirect jumps and returns, overflow-trapping arithmetic, traps, `BREAK`); orange means it relies on an assumption nothing checks (all COP1 depends on `Status.FR = 0`); grey means not lowered. VR4300 instructions: instruction semantics only. A form counts when it passes discovery, the closure solver and native lowering in a test program (`plaid isa-coverage`) and matches the pinned ares interpreter in [spike096](spikes/096-native-slice/). Exceptions and interrupts are not modelled. The unfilled cells are COP0 moves, TLB instructions, `ERET`, `SYSCALL` and `CACHE`: they are not lowered in guest code, and libultra's uses of them are replaced by Plaid's own runtime (an assumption, listed below). RSP instructions: 100% means every RSP instruction lowers to C and matches ares in [spike097](spikes/097-rsp-slice/). The orange "In a real game" bar is the other half: it does not mean a game's RSP side is proven: microcode is derived from the ROM with every fetch checked (ADR-0188), but the candidate registry is incomplete and the solver's RSP policy is unproven; graphics microcode runs natively with `--rsp-gfx`, while the default RT64 path interprets display lists at a high level; and RSP tasks complete synchronously. Milestones: states in [`docs/progress.json`](docs/progress.json); the total grows as milestones are added. ROMs CLOSED: commercial ROMs with whole-ROM closure and no assumptions.</sub>
+## Assumption ledger
 
-## Distance to no-assumption CLOSED
+<details>
+<summary>Whole-ROM blockers and the 16 assumptions (generated by <code>tools/progress.py</code>)</summary>
 
 <!-- assumptions:begin -->
 
@@ -197,6 +177,8 @@ Inputs given by hand, outside the solver:
 
 <!-- assumptions:end -->
 
+</details>
+
 ## Milestones
 
 | # | Milestone | State |
@@ -205,52 +187,12 @@ Inputs given by hand, outside the solver:
 | 2 | SM64 discovery finds at least 99% of its functions | ✅ **done**: 99.03%, scored against a local decomp map (ADR-0152) |
 | 3 | SM64 `CLOSED` under declared assumptions | ✅ **done**: 45,419 blocks, every assumption listed (ADR-0153..0156) |
 | 4 | SM64 boots natively to its title screen | ✅ **done**, and further: gameplay at full speed, with input, saves and native audio (ADR-0159..0170) |
-| 5 | Retire the assumptions one by one, then Ocarina of Time | 🟨 **in progress**: OoT `CLOSED` under the address-taken scope, first the fixed code (ADR-0175), then with all 468 overlays at their link addresses (ADR-0179/0180); boots natively through a hardware RCP I/O model and a lowered RSP task (ADR-0176/0177), runs relocated overlays through a verified binding (ADR-0181), and with RT64 draws its boot logo, title and file select (ADR-0182) |
-
-## How it works
-
-```mermaid
-flowchart TD
-  rom[Untouched ROM] --> discover["discover<br/>CFG, indirect proofs, libultra identification, declared loads"]
-  discover --> solve["solve<br/>closure proof in a declared scope"]
-  solve -->|OPEN| stop[blockers report]
-  solve -->|CLOSED| lower["plaid-lower<br/>one C function per guest function"]
-  romtexts[RSP microcode found in the ROM's images] --> rsplower["lower-rsp<br/>RSP microcode to C"]
-  subgraph exe[native executable]
-    game[lowered game code]
-    rsp[lowered RSP microcode]
-    rt[Plaid runtime: libultra on the host]
-    rt64[RT64: graphics]
-  end
-  lower --> game
-  rsplower --> rsp
-  oracle[ares and Mupen64Plus: oracles only] -.->|differential tests| lower
-  oracle -.-> rsplower
-```
-
-Unproven states fail closed: the solver reports `OPEN`, and lowered code checks every declared assumption at run time and aborts with a fault code when one is violated. There is no fallback to emulation.
-
-Libultra system functions are declared as runtime functions and become calls into Plaid's own C runtime ([`runtime/`](runtime/), ADR-0158/0159): threads, message queues, events, timers, PI DMA, controllers, EEPROM and RSP tasks. Graphics go through [RT64](https://github.com/rt64/rt64). With `--rsp-gfx`, graphics microcode also runs as compiled native code and RT64 draws its raw RDP output (ADR-0186). Other RSP tasks, such as audio, run the game's own microcode lowered to C (ADR-0167..0169). Thread entries and other callbacks are proven per call site. How to build and run a game is in [`runtime/README.md`](runtime/README.md).
-
-## Real ROMs
-
-ROMs stay local and are never committed. Per-ROM numbers and how to reproduce them are in [`docs/STATUS.md`](docs/STATUS.md).
-
-| ROM | Result |
-| --- | --- |
-| Super Mario 64 (USA) | 99.03% discovery recall. `CLOSED` over 45,419 blocks under a declared scope: its main, engine and goddard segments, with calls through function pointers restricted to address-taken functions. Runs natively at full speed (59.9 VI/s), with graphics, input, EEPROM saves and audio. |
-| Ocarina of Time (USA 1.2) | Boot, the Yaz0-compressed `code` segment and the cartridge's 64DD driver segment: `CLOSED` over 29,542 blocks under the address-taken scope (ADR-0175). With its 468 overlays at link addresses (ADR-0172, ADR-0179), it is `CLOSED` over 154,414 blocks under the address-taken scope (ADR-0180). Natively, with RT64, its own audio microcode and SRAM saves, it runs through its relocated overlays to the title screen and file select (ADR-0181, ADR-0182). |
-| Majora's Mask (USA) | No hand-written input: `scripts/native.py` infers its loads and runtime, and it is `CLOSED` with its overlays under the address-taken scope (ADR-0183). Natively with RT64 it plays the mask intro and the Clock Town attract scene, and, since ADR-0187, passes its former heap-overlay stop and runs 90 s with no fault. Audio is restored (ADR-0189). |
-| F-Zero X (USA) | From the ROM alone, 27,621 blocks and zero blockers under the address-taken scope (ADR-0185). Native graphics microcode feeds RT64 raw RDP commands; visible 65-second races show vehicle markings and shading without a runtime fault (ADR-0186). |
-| Mario Party 2 (USA) | Boot window: 712 blocks and 29 blockers. 27 sit behind an `osInitialize` whose SDK build n64sym lacks; 2 are function-pointer calls. |
-| Banjo-Kazooie (USA) (Rev 1) | No hand input. The ROM-only pipeline is scoped `CLOSED` with 0 blockers over 80,850 blocks and 41 ROM-derived RSP texts (ADR-0192, ADR-0195..0200). A visible 60 s native run with RT64 and compiled RSP audio reaches VI 3578 with 1270 graphics tasks and 1785 audio tasks, fault 0, PCM peak 32767; the Nintendo opening backgrounds and the new-game puzzle transitions draw (ADR-0200, ADR-0201). This is finite execution, not full gameplay or whole-ROM completion; no assumption is retired, and the compiled-RSP graphics probe faults on its first task. |
-| Paper Mario (USA) | Scoped OPEN with 7 blockers over 56,851 blocks and 162 loads after the ADR-0202..0217 table-dispatch proofs (164 blockers on 2026-10-18); remaining indexed dispatches still prevent native emission and no Paper Mario native run is accepted. The validation-only `--residual-dispatch` run (ADR-0218, ADR-0220, ADR-0222, ADR-0223, ADR-0224) closes with 0 blockers and 8 residual sites, passes the boot stub (154 PI DMAs, 11 threads) and, with observed call targets as discovery roots, its ROM integrity check (235 PI DMAs). Residual sites now also dispatch over their own candidate targets, so the five-case `jr` switch at `8004e544` runs, and PI DMA into a TLB-mapped buffer writes the translated physical page. The run then reaches VI 3 and submits its first audio task (261 PI DMAs), and stops on audio RSP microcode that ROM-derived extraction has not found, with CPU fault 0; the artifact records `native_complete: false` ([`research/paper-mario-native-frontier.md`](research/paper-mario-native-frontier.md)). |
-| Star Fox 64, Mario Kart 64, GoldenEye 007, Rogue Squadron (USA) | Surveyed with the ROM-only pipeline on 2026-10-18: each is scoped OPEN (GoldenEye 7 blockers, Mario Kart 64 30, Star Fox 64 298, Rogue Squadron 210) and refuses native emission; no runtime was reached. See [`research/rom-sweep.md`](research/rom-sweep.md). |
+| 5 | Retire the assumptions one by one; more games from the ROM alone | 🟨 **in progress**: MM, F-Zero X and Banjo-Kazooie build from the ROM alone; Paper Mario runs as a validation build; 0 of 16 assumptions retired |
 
 <details>
-<summary><b>Native runs: finding and fixing what breaks</b></summary>
+<summary><b>How SM64 got running: each stop and its fix</b></summary>
 
-Milestone 4 ran Super Mario 64 natively: the lowered game is linked with the runtime and run until it stops. Because nothing falls back to emulation, every stop is a fail-closed fault with an exact guest PC. Each fault points at a missing piece of the hardware model or of the runtime, and fixing one usually gets the game further. Each fix is a decision record with a differential test against ares:
+Nothing falls back to emulation, so every stop is a fail-closed fault at an exact guest PC. Each fix is a decision record with a differential test against ares.
 
 | Stop | Cause | Fix |
 | --- | --- | --- |
@@ -262,29 +204,11 @@ Milestone 4 ran Super Mario 64 natively: the lowered game is linked with the run
 | Stuck at "PRESS START" | controller always idle | keyboard and scripted input (ADR-0164) |
 | Half speed (33 VI/s) | Windows rounds 1 ms sleeps up to 15.6 ms | high-resolution timer and fixed VI deadlines (ADR-0166) |
 | Silence | audio tasks completed without running | RSP scalar and vector microcode lowered to C (ADR-0167/0168) |
-| "unlowered RSP code" | the boot microcode loads the audio microcode at run time | lowered IMEM snapshots, saved by running the game (ADR-0169) |
+| "unlowered RSP code" | the boot microcode loads the audio microcode at run time | lowered IMEM snapshots (ADR-0169), later derived from the ROM (ADR-0188) |
 | Audio microcode, fault 4 | it reads the RDP status register | an idle-RDP read, checked against ares (ADR-0169) |
 | Audio ran 4% fast | `osAiGetLength` always read 0 | AI DMA timed as ares models it, played through SDL (ADR-0170) |
 
-**SM64 runs natively at full speed into gameplay** (59.9 VI/s, 30 fps): RT64 draws it (ADR-0163), the keyboard or a `--press` script controls it (ADR-0164), and `--save` keeps the EEPROM (ADR-0165). Its audio comes from the game's own RSP microcode, lowered to C; on real audio tasks it matches ares in every byte (ADR-0169). It plays live through SDL, paced by a model of the AI's DMA timing, and `--wav` records it (ADR-0170). The latest run is in [`research/sm64-first-measurement.md`](research/sm64-first-measurement.md), and what comes next is in [`docs/NEXT.md`](docs/NEXT.md).
-
 </details>
-
-## Per-game inputs and known gaps
-
-Nothing in the compiler or the runtime is keyed to SM64: no game names, addresses or patches. The runtime implements libultra functions by name, and RT64 draws any game's display lists. A game needs a few inputs. `scripts/native.py <rom>` runs the whole pipeline and infers the first two from the ROM alone when it has a file table (ADR-0183, as for Majora's Mask); SM64 and OoT's earlier builds declared them by hand:
-
-- **Where its code is and what loads where**: the boot and code segments as executable loads (`plaid infer-loads`, or `--loads` by hand), with their ROM ranges and addresses. Without a file table, code-named ROM ranges and slot alternates are inferred as well (ADR-0184/0185); `--loads` supplies declarations when inference is insufficient. The native build checks their bytes when they are loaded and faults on a mismatch.
-- **Which functions are libultra** (`plaid identify`): n64sym signatures, or a symbol map with `--symbols` when the game's SDK build is missing from n64sym's database. SM64 uses its decomp symbol map, which stays local. The map only names functions; it is not used to find code.
-- **The assumption scope**: for example `--address-taken` and `--fr0`. Every assumption is listed in the solver's report.
-
-Known gaps:
-
-- Overlay binding is itself an assumption (ledger row 12), and every overlay's load base is found at run time, not proven. MM's heap-overlay stop is fixed (ADR-0187), but that is finite execution, not a lifetime proof.
-- The runtime covers the libultra functions that SM64, OoT and MM call. A game that calls a declared function the runtime lacks fails to link.
-- Saves are 4 Kbit EEPROM, 256 Kbit SRAM and 1 Mbit FlashRAM (no 16 Kbit EEPROM; every Controller Pak operation reports no pak, ADR-0218). Only controller 1 works, and there is no rumble.
-- RSP microcode is derived from the ROM (ADR-0188): candidate texts come from its images and SDK-style descriptors, a task selects one by a unique match on the words reachable from its entry, and every later fetch is checked against the lowered word. The candidate registry is incomplete, OoT passes its protected RSP DMA write since ADR-0219 and stops at unlowered RSP IMEM 0x080, and `--rsp-dump` saves IMEM images only as oracle inputs. Graphics tasks use RT64 display-list HLE by default; `--rt64 --rsp-gfx` runs their compiled microcode and sends its raw RDP output to RT64. Audio plays through SDL with RT64, or goes to a WAV file.
-- Only Windows has been tested with RT64.
 
 ## Build
 
