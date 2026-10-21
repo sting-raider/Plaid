@@ -30,9 +30,9 @@ int plaid_gfx_task(const uint8_t *ram, uint32_t ucode, uint32_t data, uint32_t d
 #elif READBACK_MODE == 3
   {
     uint8_t before[4];
-    memcpy(before, ram, sizeof before);
-    a = writeback(context, 0, 4, changed); /* base executable text is protected */
-    protected_unchanged = memcmp(before, ram, sizeof before) == 0;
+    memcpy(before, ram + LIVE_TEXT, sizeof before);
+    a = writeback(context, LIVE_TEXT, 4, changed); /* text the caller still runs is protected */
+    protected_unchanged = memcmp(before, ram + LIVE_TEXT, sizeof before) == 0;
   }
 #elif READBACK_MODE == 4
   a = writeback(context, 0x7ffffe, 4, changed); /* crosses the 8 MiB RAM boundary */
@@ -79,57 +79,59 @@ def _program(T, mode):
         count = 1 if mode == 1 else 4
         for i in range(count):
             program += T.log_word(0xA0004820 + 4 * i)
+    live = 4 * sum(not isinstance(w, str) for w in program)  # DONE runs after the task call
     program += A.DONE
     for name in ('osSpTaskStartGo', 'osInvalDCache'):
         if name == 'osInvalDCache' and mode not in (0, 1, 2):
             continue
         program += [name, A.jr(A.ra), A.nop]
-    return program
+    return program, live
 
 
 def _run(exe, cc, T, mode, name, dump_words):
     stub = T.OUT / f'{name}-stub.c'
     stub.write_text(STUB)
-    native = T.build(exe, cc, name, _program(T, mode),
+    program, live = _program(T, mode)
+    native = T.build(exe, cc, name, program,
                      ['osSpTaskStartGo'] + (['osInvalDCache'] if mode in (0, 1, 2) else []),
-                     ['-DPLAID_RT64', f'-DREADBACK_MODE={mode}', str(stub)])
+                     ['-DPLAID_RT64', f'-DREADBACK_MODE={mode}', f'-DLIVE_TEXT={live}u', str(stub)])
     rom = T.OUT / 'gfx-readback.z64'
     rom.write_bytes(bytes.fromhex('80371240') + bytes(0xFFC))
-    dump_at = '0x80000000' if mode == 3 else ('0x807ffffc' if mode == 4 else hex(T.LOG))
+    dump_at = hex(0x80000000 + live) if mode == 3 else ('0x807ffffc' if mode == 4 else hex(T.LOG))
     run = subprocess.run([str(native), '--rom', str(rom), '--stop-at', 'none', '--dump', dump_at, str(dump_words)],
                          capture_output=True, text=True, timeout=30)
     rows = [json.loads(line) for line in run.stdout.splitlines() if line.startswith('{')]
     status = next((row for row in rows if 'writeback' in row), None)
     stop = next((row for row in rows if 'stop' in row), {})
     dump = next((row['words'] for row in rows if 'dump' in row), None)
-    return run, status, stop, dump
+    return run, status, stop, dump, live
 
 
 def run(exe, cc, T):
-    run, status, stop, words = _run(exe, cc, T, 0, 'gfx-readback', 6)
+    run, status, stop, words, live = _run(exe, cc, T, 0, 'gfx-readback', 6)
     assert run.returncode == 0 and stop.get('stop') == 'exit' and stop.get('fault') == 0, (
         run.returncode, run.stdout, run.stderr)
     assert status == {'writeback': [0, 0], 'protected_unchanged': -1}, status
     assert words == [0x11223344, 0x11223344, 0xAABBCCDD, 0x55667788, 0x55667788, 0xAABBCCDD], words
 
-    run, status, stop, words = _run(exe, cc, T, 1, 'gfx-readback-partial', 1)
+    run, status, stop, words, live = _run(exe, cc, T, 1, 'gfx-readback-partial', 1)
     assert run.returncode == 1 and stop.get('stop') == 'guest fault' and stop.get('fault') == 4, (
         run.returncode, run.stdout, run.stderr)
     assert status == {'writeback': [0, -9], 'protected_unchanged': -1}, status
 
-    run, status, stop, words = _run(exe, cc, T, 2, 'gfx-readback-full', 4)
+    run, status, stop, words, live = _run(exe, cc, T, 2, 'gfx-readback-full', 4)
     assert run.returncode == 0 and stop.get('stop') == 'exit' and stop.get('fault') == 0, (
         run.returncode, run.stdout, run.stderr)
     assert status == {'writeback': [0, -9], 'protected_unchanged': -1}, status
     assert words == [0x90919293, 0x94959697, 0x98999A9B, 0x9C9D9E9F], words
 
-    run, status, stop, words = _run(exe, cc, T, 3, 'gfx-readback-protected', 1)
+    run, status, stop, words, live = _run(exe, cc, T, 3, 'gfx-readback-protected', 1)
     assert run.returncode == 1 and stop.get('stop') == 'guest fault' and stop.get('fault') == 2, (
         run.returncode, run.stdout, run.stderr)
     assert status == {'writeback': [1, -9], 'protected_unchanged': 1}, status
-    assert words == [int.from_bytes((T.OUT / 'gfx-readback-protected.bin').read_bytes()[:4], 'big')], words
+    assert words == [int.from_bytes((T.OUT / 'gfx-readback-protected.bin').read_bytes()[live:live + 4], 'big')], words
 
-    run, status, stop, words = _run(exe, cc, T, 4, 'gfx-readback-range', 1)
+    run, status, stop, words, live = _run(exe, cc, T, 4, 'gfx-readback-range', 1)
     assert run.returncode == 1 and stop.get('stop') == 'guest fault' and stop.get('fault') == 1, (
         run.returncode, run.stdout, run.stderr)
     assert status == {'writeback': [1, -9], 'protected_unchanged': -1}, status

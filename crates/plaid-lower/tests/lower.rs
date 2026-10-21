@@ -199,8 +199,10 @@ fn calls_lower_to_c_functions_with_checked_returns() {
     let c = lower_c(&map, &[image], GuestAddr(BASE), &[GuestAddr(0x8000_0020)]).unwrap();
     assert!(c.contains("static int F_80000010(plaid_state *s, u64 ret);"));
     assert!(c.contains(
-        "{ int r = F_80000010(s, 0xffffffff80000008ull); if (r) return r; } goto L_80000008;"
+        "{ int r = F_80000010(s, 0xffffffff80000008ull); if (r) return r; } frame->ranges = R_80000000;"
     ));
+    // While the call is outstanding the caller pins only its continuation (ADR-0239).
+    assert!(c.contains("frame->ranges = C_80000000_80000008; frame->count = "));
     assert!(c.contains("if (t != ret) return plaid_fault(s, 0x80000014u, 5); return 0;"));
 }
 
@@ -293,7 +295,7 @@ fn runtime_functions_are_called_not_decoded_and_close_only_under_the_guarded_sco
     let c = lower_c(&map, &[image], GuestAddr(BASE), &[GuestAddr(0x8000_0020)]).unwrap();
     assert!(c.contains("int plaid_rt_sum(plaid_state *s);"));
     assert!(c.contains(
-        "{ s->cp0_known = 0; int r = plaid_rt_sum(s); if (r) return r; } goto L_80000008;"
+        "{ s->cp0_known = 0; int r = plaid_rt_sum(s); if (r) return r; } frame->ranges = R_80000000;"
     ));
     assert!(!c.contains("F_80000010"));
 }

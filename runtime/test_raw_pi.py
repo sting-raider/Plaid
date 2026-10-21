@@ -54,9 +54,12 @@ def run(exe, cc, T):
     for name,arguments,reason in [
         ('write',(1,0x100,destination,16),'PI write to cartridge'),
         ('bounds',(0,0x2000,destination,16),'PI DMA outside the ROM'),
-        ('executable',(0,0x100,A.BASE,16),'runtime write refused'),
+        ('executable',(0,0x100,'live',16),'runtime write refused'),
         ('alignment',(0,0x101,destination,16),'unaligned raw PI DMA is not modeled')]:
-        bad=[*T.li(A.sp,0x80007f00),*T.poke(0xa0000308,0xb0000000),*T.call('osPiRawStartDma',*arguments),*A.DONE,
+        head=[*T.li(A.sp,0x80007f00),*T.poke(0xa0000308,0xb0000000)]
+        if arguments[2]=='live':  # DONE still runs after the call; already-run text is writable (ADR-0239)
+            arguments=(*arguments[:2],A.BASE+4*(len(head)+len(T.call('osPiRawStartDma',*arguments[:2],0,16)))&~7,16)
+        bad=[*head,*T.call('osPiRawStartDma',*arguments),*A.DONE,
              'osPiRawStartDma',A.jr(A.ra),A.nop]
         binary=T.build(exe,cc,'raw-rom-'+name,bad,['osPiRawStartDma'])
         failed=subprocess.run([str(binary),'--rom',str(rom)],capture_output=True,text=True,timeout=30)

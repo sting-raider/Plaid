@@ -1,5 +1,11 @@
 # Status
 
+## Continuation-only frame pins (ADR-0239)
+
+Suspended native frames pin only the text reachable from their pending call's
+link, so code that clears its own already-executed prefix no longer faults 2.
+Majora's Mask is fixed: 60 s, VI 3563, 1243 graphics / 3530 audio tasks, fault 0.
+
 ## Bounded ERET and aligned executable loads (partial; ADR-0237)
 
 ERET lowers with known explicit EPC/ErrorEPC and Status outside SDK contexts;
