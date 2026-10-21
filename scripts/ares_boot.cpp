@@ -66,8 +66,51 @@ static std::array<std::array<u32, 2>, 2> previousFetches{};
 static std::vector<std::array<u32, 3>> dma;
 static std::vector<u8> sp; // DMEM then IMEM at the first entry fetch
 static std::vector<u8> ram_prefix; // IPL3's vector/boot-parameter area, before game entry
+// Only complete aligned ROM-to-RAM transfers can supply a new raw occupant.
+struct RawDma { u32 ram, rom, size, site; };
+static std::vector<RawDma> completed;
+static RawDma pending{};
+static u32 copied = 0;
+static bool validCopy = false, foundOccupant = false;
+static void observeDma(u32 kind, u32 a, u32 p, u32 n, u32, u32 value) {
+  if(!entered) return;
+  if(kind == 1) {
+    dma.push_back({a,p,n});
+    pending = {a, p - 0x10000000u, n, (u32)cpu.ipu.pc}; copied = 0;
+    validCopy = !(a & 7) && !(n & 3) && n && (u64)a + n <= written.size()
+      && p >= 0x10000000u && (u64)pending.rom + n <= sourceRom.size();
+    // Ordinary snapshots and non-slot data need no raw-occupant history.
+    validCopy = validCopy && seekUncovered && (std::any_of(bindings.begin(), bindings.end(), [&](auto b) {
+      u32 runtime = canonical(b.runtime);
+      return b.source >= 0 && runtime >= 0x80000000u && runtime < 0x80800000u &&
+        (u64)a < (runtime & 0x1fffffffu) + (u64)b.size && (runtime & 0x1fffffffu) < (u64)a + n;
+    }) || std::any_of(completed.begin(), completed.end(), [&](auto d) {
+      return d.ram + d.size == a && d.rom + d.size == pending.rom && d.site == pending.site;
+    }));
+  }
+  if(kind == 5 && validCopy) {
+    if(copied >= pending.size || a != pending.ram + copied || !rdram.mapIdentity ||
+       value != sourceRom[pending.rom + copied]) validCopy = false;
+    else copied++;
+  }
+  if(kind == 7 && validCopy && copied == pending.size) {
+    // Join only adjacent complete transfers with the same ROM/RAM displacement.
+    for(auto it = completed.begin(); it != completed.end();) {
+      if(it->ram + it->size == pending.ram && it->rom + it->size == pending.rom && it->site == pending.site) {
+        pending.ram = it->ram; pending.rom = it->rom; pending.size += it->size;
+        it = completed.erase(it);
+      } else ++it;
+    }
+    completed.push_back(pending); validCopy = false;
+  }
+}
 static void mark(bool write, u32 address, u32 size, u32 device) {
-  if(!entered || !write || !rdram.mapIdentity || address >= written.size()) return;
+  if(!entered || !write) return;
+  if(!rdram.mapIdentity) { completed.clear(); validCopy = false; return; }
+  if(address >= written.size()) return;
+  completed.erase(std::remove_if(completed.begin(), completed.end(), [&](auto d) {
+    return (u64)address < (u64)d.ram + d.size && (u64)d.ram < (u64)address + size;
+  }), completed.end());
   u8 origin = device == (u32)RBusDevice::VR4300_DCACHE || device == (u32)RBusDevice::VR4300_UNCACHED ? 1
     : device == (u32)RBusDevice::PI_DMA ? 2 : 4;
   for(u32 n = address; n < std::min<u32>(address + size, written.size()); n++) written[n] |= origin;
@@ -107,8 +150,36 @@ static void observe(u64 address, u32 word) {
         seenSites.insert(canonical(pc));
       }
     }
-    // Extended replay supplies call roots only. Snapshot composition retains
-    // its reproducible 100M-instruction contract (including its Rust verifier).
+    // Numeric coverage cannot identify a different generation in a shared slot.
+    // Test once per completed producer, at its first actual instruction fetch.
+    if(seekUncovered && !foundOccupant) {
+      u32 at = canonical(pc);
+      for(auto it = completed.begin(); it != completed.end(); ++it) {
+        auto d = *it;
+        if(at < (0x80000000u | d.ram) || (u64)at >= 0x80000000ull + d.ram + d.size) continue;
+        bool slot = false, matched = false;
+        for(auto& b : bindings) {
+          if(at - canonical(b.runtime) >= b.size || b.source < 0) continue;
+          slot = true;
+          u32 offset = (0x80000000u | d.ram) - canonical(b.runtime);
+          // A complete subrange of the same declared ROM source is not new
+          // text merely because unrelated bytes elsewhere no longer match.
+          matched |= offset < b.size && d.size <= b.size - offset &&
+            ((u64)b.source + offset == d.rom || bindingMatches(b));
+        }
+        completed.erase(it);
+        if(!slot || matched) break;
+        ReplayBinding candidate{0x80000000u | d.ram, 0x80000000u | d.ram, d.size, d.rom};
+        if(!bindingMatches(candidate) || plaidFetchAccess.physical != (at & 0x1fffffffu) ||
+           rdram.ram.read<Word>(at & 0x1fffffffu, RBusDevice::ARES_DEBUGGER) != word) break;
+        std::fprintf(result, "{\"raw_occupant\":true,\"entry\":%u,\"destination\":%u,\"rom\":%u,\"size\":%u,\"load_site\":%u,\"steps\":%llu,\"bytes\":[",
+          pc, 0x80000000u | d.ram, d.rom, d.size, d.site, (unsigned long long)steps);
+        for(u32 i = 0; i < d.size; i++) std::fprintf(result, "%s%u", i ? "," : "", (u32)sourceRom[d.rom + i]);
+        std::fprintf(result, "]}\n"); foundOccupant = true; return;
+      }
+    }
+    // Extended replay supplies call roots and completed raw sources only.
+    // Snapshot composition retains its reproducible 100M-instruction contract (including its Rust verifier).
     if(steps >= 100000000) return;
     bool uncovered = seekUncovered && pc >= 0x80000000u && pc < 0x80800000u
       && std::none_of(covered.begin(), covered.end(), [&](auto r) { return r[0] <= pc && pc < r[1]; });
@@ -196,7 +267,7 @@ int main(int argc, char** argv) {
     at = end - targetList.c_str(); if(at < targetList.size()) at++;
   }
   u64 budget = std::strtoull(argv[5], nullptr, 0);
-  if(bytes.size() < 4096 || firmware.size() != 1984 || budget > 1000000000) return 2;
+  if(bytes.size() < 4096 || firmware.size() != 1984 || budget > 2000000000) return 2;
   sourceRom.assign(bytes.data(), bytes.data() + bytes.size());
   result = std::fopen(argv[7], "wb"); if(!result) return 2;
   Headless frontend; platform = &frontend;
@@ -226,10 +297,10 @@ int main(int argc, char** argv) {
   }
   plaidRdramBurstObserver = [](bool w, u32 a, u32 n, u32 d, const u32*) { mark(w,a,n,d); };
   plaidRdramScalarObserver = [](bool w, u32 a, u32 n, u32 d, u64) { mark(w,a,n,d); };
-  plaidPiDmaObserver = [](u32 kind,u32 a,u32 p,u32 n,u32,u32) { if(kind == 1) dma.push_back({a,p,n}); };
+  plaidPiDmaObserver = observeDma;
   plaidCpuInstructionObserver = [](bool before, u64 pc, u32 word) { if(before) observe(pc, word); };
   u32 vis = 0;
-  for(; steps < budget && vis < 3600 && (!targets.empty() || seekUncovered) && !uncoveredEntry; steps++) {
+  for(; steps < budget && vis < 3600 && (!targets.empty() || seekUncovered) && !uncoveredEntry && !foundOccupant; steps++) {
     if(cpu.instruction()) cpu.synchronize();
     if(vi.refreshed) { vis++; vi.refreshed = false; }
     // Extend only while the declared observation frontier remains uncovered.
@@ -254,7 +325,7 @@ int main(int argc, char** argv) {
     for(auto site : requestedSites) if(!seenSites.contains(site)) { std::fprintf(result, "%s%u", first ? "" : ",", site); first = false; }
     std::fprintf(result, "],");
   }
-  const char* reason = uncoveredEntry ? "uncovered_fetch" : steps >= budget ? "instruction_budget"
+  const char* reason = foundOccupant ? "undeclared_slot_occupant" : uncoveredEntry ? "uncovered_fetch" : steps >= budget ? "instruction_budget"
     : vis >= 3600 ? "vi_budget" : !targets.empty() || seekUncovered ? "sites_covered" : "entries_complete";
   std::fprintf(result, "\"stop_reason\":\"%s\",", reason);
   std::fprintf(result, "\"stop_pc\":%u,\"steps\":%llu,\"vi\":%u,\"entered\":%s,\"remaining\":%zu,\"sp\":[", (u32)cpu.ipu.pc, (unsigned long long)steps, vis, entered ? "true" : "false", targets.size());

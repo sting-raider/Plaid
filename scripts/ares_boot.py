@@ -13,8 +13,8 @@ import zlib
 ROOT = Path(__file__).resolve().parents[1]
 REV = '9408cb43d4948fc3ea6e152a307a34348df3fe04'
 BUDGET = 100_000_000
-# Open-call coverage may extend observation, never the snapshot contract.
-SITE_BUDGET = 1_000_000_000
+# Open-call and raw-occupant coverage may extend observation, never snapshots.
+SITE_BUDGET = 2_000_000_000
 
 
 def build_oracle():
@@ -122,8 +122,10 @@ def capture_many(rom, entries, exact=False, covered=None, sites=None, bindings=N
         if 'bytes' in result:
             result['output_sha256'] = hashlib.sha256(bytes(result['bytes'])).hexdigest()
             result['consumed_rom'] = sorted({(p - 0x10000000, p - 0x10000000 + n)
-                                             for _, p, n in result['pi_dma']
+                                             for _, p, n in result.get('pi_dma', [])
                                              if 0x10000000 <= p and p + n <= 0x10000000 + len(data)})
+            if result.get('raw_occupant'):
+                result['consumed_rom'] = [[result['rom'], result['rom'] + result['size']]]
     return results
 
 

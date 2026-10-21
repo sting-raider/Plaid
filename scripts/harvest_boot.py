@@ -144,6 +144,36 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
         receipt['rsp_sources'] = new
     for capture in captures:
         receipt['captures'].append({k: v for k, v in capture.items() if k != 'bytes'})
+        if capture.get('raw_occupant'):
+            # A full completed PI source, not a prefix search or numeric alias.
+            data = Path(rom).read_bytes()
+            width = {bytes.fromhex('37804012'): 2, bytes.fromhex('40123780'): 4}.get(data[:4], 1)
+            if width != 1:
+                canonical = bytearray(len(data))
+                for lane in range(width):
+                    canonical[lane::width] = data[width - 1 - lane::width]
+                data = canonical
+            start, source, length, entry = (capture[k] for k in ('destination', 'rom', 'size', 'entry'))
+            canonical_entry = 0x80000000 | (entry & 0x1fffffff)
+            if (start % 8 or length <= 0 or length % 4 or source < 0 or source % 2 or
+                    not 0x80000000 <= start < start + length <= 0x80800000 or
+                    not 0x80000000 <= entry < 0xc0000000 or
+                    not start <= canonical_entry < start + length or entry % 4 or
+                    source + length > len(data) or len(capture.get('bytes', [])) != length or
+                    bytes(capture['bytes']) != data[source:source + length]):
+                receipt['refusal'] = 'invalid completed PI occupant'
+                continue
+            load = {'destination': hex(start), 'size': hex(length), 'rom': hex(source),
+                    'encoding': 'raw', 'slot': True}
+            if load not in loads['loads']:
+                loads['loads'].append(load)
+                loads['source'] += (f"; completed PI raw occupant ROM {source:#x}..{source + length:#x} "
+                                    f"at {start:#x}, load site {capture['load_site']:#x}, first fetch {entry:#x}; "
+                                    f"ares {capture['revision']}, ROM sha256 {capture['rom_sha256']}, "
+                                    f"output sha256 {hashlib.sha256(bytes(capture['bytes'])).hexdigest()}; "
+                                    "native content binding required (ADR-0230)")
+                added = True
+            continue
         if 'bytes' not in capture:
             continue
         data = bytes(capture['bytes'])
@@ -171,6 +201,8 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
             added = True
     Path(receipt_path).write_text(json.dumps(receipt, indent=2) + '\n')
     if added or new:
-        loads['loads'].sort(key=lambda l: int(l['destination'], 0))
+        # Slot storage is allocated in declaration order. Append alternates so
+        # previously source-bound observed roots keep their map placements.
+        loads['loads'].sort(key=lambda l: (bool(l.get('slot')), 0 if l.get('slot') else int(l['destination'], 0)))
         loads_path.write_text(json.dumps(loads, indent=2) + '\n')
     return added

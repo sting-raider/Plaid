@@ -844,3 +844,147 @@ appended/edited as bytes and its original CRLF/non-UTF-8 prefix verified intact.
 README and progress data are unchanged. No ROM, RAM dump, disassembly, generated
 game code or WAV is committed. Only the generic table analysis, synthetic tests,
 ADR, STATUS/NEXT and this note belong to the production commit.
+
+
+## ADR-0230 investigation: executable occupants hidden by address coverage
+
+Base db999542; branch experiment/pm-next-0230. Hypothesis: replay rejects
+the undeclared live shared-slot occupant correctly, but numeric coverage
+prevents harvest from discovering it. Identify completed PI producer and
+full bytes before adding source-bound slot alternates; preserve ambiguous
+identity refusal and native frame/content guards. Receipts: ignored
+target/paper-mario/0222/adr-0230/. No game-specific production constants.
+
+
+## ADR-0230: completed PI occupants behind numeric slot coverage
+
+Base db999542, continued from hypothesis-only WIP c89de300 on
+experiment/pm-next-0230 in target/pm-boot-0222. The hypothesis is confirmed:
+the resident bytes at the VI-659 call target are a different shared-slot
+occupant, and address coverage alone suppresses its discovery. No target is
+admitted merely by its numeric projection through the older declared image.
+
+The visible retained native probe records ROM 0xa2a240 -> RAM 80240000,
+size 0x2000, with caller RA 8005f520. A complete 8192-byte RAM dump at the
+same fail-closed VI-659 stop equals ROM 0xa2a240..0xa2c240, SHA-256
+388d7ea45c4e54ad239570accde6a3075b3ef6871fd4dcc476a41d4ac510f773.
+The competing prefix at ROM 0x842c20 would imply source start 0x8423a0;
+that full 8192-byte comparison differs in 6946 bytes. Thus the two prefix
+matches are not interchangeable source identities.
+
+The pinned ares producer is the PI length-register store at PC 80060d38.
+It completes the first 0x2000-byte transfer at instruction 973580904. Adjacent
+completed chunks from the same loader form ROM 0xa2a240..0xa394e0 at RAM
+80240000..8024f2a0 (0xf2a0 bytes). The first fetch at 80240880 is instruction
+1004200680, just beyond ADR-0227's former 1B replay cap. Every produced byte,
+the actual physical fetch and valid instruction-cache words match. Full range
+SHA-256: 0f4089737a63b31bc6dee2f69b14eb8831a78b7f2a3745a4f32e891ade6e448f;
+searching for that complete payload yields only ROM 0xa2a240. A diagnostic
+3B replay establishes the boundary; production is bounded at 2B/3600 VI.
+Snapshots retain their 100M contract. The outer refinement ceiling is 16.
+
+Harvest now appends verified raw occupants even when their execution addresses
+are covered. Exact byte effects, not a PI request, authorize the source. Later
+writes revoke the retained producer even when values stay equal. Unsupported
+mapping and partial/misaligned effects are refused. Full content and DMA source
+resolve prefixes; ambiguous mapped identities still acquire no call observation.
+Existing slot order is retained so adding an alternate cannot shift old observed
+map PCs. No native guard, frame pin, boot image verifier or alias rule is relaxed.
+
+Synthetic tests exercise complete/adjacent DMA effects, covered slots, unequal
+full tails, all ROM byte orders, aliases, ambiguous projections, later equal-value
+writes, partial effects, malformed captures, stable slot placement and cache
+coherence. The cache mutation initially survived a test changing the fetched
+word because an independent fetched-word check rejected it. The strengthened
+case leaves that word equal and changes a later cached word; final mutation
+results are retained without calling the earlier survival a semantic kill.
+
+Selected source mutations disable covered-occupant discovery (semantic failure,
+61.01 s including local compilation), retain overwritten generations (69.28 s),
+omit Python full-content validation (0.29 s), and reorder old slots (0.28 s).
+The retained cache mutant and final strengthened-test result are in
+mutation-cache-final.json. Production source is restored and the synthetic
+suite rerun. A preliminary full gate passes: fmt 1.2 s, Clippy 0.4 s, workspace
+tests 9.0 s, CLI 2.9 s, runtime 211.9 s. These are operational timings under
+concurrent local work, not a performance claim. The canonical final gate is
+rerun after the tracked integration tree is frozen.
+
+Fresh retained-input rediscovery matches db999542 completely, including parsed
+maps and solver reports: BK 81465 blocks OPEN/2 (56.66 s), F-Zero X 28119 OPEN/1
+(7.95 s), MM 214963 CLOSED/0 (168.00 s). The Rust discovery implementation is
+unchanged. Earlier candidate 1B replay probes add no raw occupant to these
+controls; their existing harvest path can add ordinary call observations to old
+retained inputs, so discovery comparisons use identical original declarations.
+No finite replay/discovery control establishes new gameplay or whole-ROM closure.
+
+Ignored receipts: target/paper-mario/0222/adr-0230/ (full-dump.log,
+full-occupant.json, target-replay-capture.json, occupant-summary.json,
+probe-harvest.json, controls/, test-final.log, mutations-cpp.json,
+mutations-python.json, mutation-cache-final.json, native.log and gate-final/).
+DECISIONS is appended as bytes, with its entire original non-UTF-8/CRLF prefix
+verified unchanged. README and progress data are unchanged. No ROM, RAM bytes,
+disassembly, generated game code, screenshots or audio are tracked in git.
+
+Review rejected an unnecessary duplicate at RAM 802b6000: its complete 0x480
+producer is a subrange of the existing ROM 0xe23260 declaration, whose unrelated
+trailing bytes differ in RAM. Same-source subranges are already declared; they
+do not gain observations through a weakened binding. A dedicated synthetic
+control covers this distinction. The interrupted exploratory pipeline is kept
+as native-preliminary.log; the final pipeline restarts from infer-loads.
+The stale-cache fixture also resets the PI destination after its first DMA;
+without that reset it wrote the adjacent address and did not test replacement.
+The corrected later-word cache mutation fails semantically (5.85 s, cached
+mutant executable); the previous surviving runs remain retained as such.
+
+Final-source C++ mutations all fail semantically after rebuilding their isolated
+adapters: omit covered-occupant discovery 40.22 s, retain overwritten generation
+47.92 s, omit raw cache guard 44.65 s (compilation included). Final receipts:
+mutations-cpp-final.json. The production source digest is frozen separately in
+production-sha256.json; mutant adapters never replace the production adapter.
+
+Final 2B replay control: F-Zero X has eight eligible raw bindings, no new raw
+occupants, and completes in 250.85 s. BK and MM have zero supported raw-slot
+bindings, so the new raw-occupant path cannot activate for their retained maps.
+The complete discovery/solver equality checks above remain the regression gate.
+Receipts: final-replay-controls/result.json and its F-Zero harvest receipt.
+
+
+Final clean ROM-only pipeline: 60454 blocks (59626 in ADR-0229), eight residual
+sites, native_complete: false. ROM 0xa2a240 is placed at map 80bc0000 and target
+80bc0880 is an admitted entry/address-taken function under the existing verifier;
+that particular entry is statically evidenced, not granted an observed-target
+certificate. Call observations elsewhere in the newly discovered image still
+remain hypotheses. Fresh inference now keeps its original slot declaration order
+rather than numerically reordering slots after emitting trace facts, so historical
+synthetic map coordinates can change across these fresh builds. Runtime addresses
+and source identities remain explicit. The current residual sites are 8003c488,
+8004e544, 8082cf20, 8091893c, 809189b8, 80918aa8, 80b1c178 and 80b1c344.
+
+The exact requested native.py <local ROM> --residual-dispatch --rt64 --seconds 60
+pipeline runs in active Windows console session 3. It passes the prior VI-659
+call and stops at the 60-second time limit: VI 3590, 3579 graphics tasks,
+3588 compiled audio tasks, 17696 PI DMAs, fault 0. Approximate launch-to-final-log
+wall time is 1087.51 s, versus the retained ADR-0229 530.62 s run; the larger
+coverage budget, new image/roots and compilation workload differ, so this is
+not a controlled performance comparison. The scheduled cmd parent did not retain
+native.exit; the child success/launcher output is retained, and the independent
+repeat below supplies a directly captured shell exit code.
+
+The separately invoked visible executable repeats for 60 seconds with --wav and
+--dump: exit 0, VI 3560, 3548 graphics tasks, 3557 audio tasks, 17602 PI DMAs,
+fault 0. Its complete stop/GPR/thread record is repeat-stop.json. Different
+counters/frame selection do not establish complete state or pixel equivalence.
+The captured WAV has 1899248 stereo signed-16-bit frames at 32006 Hz, peak 32121;
+PCM is nonzero in this run. Audible mixing accuracy is not established by a peak.
+Full-window screenshots show Nintendo logos and the opening starry storybook
+scene with its stage curtains and text. No input/new-game or full-gameplay
+acceptance is claimed.
+
+There is no next runtime fault in these two 60-second neutral-controller runs.
+The next work is the eight residual-site proofs and broader visible input/gameplay
+and audio validation. Do not silently promote the artifact to native-complete.
+All tracked paths are frozen before the final canonical gate at gate-final/;
+its gate.json records exact fmt/Clippy/full-workspace-test/CLI/runtime timings.
+The full test log must show every workspace suite with zero filtered tests,
+not a focused or cached-only substitute. Final native source digests, decisions
+prefix preservation, mutation outputs and controls remain in ignored receipts.

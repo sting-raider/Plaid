@@ -6635,3 +6635,50 @@ forged closure and reachable native case coverage. Native CPU/PC/RAM state is
 compared with pinned ares; a runtime table change to an unlisted target faults.
 Mutation checks, discovery controls, full local gate timings and the visible
 Paper Mario frontier are recorded in research/paper-mario-native-frontier.md.
+
+## ADR-0230: discover completed raw occupants inside covered shared slots
+
+Numeric executable coverage does not identify a slot's resident source. During
+analysis-only pinned ares replay, retain complete aligned ROM-to-identity-RAM PI
+transfers that intersect declared raw slots, including adjacent continuations.
+Each byte must be observed after its write and match the exact ROM source.
+Join only adjacent complete ranges with the same ROM/RAM displacement and load
+site. Overlapping writes, including equal-value writes, invalidate the retained
+producer; uncertain RDRAM mapping invalidates the history. Requests and partial
+or misaligned effects alone cannot authorize an image.
+
+At the producer's first instruction fetch, compare the whole range against
+supported declared images. A matching prefix or shorter declaration does not
+cover a larger occupant. When no declaration supplies the complete occupant,
+require full ROM/RAM identity, coherent valid instruction-cache words, the actual
+physical fetch and the fetched word. Emit a raw source declaration through the
+existing content-bound shared-slot path. Python independently checks the complete
+canonical ROM slice and bounds before appending it. No prefix search selects a
+source; completed DMA provenance and complete content distinguish equal prefixes.
+Unresolved/ambiguous projection still refuses observations and native dispatch.
+A completed subrange of the same declared ROM source is already known even
+if unrelated bytes elsewhere in that declaration differ. This does not relax
+the existing projection guard or authorize a new observation.
+
+Preserve existing slot declaration order when adding an alternate, so earlier
+source-bound observed roots retain their synthetic map placements. Replay may
+observe up to 2B instruction calls/3600 VI (formerly 1B); the ROM-only driver allows
+16 refinement rounds (formerly eight). Snapshots still stop at 100M instructions
+and retain ADR-0190/0220 reproduction and verification. Extended raw-source and
+call observations never certify closure. The explicit residual artifact remains
+native_complete: false; no interpreter, JIT or fallback is added to native mode.
+ADR-0187 active-frame pins and all native content/alias controls remain unchanged.
+
+Synthetic tests cover covered ranges, unequal full content after equal prefixes,
+ROM byte orders, aliases, ambiguous declarations, adjacent producer chunks,
+equal-value overwrites, partial producers, malformed source captures, stable
+slot placement and stale later cache words despite an unchanged fetched word.
+Mutation checks, exact-parent BK/F-Zero X/MM discovery comparisons, full local
+gate receipts and the visible Paper Mario frontier are recorded in
+research/paper-mario-native-frontier.md.
+
+Pinned ISC ares 9408cb43d4948fc3ea6e152a307a34348df3fe04 remains a separately
+built analysis oracle. Its PI request/write/completion, RDRAM identity and CPU
+fetch/cache boundaries were inspected; no upstream implementation is copied or
+linked into the native artifact. Existing notices remain intact. No game-specific
+production constants, ROM data or copyrighted capture is committed.
