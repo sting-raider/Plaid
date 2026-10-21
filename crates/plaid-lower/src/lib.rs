@@ -8,7 +8,7 @@
 use plaid_core::{
     GuestAddr,
     discovery::CodeImage,
-    program::{EdgeKind, ProgramMap},
+    program::{BasicBlock, EdgeKind, ProgramMap},
     returns,
     solver::{ClosureStatus, Scope, solve},
 };
@@ -127,7 +127,8 @@ static void plaid_build_prot(plaid_state *s) {
 
 const COP0: &str = include_str!("cop0.h");
 
-const HELPERS: &str = r#"/* Native frames pin their complete fixed-text bodies, including continuations.
+const HELPERS: &str = r#"/* Native frames pin their fixed-text bodies; one suspended at a call pins only
+   the continuation it can still run (ADR-0239).
    The intrusive list permits SDK threads to suspend/resume out of stack order. */
 /* Keep the intentional stack-frame registration out of GCC's dangling-pointer
    heuristic; the wrapper always unregisters before its local frame expires. */
@@ -1147,6 +1148,59 @@ fn simple_lo(word: u32, pc: u32, fr0: bool, lo: Option<&str>) -> Result<String, 
     })
 }
 
+/// Blocks a suspended frame can still execute after each linking call returns
+/// (ADR-0219 continuation pins), keyed by the call's link address: those
+/// reachable from the link through in-function edges, the next block, and
+/// proven jump tables. A jump with no proven target set keeps every block
+/// live, so imprecision only ever pins more.
+fn continuation_blocks<'b>(
+    blocks: &[&'b BasicBlock],
+    edges: &BTreeMap<u32, Vec<u32>>,
+    targets: &BTreeMap<u32, BTreeSet<u32>>,
+    returns: &BTreeSet<u32>,
+    word: &dyn Fn(u32) -> Result<u32, String>,
+) -> BTreeMap<u32, Vec<&'b BasicBlock>> {
+    let by_start: BTreeMap<u32, &BasicBlock> = blocks.iter().map(|b| (b.start.pc.0, *b)).collect();
+    let mut unknown = false;
+    let mut next: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
+    let mut links = BTreeSet::new();
+    for b in blocks {
+        let (start, end) = (b.start.pc.0, b.start.pc.0.wrapping_add(b.size));
+        let out = next.entry(start).or_default();
+        out.insert(end);
+        for pc in (start..end).step_by(4) {
+            out.extend(edges.get(&pc).into_iter().flatten().copied());
+            let Ok(w) = word(pc) else { continue };
+            let (op, funct, rt) = (w >> 26, w & 63, (w >> 16) & 31);
+            if op == 0 && funct == 8 && !returns.contains(&pc) {
+                match targets.get(&pc) {
+                    Some(ts) => out.extend(ts.iter().copied()),
+                    None => unknown = true,
+                }
+            }
+            if op == 3 || (op == 0 && funct == 9) || (op == 1 && (16..=19).contains(&rt)) {
+                links.insert(pc.wrapping_add(8));
+            }
+        }
+    }
+    links
+        .into_iter()
+        .map(|link| {
+            if unknown {
+                return (link, blocks.to_vec());
+            }
+            let mut seen = BTreeSet::new();
+            let mut work = vec![link];
+            while let Some(pc) = work.pop() {
+                if by_start.contains_key(&pc) && seen.insert(pc) {
+                    work.extend(next.get(&pc).into_iter().flatten().copied());
+                }
+            }
+            (link, seen.iter().map(|pc| by_start[pc]).collect())
+        })
+        .collect()
+}
+
 struct Lowerer<'a> {
     image: &'a CodeImage,
     fr0: bool,
@@ -1168,9 +1222,23 @@ struct Lowerer<'a> {
     /// Relocatable overlays' link ranges, and the one this function is in.
     overlays: &'a [(u32, u32)],
     ovl: Option<usize>,
+    /// Pinned frame of a fixed-text function (ADR-0219): its entry and full
+    /// range count, and per call continuation the range count still live there.
+    frame: Option<(u32, usize)>,
+    continuations: BTreeMap<u32, usize>,
 }
 
 impl Lowerer<'_> {
+    /// While a call is outstanding, the suspended frame pins only the text its
+    /// continuation can still reach; the full body is pinned again on return.
+    fn pin(&self, link: u32, call: String) -> String {
+        match (self.frame, self.continuations.get(&link)) {
+            (Some((f, full)), Some(n)) => format!(
+                "frame->ranges = C_{f:08x}_{link:08x}; frame->count = {n}u; {call} frame->ranges = R_{f:08x}; frame->count = {full}u;"
+            ),
+            _ => call,
+        }
+    }
     fn ovl_of(&self, pc: u32) -> Option<usize> {
         self.overlays.iter().position(|(s, e)| *s <= pc && pc < *e)
     }
@@ -1202,7 +1270,11 @@ impl Lowerer<'_> {
     fn call(&self, target: u32, link: u32, pc: u32, bound: bool) -> Result<String, String> {
         if let Some(name) = self.runtime.get(&target) {
             return Ok(format!(
-                "{{ s->cp0_known = 0; int r = plaid_rt_{name}(s); if (r) return r; }} {}",
+                "{} {}",
+                self.pin(
+                    link,
+                    format!("{{ s->cp0_known = 0; int r = plaid_rt_{name}(s); if (r) return r; }}")
+                ),
                 self.fallthrough(link, pc)
             ));
         }
@@ -1216,8 +1288,14 @@ impl Lowerer<'_> {
             return Ok(format!("return plaid_fault(s, 0x{pc:08x}u, 3);"));
         }
         Ok(format!(
-            "{{ int r = F_{target:08x}(s, {}); if (r) return r; }} {}",
-            self.link(link),
+            "{} {}",
+            self.pin(
+                link,
+                format!(
+                    "{{ int r = F_{target:08x}(s, {}); if (r) return r; }}",
+                    self.link(link)
+                )
+            ),
             self.fallthrough(link, pc)
         ))
     }
@@ -1300,9 +1378,15 @@ impl Lowerer<'_> {
             (0, 9, _) => {
                 if let Some(k) = self.dispatch.get(proven()?) {
                     return Ok(format!(
-                        "{{ u64 t = {a}; {} {slot} {{ int r = plaid_call_{k}(s, t, {}, 0x{pc:08x}u); if (r) return r; }} {} }}",
+                        "{{ u64 t = {a}; {} {slot} {} {} }}",
                         set(rd, self.link(after)),
-                        self.link(after),
+                        self.pin(
+                            after,
+                            format!(
+                                "{{ int r = plaid_call_{k}(s, t, {}, 0x{pc:08x}u); if (r) return r; }}",
+                                self.link(after)
+                            )
+                        ),
                         self.fallthrough(after, pc)
                     ));
                 }
@@ -1381,10 +1465,16 @@ impl Lowerer<'_> {
             (3, _, _) if self.targets.contains_key(&pc) => {
                 let k = self.dispatch[proven()?];
                 Ok(format!(
-                    "s->r[31] = {}; {slot} {{ int r = plaid_call_{k}(s, {}, {}, 0x{pc:08x}u); if (r) return r; }} {}",
+                    "s->r[31] = {}; {slot} {} {}",
                     self.link(after),
-                    sx(jump),
-                    self.link(after),
+                    self.pin(
+                        after,
+                        format!(
+                            "{{ int r = plaid_call_{k}(s, {}, {}, 0x{pc:08x}u); if (r) return r; }}",
+                            sx(jump),
+                            self.link(after)
+                        )
+                    ),
                     self.fallthrough(after, pc)
                 ))
             }
@@ -1909,11 +1999,54 @@ pub fn lower_c_parts(
     for b in &map.blocks {
         by_start.entry(&b.start).or_default().push(b);
     }
+    // In-function control edges by site; calls leave the frame (ADR-0219).
+    let mut edges_by_site: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+    for e in map.direct_edges.iter().filter(|e| e.kind != EdgeKind::Call) {
+        edges_by_site
+            .entry(e.site.pc.0)
+            .or_default()
+            .push(e.target.pc.0);
+    }
     let mut lowered = Vec::new();
     for f in callees.iter().filter(|f| seen.insert(f.pc.0)) {
         let mut out = String::new();
         let body = &bodies[f];
+        let blocks: Vec<_> = body
+            .iter()
+            .filter_map(|b| by_start.get(b))
+            .flatten()
+            .copied()
+            .collect();
+        let fixed = ovl_of(f.pc.0).is_none();
+        let range = |b: &&BasicBlock| -> Result<String, String> {
+            Ok(format!(
+                "{{{}u, {}u}}",
+                physical(b.start.pc.0)?,
+                physical(b.start.pc.0 + b.size - 1)? + 1
+            ))
+        };
+        let mut pins = String::new();
+        let mut continuations = BTreeMap::new();
+        if fixed {
+            let live = continuation_blocks(&blocks, &edges_by_site, &targets, &returns, &word);
+            for (link, reach) in live {
+                let ranges = reach.iter().map(&range).collect::<Result<Vec<_>, _>>()?;
+                // An empty set still needs one entry for a valid C array.
+                let shown = if ranges.is_empty() {
+                    "{0u, 0u}".to_string()
+                } else {
+                    ranges.join(", ")
+                };
+                pins += &format!(
+                    "static const plaid_text_range C_{:08x}_{link:08x}[] = {{{shown}}};\n",
+                    f.pc.0
+                );
+                continuations.insert(link, ranges.len());
+            }
+        }
         let lowerer = Lowerer {
+            frame: fixed.then_some((f.pc.0, blocks.len())),
+            continuations,
             image,
             fr0: map.cop1_fr0,
             labels: body.iter().map(|b| b.pc.0).collect(),
@@ -1950,25 +2083,17 @@ pub fn lower_c_parts(
         // A wrapper balances the pin on every exit, including faults and tails.
         let body_name = if let Some(k) = lowerer.ovl {
             out += &format!(
-                "static int B_{0:08x}(plaid_state *s, u64 ret);\n{link}int F_{0:08x}(plaid_state *s, u64 ret) {{\n  int r;\n  s->ovl_active[{k}]++;\n  r = B_{0:08x}(s, ret);\n  s->ovl_active[{k}]--;\n  return r;\n}}\n",
+                "static int B_{0:08x}(plaid_state *s, u64 ret, plaid_native_frame *frame);\n{link}int F_{0:08x}(plaid_state *s, u64 ret) {{\n  int r;\n  s->ovl_active[{k}]++;\n  r = B_{0:08x}(s, ret, 0);\n  s->ovl_active[{k}]--;\n  return r;\n}}\n",
                 f.pc.0
             );
             format!("static int B_{:08x}", f.pc.0)
         } else {
-            let ranges = body
+            let ranges = blocks
                 .iter()
-                .filter_map(|b| by_start.get(b))
-                .flatten()
-                .map(|b| {
-                    Ok(format!(
-                        "{{{}u, {}u}}",
-                        physical(b.start.pc.0)?,
-                        physical(b.start.pc.0 + b.size - 1)? + 1
-                    ))
-                })
+                .map(&range)
                 .collect::<Result<Vec<_>, String>>()?;
             out += &format!(
-                "static int B_{0:08x}(plaid_state *s, u64 ret);\n{link}int F_{0:08x}(plaid_state *s, u64 ret) {{\n  static const plaid_text_range ranges[] = {{{1}}};\n  plaid_native_frame frame = {{0, 0, ranges, {2}}};\n  int r;\n  plaid_text_pin(s, &frame);\n  r = B_{0:08x}(s, ret);\n  plaid_text_unpin(s, &frame);\n  return r;\n}}\n",
+                "static const plaid_text_range R_{0:08x}[] = {{{1}}};\n{pins}static int B_{0:08x}(plaid_state *s, u64 ret, plaid_native_frame *frame);\n{link}int F_{0:08x}(plaid_state *s, u64 ret) {{\n  plaid_native_frame frame = {{0, 0, R_{0:08x}, {2}}};\n  int r;\n  plaid_text_pin(s, &frame);\n  r = B_{0:08x}(s, ret, &frame);\n  plaid_text_unpin(s, &frame);\n  return r;\n}}\n",
                 f.pc.0,
                 ranges.join(", "),
                 ranges.len()
@@ -1976,7 +2101,7 @@ pub fn lower_c_parts(
             format!("static int B_{:08x}", f.pc.0)
         };
         out += &format!(
-            "{body_name}(plaid_state *s, u64 ret) {{\n  (void)ret;\n  goto L_{:08x};\n",
+            "{body_name}(plaid_state *s, u64 ret, plaid_native_frame *frame) {{\n  (void)ret; (void)frame;\n  goto L_{:08x};\n",
             f.pc.0
         );
         for &block in body.iter().filter_map(|b| by_start.get(b)).flatten() {
@@ -2074,4 +2199,70 @@ pub fn lower_c_parts(
     );
     units.insert(0, out);
     Ok(units)
+}
+
+#[cfg(test)]
+mod continuation_tests {
+    use super::*;
+    use plaid_core::program::CodeAddress;
+
+    fn block(pc: u32, size: u32) -> BasicBlock {
+        BasicBlock {
+            start: CodeAddress {
+                pc: GuestAddr(pc),
+                image: "t".into(),
+                generation: 0,
+            },
+            size,
+            delay_slot_entry: false,
+            evidence: Default::default(),
+        }
+    }
+
+    // Blocks at 0x00 (prefix), 0x10 (call: jal at 0x10, link 0x18), 0x18 (tail).
+    fn live(words: &[(u32, u32)], edges: &[(u32, u32)], targets: &[(u32, &[u32])]) -> Vec<u32> {
+        let blocks = [block(0x00, 0x10), block(0x10, 0x08), block(0x18, 0x10)];
+        let refs: Vec<&BasicBlock> = blocks.iter().collect();
+        let words: BTreeMap<u32, u32> = words.iter().copied().collect();
+        let word = |pc: u32| Ok(*words.get(&pc).unwrap_or(&0));
+        let mut by_site: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+        for &(s, t) in edges {
+            by_site.entry(s).or_default().push(t);
+        }
+        let targets: BTreeMap<u32, BTreeSet<u32>> = targets
+            .iter()
+            .map(|(s, t)| (*s, t.iter().copied().collect()))
+            .collect();
+        let reach = continuation_blocks(&refs, &by_site, &targets, &BTreeSet::new(), &word);
+        reach[&0x18].iter().map(|b| b.start.pc.0).collect()
+    }
+
+    const JAL: u32 = 0x0c00_0000;
+
+    #[test]
+    fn an_executed_prefix_is_not_live_after_the_call() {
+        assert_eq!(live(&[(0x10, JAL)], &[], &[]), vec![0x18]);
+    }
+
+    #[test]
+    fn a_loop_back_keeps_the_earlier_block_live() {
+        // beq at 0x20 branches back to the prefix
+        assert_eq!(
+            live(&[(0x10, JAL)], &[(0x20, 0x00)], &[]),
+            vec![0x00, 0x10, 0x18]
+        );
+    }
+
+    #[test]
+    fn jump_tables_keep_targets_and_unknown_jumps_keep_everything() {
+        let jr_t0 = 0x0100_0008; // jr $t0
+        assert_eq!(
+            live(&[(0x10, JAL), (0x20, jr_t0)], &[], &[(0x20, &[0x10])]),
+            vec![0x10, 0x18]
+        );
+        assert_eq!(
+            live(&[(0x10, JAL), (0x20, jr_t0)], &[], &[]),
+            vec![0x00, 0x10, 0x18]
+        );
+    }
 }

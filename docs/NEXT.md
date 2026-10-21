@@ -1,5 +1,11 @@
 # Next
 
+## After continuation pins (ADR-0239)
+
+MM is restored. Banjo-Kazooie still regresses twice: 94a4d7cb (ADR-0205) loses the
+table proofs at two sites once a new entry splits their block, and a later
+commit adds a 42nd ROM-derived RSP text that makes its task match ambiguous.
+
 ## After bounded ERET and aligned load recovery (ADR-0237)
 
 MK64 now produces a residual validation artifact: the four missing functions

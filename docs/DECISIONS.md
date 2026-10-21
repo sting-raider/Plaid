@@ -6914,3 +6914,27 @@ by fresh-fetch expected-head CAS. All five exact-tree gate steps returned
 zero: fmt 1.3 s, Clippy 1.0 s, full workspace 12.6 s, CLI 8.7 s, runtime
 296.9 s (320.5 s total). Cargo test compiled and ran 910 passing tests,
 one ignored. README/history follow-up is validated separately before CAS.
+
+## ADR-0239: Suspended native frames pin only their reachable continuation
+
+Status: accepted. ADR-0219 pins every block of a fixed-text native function
+for as long as its frame is live, so a write into any of that text faults 2.
+Majora's Mask regressed at VI 0: its entry function clears its own reset
+prefix (bzero over the bytes it has already executed) from a callee, while
+the entry frame is suspended at the call. Under eab5da1d the whole body,
+including the dead prefix, stayed pinned.
+
+While a call is outstanding, the frame now pins only the blocks its
+continuation can still execute: blocks reachable from the call's link
+through in-function direct edges, the sequential next block and proven
+jump-table targets. A jr that is neither a checked return nor a proven table
+keeps the whole body pinned, so imprecision only ever pins more. The full
+body is pinned again as soon as the call returns. Pinned ranges are static
+per (function, link) arrays; no runtime decoder or new fallback is added.
+
+Unit tests cover a dead prefix (not pinned), a loop back to an earlier block
+(kept), and a proven table versus an unknown jr. Removing the unknown-jump rule
+or the next-block edge fails them. MM runs 60 s: VI 3563, 1243 graphics and
+3530 audio tasks, fault 0, analysis CLOSED. The RCP readback and raw PI DMA
+refusal tests wrote over already-run entry text, which is now writable (its
+next entry re-verifies it, fault 8); they now target the live epilogue.
