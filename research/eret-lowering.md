@@ -148,3 +148,36 @@ fault, not atomic state refusal. The low-half-free destination remains only a
 candidate under unchanged placement/source checks; ambiguity remains refused.
 No production dependency, game constant, guest decoder or fallback is added.
 The historical DECISIONS working bytes remain an exact 414837-byte prefix.
+
+## Exact-tree production integration receipt (2026-10-22)
+
+Production 0c4d90109efda9621f8e3d9aa888033e6aec6795, tree 1f411fec646b85841b4392a430c0dd39475cf9eb, is a direct child
+of 3c8fb8f76f4dadfde6ade2a5f882c1bae19f0320. Fresh fetch confirmed that exact base;
+the expected-head CAS succeeded and a second fetch confirmed the new head.
+Author: sting-raider <alizaydsab@gmail.com>; no AI trailer.
+
+All five final production-tree gate steps returned **0**: fmt 1.3 s, Clippy
+1.0 s, full workspace tests 12.6 s, CLI 8.7 s, runtime 296.9 s; **320.5 s** summed.
+Cargo test compiled plaid-lower and plaid, then actually ran the complete
+unfiltered workspace suite: **910 passed, one ignored**. The retained runtime
+includes the strengthened EPC/ErrorEPC selector and unknown-target contracts.
+Inverting only the selector in an ignored generated copy fails with rc 6
+(fault 3 on the poison target); the restored fixture passes. LLbit removal
+fails separately. Pinned ares remains clean at the locked revision.
+Gate logs: target/eret-0237/gate-0c4d9010; landed-0c4d9010.json records exact
+base/head/tree, author and timings. tools/progress.py --check passes.
+
+MK64's retained startup diagnosis identifies the call at 800cc0f4 as the
+signature-recognized __osSetFpcCsr at 800d1b50. The helper checks FR=0 before
+its CTC1; the post-IPL native context has Status.FR=1 (boot Status 34000000).
+Thus fault 11 is at the HLE call boundary before rendering, not ERET. This
+receipt identifies the next blocker without modifying the FR/Status policy or
+the separate BK/MM regression work. The requested normal pipeline results
+and byte-identical discovery controls above are unchanged.
+
+README now names this real implementation commit for MK64 and the ADR row,
+and the history point records ISA 204/209. This documentation follow-up must
+pass all five local gate steps before its own direct-child CAS. Its final
+SHA and gate receipt remain under target/eret-0237 and in the closeout;
+no additional native-game acceptance is claimed. Visual content remains
+unverified because the Computer Use native pipe was unavailable.

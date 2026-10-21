@@ -89,6 +89,14 @@
       "milestones_verified": 51,
       "milestones_partial": 18,
       "milestones_declared": 73
+    },
+    {
+      "date": "2026-10-22",
+      "isa_lowered": 204,
+      "isa_decoded": 209,
+      "milestones_verified": 51,
+      "milestones_partial": 18,
+      "milestones_declared": 73
     }
   ]
 }

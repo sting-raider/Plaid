@@ -6907,3 +6907,10 @@ then faults 11 at 800cc0f4 with VI/tasks/DMA zero. GoldenEye remains OPEN
 with their existing owners. Contract, source diagnosis, timings and gate
 receipt: research/eret-lowering.md. DECISIONS is appended as bytes to
 preserve its historical CRLF and non-UTF-8 byte.
+
+ADR-0237 production receipt: 0c4d90109efda9621f8e3d9aa888033e6aec6795
+is a direct child of 3c8fb8f76f4dadfde6ade2a5f882c1bae19f0320 and landed
+by fresh-fetch expected-head CAS. All five exact-tree gate steps returned
+zero: fmt 1.3 s, Clippy 1.0 s, full workspace 12.6 s, CLI 8.7 s, runtime
+296.9 s (320.5 s total). Cargo test compiled and ran 910 passing tests,
+one ignored. README/history follow-up is validated separately before CAS.
