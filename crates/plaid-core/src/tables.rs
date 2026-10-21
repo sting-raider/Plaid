@@ -820,6 +820,7 @@ fn guarded(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
         bindings: BTreeMap::new(),
         results: BTreeSet::new(),
         effects: BTreeMap::new(),
+        runtime: BTreeMap::new(),
     };
     // Retain completed witnesses even when another predecessor is unproven.
     // They remain hypotheses: only an exhaustive walk can certify closure.
@@ -857,6 +858,10 @@ fn guarded(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
             prefix.extend(placed.to_be_bytes());
             prefix.extend(source.to_be_bytes());
         }
+    }
+    if !walk.runtime.is_empty() {
+        prefix.extend(b"runtime-register-effects-v0");
+        prefix.extend(serde_json::to_vec(&walk.runtime).ok()?);
     }
     for (at, word) in std::iter::once((load_pc.0, load))
         .chain(gap)
@@ -901,6 +906,7 @@ struct Walk<'m, 'a> {
     /// Map, image and caller slot are immutable within this walk. Cached effects
     /// retain their source words/bindings and are never shared with a verifier.
     effects: BTreeMap<(GuestAddr, u8), crate::callee_effects::NoWrite>,
+    runtime: BTreeMap<u32, RuntimeFunction>,
 }
 
 struct WalkFrame {
@@ -1086,6 +1092,7 @@ impl Walk<'_, '_> {
                     let effect = &self.effects[&key];
                     returns.retain(|pc| !effect.returns.contains(pc));
                     self.bindings.extend(&effect.bindings);
+                    self.runtime.extend(effect.runtime.clone());
                     self.seen.extend(&effect.words);
                 }
                 let slot = self.word(site + 4)?;

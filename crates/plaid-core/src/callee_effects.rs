@@ -14,6 +14,7 @@ pub(crate) struct NoWrite {
     pub reads: usize,
     pub returns: BTreeSet<u32>,
     pub bindings: BTreeMap<u32, (u32, u32, u64)>,
+    pub runtime: BTreeMap<u32, crate::program::RuntimeFunction>,
 }
 
 /// Explicitly permits strict linked-text to placed-text binding and verified
@@ -48,6 +49,7 @@ pub(crate) fn no_gpr_write_bound(
         returns: BTreeSet::new(),
         bindings: BTreeMap::new(),
         active_slot: None,
+        runtime: BTreeMap::new(),
     };
     let resolved = proof.resolve_raw(entry)?;
     proof
@@ -57,6 +59,7 @@ pub(crate) fn no_gpr_write_bound(
             reads: proof.reads,
             returns: proof.returns,
             bindings: proof.bindings,
+            runtime: proof.runtime,
         })
 }
 
@@ -111,12 +114,14 @@ pub(crate) fn no_gpr_write_in(
         returns: BTreeSet::new(),
         bindings: BTreeMap::new(),
         active_slot: None,
+        runtime: BTreeMap::new(),
     };
     proof.function(entry, 0, None).then_some(NoWrite {
         words: proof.words,
         reads: proof.reads,
         returns: proof.returns,
         bindings: proof.bindings,
+        runtime: proof.runtime,
     })
 }
 
@@ -133,10 +138,31 @@ struct Proof<'a, 'm> {
     returns: BTreeSet<u32>,
     bindings: BTreeMap<u32, (u32, u32, u64)>,
     active_slot: Option<usize>,
+    runtime: BTreeMap<u32, crate::program::RuntimeFunction>,
 }
 
 impl Proof<'_, '_> {
+    // These host implementations only update TLB/binding state. They neither
+    // write GPRs nor enter callbacks/scheduling; runtime scope remains mandatory.
+    fn runtime_boundary(&self, pc: GuestAddr) -> Option<&crate::program::RuntimeFunction> {
+        let function = self.map?.runtime_functions.get(&self.image.address(pc))?;
+        (matches!(
+            function.name.as_str(),
+            "osMapTLB" | "osUnmapTLB" | "osUnmapTLBAll"
+        ) && self.index.containing(&self.image.address(pc)).is_empty()
+            && function.callbacks.is_empty()
+            && function.status_global.is_none()
+            && function.eeprom_timer.is_none()
+            && !self.image.slots.iter().any(|(placed, linked, text)| {
+                placed.contains(pc) || pc.0.checked_sub(*linked).is_some_and(|off| off < *text)
+            }))
+        .then_some(function)
+    }
+
     fn resolve_raw(&mut self, pc: GuestAddr) -> Option<(GuestAddr, Option<usize>)> {
+        if self.runtime_boundary(pc).is_some() {
+            return Some((pc, None));
+        }
         // The caller's already selected slot keeps its existing source scope.
         if self.map.is_none()
             || self
@@ -275,6 +301,14 @@ impl Proof<'_, '_> {
     }
 
     fn function(&mut self, entry: GuestAddr, depth: usize, slot: Option<usize>) -> bool {
+        if let Some(function) = self.runtime_boundary(entry).cloned() {
+            if depth > MAX_CALL_DEPTH || self.reads >= self.limit {
+                return false;
+            }
+            self.reads += 1;
+            self.runtime.insert(entry.0, function);
+            return true;
+        }
         if depth > MAX_CALL_DEPTH
             || !self.target(entry).is_some()
             || !self.active_calls.insert(entry.0)
@@ -346,7 +380,10 @@ impl Proof<'_, '_> {
                 let Some((target, target_slot)) = self.resolve_raw(target) else {
                     return false;
                 };
-                if self.target(target).is_none() {
+                if self.target(target).is_none() && self.runtime_boundary(target).is_none() {
+                    return false;
+                }
+                if opcode == 2 && self.runtime_boundary(target).is_some() {
                     return false;
                 }
                 if opcode == 3 {
@@ -590,6 +627,52 @@ mod tests {
             overlay: None,
             evidence: ["synthetic-callee".into(), "synthetic-copy".into()].into(),
         });
+    }
+
+    #[test]
+    fn tlb_runtime_effects_keep_budget_and_slot_boundaries() {
+        let (mut map, mut image) = proof(vec![0x03e00008, 0]);
+        let address = image.base.clone();
+        map.blocks.clear();
+        let f = crate::program::RuntimeFunction {
+            name: "osMapTLB".into(),
+            evidence: ["synthetic-callee".into()].into(),
+            callbacks: vec![],
+            status_global: None,
+            eeprom_timer: None,
+        };
+        map.runtime_functions.insert(address.clone(), f);
+        for register in 1..=30 {
+            let effect = no_gpr_write_bound(
+                &MapIndex::new(&map),
+                &map,
+                &image,
+                address.pc,
+                register,
+                1,
+                None,
+            )
+            .unwrap();
+            assert_eq!(effect.reads, 1);
+            assert_eq!(effect.runtime.len(), 1);
+            assert!(effect.words.is_empty() && effect.returns.is_empty());
+        }
+        assert!(
+            no_gpr_write_bound(&MapIndex::new(&map), &map, &image, address.pc, 19, 0, None)
+                .is_none()
+        );
+        image.slots.push((
+            crate::program::GuestRange {
+                start: GuestAddr(BASE + 0x1000),
+                size: 8,
+            },
+            BASE,
+            8,
+        ));
+        assert!(
+            no_gpr_write_bound(&MapIndex::new(&map), &map, &image, address.pc, 19, 8, None)
+                .is_none()
+        );
     }
 
     #[test]
