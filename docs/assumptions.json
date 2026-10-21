@@ -190,9 +190,9 @@
     {"state": "checked", "groups": ["Load/store", "Trap"], "mnemonics": ["jr", "jalr", "add", "addi", "sub", "dadd", "daddi", "dsub", "break"], "label": "guarded RAM access, indirect-jump and return closure, no overflow, no trap, no BREAK (each aborts with a fault code)"}
   ],
   "rsp_obligations": [
-    {"name": "Microcode comes from the ROM, not from IMEM snapshots taken by running the game", "state": "partial: the default since ADR-0188 (SM64, MM, F-Zero X, Banjo-Kazooie, Paper Mario); OoT reaches RSP code not yet found"},
-    {"name": "Graphics microcode is executed, not interpreted at a high level by RT64", "state": "partial: --rsp-gfx runs it for F-Zero X (ADR-0186); display-list HLE is the default"},
-    {"name": "RSP tasks run asynchronously, as on hardware (today they complete synchronously)", "state": "assumed"}
+    {"name": "Microcode comes from the ROM, not IMEM snapshots", "state": "partial: default since ADR-0188; OoT still misses some"},
+    {"name": "Graphics microcode executes natively", "state": "partial: with --rsp-gfx (ADR-0186); RT64 HLE by default"},
+    {"name": "RSP tasks run asynchronously, as on hardware", "state": "assumed: they complete synchronously"}
   ],
   "hand_inputs": [
     "Code segment ROM offset, address, size and entry point, given by hand for SM64 and OoT; inferred from the ROM for Majora's Mask and F-Zero X (boot address from the CIC, size from the entry stub's BSS clear; ADR-0183, ADR-0184)",
