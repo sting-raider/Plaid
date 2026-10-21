@@ -1,5 +1,15 @@
 # Status
 
+## TLB host register effects (ADR-0231, partial)
+
+Callee proofs can carry GPR requirements across the three explicitly supported
+TLB host boundaries under the existing runtime ABI scope. Exact declaration
+metadata joins the recomputed certificate; callbacks, guest clobbers, independent
+entries and memory effects remain separate obligations. Synthetic table tests,
+mutations and a native host-state contract cover the rule. Paper Mario still has
+eight residual sites and native_complete: false: passing osMapTLB exposes another
+guest overwrite, rather than closing its switch. See the frontier research note.
+
 ## Completed raw slot occupants (ADR-0230)
 
 Paper Mario completes two visible, neutral-controller 60-second residual-validation

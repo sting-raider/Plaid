@@ -1,5 +1,16 @@
 # Next
 
+## Paper Mario proof gaps after ADR-0231
+
+No residual site is closed by the TLB host-effect contract. Three switches meet
+independent entries that bypass table-base initialization; two require alias-safe
+stack pointer/index lineage; three need stronger guest callee value preservation.
+The 8082cf20 callee now passes osMapTLB but reaches a guest s3 overwrite at
+8002974c. Prove memory separation and exact save/restore value lineage before
+accepting it. The two other first overwrites are 8003c680 (s2) and 8004ec70 (s4).
+No ABI shortcut or observed-target certificate is valid. Keep default native
+emission refused until all required edges have source-rechecked proofs.
+
 ## After completed raw slot occupants (ADR-0230)
 
 The previous VI-659 JALR stop is passed. Two visible 60-second Paper Mario runs

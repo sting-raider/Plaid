@@ -6682,3 +6682,36 @@ built analysis oracle. Its PI request/write/completion, RDRAM identity and CPU
 fetch/cache boundaries were inspected; no upstream implementation is copied or
 linked into the native artifact. Existing notices remain intact. No game-specific
 production constants, ROM data or copyrighted capture is committed.
+
+## ADR-0231: Bind TLB host register effects into callee certificates (partial)
+
+A table-base requirement may cross a direct call to an explicitly declared
+osMapTLB, osUnmapTLB or osUnmapTLBAll host boundary. Those project-owned host
+implementations change TLB/binding state without writing GPRs or entering guest
+callbacks or the scheduler. This is a host-effect contract under the existing
+runtime ABI scope, not a guest callee-save convention or a proof about the
+undecoded SDK body's registers. Other runtime names remain unsupported.
+
+The boundary must have the current image/generation, no decoded guest block,
+no callback or auxiliary ABI metadata, and no overlapping placed/linked slot
+text. A successful effect consumes the existing shared budget, records the
+exact runtime declaration, and contributes it to the table certificate hash.
+The independent verifier recomputes the effect and declaration. Tail jumps to
+runtime boundaries remain refused; unrelated guest return witnesses cannot be
+supplied by a host contract. Guest writes, entries, source bindings, memory
+lineage and full-path obligations retain their existing checks. The global
+solver still refuses every declared runtime boundary outside runtime scope.
+No executable guest decoder, game-specific fact or new scope is introduced.
+
+Synthetic table loops cover direct/nested boundaries, source/metadata changes,
+unsupported names, callbacks, unknown entries, decoded guest bodies and later
+register clobbers. A host harness compares all state except the intended TLB
+entries/generations, including full 64-bit GPRs, FPRs, PC, HI/LO, RAM and event
+state. Existing pinned-ares/native TLB execution contracts remain mandatory.
+No upstream implementation is copied.
+
+Paper Mario remains OPEN with eight residual sites. The new contract passes
+one earlier osMapTLB barrier, then correctly rejects a deeper guest overwrite;
+no site receives a certificate merely because it has candidate targets. The
+classification and exact validation receipts are in
+research/paper-mario-native-frontier.md. Default native emission remains refused.

@@ -557,6 +557,12 @@ def tlb_unmap(exe, cc):
     assert result.returncode == 0 and lines.get('words') == [0x4020, 0xFFFFFFFF, 0x8020], (result.stdout, result.stderr)
     print('SDK TLB unmap: only the indexed mapping is invalidated; an independent mapping survives')
 
+    effects = OUT / ('tlb-register-effects.exe' if os.name == 'nt' else 'tlb-register-effects')
+    subprocess.run([cc, '-O2', '-std=gnu11', '-Wall', '-Werror', '-Wno-unused-label', '-Wno-unused-function',
+                    '-DPLAID_SAFEPOINTS', '-DPLAID_LOWERED="tlb_unmap.c"', '-I', str(OUT),
+                    str(ROOT / 'runtime/test_tlb_register_effects.c'), '-pthread', '-o', str(effects)], check=True)
+    subprocess.run([str(effects)], check=True, timeout=30)
+
 
 def build(exe, cc, name, program, runtime, extra=(), status_globals=None, fr0=False, data_bindings=None):
     (OUT / f'{name}.bin').write_bytes(A.assemble(program))

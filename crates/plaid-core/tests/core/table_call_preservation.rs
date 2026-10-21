@@ -182,3 +182,132 @@ fn a_guarded_break_path_cannot_return_with_a_changed_base() {
         site(&changed_map)
     ));
 }
+
+fn runtime_map(image: &CodeImage, name: &str) -> ProgramMap {
+    plaid_core::pipeline::discover_image_with_runtime(
+        RomIdentity {
+            sha256: "e".repeat(64),
+            size: 4096,
+        },
+        image,
+        &[image.base.pc],
+        &[(GuestAddr(BASE + 0x180), name.into(), vec![])],
+        Some((
+            "runtime-test".into(),
+            Evidence {
+                kind: plaid_core::EvidenceKind::Static,
+                producer: "synthetic-runtime-contract".into(),
+                revision: "0".into(),
+                detail: "host boundary, not guest register preservation".into(),
+            },
+        )),
+        10000,
+    )
+    .unwrap()
+    .map
+}
+
+#[test]
+fn tlb_runtime_contract_carries_a_base_through_leaf_and_nested_calls() {
+    let image = image();
+    for name in ["osMapTLB", "osUnmapTLB", "osUnmapTLBAll"] {
+        let map = runtime_map(&image, name);
+        assert!(
+            plaid_core::tables::verify(&map, &image, site(&map)),
+            "{name}"
+        );
+        assert!(!map.blocks.iter().any(|b| b.start.pc.0 == BASE + 0x180));
+        let report = plaid_core::solver::solve(
+            &map,
+            std::slice::from_ref(&image),
+            plaid_core::solver::Scope::DeclaredStaticImages,
+        )
+        .unwrap();
+        assert!(
+            report
+                .blockers
+                .iter()
+                .any(|b| b.kind == "runtime_boundary_outside_scope")
+        );
+    }
+}
+
+#[test]
+fn runtime_effect_metadata_is_recomputed_even_for_another_supported_name() {
+    let image = image();
+    let map = runtime_map(&image, "osMapTLB");
+    assert!(plaid_core::tables::verify(&map, &image, site(&map)));
+    for mode in 0..6 {
+        let mut changed = map.clone();
+        let f = changed.runtime_functions.values_mut().next().unwrap();
+        match mode {
+            0 => f.name = "osUnmapTLB".into(),
+            1 => f.name = "unknown".into(),
+            2 => f.callbacks.push(4),
+            3 => f.status_global = Some(GuestAddr(BASE + 0x380)),
+            4 => f.eeprom_timer = Some((GuestAddr(BASE + 0x380), GuestAddr(BASE + 0x390))),
+            _ => {
+                changed.runtime_functions.clear();
+            }
+        }
+        assert!(
+            !plaid_core::tables::verify(&changed, &image, site(&map)),
+            "mode {mode}"
+        );
+    }
+    let mut other_generation = map.clone();
+    let (mut address, function) = other_generation.runtime_functions.pop_first().unwrap();
+    address.generation += 1;
+    other_generation.runtime_functions.insert(address, function);
+    assert!(!plaid_core::tables::verify(
+        &other_generation,
+        &image,
+        site(&map)
+    ));
+    assert!(!plaid_core::tables::verify(
+        &runtime_map(&image, "osSetIntMask"),
+        &image,
+        site(&runtime_map(&image, "osSetIntMask"))
+    ));
+}
+
+#[test]
+fn a_runtime_effect_never_hides_a_later_guest_write_or_an_unknown_entry() {
+    let mut changed = image();
+    changed.words[0x1d0 / 4] = 0x3c11_7000;
+    let map = runtime_map(&changed, "osMapTLB");
+    assert!(!plaid_core::tables::verify(&map, &changed, site(&map)));
+    let image = image();
+    let mut map = runtime_map(&image, "osMapTLB");
+    let refs = map.entries.values().next().unwrap().clone();
+    map.entries.insert(image.address(GuestAddr(BASE + 8)), refs);
+    assert!(!plaid_core::tables::verify(&map, &image, site(&map)));
+    let mut map = runtime_map(&image, "osMapTLB");
+    map.blocks.insert(BasicBlock {
+        start: image.address(GuestAddr(BASE + 0x180)),
+        size: 4,
+        delay_slot_entry: false,
+        evidence: map.entries.values().next().unwrap().clone(),
+    });
+    assert!(!plaid_core::tables::verify(&map, &image, site(&map)));
+}
+
+#[test]
+fn a_host_contract_cannot_supply_an_unrelated_guest_return_witness() {
+    let image = image();
+    let mut map = runtime_map(&image, "osMapTLB");
+    assert!(plaid_core::tables::verify(&map, &image, site(&map)));
+    let mut unrelated = map
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == BASE + 0x280)
+        .unwrap()
+        .clone();
+    map.indirect_sites.remove(&unrelated);
+    unrelated.candidates.insert(
+        image.address(GuestAddr(BASE + 0x48)),
+        unrelated.evidence.clone(),
+    );
+    map.indirect_sites.insert(unrelated);
+    assert!(!plaid_core::tables::verify(&map, &image, site(&map)));
+}

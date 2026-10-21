@@ -988,3 +988,106 @@ its gate.json records exact fmt/Clippy/full-workspace-test/CLI/runtime timings.
 The full test log must show every workspace suite with zero filtered tests,
 not a focused or cached-only substitute. Final native source digests, decisions
 prefix preservation, mutation outputs and controls remain in ignored receipts.
+
+
+## ADR-0231 initial classification and integration claim (2026-10-21)
+
+Base c3c1edb8; branch experiment/pm-close-0231 in target/pm-boot-0222.
+Current native-manifest.json is authoritative: historical 80a0/80b2 map
+coordinates now project to 8091/80b1. All eight sites are non-linking JR
+switches, not function-pointer JALR arrays. The following classification is
+recorded before production changes. Local diagnostic instrumentation is excluded
+from the candidate and receipts live under target/paper-mario/0222/adr-0231/.
+
+| Current site | Historical site | First missing proof |
+| --- | --- | --- |
+| 8003c488 | same | Seven-entry switch: guard/index and initialized table agree on completed paths, but loop-call effect cannot prove s2 unchanged across callee 8003c668. Save/restore requires a memory/value proof, not an ABI assumption. |
+| 8004e544 | same | Five-entry switch: guard/index and candidate snapshot exist; loop-call effect cannot prove s4 unchanged across callee 8004ec68. Class: callee effect. |
+| 8082cf20 | same | Twelve-entry slot switch: completed table paths exist; loop-call effect cannot prove s3 unchanged across callee 8082d160. Class: callee effect. |
+| 8091893c | 80a0893c | Nineteen-entry slot switch: independent address-taken entry into a loop bypasses a2 table-base initialization. Unknown incoming state remains a genuine barrier. |
+| 809189b8 | 80a089b8 | Nineteen-entry slot switch: independent address-taken entry bypasses a2 base initialization. |
+| 80918aa8 | 80a08aa8 | Thirty-five-entry slot switch: independent address-taken entry bypasses t0 base initialization. |
+| 80b1c178 | 80b2c178 | Captured pointer reload from sp+0x2c, guarded index reload from sp+0x70. Need matching index-cell versions plus pointer origin/frame and intervening store-alias proof. |
+| 80b1c344 | 80b2c344 | Captured pointer reload from sp+0x30. Intervening SWC1 through s0 may alias; exact pointer/index lineage and memory separation remain unproven. |
+
+Three callee effects tie the three entry/base barriers for the largest class.
+Investigate source-checked callee value preservation first; never remove the
+entry barrier or use observed/candidate targets as certificates. The existing
+fresh verifier must recompute every new predicate from CFG and source words.
+Acceptance requires synthetic counterexamples/mutation checks, identical retained
+BK/F-Zero X/MM controls, visible PM residual validation and the full local gate.
+No default native artifact is authorized while any residual remains.
+
+
+### ADR-0231 source diagnosis and partial result
+
+The three first failed effects were not all stack restores. 8003c488 first
+encounters ADDU s2,s0,s1 at 8003c680; 8004e544 encounters DADDU s4,a0,zero at
+8004ec70. Their prior SW saves cannot prove preservation without checking the
+saved value, every intervening possibly aliasing write/call, SP and the reload.
+The 8082cf20 traversal instead initially stops at a declared osMapTLB boundary
+(800667a0), reached from guest 8005a640. Runtime bodies are intentionally not
+decoded. A project-owned TLB host-effect contract passes that boundary, but the
+same traversal then rejects DADDU s3,a2,zero at 8002974c. Thus zero of eight
+sites close. All entry/base, index-cell and memory-alias barriers remain genuine;
+no candidate or observed target becomes a certificate.
+
+The generic rule is limited to osMapTLB/osUnmapTLB/osUnmapTLBAll's actual host
+implementations under the already declared runtime ABI scope. These do not
+write GPRs, schedule, or invoke guest callbacks. Exact image/generation/name,
+evidence references and auxiliary metadata join the recomputed certificate
+hash. Decoded bodies, callback/data metadata, overlapping linked/placed slot
+text, unknown names, unsupported tail jumps and exhausted budgets refuse.
+Only normal successful calls carry the effect: native TLB faults still stop
+before the continuation, and existing mapping generations/frame pins remain.
+This is not a source proof that an arbitrary guest SDK routine preserves the
+same registers. No ABI shortcut for guest SW/LW saves is introduced.
+
+Twenty callee tests and eight table-call tests pass. The new table fixture was
+RED with the contract disabled, including the positive normal/nested case.
+Final semantic mutation receipts (seconds, expected nonzero exit): disabled
+contract 5.01/101, omitted runtime identity hash 39.02/101, accepted unsupported
+runtime name 64.77/101, host s3 clobber 7.24/1. The first hash-mutation attempt
+failed compilation because the temporary script duplicated CR bytes; it is
+not counted. The script was corrected and the semantic mutation rerun. An
+earlier focused test attempt overlapped mutation builds and is discarded;
+callee-final.log, table-final.log and runtime-final.log use restored sources.
+The final full gate is the canonical exact-tree validation.
+
+The host harness compares the entire initialized native state except intended
+TLB entries and their generations, with nontrivial 64-bit GPR/FPR patterns.
+PC, HI/LO, RAM, fault state and pending-event flag remain unchanged. Existing
+native/pinned-ares TLB execution, generation, alias, frame-pin and fault tests
+are included by the complete runtime suite. No compiler transformation of
+arithmetic, memory stores or guest timing is introduced.
+
+Fresh retained-input discovery/solve matches the exact parent's parsed maps
+and reports: BK 81465 blocks OPEN/2 (47.09 s), F-Zero X 28119 OPEN/1 (6.50 s),
+MM 214963 CLOSED/0 (155.06 s). PM's parsed map is also identical: 60454 blocks,
+OPEN/8 (52.65 s). The prior control times were 56.66/7.95/168.00 s; these are
+operational timings, not a controlled optimization claim. No bottleneck change
+is claimed. Release build 27.00 s. The production host C source is unchanged.
+
+The interactive Windows task invokes native.py with the retained ROM-derived
+load declarations, --residual-dispatch --rt64 --require-audio --seconds 60.
+Exit 0; time limit; VI 3587, 3576 graphics tasks, 3584 compiled audio tasks,
+17686 PI DMAs, fault 0, PCM peak 32121. This is a retained-declaration regression,
+not a new clean ROM-only harvest or full gameplay/audio-accuracy acceptance.
+The manifest still lists 8003c488, 8004e544, 8082cf20, 8091893c, 809189b8,
+80918aa8, 80b1c178 and 80b1c344 and native_complete: false. The default build
+is not emitted because these eight required target-set proofs are absent.
+
+Full canonical gate: gate.py with GATE_TREE=target/pm-boot-0222 and GATE_OUT=
+X:/Plaid/target/paper-mario/0222/adr-0231/gate-final. Its gate.json and logs
+retain exact fmt, locked all-target workspace Clippy, unfiltered locked workspace
+tests, CLI and full runtime results/timings. Confirm the test summaries have
+zero filtered tests before integration. Canonical CAS must use exact c3c1edb8
+unless main drifts, in which case reconcile and rerun the full gate.
+
+The code-review-and-quality pass checked the runtime-scope gate, immutable
+walk cache identity, shared budget, unknown paths, native binding lifetime,
+metadata revalidation and absence of guest fallback. No unresolved code finding;
+the residual closure gaps are the explicit partial-result limitation.
+DECISIONS was appended as bytes and its original CRLF/non-UTF-8 prefix verified
+unchanged. README/progress data, ROMs, dumps, disassemblies, generated code and
+WAVs are not committed. Ignored receipts remain under adr-0231/.
