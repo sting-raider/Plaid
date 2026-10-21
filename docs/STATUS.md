@@ -1,5 +1,22 @@
 # Status
 
+## Switch candidates across incomplete predecessor paths (ADR-0229)
+
+Paper Mario's visible residual-validation run passes the previous 80a08aa8 switch
+stop and reaches VI 659, 646 graphics tasks, 657 compiled audio tasks and 7,314
+PI DMAs. The next fault 3 is JALR a2 at map 80a06450 (runtime 802c6450), target
+80240880. A repeated visible run confirms the same VI/graphics/DMA and fault,
+with 656 audio tasks; captured PCM remains silent. native_complete is false.
+
+Completed switch-table paths now retain source-bound candidate targets when
+another predecessor defeats exhaustive closure. Incomplete evidence never
+certifies closure. Function-call arrays retain their old all-path behavior.
+The same rule recovers 5/4/5 distinct targets at the three slot switches and
+13 blocks, without changing their residual status. Final BK/F-Zero X/MM maps
+and verdicts equal exact-parent rediscovery. Synthetic tests, mutations, final
+map/lowering comparisons and gate receipts are in the frontier research note.
+
+
 
 ## Relocated replay call coverage (ADR-0227)
 

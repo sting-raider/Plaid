@@ -26,6 +26,9 @@ struct TableEvidence {
     prefix_sha256: String,
     snapshot_sha256: Option<String>,
     assumptions: [&'static str; 2],
+    /// Completed paths can seed discovery when another path defeats closure.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    incomplete_paths: bool,
 }
 
 fn field(word: u32, shift: u32) -> u8 {
@@ -351,6 +354,7 @@ fn pattern(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
         count,
         prefix_sha256: sha256(&prefix),
         snapshot_sha256: None,
+        incomplete_paths: false,
         assumptions: [
             "recognized scalar guard pattern suggests this dispatch index bound",
             "table snapshot is not proven immutable during execution",
@@ -817,7 +821,14 @@ fn guarded(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
         results: BTreeSet::new(),
         effects: BTreeMap::new(),
     };
-    walk.block(pc, load_pc, need, &mut Vec::new())?;
+    // Retain completed witnesses even when another predecessor is unproven.
+    // They remain hypotheses: only an exhaustive walk can certify closure.
+    let incomplete_paths = walk.block(pc, load_pc, need, &mut Vec::new()).is_none();
+    // Call arrays may contain nullable/optional entries; retain their existing
+    // all-path behavior rather than proposing incomplete switch candidates.
+    if incomplete_paths && site.link_register.is_some() {
+        return None;
+    }
     let mut tables = walk
         .results
         .iter()
@@ -863,8 +874,13 @@ fn guarded(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
         count,
         prefix_sha256: sha256(&prefix),
         snapshot_sha256: None,
+        incomplete_paths,
         assumptions: [
-            "every CFG path into the dispatch bounds its index (ADR-0180)",
+            if incomplete_paths {
+                "completed CFG paths suggest candidates; other paths remain unproven"
+            } else {
+                "every CFG path into the dispatch bounds its index (ADR-0180)"
+            },
             "table snapshot is not proven immutable during execution",
         ],
     })
@@ -1219,9 +1235,12 @@ pub fn verify_in(
     {
         return false;
     }
-    let Some((_, Some(words), detail)) = evidence(index, image, site) else {
+    let Some((table, Some(words), detail)) = evidence(index, image, site) else {
         return false;
     };
+    if table.incomplete_paths {
+        return false;
+    }
     let targets: std::collections::BTreeSet<_> = words
         .iter()
         .map(|w| image.address(GuestAddr(image.slot_view(site.site.pc, *w))))
@@ -1292,7 +1311,8 @@ pub(crate) fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap,
             }
             // Closing is only a claim; `verify` rechecks it and only the
             // guarded scope accepts it.
-            if aligned
+            if !table.incomplete_paths
+                && aligned
                 && site.link_register.is_none()
                 && site
                     .observed
@@ -1302,18 +1322,22 @@ pub(crate) fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap,
                 site.closed_proof = Some(id.clone());
             }
             out.indirect_sites.insert(site);
-            out.unresolved.insert(Unresolved {
+            // Candidate-only paths impose no table-immutability assumption:
+            // their unresolved indirect site still requires residual dispatch.
+            if !table.incomplete_paths {
+                out.unresolved.insert(Unresolved {
                 kind: "pointer_table_immutability_unproven".into(),
                 site: Some(old.site.clone()),
                 detail: "bounded snapshot candidates do not prove table contents or exhaustive runtime targets".into(),
                 evidence: refs.clone(),
             });
-            out.unresolved.insert(Unresolved {
+                out.unresolved.insert(Unresolved {
                 kind: "pointer_table_target_identity_unproven".into(),
                 site: Some(old.site.clone()),
                 detail: "numeric table targets do not prove target image/generation, mapping context, cache-resident generation or executable lifetime".into(),
                 evidence: refs,
             });
+            }
         } else {
             out.unresolved.insert(Unresolved {
                 kind: "pointer_table_source_missing".into(),

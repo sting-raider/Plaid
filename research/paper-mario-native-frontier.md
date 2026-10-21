@@ -713,3 +713,134 @@ its original CRLF and non-UTF-8 prefix. README is unchanged. Ares remains the
 separately built pinned ISC 9408cb43d4948fc3ea6e152a307a34348df3fe04 oracle;
 Rabbitizer remains 724a49a5b4dbfb99f1a9e6992e63964fd29c90c8. No reference code,
 ROM, RAM snapshot, generated game code, disassembly or WAV is committed.
+
+
+## ADR-0229 integration claim (2026-10-21)
+
+Base: c7ee4de9. Branch experiment/pm-next-0228, target/pm-boot-0222.
+Hypothesis: recover source-bound switch candidates for the relocated JR frontier
+without relaxing exhaustive table verification or treating case blocks as calls.
+Inspect the failed all-path obligations first; retain residual-only admission
+and exact native block coverage. No audio-runtime or README changes.
+
+
+### ADR-0229 diagnosis and generic candidate rule
+
+ROM decoding at 0xed410..0xed45c shows the table base established by LUI/ADDIU
+at runtime 802c8a68/802c8a6c, table 802da140, SLTIU count 0x23 at 802c8a90,
+BEQL at 802c8a94, SLL/ADDU/LW at 802c8a9c..802c8aa4 and JR v0 at 802c8aa8.
+The slot is ROM 0xe79b0, linked at 802c3000, placed at 80a03000, size 0x17480.
+The original map contains neither candidate 80a08ab8 nor its decoded block.
+A temporary local-only diagnostic on the retained map/source confirms that the
+all-path walker completes (table 802da140, 35 entries, guard 80a08a94, index v1),
+then rejects the independent address-taken entry 80a08ad4. Earlier slot-view
+projection is already correct; widening relocation or call roots is not needed.
+
+The production change retains already completed, agreeing table witnesses when
+another path fails. It adds incomplete_paths: true to their evidence, refuses
+closure in both producer and independent verifier, and retains the existing
+source-bound slot snapshot and candidate/derived-block discovery. Complete
+proofs retain their byte-identical evidence shape. No path barrier, resource
+bound, target guard or native-complete gate is relaxed. Candidate-only paths
+add no table-immutability/identity assumption; the unresolved indirect transfer
+remains the ordinary-scope blocker. Runtime table bytes are still loaded as
+guest data, and an unlisted target faults rather than executing guest code.
+
+The authored Rust test is RED on the exact parent (empty candidate set), GREEN
+with the change, and covers fixed/placed tables, missing source/base, forged
+closure, case lowering and ordinary-scope OPEN. All 82 filtered table tests pass.
+The native residual contract compares full captured CPU/PC/FPU/RAM state with
+pinned ares 9408cb43d4948fc3ea6e152a307a34348df3fe04, and checks fault 3 after
+a runtime table change to an unlisted block. Existing non-entry controls remain.
+Pinned ISC ares JR/LW/SLL/SLTIU semantics were inspected, without code reuse.
+
+Mutations discarding completed witnesses (12.48 s) and removing the verifier's
+incomplete-path rejection (14.33 s) fail semantically with exit 101. Removing
+only the producer's redundant closure guard survives (13.33 s): analyze_indirect's
+independent verifier clears the invalid claim before it is exposed. This is a
+surviving defense-in-depth mutation, not a killed mutant. Source restoration
+and the focused regression pass afterward. Receipt: adr-0229/mutations.json.
+
+An initial native pipeline launch failed to replace release/plaid.exe because
+a concurrently running discovery control held that Windows executable open.
+Controls now run a copied compiler, and the fresh pipeline was restarted after
+replacement. A direct invocation of the pre-existing RT64 executable instead
+reproduced the older VI-648 checksum-call stop; it was stale relative to the
+retained ADR-0227 map/receipts. That invocation is not an ADR-0227 reproduction.
+The complete fresh build/run below supplies the actual current candidate result.
+
+
+### Final call-array control and unchanged game discovery
+
+Fresh MM discovery exposed an overbroad prototype: retaining incomplete JALR
+array witnesses added a null target at 80130738, making MM OPEN/1. That receipt
+is retained in controls-before-call-filter/. The new rule is restricted to
+non-linking switches; nullable/optional call arrays retain their previous
+all-path behavior. A synthetic nullable JALR control catches removing this
+restriction. Final mutation reruns kill all three selected mutants semantically
+(exit 101): discard witnesses 18.62 s, bypass independent verifier 14.64 s,
+incomplete call arrays 27.44 s. A mutation-harness CRLF duplication initially
+caused a compile error; that is not counted as a semantic kill. Original bytes
+were restored, the harness corrected, and semantic assertions reproduced.
+
+Final exact-parent controls use the same retained loads/SDK declarations for
+fresh discovery and solve. BK: 81,465 blocks, OPEN/2 (candidate/parent
+49.19/47.99 s); F-Zero X: 28,119, OPEN/1 (10.33/6.73 s); MM: 214,963, CLOSED/0
+(179.80/185.55 s). All three complete parsed maps and solver reports are equal,
+not just counts. These are operational timings with concurrent work and different
+optimization profiles, not a performance claim. The parent is c7ee4de9, built
+locally in target/pm-0229-baseline; the final candidate control is a copied dev
+compiler to avoid locking the release executable. No visible game acceptance
+is inferred from these discovery controls.
+
+### Visible run, exact final output comparison and next stop
+
+The complete fresh pipeline runs in active Windows console session 3, with the
+RT64 window visible, using native.py <local ROM> --residual-dispatch --rt64
+--seconds 60. It takes approximately 530.62 s (recorded process start and receipt
+mtime), exit 1 at the guest fault. The PM map grows 59,613 -> 59,626 blocks.
+The three residual sites 80a0893c/80a089b8/80a08aa8 gain 5/4/5 distinct targets;
+all eight residual sites remain unclosed. The other five candidate sets retain
+their prior counts 7/5/12/0/0. The manifest remains native_complete: false.
+
+The pipeline began before the call-array restriction. Its final map has no
+incomplete-call candidates. Fresh final-tree discovery with the exact same frozen
+loads/SDK declarations produces an identical complete ProgramMap; final release
+lowering produces all 16 generated C parts byte-for-byte identical to the code
+used in the visible run. Parent/final PM discovery+solve takes 43.82/44.58 s.
+Thus the narrower final rule is verified against the executed artifact rather
+than assuming it has no effect. Receipts: pm-map-comparison.json and
+lowering-comparison.json. Final release rebuild passes after restoration.
+
+The visible run reaches VI 659, 646 graphics tasks, 657 audio tasks, 7,314 PI
+DMAs, then fault 3 at map 80a06450. The repeated visible executable invocation
+with --dump 0x802c6400 96 takes approximately 11.85 s, reproducing VI, graphics,
+DMA and fault, with 656 audio tasks and a different framebuffer selection.
+No complete state or pixel equivalence is claimed. WAV: 350,336 stereo signed
+16-bit frames at 32,006 Hz, peak zero. Audible output and gameplay acceptance
+remain unestablished.
+
+ROM 0xeae00 decodes to JALR a2 at runtime 802c6450, followed by NOP. The stop
+has a2=80240880 and ra=802c6458. The site's map has no explicit candidates,
+observations or certificate; the call is admitted under address-taken scope.
+A declared raw slot linked at 8023e000 (ROM 0x16c8e0) projects the target to
+map 80810880 / ROM 0x16f160. That address lies inside block 8081087c rather
+than at an entry, and is not address-taken. This numeric projection alone is
+not resident-source evidence; establish the returned pointer and actual target
+bytes/binding before proposing a root or changing dispatch admission. The new
+switch rule must not silently promote an internal word to a called function.
+
+### Local gate and integration contract
+
+Final gate: X:/Plaid/target/paper-mario/0222/gate.py with GATE_TREE set to this
+worktree and GATE_OUT to target/paper-mario/0222/adr-0229/gate-final. Its gate.json
+and per-command logs are the timing/exit-code receipt for fmt, locked workspace
+Clippy, workspace tests, CLI and full runtime, including the new native residual
+contract and pinned-ares checks. All five must pass on the final integration
+tree before the exact-parent CAS. No performance optimization is claimed.
+
+Ignored receipts are under target/paper-mario/0222/adr-0229/. DECISIONS was
+appended/edited as bytes and its original CRLF/non-UTF-8 prefix verified intact.
+README and progress data are unchanged. No ROM, RAM dump, disassembly, generated
+game code or WAV is committed. Only the generic table analysis, synthetic tests,
+ADR, STATUS/NEXT and this note belong to the production commit.

@@ -1,5 +1,21 @@
 # Next
 
+## Continue after incomplete-path switch candidates (ADR-0229)
+
+Paper Mario now passes the previous 80a08aa8 switch stop. Next stop: fault 3 at map
+80a06450, runtime 802c6450, JALR a2 -> 80240880, VI 659. Its target is not an
+admitted function entry. A declared linked-range projection yields 80810880,
+inside an existing block, but the actual resident source must be checked before
+turning that numeric projection into a call root. Inspect the returned pointer,
+slot identity, replay observations and instruction/source bytes; retain entry
+and dispatch checks. Do not add the observed numeric address unconditionally.
+
+Incomplete switch witnesses remain residual hypotheses, not closure. Broader
+path enumeration or incomplete call-array candidates need separate evidence;
+nullable function-call tables keep their prior behavior. PCM remains silent.
+See research/paper-mario-native-frontier.md for the exact stop and controls.
+
+
 ## Continue after relocated replay call coverage (ADR-0227)
 
 Paper Mario now passes the checksum call at map 808be154. The next visible
