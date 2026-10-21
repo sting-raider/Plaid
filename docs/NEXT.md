@@ -1,5 +1,11 @@
 # Next
 
+## After RSP candidate identity (ADR-0240)
+
+Banjo-Kazooie runs again but with 2 residual sites: since 94a4d7cb (ADR-0205)
+a new entry splits the blocks holding table jumps 0x80876480 and 0x808acf48,
+and their five-candidate table proofs are lost. Restore them generically.
+
 ## After COP1 control-register startup repair (ADR-0238)
 
 MK64's native Status writer is correct; do not clear FR to bypass a real

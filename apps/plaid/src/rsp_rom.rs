@@ -1,6 +1,27 @@
 //! ROM-backed RSP candidate registry; no runtime execution supplies inputs.
 use plaid_core::{GuestAddr, discovery::CodeImage, program::ProgramMap, rom::CanonicalRom};
-use std::{collections::BTreeSet, fs};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+};
+
+/// What the runtime compares when it matches a task (ADR-0240): the IMEM
+/// base and the value of every reachable word. Texts equal under it cannot be
+/// told apart there; words reached later through a register jump are still
+/// checked against IMEM one by one when they run.
+fn match_key(text: &[u8], imem: u32, reachable: &plaid_lower::rsp::RspReachability) -> String {
+    let words: Vec<u8> = reachable
+        .words
+        .iter()
+        .flat_map(|&pc| {
+            let at = (pc - imem) as usize;
+            pc.to_be_bytes()
+                .into_iter()
+                .chain(text[at..at + 4].iter().copied())
+        })
+        .collect();
+    format!("{imem}:{}", plaid_core::rom::sha256(&words))
+}
 
 /// `sources` are RAM ranges the game fills by PI DMA from the ROM, observed in
 /// the analysis-time replay (ADR-0225). One is a root only where a CPU constant
@@ -19,7 +40,9 @@ pub fn generate(
     let mut boot_sizes = Vec::new();
     let mut masks = Vec::new();
     let mut manifest = Vec::new();
+    let mut texts: Vec<(Vec<u8>, String)> = Vec::new();
     let mut seen = BTreeSet::new();
+    let mut same_code: BTreeMap<String, usize> = BTreeMap::new();
     let named: BTreeSet<GuestAddr> = images
         .iter()
         .flat_map(|image| plaid_core::rsp_rom::constants(image, map))
@@ -73,26 +96,44 @@ pub fn generate(
                     continue;
                 }
                 let name = format!("rom_{}_{imem:x}", &hash[..16]);
-                let lowered = plaid_lower::rsp::lower_rsp(text, imem, &name)?;
                 let reachable = plaid_lower::rsp::reachable_words(text, imem)?;
+                // Two matches for one task are refused at run time; keep the
+                // larger text, which accepts every task size the other does.
+                let key = match_key(text, imem, &reachable);
+                let slot = match same_code.get(&key) {
+                    Some(&k) if texts[k].0.len() >= size => continue,
+                    Some(&k) => k,
+                    None => *same_code.entry(key).or_insert(names.len()),
+                };
+                let lowered = plaid_lower::rsp::lower_rsp(text, imem, &name)?;
                 let mut mask = [0u8; 128];
                 for &pc in &reachable.words {
                     mask[pc as usize / 32] |= 1 << (pc / 4 % 8);
                 }
-                fs::write(out.join(format!("{name}.c")), lowered.c).map_err(|e| e.to_string())?;
-                fs::write(out.join(format!("{name}.bin")), text).map_err(|e| e.to_string())?;
-                registry += &format!("extern const plaid_rsp_text plaid_rsp_text_{name};\n");
-                manifest.push(serde_json::json!({"name":name,"image":image.base.image,
+                let entry = serde_json::json!({"name":name,"image":image.base.image,
                             "guest_address":address,"root":root.0,"source_kind":if dma {"pi_dma"} else if offset == 0 {"pointer"} else {"overlay_descriptor"},"imem":imem,"size":size,"sha256":hash,
                             "fault_stubs":lowered.stubs.len(),
                             "reachable_words":reachable.words,
                             "unresolved_indirect":reachable.indirect,
-                            "reachability_exits":reachable.exits}));
-                names.push(name);
-                boot_sizes.push(plaid_core::rsp_rom::boot_ucode_size(text).unwrap_or(0));
-                masks.push(mask);
+                            "reachability_exits":reachable.exits});
+                let boot_size = plaid_core::rsp_rom::boot_ucode_size(text).unwrap_or(0);
+                if slot == names.len() {
+                    names.push(name);
+                    texts.push((text.to_vec(), lowered.c));
+                    boot_sizes.push(boot_size);
+                    masks.push(mask);
+                    manifest.push(entry);
+                } else {
+                    (names[slot], texts[slot]) = (name, (text.to_vec(), lowered.c));
+                    (boot_sizes[slot], masks[slot], manifest[slot]) = (boot_size, mask, entry);
+                }
             }
         }
+    }
+    for (name, (text, c)) in names.iter().zip(&texts) {
+        fs::write(out.join(format!("{name}.c")), c).map_err(|e| e.to_string())?;
+        fs::write(out.join(format!("{name}.bin")), text).map_err(|e| e.to_string())?;
+        registry += &format!("extern const plaid_rsp_text plaid_rsp_text_{name};\n");
     }
     if names.len() > 64 {
         return Err(format!(
@@ -127,4 +168,36 @@ pub fn generate(
     .map_err(|e| e.to_string())?;
     println!("{} ROM-derived RSP texts", names.len());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::match_key;
+    use plaid_lower::rsp::reachable_words;
+
+    fn text(words: &[u32], len: usize, fill: u8) -> Vec<u8> {
+        let mut t: Vec<u8> = words.iter().flat_map(|w| w.to_be_bytes()).collect();
+        t.resize(len, fill);
+        t
+    }
+
+    fn key(t: &[u8]) -> String {
+        match_key(t, 0, &reachable_words(t, 0).unwrap())
+    }
+
+    #[test]
+    fn texts_are_one_candidate_only_when_their_reachable_code_matches() {
+        let run = [0x3401_0001, 0x0000_000d]; // ori at, zero, 1; break
+        let short = text(&run, 0x100, 0);
+        assert_eq!(key(&short), key(&text(&run, 0x1000, 0xff)));
+        assert_ne!(
+            key(&short),
+            key(&text(&[0x3401_0002, 0x0000_000d], 0x100, 0))
+        );
+        // A boot ends in a register jump into the text it loaded; only the
+        // words up to that jump are compared.
+        let jump = [0x0020_0008, 0x0000_0000]; // jr at; nop
+        assert_eq!(key(&text(&jump, 0x100, 0)), key(&text(&jump, 0x1000, 0xff)));
+        assert_ne!(key(&text(&jump, 0x100, 0)), key(&text(&run, 0x100, 0)));
+    }
 }

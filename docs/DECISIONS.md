@@ -6969,3 +6969,26 @@ or the next-block edge fails them. MM runs 60 s: VI 3563, 1243 graphics and
 3530 audio tasks, fault 0, analysis CLOSED. The RCP readback and raw PI DMA
 refusal tests wrote over already-run entry text, which is now writable (its
 next entry re-verifies it, fault 8); they now target the live epilogue.
+
+## ADR-0240: RSP candidates the runtime cannot tell apart are one candidate
+
+Status: accepted. The runtime picks ROM-derived RSP microcode by requiring
+exactly one boot match and one text match per task, comparing only each
+candidate's reachable words at its IMEM base (and refusing a task larger
+than the candidate). Candidates were deduplicated by the hash of their whole
+text, so a 4096-byte pointer window and a 256-byte PI-DMA source (ADR-0225)
+at the same address both survived. Their reachable words were identical, both
+matched Banjo-Kazooie's task, and the run stopped at VI 11 with "unknown or
+ambiguous ROM-derived RSP microcode".
+
+Candidates now share one key: IMEM base plus every reachable word and its
+value, which is exactly what the runtime compares. Of two equal candidates
+the larger is kept, since it accepts every task size the other does. A
+register jump may still reach words outside that set; those are checked
+against IMEM one by one when they run, as before. Truly different texts stay
+separate and ambiguity still refuses. A unit test covers equal reachable code
+in different-sized texts, a changed reachable word, and a boot that ends in a
+register jump.
+
+Banjo-Kazooie (Rev 1) now builds 40 RSP texts (was 42) and runs 60 s: VI 3568,
+1265 graphics and 1779 audio tasks, fault 0, with 2 residual dispatch sites.
