@@ -16,16 +16,19 @@ def run(exe, cc, T):
             A.lw(A.t0, 0x10, A.at), A.addiu(A.t1, A.zero, 0x7F), A.addiu(A.t2, A.zero, 0x1080),
             V.mtc0(A.t2, 0), V.mtc0(A.t0, 1), V.mtc0(A.t1, 2), A.jr(A.t2), A.nop]
     boot_words = T.rsp_words(boot, 0)
-    task = [2, 0, T.BOOT, len(boot_words) * 4, T.UCODE, 16, T.UDATA, 32, 0, 0, T.OUTB, 0, 0, 0, 0, 0]
-    program = [*T.li(A.sp, 0x80007F00),
-               *[w for i, v in enumerate(boot_words) for w in T.poke(T.BOOT + i * 4, v)],
-               *[w for i, v in enumerate(T.UCODE_WORDS) for w in T.poke(T.UCODE + i * 4, v)],
-               *[w for i, v in enumerate(T.UDATA_WORDS) for w in T.poke(T.UDATA + i * 4, v)],
-               *[w for i, v in enumerate(task) for w in T.poke(T.RTASK + i * 4, v)],
-               'before_load', *T.call('osSpTaskLoad', T.RTASK), 'before_start', *T.call('osSpTaskStartGo', T.RTASK), *A.DONE]
+    def task_program(boot_address):
+        task = [2, 0, boot_address, len(boot_words) * 4, T.UCODE, 16, T.UDATA, 32, 0, 0, T.OUTB, 0, 0, 0, 0, 0]
+        program = [*T.li(A.sp, 0x80007F00),
+                   *[w for i, v in enumerate(boot_words) for w in T.poke(boot_address + i * 4, v)],
+                   *[w for i, v in enumerate(T.UCODE_WORDS) for w in T.poke(T.UCODE + i * 4, v)],
+                   *[w for i, v in enumerate(T.UDATA_WORDS) for w in T.poke(T.UDATA + i * 4, v)],
+                   *[w for i, v in enumerate(task) for w in T.poke(T.RTASK + i * 4, v)],
+                   'before_load', *T.call('osSpTaskLoad', T.RTASK), 'before_start', *T.call('osSpTaskStartGo', T.RTASK), *A.DONE]
+        for name in runtime:
+            program += [name, A.jr(A.ra), A.nop]
+        return program
     runtime = ['osSpTaskLoad', 'osSpTaskStartGo']
-    for name in runtime:
-        program += [name, A.jr(A.ra), A.nop]
+    program = task_program(T.BOOT)
     # ROM contains both CPU code and separately addressed microcode bytes.
     raw = bytearray(0x10000)
     cpu = A.assemble(program)
@@ -71,6 +74,61 @@ def run(exe, cc, T):
             assert lines['words'] == [0, 0], (mutation, lines)
         else:
             assert result.returncode == 0 and lines['words'] == [0x12131415, T.OUTB & 0x1FFFFFFF], (result.stdout, result.stderr)
+    # A boot the ROM supplies only by PI DMA into RAM outside every image is
+    # selected from its recorded source (ADR-0225) and refused without it.
+    dma_boot = A.BASE + len(raw) + 0x1000
+    sourced_program = task_program(dma_boot)
+    sourced = bytearray(rom)
+    sourced_cpu = A.assemble(sourced_program)
+    sourced[0x1000:0x1000 + len(sourced_cpu)] = sourced_cpu
+    start = 0x1000 + T.BOOT - A.BASE
+    sourced[start:start + len(boot_words) * 4] = bytes(len(boot_words) * 4)
+    dma_rom = len(sourced)
+    sourced += b''.join(w.to_bytes(4, 'big') for w in boot_words).ljust(128, bytes(1))
+    unnamed_boot = dma_boot + 0x1000
+    unnamed_rom = len(sourced)
+    sourced += (unnamed_boot + 8).to_bytes(4, 'big') + bytes(4) + sourced[dma_rom:dma_rom + 128]
+    sourced_rom, sourced_map = out / 'rsp-rom-sourced.z64', out / 'rsp-rom-sourced-map.json'
+    sourced_rom.write_bytes(sourced)
+    sourced_loads = out / 'rsp-rom-sourced-loads.json'
+    sourced_loads.write_text(json.dumps(dict(format='plaid-loads-v0', source='synthetic', loads=[],
+                                             rsp_sources=[dict(destination=hex(dma_boot), size='0x80', rom=hex(dma_rom))])))
+    subprocess.run([str(exe), 'discover', str(sourced_rom), '0x1000', hex(A.BASE), hex(len(raw)), hex(A.BASE),
+                    str(sourced_map), str(decl)], check=True, capture_output=True)
+    # Only externally named starts are roots; malformed source ranges fail early.
+    source = dict(destination=hex(dma_boot), size='0x80', rom=hex(dma_rom))
+    for changes in (dict(destination=hex(unnamed_boot), rom=hex(unnamed_rom), size='0x88'), dict(size='0x0'),
+                    dict(destination='0x807ffff8', size='0x40'), dict(rom=hex(len(sourced)))):
+        sourced_loads.write_text(json.dumps(dict(rsp_sources=[source | changes])))
+        result = subprocess.run([str(exe), 'rsp-from-rom', str(sourced_rom), str(sourced_map),
+                                 str(out / 'rsp-rom-source-invalid'), '--loads', str(sourced_loads)],
+                                capture_output=True, text=True)
+        if changes.get('destination') == hex(unnamed_boot):
+            assert result.returncode == 0, result.stderr
+            m = json.loads((out / 'rsp-rom-source-invalid/rsp-files.json').read_text())
+            assert not any(t['source_kind'] == 'pi_dma' for t in m['texts']), m
+        else:
+            assert result.returncode != 0, changes
+    sourced_loads.write_text(json.dumps(dict(rsp_sources=[source])))
+    for with_source in (True, False):
+        sourced_texts = out / f'rsp-rom-sourced-texts-{int(with_source)}'
+        command = [str(exe), 'rsp-from-rom', str(sourced_rom), str(sourced_map), str(sourced_texts)]
+        subprocess.run(command + (['--loads', str(sourced_loads)] if with_source else []), check=True)
+        sm = json.loads((sourced_texts / 'rsp-files.json').read_text())
+        dma_texts = [t for t in sm['texts'] if t['source_kind'] == 'pi_dma']
+        assert [(t['guest_address'], t['imem'], t['size']) for t in dma_texts] == ([(dma_boot, 0, 128)] if with_source else []), dma_texts
+        sources = [str(sourced_texts / (t['name'] + '.c')) for t in sm['texts']] + [str(sourced_texts / 'rsp_registry.c')]
+        with ThreadPoolExecutor(min(8, os.cpu_count() or 1)) as pool:
+            sourced_objects = list(pool.map(compile_text, sources))
+        sourced_flags = ['-DPLAID_RSP', '-DPLAID_RSP_ROM', '-I', str(T.ROOT / 'crates/plaid-lower/src'), *sourced_objects]
+        native = T.build(exe, cc, f'rsp-rom-sourced-{int(with_source)}', sourced_program, runtime, sourced_flags)
+        result = subprocess.run([str(native), '--dump', hex(T.OUTB), '2'], capture_output=True, text=True, timeout=30)
+        lines = {k: v for line in result.stdout.splitlines() if line.startswith('{') for k, v in json.loads(line).items()}
+        if with_source:
+            assert result.returncode == 0 and lines['words'] == [0x12131415, T.OUTB & 0x1FFFFFFF], (result.stdout, result.stderr)
+        else:
+            assert result.returncode == 1 and lines['stop'] == 'unknown or ambiguous ROM-derived RSP microcode', result.stdout
+            assert lines['words'] == [0, 0], lines
     # Direct task submission: no recognized rspboot, and no separate text DMA.
     # This program's relative branch works at either IMEM placement. DMEM data
     # start at zero because no boot program loads ucode_data in this variant.

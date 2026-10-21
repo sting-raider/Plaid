@@ -263,7 +263,23 @@ def main():
             assert not harvest_boot.harvest(source, loads, program, info, receipt)
         finally:
             harvest_boot.capture_many = saved
-    print('PASS ares harvest composition: preserve static images, split overlaps, capture missing jump tables, record observed call targets, stop when all targets are covered')
+        # PI DMA from the ROM into RAM outside every image is an RSP search
+        # input only (ADR-0225): recorded once, without another CPU round.
+        loads.write_text(json.dumps({'source': 'synthetic', 'loads': [original]}))
+        dmas = [[0x2000, 0x10000100, 0x100], [0x2000, 0x10000100, 0x100], [0x420, 0x10000200, 0x40],
+                [0x3000, 0x10000300, 0x6], [0x3004, 0x10000300, 0x8], [0x4000, 0x10002ff0, 0x20]]
+        harvest_boot.capture_many = lambda rom, entries, covered, sites: [{'uncovered_entry': None, 'pi_dma': dmas}]
+        dma_rom = directory / 'dma.z64'
+        dma_rom.write_bytes(bytes(0x3000))
+        try:
+            assert not harvest_boot.harvest(dma_rom, loads, program, info, receipt)
+            assert json.loads(loads.read_text())['rsp_sources'] == [{'destination': '0x80002000', 'size': '0x100', 'rom': '0x100'}]
+            assert json.loads(receipt.read_text())['rsp_sources'] == [{'destination': '0x80002000', 'size': '0x100', 'rom': '0x100'}]
+            before = loads.read_text()
+            assert not harvest_boot.harvest(dma_rom, loads, program, info, receipt) and loads.read_text() == before
+        finally:
+            harvest_boot.capture_many = saved
+    print('PASS ares harvest composition: preserve static images, split overlaps, capture missing jump tables, record observed call targets, record RSP DMA sources, stop when all targets are covered')
 
 
 if __name__ == '__main__':

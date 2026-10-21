@@ -2,10 +2,14 @@
 use plaid_core::{GuestAddr, discovery::CodeImage, program::ProgramMap, rom::CanonicalRom};
 use std::{collections::BTreeSet, fs};
 
+/// `sources` are RAM ranges the game fills by PI DMA from the ROM, observed in
+/// the analysis-time replay (ADR-0225). One is a root only where a CPU constant
+/// names its start; it never enters CPU discovery.
 pub fn generate(
     rom: &CanonicalRom,
     map: &ProgramMap,
     images: Vec<CodeImage>,
+    sources: Vec<CodeImage>,
     output: &str,
 ) -> Result<(), String> {
     let out = std::path::Path::new(output);
@@ -16,8 +20,21 @@ pub fn generate(
     let mut masks = Vec::new();
     let mut manifest = Vec::new();
     let mut seen = BTreeSet::new();
-    for image in images {
-        let roots = plaid_core::rsp_rom::roots(&image, map);
+    let named: BTreeSet<GuestAddr> = images
+        .iter()
+        .flat_map(|image| plaid_core::rsp_rom::constants(image, map))
+        .collect();
+    let static_images = images.len();
+    for (k, image) in images.into_iter().chain(sources).enumerate() {
+        let dma = k >= static_images;
+        let mut roots = if dma {
+            BTreeSet::new()
+        } else {
+            plaid_core::rsp_rom::roots(&image, map)
+        };
+        if dma && named.contains(&image.base.pc) {
+            roots.insert(image.base.pc);
+        }
         let overlays = plaid_core::rsp_rom::overlay_descriptors(&image, &roots);
         for root in roots {
             let bytes: Vec<_> = (0..0x1000)
@@ -30,8 +47,13 @@ pub fn generate(
             }
             // Both standard rspboot placements are candidates. Word identity
             // guards retain the exact origin when microcode overlays IMEM.
+            // A recognized task boot shorter than IMEM is its own candidate.
+            let boot = (bytes.len() < 0x1000
+                && plaid_core::rsp_rom::boot_ucode_size(&bytes).is_some())
+            .then_some((0, bytes.len() as u32, 0));
             let variants = [(0, 0x1000, 0), (0, 0xf80, 0x80)]
                 .into_iter()
+                .chain(boot)
                 .chain(overlays.iter().copied());
             for (offset, requested_size, imem) in variants {
                 let address = root.0.checked_add(offset).ok_or("RSP address overflow")?;
@@ -61,7 +83,7 @@ pub fn generate(
                 fs::write(out.join(format!("{name}.bin")), text).map_err(|e| e.to_string())?;
                 registry += &format!("extern const plaid_rsp_text plaid_rsp_text_{name};\n");
                 manifest.push(serde_json::json!({"name":name,"image":image.base.image,
-                            "guest_address":address,"root":root.0,"source_kind":if offset == 0 {"pointer"} else {"overlay_descriptor"},"imem":imem,"size":size,"sha256":hash,
+                            "guest_address":address,"root":root.0,"source_kind":if dma {"pi_dma"} else if offset == 0 {"pointer"} else {"overlay_descriptor"},"imem":imem,"size":size,"sha256":hash,
                             "fault_stubs":lowered.stubs.len(),
                             "reachable_words":reachable.words,
                             "unresolved_indirect":reachable.indirect,

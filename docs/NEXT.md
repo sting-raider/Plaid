@@ -1,5 +1,15 @@
 # Next
 
+## Continue after PI DMA RSP boot extraction (ADR-0225)
+
+Keep DMA source observations separate from CPU discovery and closure. The next
+Paper Mario validation frontier is an observed call target rejected by the
+function-start layout filter; review the prepared ADR-0226 candidate against
+both discovery and solver checks, with synthetic and mutation coverage before
+integration. Establish visible gameplay and non-silent PCM independently;
+compiled audio task execution alone does not establish either.
+
+
 ## Extend ROM-derived RSP coverage after self-patching
 
 ADR-0219 identifies the OoT type-4 startup conflict as RSP boot microcode also

@@ -432,3 +432,55 @@ one gfx task, submits its first audio task (261 PI DMAs) and stops cleanly with
 "unknown or ambiguous ROM-derived RSP microcode": the audio task's microcode is
 not among the 16 ROM-derived RSP texts. CPU fault 0. Receipts: ignored
 target/paper-mario/0222.
+
+
+## ADR-0225 integration claim (2026-10-21)
+
+Base main: `0d003fc0d1d07f4651ac6568f839c941e819e920`; candidate
+`1107ed7d`. Hypothesis: ROM-backed PI DMA ranges outside the CPU images can
+supply missing RSP task boots without granting CPU discovery or closure.
+Review, synthetic execution, source-removal mutation and the full local gate
+are required before exact-head CAS integration.
+
+
+## ADR-0225 result and validation receipt (2026-10-21)
+
+The earlier visible residual-validation run with candidate `1107ed7d` reached
+VI 4, two compiled RSP audio tasks and 261 PI DMAs, then fault 3 at
+`800602d8 -> 8002605c`. The audio task's boot at `800d9780` is 0x100 bytes
+copied by PI DMA from ROM `0xb70`; its candidate is
+`rom_41a5f4f68d34a88f_0`. No visible gameplay or non-silent PCM is established
+by this observation, and this integration does not rerun the visible game.
+The next call target follows a `j .` wait loop and fails the existing
+function-start layout filter; ADR-0226 remains separate work.
+
+Review corrected DMA roots that could otherwise come from the source's own
+data, tightened source bounds to nonempty aligned 8 MiB RDRAM ranges, and
+corrected the synthetic fixture: it originally used a source inside the CPU
+image and a 64-byte boot below the retained 128-byte plausibility minimum.
+The contract now uses an externally named 128-byte source outside the image,
+executes its compiled boot and audio program, and checks exact output words.
+Without the source it refuses the task with no output writes. An unnamed
+source containing an internal boot pointer is ignored; empty, overflowing
+RDRAM and out-of-ROM ranges are refused.
+
+`python scripts/test_ares_boot.py` passes the pinned ares synthetic replay and
+harvest contracts. The focused `runtime/test_rsp_rom.py` run passes in 51.2 s.
+Fresh extraction from retained CPU maps and loads reproduces identical ordered
+(text SHA-256, IMEM placement) lists: BK 41 (14.4 s), F-Zero X 50 (1.2 s),
+MM 34 (6.3 s). Inputs and generated assets stay in ignored local directories.
+
+Build recovery: cached plaid-core objects initially failed MSVC linking;
+`cargo clean -p plaid-core` followed by the same locked build succeeded in
+145 s. No source or build-setting workaround was needed. This is a cold-cache
+recovery cost, not a production performance change. Full exact-tree validation
+uses `target/paper-mario/0222/gate.py` with GATE_TREE pointing to this worktree
+and GATE_OUT at `target/paper-mario/0222/gate-0225`; per-step timing and logs
+are retained there. No runtime guest interpreter/JIT or closure relaxation is
+introduced.
+
+
+Mutation check: after successful source parsing, temporarily clearing the
+source list and rebuilding kills the focused contract at its expected DMA
+candidate assertion (`AssertionError: []`), in 35.3 s including rebuild.
+The original source bytes were restored before the final full gate.

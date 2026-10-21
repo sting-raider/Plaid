@@ -169,7 +169,7 @@ def main():
     except ValueError as error:
         sys.exit(str(error) + ': nothing is built')
 
-    plaid('rsp-from-rom', rom, m, texts)
+    plaid('rsp-from-rom', rom, m, texts, '--loads', loads)
     rsp_manifest = json.loads((texts / 'rsp-files.json').read_text())
     c = out / f'{name}.c'
     plaid('lower-map', rom, m, entry, '0x80000000', c, '--parts', '16', *(['--residual-dispatch'] if a.residual_dispatch else []), stdout=subprocess.DEVNULL)
