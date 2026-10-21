@@ -1,5 +1,16 @@
 # Next
 
+## After COP1 control-register startup repair (ADR-0238)
+
+MK64's native Status writer is correct; do not clear FR to bypass a real
+mismatch. CFC1/CTC1 are layout-independent and now retain only the CU1 gate.
+The next observed startup stop is fault 1 at 800d1be8: a word-8 write to
+PIF RAM bfc007fc before any runtime thread or VI. Establish a generic native
+PIF access/command contract against pinned references before supporting it;
+do not add an address-specific bypass. Four residual sites still require
+closure proofs. Keep FPR mismatch and CU1 checks, event/SDK boundaries and
+native-frame protections intact. Independent BK/MM regression work remains
+owned separately. Receipt: research/status-fr-control-registers.md.
 ## After continuation pins (ADR-0239)
 
 MM is restored. Banjo-Kazooie still regresses twice: 94a4d7cb (ADR-0205) loses the

@@ -35,9 +35,8 @@ typedef struct plaid_state_s {
   u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 fcsr; u32 llbit; u32 pc; u32 fault; u32 fault_pc;
   /* Live Status comes from a post-IPL receipt or verified SDK context. */
   u32 cp0_status, status_known, status_thread, mi_mask;
-  /* Status.FR outside a verified SDK context, as the runtime knows it: 2 = FR 1
-     (the IPL3 boot context), 1 = FR 0 (every runtime thread; libultra threads
-     start with FR = 0), 0 = no runtime (bare harnesses), unchecked. */
+  /* Known Status.FR: 2 = FR 1, 1 = FR 0, 0 = unchecked bare harness.
+     Boot receipts, native Status writes and SDK restores establish it. */
   u32 fr_mode;
   u32 cp0_known, cp0_index, cp0_wired;
   u64 cp0_entryhi, cp0_epc, cp0_error_epc; plaid_tlb_entry cp0_tlb;
@@ -105,12 +104,16 @@ static inline int plaid_fault(plaid_state *s, u32 pc, u32 code) {
 /* The declared SDK ABI handles lazy COP1 acquisition before resuming an
    instruction. Track its visible CU1 effect; an incompatible FR mode faults. */
 int plaid_status_acquire(plaid_state *s, u32 pc);
+/* CFC1/CTC1 use CU1 but do not address the FR-dependent FPR layout. */
+static inline int plaid_status_cop1(plaid_state *s, u32 pc) {
+  if (s->status_known && !(s->cp0_status & 0x20000000u)) return plaid_status_acquire(s, pc);
+  return 0;
+}
 static inline int plaid_status_fp(plaid_state *s, u32 pc, int fr0) {
   if (s->status_known) {
     if (((s->cp0_status >> 26) & 1) == (u32)fr0) return plaid_fault(s, pc, 11);
-    if (!(s->cp0_status & 0x20000000u)) return plaid_status_acquire(s, pc);
   } else if (s->fr_mode && s->fr_mode != (fr0 ? 1u : 2u)) return plaid_fault(s, pc, 11);
-  return 0;
+  return plaid_status_cop1(s, pc);
 }
 "#;
 
@@ -1138,7 +1141,9 @@ fn simple_lo(word: u32, pc: u32, fr0: bool, lo: Option<&str>) -> Result<String, 
             ));
         }
     };
-    Ok(if matches!(word >> 26, 17 | 49 | 53 | 57 | 61) {
+    Ok(if word >> 26 == 17 && matches!(rs, 2 | 6) {
+        format!("if (plaid_status_cop1(s, 0x{pc:08x}u)) {{ return 1; }}\n{code}")
+    } else if matches!(word >> 26, 17 | 49 | 53 | 57 | 61) {
         format!(
             "if (plaid_status_fp(s, 0x{pc:08x}u, {})) {{ return 1; }}\n{code}",
             u8::from(fr0)
