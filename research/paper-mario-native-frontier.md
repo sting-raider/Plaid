@@ -381,7 +381,29 @@ checks, then replay and content-guard any new declaration through `ares_boot`.
 No per-ROM production facts or native guest executor will be added.
 
 Predecessor review reproduced a fail-open residual gate: a known unmapped candidate
-was suppressed along with its unproven site. Commit c4ac852b retains this target
+was suppressed along with its unproven site. The commit "Keep known missing targets blocking residual validation" retains this target
 blocker in every scope (three focused tests pass). Residual manifests must also be
 written when the ordinary scope happens to close. Cartridge-write latch/timing
 effects and untested absent-Pak/full-address EPi paths remain under review.
+
+## ADR-0220 result (2026-10-21)
+
+`native.py --residual-dispatch --rt64 --require-audio` on the same ROM, base
+main `8095e9a9`. Each analysis-time boot harvest round extends discovery
+(42,601 -> 53,094 -> 56,791 -> 56,825 -> 58,624 -> 58,642 blocks) and the
+address-taken solve goes from 14 to 11, 10 and 8 blockers. The residual solve
+closes with 0 blockers and 8 residual sites. The whole pipeline, including an
+incremental release build of 73 s, took 10.5 minutes.
+
+The artifact passes the former boot-stub fault (PI DMAs 12 -> 154, 11 threads
+created) and faults 3 at `802001f0` (VI 2 in the window build, 1 gfx task,
+0 audio tasks, no PCM). That `jalr` is in 0x190 bytes the game DMAs from ROM
+`0x316a70` to `80200080`. The routine sums ROM `0x3169f0..0x316a70` as halfwords,
+cancelling relocated `lui`/`addiu`/`jal` fields, and combines the sum with the
+cartridge word at `0x504` into the call target. Native execution computes the
+same sum as an offline replay of the routine (`0xddd20`), giving `80026ddc`: a
+function inside the main image (it calls `8002973c` with ROM-range/RAM-address
+pairs) that no instruction names directly, so discovery has no block there and
+the address-taken set (2,241 entries) omits it. The fault is the correct
+fail-closed result. Next blocker: analysis-time targets of unproven indirect
+calls are not discovery roots. Receipts: ignored target/paper-mario/0222.

@@ -6410,7 +6410,7 @@ matches pinned ares. Six semantic policy mutations are rejected. Bounded game
 and passing full-gate receipts are recorded in research/rsp-from-rom.md and ignored
  target/oot/0219; incomplete runs do not establish acceptance.
 
-## ADR-0220: Boot fetch coverage and ROM-word discovery expressions (partial)
+## ADR-0220: Boot fetch coverage and ROM-word discovery expressions
 
 Pinned ares confirms that the first residual-validation fault reaches existing
 IPL-loaded text, rather than a newly decompressed main image. Bounded lexical
@@ -6434,4 +6434,5 @@ write latch/busy effects. The existing immediate DMA/HLE timing scope remains.
 An inherited diagnostic change broke the raw EPi failure contract and is
 restored. Absent-Pak and full-cartridge-address paths now have regressions.
 Pinned oracle builds cache independently fingerprinted C++ objects so adapter
-edits do not rebuild unchanged core objects. Final measurements/gates follow.
+edits do not rebuild unchanged core objects. The full local gate passes; the
+Paper Mario result is in research/paper-mario-native-frontier.md.
