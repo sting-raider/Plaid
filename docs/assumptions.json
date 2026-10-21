@@ -190,8 +190,8 @@
     {"state": "checked", "groups": ["Load/store", "Trap"], "mnemonics": ["jr", "jalr", "add", "addi", "sub", "dadd", "daddi", "dsub", "break"], "label": "guarded RAM access, indirect-jump and return closure, no overflow, no trap, no BREAK (each aborts with a fault code)"}
   ],
   "rsp_obligations": [
-    {"name": "Microcode comes from the ROM, not from IMEM snapshots taken by running the game", "state": "assumed"},
-    {"name": "Graphics microcode is executed (today RT64 renders display lists at a high level)", "state": "assumed"},
+    {"name": "Microcode comes from the ROM, not from IMEM snapshots taken by running the game", "state": "partial: the default since ADR-0188 (SM64, MM, F-Zero X, Banjo-Kazooie, Paper Mario); OoT reaches RSP code not yet found"},
+    {"name": "Graphics microcode is executed, not interpreted at a high level by RT64", "state": "partial: --rsp-gfx runs it for F-Zero X (ADR-0186); display-list HLE is the default"},
     {"name": "RSP tasks run asynchronously, as on hardware (today they complete synchronously)", "state": "assumed"}
   ],
   "hand_inputs": [

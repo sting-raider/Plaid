@@ -496,10 +496,11 @@ def render_coverage_svg(coverage: dict, data: dict, rsp: dict | None, assumption
         y += row + 6
         group_rows(groups, "Instruction semantics", ["plain", "open"])
         y += 10
-        text(2, y + 14, "This is instruction semantics only. For a real game's RSP side, nothing below is proven:", "b")
+        text(2, y + 14, "Instruction semantics only. A real game's RSP side also needs these, none fully done yet:", "b")
         y += 30
         for ob in assumptions["rsp_obligations"]:
-            out.append(f'<rect x="2" y="{y - 11}" width="12" height="12" rx="2" fill="{UNCHECKED}"/>')
+            fill = PLAIN if ob["state"] == "done" else CHECKED if ob["state"].startswith("partial") else UNCHECKED
+            out.append(f'<rect x="2" y="{y - 11}" width="12" height="12" rx="2" fill="{fill}"/>')
             text(22, y, f'{ob["name"]}: {ob["state"]}', "t")
             y += 20
         y += 14
