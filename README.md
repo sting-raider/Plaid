@@ -14,7 +14,7 @@ Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. 
 
 ## Progress report
 
-*As of main `fdd43ff`, 2026-10-21. Every row traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). "Natively" means the lowered game linked with Plaid's runtime: no interpreter, no JIT, and every unproven state is a fail-closed fault.*
+*As of main `1e93b08`, 2026-10-21. Every row traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). "Natively" means the lowered game linked with Plaid's runtime: no interpreter, no JIT, and every unproven state is a fail-closed fault.*
 
 **Two finish lines.**
 1. **ROM in, game runs:** you supply only a ROM. Plaid discovers the code, proves it closed under a declared assumption scope, lowers it to C and builds the executable. **Reached for Majora's Mask and F-Zero X** (the build needs no hand input beyond the scope flags) and, in a finite 60 s run, for Banjo-Kazooie (ADR-0195..0200), not yet for SM64 or OoT, and no game has been played to the end.
@@ -55,6 +55,7 @@ Only Windows has been tested with RT64. Only controller 1 works, with no rumble.
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0222 | `0b6c13a`, `1e93b08` | Observed call targets as address-taken discovery roots; Paper Mario's residual run passes its ROM integrity check and stops at a `jr` switch |
 | 0220 | `4896e16`, `fdd43ff` | Boot fetch coverage and ROM-word discovery roots; Paper Mario's residual run passes the boot stub (partial) |
 | 0219 | `12f70c0`, `1ea8aff` | Inactive fixed text revoked through the shared CPU/device write gate; OoT passes its RSP self-patch |
 | 0218 | `0fa9c9a`, `bf825b6` | Validation-only `--residual-dispatch` mode; Controller Pak reports no pak, cartridge-space CPU writes ignored, full cartridge addresses in EPi DMA |
@@ -236,7 +237,7 @@ ROMs stay local and are never committed. Per-ROM numbers and how to reproduce th
 | F-Zero X (USA) | From the ROM alone, 27,621 blocks and zero blockers under the address-taken scope (ADR-0185). Native graphics microcode feeds RT64 raw RDP commands; visible 65-second races show vehicle markings and shading without a runtime fault (ADR-0186). |
 | Mario Party 2 (USA) | Boot window: 712 blocks and 29 blockers. 27 sit behind an `osInitialize` whose SDK build n64sym lacks; 2 are function-pointer calls. |
 | Banjo-Kazooie (USA) (Rev 1) | No hand input. The ROM-only pipeline is scoped `CLOSED` with 0 blockers over 80,850 blocks and 41 ROM-derived RSP texts (ADR-0192, ADR-0195..0200). A visible 60 s native run with RT64 and compiled RSP audio reaches VI 3578 with 1270 graphics tasks and 1785 audio tasks, fault 0, PCM peak 32767; the Nintendo opening backgrounds and the new-game puzzle transitions draw (ADR-0200, ADR-0201). This is finite execution, not full gameplay or whole-ROM completion; no assumption is retired, and the compiled-RSP graphics probe faults on its first task. |
-| Paper Mario (USA) | Scoped OPEN with 7 blockers over 56,851 blocks and 162 loads after the ADR-0202..0217 table-dispatch proofs (164 blockers on 2026-10-18); remaining indexed dispatches still prevent native emission and no Paper Mario native run is accepted. The validation-only `--residual-dispatch` run (ADR-0218, ADR-0220) closes with 0 blockers and 8 residual sites, passes the boot stub (154 PI DMAs, 11 threads) and faults 3 at a checksum-computed call whose target function discovery never reached; the artifact records `native_complete: false` ([`research/paper-mario-native-frontier.md`](research/paper-mario-native-frontier.md)). |
+| Paper Mario (USA) | Scoped OPEN with 7 blockers over 56,851 blocks and 162 loads after the ADR-0202..0217 table-dispatch proofs (164 blockers on 2026-10-18); remaining indexed dispatches still prevent native emission and no Paper Mario native run is accepted. The validation-only `--residual-dispatch` run (ADR-0218, ADR-0220, ADR-0222) closes with 0 blockers and 8 residual sites, passes the boot stub (154 PI DMAs, 11 threads) and, with observed call targets as discovery roots, its ROM integrity check (235 PI DMAs), then faults 3 at residual site `8004e544`, a five-case `jr` switch whose known case labels residual dispatch does not include; the artifact records `native_complete: false` ([`research/paper-mario-native-frontier.md`](research/paper-mario-native-frontier.md)). |
 | Star Fox 64, Mario Kart 64, GoldenEye 007, Rogue Squadron (USA) | Surveyed with the ROM-only pipeline on 2026-10-18: each is scoped OPEN (GoldenEye 7 blockers, Mario Kart 64 30, Star Fox 64 298, Rogue Squadron 210) and refuses native emission; no runtime was reached. See [`research/rom-sweep.md`](research/rom-sweep.md). |
 
 <details>
