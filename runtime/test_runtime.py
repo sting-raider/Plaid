@@ -674,6 +674,8 @@ def main():
     sp_boot(exe, cc)
     import test_boot_ram
     test_boot_ram.run(exe, cc, sys.modules[__name__])
+    import test_boot_entryhi
+    test_boot_entryhi.run(exe, cc, sys.modules[__name__])
     raw_pi_dma(exe, cc)
     import test_pi_bus
     test_pi_bus.run(exe, cc, sys.modules[__name__])

@@ -1,5 +1,11 @@
 # Status
 
+## Boot EntryHi (ADR-0242)
+
+EntryHi is seeded from the pinned-ares boot replay and kept across runtime
+calls. Mario Kart 64 passes startup: VI 2, 865 PI DMAs, one graphics task,
+then an unlowered word of its ROM-derived graphics microcode.
+
 ## PIF terminate-boot (ADR-0241)
 
 A natively lowered osInitialize may end the PIF boot handshake itself; the

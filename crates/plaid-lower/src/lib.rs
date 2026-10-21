@@ -1278,7 +1278,7 @@ impl Lowerer<'_> {
                 "{} {}",
                 self.pin(
                     link,
-                    format!("{{ s->cp0_known = 0; int r = plaid_rt_{name}(s); if (r) return r; }}")
+                    format!("{{ s->cp0_known &= 1u << 10; int r = plaid_rt_{name}(s); if (r) return r; }}")
                 ),
                 self.fallthrough(link, pc)
             ));
@@ -1312,7 +1312,7 @@ impl Lowerer<'_> {
         }
         if let Some(name) = self.runtime.get(&target) {
             return Ok(format!(
-                "{{ s->cp0_known = 0; int r = plaid_rt_{name}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;"
+                "{{ s->cp0_known &= 1u << 10; int r = plaid_rt_{name}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;"
             ));
         }
         if self.functions.contains(&target) {
@@ -1453,7 +1453,7 @@ impl Lowerer<'_> {
             }
             // A tail call into the runtime returns to $ra, which must be ours.
             (2, _, _) if self.runtime.contains_key(&jump) => Ok(format!(
-                "{slot} {{ s->cp0_known = 0; int r = plaid_rt_{}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;",
+                "{slot} {{ s->cp0_known &= 1u << 10; int r = plaid_rt_{}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;",
                 self.runtime[&jump]
             )),
             (2, _, _) if self.targets.contains_key(&pc) => {
@@ -1947,7 +1947,7 @@ pub fn lower_c_parts(
         for &t in ts {
             cases += &if let Some(name) = runtime.get(&t) {
                 format!(
-                    " case {}: s->cp0_known = 0; return plaid_rt_{name}(s);",
+                    " case {}: s->cp0_known &= 1u << 10; return plaid_rt_{name}(s);",
                     sx(t)
                 )
             } else if functions.contains(&t) {

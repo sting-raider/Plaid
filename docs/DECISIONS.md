@@ -7013,3 +7013,31 @@ terminate-boot write leaves exactly the RAM the ares-verified plain round trip
 does, and that a second terminate faults 1. Mario Kart 64 moves past the PIF
 write to fault 12 at 800d1c80: an MFC0 of EntryHi, which is unknown at that
 point (libultra saves it around a TLB write).
+
+## ADR-0242: EntryHi comes from the boot replay and survives runtime calls
+
+Status: accepted. ADR-0235 forgets every COP0 TLB staging register across a
+runtime (HLE) call and an SDK context switch, and none is known at boot, so an
+MFC0 of one faults 12. libultra saves EntryHi around each TLB write and
+restores it (Mario Kart 64's startup does so at 800d1c80), so the read is
+ordinary code.
+
+The pinned-ares boot replay now records EntryHi at the game's entry, beside
+Status (boot_entryhi in the capture, PLAID_BOOT_ENTRYHI in ram_boot.h, masked
+as ares stores it: ASID, VPN2 and region). The runtime starts with it known.
+Runtime calls and SDK context switches keep EntryHi and still forget Index,
+EntryLo0/1, PageMask and Wired.
+
+Assumption: the libultra functions the runtime replaces leave EntryHi as they
+found it (the TLB routines save and restore it; the others never write it),
+and the runtime itself never writes it. A TLB exception, which would set it,
+already faults. This rests on the libultra calling pattern, not on a pinned
+reference test.
+
+runtime/test_boot_entryhi.py seeds Status and EntryHi from a boot header,
+writes Index, calls a runtime function, reads EntryHi (the masked boot value)
+and then Index (fault 12). Clearing EntryHi on the call fails the first check.
+scripts/test_ares_boot.py rejects a missing or out-of-range EntryHi.
+
+Mario Kart 64 now runs past startup: VI 2, 865 PI DMAs and its first graphics
+task, then stops with --rsp-gfx on an unlowered word of its graphics microcode.

@@ -1,5 +1,11 @@
 # Next
 
+## After boot EntryHi (ADR-0242)
+
+Mario Kart 64 stops at VI 2 with --rsp-gfx on an unlowered word of its
+graphics microcode. Find which text and word, and whether the RSP lowering or
+the candidate search misses it.
+
 ## After PIF terminate-boot (ADR-0241)
 
 Mario Kart 64 reads EntryHi at 800d1c80 to save it around a TLB write. Seed

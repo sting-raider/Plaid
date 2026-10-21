@@ -96,9 +96,12 @@ def write_boot_state(capture, out, entry):
     status = capture.get('boot_status')
     if type(status) is not int or not 0 <= status <= 0xffffffff:
         raise ValueError('pinned ares supplied no valid post-IPL Status')
+    entryhi = capture.get('boot_entryhi')
+    if type(entryhi) is not int or not 0 <= entryhi < 1 << 64:
+        raise ValueError('pinned ares supplied no valid post-IPL EntryHi')
     sp_boot, ram_boot = out / 'sp_boot.h', out / 'ram_boot.h'
     sp_boot.write_text('static const u8 plaid_sp_boot[0x2000] = {' + ','.join(map(str, capture['sp'])) + '};\n')
-    ram_boot.write_text(f'#define PLAID_BOOT_STATUS {status}u\n' + 'static const u8 plaid_ram_boot[] = {' + ','.join(map(str, capture['ram_prefix'])) + '};\n')
+    ram_boot.write_text(f'#define PLAID_BOOT_STATUS {status}u\n#define PLAID_BOOT_ENTRYHI {entryhi}ull\n' + 'static const u8 plaid_ram_boot[] = {' + ','.join(map(str, capture['ram_prefix'])) + '};\n')
     receipt = {k: v for k, v in capture.items() if k not in ('sp', 'ram_prefix')}
     receipt['startup_payloads'] = {field: {'size': len(capture[field]), 'sha256': hashlib.sha256(bytes(capture[field])).hexdigest()}
                                    for field in ('sp', 'ram_prefix')}

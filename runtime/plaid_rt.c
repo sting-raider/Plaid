@@ -275,7 +275,7 @@ static void restore(const rt_thread *t) {
   memcpy(S->r, t->r, sizeof t->r); memcpy(S->f, t->f, sizeof t->f);
   S->hi = t->hi; S->lo = t->lo; S->fcc = t->fcc; S->fcsr = t->fcsr; S->llbit = t->llbit;
   S->status_known = (u32)t->status_known;
-  S->cp0_known = 0; /* SDK context switches do not certify staging registers. */
+  S->cp0_known &= 1u << 10; /* SDK context switches certify no staging register but EntryHi (ADR-0242). */
   S->fr_mode = 1; /* every runtime thread is a libultra thread: FR = 0 */
   S->status_thread = t->status_known ? t->guest : 0;
   ints_enabled = t->ie;
@@ -1776,6 +1776,7 @@ int main(int argc, char **argv) {
   S->fr_mode = 2; /* IPL3 hands over with Status.CU1 = 1, Status.FR = 1 */
 #ifdef PLAID_BOOT_STATUS
   S->cp0_status = PLAID_BOOT_STATUS; S->status_known = 1;
+  S->cp0_entryhi = PLAID_BOOT_ENTRYHI & 0xc00000ffffffe0ffull; S->cp0_known = 1u << 10;
   ints_enabled = S->cp0_status & 1u;
   S->fr_mode = (S->cp0_status & 0x04000000u) ? 2 : 1;
 #endif
