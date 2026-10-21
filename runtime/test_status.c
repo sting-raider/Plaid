@@ -110,11 +110,31 @@ static void contexts_and_events(void) {
   running = &boot;
 }
 
+/* Outside a verified SDK context, COP1 still checks FR: the IPL3 boot context
+   runs with FR = 1, every runtime thread with FR = 0 (fault 11 otherwise). */
+static void fr_outside_sdk_context(void) {
+  rt_thread plain = {0};
+  u32 known = S->status_known;
+  S->status_known = 0; S->fault = 0;
+  S->fr_mode = 2;
+  assert(plaid_status_fp(S, 0x80000400u, 1) == 1 && S->fault == 11 && S->fault_pc == 0x80000400u);
+  S->fault = 0;
+  assert(plaid_status_fp(S, 0x80000400u, 0) == 0);
+  restore(&plain);
+  assert(S->fr_mode == 1 && !S->status_known);
+  assert(plaid_status_fp(S, 0x80000404u, 1) == 0 && S->fault == 0);
+  assert(plaid_status_fp(S, 0x80000404u, 0) == 1 && S->fault == 11);
+  S->fault = 0; S->fr_mode = 0; /* bare harness: no runtime-known mode */
+  assert(plaid_status_fp(S, 0x80000408u, 1) == 0 && plaid_status_fp(S, 0x80000408u, 0) == 0);
+  S->status_known = known;
+}
+
 int main(int argc, char **argv) {
   unsigned batch = argc == 2 ? (unsigned)strtoul(argv[1], NULL, 0) : 0, i;
   assert(batch < sizeof status_cases / sizeof status_cases[0] / 16);
   S = &state; running = &boot;
   contexts_and_events();
+  fr_outside_sdk_context();
   memset(timers, 0, sizeof timers); memset(pending, 0, sizeof pending);
   for (i = 16; i < 24; i++) S->r[i] = 0x1234567800000000ull + i;
   S->hi = 0x123456789abcdef0ull; S->lo = 0xfedcba9876543210ull;

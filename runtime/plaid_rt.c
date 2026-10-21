@@ -272,6 +272,7 @@ static void restore(const rt_thread *t) {
   memcpy(S->r, t->r, sizeof t->r); memcpy(S->f, t->f, sizeof t->f);
   S->hi = t->hi; S->lo = t->lo; S->fcc = t->fcc; S->fcsr = t->fcsr; S->llbit = t->llbit;
   S->status_known = (u32)t->status_known;
+  S->fr_mode = 1; /* every runtime thread is a libultra thread: FR = 0 */
   S->status_thread = t->status_known ? t->guest : 0;
   ints_enabled = t->ie;
   if (t->status_known) {
@@ -1763,6 +1764,7 @@ int main(int argc, char **argv) {
   flash_power();
   if (save_path && load_file(save_path, eeprom, EEPROM_SIZE)) { fprintf(stderr, "%s is not a %d-byte EEPROM save\n", save_path, EEPROM_SIZE); return 2; }
   S = calloc(1, sizeof *S);
+  S->fr_mode = 2; /* IPL3 hands over with Status.CU1 = 1, Status.FR = 1 */
   if (!S) return 2;
   S->io = rt_io;
   if (rom) io_boot();
