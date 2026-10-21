@@ -1032,12 +1032,12 @@ mod tests {
             let at = start as usize;
             rom[at..at + 0x20].copy_from_slice(&code);
             for (n, w) in [
-                0x3c05_0000,                     // lui a1, 0
-                0x24a5_0000 | (start & 0xffff),  // addiu a1, a1, start
-                0x3c07_0000,                     // lui a3, 0
-                0x24e7_0000 | (start + 0x20),    // addiu a3, a3, start + 0x20
-                0x3c06_8010,                     // lui a2, 0x8010
-                0x24c6_0000,                     // addiu a2, a2, 0
+                0x3c05_0000,                    // lui a1, 0
+                0x24a5_0000 | (start & 0xffff), // addiu a1, a1, start
+                0x3c07_0000,                    // lui a3, 0
+                0x24e7_0000 | (start + 0x20),   // addiu a3, a3, start + 0x20
+                0x3c06_8010,                    // lui a2, 0x8010
+                0x24c6_0000,                    // addiu a2, a2, 0
             ]
             .into_iter()
             .enumerate()
@@ -1047,10 +1047,17 @@ mod tests {
             static_loads(&rom, &rom[0x1000..0x1100], 0x80000400).unwrap()
         };
         let aligned = load_from(0x2000);
-        assert!(aligned.iter().any(|l| l.file.rom_start == 0x2000), "{aligned:#x?}");
+        assert!(
+            aligned.iter().any(|l| l.file.rom_start == 0x2000),
+            "{aligned:#x?}"
+        );
         // an odd ROM range cannot be executable code (it would fail GuestRange)
         let odd = load_from(0x2001);
-        assert!(odd.iter().all(|l| l.file.rom_start % 4 == 0 && l.size % 4 == 0), "{odd:#x?}");
+        assert!(
+            odd.iter()
+                .all(|l| l.file.rom_start % 4 == 0 && l.size % 4 == 0),
+            "{odd:#x?}"
+        );
     }
 
     #[test]
