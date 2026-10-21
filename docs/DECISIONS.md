@@ -6604,3 +6604,34 @@ equal-byte ambiguity, target projection, KSEG aliases, missing/unsupported
 bindings, malformed inputs, finite-budget misses and later observations.
 Mutation checks and local gate/game measurements are recorded in
 research/paper-mario-native-frontier.md.
+
+
+## ADR-0229: retain completed switch paths as candidates without closure
+
+A bounded all-path table walk can finish a valid initialized predecessor and
+then fail at a separate entry, clobber, unsupported edge or resource limit.
+Discarding the completed witnesses loses discoverable case blocks even in the
+explicit residual-validation mode. Keep the walk's already completed results
+for non-linking switches when they agree on table base and count, and read their
+complete source snapshot
+through the existing caller-slot projection. Do not explore past failed paths,
+raise budgets, bypass independent entries or infer an ABI. Nullable function-call
+arrays retain their existing all-path behavior.
+
+Evidence records incomplete_paths: true and explicitly states that other paths
+remain unproven. Such evidence can add candidate targets and derived case decode
+roots; it never supplies a closed_proof. The independent table verifier rejects
+incomplete paths even if a certificate is forged. Complete-path evidence keeps
+its existing serialized shape and exhaustive verifier. Incomplete candidates
+impose no table-immutability or target-identity assumption: the unresolved
+indirect site itself remains OPEN outside residual dispatch, and candidate
+blocks and native target guards are still required. An unknown runtime target
+continues to fault 3. No runtime guest decoding is introduced.
+
+This is a generic analysis rule, with no game addresses, names, constants or
+branches, and no new dependency or reference-code reuse. Synthetic fixed and
+placed-slot cases cover initialized and independent paths, missing source/base,
+forged closure and reachable native case coverage. Native CPU/PC/RAM state is
+compared with pinned ares; a runtime table change to an unlisted target faults.
+Mutation checks, discovery controls, full local gate timings and the visible
+Paper Mario frontier are recorded in research/paper-mario-native-frontier.md.

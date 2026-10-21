@@ -375,3 +375,116 @@ fn a_bound_before_the_only_branch_to_the_guard_closes_the_table() {
         .unwrap();
     assert!(!plaid_core::tables::verify(&m, &i, s));
 }
+
+/// A separate entry reaches the guard without establishing the table base.
+/// The initialized path still supplies candidates, never an exhaustive proof.
+#[test]
+fn incomplete_table_paths_retain_only_candidate_evidence() {
+    let mut i = image();
+    i.words[..10].copy_from_slice(&[
+        0x3c088000, 0x25080100, // initialized path's table base
+        0x2c890003, 0x1120000c, 0, // guard, default at +0x40
+        0x00045080, 0x010a1021, 0x8c420000, 0x00400008, 0,
+    ]);
+    i.words[0x70 / 4] = 0x08000002; // independent entry -> guard
+    let roots = [i.base.pc, GuestAddr(0x80000070)];
+    let initial = direct_cfg(rom(), &i, &roots, 1000).unwrap().map;
+    let m = analyze_indirect(&initial, &i).unwrap();
+    let s = m
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == 0x80000020)
+        .unwrap();
+    assert_eq!(
+        s.candidates.keys().map(|a| a.pc.0).collect::<Vec<_>>(),
+        [0x80000040, 0x80000050]
+    );
+    assert!(s.closed_proof.is_none());
+    assert!(!plaid_core::tables::verify(&m, &i, s));
+    let id = s.candidates.values().next().unwrap().first().unwrap();
+    let detail: serde_json::Value = serde_json::from_str(&m.evidence[id].detail).unwrap();
+    assert_eq!(detail["incomplete_paths"], true);
+    let mut forged = s.clone();
+    forged.closed_proof = Some(id.clone());
+    assert!(!plaid_core::tables::verify(&m, &i, &forged));
+    let d = discover_image(rom(), &i, &roots, 1000).unwrap();
+    assert!(d.map.blocks.iter().any(|b| b.start.pc.0 == 0x80000050));
+    let report = solve(
+        &d.map,
+        std::slice::from_ref(&i),
+        Scope::DeclaredStaticImagesGuardedRam,
+    )
+    .unwrap();
+    assert_eq!(report.status, ClosureStatus::Open);
+    assert!(
+        report
+            .blockers
+            .iter()
+            .any(|b| b.kind == "unresolved_indirect_site")
+    );
+    // The exact same witnesses read only their own placed overlay's table.
+    let mut placed = i.clone();
+    placed.base.pc = GuestAddr(0x80020000);
+    placed.slots = vec![(
+        GuestRange {
+            start: placed.base.pc,
+            size: placed.size().unwrap(),
+        },
+        0x80000000,
+        0x100,
+    )];
+    let placed_roots = [placed.base.pc, GuestAddr(0x80020070)];
+    let d = discover_image(rom(), &placed, &placed_roots, 1000).unwrap();
+    let site = d
+        .map
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == 0x80020020)
+        .unwrap();
+    assert_eq!(
+        site.candidates.keys().map(|a| a.pc.0).collect::<Vec<_>>(),
+        [0x80020040, 0x80020050]
+    );
+    assert!(site.closed_proof.is_none());
+    assert!(!plaid_core::tables::verify(&d.map, &placed, site));
+    assert!(d.map.blocks.iter().any(|b| b.start.pc.0 == 0x80020050));
+    let initial = direct_cfg(rom(), &placed, &placed_roots, 1000).unwrap().map;
+    placed.holes.push(GuestRange {
+        start: GuestAddr(0x80020104),
+        size: 4,
+    });
+    let missing = analyze_indirect(&initial, &placed).unwrap();
+    let site = missing
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == 0x80020020)
+        .unwrap();
+    assert!(site.candidates.is_empty());
+    assert!(site.closed_proof.is_none());
+    // Nullable call arrays are not switch tables: preserve their old behavior.
+    let mut call = i.clone();
+    call.words[8] = 0x0040f809; // jalr v0
+    call.words[10] = 0x03e00008; // continuation returns
+    call.words[64] = 0; // optional entry in an otherwise recognizable array
+    let initial = direct_cfg(rom(), &call, &roots, 1000).unwrap().map;
+    let m = analyze_indirect(&initial, &call).unwrap();
+    let site = m
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc.0 == 0x80000020)
+        .unwrap();
+    assert!(site.candidates.is_empty());
+    assert!(site.closed_proof.is_none());
+    // A path that never establishes a base supplies no table at all.
+    i.words[0] = 0;
+    let m = direct_cfg(rom(), &i, &roots, 1000).unwrap().map;
+    let m = analyze_indirect(&m, &i).unwrap();
+    assert!(
+        m.indirect_sites
+            .iter()
+            .find(|s| s.site.pc.0 == 0x80000020)
+            .unwrap()
+            .candidates
+            .is_empty()
+    );
+}
