@@ -7,9 +7,11 @@ Steps, each a plain `plaid` command whose output stays in target/native/<name>:
                  without one), plus the reset stub
   identify       libultra functions the host runtime replaces
   discover       with the ROM's relocatable overlays when it has a file table
-  solve          the address-taken scope must be CLOSED, else nothing is built
-                 when OPEN, refine copy-call sources, then harvest with pinned
-                 ares and retry; each candidate still needs native byte binding
+  solve          the address-taken scope; when OPEN, refine copy-call sources,
+                 then harvest with pinned ares and retry. If only unproven
+                 indirect sites remain, they become fail-closed run-time
+                 dispatch over the lowered entries (ADR-0233; the manifest
+                 records native_complete: false). --strict refuses instead
   lower-map      16 parts, compiled in parallel with gcc
   rsp-from-rom   derive and lower candidate microcode from ROM image pointers
   snapshots      oracle-only; never loaded by the default build
@@ -107,7 +109,7 @@ def main():
     ap.add_argument('--name')
     ap.add_argument('--loads', type=Path, help='plaid-loads-v0 for a ROM without a file table')
     ap.add_argument('--rt64', action='store_true')
-    ap.add_argument('--residual-dispatch', action='store_true', help='VALIDATION ONLY (ADR-0218): accept unproven indirect sites as fail-closed dispatch over every lowered entry; the build is not natively complete')
+    ap.add_argument('--strict', action='store_true', help='build only a CLOSED map; refuse residual run-time dispatch (ADR-0233)')
     ap.add_argument('--rsp-gfx', action='store_true', help='run lowered graphics microcode; requires --rt64')
     ap.add_argument('--rsp-dump', type=Path, help='capture IMEM for oracle comparison only; never a build input')
     ap.add_argument('--press', action='append', default=[], help='runtime button press, e.g. 0x1000@300:4')
@@ -118,8 +120,6 @@ def main():
         ap.error('--rsp-gfx requires --rt64')
     rom = a.rom.resolve()
     name = a.name or ''.join(c for c in rom.stem.lower() if c.isalnum())[:16]
-    if a.residual_dispatch:
-        name += '-residual'  # never replaces the complete build
     out = ROOT / 'target/native' / name
     texts = out / 'rsp-rom'
     for d in (out, texts):
@@ -155,13 +155,14 @@ def main():
         if not harvest(rom, loads, m, info, out / f'boot-harvest-{attempt}.json'):
             break
     print('solve', verdict['status'], len(verdict['blockers']), 'blockers')
-    if verdict['status'] != 'closed' and a.residual_dispatch:
+    residual = verdict['status'] != 'closed' and not a.strict
+    if residual:
         verdict = json.loads(plaid('solve', rom, m, '--residual-dispatch', capture_output=True, text=True).stdout)
         print('residual-dispatch solve', verdict['status'], len(verdict['blockers']), 'blockers,', len(verdict.get('residual_sites', [])), 'residual sites')
     if verdict['status'] != 'closed':
-        sys.exit('not CLOSED under the address-taken scope: nothing is built')
-    if a.residual_dispatch:
-        (out / 'native-manifest.json').write_text(json.dumps({'mode': 'residual-dispatch', 'native_complete': False, 'residual_sites': [f"{s['pc']:08x}" for s in verdict.get('residual_sites', [])]}, indent=2) + '\n')
+        sys.exit('not CLOSED under the address-taken scope' + ('' if a.strict else ', even with residual dispatch') + ': nothing is built')
+    # Always rewritten: a stale manifest must never describe a later build.
+    (out / 'native-manifest.json').write_text(json.dumps({'mode': 'residual-dispatch' if residual else 'closed', 'native_complete': not residual, 'residual_sites': [f"{s['pc']:08x}" for s in verdict.get('residual_sites', [])]}, indent=2) + '\n')
 
     # The native run starts SP memory as the ROM's own IPL3 leaves it (ADR-0195).
     try:
@@ -172,7 +173,7 @@ def main():
     plaid('rsp-from-rom', rom, m, texts, '--loads', loads)
     rsp_manifest = json.loads((texts / 'rsp-files.json').read_text())
     c = out / f'{name}.c'
-    plaid('lower-map', rom, m, entry, '0x80000000', c, '--parts', '16', *(['--residual-dispatch'] if a.residual_dispatch else []), stdout=subprocess.DEVNULL)
+    plaid('lower-map', rom, m, entry, '0x80000000', c, '--parts', '16', *(['--residual-dispatch'] if residual else []), stdout=subprocess.DEVNULL)
     cc = ['gcc', '-O1', '-std=gnu11', '-w', '-DPLAID_SAFEPOINTS']
     headers = b''.join(p.read_bytes() for p in sorted((ROOT / 'crates/plaid-lower/src').glob('*.h')))
     compiler = subprocess.check_output(['gcc', '--version'])

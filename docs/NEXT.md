@@ -1,5 +1,18 @@
 # Next
 
+## After ADR-0233
+
+Per-site proofs no longer gate a build. The sweep points at the next universal
+work, in order:
+
+1. Lower COP0 moves, TLB instructions and ERET, and model exceptions and
+   interrupts, so boot code like GoldenEye's TLB setup and Mario Kart 64's
+   handler is translated instead of excluded (unsupported_scope_effect).
+2. Discover overlay code that Star Fox 64 calls into (136 unmapped targets,
+   157 unresolved direct targets).
+3. Paper Mario: find the shared-slot occupant at `80240310` reached at VI 2908.
+4. Mario Party 2: `plaid identify` fails before discovery.
+
 ## Paper Mario proof gaps after ADR-0231
 
 No residual site is closed by the TLB host-effect contract. Three switches meet
