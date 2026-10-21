@@ -14,14 +14,14 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 ## Where it stands
 
-*As of main `f9ec01f`, 2026-10-22. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
+*As of main `9e97f24`, 2026-10-22. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
 | Super Mario 64 (USA) | code segment, 2 load files, a local symbol map for 3 names | ✅ | full-speed gameplay with input, EEPROM saves and audio, no stop in 90 s | infer its loads from the ROM |
 | Majora's Mask (USA) | **none** | ??? | intro and Clock Town attract scene, 90 s, fault 0, audio (ADR-0187, ADR-0189); current main: 60 s, VI 3563, fault 0 after the frame-pin fix (ADR-0239) | longer play |
 | F-Zero X (USA) | **none** | ✅ | 65 s races with compiled graphics microcode and audio, fault 0 (ADR-0186); current main: 20 s with `--rsp-gfx`, fault 0, now built through residual dispatch (1 open blocker) | longer play |
-| Banjo-Kazooie (USA) (Rev 1) | **none** | ✅ | 60 s: Nintendo opening and title, audio, fault 0; puzzle transitions in 75 s runs (ADR-0200, ADR-0201). ⚠️ A fresh build on current main stops at VI 11 on RSP microcode it does not find; being bisected | fix the regression |
+| Banjo-Kazooie (USA) (Rev 1) | **none** | 🟨 residual dispatch, 2 sites | 60 s: Nintendo opening and title, audio, fault 0; puzzle transitions in 75 s runs (ADR-0200, ADR-0201); current main: 60 s, VI 3568, fault 0 (ADR-0240) | re-prove the 2 table jumps lost in 94a4d7cb |
 | Paper Mario (USA) | **none** | 🟨 builds by default with residual dispatch (ADR-0233) | 60 s: storybook intro, VI 3590, audio, fault 0 (ADR-0230); a fresh default build stops at VI 2908 on an undiscovered shared-slot occupant | find that code; prove 8 indirect jumps for `native_complete` |
 | Ocarina of Time (USA 1.2) | code segment, 2 load files (earlier builds) | 🟨 | title and file select in older builds (ADR-0182); the ROM-only build stops at VI 3 | lower the RSP code it reaches at IMEM `0x080` (ADR-0219) |
 | GoldenEye 007 (USA) | **none** | refused | not reached: OPEN, 327 residual blockers | bounded ERET exposes return-target obligations; qualified tables and sources remain (ADR-0237, `0c4d9010`); [receipt](research/eret-lowering.md) |
@@ -39,6 +39,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0240 | `9e97f24` | RSP microcode candidates the runtime cannot tell apart count once; fixes the Banjo-Kazooie VI 11 stop |
 | 0238 | `f9ec01f` | `CFC1`/`CTC1` need only the FPU enabled, not a matching FR mode (matches ares); Mario Kart 64 moves past fault 11 to a PIF RAM write |
 | 0239 | `c63eb84` | Suspended native frames pin only the code they can still run; fixes the Majora's Mask VI 0 regression |
 | 0237 | `0c4d9010` | Bounded ERET and aligned executable loads; MK64 builds with four residual sites, then faults 11 before VI; ISA 204/209 |
