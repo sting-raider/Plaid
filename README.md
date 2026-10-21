@@ -14,7 +14,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 ## Where it stands
 
-*As of main `9e97f24`, 2026-10-22. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
+*As of main `8dfa72b`, 2026-10-22. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
@@ -25,7 +25,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 | Paper Mario (USA) | **none** | 🟨 builds by default with residual dispatch (ADR-0233) | 60 s: storybook intro, VI 3590, audio, fault 0 (ADR-0230); a fresh default build stops at VI 2908 on an undiscovered shared-slot occupant | find that code; prove 8 indirect jumps for `native_complete` |
 | Ocarina of Time (USA 1.2) | code segment, 2 load files (earlier builds) | 🟨 | title and file select in older builds (ADR-0182); the ROM-only build stops at VI 3 | lower the RSP code it reaches at IMEM `0x080` (ADR-0219) |
 | GoldenEye 007 (USA) | **none** | refused | not reached: OPEN, 327 residual blockers | bounded ERET exposes return-target obligations; qualified tables and sources remain (ADR-0237, `0c4d9010`); [receipt](research/eret-lowering.md) |
-| Mario Kart 64 (USA) | **none** | built; validation failed | VI 0, graphics/audio tasks 0; fault 1 at `800d1be8` | CFC1/CTC1 startup FR check fixed; next is PIF RAM write `bfc007fc`; four residual sites (ADR-0238); [receipt](research/status-fr-control-registers.md) |
+| Mario Kart 64 (USA) | **none** | built; validation failed | VI 2, 865 PI DMAs, 1 graphics task, then an unlowered word of its graphics microcode | startup now runs natively (ADR-0238, ADR-0241, ADR-0242); next, the microcode word; four residual sites |
 | Star Fox 64, Rogue Squadron (USA) | **none** | refused | not reached in the ADR-0233 sweep | overlay and instruction coverage; see [research/rom-sweep.md](research/rom-sweep.md) |
 
 "Native build ✅" means analysis is `CLOSED` under a declared scope (usually `--address-taken`) and `native.py` emits the executable. Since ADR-0233, `native.py` also builds by default when the only open items are indirect jumps it cannot prove: they go through a fail-closed run-time lookup over the translated code (still no emulation), and `native-manifest.json` records `native_complete: false`. `--strict` builds only proven maps.
@@ -39,6 +39,8 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0242 | `8dfa72b` | EntryHi comes from the boot replay and survives runtime calls; Mario Kart 64 gets through startup to its first graphics task |
+| 0241 | `0d6f52b` | The PIF accepts a game's own terminate-boot command, as ares does; Mario Kart 64 moves to an EntryHi read |
 | 0240 | `9e97f24` | RSP microcode candidates the runtime cannot tell apart count once; fixes the Banjo-Kazooie VI 11 stop |
 | 0238 | `f9ec01f` | `CFC1`/`CTC1` need only the FPU enabled, not a matching FR mode (matches ares); Mario Kart 64 moves past fault 11 to a PIF RAM write |
 | 0239 | `c63eb84` | Suspended native frames pin only the code they can still run; fixes the Majora's Mask VI 0 regression |
