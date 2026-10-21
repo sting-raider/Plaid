@@ -74,7 +74,6 @@ PROGRAM = [
     *call('osSendMesg', Q, 7, 1),  # wakes t2, which preempts
     *log(4),
     *call('osCreateMesgQueue', Q2, BUF2, 4),
-    *call('osSetEventMesg', 7, Q2, 0x99),  # OS_EVENT_VI
     *call('osCreateThread', T4, 4, 't4', 0, 0x8001FF00, 30),
     *call('osStartThread', T4),  # runs, blocks on the VI queue
     *log(5),
@@ -83,6 +82,8 @@ PROGRAM = [
     *log(6),
     *call('osYieldThread'),  # t5 runs first
     *log(8),
+    # Arm VI only after setup: a host stall may otherwise preempt before log(6).
+    *call('osSetEventMesg', 7, Q2, 0x99),  # OS_EVENT_VI
     'spin', A.beq(A.zero, A.zero, 'spin'), A.nop,  # preempted only at its safepoint
     't2',
     *log(2),
