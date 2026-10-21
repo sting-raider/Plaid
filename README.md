@@ -24,7 +24,9 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 | Banjo-Kazooie (USA) (Rev 1) | **none** | ✅ | 60 s: Nintendo opening and title, audio, fault 0; puzzle transitions in 75 s runs (ADR-0200, ADR-0201). ⚠️ A fresh build on current main stops at VI 11 on RSP microcode it does not find; being bisected | fix the regression |
 | Paper Mario (USA) | **none** | 🟨 builds by default with residual dispatch (ADR-0233) | 60 s: storybook intro, VI 3590, audio, fault 0 (ADR-0230); a fresh default build stops at VI 2908 on an undiscovered shared-slot occupant | find that code; prove 8 indirect jumps for `native_complete` |
 | Ocarina of Time (USA 1.2) | code segment, 2 load files (earlier builds) | 🟨 | title and file select in older builds (ADR-0182); the ROM-only build stops at VI 3 | lower the RSP code it reaches at IMEM `0x080` (ADR-0219) |
-| GoldenEye 007, Mario Kart 64, Star Fox 64, Rogue Squadron (USA) | **none** | ❌ | not reached: OPEN with 7, 27, 296, 225 blockers even with residual dispatch | COP0/TLB/ERET lowering (in progress, ADR-0235) and overlay discovery; see [`research/rom-sweep.md`](research/rom-sweep.md) |
+| GoldenEye 007 (USA) | **none** | refused | not reached: OPEN, 1 blocker | mapped instruction discovery (ADR-0235); [receipt](research/cop0-lowering.md) |
+| Mario Kart 64 (USA) | **none** | refused | not reached: OPEN, 10 blockers with residual dispatch | ERET and missing targets (ADR-0235); [receipt](research/cop0-lowering.md) |
+| Star Fox 64, Rogue Squadron (USA) | **none** | refused | not reached in the ADR-0233 sweep | overlay and instruction coverage; see [research/rom-sweep.md](research/rom-sweep.md) |
 
 "Native build ✅" means analysis is `CLOSED` under a declared scope (usually `--address-taken`) and `native.py` emits the executable. Since ADR-0233, `native.py` also builds by default when the only open items are indirect jumps it cannot prove: they go through a fail-closed run-time lookup over the translated code (still no emulation), and `native-manifest.json` records `native_complete: false`. `--strict` builds only proven maps.
 
@@ -37,6 +39,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0235 | this change | Seven checked COP0/TLB forms; mapped instruction discovery and exception/timer delivery remain open |
 | 0234 | `76692ed` | Every FPU instruction checks `Status.FR` at run time (boot context FR = 1, threads FR = 0); FPU forms move from orange to amber |
 | 0233 | `b65a162` | Residual run-time dispatch is the default build; `--strict` keeps proven-only builds; seven-ROM sweep recorded |
 | 0231 | `78b0eda` | TLB host register effects bound into callee proofs; Paper Mario's 8 remaining indirect jumps classified (save/restore alias proofs, table-base initialization, stack lineage) |
@@ -106,7 +109,7 @@ Known gaps:
 
 [![instruction coverage and assumptions](docs/coverage.svg)](docs/PROGRESS.md)
 
-<sub>**These bars cover instruction translation only. They do not mean a game works.** Green: matches ares with no conditions. Amber: matches ares, and the native code checks a condition at run time and faults if it fails (loads and stores, indirect jumps and returns, trapping arithmetic, traps, `BREAK`, and all COP1, which faults 11 unless `Status.FR = 0`). Orange: matches ares but relies on something nothing checks. Grey: not lowered (COP0 moves, TLB, `ERET`, `SYSCALL`, `CACHE`); libultra's uses of them are replaced by Plaid's runtime. A form counts when it passes discovery, the solver and lowering in a test program (`plaid isa-coverage`) and matches ares in [spike096](spikes/096-native-slice/); RSP instructions are checked in [spike097](spikes/097-rsp-slice/). The RSP "In a real game" bar is orange because the candidate registry and the solver's RSP policy are not proven, even though microcode is taken from the ROM with every fetch checked (ADR-0188). [Progress history](docs/HISTORY.md).</sub>
+<sub>**These bars cover instruction translation only. They do not mean a game works.** Green: matches ares with no conditions. Amber: matches ares, and the native code checks a condition at run time and faults if it fails (bounded COP0/TLB state, loads and stores, indirect jumps and returns, trapping arithmetic, traps, `BREAK`, and all COP1, which faults 11 unless `Status.FR = 0`). Orange: matches ares but relies on something nothing checks. Grey: not lowered (`TLBWR`, `ERET`, `SYSCALL`, `CACHE` and COP0 control moves); the seven COP0/TLB forms are amber and fault 12 on unmodeled state; libultra's uses of them are replaced by Plaid's runtime. A form counts when it passes discovery, the solver and lowering in a test program (`plaid isa-coverage`) and matches ares in [the COP0 contract](runtime/test_cop0.py) or [spike096](spikes/096-native-slice/); RSP instructions are checked in [spike097](spikes/097-rsp-slice/). The RSP "In a real game" bar is orange because the candidate registry and the solver's RSP policy are not proven, even though microcode is taken from the ROM with every fetch checked (ADR-0188). [Progress history](docs/HISTORY.md).</sub>
 
 ## Assumption ledger
 

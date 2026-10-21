@@ -1,5 +1,24 @@
 # Status
 
+## Bounded native COP0 state (partial; ADR-0235)
+
+Seven additional forms lower with checked kernel state: MFC0/DMFC0/MTC0/DMTC0,
+TLBWI, TLBR and TLBP. Index, EntryHi/Lo, PageMask, Wired and bounded Status
+match pinned ares; Status writes keep FR checks consistent. Unknown CP0 state,
+unsupported modes, ASID-dependent commits and unmodeled event effects fault 12.
+Native boot Status comes from the first post-IPL replay fetch. TLBWR/Random,
+Count/Compare, Cause/EPC/ERET, CACHE, mapped instruction discovery and the
+core-only boot evaluator remain open. This is a partial lowering milestone,
+not a new game or whole-ROM completion claim. Validation and ROM receipts:
+research/cop0-lowering.md.
+
+Continuation on e9d1ccf0: ISA 196/209 -> 203/209; GoldenEye ordinary/residual
+OPEN 1/1 and MK64 OPEN 13/10. Both requested 60-second RT64 pipelines refuse
+before building; no native execution is claimed. BK/F-Zero X discovery maps
+are byte-identical; MM's retained visible run reproduces its existing fault 2
+at VI 0 with identical reported state. The 905-test Rust suite and complete
+pinned runtime contracts are the integration gate; see the receipt above.
+
 ## Residual dispatch is the default build (ADR-0233)
 
 `scripts/native.py` now builds whenever the only blockers left are unproven

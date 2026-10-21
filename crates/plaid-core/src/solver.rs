@@ -392,6 +392,17 @@ fn static_identity_blockers(
     blockers
 }
 
+/// COP0 moves lower to register-specific checked state operations (ADR-0235).
+/// Unmodeled registers fault explicitly; no timer/exception values are invented.
+pub fn is_cop0_move(word: u32) -> bool {
+    word >> 26 == 16 && matches!((word >> 21) & 31, 0 | 1 | 4 | 5) && word & 0x7ff == 0
+}
+
+/// TLBWI/TLBR/TLBP; Random-dependent TLBWR remains outside the native subset.
+pub fn is_cop0_tlb(word: u32) -> bool {
+    matches!(word, 0x4200_0001 | 0x4200_0002 | 0x4200_0008)
+}
+
 /// COP1 data moves: MFC1 DMFC1 MTC1 DMTC1 LWC1 LDC1 SWC1 SDC1 (ADR-0131).
 pub fn is_cop1_move(word: u32) -> bool {
     match word >> 26 {
@@ -435,7 +446,9 @@ pub fn is_cop1_branch(word: u32) -> bool {
 
 fn allowed_static_effect(word: u32, pc: crate::GuestAddr, guarded_ram: bool) -> bool {
     if guarded_ram
-        && (is_cop1_move(word)
+        && (is_cop0_move(word)
+            || is_cop0_tlb(word)
+            || is_cop1_move(word)
             || is_cop1_compare(word)
             || is_cop1_branch(word)
             || is_cop1_arith(word)
@@ -675,7 +688,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             );
         }
     }
-    let (mut uses_cop1, mut uses_compare) = (false, false);
+    let (mut uses_cop0, mut uses_cop1, mut uses_compare) = (false, false, false);
     for b in &map.blocks {
         if b.delay_slot_entry {
             add(
@@ -709,6 +722,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 );
                 continue;
             };
+            uses_cop0 |= is_cop0_move(word) || is_cop0_tlb(word);
             uses_compare |= is_cop1_compare(word) || is_cop1_arith(word);
             uses_cop1 |= is_cop1_move(word)
                 || is_cop1_compare(word)
@@ -1235,12 +1249,18 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     }
     if scope.guarded() {
         assumptions.push(
-            "Data loads/stores are naturally aligned RDRAM accesses through KSEG0/KSEG1 or global TLB entries written by the runtime's osMapTLB (ADR-0162) (unaligned LWL/LWR/LDL/LDR read their containing aligned word, and SWL/SWR/SDL/SDR write single bytes), never reach executable bytes, and use only one cache view per 16-byte line: cached at its physical D-cache index, cached at the other index, or uncached; a native artifact checks every store and access and aborts on violation, with no fallback execution."
+            "Data loads/stores are naturally aligned RDRAM accesses through KSEG0/KSEG1 or global TLB entries admitted by checked SDK/TLBWI mutations (ADR-0162/0235) (unaligned LWL/LWR/LDL/LDR read their containing aligned word, and SWL/SWR/SDL/SDR write single bytes), never reach executable bytes, and use only one cache view per 16-byte line: cached at its physical D-cache index, cached at the other index, or uncached; a native artifact checks every store and access and aborts on violation, with no fallback execution."
                 .into(),
         );
         if !tables.is_empty() {
             assumptions.push(
                 "Recognized jump tables are read-only bytes of the declared image: a native artifact checks every store and aborts on a write to table bytes, and dispatches only to the table's snapshot targets."
+                    .into(),
+            );
+        }
+        if uses_cop0 {
+            assumptions.push(
+                "COP0 operations use known kernel Status and staging registers, normalized global 32-bit TLB entries, and no unmodeled timer, exception, interrupt-delivery or SDK-thread Status effects; a native artifact faults 12 on unsupported state, invalidates staging knowledge across runtime boundaries, and never falls back to guest execution (ADR-0235)."
                     .into(),
             );
         }

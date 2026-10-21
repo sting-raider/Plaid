@@ -77,8 +77,8 @@ fn open_programs_are_rejected() {
 
 #[test]
 fn instructions_outside_the_model_are_rejected() {
-    // mtc0 a0,Compare stays behind the runtime boundary; never emulated.
-    let words = [[0x4084_5800, 0, 0, 0].as_slice(), &HALT].concat();
+    // TLBWR needs a modeled Random timeline; never emulated.
+    let words = [[0x4200_0006, 0, 0, 0].as_slice(), &HALT].concat();
     let err = lower(&words, 0x8000_0010).unwrap_err();
     assert!(err.contains("not CLOSED"), "{err}");
 }
@@ -292,7 +292,9 @@ fn runtime_functions_are_called_not_decoded_and_close_only_under_the_guarded_sco
     );
     let c = lower_c(&map, &[image], GuestAddr(BASE), &[GuestAddr(0x8000_0020)]).unwrap();
     assert!(c.contains("int plaid_rt_sum(plaid_state *s);"));
-    assert!(c.contains("{ int r = plaid_rt_sum(s); if (r) return r; } goto L_80000008;"));
+    assert!(c.contains(
+        "{ s->cp0_known = 0; int r = plaid_rt_sum(s); if (r) return r; } goto L_80000008;"
+    ));
     assert!(!c.contains("F_80000010"));
 }
 
@@ -430,4 +432,11 @@ fn fr0_maps_odd_transfers_to_upper_words_and_masks_sources() {
     assert!(c.contains("s->f[10] = (s->f[10] & 0xffffffffull) | (u64)(u32)s->r[1] << 32;"));
     assert!(c.contains("plaid_arith_s(s, 0, 4, 4, 2,"));
     assert!(c.contains("s->f[6] = (s->f[6] & 0xffffffffull) | (u64)(u32)v << 32;"));
+}
+
+#[test]
+fn unmodeled_cop0_register_lowers_to_an_explicit_checked_fault() {
+    let words = [[0x4084_5800, 0, 0, 0].as_slice(), &HALT].concat();
+    let c = lower(&words, 0x8000_0010).unwrap();
+    assert!(c.contains("plaid_cp0_write(s, 11, s->r[4],"));
 }

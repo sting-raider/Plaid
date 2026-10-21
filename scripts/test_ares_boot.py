@@ -12,12 +12,13 @@ from native import write_boot_state
 
 
 def boot_header_contract():
-    capture = dict(entered=True, boot_entry=0x80000400,
+    capture = dict(boot_status=0x34000000, entered=True, boot_entry=0x80000400,
                    sp=[i % 256 for i in range(0x2000)], ram_prefix=[(i * 7 + 3) % 256 for i in range(0x400)],
                    rom_sha256='synthetic', revision='synthetic')
     with tempfile.TemporaryDirectory(prefix='plaid-boot-header-') as temporary:
         directory = Path(temporary)
         sp, ram = write_boot_state(capture, directory, 0x80000400)
+        assert '#define PLAID_BOOT_STATUS 872415232u' in ram.read_text()
         assert ','.join(map(str, capture['ram_prefix'])) in ram.read_text()
         assert ','.join(map(str, capture['sp'])) in sp.read_text()
         receipt = json.loads((directory / 'boot-state.json').read_text())
@@ -26,7 +27,8 @@ def boot_header_contract():
         assert receipt['startup_payloads']['ram_prefix']['sha256'] == hashlib.sha256(bytes(capture['ram_prefix'])).hexdigest()
         assert 'ram_prefix' not in receipt and 'sp' not in receipt
         write_boot_state(dict(capture, boot_entry=0xa0000400), directory, 0xa0000400)
-        for change in [dict(entered=False), dict(boot_entry=0x80001000), dict(ram_prefix=None),
+        for change in [dict(boot_status=None), dict(boot_status=True), dict(boot_status=-1),
+                       dict(boot_status=0x100000000), dict(entered=False), dict(boot_entry=0x80001000), dict(ram_prefix=None),
                        dict(ram_prefix=capture['ram_prefix'][:-1]), dict(sp=capture['sp'][:-1]),
                        dict(ram_prefix=[256] * 0x400), dict(ram_prefix=[True] * 0x400)]:
             try:
@@ -230,6 +232,13 @@ def main():
         # Capturing the stop-time bytes instead would retain 03e00008 at 0x1d8.
         assert bytes(stop['ram_prefix']) == rom[:0x400] == bytes(entry['ram_prefix']), stop['ram_prefix']
         assert stop['boot_entry'] == entry['boot_entry'] == 0x80000400
+        # Snapshot Status at entry, before a later guest write in the jump slot.
+        changed = bytearray(rom)
+        changed[0x1030:0x1034] = struct.pack('>I', 0x40806000)  # mtc0 zero,Status
+        source.write_bytes(changed)
+        status_stop = json.loads(run('0x80001000', 1000).splitlines()[-1])
+        assert status_stop['boot_status'] == entry['boot_status'] != 0
+        source.write_bytes(rom)
         refused = [json.loads(line) for line in run('0x80001000', 4).splitlines()]
         assert len(refused) == 1 and refused[0]['remaining'] == 1 and refused[0]['steps'] == 4
         refused = [json.loads(line) for line in run('0x80000400', 1000).splitlines()]
