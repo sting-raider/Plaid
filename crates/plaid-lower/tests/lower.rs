@@ -295,7 +295,7 @@ fn runtime_functions_are_called_not_decoded_and_close_only_under_the_guarded_sco
     let c = lower_c(&map, &[image], GuestAddr(BASE), &[GuestAddr(0x8000_0020)]).unwrap();
     assert!(c.contains("int plaid_rt_sum(plaid_state *s);"));
     assert!(c.contains(
-        "{ s->cp0_known = 0; int r = plaid_rt_sum(s); if (r) return r; } frame->ranges = R_80000000;"
+        "{ s->cp0_known &= 1u << 10; int r = plaid_rt_sum(s); if (r) return r; } frame->ranges = R_80000000;"
     ));
     assert!(!c.contains("F_80000010"));
 }

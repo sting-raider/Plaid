@@ -15,6 +15,7 @@ static std::vector<u8> startupWritten(8 * 1024 * 1024);
 static bool startupIdentity = true;
 static bool entered = false;
 static u32 boot, bootStatus;
+static u64 bootEntryHi;
 static std::set<u32> targets;
 static u64 steps = 0;
 static FILE* result;
@@ -162,6 +163,7 @@ static void observe(u64 address, u32 word) {
     previousFetches = {previous[1], {pc, word}};
     if(pc == boot && !entered) {
       bootStatus = (u32)cpu.getControlRegister(12);
+      bootEntryHi = cpu.getControlRegister(10);
       entered = true; std::fill(written.begin(), written.end(), 0);
       for(u32 a = 0; a < 0x400; a++)
         ram_prefix.push_back(rdram.ram.read<Byte>(a, RBusDevice::ARES_DEBUGGER));
@@ -380,7 +382,7 @@ int main(int argc, char** argv) {
   std::fprintf(result, "\"stop_reason\":\"%s\",", reason);
   std::fprintf(result, "\"stop_pc\":%u,\"steps\":%llu,\"vi\":%u,\"entered\":%s,\"remaining\":%zu,\"sp\":[", (u32)cpu.ipu.pc, (unsigned long long)steps, vis, entered ? "true" : "false", targets.size());
   for(size_t i = 0; i < sp.size(); i++) std::fprintf(result, "%s%u", i ? "," : "", (u32)sp[i]);
-  std::fprintf(result, "],\"boot_status\":%u", bootStatus);
+  std::fprintf(result, "],\"boot_status\":%u,\"boot_entryhi\":%llu", bootStatus, (unsigned long long)bootEntryHi);
   std::fprintf(result, ",\"boot_entry\":%u,\"ram_prefix\":[", boot);
   for(size_t i = 0; i < ram_prefix.size(); i++) std::fprintf(result, "%s%u", i ? "," : "", (u32)ram_prefix[i]);
   std::fprintf(result, "]}\n");

@@ -12,13 +12,14 @@ from native import write_boot_state
 
 
 def boot_header_contract():
-    capture = dict(boot_status=0x34000000, entered=True, boot_entry=0x80000400,
+    capture = dict(boot_status=0x34000000, boot_entryhi=0xff, entered=True, boot_entry=0x80000400,
                    sp=[i % 256 for i in range(0x2000)], ram_prefix=[(i * 7 + 3) % 256 for i in range(0x400)],
                    rom_sha256='synthetic', revision='synthetic')
     with tempfile.TemporaryDirectory(prefix='plaid-boot-header-') as temporary:
         directory = Path(temporary)
         sp, ram = write_boot_state(capture, directory, 0x80000400)
         assert '#define PLAID_BOOT_STATUS 872415232u' in ram.read_text()
+        assert '#define PLAID_BOOT_ENTRYHI 255ull' in ram.read_text()
         assert ','.join(map(str, capture['ram_prefix'])) in ram.read_text()
         assert ','.join(map(str, capture['sp'])) in sp.read_text()
         receipt = json.loads((directory / 'boot-state.json').read_text())
@@ -27,7 +28,7 @@ def boot_header_contract():
         assert receipt['startup_payloads']['ram_prefix']['sha256'] == hashlib.sha256(bytes(capture['ram_prefix'])).hexdigest()
         assert 'ram_prefix' not in receipt and 'sp' not in receipt
         write_boot_state(dict(capture, boot_entry=0xa0000400), directory, 0xa0000400)
-        for change in [dict(boot_status=None), dict(boot_status=True), dict(boot_status=-1),
+        for change in [dict(boot_status=None), dict(boot_status=True), dict(boot_status=-1), dict(boot_entryhi=None), dict(boot_entryhi=1 << 64),
                        dict(boot_status=0x100000000), dict(entered=False), dict(boot_entry=0x80001000), dict(ram_prefix=None),
                        dict(ram_prefix=capture['ram_prefix'][:-1]), dict(sp=capture['sp'][:-1]),
                        dict(ram_prefix=[256] * 0x400), dict(ram_prefix=[True] * 0x400)]:
