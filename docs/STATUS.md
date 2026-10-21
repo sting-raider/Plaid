@@ -1,5 +1,11 @@
 # Status
 
+## RSP candidate identity (ADR-0240)
+
+ROM-derived RSP candidates are deduplicated by what the runtime compares
+(IMEM base and reachable word values), keeping the larger text. Banjo-Kazooie
+runs 60 s again: VI 3568, 1265 graphics / 1779 audio tasks, fault 0.
+
 ## COP1 control registers and Status.FR (ADR-0238)
 
 Native Status writes already track FR correctly. CFC1/CTC1 and their HLE
