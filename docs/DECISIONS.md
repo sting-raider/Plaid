@@ -6507,3 +6507,38 @@ out-of-RAM destination is still refused. Verification: a raw PI DMA test maps
 a 4 KiB page with `osMapTLB`, transfers ROM bytes into its virtual address and
 reads them back through KSEG0; the previous code stops with "runtime write
 refused" on it, as Paper Mario did.
+
+
+## ADR-0225: ROM-backed PI DMA ranges as RSP search sources
+
+Date: 2026-10-21.
+
+A task boot can be copied from cartridge into RAM outside every discovered CPU
+image. CPU-image-only RSP extraction cannot see those bytes. Analysis-time boot
+harvest now records aligned, ROM-bounded PI DMA ranges outside all existing
+images as `rsp_sources` in the loads file. They do not become CPU loads or
+roots and do not require another CPU discovery round by themselves.
+
+`rsp-from-rom --loads` reads those ranges from the canonical ROM as RSP-only
+images. A DMA image is searched only at its start, and only when an existing
+CPU image's data or decoded constant expressions name that address. Source
+ranges must be nonempty, word-sized, eight-byte aligned and inside 8 MiB RDRAM;
+ROM bounds are checked before constructing an image. A recognized task boot
+shorter than IMEM may become its own IMEM-zero candidate. Existing full-size
+placements, overlay hints, deduplication and runtime content/reachability guards
+remain in force. `native.py` passes the harvested loads file to extraction.
+
+These finite replay observations are candidate search inputs, never proof of
+byte provenance, exhaustive coverage or target closure. Stale, transformed or
+conflicting bytes must still pass native task guards; unknown tasks fail before
+side effects. Manifests remain `complete: false`; no guest executor, reference
+implementation code or per-game production constant is added. ROM-specific
+observations belong in research/paper-mario-native-frontier.md.
+
+Verification: deterministic harvest tests check filtering, deduplication and
+no CPU rediscovery for RSP-only additions. The synthetic native contract moves
+a boot outside the CPU image, checks extraction and native task output, and
+requires fail-before-side-effects refusal without its source. It also rejects
+empty/out-of-RAM/out-of-ROM ranges and ignores an unnamed source containing an
+internal pointer. Integration measurements and mutation results are recorded
+in the research note.

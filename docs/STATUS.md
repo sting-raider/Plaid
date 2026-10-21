@@ -1,5 +1,14 @@
 # Status
 
+## PI DMA RSP sources (ADR-0225)
+
+Boot harvest retains ROM-backed DMA ranges outside CPU images as RSP-only
+search inputs. Externally named starts and recognized short task boots can
+supply native RSP candidates; native byte guards and fail-closed unknown-task
+handling remain mandatory. This adds no closure proof or native-complete claim.
+See research/paper-mario-native-frontier.md for validation and ROM observations.
+
+
 ## Shared CPU/RSP executable-write policy (ADR-0219)
 
 OoT type-4 startup patches eight bytes of its RSP boot program in RDRAM. The

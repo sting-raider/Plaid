@@ -5,11 +5,19 @@ use std::collections::BTreeSet;
 /// Collect aligned image pointers from data and constant expressions in decoded
 /// CPU blocks. A pointer is only a search hint; consumers must check its bytes.
 pub fn roots(image: &CodeImage, map: &ProgramMap) -> BTreeSet<GuestAddr> {
+    constants(image, map)
+        .into_iter()
+        .filter(|&address| image.word(address).is_some())
+        .collect()
+}
+
+/// [`roots`] before the image's own bytes are required: aligned values the
+/// image's data and decoded blocks name, wherever they point (ADR-0225).
+pub fn constants(image: &CodeImage, map: &ProgramMap) -> BTreeSet<GuestAddr> {
     let mut out = BTreeSet::new();
     let mut add = |value: u32| {
-        let address = GuestAddr(value);
-        if value.is_multiple_of(8) && image.word(address).is_some() {
-            out.insert(address);
+        if value.is_multiple_of(8) {
+            out.insert(GuestAddr(value));
         }
     };
     for (i, &word) in image.words.iter().enumerate() {

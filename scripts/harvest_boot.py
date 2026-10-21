@@ -74,6 +74,23 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
         loads['source'] += (f"; observed indirect call targets {[[hex(s), hex(t)] for s, t in observed]} in the same "
                             "ares replay (ADR-0222), discovery roots only")
         added = True
+    # RAM the replay fills by PI DMA from the ROM, outside every image, is a
+    # search input for ROM-derived RSP microcode only (ADR-0225).
+    images = coverage(loads, base, size, slots=True)
+    sources = loads.setdefault('rsp_sources', [])
+    known = {(s['destination'], s['size'], s['rom']) for s in sources}
+    dmas = [dma for c in captures for dma in c.get('pi_dma', [])]
+    rom_size = Path(rom).stat().st_size if dmas else 0
+    fresh = sorted({(0x80000000 | dram, n, cart - 0x10000000)
+                    for dram, cart, n in dmas
+                    if n and n % 4 == 0 and dram % 8 == 0 and dram + n <= 0x800000
+                    and 0x10000000 <= cart and cart - 0x10000000 + n <= rom_size
+                    and not any(lo < (0x80000000 | dram) + n and (0x80000000 | dram) < hi for lo, hi in images)})
+    new = [s for s in ({'destination': hex(d), 'size': hex(n), 'rom': hex(r)} for d, n, r in fresh)
+           if (s['destination'], s['size'], s['rom']) not in known]
+    sources.extend(new)
+    if new:
+        receipt['rsp_sources'] = new
     for capture in captures:
         receipt['captures'].append({k: v for k, v in capture.items() if k != 'bytes'})
         if 'bytes' not in capture:
@@ -102,7 +119,7 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
                                 "replayed during composition, content-guarded at native entry")
             added = True
     Path(receipt_path).write_text(json.dumps(receipt, indent=2) + '\n')
-    if added:
+    if added or new:
         loads['loads'].sort(key=lambda l: int(l['destination'], 0))
         loads_path.write_text(json.dumps(loads, indent=2) + '\n')
     return added

@@ -90,18 +90,24 @@ fn rom_images(rom: &CanonicalRom, map: &ProgramMap) -> Result<Vec<CodeImage>, St
 fn run() -> Result<(), String> {
     let mut args: Vec<_> = env::args().skip(1).collect();
     // `--loads <loads.json>` applies declared loads to discover, lower-c and
-    // identify (ADR-0136).
+    // identify (ADR-0136); rsp-from-rom reads RSP-only sources (ADR-0225).
     let loads_path = match args.iter().position(|a| a == "--loads") {
         Some(i)
             if i + 1 < args.len()
-                && matches!(args[0].as_str(), "discover" | "lower-c" | "identify") =>
+                && matches!(
+                    args[0].as_str(),
+                    "discover" | "lower-c" | "identify" | "rsp-from-rom"
+                ) =>
         {
             let path = args.remove(i + 1);
             args.remove(i);
             Some(path)
         }
         Some(_) => {
-            return Err("--loads <file> applies only to discover, lower-c and identify".into());
+            return Err(
+                "--loads <file> applies only to discover, lower-c, identify and rsp-from-rom"
+                    .into(),
+            );
         }
         None => None,
     };
@@ -1064,7 +1070,8 @@ fn run() -> Result<(), String> {
             if map.rom != rom.identity {
                 return Err("map does not match canonical ROM".into());
             }
-            rsp_rom::generate(&rom, &map, rom_images(&rom, &map)?, output)?;
+            let sources = rsp_sources(&rom, loads_path.as_ref())?;
+            rsp_rom::generate(&rom, &map, rom_images(&rom, &map)?, sources, output)?;
         }
         [command, path, offset, size, imem, name, output, raw @ ..]
             if command == "lower-rsp" && (raw.is_empty() || raw == ["--raw"]) =>
@@ -1755,6 +1762,48 @@ fn observed_roots(path: Option<&String>) -> Result<BTreeSet<GuestAddr>, String> 
             Ok(GuestAddr(field("target")?))
         })
         .collect()
+}
+
+/// RAM ranges filled by PI DMA from the ROM in the analysis-time replay, from a
+/// loads file's `rsp_sources` (ADR-0225): RSP search inputs only.
+fn rsp_sources(rom: &CanonicalRom, path: Option<&String>) -> Result<Vec<CodeImage>, String> {
+    let Some(path) = path else {
+        return Ok(Vec::new());
+    };
+    let doc: serde_json::Value =
+        serde_json::from_slice(&fs::read(path).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    let Some(rows) = doc.get("rsp_sources") else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for row in rows.as_array().ok_or("rsp_sources must be an array")? {
+        let field = |name: &str| -> Result<u32, String> {
+            row[name]
+                .as_str()
+                .ok_or(format!("each RSP source needs a {name} string"))
+                .and_then(number32)
+        };
+        let (destination, size, source) = (field("destination")?, field("size")?, field("rom")?);
+        if !(0x8000_0000..0x8080_0000).contains(&destination)
+            || destination % 8 != 0
+            || size == 0
+            || size % 4 != 0
+            || size > 0x8080_0000 - destination
+        {
+            return Err("an RSP source must be a nonempty aligned RDRAM range in KSEG0".into());
+        }
+        let range = GuestRange {
+            start: GuestAddr(destination),
+            size,
+        };
+        out.push(CodeImage::from_rom(
+            rom,
+            RomOffset(u64::from(source)),
+            range,
+        )?);
+    }
+    Ok(out)
 }
 
 /// Evidence for loads placed from the ROM's own overlay catalog.
