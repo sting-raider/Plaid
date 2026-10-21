@@ -1,5 +1,18 @@
 # Status
 
+## Bounded ERET and aligned executable loads (partial; ADR-0237)
+
+ERET lowers with known explicit EPC/ErrorEPC and Status outside SDK contexts;
+EXL/ERL selection and LLbit clearing match pinned ares. Event-enabling, unknown,
+wide and SDK states fault 12. Strict solve retains return-target closure;
+residual mode dispatches only to compiled targets. ISA is 204/209 (97.6%).
+Lone-LUI aligned load destinations recover MK64's four missing functions and
+four direct edges: 41631 blocks, ordinary OPEN/4, residual 0 with four sites.
+Its visible RT64 validation build stops at VI 0, zero tasks, fault 11 at
+800cc0f4; no gameplay is accepted. GoldenEye remains OPEN 339/327. BK/F-Zero X/MM
+maps are byte-identical; separate native regression work is untouched.
+See research/eret-lowering.md for the contract, measurements and limitations.
+
 ## Mapped instruction sources (partial; ADR-0236)
 
 Pinned reset replay now exports produced RAM at a unique global TLB virtual

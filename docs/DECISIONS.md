@@ -6879,3 +6879,31 @@ CLI/runtime all returned zero (4.3/18.6/28.4/19.9/250.4 seconds). Full suite:
 at analysis, 52.911/217.063 seconds; results and limits above are unchanged.
 README's follow-up uses this real production SHA and receives a fresh full
 five-step local gate before its own canonical write. No new acceptance claim.
+
+
+## ADR-0237: Explicit bounded ERET and aligned executable-load candidates
+
+ERET uses known guest-written EPC/ErrorEPC and Status outside SDK contexts.
+ERL chooses ErrorEPC and clears only ERL; otherwise EPC is chosen and EXL
+clears. LLbit clears, FR/other Status bits persist, and native dispatch
+receives the aligned sign-extended 32-bit target without a delay slot.
+Unknown/SDK/mode/event-enabling states fault 12 before mutation; unknown
+compiled targets fault 3 after the supported transition. HLE exceptions do
+not establish guest vector-entry/EPC/frame evidence. No guest exception
+entry or SDK-frame unwinding is claimed. Strict solve keeps return closure;
+explicit residual mode lists ERET sites and remains native_complete:false.
+Pinned ares 9408cb43d4948fc3ea6e152a307a34348df3fe04 (ISC) is an independent
+execution oracle only; no reference implementation is copied/linked.
+The retained native differential checks registers, Status, PC, LL/SC, FR and
+RAM, with atomic refusals and an LLbit-clear mutation. ISA becomes 204/209.
+
+A lone LUI also supplies a 64 KiB-aligned RAM destination candidate under
+the existing unique-placement/call-target scoring. This recovers MK64's
+missing raw image and all four target/edge pairs without game constants.
+BK/F-Zero X/MM retained complete discovery maps remain byte-identical.
+MK64 residual solving has zero blockers/four sites and builds visibly,
+then faults 11 at 800cc0f4 with VI/tasks/DMA zero. GoldenEye remains OPEN
+339/327. No new gameplay or whole-ROM acceptance; BK/MM regressions stay
+with their existing owners. Contract, source diagnosis, timings and gate
+receipt: research/eret-lowering.md. DECISIONS is appended as bytes to
+preserve its historical CRLF and non-UTF-8 byte.

@@ -690,6 +690,8 @@ def main():
     tlb_unmap(exe, cc)
     from test_cop0 import main as cop0_contracts
     cop0_contracts()
+    from test_eret import main as eret_contracts
+    eret_contracts()
     from test_tlb_execution import main as tlb_execution_contracts
     tlb_execution_contracts()
     from test_indexed_dispatch import main as indexed_dispatch_contracts

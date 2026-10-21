@@ -40,7 +40,7 @@ typedef struct plaid_state_s {
      start with FR = 0), 0 = no runtime (bare harnesses), unchecked. */
   u32 fr_mode;
   u32 cp0_known, cp0_index, cp0_wired;
-  u64 cp0_entryhi; plaid_tlb_entry cp0_tlb;
+  u64 cp0_entryhi, cp0_epc, cp0_error_epc; plaid_tlb_entry cp0_tlb;
   u8 ram[PLAID_RAM_SIZE];
   /* The VR4300 D-cache as pinned ares models it (ADR-0183): 512 direct-mapped
      16-byte lines indexed by virtual address bits 4-12; dtag holds a resident
@@ -1267,6 +1267,18 @@ impl Lowerer<'_> {
                 .get(&pc)
                 .ok_or_else(|| format!("{pc:08x}: indirect site lacks a proven target set"))
         };
+        if plaid_core::solver::is_eret(word) {
+            let mut cases = String::new();
+            for &t in proven()? {
+                if let Ok(code) = self.tail(t, pc) {
+                    cases += &format!(" case {}: {code}", sx(t));
+                }
+            }
+            return Ok(format!(
+                "{{ u64 t; if (plaid_cp0_eret(s, &t, 0x{pc:08x}u)) return 1; {}switch (t) {{{cases} }} return plaid_fault(s, 0x{pc:08x}u, 3); }}",
+                self.relink(proven()?)
+            ));
+        }
         match (word >> 26, word & 63, rt) {
             (0, 8, _) if self.returns.contains(&pc) => Ok(format!(
                 "{{ u64 t = {a}; {slot} if (t != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0; }}"
@@ -1704,6 +1716,15 @@ pub fn lower_c_parts(
         });
         targets.insert(pc, every_entry.iter().copied().chain(own).collect());
     }
+    for site in &report.residual_sites {
+        if plaid_core::solver::is_eret(word(site.pc.0)?) {
+            targets.insert(
+                site.pc.0,
+                every_entry.iter().chain(blocks.iter()).copied().collect(),
+            );
+            residual.insert(site.pc.0, (false, BTreeSet::new()));
+        }
+    }
     let residual: BTreeSet<u32> = residual.into_keys().collect();
 
     let mut code = Vec::new();
@@ -1999,7 +2020,14 @@ pub fn lower_c_parts(
             let mut transferred = false;
             while pc < end {
                 let w = word(pc)?;
-                if is_control(w) {
+                if plaid_core::solver::is_eret(w) {
+                    out += &format!("  {}\n", lowerer.control(w, pc, "")?);
+                    pc += 4;
+                    transferred = true;
+                    if pc != end {
+                        return Err(format!("{start:08x}: block continues past ERET"));
+                    }
+                } else if is_control(w) {
                     let slot = lower(word(pc + 4)?, pc + 4)?;
                     out += &format!("  {}\n", lowerer.control(w, pc, &slot)?);
                     pc += 8;

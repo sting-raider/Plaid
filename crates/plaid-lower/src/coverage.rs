@@ -2,6 +2,7 @@
 //! history. Every encoding form the pinned decoder accepts is tried once in a
 //! tiny program that must go through discovery, the guarded-scope solver and
 //! lowering; a form counts as lowered only if the whole program lowers.
+//! ERET uses explicit residual scope; its checked state does not prove return closure.
 use crate::lower_c;
 use plaid_core::{
     GuestAddr,
@@ -100,7 +101,20 @@ fn lowers(word: u32) -> bool {
         size: 64,
     };
     discover_image(rom, &image, &[GuestAddr(BASE)], 100)
-        .and_then(|d| lower_c(&d.map, &[image], GuestAddr(BASE), &[GuestAddr(EXIT)]))
+        .and_then(|d| {
+            if plaid_core::solver::is_eret(word) {
+                crate::lower_c_with_preload(
+                    &d.map,
+                    std::slice::from_ref(&image),
+                    &image,
+                    GuestAddr(BASE),
+                    &[GuestAddr(EXIT)],
+                    true,
+                )
+            } else {
+                lower_c(&d.map, &[image], GuestAddr(BASE), &[GuestAddr(EXIT)])
+            }
+        })
         .is_ok()
 }
 
@@ -261,7 +275,7 @@ mod tests {
             assert!(c[name], "{name}");
         }
         assert!(!c["tlbwr"] && !c["cache"]);
-        assert!(!c["eret"] && !c["syscall"]);
+        assert!(c["eret"] && !c["syscall"]);
         assert!(!c.contains_key("nop") && !c.contains_key("movn"));
     }
 

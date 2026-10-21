@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 1140" width="840" height="1140" role="img" aria-label="Plaid coverage and assumptions">
 <style>text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;fill:#1f2328}.h{font-size:16px;font-weight:600}.b{font-size:13px;font-weight:600}.t{font-size:13px}.s{font-size:12px;fill:#59636e}@media (prefers-color-scheme:dark){text{fill:#e6edf3}.s{fill:#9198a1}}</style>
-<text x="2" y="22" class="h">VR4300 instructions*: 203 of 209 forms lower to native C (97.1%); 64 with no run-time assumption</text>
+<text x="2" y="22" class="h">VR4300 instructions*: 204 of 209 forms lower to native C (97.6%); 64 with no run-time assumption</text>
 <rect x="2" y="38" width="11" height="11" fill="#2ea043"/>
 <text x="20" y="48" class="s">Matches ares, no run-time assumption</text>
 <rect x="2" y="56" width="11" height="11" fill="#d29922"/>
@@ -11,9 +11,9 @@
 <text x="20" y="102" class="s">Not lowered</text>
 <text x="2" y="142" class="b">All forms</text>
 <rect x="150.0" y="126" width="171.5" height="18" fill="#2ea043" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>All forms: 64 plain</title></rect>
-<rect x="321.5" y="126" width="372.4" height="18" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>All forms: 139 checked</title></rect>
-<rect x="693.9" y="126" width="16.1" height="18" fill="#6e7681" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>All forms: 6 open</title></rect>
-<text x="720" y="141" class="b">203/209</text>
+<rect x="321.5" y="126" width="375.1" height="18" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>All forms: 140 checked</title></rect>
+<rect x="696.6" y="126" width="13.4" height="18" fill="#6e7681" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>All forms: 5 open</title></rect>
+<text x="720" y="141" class="b">204/209</text>
 <text x="2" y="172" class="t">FPU compare</text>
 <rect x="150.0" y="156" width="560.0" height="16" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>FPU compare: 32 checked</title></rect>
 <text x="720" y="171" class="t">32/32</text>
@@ -40,9 +40,9 @@
 <text x="720" y="315" class="t">15/15</text>
 <text x="2" y="340" class="t">COP0/system</text>
 <rect x="150.0" y="324" width="37.3" height="16" fill="#2ea043" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>COP0/system: 1 plain</title></rect>
-<rect x="187.3" y="324" width="298.7" height="16" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>COP0/system: 8 checked</title></rect>
-<rect x="486.0" y="324" width="224.0" height="16" fill="#6e7681" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>COP0/system: 6 open</title></rect>
-<text x="720" y="339" class="t">9/15</text>
+<rect x="187.3" y="324" width="336.0" height="16" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>COP0/system: 9 checked</title></rect>
+<rect x="523.3" y="324" width="186.7" height="16" fill="#6e7681" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>COP0/system: 5 open</title></rect>
+<text x="720" y="339" class="t">10/15</text>
 <text x="2" y="364" class="t">COP1 move</text>
 <rect x="150.0" y="348" width="560.0" height="16" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>COP1 move: 14 checked</title></rect>
 <text x="720" y="363" class="t">14/14</text>
