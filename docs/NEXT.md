@@ -1,5 +1,24 @@
 # Next
 
+## After completed raw slot occupants (ADR-0230)
+
+The previous VI-659 JALR stop is passed. Two visible 60-second Paper Mario runs
+reach the time limit with fault 0 and render the opening storybook; the repeat
+also captures nonzero PCM. There is no next runtime fault in this coverage scope.
+Extend visible validation through controller input/new-game transitions and
+longer gameplay, recording the next source-bound stop before implementing a fix.
+Intro rendering and a nonzero PCM peak do not establish full gameplay or audio
+accuracy. Preserve native_complete: false until the remaining proofs close.
+
+The current map retains eight residual sites: 8003c488, 8004e544, 8082cf20,
+8091893c, 809189b8, 80918aa8, 80b1c178 and 80b1c344. Follow their current
+source/linked bindings, not historical synthetic slot coordinates. Prove the
+missing target sets without turning finite replay observations into closure.
+Broaden raw-source discovery only with equally strong completed-effect, full-byte,
+cache, alias and native-frame checks; transformed or unsupported producer modes
+remain separate work. See research/paper-mario-native-frontier.md for receipts.
+
+
 ## Continue after incomplete-path switch candidates (ADR-0229)
 
 Paper Mario now passes the previous 80a08aa8 switch stop. Next stop: fault 3 at map

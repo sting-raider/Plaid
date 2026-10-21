@@ -61,12 +61,58 @@ def projection_contract():
     print('PASS relocated replay site projection: runtime PCs, aliases, ambiguous and unsupported refusal')
 
 
+
+def raw_occupant_contract():
+    with tempfile.TemporaryDirectory(prefix='plaid-occupant-') as temporary:
+        d = Path(temporary)
+        rom, loads, program, receipt = (d / n for n in ('rom.z64', 'loads.json', 'map.json', 'receipt.json'))
+        payload = bytes.fromhex('2402002a03e000080000000000000000')
+        rom.write_bytes(bytes.fromhex('80371240') + bytes(0xfc) + payload)
+        original = {'destination': '0x80001008', 'size': '0x20', 'rom': '0x80', 'encoding': 'raw', 'slot': True}
+        initial = json.dumps({'source': 'synthetic', 'loads': [original]})
+        program.write_text(json.dumps({'direct_edges': [], 'indirect_sites': [
+            {'site': {'pc': 0x80000420}, 'closed_proof': None, 'link_register': 31, 'candidates': [], 'observed': []}]}))
+        capture = dict(raw_occupant=True, destination=0x80001000, size=16, rom=0x100,
+                       entry=0xa0001000, load_site=0x8000041c, bytes=list(payload),
+                       revision='synthetic', rom_sha256='synthetic')
+        saved = harvest_boot.capture_many
+        try:
+            info = {'header': {'boot_address': 0x80000400}, 'boot_image_size': 0x100}
+            harvest_boot.capture_many = lambda *args, **kwargs: [capture]
+            loads.write_text(initial)
+            assert harvest_boot.harvest(rom, loads, program, info, receipt)
+            declared = json.loads(loads.read_text())['loads']
+            assert declared[0] == original and len(declared) == 2  # old slot placement is stable
+            assert dict(destination='0x80001000', size='0x10', rom='0x100', encoding='raw', slot=True) in declared
+            before = loads.read_bytes()
+            assert not harvest_boot.harvest(rom, loads, program, info, receipt)
+            assert loads.read_bytes() == before
+            canonical = rom.read_bytes()
+            for width in (2, 4):
+                ordered = bytearray(len(canonical))
+                for lane in range(width):
+                    ordered[lane::width] = canonical[width - 1 - lane::width]
+                rom.write_bytes(ordered); loads.write_text(initial)
+                assert harvest_boot.harvest(rom, loads, program, info, receipt)
+            rom.write_bytes(canonical)
+            for change in [dict(bytes=list(payload[:-1])), dict(bytes=[0] * 16),
+                           dict(rom=0x104), dict(size=12), dict(entry=0x1000), dict(entry=0x80001010), dict(destination=0x80001004)]:
+                loads.write_text(initial)
+                harvest_boot.capture_many = lambda *args, **kwargs: [dict(capture, **change)]
+                assert not harvest_boot.harvest(rom, loads, program, info, receipt)
+                assert loads.read_text() == initial
+                assert json.loads(receipt.read_text())['refusal'] == 'invalid completed PI occupant'
+        finally:
+            harvest_boot.capture_many = saved
+    print('PASS raw occupant harvest: covered range adds guarded alternate once; malformed/full-content mismatch refused')
+
 def main():
     if os.name == 'nt':
         script = subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(Path(__file__).resolve())], text=True).strip()
         subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', script], check=True, timeout=600)
         return
     boot_header_contract()
+    raw_occupant_contract()
     for coverage in ([], [None], [[1]], [[4, 4]], [[0, 3]], [[False, 4]], [[0, 0x100000000]]):
         try:
             capture_many('never-read.z64', [], covered=coverage)
@@ -190,6 +236,84 @@ def main():
         assert refused[0]['reason'] == 'no completed RAM producer' and not any('bytes' in r for r in refused)
         refused = [json.loads(line) for line in run('', 1000, covered=[(0x80000404, 0x80000500)]).splitlines()]
         assert refused[0]['reason'] == 'no completed RAM producer' and not any('bytes' in r for r in refused)
+        # A completed PI producer in a numerically covered slot is a new
+        # image when the full resident bytes differ. Prefix twins are irrelevant.
+        saved_rom = bytes(rom)
+        dma_words = [0x3c08a460, 0x24091000, 0xad090000,
+                     0x3c091000, 0x35291800, 0xad090004,
+                     0x2409000f, 0xad09000c,
+                     0x3c198000, 0x37391000, 0x0320f809, 0,
+                     0x1000ffff, 0]
+        payload = struct.pack('>4I', 0x2402002a, 0x03e00008, 0, 0)
+        rom[0x1000:0x1100] = bytes(0x100)
+        rom[0x1000:0x1000 + len(dma_words)*4] = struct.pack(f'>{len(dma_words)}I', *dma_words)
+        rom[0x1800:0x1810] = payload
+        rom[0x1900:0x1910] = payload[:-4] + bytes.fromhex('00000001')
+        source.write_bytes(rom)
+        slot_bindings = [[0x80000400, 0x80000400, 0x100, -2],
+                         [0x80801000, 0x80001000, 16, 0x1900]]
+        def occupant_result(bound=slot_bindings):
+            return [json.loads(line) for line in run('', 40,
+                covered=[(0x80000400, 0x80000500), (0x80001000, 0x80001010)],
+                sites=[0x80000428], bindings=bound).splitlines()]
+        occupant, summary = occupant_result()
+        assert occupant['raw_occupant'] and occupant['rom'] == 0x1800
+        assert occupant['destination'] == occupant['entry'] == 0x80001000
+        assert occupant['size'] == 16 and bytes(occupant['bytes']) == payload
+        assert occupant['load_site'] == 0x8000041c
+        assert summary['stop_reason'] == 'undeclared_slot_occupant'
+        # A completed subrange from an already declared source is known even
+        # when unrelated bytes outside that subrange differ in RAM.
+        rom[0x1810:0x1820] = bytes(range(16)); source.write_bytes(rom)
+        containing = [0x80811000, 0x80001000, 32, 0x1800]
+        assert not any(r.get('raw_occupant') for r in occupant_result([slot_bindings[0], containing]))
+        # Same content and two ambiguous declarations retain existing refusal.
+        matching = [0x80811000, 0x80001000, 16, 0x1800]
+        assert not any(r.get('raw_occupant') for r in occupant_result(slot_bindings + [matching]))
+        ambiguous_results = occupant_result(slot_bindings + [matching, [0x80821000, 0xa0001000, 16, 0x1800]])
+        assert not any(r.get('raw_occupant') for r in ambiguous_results)
+        assert ambiguous_results[-1]['indirect_targets'] == []
+        # A later equal-value CPU write destroys the completed DMA generation.
+        mutated = dma_words[:8] + [0x3c0aa000, 0xad40100c] + dma_words[8:]
+        rom[0x1000:0x1000 + len(mutated)*4] = struct.pack(f'>{len(mutated)}I', *mutated)
+        source.write_bytes(rom)
+        assert not any(r.get('raw_occupant') for r in occupant_result())
+        # A misaligned/partial PI effect cannot masquerade as a complete source.
+        mutated = dma_words.copy(); mutated[1] = 0x24091004
+        rom[0x1000:0x1100] = bytes(0x100)
+        rom[0x1000:0x1000 + len(mutated)*4] = struct.pack(f'>{len(mutated)}I', *mutated)
+        source.write_bytes(rom)
+        assert not any(r.get('raw_occupant') for r in occupant_result())
+        # Adjacent DMA chunks from one loader site retain their entire source.
+        chunks = [0x3c08a460, 0x24091000, 0x3c0a1000, 0x354a1800, 0x240b0002,
+                  0xad090000, 0xad0a0004, 0x240c000f, 0xad0c000c,
+                  0x8d020010, 0x30420001, 0x1440fffd, 0,
+                  0x25290010, 0x254a0010, 0x256bffff, 0x1560fff4, 0,
+                  0x3c198000, 0x37391000, 0x0320f809, 0, 0x1000ffff, 0]
+        rom[0x1000:0x1100] = bytes(0x100)
+        rom[0x1000:0x1000 + len(chunks)*4] = struct.pack(f'>{len(chunks)}I', *chunks)
+        rom[0x1810:0x1820] = bytes(range(16))
+        source.write_bytes(rom)
+        merged = [json.loads(line) for line in run('', 1000,
+            covered=[(0x80000400, 0x80000500), (0x80001000, 0x80001020)],
+            sites=[0x80000450], bindings=slot_bindings).splitlines()][0]
+        assert merged['raw_occupant'] and merged['size'] == 32, merged
+        assert bytes(merged['bytes']) == rom[0x1800:0x1820] and merged['load_site'] == 0x80000420
+        # A second DMA changes a later word while the fetched word stays equal.
+        # The first generation is declared; the stale second one is refused.
+        stale_dma = dma_words[:12] + [0x8d020010, 0x30420001, 0x1440fffd, 0,
+                    0x24091000, 0xad090000, 0x3c091000, 0x35291a00, 0xad090004,
+                    0x2409000f, 0xad09000c, 0x0320f809, 0, 0x1000ffff, 0]
+        rom[0x1000:0x1100] = bytes(0x100)
+        rom[0x1000:0x1000 + len(stale_dma)*4] = struct.pack(f'>{len(stale_dma)}I', *stale_dma)
+        rom[0x1a00:0x1a10] = struct.pack('>4I', 0x2402002a, 0x03e00008, 0x24100001, 0)
+        source.write_bytes(rom)
+        stale_results = [json.loads(line) for line in run('', 1000,
+            covered=[(0x80000400, 0x80000500), (0x80001000, 0x80001010)],
+            sites=[0x80000428, 0x8000045c], bindings=[slot_bindings[0], matching]).splitlines()]
+        assert not any(r.get('raw_occupant') for r in stale_results), [r for r in stale_results if r.get('raw_occupant')]
+        rom[:] = saved_rom; source.write_bytes(rom)
+        print('PASS covered shared-slot PI occupant: full bytes, source, aliases, ambiguity, equal-value overwrite and partial producer')
         # Fetching 1000 fills I-cache, then its store changes RAM at 1008.
         # Capturing 1008 must reject that stale instruction generation.
         stale = words.copy()

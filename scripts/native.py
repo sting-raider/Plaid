@@ -137,7 +137,7 @@ def main():
     window = [rom, '0x1000', entry, hex(info.get('boot_image_size') or 0x100000)]
     m = out / 'map.json'
     overlay_support = None
-    for attempt in range(8):
+    for attempt in range(16):
         # A ROM with no file table and no reset stub has no loads to declare.
         with_loads = ['--loads', loads] if json.loads(loads.read_text())['loads'] else []
         with open(out / 'id.json', 'w') as f:
@@ -145,7 +145,7 @@ def main():
         discover = ['discover', *window, entry, m, out / 'id.json', *with_loads, '--address-taken', '--fr0']
         overlay_support = discover_map(discover, overlay_support)
         verdict = json.loads(plaid('solve', rom, m, '--address-taken', capture_output=True, text=True).stdout)
-        if verdict['status'] == 'closed' or a.loads or attempt == 7:
+        if verdict['status'] == 'closed' or a.loads or attempt == 15:
             break
         previous_loads = loads.read_bytes()
         plaid('infer-call-loads', rom, m, loads)

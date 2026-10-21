@@ -1,5 +1,26 @@
 # Status
 
+## Completed raw slot occupants (ADR-0230)
+
+Paper Mario completes two visible, neutral-controller 60-second residual-validation
+runs with fault 0. The fresh ROM-only pipeline reaches VI 3590, 3579 graphics
+tasks, 3588 compiled audio tasks and 17696 PI DMAs. A separate visible executable
+repeat reaches VI 3560, 3548 graphics tasks, 3557 audio tasks and 17602 PI DMAs,
+exit 0. The window renders the Nintendo logos and opening storybook scene.
+Captured stereo PCM is nonzero, peak 32121. This is finite intro validation;
+full gameplay, audio/mixing accuracy and whole-ROM closure remain unestablished.
+
+Harvest identifies complete PI-backed occupants by full content and completed
+source effects even inside numerically covered raw slots. Same-source subranges
+remain known; equal-prefix ambiguity, partial producers, overwritten generations,
+stale cache bytes and ambiguous projections remain fail-closed. Slot order stays
+stable as alternates append. Native frame/content/alias and boot-image guards
+are unchanged. The map has 60454 blocks and eight residual sites; the artifact
+continues to declare native_complete: false. Exact source/progress evidence,
+synthetic mutations, unchanged retained-input BK/F-Zero X/MM discovery and local
+gate receipts are in research/paper-mario-native-frontier.md.
+
+
 ## Switch candidates across incomplete predecessor paths (ADR-0229)
 
 Paper Mario's visible residual-validation run passes the previous 80a08aa8 switch
