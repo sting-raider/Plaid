@@ -69,7 +69,7 @@ def main():
         source, output = directory / 'fixture.z64', directory / 'capture.json'
         source.write_bytes(rom)
 
-        def run(target, budget, exact=False, covered=None):
+        def run(target, budget, exact=False, covered=None, sites=None, check=True):
             command = [str(exe), str(source), str(firmware), '0x80000400', target,
                        str(budget), 'fixture', str(output)]
             if exact:
@@ -78,6 +78,12 @@ def main():
                 coverage = directory / 'covered.txt'
                 coverage.write_text(''.join(f'{lo} {hi}\n' for lo, hi in covered))
                 command.extend(['uncovered', str(coverage)])
+            if sites is not None:
+                listed = directory / 'sites.txt'
+                listed.write_text(''.join(f'{s}\n' for s in sites))
+                command.append(str(listed))
+            if not check:
+                return subprocess.run(command, timeout=30).returncode
             subprocess.run(command, check=True, timeout=30)
             return output.read_bytes()
 
@@ -92,6 +98,13 @@ def main():
         # discover precisely the same completed producer, at its first fetch.
         unknown = [json.loads(line) for line in run('', 1000, covered=[(0x80000400, 0x80000500)]).splitlines()]
         assert unknown[0] == image and unknown[-1]['uncovered_entry'] == image['entry'], unknown
+        # A listed unproven transfer reports the target its register held as
+        # it executed (ADR-0222); an unexecuted listed site reports nothing.
+        observed = [json.loads(line) for line in run('', 1000, covered=[(0x80000400, 0x80000500)],
+                                                     sites=[0x8000042c, 0x80000430]).splitlines()]
+        assert observed[0] == image and observed[-1]['indirect_targets'] == [[0x8000042c, 0x80001000]], observed[-1]
+        assert 'indirect_targets' not in unknown[-1], unknown[-1]
+        assert run('', 1000, covered=[(0x80000400, 0x80000500)], sites=[0x8000042e], check=False) == 2
         # Coverage prevents recapture; a short budget must not invent bytes.
         covered = [json.loads(line) for line in run('', 20, covered=[(0x80000400, 0x80001100)]).splitlines()]
         assert len(covered) == 1 and covered[0]['uncovered_entry'] is None, covered
@@ -203,7 +216,7 @@ def main():
         loads.write_text(json.dumps({'source': 'synthetic', 'loads': [original]}))
         program.write_text(json.dumps({'direct_edges': [], 'indirect_sites': [{'closed_proof': None, 'candidates': [], 'observed': []}]}))
         requested = []
-        def capture_unknown(rom, entries, covered):
+        def capture_unknown(rom, entries, covered, sites):
             requested.append((entries, covered))
             return [synthetic, {'uncovered_entry': synthetic['entry']}]
         harvest_boot.capture_many = capture_unknown
@@ -230,7 +243,27 @@ def main():
             assert json.loads(loads.read_text())['loads'][0] == dict(destination='0x80001000', size='0x8', rom='0x0', encoding='ares_boot', entry='0x80001000')
         finally:
             harvest_boot.capture_many = saved
-    print('PASS ares harvest composition: preserve static images, split overlaps, capture missing jump tables, stop when all targets are covered')
+        # Targets unproven calls took become discovery roots once; computed
+        # jumps are not listed, and a repeated observation adds nothing.
+        loads.write_text(json.dumps({'source': 'synthetic', 'loads': [original]}))
+        program.write_text(json.dumps({'direct_edges': [], 'indirect_sites': [
+            {'site': {'pc': 0x80000420}, 'closed_proof': None, 'link_register': 31, 'candidates': [], 'observed': []},
+            {'site': {'pc': 0x80000430}, 'closed_proof': None, 'link_register': None, 'candidates': [], 'observed': []}]}))
+        asked = []
+        def capture_observed(rom, entries, covered, sites):
+            asked.append(sites)
+            return [{'uncovered_entry': None, 'indirect_targets': [[0x80000420, 0x80000460]]}]
+        harvest_boot.capture_many = capture_observed
+        try:
+            info = {'header': {'boot_address': 0x80000400}, 'boot_image_size': 0x100}
+            assert harvest_boot.harvest(source, loads, program, info, receipt)
+            assert asked == [[0x80000420]], asked
+            assert json.loads(loads.read_text())['observed_roots'] == [{'site': '0x80000420', 'target': '0x80000460'}]
+            assert json.loads(receipt.read_text())['observed_roots'] == [[0x80000420, 0x80000460]]
+            assert not harvest_boot.harvest(source, loads, program, info, receipt)
+        finally:
+            harvest_boot.capture_many = saved
+    print('PASS ares harvest composition: preserve static images, split overlaps, capture missing jump tables, record observed call targets, stop when all targets are covered')
 
 
 if __name__ == '__main__':

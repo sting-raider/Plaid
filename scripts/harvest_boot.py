@@ -49,7 +49,12 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
         return False
     try:
         entries = sorted(set(targets) | {site for site, _, _ in tables})
-        captures = capture_many(rom, entries, covered=coverage(loads, base, size, slots=True)) if unknown_indirect else capture_many(rom, entries)
+        # Calls only: a computed jr is often a return or an in-function jump,
+        # whose target is no function start (ADR-0222).
+        sites = sorted({s['site']['pc'] for s in program['indirect_sites']
+                        if s.get('closed_proof') is None and s.get('link_register') is not None})
+        captures = (capture_many(rom, entries, covered=coverage(loads, base, size, slots=True), sites=sites)
+                    if unknown_indirect else capture_many(rom, entries))
     except ValueError as error:
         Path(receipt_path).write_text(json.dumps({'targets': targets, 'refusal': str(error)}, indent=2) + '\n')
         return False
@@ -59,6 +64,16 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
     if uncovered is not None:
         targets = sorted(set(targets) | {uncovered})
         receipt['uncovered_entry'] = uncovered
+    # Targets the unproven calls took: discovery roots, never certificates.
+    roots = loads.setdefault('observed_roots', [])
+    known = {(int(r['site'], 0), int(r['target'], 0)) for r in roots}
+    observed = sorted({tuple(pair) for c in captures for pair in c.get('indirect_targets', [])} - known)
+    if observed:
+        receipt['observed_roots'] = observed
+        roots.extend({'site': hex(site), 'target': hex(target)} for site, target in observed)
+        loads['source'] += (f"; observed indirect call targets {[[hex(s), hex(t)] for s, t in observed]} in the same "
+                            "ares replay (ADR-0222), discovery roots only")
+        added = True
     for capture in captures:
         receipt['captures'].append({k: v for k, v in capture.items() if k != 'bytes'})
         if 'bytes' not in capture:

@@ -352,6 +352,7 @@ fn fresh_discovery_keeps_declared_binding_sources_through_all_proof_rounds() {
                 None,
                 &Default::default(),
                 Some(&context),
+                &Default::default(),
                 10000,
             )
         } else {

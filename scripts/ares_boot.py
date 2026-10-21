@@ -29,7 +29,10 @@ def build_oracle():
                              cpu_instruction_access=True)
 
 
-def capture_many(rom, entries, exact=False, covered=None):
+def capture_many(rom, entries, exact=False, covered=None, sites=None):
+    if sites is not None and (covered is None or not isinstance(sites, (list, tuple)) or
+                              any(type(s) is not int or not 0 <= s <= 0xffffffff or s % 4 for s in sites)):
+        raise ValueError('indirect-target observation requires aligned site addresses and coverage ranges')
     if covered is not None:
         if (exact or not isinstance(covered, (list, tuple)) or not covered or
                 any(not isinstance(r, (list, tuple)) or len(r) != 2 or
@@ -48,7 +51,7 @@ def capture_many(rom, entries, exact=False, covered=None):
         with tempfile.TemporaryDirectory(prefix='plaid-canonical-') as temporary:
             path = Path(temporary) / 'input.z64'
             path.write_bytes(canonical)
-            return capture_many(path, entries, exact=exact, covered=covered)
+            return capture_many(path, entries, exact=exact, covered=covered, sites=sites)
     if data[:4] != bytes.fromhex('80371240'):
         raise ValueError('unrecognized N64 byte-order signature')
     crc = zlib.crc32(data[0x40:0x1000])
@@ -66,6 +69,8 @@ def capture_many(rom, entries, exact=False, covered=None):
             command.append('--exact-many')
         if covered is not None:
             command.extend(['--covered', json.dumps(covered)])
+        if sites is not None:
+            command.extend(['--sites', json.dumps(sites)])
         # Includes a cold reference build; the actual replay below stays bounded.
         return json.loads(subprocess.check_output(command, text=True, timeout=600))
     # DrvFS index preloading is much slower than a serial source check.
@@ -85,6 +90,10 @@ def capture_many(rom, entries, exact=False, covered=None):
             coverage = Path(temporary) / 'covered.txt'
             coverage.write_text(''.join(f'{lo} {hi}\n' for lo, hi in covered))
             command.extend(['uncovered', str(coverage)])
+            if sites is not None:
+                listed = Path(temporary) / 'sites.txt'
+                listed.write_text(''.join(f'{s}\n' for s in sites))
+                command.append(str(listed))
         subprocess.run(command, check=True, timeout=180)
         results = [json.loads(line) for line in output.read_text().splitlines()]
     for result in results:
@@ -106,7 +115,8 @@ if __name__ == '__main__':
     parser.add_argument('--many', action='store_true')
     parser.add_argument('--exact-many', action='store_true')
     parser.add_argument('--covered', type=json.loads)
+    parser.add_argument('--sites', type=json.loads)
     args = parser.parse_args()
     entries = [int(v, 0) for v in args.entry.split(',') if v]
-    results = capture_many(args.rom, entries, exact=args.exact_many, covered=args.covered)
+    results = capture_many(args.rom, entries, exact=args.exact_many, covered=args.covered, sites=args.sites)
     print(json.dumps(results if args.many or args.exact_many else next((r for r in results if 'bytes' in r), results[-1]), separators=(',', ':')))
