@@ -33,12 +33,14 @@ typedef struct plaid_native_frame_s {
 } plaid_native_frame;
 typedef struct plaid_state_s {
   u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 fcsr; u32 llbit; u32 pc; u32 fault; u32 fault_pc;
-  /* Complete live Status exists only in a verified SDK thread context. */
+  /* Live Status comes from a post-IPL receipt or verified SDK context. */
   u32 cp0_status, status_known, status_thread, mi_mask;
   /* Status.FR outside a verified SDK context, as the runtime knows it: 2 = FR 1
      (the IPL3 boot context), 1 = FR 0 (every runtime thread; libultra threads
      start with FR = 0), 0 = no runtime (bare harnesses), unchecked. */
   u32 fr_mode;
+  u32 cp0_known, cp0_index, cp0_wired;
+  u64 cp0_entryhi; plaid_tlb_entry cp0_tlb;
   u8 ram[PLAID_RAM_SIZE];
   /* The VR4300 D-cache as pinned ares models it (ADR-0183): 512 direct-mapped
      16-byte lines indexed by virtual address bits 4-12; dtag holds a resident
@@ -95,7 +97,8 @@ typedef struct { u32 start, end; int load; } plaid_range;
       again (ADR-0161); a write by the load's own code into it faults 2;
    9: a BREAK was reached (its exception handler is not modeled);
    10: a conditional trap was taken (its exception handler is not modeled);
-   11: Status observation/acquisition outside the supported SDK context. */
+   11: Status observation/acquisition outside the supported SDK context;
+   12: COP0 state, mode or event effects outside the verified subset. */
 static inline int plaid_fault(plaid_state *s, u32 pc, u32 code) {
   s->fault = code; s->fault_pc = pc; return 1;
 }
@@ -121,6 +124,8 @@ static void plaid_build_prot(plaid_state *s) {
   s->prot_ready = 1;
 }
 "#;
+
+const COP0: &str = include_str!("cop0.h");
 
 const HELPERS: &str = r#"/* Native frames pin their complete fixed-text bodies, including continuations.
    The intrusive list permits SDK threads to suspend/resume out of stack order. */
@@ -978,6 +983,24 @@ fn simple_lo(word: u32, pc: u32, fr0: bool, lo: Option<&str>) -> Result<String, 
         ),
         (25, _) => set(rt, format!("{a} + (u64)(s64){simm}")),
         (55, _) => load(8, "s64"),
+        (16, _) if plaid_core::solver::is_cop0_move(word) => match rs {
+            0 | 1 => {
+                let value = if rs == 0 { "SX32(v)" } else { "v" };
+                let assign = set(rt, value.into());
+                format!(
+                    "{{ u64 v; if (plaid_cp0_read(s, {rd}, &v, 0x{pc:08x}u)) return 1; {assign} }}"
+                )
+            }
+            _ => format!("if (plaid_cp0_write(s, {rd}, s->r[{rt}], 0x{pc:08x}u)) return 1;"),
+        },
+        (16, _) if plaid_core::solver::is_cop0_tlb(word) => {
+            let operation = match word & 63 {
+                1 => "tlbr",
+                2 => "tlbwi",
+                _ => "tlbp",
+            };
+            format!("if (plaid_cp0_{operation}(s, 0x{pc:08x}u)) return 1;")
+        }
         // COP1 data moves with 64-bit FPRs (Status.FR = 1): 32-bit forms
         // replace only the low word, as on the VR4300 (ADR-0131).
         // Moves have rs < 16; `add.s $f0, ...` also has zero low bits.
@@ -1175,7 +1198,7 @@ impl Lowerer<'_> {
     fn call(&self, target: u32, link: u32, pc: u32, bound: bool) -> Result<String, String> {
         if let Some(name) = self.runtime.get(&target) {
             return Ok(format!(
-                "{{ int r = plaid_rt_{name}(s); if (r) return r; }} {}",
+                "{{ s->cp0_known = 0; int r = plaid_rt_{name}(s); if (r) return r; }} {}",
                 self.fallthrough(link, pc)
             ));
         }
@@ -1202,7 +1225,7 @@ impl Lowerer<'_> {
         }
         if let Some(name) = self.runtime.get(&target) {
             return Ok(format!(
-                "{{ int r = plaid_rt_{name}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;"
+                "{{ s->cp0_known = 0; int r = plaid_rt_{name}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;"
             ));
         }
         if self.functions.contains(&target) {
@@ -1325,7 +1348,7 @@ impl Lowerer<'_> {
             }
             // A tail call into the runtime returns to $ra, which must be ours.
             (2, _, _) if self.runtime.contains_key(&jump) => Ok(format!(
-                "{slot} {{ int r = plaid_rt_{}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;",
+                "{slot} {{ s->cp0_known = 0; int r = plaid_rt_{}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;",
                 self.runtime[&jump]
             )),
             (2, _, _) if self.targets.contains_key(&pc) => {
@@ -1715,13 +1738,13 @@ pub fn lower_c_parts(
     }
     let mut out = String::from(PRELUDE);
     out += &format!(
-        "static const plaid_range plaid_code[] = {{{}}};\n{}{HELPERS}{RUNTIME_WRITE}{HELPERS_TAIL}",
+        "static const plaid_range plaid_code[] = {{{}}};\n{}{HELPERS}{COP0}{RUNTIME_WRITE}{HELPERS_TAIL}",
         code.join(", "),
         BUILD_PROT.replacen("static ", link, 1)
     );
     // What every other unit sees of the main unit's definitions.
     let mut shared =
-        format!("{PRELUDE}void plaid_build_prot(plaid_state *s);\n{HELPERS}{HELPERS_TAIL}");
+        format!("{PRELUDE}void plaid_build_prot(plaid_state *s);\n{HELPERS}{COP0}{HELPERS_TAIL}");
     if !loads.is_empty() {
         shared += "int plaid_verify_load(plaid_state *s, int load, u32 pc);\n";
         // Expected bytes come from the composite image (ADR-0136), up to the
@@ -1787,7 +1810,10 @@ pub fn lower_c_parts(
         );
         for &t in ts {
             cases += &if let Some(name) = runtime.get(&t) {
-                format!(" case {}: return plaid_rt_{name}(s);", sx(t))
+                format!(
+                    " case {}: s->cp0_known = 0; return plaid_rt_{name}(s);",
+                    sx(t)
+                )
             } else if functions.contains(&t) {
                 format!(" case {}: return F_{t:08x}(s, ret);", sx(t))
             } else {

@@ -93,9 +93,12 @@ def write_boot_state(capture, out, entry):
         if (capture.get('entered') is not True or not isinstance(data, list) or len(data) != size or
                 any(type(b) is not int or not 0 <= b <= 255 for b in data)):
             raise ValueError(f'pinned ares supplied no valid post-IPL {field}')
+    status = capture.get('boot_status')
+    if type(status) is not int or not 0 <= status <= 0xffffffff:
+        raise ValueError('pinned ares supplied no valid post-IPL Status')
     sp_boot, ram_boot = out / 'sp_boot.h', out / 'ram_boot.h'
     sp_boot.write_text('static const u8 plaid_sp_boot[0x2000] = {' + ','.join(map(str, capture['sp'])) + '};\n')
-    ram_boot.write_text('static const u8 plaid_ram_boot[] = {' + ','.join(map(str, capture['ram_prefix'])) + '};\n')
+    ram_boot.write_text(f'#define PLAID_BOOT_STATUS {status}u\n' + 'static const u8 plaid_ram_boot[] = {' + ','.join(map(str, capture['ram_prefix'])) + '};\n')
     receipt = {k: v for k, v in capture.items() if k not in ('sp', 'ram_prefix')}
     receipt['startup_payloads'] = {field: {'size': len(capture[field]), 'sha256': hashlib.sha256(bytes(capture[field])).hexdigest()}
                                    for field in ('sp', 'ram_prefix')}
@@ -183,7 +186,8 @@ def main():
         return compile_source(source, flags, headers + dependencies, compiler)
 
     parts = sorted(out.glob(f'{name}.part*.c'))
-    with ThreadPoolExecutor(os.cpu_count()) as pool:
+    # Large CPU units can exceed RAM when every logical CPU launches GCC.
+    with ThreadPoolExecutor(min(4, os.cpu_count() or 1)) as pool:
         part_objs = list(pool.map(lambda p: compile_cached(p, cc), parts))
     rt = [*cc, '-DPLAID_RSP', '-DPLAID_RSP_ROM', '-I', ROOT / 'crates/plaid-lower/src', f'-DPLAID_LOWERED="{c.name}"', f'-DPLAID_SP_BOOT="{sp_boot.name}"', f'-DPLAID_RAM_BOOT="{ram_boot.name}"', '-I', out]
     # Keep runtime objects in the build directory, alongside the generated C.

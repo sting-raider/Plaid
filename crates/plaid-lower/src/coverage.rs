@@ -257,6 +257,10 @@ mod tests {
         assert!(c["c.eq.s"] && c["c.ngt.d"] && c["bc1tl"]);
         assert!(c["add.s"] && c["cvt.s.w"] && c["trunc.w.d"] && c["ctc1"]);
         assert!(c["round.w.s"] && c["floor.l.d"] && c["cvt.l.s"]);
+        for name in ["mfc0", "dmfc0", "mtc0", "dmtc0", "tlbwi", "tlbr", "tlbp"] {
+            assert!(c[name], "{name}");
+        }
+        assert!(!c["tlbwr"] && !c["cache"]);
         assert!(!c["eret"] && !c["syscall"]);
         assert!(!c.contains_key("nop") && !c.contains_key("movn"));
     }

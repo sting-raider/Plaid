@@ -6776,3 +6776,56 @@ from unchecked to checked.
 Test: `runtime/test_status.c` checks fault 11 for FR = 0 code in the boot
 context, success after a thread restore, fault 11 for FR = 1 code in a thread,
 and no check with `fr_mode = 0`.
+
+## ADR-0235: Checked COP0 staging and indexed TLB operations (partial)
+
+Status: partial, 2026-10-21.
+
+MFC0/DMFC0/MTC0/DMTC0 now lower to native register-specific state operations.
+Index (six bits plus probe failure), EntryLo0/1, PageMask, Wired, full-width
+EntryHi and bounded Status use exact pinned-ares masks and read widths.
+Unknown values, unsupported registers and non-kernel contexts fault 12; a
+read into r0 still performs its checks. Status writes preserve readonly TS,
+update cp0_status/fr_mode together, and reject unsupported addressing, tracing,
+endian, interrupt-delivery and SDK-thread effects before any mutation. IE
+changes remain refused until the runtime scheduler has an explicit contract.
+The existing COP1 FR guard (ADR-0234) stays authoritative.
+
+TLBWI normalizes PageMask, EntryHi and physical PFNs and calls the existing
+plaid_tlb_write preflight/generation path (ADR-0162/0203/0231). This slice admits
+only global 32-bit mappings; ASID-sensitive or wider commits fault 12. Index
+32..63 makes TLBWI/TLBR a no-op, matching pinned ares rather than wrapping to
+32 entries. TLBR requires a known entry; TLBP requires a known entry census
+and matches region, VPN/PageMask and global/ASID fields. Staging values remain
+separate from normalized committed entries. Every accepted equal write still
+advances the native TLB generation and preserves binding/frame protection.
+
+The analysis-only ares adapter exports Status at the first boot-entry fetch;
+native startup validates the field and initializes Status, FR and host IE from
+that receipt. This does not authenticate other initial CP0 values. The bounded
+core-only boot evaluator still refuses COP0 instead of guessing reset state.
+The ares replay already executes these instructions; mapped instruction-fetch
+export, source/lifetime bindings and discovery admission remain separate work.
+
+The guarded solver and isa-coverage admit these seven forms; unmodeled register
+operands produce explicit native faults, never fallback guest execution.
+TLBWR/Random, Count/Compare, Cause/EPC, ERET, CACHE and general interrupt and
+exception delivery remain open. ADR-0233 still refuses non-residual blockers.
+
+runtime/test_cop0.py compares lowered PC, all GPR/FPRs, HI/LO, FCSR, written
+RAM, CP0 staging and all 32 TLB entries with unmodified pinned ares, including
+mask normalization, wide moves, probe hits/misses, FR transitions and Index
+no-ops. Adversarial native controls verify atomic refusal. Existing executable
+TLB remap/generation/frame-pin contracts remain mandatory. The upstream ISC
+source was read as an oracle; no upstream implementation was copied or linked
+into the native artifact. See research/cop0-lowering.md for exact receipts,
+ROM results and limitations. No whole-ROM or native-complete claim is added.
+
+ADR-0235 continuation (2026-10-22): reconciled stopped candidate 3b73a1c5
+onto main e9d1ccf0. Fresh focused runtime-call assertion passes; the candidate
+already includes its CP0 invalidation update. Coverage is 203/209 from 196/209.
+Normal RT64 pipelines still refuse before building: GoldenEye OPEN/1 and MK64
+residual OPEN/10. BK/F-Zero X discovery identity, visible MM regression state,
+Index-width mutation and exact-tree local gates are recorded in
+research/cop0-lowering.md. Mapped discovery, boot evaluator expansion, ERET,
+CACHE and event delivery remain separate work; no completeness is asserted.

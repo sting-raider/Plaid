@@ -924,3 +924,18 @@ whole-pipeline wall clock on the laptop.
 
 Classification: `research/classify-dispatch-sweep.py` (residual-solve blocker kinds).
 No ROM, map or generated code is committed.
+
+## Bounded COP0 continuation (ADR-0235, 2026-10-22)
+
+On main e9d1ccf0 plus the reconciled COP0 candidate, the requested normal
+visible-window pipelines (--rt64 --seconds 60) stop before emitting a game:
+GoldenEye OPEN 7 -> 1 (348 blocks, mapped target 70000510 absent), Mario Kart
+64 ordinary OPEN 30 -> 13 and residual OPEN 27 -> 10 (40,610 blocks; ERET,
+four missing targets/eight source/edge blockers). Pipeline wall times were
+6.812 and 215.547 s respectively. Neither reached a window, VI or audio.
+Seven native COP0/TLB forms are verified, 196/209 -> 203/209 ISA coverage;
+ERET/CACHE and mapped executable discovery are still open. BK/F-Zero X
+complete discovery maps are unchanged. The retained candidate MM executable
+visibly reproduces fault 2 at 80089668, VI 0, with identical reported state;
+known BK/MM regressions are not repaired. Full evidence and limitations:
+[research/cop0-lowering.md](cop0-lowering.md).

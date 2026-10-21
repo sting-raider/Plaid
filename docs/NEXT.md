@@ -5,9 +5,18 @@
 Per-site proofs no longer gate a build. The sweep points at the next universal
 work, in order:
 
-1. Lower COP0 moves, TLB instructions and ERET, and model exceptions and
-   interrupts, so boot code like GoldenEye's TLB setup and Mario Kart 64's
-   handler is translated instead of excluded (unsupported_scope_effect).
+1. After ADR-0235's seven checked COP0/TLB forms, authenticate and export
+   TLB-mapped instruction fetch/source/lifetime bindings from pinned replay
+   so mapped main images can be discovered. Extend the core-only boot evaluator
+   only with verified initial CP0 state. Add Random/TLBWR, Count/Compare,
+   Cause/EPC/ERET, CACHE and interrupt/exception delivery; expand Status writes
+   into SDK contexts with explicit scheduler/IE effects. Unmodeled values fault
+   12; they are not emulated. See research/cop0-lowering.md.
+   The verified partial leaves GoldenEye OPEN/1 at mapped target 70000510;
+   MK64 residual OPEN/10 includes ERET plus four missing target/source pairs.
+   Preserve BK/F-Zero X discovery identity and the known unrelated native
+   regressions while extending this boundary; do not admit mapped bytes by
+   virtual/physical equality alone.
 2. Discover overlay code that Star Fox 64 calls into (136 unmapped targets,
    157 unresolved direct targets).
 3. Paper Mario: find the shared-slot occupant at `80240310` reached at VI 2908.
