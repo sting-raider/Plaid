@@ -496,3 +496,111 @@ filter or solver evidence exception is removed. No Paper Mario rerun was made
 on this branch; the expected next replay target is `8002605c`. Production
 logic uses generic evidence and instruction predicates, with no game-specific
 addresses or constants.
+
+## ADR-0226 landed-tree run and next frontier (2026-10-21)
+
+Integration claim: reconcile the reviewed `ae3bbb6c` candidate onto canonical
+ADR-0225, retaining replay evidence in both discovery and solver, then test
+whether Paper Mario passes its previous observed-call fault. The two old-base
+commits were rebased and squashed as `1f284c410b5116bd81e36b240ab8a9cb1ab2f3ab`,
+whose direct parent is `7d6ae3cbb641071e6dc5452aed144395e7f8b4b5`.
+DECISIONS conflicts were resolved as bytes, preserving the existing non-UTF-8
+content and appending ADR-0226 after ADR-0225; research receipts from both
+branches were retained. No conflict markers or README changes were included.
+The commit author is sting-raider <alizaydsab@gmail.com>, with no AI trailer.
+
+Full local gate on that exact tree, using `gate.py` with GATE_TREE set to
+`X:/Plaid/target/speed-0222` and GATE_OUT to
+`X:/Plaid/target/paper-mario/0222/gate-0226`: fmt 1.2 s, Clippy 7.3 s,
+workspace tests 99.9 s, CLI 20.8 s, runtime 243.5 s; total 372.7 s, all exit 0.
+Rust reports 897 passing tests and one ignored. Runtime includes the pinned
+oracle contracts and `scripts/test_ares_boot.py`. The earlier reviewed
+candidate's discovery/solver mutation checks are recorded above; they were
+not repeated during this integration. Main was refetched immediately before
+the successful expected-head push from the exact parent above. No performance
+change was made: these are gate measurements, not a speedup benchmark.
+
+The `pm-boot-0222` worktree was fast-forwarded to the landed commit. Its release
+build (`cargo build --locked --release -p plaid`, release incremental enabled)
+passed in 38.03 s. The requested command then ran in active Windows console
+session 3, with the RT64 window visible:
+
+```
+python scripts/native.py "<local Paper Mario (USA).z64>" --residual-dispatch --rt64 --require-audio --seconds 60
+```
+
+Fresh inference/discovery reached 59,613 blocks, eight ordinary scoped
+blockers, and a residual solve with zero blockers and eight residual sites.
+Extraction found 17 ROM-derived RSP texts. The manifest retains
+`mode: residual-dispatch` and `native_complete: false`. The command's log spans
+about 805 s (file timestamps, not a controlled benchmark). It exited 1 at the
+native fault below, before audio acceptance. ROM identity remains SHA-256
+`9ec6d2a5c2fca81ab86312328779fd042b5f3b920bf65df9f6b87b376883cb5b`.
+
+The run passes the old `800602d8 -> 8002605c` fault. It reaches **VI 648,
+637 graphics tasks, 646 audio tasks and 327 PI DMAs**, then stops with fault 3
+at analysis PC `808be154`. A second visible invocation of the just-built RT64
+executable (`--stop-at none --seconds 60 --wav <receipt>/audio-0226.wav
+--dump 0x802ae100 64`, with the same ROM and save paths) reproduces every
+counter and the fault in 11.61 s, exit 1. The WAV has 345,184 stereo signed
+16-bit frames at 32,006 Hz, peak **0**. Compiled audio-task execution is
+established; audible output and gameplay acceptance are not. Graphics-task
+counts alone do not establish correct rendering or playable gameplay.
+
+### Next fault: checksum-derived call from relocated text
+
+The faulting load is ROM `0x316c00`, size `0x190`, linked/runtime base
+`802ae000`, represented in the composed map at synthetic base `808be000`.
+Thus fault PC `808be154` is runtime PC `802ae154` and ROM offset `0x316d54`.
+The RAM dump agrees with ROM decoding: `0260f809` is `jalr $s3`, followed by
+NOP. At the stop `$s3 = 8002ac00` and `$ra = 802ae15c`. `$t9 = ffff0000` is
+unrelated to this transfer; it is not the call target.
+
+This routine checks ROM words `0x316a70..0x316c00`, sums their halfwords with
+instruction-field adjustments, and combines the result with ROM word `0x574`.
+Observed `$s0 = 002499bf`, `$s4 = 0fefefef`, and initial `$s3 = 7012bc11`
+explain the result modulo 2^32:
+
+```
+s4 = 4bf15bf6 - ROM[574] = 4bf15bf6 - 3c016c07 = 0fefefef
+s3 = 7012bc11 + s4 - (002499bf + ffdb6641) = 8002ac00
+```
+
+The high-nibble guard permits this call. Decode the main-image target using
+`0x1000 + (pc - 0x80025c00)`: target `8002ac00` is ROM offset `0x6000`.
+It has a stack prologue and calls `80029030` with a buffer at `802fb800`
+and length `0x54000`. The map already contains its block and the emitted
+native function `F_8002ac00`, but it is neither an entry nor address-taken.
+The generated helper `plaid_call_8` lacks its case and takes the fail-closed
+fault-3 default. The fault is therefore dispatch admission, not missing native
+instruction lowering or an unsupported RSP task.
+
+Two measured limits prevent treating this as another simple layout fix:
+
+- `harvest_boot.py` requests each unresolved call's map PC directly. This site
+  is requested as `808be154`, whereas the ares fetch observer matches actual
+  PCs (`openSites.contains(pc)`), here `802ae154`. No projected runtime site
+  is present in the current site list.
+- The final retained harvest (`boot-harvest-6.json`) exhausts its
+  100,000,000-instruction budget at VI 123, with no uncovered entry. It has
+  no observation of this later call. Native and ares VI rates are not an
+  equivalence claim, but this finite replay does not provide evidence for
+  the target seen at the native frontier.
+
+No production fix or ADR-0227 is introduced. A safe follow-up must select
+runtime observation sites through declared relocation bindings (including
+shared-slot/alias controls) and obtain replay evidence covering the later
+call, while retaining source identity and bounded replay behavior. Merely
+adding the target, broadly admitting all direct-call functions, or changing
+the replay budget without establishing coverage would not prove that fix.
+Synthetic tests should separate relocated and fixed sites, reject unsupported
+or ambiguous mappings, and retain the rule that observed targets are discovery
+roots rather than closed target certificates. Non-silent audio remains an
+independent frontier.
+
+Ignored local receipts: `target/paper-mario/0222/native-0226.log`,
+`window-0226.log`, `stop-0226.json`, `audio-0226.wav`,
+`next-blocker-disasm.txt`, and `gate-0226/`. Ares is pinned at
+`9408cb43d4948fc3ea6e152a307a34348df3fe04`; Rabbitizer at
+`724a49a5b4dbfb99f1a9e6992e63964fd29c90c8`. No ROM, captured RAM,
+generated game code, WAV or disassembly asset is committed.
