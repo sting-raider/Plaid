@@ -781,7 +781,9 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             && map.runtime_functions.contains_key(&edge.target);
         if !starts.contains(&edge.target)
             && !into_runtime
-            && !(edge.kind == EdgeKind::Call && into_slot(&edge.target))
+            && !((edge.kind == EdgeKind::Call
+                || !(0x8000_0000..0xc000_0000).contains(&edge.target.pc.0))
+                && into_slot(&edge.target))
         {
             add(
                 "unresolved_direct_target",
@@ -907,7 +909,9 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         for target in site.candidates.keys().chain(site.observed.keys()) {
             if !starts.contains(target)
                 && !(site.link_register.is_some() && map.runtime_functions.contains_key(target))
-                && !(site.link_register.is_some() && into_slot(target))
+                && !((site.link_register.is_some()
+                    || !(0x8000_0000..0xc000_0000).contains(&target.pc.0))
+                    && into_slot(target))
             {
                 add(
                     "unresolved_indirect_target",

@@ -20,6 +20,8 @@ pub struct Capture {
     pub format: String,
     pub entry: u32,
     pub destination: u32,
+    #[serde(default)]
+    pub physical_start: Option<u32>,
     pub bytes: Vec<u8>,
     pub steps: u64,
     pub cpu_writes: Vec<(u32, u32)>,
@@ -91,13 +93,28 @@ pub fn execute_many(rom: &CanonicalRom, entries: &[u32]) -> Result<BTreeMap<u32,
 }
 
 fn validate_entry(entry: u32) -> Result<(), String> {
-    if entry & 3 != 0 || !(0x8000_0000..0x8080_0000).contains(&entry) {
-        return Err("ares boot capture requires an aligned KSEG0 RAM target".into());
+    if entry & 3 != 0 || (0x8080_0000..0xc000_0000).contains(&entry) {
+        return Err("ares boot capture requires an aligned RAM or mapped target".into());
     }
     Ok(())
 }
 
 fn validate_capture(capture: &Capture, rom: &CanonicalRom, entry: u32) -> Result<(), String> {
+    let end = u64::from(capture.destination) + capture.bytes.len() as u64;
+    let valid_source = match capture.physical_start {
+        Some(p) => {
+            !(0x8000_0000..0xc000_0000).contains(&capture.destination)
+                && p.is_multiple_of(4)
+                && u64::from(p) + capture.bytes.len() as u64 <= 0x800000
+                && end
+                    <= if capture.destination < 0x8000_0000 {
+                        0x8000_0000
+                    } else {
+                        0x1_0000_0000
+                    }
+        }
+        None => capture.destination >= 0x8000_0000 && end <= 0x8080_0000,
+    };
     if capture.format != "plaid-ares-boot-harvest-v1"
         || capture.revision != "9408cb43d4948fc3ea6e152a307a34348df3fe04"
         || capture.rom_sha256 != rom.identity.sha256
@@ -107,8 +124,7 @@ fn validate_capture(capture: &Capture, rom: &CanonicalRom, entry: u32) -> Result
         || capture.destination & 3 != 0
         || capture.bytes.is_empty()
         || !capture.bytes.len().is_multiple_of(4)
-        || capture.destination < 0x8000_0000
-        || u64::from(capture.destination) + capture.bytes.len() as u64 > 0x8080_0000
+        || !valid_source
         || entry < capture.destination
         || u64::from(entry) >= u64::from(capture.destination) + capture.bytes.len() as u64
         || sha256(&capture.bytes) != capture.output_sha256
@@ -360,5 +376,36 @@ mod tests {
         assert!(validate_entry(0x80001002).is_err());
         assert!(validate_entry(0x7fffffff).is_err());
         assert!(validate_entry(0x80800000).is_err());
+    }
+
+    #[test]
+    fn mapped_capture_requires_bounded_physical_source_and_virtual_extent() {
+        let rom = rom();
+        let entry = 0x60001000;
+        let mut row = capture(&rom, entry, 0x2402002a);
+        let parse = |row| {
+            parse_capture_rows(
+                &serde_json::to_vec(&serde_json::json!([
+                row, {"remaining": 0, "stop_pc": entry}
+                ]))
+                .unwrap(),
+                &rom,
+                &[entry],
+            )
+        };
+        assert!(parse(row.clone()).is_err());
+        row["physical_start"] = serde_json::json!(0x2000);
+        assert!(parse(row.clone()).is_ok());
+        for (key, value) in [
+            ("physical_start", 0x800000u32),
+            ("physical_start", 0x2002),
+            ("destination", 0x80001000),
+            ("destination", 0x60001004),
+            ("destination", 0x7fffffff),
+        ] {
+            let mut changed = row.clone();
+            changed[key] = serde_json::json!(value);
+            assert!(parse(changed).is_err(), "{key}={value:x}");
+        }
     }
 }

@@ -567,7 +567,7 @@ fn relink(overlay: bool) -> &'static str {
 /// `plaid_ovl_write`, which revokes a binding when its text is written.
 fn overlay_runtime(
     overlays: &[(u32, u32)],
-    virtual_bases: &[Option<u32>],
+    mapped_bases: &[(Option<u32>, Option<u32>)],
     layouts: &[(Vec<u8>, plaid_core::overlays::Layout)],
     compared: &[usize],
     guarded: &[Vec<(u32, u32)>],
@@ -580,7 +580,7 @@ fn overlay_runtime(
         ));
     }
     let mut out = String::from(
-        "typedef struct { u32 f, w, probe; } plaid_ovl_fn;\ntypedef struct { u32 start, end; } plaid_ovl_range;\ntypedef struct { u32 link, text, mapped, virtual_base, span, guards; const plaid_ovl_range *ranges; int (*verify)(const uint8_t *, size_t, uint32_t); u32 n; const plaid_ovl_fn *f; } plaid_ovl;\n",
+        "typedef struct { u32 f, w, probe; } plaid_ovl_fn;\ntypedef struct { u32 start, end; } plaid_ovl_range;\ntypedef struct { u32 link, text, mapped, virtual_base, physical_base, span, guards; const plaid_ovl_range *ranges; int (*verify)(const uint8_t *, size_t, uint32_t); u32 n; const plaid_ovl_fn *f; } plaid_ovl;\n",
     );
     let mut table = Vec::new();
     for (k, (&(link, _), (bytes, layout))) in overlays.iter().zip(layouts).enumerate() {
@@ -618,10 +618,11 @@ fn overlay_runtime(
             }
         );
         table.push(format!(
-            "{{0x{link:08x}u, {}u, {}u, {}u, {span}u, {}u, plaid_ovl_ranges_{k}, plaid_overlay_verify_{k}, {}u, plaid_ovl_fn_{k}}}",
+            "{{0x{link:08x}u, {}u, {}u, {}u, {}u, {span}u, {}u, plaid_ovl_ranges_{k}, plaid_overlay_verify_{k}, {}u, plaid_ovl_fn_{k}}}",
             layout.text,
-            u8::from(virtual_bases[k].is_some()),
-            virtual_bases[k].unwrap_or(0),
+            u8::from(mapped_bases[k].0.is_some()),
+            mapped_bases[k].0.unwrap_or(0),
+            mapped_bases[k].1.unwrap_or(u32::MAX),
             ranges.len(),
             entries.len()
         ));
@@ -668,7 +669,10 @@ static int plaid_ovl_mapping(plaid_state *s, u32 k, u32 *base, u32 *index,
   if (!n || n > PLAID_RAM_SIZE || v > UINT32_MAX - (n - 1)) return 1;
   for (;;) {
     if (plaid_tlb_lookup(s, v + offset, 0, &p, &seg, &i, changed, replacement)) return 1;
-    if (!offset) { *base = p; *index = i; }
+    if (!offset) {
+      if (plaid_ovls[k].physical_base != UINT32_MAX && p != plaid_ovls[k].physical_base) return 1;
+      *base = p; *index = i;
+    }
     else if (i != *index || p != *base + offset) return 1;
     if (*base > PLAID_RAM_SIZE - n) return 1;
     if (offset == n - 1) return 0;
@@ -1486,7 +1490,8 @@ pub fn lower_c_parts(
     let virtual_bases: Vec<Option<u32>> = relocatable
         .iter()
         .map(|l| match l.encoding {
-            plaid_core::declared_loads::LoadEncoding::TlbRaw { .. } => l
+            plaid_core::declared_loads::LoadEncoding::TlbRaw { .. }
+            | plaid_core::declared_loads::LoadEncoding::AresTlb { .. } => l
                 .linked
                 .map(|a| a.0)
                 .ok_or("TLB executable lacks its virtual base")
@@ -1500,6 +1505,21 @@ pub fn lower_c_parts(
             _ => Ok(None),
         })
         .collect::<Result<_, _>>()?;
+    let mapped_bases: Vec<_> = relocatable
+        .iter()
+        .zip(virtual_bases)
+        .map(|(l, virtual_base)| {
+            (
+                virtual_base,
+                match l.encoding {
+                    plaid_core::declared_loads::LoadEncoding::AresTlb { physical, .. } => {
+                        Some(physical)
+                    }
+                    _ => None,
+                },
+            )
+        })
+        .collect();
     if overlays.len() > 1024 {
         return Err("at most 1024 relocatable overlays are supported".into());
     }
@@ -1787,7 +1807,7 @@ pub fn lower_c_parts(
     shared += &declarations;
     out += &overlay_runtime(
         &overlays,
-        &virtual_bases,
+        &mapped_bases,
         &layouts,
         &compared,
         &guarded,

@@ -108,6 +108,39 @@ def raw_occupant_contract():
             harvest_boot.capture_many = saved
     print('PASS raw occupant harvest: covered range adds guarded alternate once; malformed/full-content mismatch refused')
 
+def mapped_harvest_contract():
+    with tempfile.TemporaryDirectory(prefix='plaid-mapped-') as temporary:
+        d = Path(temporary)
+        rom, loads, program, receipt = (d / n for n in ('rom.z64', 'loads.json', 'map.json', 'receipt.json'))
+        initial = json.dumps(dict(source='synthetic', loads=[]))
+        loads.write_text(initial)
+        program.write_text(json.dumps(dict(direct_edges=[{'target': {'pc': 0x60000000}}], indirect_sites=[])))
+        capture = dict(destination=0x60000000, physical_start=0x1000, entry=0x60000000,
+                       bytes=[0x24, 2, 0, 42, 3, 0xe0, 0, 8, 0, 0, 0, 0],
+                       revision='synthetic', rom_sha256='synthetic')
+        saved = harvest_boot.capture_many
+        try:
+            harvest_boot.capture_many = lambda *args, **kwargs: [capture]
+            info = dict(header=dict(boot_address=0x80000400), boot_image_size=0x100)
+            assert harvest_boot.harvest(rom, loads, program, info, receipt)
+            declaration = json.loads(loads.read_text())['loads'][0]
+            assert declaration == dict(destination='0x60000000', physical='0x1000', size='0xc',
+                                       rom='0x0', encoding='ares_tlb', entry='0x60000000', text_size='0xc', slot=True)
+            before = loads.read_bytes()
+            assert not harvest_boot.harvest(rom, loads, program, info, receipt)
+            assert loads.read_bytes() == before
+            for changed in [dict(physical_start=0x800000), dict(physical_start=0x1002),
+                            dict(destination=0x80001000), dict(destination=0x7ffffffc),
+                            dict(entry=0x6000000c), dict(bytes=[]), dict(bytes=[0])]:
+                loads.write_text(initial)
+                harvest_boot.capture_many = lambda *args, **kwargs: [dict(capture, **changed)]
+                assert not harvest_boot.harvest(rom, loads, program, info, receipt)
+                assert loads.read_text() == initial
+        finally:
+            harvest_boot.capture_many = saved
+    print('PASS mapped harvest: physical/virtual identity, bounded text, whole-ROM replay declaration, duplicate and mutation refusal')
+
+
 def main():
     if os.name == 'nt':
         script = subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(Path(__file__).resolve())], text=True).strip()
@@ -115,6 +148,7 @@ def main():
         return
     boot_header_contract()
     raw_occupant_contract()
+    mapped_harvest_contract()
     for coverage in ([], [None], [[1]], [[4, 4]], [[0, 3]], [[False, 4]], [[0, 0x100000000]]):
         try:
             capture_many('never-read.z64', [], covered=coverage)
@@ -173,6 +207,36 @@ def main():
         assert bytes(image['bytes']) == struct.pack('>3I', 0x2402002a, 0x03e00008, 0), image
         assert image['cpu_writes'] == [[0x1000, 0x100c]] and image['pi_dma'] == [], image
         assert image['steps'] == 13 and stop['remaining'] == 0, (image, stop)
+        # The same produced words reached through the game's own indexed TLB write.
+        # No addresses from commercial games occur in this fixture.
+        mapped_words = words[:9] + [
+            0x40800000,  # MTC0 zero, Index
+            0x40802800,  # MTC0 zero, PageMask
+            0x3c0a6000, 0x408a5000,  # EntryHi
+            0x240a005f, 0x408a1000,  # global/valid/cache3, physical 1000
+            0x240a009f, 0x408a1800,  # odd physical 2000
+            0x42000002,  # TLBWI
+            0x3c196000, 0x03200008, 0]
+        def mapped_replay(changed):
+            fixture = bytearray(rom)
+            fixture[0x1000:0x1000 + 4 * len(changed)] = struct.pack(f'>{len(changed)}I', *changed)
+            source.write_bytes(fixture)
+            return [json.loads(line) for line in run('', 1000, covered=[(0x80000400, 0x80000500)]).splitlines()]
+        mapped = mapped_replay(mapped_words)
+        assert mapped[0]['entry'] == mapped[0]['destination'] == 0x60000000, mapped
+        assert mapped[0]['physical_start'] == 0x1000 and mapped[0]['bytes'] == image['bytes'], mapped
+        assert mapped[-1]['uncovered_entry'] == 0x60000000, mapped
+        # Exact composition replay must select the identical first generation.
+        exact = [json.loads(line) for line in run('0x60000000', 1000, exact=True).splitlines()]
+        assert exact[0] == mapped[0], exact
+        # Non-global and invalid mappings cannot acquire an executable declaration.
+        for lo0, lo1 in [(0x5e, 0x9e), (0x5d, 0x9d)]:
+            changed = mapped_words.copy()
+            changed[13], changed[15] = 0x240a0000 | lo0, 0x240a0000 | lo1
+            rejected = mapped_replay(changed)
+            assert not any('physical_start' in row for row in rejected), rejected
+        source.write_bytes(rom)
+        print('PASS mapped fetch: guest COP0/TLB writes, identical produced physical bytes, exact replay, non-global/invalid refusal')
         # No named target: an indirect fetch beyond supplied images must still
         # discover precisely the same completed producer, at its first fetch.
         unknown = [json.loads(line) for line in run('', 1000, covered=[(0x80000400, 0x80000500)]).splitlines()]

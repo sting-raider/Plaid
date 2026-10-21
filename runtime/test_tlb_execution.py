@@ -3,6 +3,7 @@ from pathlib import Path
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 
@@ -331,6 +332,28 @@ def main():
                     '-Wno-unused-function', f'-DPLAID_LOWERED="{native_c.name}"', '-I', str(OUT), str(tamper_harness), '-o', str(tamper_native)], check=True)
     tampered = subprocess.run([str(tamper_native)], capture_output=True, text=True, timeout=30)
     assert tampered.returncode == 0, (tampered.returncode, tampered.stdout, tampered.stderr)
+    # Exercise the replay-bound physical field with the same native program.
+    # Equal content at another RAM address must not satisfy this binding.
+    constrained, count = re.subn(r'(\{0x[0-9a-f]{8}u, \d+u, 1u, ' + str(E0) + r'u, )4294967295u,',
+                                 lambda m: m[1] + str(P0) + 'u,', native_c.read_text())
+    assert count == 1
+    physical_c = OUT / 'physical.c'
+    physical_c.write_text(constrained)
+    physical_harness = OUT / 'physical-harness.c'
+    prefix = _native_harness(module0, module1, labels).split('  /* An earlier index')[0]
+    physical_harness.write_text(prefix.replace('#include "native.c"', '#include "physical.c"') + f'''
+  memcpy(s.ram + {P_ALIAS}u, raw0, sizeof raw0);
+  e = s.tlb[0]; e.lo[0] = ({P_ALIAS}u >> 6) | 31u;
+  assert(plaid_tlb_write(&s, 0, e, {PC}u) == 0 && !s.ovl_ok[k0]);
+  assert(plaid_link(&s, {E0}u) == 1 && !s.ovl_ok[k0]);
+  return 0;
+}}
+''')
+    physical_native = OUT / ('physical.exe' if os.name == 'nt' else 'physical')
+    subprocess.run([cc, '-O2', '-std=c11', '-Wall', '-Werror', '-Wno-unused-label',
+                    '-Wno-unused-function', '-Wno-unused-variable', str(physical_harness), '-o', str(physical_native)], check=True)
+    subprocess.run([str(physical_native)], check=True, timeout=30)
+    print('PASS replay-bound physical source: correct mapping executes; equal bytes at a different physical address refuse')
     print('PASS TLB execution: full state matches pinned ares; remap/clear transactions, pre-entry guarded-data tamper, fail-closed mappings and writable unrelated data verified')
 
 
