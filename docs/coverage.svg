@@ -11,15 +11,14 @@
 <text x="20" y="102" class="s">Not lowered</text>
 <text x="2" y="142" class="b">All forms</text>
 <rect x="150.0" y="126" width="171.5" height="18" fill="#2ea043" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>All forms: 64 plain</title></rect>
-<rect x="321.5" y="126" width="117.9" height="18" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>All forms: 44 checked</title></rect>
-<rect x="439.4" y="126" width="235.8" height="18" fill="#db6d28" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>All forms: 88 unchecked</title></rect>
+<rect x="321.5" y="126" width="353.7" height="18" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>All forms: 132 checked</title></rect>
 <rect x="675.2" y="126" width="34.8" height="18" fill="#6e7681" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>All forms: 13 open</title></rect>
 <text x="720" y="141" class="b">196/209</text>
 <text x="2" y="172" class="t">FPU compare</text>
-<rect x="150.0" y="156" width="560.0" height="16" fill="#db6d28" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>FPU compare: 32 unchecked</title></rect>
+<rect x="150.0" y="156" width="560.0" height="16" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>FPU compare: 32 checked</title></rect>
 <text x="720" y="171" class="t">32/32</text>
 <text x="2" y="196" class="t">FPU convert</text>
-<rect x="150.0" y="180" width="560.0" height="16" fill="#db6d28" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>FPU convert: 26 unchecked</title></rect>
+<rect x="150.0" y="180" width="560.0" height="16" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>FPU convert: 26 checked</title></rect>
 <text x="720" y="195" class="t">26/26</text>
 <text x="2" y="220" class="t">ALU</text>
 <rect x="150.0" y="204" width="490.0" height="16" fill="#2ea043" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>ALU: 21 plain</title></rect>
@@ -33,7 +32,7 @@
 <rect x="654.0" y="252" width="56.0" height="16" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>Branch/jump: 2 checked</title></rect>
 <text x="720" y="267" class="t">20/20</text>
 <text x="2" y="292" class="t">FPU arith</text>
-<rect x="150.0" y="276" width="560.0" height="16" fill="#db6d28" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>FPU arith: 16 unchecked</title></rect>
+<rect x="150.0" y="276" width="560.0" height="16" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>FPU arith: 16 checked</title></rect>
 <text x="720" y="291" class="t">16/16</text>
 <text x="2" y="316" class="t">64-bit ALU</text>
 <rect x="150.0" y="300" width="448.0" height="16" fill="#2ea043" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>64-bit ALU: 12 plain</title></rect>
@@ -45,7 +44,7 @@
 <rect x="224.7" y="324" width="485.3" height="16" fill="#6e7681" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>COP0/system: 13 open</title></rect>
 <text x="720" y="339" class="t">2/15</text>
 <text x="2" y="364" class="t">COP1 move</text>
-<rect x="150.0" y="348" width="560.0" height="16" fill="#db6d28" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>COP1 move: 14 unchecked</title></rect>
+<rect x="150.0" y="348" width="560.0" height="16" fill="#d29922" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>COP1 move: 14 checked</title></rect>
 <text x="720" y="363" class="t">14/14</text>
 <text x="2" y="388" class="t">Mul/div</text>
 <rect x="150.0" y="372" width="560.0" height="16" fill="#2ea043" stroke="#0d1117" stroke-opacity=".35" stroke-width=".6"><title>Mul/div: 12 plain</title></rect>

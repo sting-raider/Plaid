@@ -35,6 +35,10 @@ typedef struct plaid_state_s {
   u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 fcsr; u32 llbit; u32 pc; u32 fault; u32 fault_pc;
   /* Complete live Status exists only in a verified SDK thread context. */
   u32 cp0_status, status_known, status_thread, mi_mask;
+  /* Status.FR outside a verified SDK context, as the runtime knows it: 2 = FR 1
+     (the IPL3 boot context), 1 = FR 0 (every runtime thread; libultra threads
+     start with FR = 0), 0 = no runtime (bare harnesses), unchecked. */
+  u32 fr_mode;
   u8 ram[PLAID_RAM_SIZE];
   /* The VR4300 D-cache as pinned ares models it (ADR-0183): 512 direct-mapped
      16-byte lines indexed by virtual address bits 4-12; dtag holds a resident
@@ -102,7 +106,7 @@ static inline int plaid_status_fp(plaid_state *s, u32 pc, int fr0) {
   if (s->status_known) {
     if (((s->cp0_status >> 26) & 1) == (u32)fr0) return plaid_fault(s, pc, 11);
     if (!(s->cp0_status & 0x20000000u)) return plaid_status_acquire(s, pc);
-  }
+  } else if (s->fr_mode && s->fr_mode != (fr0 ? 1u : 2u)) return plaid_fault(s, pc, 11);
   return 0;
 }
 "#;

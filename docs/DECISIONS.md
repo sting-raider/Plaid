@@ -6748,3 +6748,31 @@ sets, not as a precondition for a build. The synthetic native-builder contract
 default with its site list, and `--strict` refusing an OPEN map before any
 manifest is written. `runtime/test_residual_dispatch.py` keeps the lowering
 contract: lowered entries match pinned ares, other targets fault 3.
+
+## ADR-0234: COP1 checks Status.FR outside verified SDK contexts
+
+Status: accepted, 2026-10-21.
+
+Lowered COP1 instructions already fault 11 on an incompatible Status.FR, but
+only while complete live Status is known, which needs the verified SDK thread
+ABI (`status_known`). Everywhere else the FR = 0 lowering (ADR-0160) was an
+unchecked assumption (ledger row 9), the reason every FPU form was orange.
+
+Decision: the native state gains `fr_mode`, the FR value the runtime knows
+even without complete Status. The runtime starts it at 2 (FR = 1), the state
+IPL3 hands to a commercial game and ares's reset default (ADR-0131). Every
+runtime thread restore sets 1 (FR = 0): the runtime implements libultra
+threads, which start with FR = 0 and never set it (ADR-0160). `plaid_status_fp`
+keeps the complete-Status check and, when Status is not known, faults 11 unless
+`fr_mode` matches the lowering's FR mode. `fr_mode = 0` means no runtime (bare
+differential harnesses) and stays unchecked there. Lowered guest code has no
+COP0 writes (they are not lowered), so no other path can change FR.
+
+Consequence: FPU code in the boot context before the first thread now faults
+instead of silently computing with the wrong register layout. Ledger row 9 is
+still an assumption but is checked (fault 11); the COP1 instruction rule moves
+from unchecked to checked.
+
+Test: `runtime/test_status.c` checks fault 11 for FR = 0 code in the boot
+context, success after a thread restore, fault 11 for FR = 1 code in a thread,
+and no check with `fr_mode = 0`.

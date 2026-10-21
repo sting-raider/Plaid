@@ -31,7 +31,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 ### What is proven and what is assumed
 
 - **Instructions.** Every VR4300 form Plaid lowers and all 119 RSP instructions match the pinned ares interpreter in differential tests. The chart under [Coverage](#coverage) has the breakdown.
-- **Whole programs.** No ROM is yet proven complete with zero assumptions: **0 of 16** assumptions are retired. 12 of the 16 are checked while the game runs and stop it with a fault code if broken (for example, an indirect jump reaching an unknown target). 4 are trusted without a check: interrupts, DMA and the RSP are left out of the analysis (2); the FPU runs with `Status.FR = 0` (9); libultra is replaced by Plaid's own runtime (13); and three SM64 function names come from a symbol map (14). The [ledger](#assumption-ledger) lists all 16.
+- **Whole programs.** No ROM is yet proven complete with zero assumptions: **0 of 16** assumptions are retired. 13 of the 16 are checked while the game runs and stop it with a fault code if broken (for example, an indirect jump reaching an unknown target, or FPU code running in the wrong `Status.FR` mode, ADR-0234). 3 are trusted without a check: interrupts, DMA and the RSP are left out of the analysis (2); libultra is replaced by Plaid's own runtime (13); and three SM64 function names come from a symbol map (14). The [ledger](#assumption-ledger) lists all 16.
 
 ### Recent landings
 
@@ -104,7 +104,7 @@ Known gaps:
 
 [![instruction coverage and assumptions](docs/coverage.svg)](docs/PROGRESS.md)
 
-<sub>**These bars cover instruction translation only. They do not mean a game works.** Green: matches ares with no conditions. Amber: matches ares, and the native code checks a condition at run time and faults if it fails (loads and stores, indirect jumps and returns, trapping arithmetic, traps, `BREAK`). Orange: matches ares but relies on something nothing checks (all COP1 assumes `Status.FR = 0`). Grey: not lowered (COP0 moves, TLB, `ERET`, `SYSCALL`, `CACHE`); libultra's uses of them are replaced by Plaid's runtime. A form counts when it passes discovery, the solver and lowering in a test program (`plaid isa-coverage`) and matches ares in [spike096](spikes/096-native-slice/); RSP instructions are checked in [spike097](spikes/097-rsp-slice/). The RSP "In a real game" bar is orange because the candidate registry and the solver's RSP policy are not proven, even though microcode is taken from the ROM with every fetch checked (ADR-0188). [Progress history](docs/HISTORY.md).</sub>
+<sub>**These bars cover instruction translation only. They do not mean a game works.** Green: matches ares with no conditions. Amber: matches ares, and the native code checks a condition at run time and faults if it fails (loads and stores, indirect jumps and returns, trapping arithmetic, traps, `BREAK`, and all COP1, which faults 11 unless `Status.FR = 0`). Orange: matches ares but relies on something nothing checks. Grey: not lowered (COP0 moves, TLB, `ERET`, `SYSCALL`, `CACHE`); libultra's uses of them are replaced by Plaid's runtime. A form counts when it passes discovery, the solver and lowering in a test program (`plaid isa-coverage`) and matches ares in [spike096](spikes/096-native-slice/); RSP instructions are checked in [spike097](spikes/097-rsp-slice/). The RSP "In a real game" bar is orange because the candidate registry and the solver's RSP policy are not proven, even though microcode is taken from the ROM with every fetch checked (ADR-0188). [Progress history](docs/HISTORY.md).</sub>
 
 ## Assumption ledger
 
@@ -158,7 +158,7 @@ Assumptions behind the SM64 `--address-taken` result. "Fault n" means the native
 | 6 | Return closure: each jr ra returns to its caller's continuation | fault 5 | assumed | prove return targets per function, including tail calls and stack-slot integrity |
 | 7 | Guarded RAM data access: aligned RDRAM through KSEG0/KSEG1 or runtime-written TLB entries, no stores into code | fault 1/2/4 | assumed | prove each load and store address range |
 | 8 | Jump tables are read-only | fault 2 | assumed | prove table immutability and target identity (pointer_table blockers) |
-| 9 | COP1 usable with FR=0 (declared with --fr0) | **unchecked** | assumed | model Status.CU1 and Status.FR, or prove them from the game's own writes |
+| 9 | COP1 usable with FR=0 (declared with --fr0) | fault 11 | assumed | model Status.CU1 and Status.FR from the game's own writes; today every COP1 instruction faults 11 unless the runtime-known mode is FR = 0 (libultra threads), and the IPL3 boot context is FR = 1 (ADR-0234) |
 | 10 | COP1 stays in the modelled subset: no NaN, subnormal, out-of-range conversion or FPU exception | fault 7 | assumed | model FPU exceptions and the remaining operand classes |
 | 11 | Declared loads place their bytes before the code runs | fault 8 | assumed | derive the loads from the ROM instead of declaring them by hand |
 | 12 | Relocatable overlays run only where their relocated bytes verify; native frames pin each binding (ADR-0181/0187) | fault 2/3/8 | assumed | prove each overlay's load base and lifetime from the game's own loader |

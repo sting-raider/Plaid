@@ -176,7 +176,7 @@
     {"name": "Return closure: each jr ra returns to its caller's continuation", "state": "assumed", "checked": true, "faults": [5], "retire": "prove return targets per function, including tail calls and stack-slot integrity"},
     {"name": "Guarded RAM data access: aligned RDRAM through KSEG0/KSEG1 or runtime-written TLB entries, no stores into code", "state": "assumed", "checked": true, "faults": [1, 2, 4], "retire": "prove each load and store address range"},
     {"name": "Jump tables are read-only", "state": "assumed", "checked": true, "faults": [2], "retire": "prove table immutability and target identity (pointer_table blockers)"},
-    {"name": "COP1 usable with FR=0 (declared with --fr0)", "state": "assumed", "checked": false, "faults": [], "retire": "model Status.CU1 and Status.FR, or prove them from the game's own writes"},
+    {"name": "COP1 usable with FR=0 (declared with --fr0)", "state": "assumed", "checked": true, "faults": [11], "retire": "model Status.CU1 and Status.FR from the game's own writes; today every COP1 instruction faults 11 unless the runtime-known mode is FR = 0 (libultra threads), and the IPL3 boot context is FR = 1 (ADR-0234)"},
     {"name": "COP1 stays in the modelled subset: no NaN, subnormal, out-of-range conversion or FPU exception", "state": "assumed", "checked": true, "faults": [7], "retire": "model FPU exceptions and the remaining operand classes"},
     {"name": "Declared loads place their bytes before the code runs", "state": "assumed", "checked": true, "faults": [8], "retire": "derive the loads from the ROM instead of declaring them by hand"},
     {"name": "Relocatable overlays run only where their relocated bytes verify; native frames pin each binding (ADR-0181/0187)", "state": "assumed", "checked": true, "faults": [2, 3, 8], "retire": "prove each overlay's load base and lifetime from the game's own loader"},
@@ -186,7 +186,7 @@
     {"name": "BREAK is never executed", "state": "assumed", "checked": true, "faults": [9], "retire": "model the Breakpoint exception"}
   ],
   "instruction_rules": [
-    {"state": "unchecked", "groups": ["FPU arith", "FPU compare", "FPU convert", "COP1 move"], "label": "COP1 is usable with Status.FR = 0 (ledger: declared, unchecked)"},
+    {"state": "checked", "groups": ["FPU arith", "FPU compare", "FPU convert", "COP1 move"], "label": "COP1 is usable with Status.FR = 0 (each COP1 instruction faults 11 otherwise, ADR-0234)"},
     {"state": "checked", "groups": ["Load/store", "Trap"], "mnemonics": ["jr", "jalr", "add", "addi", "sub", "dadd", "daddi", "dsub", "break"], "label": "guarded RAM access, indirect-jump and return closure, no overflow, no trap, no BREAK (each aborts with a fault code)"}
   ],
   "rsp_obligations": [
