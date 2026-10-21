@@ -504,7 +504,20 @@ def raw_pi_dma(exe, cc):
         assert lines['stop'] == stop and run.returncode == (stop != 'exit'), (run.stdout, run.stderr)
         assert lines['words'] == ([0xCAFEF00D, 0] if stop == 'exit' else [0, 0]), lines
         assert lines['pi_dma'] == (stop == 'exit') and rom.read_bytes() == original, lines
-    print('raw handle PI DMA: o32 stack size, cartridge bytes and return value; writes and out-of-range reads refused')
+    # A TLB-mapped destination is written at the physical page libultra's
+    # osVirtualToPhysical names, as the PI does (ADR-0224).
+    program = [*li(A.sp, 0x80007F00), *poke(handle + 0xC, 0xB0000000),
+               *call('osMapTLB', 0, 0, 0xE0200000, 0x6000, 0xFFFFFFFF, 0xFFFFFFFF),
+               *call('osEPiRawStartDma', handle, 0, 0x40, 0xE0200000, 4),
+               *log_word(0x80006000), *log_v0(), *A.DONE,
+               'osMapTLB', A.jr(A.ra), A.nop, 'osEPiRawStartDma', A.jr(A.ra), A.nop]
+    native = build(exe, cc, 'raw_pi_tlb', program, ['osMapTLB', 'osEPiRawStartDma'])
+    run = subprocess.run([str(native), '--rom', str(rom), '--dump', hex(LOG), '2'],
+                         capture_output=True, text=True, timeout=30)
+    lines = {k: v for line in run.stdout.splitlines() if line.startswith('{') for k, v in json.loads(line).items()}
+    assert lines['stop'] == 'exit' and run.returncode == 0, (run.stdout, run.stderr)
+    assert lines['words'] == [0xCAFEF00D, 0] and rom.read_bytes() == original, lines
+    print('raw handle PI DMA: o32 stack size, cartridge bytes and return value; TLB-mapped destination; writes and out-of-range reads refused')
 
 
 SP_BOOT_PROGRAM = [*li(A.sp, 0x80007F00), *(w for a in (0xA4000000, 0xA4000040, 0xA4001000, 0xA4001FFC)

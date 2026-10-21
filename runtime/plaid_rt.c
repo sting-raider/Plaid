@@ -859,7 +859,14 @@ static void dma_wrote(u32 p, u32 n) {
     }
   }
 }
-static void dma_wr(u32 va, const u8 *bytes, u32 n) { if (n) dma_wrote(v2p(va), n); wr(va, bytes, n); }
+/* The PI writes the physical RAM libultra names with osVirtualToPhysical, so
+   a TLB-mapped destination lands on its mapped page (ADR-0224). */
+static void dma_wr(u32 va, const u8 *bytes, u32 n) {
+  u32 p = v2p(va);
+  if (p > PLAID_RAM_SIZE || n > PLAID_RAM_SIZE - p || plaid_runtime_write(S, p, n, va)) finish(1, "runtime write refused");
+  if (n) dma_wrote(p, n);
+  memcpy(S->ram + p, bytes, n);
+}
 #ifdef PLAID_RT64
 /* A completed renderer readback bypasses D-cache, just like device DMA. */
 static int gfx_writeback(void *context, u32 p, u32 n, const u8 *bytes) {
