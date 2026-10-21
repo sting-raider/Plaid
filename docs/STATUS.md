@@ -14,6 +14,9 @@ BK/F-Zero X/MM complete maps are byte-identical to ADR-0235 controls; separate
 native regressions remain untouched. ISA stays 203/209. See
 research/mapped-code-discovery.md for synthetic/reference/mutation gates,
 timings and the open replay-projection/text/lifetime/overlap obligations.
+Production `438a0c2d` landed by exact-head CAS after all five local gate
+steps passed (321.6 s total); the full Rust suite ran 908 tests, one ignored.
+Final GoldenEye/MK64 pipelines took 52.911/217.063 s and refused at analysis.
 
 ## Bounded native COP0 state (partial; ADR-0235)
 

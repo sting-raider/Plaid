@@ -134,3 +134,59 @@ fail-closed boundaries, byte/source trust, runtime overlap limitations, bounded
 work and unchanged ordinary controls. No correctness objection remains within
 the declared partial scope. README will receive the actual production commit
 hash in a separately validated direct-child documentation landing.
+
+## Exact-tree integration receipt (2026-10-22)
+
+Production commit: 438a0c2d7cfc7aaf8f8a518530c6e04e465300fb, author sting-raider
+<alizaydsab@gmail.com>, no AI trailer. Its parent is exactly
+20b8ddf78765c9313996d8e5dee9fde0a3466db1; validated tree 56c82ba20157751b60c9c4a6194ee9e6788d5600.
+Fresh fetch confirmed that parent before the expected-head push; CAS landed
+and a second fetch verified the production SHA. No main drift was present.
+
+All five final production-tree gate steps return **0**: fmt 4.3 s, Clippy
+18.6 s, full workspace tests 28.4 s, CLI 19.9 s, runtime 250.4 s; summed
+**321.6 s**. cargo test really compiled plaid-lower and the CLI for that exact
+code, then ran the complete unfiltered suite: **908 passed, one ignored**.
+The complete native/reference runtime contracts, including mapped fetch,
+physical-source refusal and byte/generation/frame mutations, pass. The
+progress.py --check succeeds, with no coverage data change. The pinned ares
+checkout is clean at its locked revision. Retained gate logs:
+target/mapped-0236/gate-438a0c2d/ and landed-438a0c2d.json.
+
+Final normal --rt64 --seconds 60 pipeline timings: GoldenEye 52.911 s,
+MK64 217.063 s; both return 1 at analysis refusal. GoldenEye remains
+3716 blocks / OPEN 341 ordinary, 331 residual (10 sites); MK64 remains 40610
+blocks / OPEN 13 ordinary, 10 residual (three sites). No native executable or
+window is produced by either command; no native VI, frame or PCM result is
+claimed. The longer MK64 wall time relative to its first 123.877 s rerun is
+uncontrolled concurrent work, not evidence of an analysis algorithm change.
+GE's old replay 1.625 s and the final replay remain bounded observations;
+no causal speedup is claimed from the separately timed control-map runs.
+
+README now identifies the actual production commit and these current game
+rows. This receipt/test follow-up is itself required to pass all five
+local gate steps before its direct-child CAS; its final SHA/gate JSON is
+retained under target/mapped-0236 and reported in the closeout. The follow-up changes no production Rust, runtime implementation or declared
+partial acceptance scope.
+
+### Scheduler fixture timing repair in the follow-up
+
+The first follow-up gate returned fmt/Clippy/test/CLI zero and runtime 1 at
+the initial scheduler assertion (8.7 s); the complete failure is preserved in
+target/mapped-0236/docs-gate-first-failure/. The log was [1,2,3,7,4,5,153]
+instead of [1,2,3,7,4,5,6,16,8,153]. The native runtime legitimately delivered
+VI to the higher-priority waiting thread before setup completed; this is not
+a mapped-code or game regression. Twenty immediate unchanged-executable reruns
+all passed, so an explicit controlled delay was used to test the hypothesis.
+
+An ignored synthetic variant puts a long native guest loop after log(5): the
+old fixture deterministically produces the same early-VI failure, while moving
+its osSetEventMesg registration after log(8) produces the entire expected log.
+The fixture now makes exactly that move, ensuring setup completes before its
+VI handler can run. Scheduler behavior, timeout, expected sequence and every
+assertion remain unchanged. No artificial delay is added to the canonical
+suite and no runtime implementation is modified. This removes a timing race
+from the required local gate instead of suppressing a failure or accepting a
+retry. Evidence: scheduler-baseline-trials.json (20/20),
+scheduler-delay-proof.json and scheduler-delay-proof.log under
+target/mapped-0236. The complete five-step gate is rerun on this final tree.

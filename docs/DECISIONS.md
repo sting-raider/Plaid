@@ -6871,3 +6871,11 @@ overlap, wide/ASID mappings, ERET/event effects and broader closure remain open.
 The core-only boot evaluator still refuses unknown COP0 startup state; this
 milestone extends the pinned reset harvest. ISA coverage stays 203/209; no
 whole-ROM or new native-complete acceptance is claimed.
+
+ADR-0236 integration receipt: production 438a0c2d is a direct child of
+20b8ddf7, landed by expected-head CAS after fmt/Clippy/full workspace tests/
+CLI/runtime all returned zero (4.3/18.6/28.4/19.9/250.4 seconds). Full suite:
+908 passed, one ignored. Final GoldenEye/MK64 normal RT64 pipelines refuse
+at analysis, 52.911/217.063 seconds; results and limits above are unchanged.
+README's follow-up uses this real production SHA and receives a fresh full
+five-step local gate before its own canonical write. No new acceptance claim.
