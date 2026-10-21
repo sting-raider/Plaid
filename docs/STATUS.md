@@ -1,5 +1,11 @@
 # Status
 
+## Short table-named RSP overlays (ADR-0243)
+
+Overlay-table entries of 64 bytes or more become RSP candidates when they are
+all code with an RSP operation. Mario Kart 64 runs natively to VI 526 (224
+graphics, 517 audio tasks) with compiled graphics microcode, then faults 3.
+
 ## Boot EntryHi (ADR-0242)
 
 EntryHi is seeded from the pinned-ares boot replay and kept across runtime

@@ -77,16 +77,22 @@ pub fn generate(
             let variants = [(0, 0x1000, 0), (0, 0xf80, 0x80)]
                 .into_iter()
                 .chain(boot)
-                .chain(overlays.iter().copied());
-            for (offset, requested_size, imem) in variants {
+                .map(|v| (v, false))
+                .chain(overlays.iter().map(|&v| (v, true)));
+            for ((offset, requested_size, imem), from_table) in variants {
                 let address = root.0.checked_add(offset).ok_or("RSP address overflow")?;
                 let text: Vec<_> = (0..requested_size)
                     .step_by(4)
                     .map_while(|n| image.word(GuestAddr(address + n)))
                     .flat_map(u32::to_be_bytes)
                     .collect();
-                if text.len() != requested_size as usize || !plaid_lower::rsp::plausible_text(&text)
-                {
+                // An overlay table states its entry's extent (ADR-0243).
+                let plausible = if from_table {
+                    plaid_lower::rsp::plausible_overlay(&text)
+                } else {
+                    plaid_lower::rsp::plausible_text(&text)
+                };
+                if text.len() != requested_size as usize || !plausible {
                     continue;
                 }
                 let size = text.len();

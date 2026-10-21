@@ -123,7 +123,7 @@ pub fn overlay_descriptors(
         if image.word(at).is_some()
             && (0x1000..0x2000).contains(&dest)
             && dest.is_multiple_of(8)
-            && size >= 128
+            && size >= 64
             && size <= 0x2000 - dest
         {
             out.insert((offset, size, dest & 0xfff));

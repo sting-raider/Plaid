@@ -208,6 +208,30 @@ pub fn reachable_words(text: &[u8], imem: u32) -> Result<RspReachability, String
     })
 }
 
+/// Content filter for text an SDK overlay table names (ADR-0243). The table
+/// already says where and how long it is, so an overlay of 64 bytes or more passes when every
+/// word is code and at least one is an RSP-specific operation.
+pub fn plausible_overlay(text: &[u8]) -> bool {
+    let words: Vec<_> = text
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_be_bytes(*w))
+        .collect();
+    text.len() >= 64
+        && text.len().is_multiple_of(4)
+        && words.iter().any(|&w| rsp_specific(w))
+        && words
+            .iter()
+            .enumerate()
+            .all(|(i, &w)| is_control(w) || simple(w, i as u32 * 4, "").is_ok())
+}
+
+fn rsp_specific(w: u32) -> bool {
+    (w >> 26 == 16 && matches!((w >> 21) & 31, 0 | 4) && (w >> 11) & 31 < 16)
+        || (w >> 26 == 18 && w & (1 << 25) != 0)
+}
+
 /// Content filter for ROM pointer hints. False negatives remain unsupported;
 /// this is deliberately not evidence of whole-ROM RSP closure.
 pub fn plausible_text(text: &[u8]) -> bool {
@@ -220,13 +244,7 @@ pub fn plausible_text(text: &[u8]) -> bool {
         .iter()
         .map(|w| u32::from_be_bytes(*w))
         .collect();
-    let specific = words
-        .iter()
-        .filter(|&&w| {
-            (w >> 26 == 16 && matches!((w >> 21) & 31, 0 | 4) && (w >> 11) & 31 < 16)
-                || (w >> 26 == 18 && w & (1 << 25) != 0)
-        })
-        .count();
+    let specific = words.iter().filter(|&&w| rsp_specific(w)).count();
     specific >= 2
         && words
             .iter()
