@@ -14,35 +14,35 @@ Plaid is a research tool for automatic Nintendo 64 ROM-to-native recompilation. 
 
 ## Progress report
 
-*As of main `a5e3eb9`, 2026-10-17. Every row traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). "Natively" means the lowered game linked with Plaid's runtime: no interpreter, no JIT, and every unproven state is a fail-closed fault.*
+*As of main `fdd43ff`, 2026-10-21. Every row traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). "Natively" means the lowered game linked with Plaid's runtime: no interpreter, no JIT, and every unproven state is a fail-closed fault.*
 
 **Two finish lines.**
-1. **ROM in, game runs:** you supply only a ROM. Plaid discovers the code, proves it closed under a declared assumption scope, lowers it to C and builds the executable. **Reached for Majora's Mask and F-Zero X** (the build needs no hand input beyond the scope flags), not yet for SM64 or OoT, and no game has been played to the end.
+1. **ROM in, game runs:** you supply only a ROM. Plaid discovers the code, proves it closed under a declared assumption scope, lowers it to C and builds the executable. **Reached for Majora's Mask and F-Zero X** (the build needs no hand input beyond the scope flags) and, in a finite 60 s run, for Banjo-Kazooie (ADR-0195..0200), not yet for SM64 or OoT, and no game has been played to the end.
 2. **ROM in, provably complete with zero assumptions:** the whole ROM is `CLOSED` with no assumption. **Not reached: 0 of 16 assumptions retired, no ROM is whole-ROM `CLOSED`.**
 
 ### Per game
 
-| | Super Mario 64 (USA) | Ocarina of Time (USA 1.2) | Majora's Mask (USA) | F-Zero X (USA) |
-| --- | --- | --- | --- | --- |
-| Inputs by hand | code segment, 2 `--loads`, local decomp map for 3 runtime names | code segment, 2 `--loads` (earlier builds) | **none**: loads and runtime inferred from the ROM (ADR-0183) | **none**: inferred from the ROM (ADR-0184/0185) |
-| Closure, scope `--address-taken` | ✅ `CLOSED`, 45,419 blocks (ADR-0153..0156) | ✅ `CLOSED`: fixed image 29,542 blocks (ADR-0175); with 468 overlays 154,414 blocks (ADR-0180) | ✅ `CLOSED` with overlays (ADR-0183) | ✅ `CLOSED`, 27,621 blocks, 0 scoped blockers (ADR-0185) |
-| Whole-ROM, no assumptions | OPEN, 4,820 blockers | OPEN, 16,338 with overlays | OPEN, 21,313 | OPEN, 2,995 |
-| How far it runs natively | 59.9 VI/s gameplay with input and saves | boot logo, title screen, file select (ADR-0182) | intro and Clock Town attract scene; erased-FlashRAM run passes the old heap-overlay fault and reaches VI 5358 at the 90 s limit, fault 0 (ADR-0187) | visible 65 s races, vehicle markings and shading, no fault (ADR-0186) |
-| Graphics | RT64 display-list HLE | RT64 display-list HLE | RT64 display-list HLE | compiled graphics microcode, raw RDP to RT64 (`--rsp-gfx`, ADR-0186) |
-| RSP microcode source | from the ROM; 20 s run, fault 0, nonzero PCM (ADR-0188) | ROM-only run refuses at VI 2 on a protected RSP DMA write, so the title and file select above predate it (ADR-0188) | from the ROM; 60 s run, fault 0, nonzero PCM (ADR-0188) | from the ROM, with `--rsp-gfx`; 20 s run, fault 0, nonzero PCM (ADR-0188) |
-| Audio | native: the game's own RSP microcode lowered to C, played via SDL (ADR-0169/0170) | native, lowered microcode (ADR-0182) | restored, PCM peak 32569 in a 60 s run; a real audio task matches ares (ADR-0189) | native, in the same race runs (ADR-0186) |
-| Saves | EEPROM | SRAM | FlashRAM | in the race runs (ADR-0186) |
-| Known stop points | none recorded in a 90 s run | beyond file select is untested | none since ADR-0187; the earlier stop (heap overlay at VI 3188) is fixed. This is finite execution, not a loader-lifetime proof | none in 65 s runs |
+| | Super Mario 64 (USA) | Ocarina of Time (USA 1.2) | Majora's Mask (USA) | F-Zero X (USA) | Banjo-Kazooie (USA) (Rev 1) |
+| --- | --- | --- | --- | --- | --- |
+| Inputs by hand | code segment, 2 `--loads`, local decomp map for 3 runtime names | code segment, 2 `--loads` (earlier builds) | **none**: loads and runtime inferred from the ROM (ADR-0183) | **none**: inferred from the ROM (ADR-0184/0185) | **none**: ROM-only pipeline (ADR-0190..0192, ADR-0195..0200) |
+| Closure, scope `--address-taken` | ✅ `CLOSED`, 45,419 blocks (ADR-0153..0156) | ✅ `CLOSED`: fixed image 29,542 blocks (ADR-0175); with 468 overlays 154,414 blocks (ADR-0180) | ✅ `CLOSED` with overlays (ADR-0183) | ✅ `CLOSED`, 27,621 blocks, 0 scoped blockers (ADR-0185) | ✅ `CLOSED`, 80,850 blocks, 0 blockers (ADR-0195..0200) |
+| Whole-ROM, no assumptions | OPEN, 4,820 blockers | OPEN, 16,338 with overlays | OPEN, 21,313 | OPEN, 2,995 | not in the ledger below |
+| How far it runs natively | 59.9 VI/s gameplay with input and saves | boot logo, title screen, file select (ADR-0182) | intro and Clock Town attract scene; erased-FlashRAM run passes the old heap-overlay fault and reaches VI 5358 at the 90 s limit, fault 0 (ADR-0187) | visible 65 s races, vehicle markings and shading, no fault (ADR-0186) | visible 60 s run: Nintendo opening and title, VI 3578, 1270 graphics tasks, 1785 audio tasks, fault 0 (ADR-0200); new-game puzzle transitions draw colored interiors in two 75 s runs (ADR-0201) |
+| Graphics | RT64 display-list HLE | RT64 display-list HLE | RT64 display-list HLE | compiled graphics microcode, raw RDP to RT64 (`--rsp-gfx`, ADR-0186) | RT64 display-list HLE; the compiled-RSP graphics probe faults on its first task |
+| RSP microcode source | from the ROM; 20 s run, fault 0, nonzero PCM (ADR-0188) | ROM-only run passes the former protected RSP DMA write (ADR-0219) and stops at unlowered RSP IMEM 0x080: VI 3, CPU fault 0, no graphics or PCM, so the title and file select above predate it | from the ROM; 60 s run, fault 0, nonzero PCM (ADR-0188) | from the ROM, with `--rsp-gfx`; 20 s run, fault 0, nonzero PCM (ADR-0188) | from the ROM: 41 ROM-derived RSP texts, 60 s run, fault 0, PCM peak 32767 (ADR-0188) |
+| Audio | native: the game's own RSP microcode lowered to C, played via SDL (ADR-0169/0170) | native, lowered microcode (ADR-0182) | restored, PCM peak 32569 in a 60 s run; a real audio task matches ares (ADR-0189) | native, in the same race runs (ADR-0186) | compiled RSP audio, PCM peak 32767 in the 60 s run |
+| Saves | EEPROM | SRAM | FlashRAM | in the race runs (ADR-0186) | EEPROM (ADR-0196) |
+| Known stop points | none recorded in a 90 s run | beyond file select is untested | none since ADR-0187; the earlier stop (heap overlay at VI 3188) is fixed. This is finite execution, not a loader-lifetime proof | none in 65 s runs | none in the 60 s and 75 s runs. Finite execution, not full gameplay, pixel-perfect rendering or verified mixing |
 
 ### Distance to "ROM in, game runs"
 
 | Remaining hand input | Status | What retires it |
 | --- | --- | --- |
-| **RSP microcode** is derived from the ROM by default; IMEM snapshots are oracle-only (ADR-0188) | 🟨 partial: SM64, MM and F-Zero X run with ROM-derived microcode; OoT refuses at VI 2 on a protected RSP DMA write (ADR-0188) | resolve OoT's bootstrap path without a game exception, broaden task, overlay and DMA coverage, and prove the solver's general RSP policy |
+| **RSP microcode** is derived from the ROM by default; IMEM snapshots are oracle-only (ADR-0188) | 🟨 partial: SM64, MM, F-Zero X and BK run with ROM-derived microcode; OoT passes its protected RSP DMA write since ADR-0219 and stops at unlowered RSP IMEM 0x080 (VI 3, no graphics or PCM) | lower the RSP code OoT reaches at IMEM 0x080, broaden task, overlay and DMA coverage, and prove the solver's general RSP policy |
 | Code segment address and entry point (SM64, OoT) | inferred for MM and F-Zero X (ADR-0183/0184) | run the same inference on SM64 and OoT, which lack a usable file table for it |
-| `--loads` files (SM64: 2, OoT: 2) | inferred for MM and F-Zero X; SM64's inference finds the engine segment but not goddard (ADR-0184). On unseen ROMs, Banjo-Kazooie is scoped OPEN with 1 blocker (ADR-0190..0192) and five others stop earlier ([`research/rom-sweep.md`](research/rom-sweep.md)) | broader load inference |
+| `--loads` files (SM64: 2, OoT: 2) | inferred for MM and F-Zero X; SM64's inference finds the engine segment but not goddard (ADR-0184). On unseen ROMs, Banjo-Kazooie is scoped `CLOSED` and runs natively (ADR-0190..0200), Paper Mario is scoped OPEN (ADR-0202..0217) and four others are scoped OPEN with no native emission ([`research/rom-sweep.md`](research/rom-sweep.md)) | broader load inference |
 | SM64 decomp map for three runtime names (ADR-0171) | local, never used to find code | identify them from the ROM's bytes (assumption 14) |
-| Scope flags (`--address-taken`, `--fr0`) | chosen by the user; `native.py` refuses to build unless the scope is `CLOSED` | none: the scope is the declared assumption set |
+| Scope flags (`--address-taken`, `--fr0`) | chosen by the user; `native.py` refuses to build unless the scope is `CLOSED`, except the validation-only `--residual-dispatch` mode, which also builds a map whose only blockers are unresolved indirect sites and records `native_complete: false` (ADR-0218) | none: the scope is the declared assumption set |
 | libultra as host runtime (HLE) | covers the functions SM64, OoT and MM call; a game calling another fails to link | differential-test each function (assumption 13) |
 
 Only Windows has been tested with RT64. Only controller 1 works, with no rumble.
@@ -55,6 +55,26 @@ Only Windows has been tested with RT64. Only controller 1 works, with no rumble.
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0220 | `4896e16`, `fdd43ff` | Boot fetch coverage and ROM-word discovery roots; Paper Mario's residual run passes the boot stub (partial) |
+| 0219 | `12f70c0`, `1ea8aff` | Inactive fixed text revoked through the shared CPU/device write gate; OoT passes its RSP self-patch |
+| 0218 | `0fa9c9a`, `bf825b6` | Validation-only `--residual-dispatch` mode; Controller Pak reports no pak, cartridge-space CPU writes ignored, full cartridge addresses in EPi DMA |
+| 0217 | `66a52d8` | Frame-local table-pointer reloads proven without alias assumptions (partial) |
+| 0216 | `7f09341` | Source-bound callee effects reused within one immutable table walk |
+| 0215 | `171a6f5` | Mapped callee effects bound to checked source paths |
+| 0214 | `8645d1c` | Paired table index and byte-offset updates proven; checked fixed returns |
+| 0213 | `7c12a36` | Captured table values preserved through checked guest calls |
+| 0212 | `2342395` | Branch flag values versioned; impossible paths pruned |
+| 0211 | `309b091` | Callee proof paths end at a checked BREAK |
+| 0210 | `2144c30` | No-write guest-callee summaries carry table bases |
+| 0209 | `bbf99fc` | Longer bounded predecessor paths for table proofs |
+| 0208 | `4075dcc` | Independently evidenced internal decode entries retained |
+| 0207 | `9d19914` | Inductive unchanged table-dispatch predicates |
+| 0206 | `5cc8d13` | Scheduled bounded indexed dispatch proofs |
+| 0205 | `94a4d7c` | Unchanged TLB executable sources and guarded tail cells |
+| 0204 | `435d7ec` | Raw copy-call and indexed source candidates refined |
+| 0202, 0203 | `1a465af` | Bounded raw section slots, exact cache SDK identities, batched first-fetch replays |
+| 0201 | `109f467` | Completed renderer framebuffer transfers return to native RAM |
+| 0195..0200 | `76df640` | Banjo-Kazooie reaches its native intro with restored backgrounds (post-IPL SP memory, EEPROM timer queue, VI code as guest code, IPL3 RDRAM prefix) |
 | 0194 | `a5e3eb9` | Identification retains verified per-copy SDK scalar address bindings |
 | 0193 | `b6006cb` | Restoring a saved zero interrupt bit keeps an enabled one enabled |
 | 0192 | `37399f3` | Paired-stream executable slots derived and verified; Banjo-Kazooie 29 to 1 scoped blocker |
@@ -215,8 +235,9 @@ ROMs stay local and are never committed. Per-ROM numbers and how to reproduce th
 | Majora's Mask (USA) | No hand-written input: `scripts/native.py` infers its loads and runtime, and it is `CLOSED` with its overlays under the address-taken scope (ADR-0183). Natively with RT64 it plays the mask intro and the Clock Town attract scene, and, since ADR-0187, passes its former heap-overlay stop and runs 90 s with no fault. Audio is restored (ADR-0189). |
 | F-Zero X (USA) | From the ROM alone, 27,621 blocks and zero blockers under the address-taken scope (ADR-0185). Native graphics microcode feeds RT64 raw RDP commands; visible 65-second races show vehicle markings and shading without a runtime fault (ADR-0186). |
 | Mario Party 2 (USA) | Boot window: 712 blocks and 29 blockers. 27 sit behind an `osInitialize` whose SDK build n64sym lacks; 2 are function-pointer calls. |
-| Banjo-Kazooie (USA) (Rev 1) | No hand input. Boot-produced images are recovered with pinned ares (ADR-0190) and 13 executable files that share one RAM slot come from the ROM's own catalog (ADR-0192): 33,796 blocks, scoped OPEN with 1 blocker, an unsupported `MFC0` Status read in `__osGetSR` at `80259d30`. It stops before lowering; native execution is unmeasured. |
-| Paper Mario, Star Fox 64, Mario Kart 64, GoldenEye 007, Rogue Squadron (USA) | Surveyed with the ROM-only pipeline (with Banjo-Kazooie above, six in all): every ROM is scoped OPEN and stops before lowering, on missing executable images and loads, system instructions or unproven indirect sites. Paper Mario is down to 164 blockers (ADR-0191). No runtime was reached. See [`research/rom-sweep.md`](research/rom-sweep.md). |
+| Banjo-Kazooie (USA) (Rev 1) | No hand input. The ROM-only pipeline is scoped `CLOSED` with 0 blockers over 80,850 blocks and 41 ROM-derived RSP texts (ADR-0192, ADR-0195..0200). A visible 60 s native run with RT64 and compiled RSP audio reaches VI 3578 with 1270 graphics tasks and 1785 audio tasks, fault 0, PCM peak 32767; the Nintendo opening backgrounds and the new-game puzzle transitions draw (ADR-0200, ADR-0201). This is finite execution, not full gameplay or whole-ROM completion; no assumption is retired, and the compiled-RSP graphics probe faults on its first task. |
+| Paper Mario (USA) | Scoped OPEN with 7 blockers over 56,851 blocks and 162 loads after the ADR-0202..0217 table-dispatch proofs (164 blockers on 2026-10-18); remaining indexed dispatches still prevent native emission and no Paper Mario native run is accepted. The validation-only `--residual-dispatch` run (ADR-0218, ADR-0220) closes with 0 blockers and 8 residual sites, passes the boot stub (154 PI DMAs, 11 threads) and faults 3 at a checksum-computed call whose target function discovery never reached; the artifact records `native_complete: false` ([`research/paper-mario-native-frontier.md`](research/paper-mario-native-frontier.md)). |
+| Star Fox 64, Mario Kart 64, GoldenEye 007, Rogue Squadron (USA) | Surveyed with the ROM-only pipeline on 2026-10-18: each is scoped OPEN (GoldenEye 7 blockers, Mario Kart 64 30, Star Fox 64 298, Rogue Squadron 210) and refuses native emission; no runtime was reached. See [`research/rom-sweep.md`](research/rom-sweep.md). |
 
 <details>
 <summary><b>Native runs: finding and fixing what breaks</b></summary>
@@ -253,8 +274,8 @@ Known gaps:
 
 - Overlay binding is itself an assumption (ledger row 12), and every overlay's load base is found at run time, not proven. MM's heap-overlay stop is fixed (ADR-0187), but that is finite execution, not a lifetime proof.
 - The runtime covers the libultra functions that SM64, OoT and MM call. A game that calls a declared function the runtime lacks fails to link.
-- Saves are 4 Kbit EEPROM, 256 Kbit SRAM and 1 Mbit FlashRAM (no 16 Kbit EEPROM or Controller Pak). Only controller 1 works, and there is no rumble.
-- RSP microcode is derived from the ROM (ADR-0188): candidate texts come from its images and SDK-style descriptors, a task selects one by a unique match on the words reachable from its entry, and every later fetch is checked against the lowered word. The candidate registry is incomplete, OoT refuses at VI 2 on a protected RSP DMA write, and `--rsp-dump` saves IMEM images only as oracle inputs. Graphics tasks use RT64 display-list HLE by default; `--rt64 --rsp-gfx` runs their compiled microcode and sends its raw RDP output to RT64. Audio plays through SDL with RT64, or goes to a WAV file.
+- Saves are 4 Kbit EEPROM, 256 Kbit SRAM and 1 Mbit FlashRAM (no 16 Kbit EEPROM; every Controller Pak operation reports no pak, ADR-0218). Only controller 1 works, and there is no rumble.
+- RSP microcode is derived from the ROM (ADR-0188): candidate texts come from its images and SDK-style descriptors, a task selects one by a unique match on the words reachable from its entry, and every later fetch is checked against the lowered word. The candidate registry is incomplete, OoT passes its protected RSP DMA write since ADR-0219 and stops at unlowered RSP IMEM 0x080, and `--rsp-dump` saves IMEM images only as oracle inputs. Graphics tasks use RT64 display-list HLE by default; `--rt64 --rsp-gfx` runs their compiled microcode and sends its raw RDP output to RT64. Audio plays through SDL with RT64, or goes to a WAV file.
 - Only Windows has been tested with RT64.
 
 ## Build
