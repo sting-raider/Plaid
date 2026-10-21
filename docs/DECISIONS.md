@@ -6558,3 +6558,49 @@ observation alone does not close the originating indirect site's target set.
 Synthetic regressions cover a called entry after a `j .` wait loop, rejection
 when its replay evidence is removed, rejection when `executed_start` fails,
 and mutation checks showing both discovery and solver clauses are required.
+
+
+## ADR-0227: source-checked relocated replay sites and bounded call coverage
+
+Date: 2026-10-21.
+
+Analysis PCs in a composed image can differ from the addresses a replay CPU
+fetches. Harvest projects open call sites using the ProgramMap's declared
+load-image base and linked slot ranges; it requests both KSEG aliases. At the
+actual instruction observation, sites and targets are projected back through
+that same declaration set. A linked raw/segment source must match replay RAM
+byte-for-byte, with no conflicting resident I-cache words, before its mapping
+can contribute an observed root. Shared slots select only a unique matching
+map address; missing or multiple matches refuse the observation. Fixed images
+retain their declared addresses. Undiscovered targets retain their runtime
+address for subsequent discovery. Numeric coincidence is not a slot identity.
+
+Supported linked sources are unmodified raw bytes and format-bounded segment
+or TLB-raw text. Raw ranges conservatively compare the entire declaration.
+Compressed slots, dynamically placed relocating overlays, non-direct-mapped
+runtime sources and multiple composed load images are not guessed: unsupported
+open-site projection refuses harvest and unmatched target bindings contribute
+no root. This is a conservative observation limit, not a new native binding
+rule or a claim of provenance from equal bytes.
+
+Replay retains the default 100M instruction calls. With requested open calls,
+it may extend observation up to 1B calls or 3600 VI, stopping after the default
+budget once every requested runtime site has an admitted observation. Earlier
+uncovered-image stops still return immediately. Beyond 100M only call roots
+are collected; snapshot capture stays within its existing reproducible budget
+and Rust verification contract. Receipts report projected bindings, observed
+and unobserved runtime sites, consumed steps/VI, stop reason and replay time.
+The outer discovery loop remains bounded. A budget ceiling is not coverage.
+
+Observations remain discovery roots, never finite-target closure certificates.
+Native dispatch still rejects unknown targets; residual artifacts continue to
+state native_complete: false. No runtime guest decoder, per-game production
+constant, reference code reuse or additional dependency is introduced. The
+analysis adapter continues to use the separately built pinned ISC ares source
+with its notices; no ares code is copied into the native artifact.
+
+Verification: synthetic fixed/relocated sites, shared-slot source selection,
+equal-byte ambiguity, target projection, KSEG aliases, missing/unsupported
+bindings, malformed inputs, finite-budget misses and later observations.
+Mutation checks and local gate/game measurements are recorded in
+research/paper-mario-native-frontier.md.

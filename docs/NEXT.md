@@ -1,16 +1,19 @@
 # Next
 
-## Continue after replay-entry validation (ADR-0226)
+## Continue after relocated replay call coverage (ADR-0227)
 
-Paper Mario passes the former observed-call frontier. Next, establish evidence
-for the later checksum-derived call from relocated text: harvest currently
-lists synthetic map PCs while the oracle executes linked PCs, and the finite
-replay stops before the native frontier. Validate binding-aware site selection
-and later replay coverage before extending dispatch. Keep observations separate
-from closure certificates and unknown targets fail-closed. Establish non-silent
-PCM independently; the repeated visible run's captured audio is silent. See
-research/paper-mario-native-frontier.md for the exact stop and receipts.
+Paper Mario now passes the checksum call at map 808be154. The next visible
+residual stop is JR v0 at map 80a08aa8 (runtime 802c8aa8), targeting runtime
+802c8ab8 in the same slot. It has no candidate/observed targets or closure
+certificate. Establish the control-flow evidence and lower/admit the reachable
+case without treating a computed JR as a function-call root. Keep unknown
+transfers fail-closed and observations separate from exhaustive target proofs.
 
+PCM remains silent; establish non-silent audio independently. Extend observation
+to other formats only with source-aware binding verifiers: compressed/dynamic
+placements and TLB source translation are still conservatively unsupported by
+the new slot observer. See research/paper-mario-native-frontier.md for finite
+coverage, control comparisons and exact receipts.
 
 ## Extend ROM-derived RSP coverage after self-patching
 

@@ -22,6 +22,46 @@ static std::vector<std::array<u32, 2>> covered;
 static u32 uncoveredEntry = 0;
 static std::set<u32> openSites;
 static std::set<std::pair<u32, u32>> observedTargets;
+static std::set<u32> seenSites;
+static std::set<u32> requestedSites;
+struct ReplayBinding { u32 mapped, runtime, size; long long source; };
+static std::vector<ReplayBinding> bindings;
+static std::vector<u8> sourceRom;
+static u32 canonical(u32 pc) {
+  return pc >= 0x80000000u && pc < 0xc0000000u ? 0x80000000u | (pc & 0x1fffffffu) : pc;
+}
+static bool bindingMatches(const ReplayBinding& b) {
+  if(b.source == -2) return true; // fixed image, no competing slot identity
+  u32 runtime = canonical(b.runtime);
+  if(b.source < 0 || runtime < 0x80000000u || runtime >= 0x80800000u ||
+     (u64)runtime + b.size > 0x80800000u || (u64)b.source + b.size > sourceRom.size()) return false;
+  u32 p = runtime & 0x1fffffffu;
+  for(u32 i = 0; i < b.size; i++)
+    if(rdram.ram.read<Byte>(p + i, RBusDevice::ARES_DEBUGGER) != sourceRom[b.source + i]) return false;
+  // Source identity must describe executed cache bytes too, not only new RAM.
+  for(auto& line : cpu.icache.lines) {
+    if(!line.valid()) continue;
+    u32 a = (line.tagKey & ~1u) | line.index;
+    for(u32 i = 0; i < 8; i++) {
+      u32 at = a + i * 4;
+      if(at >= p && at < p + b.size && line.words[i] != rdram.ram.read<Word>(at, RBusDevice::ARES_DEBUGGER)) return false;
+    }
+  }
+  return true;
+}
+static bool project(u32 pc, u32& mapped) {
+  std::set<u32> matches;
+  bool declared = false;
+  for(auto& b : bindings) {
+    u32 offset = canonical(pc) - canonical(b.runtime);
+    if(offset >= b.size) continue;
+    declared = true;
+    if(bindingMatches(b)) matches.insert(b.mapped + offset);
+  }
+  if(!declared) { mapped = pc; return true; } // not yet discovered RAM
+  if(matches.size() != 1) return false;
+  mapped = *matches.begin(); return true;
+}
 static std::array<std::array<u32, 2>, 2> previousFetches{};
 static std::vector<std::array<u32, 3>> dma;
 static std::vector<u8> sp; // DMEM then IMEM at the first entry fetch
@@ -60,8 +100,16 @@ static void observe(u64 address, u32 word) {
     if(!entered) return;
     // An unproven indirect transfer's target, read from its register before it
     // executes: discovery evidence, never a target certificate (ADR-0222).
-    if(openSites.contains(pc) && word >> 26 == 0 && ((word & 63) == 8 || (word & 63) == 9))
-      observedTargets.insert({pc, (u32)cpu.ipu.r[word >> 21 & 31].u64});
+    if(openSites.contains(pc) && word >> 26 == 0 && ((word & 63) == 8 || (word & 63) == 9)) {
+      u32 site, target;
+      if(project(pc, site) && project((u32)cpu.ipu.r[word >> 21 & 31].u64, target)) {
+        observedTargets.insert({site, target});
+        seenSites.insert(canonical(pc));
+      }
+    }
+    // Extended replay supplies call roots only. Snapshot composition retains
+    // its reproducible 100M-instruction contract (including its Rust verifier).
+    if(steps >= 100000000) return;
     bool uncovered = seekUncovered && pc >= 0x80000000u && pc < 0x80800000u
       && std::none_of(covered.begin(), covered.end(), [&](auto r) { return r[0] <= pc && pc < r[1]; });
     if(!targets.contains(pc) && !uncovered) return;
@@ -103,7 +151,7 @@ static void observe(u64 address, u32 word) {
     }
 }
 int main(int argc, char** argv) {
-  if(argc < 8 || argc > 11) return 2;
+  if(argc < 8 || argc > 12) return 2;
   if(argc == 9 && std::strcmp(argv[8], "exact-many") != 0) return 2;
   exactMany = argc == 9;
   if(argc >= 10) {
@@ -118,15 +166,26 @@ int main(int argc, char** argv) {
     if(!valid) return 2;
     seekUncovered = true;
   }
-  if(argc == 11) {
+  if(argc >= 11) {
     FILE* f = std::fopen(argv[10], "rb"); if(!f) return 2;
     u32 site;
     while(std::fscanf(f, "%u", &site) == 1) {
       if(site & 3) { std::fclose(f); return 2; }
-      openSites.insert(site);
+      openSites.insert(site); requestedSites.insert(canonical(site));
     }
     bool valid = std::feof(f); std::fclose(f);
     if(!valid) return 2;
+  }
+  if(argc == 12) {
+    FILE* f = std::fopen(argv[11], "rb"); if(!f) return 2;
+    ReplayBinding b;
+    int fields;
+    while((fields = std::fscanf(f, "%u %u %u %lld", &b.mapped, &b.runtime, &b.size, &b.source)) == 4) {
+      if((b.mapped | b.runtime | b.size) & 3 || !b.size || b.source < -2 ||
+         (u64)b.mapped + b.size > 0x100000000ull || (u64)b.runtime + b.size > 0x100000000ull) { std::fclose(f); return 2; }
+      bindings.push_back(b);
+    }
+    bool valid = fields == EOF; std::fclose(f); if(!valid) return 2;
   }
   auto bytes = nall::file::read(argv[1]);
   auto firmware = nall::file::read(argv[2]);
@@ -137,7 +196,8 @@ int main(int argc, char** argv) {
     at = end - targetList.c_str(); if(at < targetList.size()) at++;
   }
   u64 budget = std::strtoull(argv[5], nullptr, 0);
-  if(bytes.size() < 4096 || firmware.size() != 1984 || budget > 100000000) return 2;
+  if(bytes.size() < 4096 || firmware.size() != 1984 || budget > 1000000000) return 2;
+  sourceRom.assign(bytes.data(), bytes.data() + bytes.size());
   result = std::fopen(argv[7], "wb"); if(!result) return 2;
   Headless frontend; platform = &frontend;
   frontend.systemPak->append("pif.ntsc.rom", std::span<const u8>{firmware.data(), firmware.size()});
@@ -172,20 +232,31 @@ int main(int argc, char** argv) {
   for(; steps < budget && vis < 3600 && (!targets.empty() || seekUncovered) && !uncoveredEntry; steps++) {
     if(cpu.instruction()) cpu.synchronize();
     if(vi.refreshed) { vis++; vi.refreshed = false; }
+    // Extend only while the declared observation frontier remains uncovered.
+    if(steps + 1 >= 100000000 && !requestedSites.empty() && seenSites == requestedSites) { steps++; break; }
   }
   std::fprintf(result, "{");
   if(argc >= 10) {
     if(uncoveredEntry) std::fprintf(result, "\"uncovered_entry\":%u,", uncoveredEntry);
     else std::fprintf(result, "\"uncovered_entry\":null,");
   }
-  if(argc == 11) {
+  if(argc >= 11) {
     std::fprintf(result, "\"indirect_targets\":[");
     bool comma = false;
     for(auto [site, target] : observedTargets) {
       std::fprintf(result, "%s[%u,%u]", comma ? "," : "", site, target); comma = true;
     }
+    std::fprintf(result, "],\"observed_runtime_sites\":[");
+    bool first = true;
+    for(auto site : seenSites) { std::fprintf(result, "%s%u", first ? "" : ",", site); first = false; }
+    std::fprintf(result, "],\"unobserved_runtime_sites\":[");
+    first = true;
+    for(auto site : requestedSites) if(!seenSites.contains(site)) { std::fprintf(result, "%s%u", first ? "" : ",", site); first = false; }
     std::fprintf(result, "],");
   }
+  const char* reason = uncoveredEntry ? "uncovered_fetch" : steps >= budget ? "instruction_budget"
+    : vis >= 3600 ? "vi_budget" : !targets.empty() || seekUncovered ? "sites_covered" : "entries_complete";
+  std::fprintf(result, "\"stop_reason\":\"%s\",", reason);
   std::fprintf(result, "\"stop_pc\":%u,\"steps\":%llu,\"vi\":%u,\"entered\":%s,\"remaining\":%zu,\"sp\":[", (u32)cpu.ipu.pc, (unsigned long long)steps, vis, entered ? "true" : "false", targets.size());
   for(size_t i = 0; i < sp.size(); i++) std::fprintf(result, "%s%u", i ? "," : "", (u32)sp[i]);
   std::fprintf(result, "],\"boot_entry\":%u,\"ram_prefix\":[", boot);

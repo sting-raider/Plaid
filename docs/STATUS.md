@@ -1,6 +1,22 @@
 # Status
 
 
+## Relocated replay call coverage (ADR-0227)
+
+Paper Mario's visible residual-validation run passes the relocated checksum call
+and reaches VI 654, 642 graphics tasks, 652 compiled audio tasks and 7,314 PI
+DMAs. It then stops fail-closed on an unresolved JR at map PC 80a08aa8 (runtime
+802c8aa8). The repeated native run confirms the counters and stop; PCM remains
+silent. This is still a native_complete: false validation artifact.
+
+Harvest now projects call sites and targets through declared linked sources,
+checks shared-slot bytes and aliases, rejects ambiguity, and bounds extended
+call observation at 1B instruction calls/3600 VI. Snapshot capture retains its
+100M contract. Observations do not certify target closure. Synthetic mutations,
+parent-tree discovery comparisons, timing and the next stop are recorded in
+research/paper-mario-native-frontier.md. Historical game maps are not fresh
+current-tree closure evidence.
+
 ## Paper Mario after replay-entry validation (ADR-0226)
 
 ADR-0226 is landed. A fresh visible residual-validation run passes the previous
