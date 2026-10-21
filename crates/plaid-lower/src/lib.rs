@@ -1129,6 +1129,9 @@ struct Lowerer<'a> {
     functions: &'a BTreeSet<u32>,
     /// Declared runtime functions (ADR-0129): host-provided `plaid_rt_<name>`.
     runtime: &'a BTreeMap<u32, String>,
+    /// Residual sites (ADR-0218): a jump's candidate outside this function
+    /// faults 3 instead of refusing the lowering (ADR-0223).
+    residual: &'a BTreeSet<u32>,
     /// `plaid_call_<k>` dispatchers by JALR target set.
     dispatch: &'a BTreeMap<&'a BTreeSet<u32>, usize>,
     /// Relocatable overlays' link ranges, and the one this function is in.
@@ -1240,7 +1243,11 @@ impl Lowerer<'_> {
             (0, 8, _) => {
                 let mut cases = String::new();
                 for &t in proven()? {
-                    cases += &format!(" case {}: {}", sx(t), self.tail(t, pc)?);
+                    match self.tail(t, pc) {
+                        Ok(code) => cases += &format!(" case {}: {code}", sx(t)),
+                        Err(_) if self.residual.contains(&pc) => {}
+                        Err(e) => return Err(e),
+                    }
                 }
                 Ok(format!(
                     "{{ u64 t = {a}; {slot} {}switch (t) {{{cases} }} return plaid_fault(s, 0x{pc:08x}u, 3); }}",
@@ -1525,10 +1532,16 @@ pub fn lower_c_parts(
     let mut targets = BTreeMap::new();
     let mut returns = BTreeSet::new();
     let mut callees = vec![host.clone()];
-    let mut residual = BTreeSet::new();
+    let mut residual = BTreeMap::new();
     for site in &map.indirect_sites {
         if report.residual_sites.contains(&site.site) {
-            residual.insert(site.site.pc.0);
+            let known: BTreeSet<u32> = site
+                .candidates
+                .keys()
+                .chain(site.observed.keys())
+                .map(|t| t.pc.0)
+                .collect();
+            residual.insert(site.site.pc.0, (site.link_register.is_some(), known));
             continue;
         }
         let proof = site
@@ -1630,11 +1643,21 @@ pub fn lower_c_parts(
     callees.extend(entered.iter().cloned());
     callees.retain(|f| !runtime.contains_key(&f.pc.0));
     let functions: BTreeSet<u32> = callees.iter().map(|f| f.pc.0).collect();
-    // A residual site dispatches over every lowered entry, never beyond (ADR-0218).
+    // A residual site dispatches over every lowered entry, never beyond
+    // (ADR-0218), and over its own candidate and observed targets: entries for
+    // a call, block starts for a jump (ADR-0223).
     let every_entry: BTreeSet<u32> = functions.iter().chain(runtime.keys()).copied().collect();
-    for &pc in &residual {
-        targets.insert(pc, every_entry.clone());
+    for (&pc, (call, known)) in &residual {
+        let own = known.iter().copied().filter(|t| {
+            if *call {
+                functions.contains(t) || runtime.contains_key(t)
+            } else {
+                blocks.contains(t)
+            }
+        });
+        targets.insert(pc, every_entry.iter().copied().chain(own).collect());
     }
+    let residual: BTreeSet<u32> = residual.into_keys().collect();
 
     let mut code = Vec::new();
     for block in &map.blocks {
@@ -1807,6 +1830,7 @@ pub fn lower_c_parts(
         image,
         callees.iter().filter(|f| body_entries.insert(*f)),
         |a| ovl_of(a.pc.0),
+        &report.residual_sites,
     );
     // Blocks by start; `map.blocks` is ordered by start, so a body's blocks
     // come out in map order.
@@ -1826,6 +1850,7 @@ pub fn lower_c_parts(
             returns: &returns,
             functions: &functions,
             runtime: &runtime,
+            residual: &residual,
             dispatch: &dispatch,
             overlays: &overlays,
             ovl: ovl_of(f.pc.0),

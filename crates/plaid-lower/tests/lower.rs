@@ -48,6 +48,27 @@ fn computed_jump_dispatches_only_over_its_proven_targets() {
 }
 
 #[test]
+fn a_residual_jump_also_dispatches_over_its_own_candidates() {
+    // The same jump with its proof removed: only --residual-dispatch lowers
+    // it, and its known candidate stays a label (ADR-0223).
+    use plaid_lower::lower_c_with_preload;
+    let words = [[0x3c08_8000, 0x3508_0010, 0x0100_0008, 0].as_slice(), &HALT].concat();
+    let (mut map, image) = map_of(&words);
+    let mut site = map.indirect_sites.pop_first().unwrap();
+    assert!(site.closed_proof.take().is_some());
+    map.indirect_sites.insert(site);
+    let images = std::slice::from_ref(&image);
+    let exits = [GuestAddr(0x8000_0010)];
+    assert!(lower_c(&map, images, GuestAddr(BASE), &exits).is_err());
+    let c = lower_c_with_preload(&map, images, &image, GuestAddr(BASE), &exits, true).unwrap();
+    assert!(
+        c.contains("case 0xffffffff80000010ull: goto L_80000010;"),
+        "{c}"
+    );
+    assert!(c.contains("return plaid_fault(s, 0x80000008u, 3);"));
+}
+
+#[test]
 fn open_programs_are_rejected() {
     // jr t0 with an unknown target.
     let err = lower(&[0x0100_0008, 0], 0x8000_0010).unwrap_err();

@@ -205,11 +205,17 @@ fn native_bodies_stop_before_a_tail_leaves_their_binding() {
     let entry = image.address(GuestAddr(0x8001_0000));
     let target = image.address(GuestAddr(0x8000_0020));
     assert!(plaid_core::returns::function_body(&d.map, &image, &entry).contains(&target));
-    let bodies = plaid_core::returns::function_bodies_partitioned(&d.map, &image, [&entry], |a| {
-        image.slots.iter().position(|(range, _, _)| {
-            u64::from(a.pc.0) >= u64::from(range.start.0) && u64::from(a.pc.0) < range.end()
-        })
-    });
+    let bodies = plaid_core::returns::function_bodies_partitioned(
+        &d.map,
+        &image,
+        [&entry],
+        |a| {
+            image.slots.iter().position(|(range, _, _)| {
+                u64::from(a.pc.0) >= u64::from(range.start.0) && u64::from(a.pc.0) < range.end()
+            })
+        },
+        &Default::default(),
+    );
     assert!(bodies[&entry].contains(&entry));
     assert!(!bodies[&entry].contains(&target));
 }

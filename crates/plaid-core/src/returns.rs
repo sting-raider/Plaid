@@ -185,13 +185,27 @@ pub fn function_bodies<'a>(
 /// Native function bodies stop at a binding boundary: a tail into another
 /// content-bound image enters that image's native wrapper instead. Return
 /// closure still uses the unrestricted graph to propagate continuations.
+/// An `unproven` jump (a residual site, ADR-0223) also reaches its candidate
+/// and observed targets, so they are lowered as labels it can dispatch to.
 pub fn function_bodies_partitioned<'a>(
     map: &ProgramMap,
     image: &CodeImage,
     entries: impl IntoIterator<Item = &'a CodeAddress>,
     partition: impl Fn(&CodeAddress) -> Option<usize>,
+    unproven: &BTreeSet<CodeAddress>,
 ) -> BTreeMap<CodeAddress, BTreeSet<CodeAddress>> {
-    let succ = successors(map, image);
+    let mut succ = successors(map, image);
+    for site in map
+        .indirect_sites
+        .iter()
+        .filter(|s| s.link_register.is_none() && unproven.contains(&s.site))
+    {
+        if let Some(block) = map.blocks.iter().find(|b| in_block(b, &site.site)) {
+            succ.entry(block.start.clone())
+                .or_default()
+                .extend(site.candidates.keys().chain(site.observed.keys()).cloned());
+        }
+    }
     entries
         .into_iter()
         .map(|entry| {
