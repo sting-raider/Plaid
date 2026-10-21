@@ -407,3 +407,16 @@ pairs) that no instruction names directly, so discovery has no block there and
 the address-taken set (2,241 entries) omits it. The fault is the correct
 fail-closed result. Next blocker: analysis-time targets of unproven indirect
 calls are not discovery roots. Receipts: ignored target/paper-mario/0222.
+
+## ADR-0222 result (2026-10-21)
+
+With observed call targets as discovery roots, the six harvest rounds record
+19 call targets, among them the integrity check's `802001f0 -> 80026ddc` and
+the boot stub's `80200064 -> 8004ab00`. Discovery grows to 58,735 blocks; the
+residual solve still closes with 0 blockers and 8 residual sites. The run
+passes the integrity check (PI DMAs 154 -> 235, VI 2, 1 gfx task, 0 audio
+tasks) and faults 3 at residual site `8004e544`, a five-case `jr v0` switch
+(`sltiu v1, 5`, table base from `lui/addiu s4`). Its map candidates are the five
+case labels, all block starts, and the fault value `8004e5a8` is one of them;
+residual lowering dispatches only over function entries and ignores them.
+Pipeline time 13.2 minutes. Receipts: ignored target/paper-mario/0222.
