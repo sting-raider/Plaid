@@ -24,8 +24,8 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 | Banjo-Kazooie (USA) (Rev 1) | **none** | ✅ | 60 s: Nintendo opening and title, audio, fault 0; puzzle transitions in 75 s runs (ADR-0200, ADR-0201). ⚠️ A fresh build on current main stops at VI 11 on RSP microcode it does not find; being bisected | fix the regression |
 | Paper Mario (USA) | **none** | 🟨 builds by default with residual dispatch (ADR-0233) | 60 s: storybook intro, VI 3590, audio, fault 0 (ADR-0230); a fresh default build stops at VI 2908 on an undiscovered shared-slot occupant | find that code; prove 8 indirect jumps for `native_complete` |
 | Ocarina of Time (USA 1.2) | code segment, 2 load files (earlier builds) | 🟨 | title and file select in older builds (ADR-0182); the ROM-only build stops at VI 3 | lower the RSP code it reaches at IMEM `0x080` (ADR-0219) |
-| GoldenEye 007 (USA) | **none** | refused | not reached: OPEN, 331 residual blockers | mapped boot target discovered; qualified tables, targets and ERET remain (ADR-0236); [receipt](research/mapped-code-discovery.md) |
-| Mario Kart 64 (USA) | **none** | refused | not reached: OPEN, 10 blockers with residual dispatch | ERET and four missing targets unchanged (ADR-0236); [receipt](research/mapped-code-discovery.md) |
+| GoldenEye 007 (USA) | **none** | refused | not reached: OPEN, 327 residual blockers | bounded ERET exposes return-target obligations; qualified tables and sources remain (ADR-0237, `0c4d9010`); [receipt](research/eret-lowering.md) |
+| Mario Kart 64 (USA) | `0c4d9010` | built; validation failed | VI 0, graphics/audio tasks 0; fault 11 at `800cc0f4` | aligned load recovery and bounded ERET permit four residual sites; Status/FR startup stops before rendering (ADR-0237); [receipt](research/eret-lowering.md) |
 | Star Fox 64, Rogue Squadron (USA) | **none** | refused | not reached in the ADR-0233 sweep | overlay and instruction coverage; see [research/rom-sweep.md](research/rom-sweep.md) |
 
 "Native build ✅" means analysis is `CLOSED` under a declared scope (usually `--address-taken`) and `native.py` emits the executable. Since ADR-0233, `native.py` also builds by default when the only open items are indirect jumps it cannot prove: they go through a fail-closed run-time lookup over the translated code (still no emulation), and `native-manifest.json` records `native_complete: false`. `--strict` builds only proven maps.
@@ -39,6 +39,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0237 | `0c4d9010` | Bounded ERET and aligned executable loads; MK64 builds with four residual sites, then faults 11 before VI; ISA 204/209 |
 | 0236 | `438a0c2` | Replay-authenticated mapped instruction sources and guarded physical backing; GoldenEye reaches 3,716 blocks, both new games still refuse |
 | 0235 | `e9b1521` | Seven checked COP0/TLB forms; mapped instruction discovery and exception/timer delivery remain open |
 | 0234 | `76692ed` | Every FPU instruction checks `Status.FR` at run time (boot context FR = 1, threads FR = 0); FPU forms move from orange to amber |

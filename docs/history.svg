@@ -15,44 +15,47 @@
 <line x1="56" x2="890" y1="28.0" y2="28.0" stroke="#1f2d40"/>
 <text x="48" y="32.0" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="end">250</text>
 <text x="56.0" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-08</text>
-<text x="139.4" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-09</text>
-<text x="222.8" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-10</text>
-<text x="306.2" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-11</text>
-<text x="389.6" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-12</text>
-<text x="473.0" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-13</text>
-<text x="556.4" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-14</text>
-<text x="639.8" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-15</text>
-<text x="723.2" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-16</text>
-<text x="806.6" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-17</text>
-<text x="890.0" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-21</text>
-<path d="M56.0,80.5 L139.4,80.5 L222.8,80.5 L306.2,80.5 L389.6,80.5 L473.0,80.5 L556.4,80.5 L639.8,80.5 L723.2,80.5 L806.6,80.5 L890.0,80.5" fill="none" stroke="#8b9bb0" stroke-width="1.5" stroke-dasharray="5 4"/>
-<path d="M56.0,348.0 L139.4,348.0 L222.8,348.0 L306.2,348.0 L389.6,348.0 L473.0,348.0 L556.4,348.0 L639.8,97.1 L723.2,97.1 L806.6,97.1 L890.0,88.2 L890.0,348.0 L56.0,348.0 Z" fill="#4f9cf7" fill-opacity="0.12"/>
-<path d="M56.0,348.0 L139.4,348.0 L222.8,348.0 L306.2,348.0 L389.6,348.0 L473.0,348.0 L556.4,348.0 L639.8,97.1 L723.2,97.1 L806.6,97.1 L890.0,88.2" fill="none" stroke="#4f9cf7" stroke-width="2.5"/>
+<text x="131.8" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-09</text>
+<text x="207.6" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-10</text>
+<text x="283.5" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-11</text>
+<text x="359.3" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-12</text>
+<text x="435.1" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-13</text>
+<text x="510.9" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-14</text>
+<text x="586.7" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-15</text>
+<text x="662.5" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-16</text>
+<text x="738.4" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-17</text>
+<text x="814.2" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-21</text>
+<text x="890.0" y="368" fill="#7d8da3" font-size="11" font-family="Segoe UI,Arial,sans-serif" text-anchor="middle">10-22</text>
+<path d="M56.0,80.5 L131.8,80.5 L207.6,80.5 L283.5,80.5 L359.3,80.5 L435.1,80.5 L510.9,80.5 L586.7,80.5 L662.5,80.5 L738.4,80.5 L814.2,80.5 L890.0,80.5" fill="none" stroke="#8b9bb0" stroke-width="1.5" stroke-dasharray="5 4"/>
+<path d="M56.0,348.0 L131.8,348.0 L207.6,348.0 L283.5,348.0 L359.3,348.0 L435.1,348.0 L510.9,348.0 L586.7,97.1 L662.5,97.1 L738.4,97.1 L814.2,88.2 L890.0,86.9 L890.0,348.0 L56.0,348.0 Z" fill="#4f9cf7" fill-opacity="0.12"/>
+<path d="M56.0,348.0 L131.8,348.0 L207.6,348.0 L283.5,348.0 L359.3,348.0 L435.1,348.0 L510.9,348.0 L586.7,97.1 L662.5,97.1 L738.4,97.1 L814.2,88.2 L890.0,86.9" fill="none" stroke="#4f9cf7" stroke-width="2.5"/>
 <circle cx="56.0" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-08: Lowered to native C 0</title></circle>
-<circle cx="139.4" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-09: Lowered to native C 0</title></circle>
-<circle cx="222.8" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-10: Lowered to native C 0</title></circle>
-<circle cx="306.2" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-11: Lowered to native C 0</title></circle>
-<circle cx="389.6" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-12: Lowered to native C 0</title></circle>
-<circle cx="473.0" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-13: Lowered to native C 0</title></circle>
-<circle cx="556.4" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-14: Lowered to native C 0</title></circle>
-<circle cx="639.8" cy="97.1" r="3.5" fill="#4f9cf7"><title>2026-10-15: Lowered to native C 196</title></circle>
-<circle cx="723.2" cy="97.1" r="3.5" fill="#4f9cf7"><title>2026-10-16: Lowered to native C 196</title></circle>
-<circle cx="806.6" cy="97.1" r="3.5" fill="#4f9cf7"><title>2026-10-17: Lowered to native C 196</title></circle>
-<circle cx="890.0" cy="88.2" r="3.5" fill="#4f9cf7"><title>2026-10-21: Lowered to native C 203</title></circle>
-<path d="M222.8,276.3 L306.2,276.3 L389.6,276.3 L473.0,276.3 L556.4,264.8 L639.8,254.6 L723.2,254.6 L806.6,254.6 L890.0,254.6" fill="none" stroke="#3f8f74" stroke-width="1.5" stroke-dasharray="5 4"/>
-<path d="M222.8,328.8 L306.2,327.5 L389.6,327.5 L473.0,327.5 L556.4,316.0 L639.8,282.7 L723.2,282.7 L806.6,282.7 L890.0,282.7 L890.0,348.0 L222.8,348.0 Z" fill="#58d5ab" fill-opacity="0.12"/>
-<path d="M222.8,328.8 L306.2,327.5 L389.6,327.5 L473.0,327.5 L556.4,316.0 L639.8,282.7 L723.2,282.7 L806.6,282.7 L890.0,282.7" fill="none" stroke="#58d5ab" stroke-width="2.5"/>
-<circle cx="222.8" cy="328.8" r="3.5" fill="#58d5ab"><title>2026-10-10: Milestones verified 15</title></circle>
-<circle cx="306.2" cy="327.5" r="3.5" fill="#58d5ab"><title>2026-10-11: Milestones verified 16</title></circle>
-<circle cx="389.6" cy="327.5" r="3.5" fill="#58d5ab"><title>2026-10-12: Milestones verified 16</title></circle>
-<circle cx="473.0" cy="327.5" r="3.5" fill="#58d5ab"><title>2026-10-13: Milestones verified 16</title></circle>
-<circle cx="556.4" cy="316.0" r="3.5" fill="#58d5ab"><title>2026-10-14: Milestones verified 25</title></circle>
-<circle cx="639.8" cy="282.7" r="3.5" fill="#58d5ab"><title>2026-10-15: Milestones verified 51</title></circle>
-<circle cx="723.2" cy="282.7" r="3.5" fill="#58d5ab"><title>2026-10-16: Milestones verified 51</title></circle>
-<circle cx="806.6" cy="282.7" r="3.5" fill="#58d5ab"><title>2026-10-17: Milestones verified 51</title></circle>
-<circle cx="890.0" cy="282.7" r="3.5" fill="#58d5ab"><title>2026-10-21: Milestones verified 51</title></circle>
+<circle cx="131.8" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-09: Lowered to native C 0</title></circle>
+<circle cx="207.6" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-10: Lowered to native C 0</title></circle>
+<circle cx="283.5" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-11: Lowered to native C 0</title></circle>
+<circle cx="359.3" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-12: Lowered to native C 0</title></circle>
+<circle cx="435.1" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-13: Lowered to native C 0</title></circle>
+<circle cx="510.9" cy="348.0" r="3.5" fill="#4f9cf7"><title>2026-10-14: Lowered to native C 0</title></circle>
+<circle cx="586.7" cy="97.1" r="3.5" fill="#4f9cf7"><title>2026-10-15: Lowered to native C 196</title></circle>
+<circle cx="662.5" cy="97.1" r="3.5" fill="#4f9cf7"><title>2026-10-16: Lowered to native C 196</title></circle>
+<circle cx="738.4" cy="97.1" r="3.5" fill="#4f9cf7"><title>2026-10-17: Lowered to native C 196</title></circle>
+<circle cx="814.2" cy="88.2" r="3.5" fill="#4f9cf7"><title>2026-10-21: Lowered to native C 203</title></circle>
+<circle cx="890.0" cy="86.9" r="3.5" fill="#4f9cf7"><title>2026-10-22: Lowered to native C 204</title></circle>
+<path d="M207.6,276.3 L283.5,276.3 L359.3,276.3 L435.1,276.3 L510.9,264.8 L586.7,254.6 L662.5,254.6 L738.4,254.6 L814.2,254.6 L890.0,254.6" fill="none" stroke="#3f8f74" stroke-width="1.5" stroke-dasharray="5 4"/>
+<path d="M207.6,328.8 L283.5,327.5 L359.3,327.5 L435.1,327.5 L510.9,316.0 L586.7,282.7 L662.5,282.7 L738.4,282.7 L814.2,282.7 L890.0,282.7 L890.0,348.0 L207.6,348.0 Z" fill="#58d5ab" fill-opacity="0.12"/>
+<path d="M207.6,328.8 L283.5,327.5 L359.3,327.5 L435.1,327.5 L510.9,316.0 L586.7,282.7 L662.5,282.7 L738.4,282.7 L814.2,282.7 L890.0,282.7" fill="none" stroke="#58d5ab" stroke-width="2.5"/>
+<circle cx="207.6" cy="328.8" r="3.5" fill="#58d5ab"><title>2026-10-10: Milestones verified 15</title></circle>
+<circle cx="283.5" cy="327.5" r="3.5" fill="#58d5ab"><title>2026-10-11: Milestones verified 16</title></circle>
+<circle cx="359.3" cy="327.5" r="3.5" fill="#58d5ab"><title>2026-10-12: Milestones verified 16</title></circle>
+<circle cx="435.1" cy="327.5" r="3.5" fill="#58d5ab"><title>2026-10-13: Milestones verified 16</title></circle>
+<circle cx="510.9" cy="316.0" r="3.5" fill="#58d5ab"><title>2026-10-14: Milestones verified 25</title></circle>
+<circle cx="586.7" cy="282.7" r="3.5" fill="#58d5ab"><title>2026-10-15: Milestones verified 51</title></circle>
+<circle cx="662.5" cy="282.7" r="3.5" fill="#58d5ab"><title>2026-10-16: Milestones verified 51</title></circle>
+<circle cx="738.4" cy="282.7" r="3.5" fill="#58d5ab"><title>2026-10-17: Milestones verified 51</title></circle>
+<circle cx="814.2" cy="282.7" r="3.5" fill="#58d5ab"><title>2026-10-21: Milestones verified 51</title></circle>
+<circle cx="890.0" cy="282.7" r="3.5" fill="#58d5ab"><title>2026-10-22: Milestones verified 51</title></circle>
 <text x="900" y="84.5" fill="#8b9bb0" font-size="13" font-weight="600" font-family="Segoe UI,Arial,sans-serif">VR4300 forms decoded 209</text>
-<text x="900" y="100.5" fill="#4f9cf7" font-size="13" font-weight="600" font-family="Segoe UI,Arial,sans-serif">Lowered to native C 203</text>
+<text x="900" y="100.5" fill="#4f9cf7" font-size="13" font-weight="600" font-family="Segoe UI,Arial,sans-serif">Lowered to native C 204</text>
 <text x="900" y="258.6" fill="#3f8f74" font-size="13" font-weight="600" font-family="Segoe UI,Arial,sans-serif">Milestones declared 73</text>
 <text x="900" y="286.7" fill="#58d5ab" font-size="13" font-weight="600" font-family="Segoe UI,Arial,sans-serif">Milestones verified 51</text>
 </svg>

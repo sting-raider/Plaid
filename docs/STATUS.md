@@ -12,6 +12,8 @@ Its visible RT64 validation build stops at VI 0, zero tasks, fault 11 at
 800cc0f4; no gameplay is accepted. GoldenEye remains OPEN 339/327. BK/F-Zero X/MM
 maps are byte-identical; separate native regression work is untouched.
 See research/eret-lowering.md for the contract, measurements and limitations.
+Production `0c4d9010` landed by exact-head CAS; all five gate steps passed
+(320.5 s), with 910 Rust tests passed and one ignored.
 
 ## Mapped instruction sources (partial; ADR-0236)
 
