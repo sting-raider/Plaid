@@ -403,6 +403,11 @@ pub fn is_cop0_tlb(word: u32) -> bool {
     matches!(word, 0x4200_0001 | 0x4200_0002 | 0x4200_0008)
 }
 
+/// ERET has a runtime-checked state transition, but no static return-target proof.
+pub fn is_eret(word: u32) -> bool {
+    word == 0x4200_0018
+}
+
 /// COP1 data moves: MFC1 DMFC1 MTC1 DMTC1 LWC1 LDC1 SWC1 SDC1 (ADR-0131).
 pub fn is_cop1_move(word: u32) -> bool {
     match word >> 26 {
@@ -448,6 +453,7 @@ fn allowed_static_effect(word: u32, pc: crate::GuestAddr, guarded_ram: bool) -> 
     if guarded_ram
         && (is_cop0_move(word)
             || is_cop0_tlb(word)
+            || is_eret(word)
             || is_cop1_move(word)
             || is_cop1_compare(word)
             || is_cop1_branch(word)
@@ -570,6 +576,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     };
     let checked_trap = |u: &Unresolved| checked_word(u, crate::discovery::is_conditional_trap);
     let checked_break = |u: &Unresolved| checked_word(u, is_break) || checked_trap(u);
+    let checked_eret = |u: &Unresolved| checked_word(u, is_eret);
     if !map.fetch_observations.is_empty() {
         add(
             "fetch_execution_identity_unknown",
@@ -722,7 +729,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 );
                 continue;
             };
-            uses_cop0 |= is_cop0_move(word) || is_cop0_tlb(word);
+            uses_cop0 |= is_cop0_move(word) || is_cop0_tlb(word) || is_eret(word);
             uses_compare |= is_cop1_compare(word) || is_cop1_arith(word);
             uses_cop1 |= is_cop1_move(word)
                 || is_cop1_compare(word)
@@ -1044,11 +1051,24 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             }
         }
         for u in &expected.unresolved {
+            if checked_eret(u) {
+                if scope == Scope::DeclaredStaticImagesGuardedRamResidualDispatch {
+                    residual_sites.extend(u.site.clone());
+                } else {
+                    add(
+                        "eret_return_target_unknown",
+                        u.site.clone(),
+                        "ERET requires a closed return-target proof or explicit residual dispatch",
+                        u.evidence.clone(),
+                    );
+                }
+            }
             if !(u.kind == "unmapped_target"
                 && u.site
                     .as_ref()
                     .is_some_and(|a| starts.contains(a) || into_slot(a)))
                 && !checked_break(u)
+                && !checked_eret(u)
             {
                 add(&u.kind, u.site.clone(), &u.detail, provenance.clone());
             }
@@ -1065,6 +1085,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         uses_break |= checked_break && !checked_trap(u);
         if table_obligation
             || checked_break
+            || checked_eret(u)
             || (u.kind == "unmapped_target"
                 && u.site
                     .as_ref()

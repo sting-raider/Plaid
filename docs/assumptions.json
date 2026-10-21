@@ -186,7 +186,7 @@
     {"name": "BREAK is never executed", "state": "assumed", "checked": true, "faults": [9], "retire": "model the Breakpoint exception"}
   ],
   "instruction_rules": [
-    {"state": "checked", "mnemonics": ["mfc0", "dmfc0", "mtc0", "dmtc0", "tlbwi", "tlbr", "tlbp"], "label": "bounded known kernel COP0 state and global TLB mappings; unsupported state/mode/events fault 12 (ADR-0235)"},
+    {"state": "checked", "mnemonics": ["mfc0", "dmfc0", "mtc0", "dmtc0", "tlbwi", "tlbr", "tlbp", "eret"], "label": "bounded known kernel COP0/TLB state and explicit non-SDK ERET; unsupported state/mode/events fault 12 (ADR-0235/0237)"},
     {"state": "checked", "groups": ["FPU arith", "FPU compare", "FPU convert", "COP1 move"], "label": "COP1 is usable with Status.FR = 0 (each COP1 instruction faults 11 otherwise, ADR-0234)"},
     {"state": "checked", "groups": ["Load/store", "Trap"], "mnemonics": ["jr", "jalr", "add", "addi", "sub", "dadd", "daddi", "dsub", "break"], "label": "guarded RAM access, indirect-jump and return closure, no overflow, no trap, no BREAK (each aborts with a fault code)"}
   ],

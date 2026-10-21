@@ -1,7 +1,7 @@
 {
   "decoded": 209,
   "format": "plaid-isa-coverage-v0",
-  "lowered": 203,
+  "lowered": 204,
   "mnemonics": {
     "abs.d": true,
     "abs.s": true,
@@ -112,7 +112,7 @@
     "dsrlv": true,
     "dsub": true,
     "dsubu": true,
-    "eret": false,
+    "eret": true,
     "floor.l.d": true,
     "floor.l.s": true,
     "floor.w.d": true,

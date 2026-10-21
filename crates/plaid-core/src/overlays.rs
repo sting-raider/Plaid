@@ -671,7 +671,17 @@ pub fn static_loads(rom: &[u8], base: &[u8], at: u32) -> Result<Vec<StaticLoad>,
                 }
             }
         }
-        let ram: Vec<(u32, u32)> = found
+        // A LUI is also a complete address when the destination is 64 KiB
+        // aligned (including a DMA argument set in a call's delay slot).
+        // These remain candidates: the same unique call-target score must fit.
+        let mut ram_candidates = found.clone();
+        for (k, bytes) in image.as_chunks::<4>().0.iter().enumerate() {
+            let w = u32::from_be_bytes(*bytes);
+            if w >> 26 == 15 && (w >> 16) & 31 != 0 {
+                ram_candidates.entry(w << 16).or_insert(at + 4 * k as u32);
+            }
+        }
+        let ram: Vec<(u32, u32)> = ram_candidates
             .iter()
             .filter(|(v, _)| (0x8000_0000..0x8080_0000).contains(*v) && *v % 4 == 0)
             .map(|(&v, &pc)| (v, pc))
@@ -1019,6 +1029,26 @@ mod tests {
         let rom = static_rom(false);
         let far = static_loads(&rom, &rom[0x1000..0x1100], 0x80000400).unwrap();
         assert!(far.is_empty(), "{far:#x?}");
+    }
+
+    #[test]
+    fn aligned_load_destination_needs_no_low_half_instruction() {
+        let mut rom = static_rom(true);
+        // Remove the ADDIU completing the 64 KiB-aligned RAM address.
+        put(&mut rom, 0x1094, 0);
+        let loads = static_loads(&rom, &rom[0x1000..0x1100], 0x80000400).unwrap();
+        assert!(
+            loads
+                .iter()
+                .any(|l| l.destination == 0x80100000 && l.calls == (2, 2))
+        );
+        // An address candidate alone cannot authenticate a misplaced file.
+        put(&mut rom, 0x1090, 0x3c06_8011);
+        assert!(
+            static_loads(&rom, &rom[0x1000..0x1100], 0x80000400)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

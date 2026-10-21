@@ -1,5 +1,20 @@
 # Next
 
+## After bounded ERET and aligned load recovery (ADR-0237)
+
+MK64 now produces a residual validation artifact: the four missing functions
+belong to ROM 123640..12aae0 loaded at 80280000 by a lone LUI destination.
+The first native stop is fault 11 at 800cc0f4, VI/tasks/DMA 0. Preserve the
+existing Status/FR checks and coordinate with the separate BK/MM regression
+investigation; do not bypass FR to claim gameplay. Its ordinary four blockers
+are three indirect sites plus ERET return closure, retained as four residual
+sites. General guest exception-vector entry/EPC production and SDK-frame ERET
+still require independent contracts; current ERET accepts explicit known return
+registers only outside SDK contexts without enabling unmodeled events.
+GoldenEye stays OPEN 339 ordinary / 327 residual blockers (12 sites): qualify
+mapped table/source/target bounds and the remaining scope effect. Preserve the
+byte-identical BK/F-Zero X/MM discovery controls. Receipt: research/eret-lowering.md.
+
 ## Continue mapped discovery after ADR-0236
 
 GoldenEye's mapped boot target now has replay-authenticated physical bytes;

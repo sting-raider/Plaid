@@ -440,3 +440,25 @@ fn unmodeled_cop0_register_lowers_to_an_explicit_checked_fault() {
     let c = lower(&words, 0x8000_0010).unwrap();
     assert!(c.contains("plaid_cp0_write(s, 11, s->r[4],"));
 }
+
+#[test]
+fn eret_requires_residual_scope_and_has_no_delay_slot() {
+    use plaid_lower::lower_c_with_preload;
+    let words = [0x4200_0018, 0xffff_ffff];
+    let (mut map, image) = map_of(&words);
+    map.unresolved.clear(); // deleting diagnostics cannot forge ERET closure
+    let images = std::slice::from_ref(&image);
+    assert!(lower_c(&map, images, GuestAddr(BASE), &[]).is_err());
+    let c = lower_c_with_preload(&map, images, &image, GuestAddr(BASE), &[], true).unwrap();
+    assert!(c.contains("plaid_cp0_eret(s, &t, 0x80000000u)"));
+    assert!(c.contains("switch (t)"));
+    assert!(c.contains("return plaid_fault(s, 0x80000000u, 3)"));
+    let report = plaid_core::solver::solve(
+        &map,
+        images,
+        plaid_core::solver::Scope::DeclaredStaticImagesGuardedRamResidualDispatch,
+    );
+    let report = report.unwrap();
+    assert!(!report.native_complete);
+    assert_eq!(report.residual_sites.len(), 1);
+}

@@ -14,6 +14,8 @@ static inline int plaid_cp0_read(plaid_state *s, u32 reg, u64 *v, u32 pc) {
   case 5: *v = s->cp0_tlb.mask; break;
   case 6: *v = s->cp0_wired; break;
   case 10: *v = s->cp0_entryhi; break;
+  case 14: *v = s->cp0_epc; break;
+  case 30: *v = s->cp0_error_epc; break;
   default: return plaid_fault(s, pc, 12);
   }
   return 0;
@@ -26,6 +28,8 @@ static inline int plaid_cp0_write(plaid_state *s, u32 reg, u64 v, u32 pc) {
   case 5: s->cp0_tlb.mask = (u32)v & 0x01ffe000u; break;
   case 6: s->cp0_wired = (u32)v & 63u; break;
   case 10: s->cp0_entryhi = v & 0xc00000ffffffe0ffull; break;
+  case 14: s->cp0_epc = v; break;
+  case 30: s->cp0_error_epc = v; break;
   case 12:
     /* Timer/exception delivery and SDK scheduler Status writes need a separate
        contract. Reject before changing state, including FR. */
@@ -92,5 +96,23 @@ static inline int plaid_cp0_tlbp(plaid_state *s, u32 pc) {
     s->cp0_index = i; s->cp0_known |= 1u; return 0;
   }
   s->cp0_index = 0x80000000u; s->cp0_known |= 1u;
+  return 0;
+}
+
+/* HLE does not enter guest vectors or establish EPC. Only explicit guest
+   register writes outside SDK contexts can establish this bounded return. */
+static inline int plaid_cp0_eret(plaid_state *s, u64 *target, u32 pc) {
+  u32 status, reg; u64 t;
+  if (plaid_cp0_kernel(s, pc)) return 1;
+  reg = (s->cp0_status & 4u) ? 30 : 14;
+  status = s->cp0_status & ~((reg == 30) ? 4u : 2u);
+  if (s->status_thread || !(s->cp0_status & 6u) ||
+      !(s->cp0_known & (1u << reg)) || (status & 0x030000f8u) ||
+      ((status & 1u) && !(status & 6u) && (status & 0xff00u)))
+    return plaid_fault(s, pc, 12);
+  t = reg == 30 ? s->cp0_error_epc : s->cp0_epc;
+  if (t != SX32(t) || (t & 3u)) return plaid_fault(s, pc, 12);
+  s->cp0_status = status; s->llbit = 0; s->pc = (u32)t;
+  *target = t;
   return 0;
 }
