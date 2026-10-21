@@ -965,3 +965,10 @@ switch. The map already holds the five case labels as candidates; residual
 dispatch covers only function entries. Next: let a residual site also
 dispatch over its own candidate and observed targets (labels for a jump,
 functions for a call), still validation-only and fail-closed otherwise.
+
+## After ADR-0224
+
+Paper Mario's residual run reaches VI 3 and submits its first audio task,
+whose RSP microcode is not among the ROM-derived texts. Next: find where that
+microcode comes from in the ROM and extend extraction generally (compare the
+unfinished OoT microcode work on `experiment/oot-rsp-0221`).
