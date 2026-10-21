@@ -119,7 +119,8 @@ def main():
     if a.rsp_gfx and not a.rt64:
         ap.error('--rsp-gfx requires --rt64')
     rom = a.rom.resolve()
-    name = a.name or ''.join(c for c in rom.stem.lower() if c.isalnum())[:16]
+    # 32 characters keep both Zelda titles (and similar series) apart
+    name = a.name or ''.join(c for c in rom.stem.lower() if c.isalnum())[:32]
     out = ROOT / 'target/native' / name
     texts = out / 'rsp-rom'
     for d in (out, texts):
