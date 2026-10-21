@@ -1,5 +1,17 @@
 # Status
 
+
+## Paper Mario after replay-entry validation (ADR-0226)
+
+ADR-0226 is landed. A fresh visible residual-validation run passes the previous
+observed-call fault and reaches VI 648, 637 graphics tasks, 646 compiled audio
+tasks and 327 PI DMAs. It then stops fail-closed at a checksum-derived call
+from relocated text whose target lacks dispatch-admission evidence. Captured
+PCM is silent (peak zero); audio and gameplay acceptance remain unestablished.
+The artifact is still native_complete: false. Exact gate timings, repeat-run
+state and the relocation/replay-coverage diagnosis are in
+research/paper-mario-native-frontier.md.
+
 ## PI DMA RSP sources (ADR-0225)
 
 Boot harvest retains ROM-backed DMA ranges outside CPU images as RSP-only

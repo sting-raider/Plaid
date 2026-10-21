@@ -1,13 +1,15 @@
 # Next
 
-## Continue after PI DMA RSP boot extraction (ADR-0225)
+## Continue after replay-entry validation (ADR-0226)
 
-Keep DMA source observations separate from CPU discovery and closure. The next
-Paper Mario validation frontier is an observed call target rejected by the
-function-start layout filter; review the prepared ADR-0226 candidate against
-both discovery and solver checks, with synthetic and mutation coverage before
-integration. Establish visible gameplay and non-silent PCM independently;
-compiled audio task execution alone does not establish either.
+Paper Mario passes the former observed-call frontier. Next, establish evidence
+for the later checksum-derived call from relocated text: harvest currently
+lists synthetic map PCs while the oracle executes linked PCs, and the finite
+replay stops before the native frontier. Validate binding-aware site selection
+and later replay coverage before extending dispatch. Keep observations separate
+from closure certificates and unknown targets fail-closed. Establish non-silent
+PCM independently; the repeated visible run's captured audio is silent. See
+research/paper-mario-native-frontier.md for the exact stop and receipts.
 
 
 ## Extend ROM-derived RSP coverage after self-patching
@@ -988,5 +990,5 @@ unfinished OoT microcode work on `experiment/oot-rsp-0221`).
 Observed call targets after non-return layout code can now pass discovery and
 the guarded address-taken solver when replay evidence is present and
 `executed_start` succeeds. The synthetic regressions and mutation checks pass.
-Next: rebase with the ADR-0225 RSP source work, then rerun the Paper Mario
-validation run to confirm it passes the observed target at `8002605c`.
+The landed-tree visible rerun passes the former target; continue with the
+relocated-call and silent-audio frontiers documented above and in research.
