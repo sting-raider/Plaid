@@ -1,5 +1,10 @@
 # Status
 
+## PIF terminate-boot (ADR-0241)
+
+A natively lowered osInitialize may end the PIF boot handshake itself; the
+runtime clears the command byte as pinned ares does. Mario Kart 64 now stops
+later, at fault 12 (MFC0 EntryHi with unknown state) at 800d1c80.
 ## RSP candidate identity (ADR-0240)
 
 ROM-derived RSP candidates are deduplicated by what the runtime compares

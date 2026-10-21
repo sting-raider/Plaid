@@ -6992,3 +6992,24 @@ register jump.
 
 Banjo-Kazooie (Rev 1) now builds 40 RSP texts (was 42) and runs 60 s: VI 3568,
 1265 graphics and 1779 audio tasks, fault 0, with 2 residual dispatch sites.
+## ADR-0241: The PIF accepts the game's own terminate-boot command
+
+Status: accepted. After IPL3 the PIF waits for the CPU to set bit 3 (0x08) of
+the PIF RAM command byte; pinned ares (pif/hle.cpp, WaitTerminateBoot) then
+clears the byte and enters Run, and every CPU word write to PIF RAM runs that
+step at once (pif/io.cpp writeWord -> mainHLE). The runtime's HLE osInitialize
+covered this implicitly, but a game whose osInitialize is lowered natively
+(Mario Kart 64) wrote 8 to 0x1fc007fc and the joybus parser, which accepts only
+bit 0, faulted 1 at VI 0.
+
+The runtime now tracks whether the PIF boot handshake has ended. The first
+command write with bit 3 clears the byte and ends it; the HLE osInitialize
+also ends it. A later bit-3 write is still refused: nothing models it.
+
+The pinned-ares oracle starts its PIF before IPL rather than in
+WaitTerminateBoot, so the boot variant is not compared against ares directly:
+runtime/test_si_order.py requires that an SI write/read round trip after a
+terminate-boot write leaves exactly the RAM the ares-verified plain round trip
+does, and that a second terminate faults 1. Mario Kart 64 moves past the PIF
+write to fault 12 at 800d1c80: an MFC0 of EntryHi, which is unknown at that
+point (libultra saves it around a TLB write).
