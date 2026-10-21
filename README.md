@@ -14,19 +14,19 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 ## Where it stands
 
-*As of main `78b0eda`, 2026-10-21. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
+*As of main `0a8f959`, 2026-10-21. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
 | Super Mario 64 (USA) | code segment, 2 load files, a local symbol map for 3 names | ✅ | full-speed gameplay with input, EEPROM saves and audio, no stop in 90 s | infer its loads from the ROM |
-| Majora's Mask (USA) | **none** | ✅ | intro and Clock Town attract scene, 90 s, fault 0, audio (ADR-0187, ADR-0189) | longer play |
-| F-Zero X (USA) | **none** | ✅ | 65 s races with compiled graphics microcode and audio, fault 0 (ADR-0186) | longer play |
-| Banjo-Kazooie (USA) (Rev 1) | **none** | ✅ | 60 s: Nintendo opening and title, audio, fault 0; puzzle transitions in 75 s runs (ADR-0200, ADR-0201) | compiled-RSP graphics faults on its first task |
-| Paper Mario (USA) | **none** | 🟨 validation build only | 60 s: storybook intro, VI 3590, audio, fault 0 (ADR-0230) | prove 8 indirect jumps so the normal build is emitted (ADR-0231) |
+| Majora's Mask (USA) | **none** | ✅ | intro and Clock Town attract scene, 90 s, fault 0, audio (ADR-0187, ADR-0189). ⚠️ A fresh build on current main faults 2 at VI 0 (its startup code clears its own reset stub); being bisected | fix the regression |
+| F-Zero X (USA) | **none** | ✅ | 65 s races with compiled graphics microcode and audio, fault 0 (ADR-0186); current main: 20 s with `--rsp-gfx`, fault 0, now built through residual dispatch (1 open blocker) | longer play |
+| Banjo-Kazooie (USA) (Rev 1) | **none** | ✅ | 60 s: Nintendo opening and title, audio, fault 0; puzzle transitions in 75 s runs (ADR-0200, ADR-0201). ⚠️ A fresh build on current main stops at VI 11 on RSP microcode it does not find; being bisected | fix the regression |
+| Paper Mario (USA) | **none** | 🟨 builds by default with residual dispatch (ADR-0233) | 60 s: storybook intro, VI 3590, audio, fault 0 (ADR-0230); a fresh default build stops at VI 2908 on an undiscovered shared-slot occupant | find that code; prove 8 indirect jumps for `native_complete` |
 | Ocarina of Time (USA 1.2) | code segment, 2 load files (earlier builds) | 🟨 | title and file select in older builds (ADR-0182); the ROM-only build stops at VI 3 | lower the RSP code it reaches at IMEM `0x080` (ADR-0219) |
-| GoldenEye 007, Mario Kart 64, Star Fox 64, Rogue Squadron (USA) | **none** | ❌ | not reached: analysis still OPEN (7, 30, 298, 210 blockers) | see [`research/rom-sweep.md`](research/rom-sweep.md) |
+| GoldenEye 007, Mario Kart 64, Star Fox 64, Rogue Squadron (USA) | **none** | ❌ | not reached: OPEN with 7, 27, 296, 225 blockers even with residual dispatch | COP0/TLB/ERET lowering (in progress, ADR-0235) and overlay discovery; see [`research/rom-sweep.md`](research/rom-sweep.md) |
 
-"Native build ✅" means analysis is `CLOSED` under a declared scope (usually `--address-taken`) and `native.py` emits the executable. The Paper Mario validation build (`--residual-dispatch`, ADR-0218) also runs only native code, but sends the few indirect jumps it cannot prove through a fail-closed lookup, so it is marked `native_complete: false`.
+"Native build ✅" means analysis is `CLOSED` under a declared scope (usually `--address-taken`) and `native.py` emits the executable. Since ADR-0233, `native.py` also builds by default when the only open items are indirect jumps it cannot prove: they go through a fail-closed run-time lookup over the translated code (still no emulation), and `native-manifest.json` records `native_complete: false`. `--strict` builds only proven maps.
 
 ### What is proven and what is assumed
 
@@ -37,6 +37,8 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0234 | `76692ed` | Every FPU instruction checks `Status.FR` at run time (boot context FR = 1, threads FR = 0); FPU forms move from orange to amber |
+| 0233 | `b65a162` | Residual run-time dispatch is the default build; `--strict` keeps proven-only builds; seven-ROM sweep recorded |
 | 0231 | `78b0eda` | TLB host register effects bound into callee proofs; Paper Mario's 8 remaining indirect jumps classified (save/restore alias proofs, table-base initialization, stack lineage) |
 | 0230 | `c3c1edb` | Code loaded into an already-covered memory slot is discovered; Paper Mario plays 60 s fault-free with audio |
 | 0229 | `db99954` | Incomplete switch paths kept as candidates; Paper Mario VI 654 to 659 |
