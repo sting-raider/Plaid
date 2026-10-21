@@ -11,6 +11,8 @@
 #include <set>
 
 static std::vector<u8> written(8 * 1024 * 1024);
+static std::vector<u8> startupWritten(8 * 1024 * 1024);
+static bool startupIdentity = true;
 static bool entered = false;
 static u32 boot, bootStatus;
 static std::set<u32> targets;
@@ -29,6 +31,22 @@ static std::vector<ReplayBinding> bindings;
 static std::vector<u8> sourceRom;
 static u32 canonical(u32 pc) {
   return pc >= 0x80000000u && pc < 0xc0000000u ? 0x80000000u | (pc & 0x1fffffffu) : pc;
+}
+// Inspect synchronized entries without issuing a guest TLB/bus access.
+static bool mappedSource(u32 pc, u32 p, u32& low, u32& high) {
+  u64 address = (u64)(s64)(s32)pc;
+  unsigned matches = 0;
+  for(auto& e : cpu.tlb.entry) {
+    if((address >> 62) != e.region || (address & (u64)e.addressMaskHi) != e.virtualAddress) continue;
+    // Refuse even an ambiguous invalid/ASID entry; replay observation is not closure.
+    matches++;
+    bool odd = address & e.addressSelect;
+    u64 span = (u64)e.addressMaskLo + 1, base = e.physicalAddress[odd];
+    if(!e.globals || !e.valid[odd] || span > written.size() || base + span > written.size() ||
+       base + (address & e.addressMaskLo) != p) return false;
+    low = base; high = base + span;
+  }
+  return matches == 1;
 }
 static bool bindingMatches(const ReplayBinding& b) {
   if(b.source == -2) return true; // fixed image, no competing slot identity
@@ -105,7 +123,19 @@ static void observeDma(u32 kind, u32 a, u32 p, u32 n, u32, u32 value) {
   }
 }
 static void mark(bool write, u32 address, u32 size, u32 device) {
-  if(!entered || !write) return;
+  if(!write) return;
+  if(!entered) {
+    // Retain actual reset/ IPL producers for mapped text already present at entry.
+    if(!rdram.mapIdentity) {
+      if(startupIdentity) std::fill(startupWritten.begin(), startupWritten.end(), 0);
+      startupIdentity = false; return;
+    }
+    startupIdentity = true;
+    u8 origin = device == (u32)RBusDevice::VR4300_DCACHE ||
+       device == (u32)RBusDevice::VR4300_UNCACHED || device == (u32)RBusDevice::PI_DMA ? 1 : 4;
+    for(u32 n = address; n < std::min<u64>((u64)address + size, startupWritten.size()); n++) startupWritten[n] |= origin;
+    return;
+  }
   if(!rdram.mapIdentity) { completed.clear(); validCopy = false; return; }
   if(address >= written.size()) return;
   completed.erase(std::remove_if(completed.begin(), completed.end(), [&](auto d) {
@@ -182,19 +212,24 @@ static void observe(u64 address, u32 word) {
     // Extended replay supplies call roots and completed raw sources only.
     // Snapshot composition retains its reproducible 100M-instruction contract (including its Rust verifier).
     if(steps >= 100000000) return;
-    bool uncovered = seekUncovered && pc >= 0x80000000u && pc < 0x80800000u
+    bool mapped = pc < 0x80000000u || pc >= 0xc0000000u;
+    bool uncovered = seekUncovered && (mapped || (pc >= 0x80000000u && pc < 0x80800000u))
       && std::none_of(covered.begin(), covered.end(), [&](auto r) { return r[0] <= pc && pc < r[1]; });
     if(!targets.contains(pc) && !uncovered) return;
     if(uncovered) { uncoveredEntry = pc; seekUncovered = false; }
     targets.erase(pc); // Only the first fetch can authorize this generation.
     auto reject = [&](const char* reason) {
-      std::fprintf(result, "{\"rejected_entry\":%u,\"steps\":%llu,\"reason\":\"%s\"}\n", pc, (unsigned long long)steps, reason);
+      std::fprintf(result, "{\"rejected_entry\":%u,\"physical\":%u,\"steps\":%llu,\"reason\":\"%s\"}\n", pc, plaidFetchAccess.physical, (unsigned long long)steps, reason);
     };
     u32 p = plaidFetchAccess.physical;
-    if(p >= written.size() || !written[p]) { reject("no completed RAM producer"); return; }
+    if(mapped && !rdram.mapIdentity) { reject("nonidentity RDRAM backing"); return; }
+    auto produced = [&](u32 at) { return written[at] ? written[at] : mapped ? startupWritten[at] : 0; };
+    if(p >= written.size() || !produced(p)) { reject("no completed RAM producer"); return; }
+    u32 lower = 0, upper = written.size();
+    if(mapped && !mappedSource(pc, p, lower, upper)) { reject("unsupported or ambiguous executable TLB mapping"); return; }
     u32 lo = p, hi = p;
-    while(lo && written[lo-1] && !(written[lo-1] & 4)) lo--;
-    while(hi < written.size() && written[hi] && !(written[hi] & 4)) hi++;
+    while(lo > lower && produced(lo-1) && !(produced(lo-1) & 4)) lo--;
+    while(hi < upper && produced(hi) && !(produced(hi) & 4)) hi++;
     lo = (lo + 3) & ~3u; hi &= ~3u;
     if(lo > p || hi < p + 4) { reject("incomplete produced instruction"); return; }
     // RAM must represent the instruction cache, including previously filled
@@ -208,7 +243,21 @@ static void observe(u64 address, u32 word) {
       }
     }
     if(rdram.ram.read<Word>(p, RBusDevice::ARES_DEBUGGER) != word) { reject("fetched word differs from RAM"); return; }
-    std::fprintf(result, "{\"entry\":%u,\"destination\":%u,\"steps\":%llu,\"cpu_writes\":", pc, 0x80000000u | lo, (unsigned long long)steps);
+    u32 destination = mapped ? pc - (p - lo) : 0x80000000u | lo;
+    if(mapped) {
+      // A different entry can shadow a page between the endpoints.
+      for(u32 offset = 0;;) {
+        u32 a, b;
+        if(!mappedSource(destination + offset, lo + offset, a, b) || a != lower || b != upper) {
+          reject("noncontiguous executable TLB source"); return;
+        }
+        if(offset == hi - lo - 1) break;
+        offset = std::min<u32>(((destination + offset) | 0xfffu) - destination + 1, hi - lo - 1);
+      }
+    }
+    std::fprintf(result, "{\"entry\":%u,\"destination\":%u,\"steps\":%llu,", pc, destination, (unsigned long long)steps);
+    if(mapped) std::fprintf(result, "\"physical_start\":%u,", lo);
+    std::fprintf(result, "\"cpu_writes\":");
     ranges(result, lo, hi, 1);
     std::fprintf(result, ",\"pi_dma\":[");
     for(size_t i = 0; i < dma.size(); i++) std::fprintf(result, "%s[%u,%u,%u]", i ? "," : "", dma[i][0], dma[i][1], dma[i][2]);
@@ -217,7 +266,7 @@ static void observe(u64 address, u32 word) {
     std::fprintf(result, "]}\n");
     if(!exactMany) {
       for(auto it = targets.begin(); it != targets.end();) {
-        if(*it >= (0x80000000u | lo) && *it < (0x80000000u | hi)) it = targets.erase(it);
+        if(*it >= destination && (u64)*it < (u64)destination + hi - lo) it = targets.erase(it);
         else ++it;
       }
     }

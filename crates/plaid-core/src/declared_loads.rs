@@ -24,6 +24,12 @@ pub enum LoadEncoding {
     TlbRaw {
         text_size: u32,
     },
+    /// Replay-produced unchanged text, bound to its observed physical RAM.
+    AresTlb {
+        entry: GuestAddr,
+        physical: u32,
+        text_size: u32,
+    },
     Yaz0,
     /// Two adjacent 1172 streams: text followed by data, bounded by the catalog.
     RarePair {
@@ -69,8 +75,29 @@ impl DeclaredLoad {
     /// The overlay layout of a relocatable load whose placed bytes are
     /// `bytes`: a slot alternate's synthesized one, else the Zelda64 trailer.
     pub fn layout(&self, bytes: &[u8]) -> Result<crate::overlays::Layout, String> {
+        if let LoadEncoding::AresTlb {
+            entry,
+            physical,
+            text_size,
+        } = self.encoding
+            && (self.source.0 != 0
+                || !physical.is_multiple_of(4)
+                || u64::from(physical) + bytes.len() as u64 > 0x800000
+                || !entry.0.is_multiple_of(4)
+                || self
+                    .linked
+                    .is_none_or(|link| entry.0.wrapping_sub(link.0) >= text_size))
+        {
+            return Err(
+                "mapped boot load needs a bounded physical source and executable replay entry"
+                    .into(),
+            );
+        }
         match (self.linked, self.encoding) {
-            (Some(linked), LoadEncoding::TlbRaw { text_size }) => {
+            (
+                Some(linked),
+                LoadEncoding::TlbRaw { text_size } | LoadEncoding::AresTlb { text_size, .. },
+            ) => {
                 if (0x8000_0000..0xc000_0000).contains(&linked.0)
                     || !self.relocatable
                     || !linked.0.is_multiple_of(4)
@@ -92,7 +119,7 @@ impl DeclaredLoad {
                     relocations: Vec::new(),
                 })
             }
-            (None, LoadEncoding::TlbRaw { .. }) => {
+            (None, LoadEncoding::TlbRaw { .. } | LoadEncoding::AresTlb { .. }) => {
                 Err("TLB raw load requires a content-bound slot".into())
             }
             (
@@ -119,7 +146,8 @@ pub fn slot_targets(loads: &[DeclaredLoad], target: u32) -> Vec<u32> {
             let size = match l.encoding {
                 LoadEncoding::RarePair { text_size, .. }
                 | LoadEncoding::Segment { text_size, .. }
-                | LoadEncoding::TlbRaw { text_size } => text_size,
+                | LoadEncoding::TlbRaw { text_size }
+                | LoadEncoding::AresTlb { text_size, .. } => text_size,
                 _ => l.destination.size,
             };
             (off < size).then(|| l.destination.start.0 + off)
@@ -295,6 +323,9 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
             }
             let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
             let capture = crate::ares_boot::execute(&rom, entry.0)?;
+            if capture.physical_start.is_some() {
+                return Err("mapped boot captures require ares_tlb binding guards".into());
+            }
             let offset =
                 load.destination
                     .start
@@ -306,6 +337,23 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
                 .get(offset..offset.checked_add(size).ok_or("ares load range overflow")?)
                 .ok_or("ares load ends beyond the replayed image")?
                 .to_vec()
+        }
+        LoadEncoding::AresTlb {
+            entry, physical, ..
+        } => {
+            if start != 0 || !load.relocatable {
+                return Err("mapped boot loads require whole-ROM replay and a slot".into());
+            }
+            let linked = load.linked.ok_or("mapped boot load lacks virtual link")?;
+            let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
+            let capture = crate::ares_boot::execute(&rom, entry.0)?;
+            if capture.destination != linked.0
+                || capture.physical_start != Some(physical)
+                || capture.bytes.len() != size
+            {
+                return Err("mapped boot load differs from replayed mapping/source extent".into());
+            }
+            capture.bytes
         }
     };
     if data.len() != size {
@@ -319,7 +367,10 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
         if !load.relocatable {
             return Err("a slot alternate runs only through a binding".into());
         }
-        if matches!(load.encoding, LoadEncoding::TlbRaw { .. }) {
+        if matches!(
+            load.encoding,
+            LoadEncoding::TlbRaw { .. } | LoadEncoding::AresTlb { .. }
+        ) {
             load.layout(&data)?;
             return Ok(data);
         }
@@ -331,7 +382,10 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
         };
         return layout.apply(&data, linked.0, load.destination.start.0);
     }
-    if matches!(load.encoding, LoadEncoding::TlbRaw { .. }) {
+    if matches!(
+        load.encoding,
+        LoadEncoding::TlbRaw { .. } | LoadEncoding::AresTlb { .. }
+    ) {
         return Err("TLB raw load requires a content-bound slot".into());
     }
     Ok(data)
@@ -379,7 +433,7 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
         .loads
         .iter()
         .filter_map(|load| match load.encoding {
-            LoadEncoding::AresBoot { entry } => Some(entry.0),
+            LoadEncoding::AresBoot { entry } | LoadEncoding::AresTlb { entry, .. } => Some(entry.0),
             _ => None,
         })
         .collect();

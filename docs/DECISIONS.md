@@ -6829,3 +6829,45 @@ residual OPEN/10. BK/F-Zero X discovery identity, visible MM regression state,
 Index-width mutation and exact-tree local gates are recorded in
 research/cop0-lowering.md. Mapped discovery, boot evaluator expansion, ERET,
 CACHE and event delivery remain separate work; no completeness is asserted.
+
+## ADR-0236: Replay-authenticated TLB instruction sources (partial)
+
+Status: partial, 2026-10-22.
+
+Pinned analysis-time ares reset replay now harvests first mapped instruction
+fetches from observed CPU/PI-produced identity-backed RAM, including the IPL
+producer history before game entry. A unique global/valid 32-bit TLB entry must
+map every captured page boundary and final byte to contiguous physical bytes
+within the selected half. Incomplete/unsupported producers, ASID ambiguity,
+stale instruction cache, nonidentity backing and fetch/RAM disagreement refuse.
+Ordinary KSEG0 harvesting retains its previous post-entry producer requirement.
+
+An ares_tlb declaration carries whole-ROM replay entry, virtual link, physical
+source and bounded unchanged text. Composition reruns reset and verifies exact
+virtual/physical identity and extent; RAM snapshots are outputs, never inputs.
+Mapped register/direct tail targets now discover their supplied slot copies,
+with guest-visible addresses unchanged and the existing solver slot verification.
+
+Native lowering reuses ADR-0205 executable content/generation/frame guards and
+requires the captured physical source in the live contiguous TLB mapping. Equal
+bytes elsewhere do not authorize a different source. Invalid physical sentinels
+and entry/source bounds fail validation; ordinary ares_boot cannot bypass the
+mapped binding. No runtime MIPS decoder, interpreter or JIT is added.
+
+Synthetic pinned-ares MTC0/TLBWI fetch/replay and malformed mapping cases,
+Rust capture/tail/layout verifiers, complete native/reference state/RAM checks,
+source-byte/remap/clear/frame tests and a physical-guard mutation cover this
+partial. The pinned ISC ares implementation is an oracle, not copied native
+code. Details, exact gates, map hashes and limitations are recorded in
+research/mapped-code-discovery.md.
+
+GoldenEye expands 348 -> 3716 blocks: its mapped boot target now has a source,
+but newly reached code remains OPEN 341 ordinary / 331 residual blockers. MK64
+remains OPEN 13/10, including ERET and missing targets. Both normal requested
+60-second RT64 pipelines refuse before native execution. BK/F-Zero X/MM maps
+regenerate byte-identically; their separate native regressions are not fixed.
+Mapped open-call replay projection, precise text bounds, fixed-code binding
+overlap, wide/ASID mappings, ERET/event effects and broader closure remain open.
+The core-only boot evaluator still refuses unknown COP0 startup state; this
+milestone extends the pinned reset harvest. ISA coverage stays 203/209; no
+whole-ROM or new native-complete acceptance is claimed.

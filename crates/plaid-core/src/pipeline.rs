@@ -228,7 +228,9 @@ fn discover_bounded(
         // Linked calls into a content-bound slot discover every supplied text
         // alternate. Keep the edge's architectural target; native dispatch
         // chooses the byte-verified alternate when the call executes.
-        for edge in map.direct_edges.iter().filter(|e| e.kind == EdgeKind::Call) {
+        for edge in map.direct_edges.iter().filter(|e| {
+            e.kind == EdgeKind::Call || !(0x8000_0000..0xc000_0000).contains(&e.target.pc.0)
+        }) {
             for target in image.slot_copies(edge.target.pc.0) {
                 if target != edge.target.pc.0
                     && image.instruction_word(GuestAddr(target)).is_some()
@@ -249,7 +251,8 @@ fn discover_bounded(
         for site in &map.indirect_sites {
             for target in site.candidates.keys() {
                 if target.image == image.base.image && target.generation == image.base.generation {
-                    let copies = if site.link_register.is_some() {
+                    let mapped = !(0x8000_0000..0xc000_0000).contains(&target.pc.0);
+                    let copies = if site.link_register.is_some() || mapped {
                         image.slot_copies(target.pc.0)
                     } else {
                         vec![target.pc.0]
@@ -257,7 +260,7 @@ fn discover_bounded(
                     for target in copies.into_iter().map(GuestAddr) {
                         if image.instruction_word(target).is_some() && !boundary.contains(&target) {
                             roots.insert(target);
-                            if site.link_register.is_some() {
+                            if site.link_register.is_some() || mapped {
                                 external.insert(target);
                             }
                         }

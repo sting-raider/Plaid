@@ -180,6 +180,97 @@ fn linked_register_and_direct_calls_discover_alternates_and_return_continuations
 }
 
 #[test]
+fn mapped_register_tail_discovers_bound_text_without_rewriting_guest_target() {
+    let (mut bytes, spec) = fixture();
+    for (n, word) in [0x3c19_e020u32, 0x0320_0008, 0].into_iter().enumerate() {
+        bytes[n * 4..n * 4 + 4].copy_from_slice(&word.to_be_bytes());
+    }
+    let (_, image) = compose(&bytes, &spec).unwrap();
+    let d = plaid_core::pipeline::discover_image(
+        RomIdentity {
+            sha256: "0".repeat(64),
+            size: bytes.len() as u64,
+        },
+        &image,
+        &[image.base.pc],
+        1000,
+    )
+    .unwrap();
+    assert!(
+        d.map
+            .blocks
+            .iter()
+            .any(|b| b.start.pc == GuestAddr(0x8001_0040))
+    );
+    let site = d
+        .map
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc == GuestAddr(0x8000_0004))
+        .unwrap();
+    assert!(
+        site.candidates
+            .keys()
+            .any(|a| a.pc == GuestAddr(0xe020_0000))
+    );
+    assert!(plaid_core::indirect::verify_constant(&d.map, &image, site));
+    let mut map = d.map;
+    let mut spec = spec;
+    let evidence = map.evidence.keys().next().unwrap().clone();
+    for load in &mut spec.loads {
+        load.evidence = [evidence.clone()].into();
+    }
+    map.load_images.insert(image.base.image.clone(), spec);
+    let check = |map: &plaid_core::program::ProgramMap| {
+        plaid_core::solver::solve(
+            map,
+            std::slice::from_ref(&image),
+            plaid_core::solver::Scope::DeclaredStaticImagesGuardedRam,
+        )
+        .unwrap()
+        .blockers
+        .iter()
+        .any(|b| {
+            b.kind == "unresolved_indirect_target"
+                && b.site
+                    .as_ref()
+                    .is_some_and(|s| s.pc == GuestAddr(0x80000004))
+        })
+    };
+    assert!(!check(&map));
+    map.load_images.clear();
+    assert!(check(&map));
+}
+
+#[test]
+fn replay_mapped_layout_cannot_disable_or_escape_physical_guards() {
+    let (bytes, spec) = fixture();
+    let mut load = spec.loads[0].clone();
+    load.source = RomOffset(0);
+    let data = &bytes[0x40..0x80];
+    let encoding = |entry, physical| LoadEncoding::AresTlb {
+        entry: GuestAddr(entry),
+        physical,
+        text_size: 0x20,
+    };
+    load.encoding = encoding(0xe0000000, 0x2000);
+    assert!(load.layout(data).is_ok());
+    for (entry, physical) in [
+        (0xe0000000, u32::MAX),
+        (0xe0000000, 0x800000),
+        (0xe0000000, 0x2002),
+        (0xe0000020, 0x2000),
+        (0xe0000002, 0x2000),
+    ] {
+        load.encoding = encoding(entry, physical);
+        assert!(load.layout(data).is_err());
+    }
+    load.encoding = encoding(0xe0000000, 0x2000);
+    load.source = RomOffset(4);
+    assert!(load.layout(data).is_err());
+}
+
+#[test]
 fn native_bodies_stop_before_a_tail_leaves_their_binding() {
     let (mut bytes, spec) = fixture();
     for (offset, words) in [

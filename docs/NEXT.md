@@ -1,5 +1,20 @@
 # Next
 
+## Continue mapped discovery after ADR-0236
+
+GoldenEye's mapped boot target now has replay-authenticated physical bytes;
+its 3,716-block map exposes OPEN 341/331 ordinary/residual blockers. Establish
+qualified code/data and table/source bounds in the reached image, and compare
+replay-produced slot identity before admitting mapped open-call observations.
+Keep fixed executable/binding overlap fail-closed. MK64 stays OPEN 13/10:
+ERET needs EPC/ErrorEPC, Status EXL/ERL, LL and event effects with a pinned
+native differential contract; four missing targets still need load provenance.
+The pinned reset harvester now crosses boot COP0/TLB; the core-only evaluator
+still refuses unknown startup state. Do not claim native execution for either
+ROM. Preserve byte-identical BK/F-Zero X/MM discovery and leave the independent
+BK/MM native regression bisects to their owners. Receipt:
+research/mapped-code-discovery.md.
+
 ## After ADR-0233
 
 Per-site proofs no longer gate a build. The sweep points at the next universal

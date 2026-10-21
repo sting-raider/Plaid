@@ -19,7 +19,7 @@ def missing_targets(program, loads, base, size):
     for site in program['indirect_sites']:
         for name in ('candidates', 'observed'):
             targets.update(c[0]['pc'] for c in site[name])
-    return sorted(t for t in targets if 0x80000000 <= t < 0x80800000 and t % 4 == 0
+    return sorted(t for t in targets if (t < 0x80800000 or t >= 0xc0000000) and t % 4 == 0
                   and not any(lo <= t < hi for lo, hi in covered))
 
 
@@ -58,6 +58,10 @@ def replay_bindings(program, base, size):
                         if kind in encoding:
                             length = encoding[kind]['text_size']
                             source = load['source']
+                    if 'ares_tlb' in encoding:
+                        # Its reset replay authenticates bytes during composition;
+                        # until replay projection can recheck them, do not observe calls.
+                        source = -1
                 if linked is None:
                     # Unknown runtime placement: never observe the synthetic PC.
                     continue
@@ -177,6 +181,25 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
         if 'bytes' not in capture:
             continue
         data = bytes(capture['bytes'])
+        if 'physical_start' in capture:
+            start, physical, entry = (capture[k] for k in ('destination', 'physical_start', 'entry'))
+            if (not data or (start | physical | entry | len(data)) & 3 or
+                    physical < 0 or physical + len(data) > 0x800000 or
+                    not start <= entry < start + len(data) or
+                    not (0 <= start < start + len(data) <= 0x80000000 or
+                         0xc0000000 <= start < start + len(data) <= 0x100000000)):
+                receipt['refusal'] = 'invalid mapped boot extent'
+                continue
+            load = dict(destination=hex(start), size=hex(len(data)), rom='0x0', encoding='ares_tlb',
+                        entry=hex(entry), physical=hex(physical), text_size=hex(len(data)), slot=True)
+            if load not in loads['loads']:
+                loads['loads'].append(load)
+                loads['source'] += (f"; mapped first fetch {entry:#x} from physical RAM {physical:#x}; "
+                                    f"ares {capture['revision']}, ROM sha256 {capture['rom_sha256']}, "
+                                    f"output sha256 {hashlib.sha256(data).hexdigest()}; "
+                                    "whole-ROM replay and native mapping/content/generation guards required (ADR-0236)")
+                added = True
+            continue
         lo, hi = capture['destination'], capture['destination'] + len(data)
         pieces = [(lo, hi)]
         # Preserve static inference and earlier snapshots byte-for-byte.

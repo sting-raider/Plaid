@@ -1,5 +1,20 @@
 # Status
 
+## Mapped instruction sources (partial; ADR-0236)
+
+Pinned reset replay now exports produced RAM at a unique global TLB virtual
+link, including observed IPL producers. Composition replays and checks the
+virtual/physical source; native bindings retain content, generation and frame
+guards and require that physical backing. Mapped tail transfers discover their
+unchanged slot text. GoldenEye expands 348 -> 3,716 blocks, resolving its old
+mapped boot target, then exposes OPEN 341 ordinary / 331 residual blockers.
+MK64 remains OPEN 13/10 with ERET and four missing targets. Both requested
+60-second RT64 pipelines refuse before any native window or gameplay.
+BK/F-Zero X/MM complete maps are byte-identical to ADR-0235 controls; separate
+native regressions remain untouched. ISA stays 203/209. See
+research/mapped-code-discovery.md for synthetic/reference/mutation gates,
+timings and the open replay-projection/text/lifetime/overlap obligations.
+
 ## Bounded native COP0 state (partial; ADR-0235)
 
 Seven additional forms lower with checked kernel state: MFC0/DMFC0/MTC0/DMTC0,
