@@ -948,3 +948,12 @@ The Paper Mario residual-dispatch run faults 3 at the boot stub jump: the
 target is main-program code that no lowered entry covers (apparently generated
 or relocated at boot). Next: discover and lower that code (boot-generated text
 capture) so the run proceeds to the remaining residual sites.
+
+## After ADR-0220
+
+Boot text capture now carries the Paper Mario run past the boot stub to a
+computed call (154 PI DMAs). Its target is a real function that only a ROM
+checksum names, so discovery never reaches it and the native dispatch faults 3.
+Next: record the targets that unproven indirect calls take during the
+analysis-time pinned-ares replay and add them as discovery roots, never as
+target certificates, so code reached only through computed calls is lowered.

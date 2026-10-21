@@ -287,3 +287,6 @@ indirect-site blocker for native validation runs. Its artifacts and manifest are
 path is unchanged. The first Paper Mario run closes with 0 blockers and 7
 residual sites, builds, and faults 3 at a site whose computed target is code
 absent from every lowered entry (VI 1, 1 gfx task, 0 audio tasks).
+With boot text capture (ADR-0220) the run closes with 0 blockers and 8 residual
+sites, passes the boot stub (154 PI DMAs, 11 threads) and faults 3 at a
+checksum-computed call whose target function discovery never reached.
