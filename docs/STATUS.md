@@ -290,3 +290,6 @@ absent from every lowered entry (VI 1, 1 gfx task, 0 audio tasks).
 With boot text capture (ADR-0220) the run closes with 0 blockers and 8 residual
 sites, passes the boot stub (154 PI DMAs, 11 threads) and faults 3 at a
 checksum-computed call whose target function discovery never reached.
+With observed call targets as discovery roots (ADR-0222) it passes that check
+(235 PI DMAs) and faults 3 at a residual switch whose known case labels the
+residual dispatch does not include.

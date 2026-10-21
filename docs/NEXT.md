@@ -957,3 +957,11 @@ checksum names, so discovery never reaches it and the native dispatch faults 3.
 Next: record the targets that unproven indirect calls take during the
 analysis-time pinned-ares replay and add them as discovery roots, never as
 target certificates, so code reached only through computed calls is lowered.
+
+## After ADR-0222
+
+Paper Mario now passes its integrity check and stops at a residual `jr`
+switch. The map already holds the five case labels as candidates; residual
+dispatch covers only function entries. Next: let a residual site also
+dispatch over its own candidate and observed targets (labels for a jump,
+functions for a call), still validation-only and fail-closed otherwise.

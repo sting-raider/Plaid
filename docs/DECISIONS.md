@@ -6436,3 +6436,36 @@ restored. Absent-Pak and full-cartridge-address paths now have regressions.
 Pinned oracle builds cache independently fingerprinted C++ objects so adapter
 edits do not rebuild unchanged core objects. The full local gate passes; the
 Paper Mario result is in research/paper-mario-native-frontier.md.
+
+## ADR-0222: Observed call targets as address-taken discovery roots
+
+Date: 2026-10-21. ADR-0221 is reserved by the separate OoT worker.
+
+A call whose target is computed from data no instruction names (for example a
+ROM checksum) has no candidate, no address-taken constant and no uncovered
+fetch when its target lies inside an already declared image. Discovery never
+reaches the callee, and the native address-taken dispatch faults 3 although
+the computed value is correct.
+
+The ADR-0190 analysis-time pinned ares replay now receives the open call sites
+(no closed proof, linking register) and records the target register value as
+each one executes. `harvest_boot.py` adds new pairs to the loads file as
+`observed_roots`; discovery adds those targets to the address-taken roots
+after the existing plausibility filter, alongside ROM-word and ROM-expression
+roots. Computed jumps are not listed: their targets are usually returns or
+labels inside a function, not function starts.
+
+Observed targets are discovery inputs, never target certificates. The site
+keeps no closed proof, whole-ROM closure still refuses it, and the native
+address-taken dispatch remains fail-closed for every other value. The replay
+is finite, deterministic and neutral-input, so it can only add roots that this
+run executed. No game-specific value enters production code.
+
+Verification: Rust tests show an observed target discovered and dispatched
+while its site stays an unresolved indirect site under WholeRom, and an
+implausible or misaligned target ignored. The oracle test records the exact
+register target of a listed transfer, reports nothing for an unexecuted site
+and rejects a misaligned site list; the harvest test lists only calls and adds
+a repeated observation once. Dropping the roots, skipping plausibility,
+disabling the oracle record and listing jumps are all caught. The Paper Mario
+result is in research/paper-mario-native-frontier.md.
