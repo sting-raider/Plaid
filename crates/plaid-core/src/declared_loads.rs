@@ -31,6 +31,13 @@ pub enum LoadEncoding {
         text_size: u32,
     },
     Yaz0,
+    /// Fixed-slot overlay described by a ROM DMA catalog and scene record.
+    CatalogOverlay {
+        encoding: OverlayCompression,
+        encoded_size: u32,
+        text_size: u32,
+        bss_size: u32,
+    },
     /// Two adjacent 1172 streams: text followed by data, bounded by the catalog.
     RarePair {
         end: RomOffset,
@@ -53,6 +60,13 @@ pub enum LoadEncoding {
         entry: GuestAddr,
         physical: u32,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OverlayCompression {
+    Raw,
+    Mio0,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -145,6 +159,27 @@ impl DeclaredLoad {
                     relocations: Vec::new(),
                 })
             }
+            (
+                Some(linked),
+                LoadEncoding::CatalogOverlay {
+                    text_size,
+                    bss_size,
+                    ..
+                },
+            ) => {
+                if !self.relocatable
+                    || !linked.0.is_multiple_of(4)
+                    || text_size == 0
+                    || !text_size.is_multiple_of(4)
+                    || text_size as usize > bytes.len()
+                    || bytes.len() as u64 + u64::from(bss_size) > 8 * 1024 * 1024
+                {
+                    return Err("MIO0 overlay needs bounded text and BSS extents".into());
+                }
+                let mut layout = crate::overlays::slot_layout_bounded(bytes, linked.0, text_size)?;
+                layout.bss = bss_size;
+                Ok(layout)
+            }
             (None, LoadEncoding::TlbRaw { .. } | LoadEncoding::AresTlb { .. }) => {
                 Err("TLB raw load requires a content-bound slot".into())
             }
@@ -172,6 +207,7 @@ pub fn slot_targets(loads: &[DeclaredLoad], target: u32) -> Vec<u32> {
             let size = match l.encoding {
                 LoadEncoding::RarePair { text_size, .. }
                 | LoadEncoding::Segment { text_size, .. }
+                | LoadEncoding::CatalogOverlay { text_size, .. }
                 | LoadEncoding::TlbRaw { text_size }
                 | LoadEncoding::AresTlb { text_size, .. } => text_size,
                 _ => l.destination.size,
@@ -253,6 +289,70 @@ pub fn yaz0(data: &[u8]) -> Result<Vec<u8>, String> {
     yaz0_stream(data).map(|(out, _)| out)
 }
 
+/// Decode one bounded Nintendo MIO0 stream.
+pub fn mio0(data: &[u8]) -> Result<Vec<u8>, String> {
+    if data.len() < 16 || &data[..4] != b"MIO0" {
+        return Err("not a MIO0 stream".into());
+    }
+    let be = |at: usize| -> Result<usize, String> {
+        let end = at.checked_add(4).ok_or("MIO0 header overflow")?;
+        Ok(u32::from_be_bytes(
+            data.get(at..end)
+                .ok_or("truncated MIO0 header")?
+                .try_into()
+                .unwrap(),
+        ) as usize)
+    };
+    let size = be(4)?;
+    let mut comp = be(8)?;
+    let control_end = comp;
+    let mut raw = be(12)?;
+    let raw_start = raw;
+    if size == 0 || size > 8 * 1024 * 1024 || comp < 16 || comp > raw || raw > data.len() {
+        return Err("invalid MIO0 bounds".into());
+    }
+    let mut control = 16usize;
+    let mut bits = 0u8;
+    let mut mask = 0u8;
+    let mut out = Vec::with_capacity(size);
+    while out.len() < size {
+        if mask == 0 {
+            if control >= control_end {
+                return Err("truncated MIO0 control stream".into());
+            }
+            bits = *data.get(control).ok_or("truncated MIO0 control stream")?;
+            control += 1;
+            mask = 0x80;
+        }
+        if bits & mask != 0 {
+            out.push(*data.get(raw).ok_or("truncated MIO0 literal stream")?);
+            raw += 1;
+        } else {
+            let token_end = comp.checked_add(2).ok_or("MIO0 token overflow")?;
+            if token_end > raw_start {
+                return Err("truncated MIO0 back-reference".into());
+            }
+            let token = u16::from_be_bytes(
+                data.get(comp..token_end)
+                    .ok_or("truncated MIO0 back-reference")?
+                    .try_into()
+                    .unwrap(),
+            );
+            comp = token_end;
+            let count = usize::from(token >> 12) + 3;
+            let distance = usize::from(token & 0x0fff) + 1;
+            if distance > out.len() || count > size - out.len() {
+                return Err("invalid MIO0 back-reference".into());
+            }
+            for _ in 0..count {
+                out.push(out[out.len() - distance]);
+            }
+        }
+        mask >>= 1;
+    }
+    Ok(out)
+}
+
 /// The largest decoded size accepted, so a stray header cannot demand an
 /// arbitrary allocation; it exceeds any N64 cartridge.
 const YAZ0_MAX: usize = 64 << 20;
@@ -309,6 +409,25 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
             .ok_or("load source outside the ROM")?
             .to_vec(),
         LoadEncoding::Yaz0 => yaz0(bytes.get(start..).ok_or("load source outside the ROM")?)?,
+        LoadEncoding::CatalogOverlay {
+            encoding,
+            encoded_size,
+            ..
+        } => {
+            let end = start
+                .checked_add(encoded_size as usize)
+                .ok_or("catalog source range overflow")?;
+            let source = bytes
+                .get(start..end)
+                .ok_or("catalog source outside the ROM")?;
+            match encoding {
+                OverlayCompression::Raw => source
+                    .get(..size)
+                    .ok_or("catalog raw source is shorter than its logical size")?
+                    .to_vec(),
+                OverlayCompression::Mio0 => mio0(source)?,
+            }
+        }
         LoadEncoding::RarePair { end, text_size } => {
             if !load.relocatable || load.linked.is_none() {
                 return Err("1172 paired files require a slot binding".into());
@@ -415,6 +534,12 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
         ) {
             load.layout(&data)?;
             return Ok(data);
+        }
+        if matches!(load.encoding, LoadEncoding::CatalogOverlay { .. }) {
+            let layout = load.layout(&data)?;
+            let mut relocated = layout.apply(&data, linked.0, load.destination.start.0)?;
+            relocated.truncate(data.len());
+            return Ok(relocated);
         }
         let layout = match load.encoding {
             LoadEncoding::RarePair { text_size, .. } | LoadEncoding::Segment { text_size, .. } => {
@@ -748,6 +873,36 @@ mod tests {
         let mut bad = s.clone();
         bad[21] = 0x10; // distance 17 reaches before the start of the output
         assert!(yaz0(&bad).is_err());
+    }
+
+    #[test]
+    fn mio0_decodes_literals_and_overlapping_back_references() {
+        let mut literal = b"MIO0".to_vec();
+        literal.extend(3u32.to_be_bytes());
+        literal.extend(17u32.to_be_bytes());
+        literal.extend(17u32.to_be_bytes());
+        literal.extend([0xe0, b'a', b'b', b'c']);
+        assert_eq!(mio0(&literal).unwrap(), b"abc");
+
+        let mut repeated = b"MIO0".to_vec();
+        repeated.extend(6u32.to_be_bytes());
+        repeated.extend(17u32.to_be_bytes());
+        repeated.extend(19u32.to_be_bytes());
+        repeated.extend([0xe0, 0x00, 0x02, b'a', b'b', b'c']);
+        assert_eq!(mio0(&repeated).unwrap(), b"abcabc");
+
+        let mut mixed = b"MIO0".to_vec();
+        mixed.extend(11u32.to_be_bytes());
+        mixed.extend(18u32.to_be_bytes());
+        mixed.extend(20u32.to_be_bytes());
+        mixed.extend([
+            0xbf, 0x80, 0, 0, b'a', b'b', b'c', b'd', b'e', b'f', b'g', b'h',
+        ]);
+        assert_eq!(mio0(&mixed).unwrap(), b"aaaabcdefgh");
+
+        // A malformed token may not borrow bytes from the literal stream.
+        repeated[12..16].copy_from_slice(&18u32.to_be_bytes());
+        assert!(mio0(&repeated).is_err());
     }
 
     #[test]
