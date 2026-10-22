@@ -1,5 +1,12 @@
 # Status
 
+## RSP candidates all run again (ADR-0245)
+
+All RSP candidates are lowered again; only one per group the task matcher
+cannot tell apart is matched. Corrects ADR-0240, which dropped texts F-Zero X
+needs.
+F-Zero X with --rsp-gfx runs 20 s again (50 texts, VI 1166, fault 0); Banjo-Kazooie runs 30 s (45 texts, VI 1773, fault 0).
+
 ## Short table-named RSP overlays (ADR-0243)
 
 Overlay-table entries of 64 bytes or more become RSP candidates when they are

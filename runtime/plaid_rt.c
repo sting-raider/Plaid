@@ -139,6 +139,7 @@ extern const plaid_rsp_text *const plaid_rsp_texts[];
 #ifdef PLAID_RSP_ROM
 extern const u32 plaid_rsp_boot_ucode_sizes[];
 extern const u8 plaid_rsp_rom_reachable[][128];
+extern const u8 plaid_rsp_rom_matchable[]; /* one per indistinguishable group (ADR-0245) */
 #endif
 static plaid_rsp rsp;
 static const char *rsp_dump_dir, *rsp_capture_dir;
@@ -1354,7 +1355,7 @@ static void rsp_task(void) {
   ucode = (u32)rsp.dmem[0xfd0] << 24 | (u32)rsp.dmem[0xfd1] << 16 |
           (u32)rsp.dmem[0xfd2] << 8 | rsp.dmem[0xfd3];
   for (i = 0; plaid_rsp_texts[i]; i++) {
-    if (boot_size <= 0x1000 && rsp_rom_matches(i, rsp.imem, 0, boot_size)) {
+    if (plaid_rsp_rom_matchable[i] && boot_size <= 0x1000 && rsp_rom_matches(i, rsp.imem, 0, boot_size)) {
       boot_matches++;
       size = plaid_rsp_boot_ucode_sizes[i];
     }
@@ -1365,7 +1366,7 @@ static void rsp_task(void) {
   if (size) {
     if (ucode <= PLAID_RAM_SIZE && size <= PLAID_RAM_SIZE - ucode) {
       for (i = 0; plaid_rsp_texts[i]; i++) {
-        if (rsp_rom_matches(i, S->ram + ucode, 0x80, size)) text_matches++;
+        if (plaid_rsp_rom_matchable[i] && rsp_rom_matches(i, S->ram + ucode, 0x80, size)) text_matches++;
       }
     }
     if (text_matches != 1) finish(1, "unknown or ambiguous ROM-derived RSP microcode");
