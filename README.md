@@ -14,7 +14,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 ## Where it stands
 
-*As of main `a0dbaf22`, 2026-10-23. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
+*As of main `dc6e8664`, 2026-10-23. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
@@ -39,6 +39,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0254 | `dc6e8664` | Analysis-time ares runs natively on Windows (MinGW) instead of in WSL; Banjo-Kazooie analysis is byte-identical and replays are about 3x faster |
 | 0253 | `a0dbaf22` | RSP boot loaders that jump and short task programs are recognized; Ocarina of Time runs 30 s from the ROM alone with fault 0 |
 | 0251 | `42887dfa` | Jump-table candidates whose bytes overlap decoded code stay unresolved instead of adding false targets; Rogue Squadron residual blockers 184 -> 151 |
 | 0250 | `0cb6a044` | Initialized table data recovered from the boot replay, kept as data and checked natively where it is used; GoldenEye blockers 338 -> 175 |
