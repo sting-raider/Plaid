@@ -7317,3 +7317,25 @@ fault 0: F-Zero X and Mario Kart 64 (compiled graphics microcode),
 Banjo-Kazooie, Paper Mario and Majora's Mask. Synthetic tests cover the jump-and-wrap
 boot (and an ucode_data load and an unreachable DMA, both refused) and a short
 program (and a missing BREAK and a missing RSP instruction, both refused).
+
+## ADR-0254: Analysis-time ares runs natively on Windows
+
+Status: accepted
+
+Context: every build's ares replays (boot state and harvest rounds) ran in WSL
+Ubuntu, capped at 4 vCPUs and crossing DrvFS for every file. ares and its
+support library build with MinGW, the compiler the native artifacts already
+use.
+
+Decision: on Windows `scripts/ares_boot.py` builds and runs the pinned ares
+oracle with MinGW (`oracle.exe`, linked with ws2_32, shlwapi, ole32 and uuid
+instead of libdl) and locks its build directory with `msvcrt`.
+`PLAID_ARES_WSL=1` keeps the WSL route. Replay results pass through JSON on
+every route, exactly as a cache hit or the WSL route returns them. The
+runtime test oracles still use WSL.
+
+Consequences: Banjo-Kazooie built with an empty replay cache produces
+`loads.json`, `map.json`, `id.json` and boot state byte-identical to the WSL
+route (only the recorded `replay_seconds` differ: 0.54 s vs 1.52 s for the
+boot state). The oracle builds in 195 s; harvest rounds take about 35 s each,
+including rediscovery.

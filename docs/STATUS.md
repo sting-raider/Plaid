@@ -1,5 +1,11 @@
 # Status
 
+## Native Windows ares oracle (ADR-0254)
+
+Analysis-time ares replays run natively on Windows with MinGW instead of in
+WSL; Banjo-Kazooie analysis outputs are byte-identical and replays are about
+3x faster. `PLAID_ARES_WSL=1` keeps the old route.
+
 ## Ocarina of Time runs from the ROM alone (ADR-0253)
 
 The RSP boot recognizer follows jumps and wrapped DMEM offsets, and short task

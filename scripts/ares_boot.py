@@ -17,15 +17,26 @@ BUDGET = 100_000_000
 SITE_BUDGET = 2_000_000_000
 
 
-def build_oracle():
+def lock_exclusive(lock):
+    if os.name == 'nt':
+        import msvcrt
+        while True:
+            try:
+                return msvcrt.locking(lock.fileno(), msvcrt.LK_LOCK, 1)
+            except OSError:  # LK_LOCK gives up after 10 s; keep waiting
+                pass
     import fcntl
+    fcntl.flock(lock, fcntl.LOCK_EX)
+
+
+def build_oracle():
     spec = importlib.util.spec_from_file_location('ares_builder', ROOT / 'spikes/003-ares-oracle/run.py')
     builder = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(builder)
     directory = ROOT / 'target/ares-boot/oracle'
     directory.mkdir(parents=True, exist_ok=True)
     with (directory / 'build.lock').open('w') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        lock_exclusive(lock)
         return builder.build(ROOT / 'scripts/ares_boot.cpp', directory,
                              raw_fetch_access=True, physical_fetch_access=True,
                              rdram_burst_access=True, rdram_scalar_access=True, pi_dma_access=True,
@@ -66,7 +77,8 @@ def capture_many(rom, entries, exact=False, covered=None, sites=None, bindings=N
     cached = Path(os.environ.get('PLAID_REPLAY_CACHE', Path.home() / '.cache/plaid/ares-replay')) / f'{key}.json'
     if cached.exists():
         return json.loads(cached.read_text())
-    results = replay(rom, data, entries, exact, covered, sites, bindings, budget)
+    # JSON-normalized, exactly as a cache hit or the WSL route returns it.
+    results = json.loads(json.dumps(replay(rom, data, entries, exact, covered, sites, bindings, budget)))
     cached.parent.mkdir(parents=True, exist_ok=True)
     partial = cached.with_name(f'{key}.{os.getpid()}.tmp')
     partial.write_text(json.dumps(results))
@@ -92,7 +104,8 @@ def replay(rom, data, entries, exact, covered, sites, bindings, budget):
     if crc not in cics:
         raise ValueError(f'unsupported IPL3 CRC32 {crc:08x}; no guessed CIC')
     boot = int.from_bytes(data[8:12], 'big') - {0x0b050ee0: 0x100000, 0xacc8580a: 0x200000}.get(crc, 0)
-    if os.name == 'nt':
+    # PLAID_ARES_WSL=1 keeps the old WSL route; Windows builds the oracle with MinGW.
+    if os.name == 'nt' and os.environ.get('PLAID_ARES_WSL'):
         def linux(p):
             return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(p)], text=True).strip()
         command = ['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(Path(__file__).resolve()),
