@@ -14,7 +14,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 ## Where it stands
 
-*As of main `f710541`, 2026-10-22. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
+*As of main `deaa5d4`, 2026-10-22. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
@@ -39,6 +39,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0245 | `deaa5d4` | Corrects 0240: every RSP text is kept for execution, one per indistinguishable group is matched; F-Zero X with compiled graphics microcode runs again |
 | 0243 | `f710541` | Short RSP overlays named by an overlay table become candidates; Mario Kart 64 renders and plays audio for ~9 s |
 | 0242 | `8dfa72b` | EntryHi comes from the boot replay and survives runtime calls; Mario Kart 64 gets through startup to its first graphics task |
 | 0241 | `0d6f52b` | The PIF accepts a game's own terminate-boot command, as ares does; Mario Kart 64 moves to an EntryHi read |
