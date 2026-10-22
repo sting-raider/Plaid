@@ -1,5 +1,11 @@
 # Status
 
+## Faster builds (ADR-0247)
+
+Analysis-time ares replays are cached by their exact inputs and the oracle is
+built at -O2. A Banjo-Kazooie build takes 335 s instead of 606 s, and 109 s
+when rebuilt.
+
 ## Mario Kart 64 runs 60 s (ADR-0246)
 
 Overlays also become candidates inside their resident microcode, and a

@@ -101,7 +101,7 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
         shutil.copy2(shared / "oracle", exe)
         shutil.copyfile(shared / "build.json", manifest)
     if not built(output):
-        flags = ["-O1","-std=c++20","-msse4.1","-DSLJIT_HAVE_CONFIG_PRE=1","-DSLJIT_HAVE_CONFIG_POST=1"]
+        flags = ["-O2","-std=c++20","-msse4.1","-DSLJIT_HAVE_CONFIG_PRE=1","-DSLJIT_HAVE_CONFIG_POST=1"]
         includes = [REF / p for p in ("ares","nall",".","thirdparty","thirdparty/xxhash","ares/n64/system")]
         queue_header = output/"include/nall/priority-queue.hpp"
         if queue_access:
