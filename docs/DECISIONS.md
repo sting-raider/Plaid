@@ -7063,3 +7063,18 @@ with an RSP operation, rejected when shorter than 64 bytes or holding a
 non-code word, and still rejected by the whole-text filter. Mario Kart 64
 builds 45 RSP texts (was 38) and runs to VI 526: 224 graphics and 517 audio
 tasks, then faults 3 at 80040c8c (an indirect jump to an undiscovered target).
+
+## ADR-0245: Every RSP text runs; only one per indistinguishable group is matched
+
+Status: accepted; corrects ADR-0240. ADR-0240 dropped RSP candidates whose
+words reachable from their IMEM base matched another's, keeping the larger.
+That key is what task matching compares, but execution may enter a text at
+other words (an overlay entered at 0x03c), so dropped texts were still
+needed. F-Zero X with --rsp-gfx fell from 50 to 43 texts and stopped at VI
+210 with no text holding the word IMEM had at 0x03c.
+
+Every candidate is lowered and registered again. Within each group equal
+under the ADR-0240 key only the largest is marked matchable
+(plaid_rsp_rom_matchable, and "matchable" in rsp-files.json); the runtime's
+boot and text matching skip the others, so Banjo-Kazooie's task still has one
+match, while execution can use any text that holds IMEM's words. F-Zero X with --rsp-gfx runs 20 s again (50 texts, VI 1166, fault 0); Banjo-Kazooie runs 30 s (45 texts, VI 1773, fault 0).
