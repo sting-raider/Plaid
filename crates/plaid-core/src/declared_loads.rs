@@ -48,6 +48,11 @@ pub enum LoadEncoding {
     AresBoot {
         entry: GuestAddr,
     },
+    /// Data only, from the physical extent at a replayed first-use fetch.
+    AresData {
+        entry: GuestAddr,
+        physical: u32,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -75,6 +80,27 @@ impl DeclaredLoad {
     /// The overlay layout of a relocatable load whose placed bytes are
     /// `bytes`: a slot alternate's synthesized one, else the Zelda64 trailer.
     pub fn layout(&self, bytes: &[u8]) -> Result<crate::overlays::Layout, String> {
+        if let LoadEncoding::AresData { physical, .. } = self.encoding {
+            if self.source.0 != 0
+                || self.relocatable
+                || self.linked.is_some()
+                || self.destination.start.0 != (0x8000_0000 | physical)
+                || (physical | self.destination.size) & 3 != 0
+                || self.destination.size == 0
+                || bytes.len() != self.destination.size as usize
+                || u64::from(physical) + bytes.len() as u64 > 0x800000
+            {
+                return Err("replayed data needs a fixed physical RAM alias and whole ROM".into());
+            }
+            return Ok(crate::overlays::Layout {
+                text: 0,
+                data: bytes.len() as u32,
+                rodata: 0,
+                bss: 0,
+                file_size: bytes.len() as u32,
+                relocations: Vec::new(),
+            });
+        }
         if let LoadEncoding::AresTlb {
             entry,
             physical,
@@ -161,7 +187,7 @@ pub fn verify_slots(image: &CodeImage, spec: Option<&LoadImage>) -> bool {
     let declared: Vec<_> = spec
         .into_iter()
         .flat_map(|s| &s.loads)
-        .filter(|l| l.linked.is_some())
+        .filter(|l| l.linked.is_some() || matches!(l.encoding, LoadEncoding::AresData { .. }))
         .collect();
     if declared.len() != image.slots.len() {
         return false;
@@ -181,9 +207,15 @@ pub fn verify_slots(image: &CodeImage, spec: Option<&LoadImage>) -> bool {
                 return false;
             }
             declared.iter().any(|l| {
-                if !l.relocatable
+                let data = matches!(l.encoding, LoadEncoding::AresData { .. });
+                let expected_link = if data {
+                    Some(l.destination.start)
+                } else {
+                    l.linked
+                };
+                if (!data && !l.relocatable)
                     || l.destination != *placed
-                    || l.linked != Some(GuestAddr(*linked))
+                    || expected_link != Some(GuestAddr(*linked))
                     || placed.size as usize / 4 > image.words.len()
                 {
                     return false;
@@ -338,6 +370,16 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
                 .ok_or("ares load ends beyond the replayed image")?
                 .to_vec()
         }
+        LoadEncoding::AresData { entry, physical } => {
+            if start != 0 || load.relocatable || load.linked.is_some() {
+                return Err("replayed data needs whole-ROM replay and a fixed destination".into());
+            }
+            let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
+            let data = crate::ares_boot::execute(&rom, entry.0)?
+                .data_slice(physical, load.destination.size)?;
+            load.layout(&data)?;
+            data
+        }
         LoadEncoding::AresTlb {
             entry, physical, ..
         } => {
@@ -433,7 +475,9 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
         .loads
         .iter()
         .filter_map(|load| match load.encoding {
-            LoadEncoding::AresBoot { entry } | LoadEncoding::AresTlb { entry, .. } => Some(entry.0),
+            LoadEncoding::AresBoot { entry }
+            | LoadEncoding::AresTlb { entry, .. }
+            | LoadEncoding::AresData { entry, .. } => Some(entry.0),
             _ => None,
         })
         .collect();
@@ -470,6 +514,8 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
         let data = decoded(bytes, load)?;
         if let Some(linked) = load.linked {
             slots.push((load.destination.clone(), linked.0, load.layout(&data)?.text));
+        } else if matches!(load.encoding, LoadEncoding::AresData { .. }) {
+            slots.push((load.destination.clone(), load.destination.start.0, 0));
         }
         composite[at(u64::from(load.destination.start.0))..at(load.destination.end())]
             .copy_from_slice(&data);
@@ -498,6 +544,71 @@ mod tests {
             evidence: EvidenceRefs::new(),
             relocatable: false,
             linked: None,
+        }
+    }
+
+    #[test]
+    fn replayed_data_is_readable_but_cannot_authorize_instructions() {
+        let bytes = [0x03e00008u32, 0]
+            .into_iter()
+            .flat_map(u32::to_be_bytes)
+            .collect::<Vec<_>>();
+        let data = load(
+            0x80001000,
+            0,
+            8,
+            LoadEncoding::AresData {
+                entry: GuestAddr(0x60000020),
+                physical: 0x1000,
+            },
+        );
+        assert_eq!(data.layout(&bytes).unwrap().text, 0);
+        let mut image = CodeImage {
+            base: CodeAddress {
+                pc: data.destination.start,
+                image: String::new(),
+                generation: 0,
+            },
+            words: vec![0x03e00008, 0],
+            rom_offset: None,
+            physical_start: None,
+            holes: Vec::new(),
+            slots: vec![(data.destination.clone(), data.destination.start.0, 0)],
+        };
+        image.base.image = image.content_identity();
+        let spec = LoadImage {
+            base_offset: RomOffset(0),
+            base: data.destination.clone(),
+            loads: vec![data.clone()],
+        };
+        assert_eq!(image.word(data.destination.start), Some(0x03e00008));
+        assert_eq!(image.instruction_word(data.destination.start), None);
+        assert!(verify_slots(&image, Some(&spec)));
+        image.slots[0].2 = 8;
+        image.base.image = image.content_identity();
+        assert!(!verify_slots(&image, Some(&spec)));
+        for changed in [
+            DeclaredLoad {
+                source: RomOffset(4),
+                ..data.clone()
+            },
+            DeclaredLoad {
+                relocatable: true,
+                ..data.clone()
+            },
+            DeclaredLoad {
+                linked: Some(GuestAddr(0x60001000)),
+                ..data.clone()
+            },
+            DeclaredLoad {
+                encoding: LoadEncoding::AresData {
+                    entry: GuestAddr(0x60000020),
+                    physical: 0x2000,
+                },
+                ..data
+            },
+        ] {
+            assert!(changed.layout(&bytes).is_err());
         }
     }
 

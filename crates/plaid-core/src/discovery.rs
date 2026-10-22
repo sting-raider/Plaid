@@ -22,6 +22,8 @@ pub struct CodeImage {
     /// Slot alternates placed in the image (ADR-0185): each placed range and
     /// the address the file is linked at, where its own code reaches its
     /// data. Table reads from code in a placed range use the placed copy.
+    /// Fixed replay data uses an identity link and zero text, with the same
+    /// declaration/content verification; it never supplies instructions.
     pub slots: Vec<(GuestRange, u32, u32)>,
 }
 impl CodeImage {

@@ -1,5 +1,16 @@
 # Next
 
+## GoldenEye after first-use data recovery (ADR-0250)
+
+The normal ROM-only pipeline remains OPEN 175/172 ordinary/residual. Establish
+the sources and paging/loader model for the 85 direct destinations in the 7f
+engine range, then the remaining callbacks, mapped helper and COP0 effect.
+The first mapped producer extent includes writable data; its text/lifetime
+bounds still need refinement before native acceptance. Text trimming alone
+does not reduce these blockers. Preserve replay-authenticated data-only ranges,
+table guards, the closed-world gate and BK/MM controls. Evidence and receipts:
+research/mapped-boot-text-extents.md.
+
 ## After Mario Kart 64 runs (ADR-0244, ADR-0246)
 
 Mario Kart 64 still builds with two residual dispatch sites; prove them for
