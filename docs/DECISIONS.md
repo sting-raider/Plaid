@@ -7253,3 +7253,31 @@ refuses first-use/post-write tampering and detects a missing-guard mutation.
 Research, scope limits, commands, control-game and exact-tree gate receipt paths:
 research/mapped-boot-text-extents.md. DECISIONS is appended as bytes, preserving
 its historical CRLF/non-UTF-8 prefix.
+
+## ADR-0251: Withdraw pointer-table proofs when code overlaps
+
+Rogue Squadron's site at `0x8006c694` exposed a false pointer-table proof.
+The candidate table at `0x80034158` lies inside the loaded executable image
+whose load begins at `0x8003407c` (ROM offset `0x2f20`). The corresponding
+ROM bytes at offset `0x2ffc` are MIPS instructions, including `0x00431021`
+(`addu`), not pointer entries. Independent CFG branches enter this range from
+`0x80034134`, `0x8003413c` and `0x80034154`. Treating these words as pointers
+created bogus targets and invalid-entry diagnostics.
+
+Table analysis now refuses candidate snapshots whose byte extent overlaps a
+decoded block in the same image generation. If discovery decodes such code
+after an earlier table pass, it withdraws the table-derived candidate edges
+and table-specific unresolved diagnostics while retaining the evidence record
+for audit. The indirect site remains residual unless another proof closes it;
+no target is inferred from executable words. Synthetic table tests cover both
+immediate rejection and later withdrawal, including an assertion that stale
+candidate evidence cannot close the site.
+
+On the supplied Rogue Squadron Rev 1 ROM, the residual solve report fell from
+184 to 151 blockers (17 residual sites); the ordinary harvested report ended
+at 168 rather than the observed 201. The map remains OPEN, so native.py
+correctly emitted no artifact. Remaining blockers include unresolved indirect
+targets, invalid pointer-table entries from other evidence, unsupported scope
+effects, table immutability/identity proofs, and one direct target/delay-slot
+case. See `research/rogue-squadron-table-provenance.md` for the evidence and
+next blocker details. No ROM bytes are included in the repository.
