@@ -15,6 +15,9 @@ REV = "9408cb43d4948fc3ea6e152a307a34348df3fe04"
 OUTPUT = ROOT / "target/ares-oracle-spike"
 
 
+# MinGW names executables with .exe and links nall's Windows APIs; Linux needs libdl.
+ORACLE = "oracle.exe" if os.name == "nt" else "oracle"
+
 def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False, rdram_scalar_access=False, fetch_boundary_access=False, pi_dma_access=False, queue_access=False, sp_backing_access=False, pif_backing_access=False, rsp_dmem_access=False, cpu_instruction_access=False, rsp_word_read_access=False, rsp_dma_lifecycle_access=False, rsp_dma_pending_access=False, tlb_write_access=False, entryhi_write_access=False, entrylo_write_access=False, tlbr_load_access=False, dcache_access=False, memory_mutation_access=False, rsp_instruction_fetch_access=False,rsp_scalar_store_access=False,sp_dma_egress_access=False):
     if dcache_access: assert cpu_instruction_access and rdram_burst_access
     if cache_fill_access: assert raw_fetch_access and physical_fetch_access
@@ -91,14 +94,14 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
     if rsp_dma_pending_access:
         inputs["rsp_dma_pending_access"]=True
     if rsp_scalar_store_access: inputs["rsp_scalar_store_access"]=True
-    exe = output / "oracle"
+    exe = output / ORACLE
     manifest = output / "build.json"
     # The inputs fully determine the oracle, so every checkout shares one copy.
     shared = Path(os.environ.get("PLAID_ORACLE_CACHE", Path.home() / ".cache/plaid/ares-oracle"))
     shared /= hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
-    built = lambda d: (d / "build.json").exists() and json.loads((d / "build.json").read_text()) == inputs and (d / "oracle").exists()
+    built = lambda d: (d / "build.json").exists() and json.loads((d / "build.json").read_text()) == inputs and (d / ORACLE).exists()
     if not built(output) and built(shared):
-        shutil.copy2(shared / "oracle", exe)
+        shutil.copy2(shared / ORACLE, exe)
         shutil.copyfile(shared / "build.json", manifest)
     if not built(output):
         flags = ["-O2","-std=c++20","-msse4.1","-DSLJIT_HAVE_CONFIG_PRE=1","-DSLJIT_HAVE_CONFIG_POST=1"]
@@ -378,13 +381,13 @@ struct PlaidQueueDispatchScope {
                         finally:
                             temporary.unlink(missing_ok=True)
                     objects.append(obj)
-                subprocess.run(["g++",*map(str,objects),"-pthread","-ldl","-o",str(exe)],check=True,stdout=log,stderr=subprocess.STDOUT)
+                subprocess.run(["g++",*map(str,objects),"-pthread",*(["-lws2_32","-lshlwapi","-lole32","-luuid"] if os.name == "nt" else ["-ldl"]),"-o",str(exe)],check=True,stdout=log,stderr=subprocess.STDOUT)
             except subprocess.CalledProcessError:
                 print("\n".join((output / "build.log").read_text().splitlines()[-30:]))
                 raise
         manifest.write_text(json.dumps(inputs,indent=2)+"\n")
         shared.mkdir(parents=True,exist_ok=True)
-        for name in ("oracle","build.json"):
+        for name in (ORACLE,"build.json"):
             temporary = shared / f"{name}.{os.getpid()}.tmp"
             shutil.copy2(output / name, temporary)
             os.replace(temporary, shared / name)
