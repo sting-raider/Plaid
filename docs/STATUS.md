@@ -1,5 +1,11 @@
 # Status
 
+## Ocarina of Time runs from the ROM alone (ADR-0253)
+
+The RSP boot recognizer follows jumps and wrapped DMEM offsets, and short task
+texts followed by data become candidates. Ocarina of Time (USA 1.2) builds with
+0 blockers and runs 30 s: VI 1749, 660 graphics / 1275 audio tasks, fault 0.
+
 ## Rogue Squadron table/code overlap (ADR-0251)
 
 Table snapshots that overlap decoded executable blocks no longer contribute

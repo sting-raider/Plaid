@@ -1,4 +1,6 @@
-use plaid_lower::rsp::{lower_rsp, plausible_overlay, plausible_text, reachable_words};
+use plaid_lower::rsp::{
+    lower_rsp, plausible_overlay, plausible_program, plausible_text, reachable_words,
+};
 
 fn reach(words: &[u32], imem: u32) -> plaid_lower::rsp::RspReachability {
     reachable_words(
@@ -90,4 +92,25 @@ fn table_named_overlays_need_only_code_and_one_rsp_operation() {
     assert!(!plausible_overlay(&bytes(&words[..15])));
     words[25] = 0xffff_ffff;
     assert!(!plausible_overlay(&bytes(&words)));
+}
+
+#[test]
+fn a_short_program_followed_by_data_is_plausible_only_when_it_halts() {
+    // ori at, 0x4000; mtc0 at, SP_STATUS; break; then pointer-table data.
+    let words = [
+        0x3401_4000u32,
+        0x4081_2000,
+        0x0000_000d,
+        0x8000_65c0,
+        0x8000_6720,
+    ];
+    let bytes = |w: &[u32]| w.iter().flat_map(|w| w.to_be_bytes()).collect::<Vec<_>>();
+    assert!(plausible_program(&bytes(&words), 0x80));
+    assert!(!plausible_text(&bytes(&words)));
+    let mut changed = words;
+    changed[2] = 0; // no BREAK: execution runs into the data and off the text
+    assert!(!plausible_program(&bytes(&changed), 0x80));
+    let mut changed = words;
+    changed[1] = 0x3401_4001; // no RSP-specific instruction
+    assert!(!plausible_program(&bytes(&changed), 0x80));
 }

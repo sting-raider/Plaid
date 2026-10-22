@@ -52,13 +52,38 @@ pub fn constants(image: &CodeImage, map: &ProgramMap) -> BTreeSet<GuestAddr> {
 
 /// Recognize a constant-sized boot DMA from OSTask.ucode to IMEM. This is a
 /// search contract for the standard task loader, never a general RSP proof.
+/// Paths from IMEM 0 follow jumps, both branch arms and constant JR targets
+/// (ADR-0251): a boot may load the ucode pointer after the code that uses it.
 pub fn boot_ucode_size(bytes: &[u8]) -> Option<u32> {
+    // A task boot is small; a whole microcode at IMEM 0 is not searched past it.
+    const WINDOW: u32 = 0x200;
+    let words: Vec<u32> = bytes
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_be_bytes(*w))
+        .collect();
     let mut state = [None; 32];
     state[0] = Some(0);
-    let mut ucode = [false; 32];
-    let (mut mem, mut source) = (None, false);
-    for w in bytes.as_chunks::<4>().0.iter().take(64) {
-        let word = u32::from_be_bytes(*w);
+    // pc, registers, registers holding the ucode pointer, DMA address, source
+    // flag, and the targets a pending delay slot leaves to.
+    type Path = (
+        [Option<u64>; 32],
+        [bool; 32],
+        Option<u64>,
+        bool,
+        [Option<u32>; 2],
+    );
+    let mut work: Vec<(u32, Path)> = vec![(0, (state, [false; 32], None, false, [None; 2]))];
+    let mut seen = std::collections::HashSet::new();
+    while let Some((pc, path)) = work.pop() {
+        if seen.len() >= 4096 || pc >= WINDOW || !seen.insert((pc, path)) {
+            continue;
+        }
+        let (mut state, mut ucode, mut mem, mut source, pending) = path;
+        let Some(&word) = words.get(pc as usize / 4) else {
+            continue;
+        };
         let (rs, rt, rd) = (
             ((word >> 21) & 31) as usize,
             ((word >> 16) & 31) as usize,
@@ -79,8 +104,20 @@ pub fn boot_ucode_size(bytes: &[u8]) -> Option<u32> {
                 _ => {}
             }
         }
+        let branch = pc.wrapping_add(4).wrapping_add((word as i16 as u32) << 2) & 0xffc;
+        let targets = match (word >> 26, word & 63) {
+            (0, 13) => continue, // BREAK ends the task
+            (0, 8 | 9) => [state[rs].map(|v| v as u32 & 0xffc), None],
+            (2 | 3, _) => [Some((word << 2) & 0xffc), None],
+            (1, _) if matches!(rt, 0 | 1 | 16 | 17) => [Some(branch), Some(pc + 8)],
+            (4..=7, _) => [Some(branch), Some(pc + 8)],
+            _ => [None; 2],
+        };
+        let control = targets[0].is_some() || matches!((word >> 26, word & 63), (0, 8 | 9));
+        // DMEM addresses wrap at 4 KiB, so -0x30(zero) is OSTask.ucode too.
         let pointer = word >> 26 == 35
-            && state[rs].is_some_and(|v| (v as u32).wrapping_add(word as i16 as u32) == 0xfd0);
+            && state[rs]
+                .is_some_and(|v| (v as u32).wrapping_add(word as i16 as u32) & 0xfff == 0xfd0);
         if let Some(dest) = crate::discovery::decode(word, GuestAddr(0)).destination_gpr() {
             ucode[dest as usize] = pointer;
         }
@@ -90,7 +127,20 @@ pub fn boot_ucode_size(bytes: &[u8]) -> Option<u32> {
         } else {
             word
         };
-        transfer(word, GuestAddr(0), &mut state);
+        transfer(word, GuestAddr(pc), &mut state);
+        if word >> 26 == 3 || (word >> 26 == 0 && word & 63 == 9) {
+            state[if word >> 26 == 3 { 31 } else { rd as usize }] = Some(u64::from(pc + 8));
+        }
+        if control {
+            // The delay slot runs first, then each target.
+            work.push((pc + 4, (state, ucode, mem, source, targets)));
+        } else if pending[0].is_some() || pending[1].is_some() {
+            for target in pending.into_iter().flatten() {
+                work.push((target, (state, ucode, mem, source, [None; 2])));
+            }
+        } else {
+            work.push((pc + 4, (state, ucode, mem, source, [None; 2])));
+        }
     }
     None
 }
@@ -192,6 +242,32 @@ mod tests {
             [(0x1000, 0x170, 0)].into()
         );
         assert!(overlay_descriptors(&image, &BTreeSet::new()).is_empty());
+    }
+
+    #[test]
+    fn boot_contract_follows_jumps_and_wrapped_task_offsets() {
+        // A boot that jumps ahead, loads OSTask.ucode as -0x30(zero) (DMEM
+        // 0xfd0 after wrapping) in a delay slot, then returns to the DMA.
+        let words = [
+            0x0800_0408u32, // j 0x20
+            0,
+            0x341f_1080, // ori ra, zero, 0x1080
+            0x3401_0f7f, // ori at, zero, 0xf7f
+            0x4090_0800, // mtc0 s0, SP_DRAM_ADDR
+            0x409f_0000, // mtc0 ra, SP_MEM_ADDR
+            0x4081_1000, // mtc0 at, SP_RD_LEN
+            0x0000_000d, // break
+            0x0800_0402, // j 0x08
+            0x8c10_ffd0, // lw s0, -0x30(zero)
+        ];
+        let bytes = |w: &[u32]| w.iter().flat_map(|w| w.to_be_bytes()).collect::<Vec<_>>();
+        assert_eq!(boot_ucode_size(&bytes(&words)), Some(0xf80));
+        let mut changed = words;
+        changed[9] = 0x8c10_ffd8; // OSTask.ucode_data is not executable ucode
+        assert_eq!(boot_ucode_size(&bytes(&changed)), None);
+        let mut changed = words;
+        changed[8] = 0x0800_0407; // the jump never reaches the load's DMA
+        assert_eq!(boot_ucode_size(&bytes(&changed)), None);
     }
 
     #[test]
