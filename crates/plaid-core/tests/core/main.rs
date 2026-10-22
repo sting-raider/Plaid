@@ -46,6 +46,7 @@ mod region_physical_alignment;
 mod region_physical_span;
 mod residual_dispatch;
 mod rom;
+mod saved_ra_returns;
 mod software_interrupt;
 mod solver;
 mod solver_cross_fragment;

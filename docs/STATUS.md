@@ -1,5 +1,10 @@
 # Status
 
+## Saved-$ra returns (ADR-0244)
+
+`jr rX` where rX is a copy of the entry `$ra` closes like `jr $ra`, with the
+same run-time check. Mario Kart 64 needs two residual sites instead of four.
+
 ## RSP candidates all run again (ADR-0245)
 
 All RSP candidates are lowered again; only one per group the task matcher
