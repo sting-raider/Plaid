@@ -32,6 +32,11 @@ def build_oracle():
                              cpu_instruction_access=True)
 
 
+# Everything that builds the oracle or shapes its output (spikes/003 build inputs).
+ORACLE_SOURCES = ('scripts/ares_boot.py', 'scripts/ares_boot.cpp', 'spikes/003-ares-oracle/run.py',
+                  'spikes/003-ares-oracle/driver.cpp', 'spikes/044-ares-cpu-copy-dataflow/prepare.py')
+
+
 def capture_many(rom, entries, exact=False, covered=None, sites=None, bindings=None):
     if bindings is not None and (sites is None or not isinstance(bindings, (list, tuple)) or
             any(not isinstance(b, (list, tuple)) or len(b) != 4 or
@@ -54,6 +59,22 @@ def capture_many(rom, entries, exact=False, covered=None, sites=None, bindings=N
     data = rom.read_bytes()
     if len(data) < 4096 or len(data) > 64 * 1024 * 1024 or len(data) % 4:
         raise ValueError('boot capture requires a word-aligned ROM of 4 KiB..64 MiB')
+    # A replay is deterministic in its sources and arguments, so an identical
+    # request reuses the recorded results instead of launching ares (and WSL).
+    key = hashlib.sha256(json.dumps([REV, [hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in ORACLE_SOURCES],
+                                     hashlib.sha256(data).hexdigest(), entries, exact, covered, sites, bindings]).encode()).hexdigest()
+    cached = Path(os.environ.get('PLAID_REPLAY_CACHE', Path.home() / '.cache/plaid/ares-replay')) / f'{key}.json'
+    if cached.exists():
+        return json.loads(cached.read_text())
+    results = replay(rom, data, entries, exact, covered, sites, bindings, budget)
+    cached.parent.mkdir(parents=True, exist_ok=True)
+    partial = cached.with_name(f'{key}.{os.getpid()}.tmp')
+    partial.write_text(json.dumps(results))
+    partial.replace(cached)
+    return results
+
+
+def replay(rom, data, entries, exact, covered, sites, bindings, budget):
     width = {bytes.fromhex('37804012'): 2, bytes.fromhex('40123780'): 4}.get(data[:4])
     if width:
         canonical = bytearray(len(data))

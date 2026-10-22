@@ -7123,3 +7123,29 @@ crates/plaid-lower/tests/rsp.rs expects the leave at a final transfer. Mario
 Kart 64 (63 RSP texts) now runs 60 s with compiled graphics microcode: VI
 2762, 1270 graphics and 2635 audio tasks, fault 0. F-Zero X (55 texts, VI
 1170) and Banjo-Kazooie (52 texts, VI 1774) still run without faults.
+
+## ADR-0247: Analysis-time ares replays are cached and the oracle is built at -O2
+
+Status: accepted. Timing a Banjo-Kazooie build stage by stage (606 s) put
+about 300 s in pinned ares replays, all single-threaded under WSL: four
+harvest rounds of up to two billion guest instructions each (the last with
+exactly the same targets, sites and bindings as the one before it, so the
+same result), the post-IPL capture, and a short exact replay of the ROM's
+ares-captured loads repeated by every `plaid` command that composes the
+image (identify, discover, solve, lower-map, ...), each paying a WSL start.
+
+`capture_many` now keys every validated request on the ares revision, the
+oracle's build and driver sources, the ROM bytes and every replay argument,
+and returns the recorded results for an identical request without starting
+WSL or ares (`~/.cache/plaid/ares-replay`, or `PLAID_REPLAY_CACHE`). The
+replay is deterministic in those inputs, so cached and fresh results are the
+same; failures are never recorded. scripts/test_ares_boot.py checks one
+replay per distinct request and a miss when the ROM or an argument changes.
+
+The oracle's C++ objects are built at -O2 instead of -O1 (no -march, so no
+FMA contraction or other host-dependent float changes). The same
+Banjo-Kazooie harvest replay (100 entries, 2e9-instruction budget) took
+70.6 s instead of 90.1 s with byte-identical output.
+
+Banjo-Kazooie, full native.py build with --rt64, 20 s validation run, both
+fault 0: 606 s before; 335 s for a first build; 109 s for a rebuild.

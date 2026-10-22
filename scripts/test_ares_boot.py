@@ -142,12 +142,36 @@ def mapped_harvest_contract():
     print('PASS mapped harvest: physical/virtual identity, bounded text, whole-ROM replay declaration, duplicate and mutation refusal')
 
 
+def replay_cache_contract():
+    import ares_boot
+    calls, saved, saved_root = [], ares_boot.replay, os.environ.get('PLAID_REPLAY_CACHE')
+    ares_boot.replay = lambda rom, data, entries, *rest: calls.append(entries) or [{'entry': entries[0], 'n': len(calls)}]
+    try:
+        with tempfile.TemporaryDirectory(prefix='plaid-replay-cache-') as temporary:
+            os.environ['PLAID_REPLAY_CACHE'] = temporary
+            rom = Path(temporary) / 'rom.z64'
+            rom.write_bytes(bytes(0x1000))
+            first = capture_many(rom, [0x80000400])
+            assert capture_many(rom, [0x80000400]) == first and len(calls) == 1
+            capture_many(rom, [0x80000404])
+            capture_many(rom, [0x80000400], covered=[(0, 4)])
+            rom.write_bytes(bytes(0xfff) + b'')
+            assert capture_many(rom, [0x80000400]) == [{'entry': 0x80000400, 'n': 4}] and len(calls) == 4
+    finally:
+        ares_boot.replay = saved
+        if saved_root is None:
+            os.environ.pop('PLAID_REPLAY_CACHE')
+        else:
+            os.environ['PLAID_REPLAY_CACHE'] = saved_root
+
+
 def main():
     if os.name == 'nt':
         script = subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(Path(__file__).resolve())], text=True).strip()
         subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', script], check=True, timeout=600)
         return
     boot_header_contract()
+    replay_cache_contract()
     raw_occupant_contract()
     mapped_harvest_contract()
     for coverage in ([], [None], [[1]], [[4, 4]], [[0, 3]], [[False, 4]], [[0, 0x100000000]]):
