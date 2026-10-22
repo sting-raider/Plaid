@@ -73,7 +73,11 @@ pub fn generate(
                 .map_while(|n| image.word(GuestAddr(root.0 + n)))
                 .flat_map(u32::to_be_bytes)
                 .collect();
-            if !plaid_lower::rsp::plausible_text(&bytes) {
+            // A short task text may be followed directly by data (ADR-0253).
+            let short = &bytes[..bytes.len().min(0xf80)];
+            if !plaid_lower::rsp::plausible_text(&bytes)
+                && !plaid_lower::rsp::plausible_program(short, 0x80)
+            {
                 continue;
             }
             // Both standard rspboot placements are candidates. Word identity
@@ -82,12 +86,15 @@ pub fn generate(
             let boot = (bytes.len() < 0x1000
                 && plaid_core::rsp_rom::boot_ucode_size(&bytes).is_some())
             .then_some((0, bytes.len() as u32, 0));
+            let short =
+                (bytes.len() < 0xf80 && boot.is_none()).then_some((0, bytes.len() as u32, 0x80));
             // An overlay in the resident text's range also becomes that text
             // with the overlay in place (ADR-0246): its code may run on into,
             // or take a delay slot from, the resident words around it.
             let variants = [(0, 0x1000, 0), (0, 0xf80, 0x80)]
                 .into_iter()
                 .chain(boot)
+                .chain(short)
                 .map(|v| (v, Kind::Text))
                 .chain(overlays.iter().map(|&v| (v, Kind::Overlay)))
                 .chain(
@@ -106,7 +113,10 @@ pub fn generate(
                     .collect();
                 // An overlay table states its entry's extent (ADR-0243).
                 let plausible = match kind {
-                    Kind::Text => plaid_lower::rsp::plausible_text(&text),
+                    Kind::Text => {
+                        plaid_lower::rsp::plausible_text(&text)
+                            || plaid_lower::rsp::plausible_program(&text, imem)
+                    }
                     _ => plaid_lower::rsp::plausible_overlay(&text),
                 };
                 if text.len() != requested_size as usize || !plausible {

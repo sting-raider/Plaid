@@ -1334,7 +1334,8 @@ static void rsp_save(const char *tag) {
 static int rsp_rom_matches(u32 index, const u8 *bytes, u32 start, u32 size) {
   const plaid_rsp_text *t = plaid_rsp_texts[index];
   u32 pc;
-  if (t->start != start || !size || size > t->size) return 0;
+  /* A DMA longer than the text is fine: words outside it fail their fetch guard. */
+  if (t->start != start || !size) return 0;
   for (pc = start; pc < t->start + t->size; pc += 4) {
     if (!(plaid_rsp_rom_reachable[index][pc / 32] >> (pc / 4 % 8) & 1)) continue;
     if (pc - start + 4 > size || memcmp(bytes + pc - start, t->bytes + pc - start, 4)) return 0;
@@ -1360,7 +1361,10 @@ static void rsp_task(void) {
       size = plaid_rsp_boot_ucode_sizes[i];
     }
   }
-  if (boot_matches != 1) finish(1, "unknown or ambiguous ROM-derived RSP microcode");
+  if (boot_matches != 1) {
+    fprintf(stderr, "RSP task boot: %u matches for %u bytes at IMEM 0\n", boot_matches, boot_size);
+    finish(1, "unknown or ambiguous ROM-derived RSP microcode");
+  }
   /* A recognized boot loads text at 0x80. Otherwise this is direct-loaded text.
      The DMA size, rather than advertised ucode_size, bounds the comparison. */
   if (size) {
@@ -1369,7 +1373,10 @@ static void rsp_task(void) {
         if (plaid_rsp_rom_matchable[i] && rsp_rom_matches(i, S->ram + ucode, 0x80, size)) text_matches++;
       }
     }
-    if (text_matches != 1) finish(1, "unknown or ambiguous ROM-derived RSP microcode");
+    if (text_matches != 1) {
+      fprintf(stderr, "RSP task text: %u matches for %u bytes from RDRAM %08x\n", text_matches, size, ucode);
+      finish(1, "unknown or ambiguous ROM-derived RSP microcode");
+    }
   }
 #endif
   /* osSpTaskStartGo: SET_INTR_ON_BREAK | CLEAR_SSTEP | CLEAR_BROKE | CLEAR_HALT */

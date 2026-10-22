@@ -253,6 +253,30 @@ pub fn plausible_text(text: &[u8]) -> bool {
             .all(|(i, &w)| is_control(w) || simple(w, i as u32 * 4, "").is_ok())
 }
 
+/// Content filter for a short program followed by data (ADR-0253): every
+/// word reachable from `imem` lowers, no path leaves the text or jumps
+/// indirectly, a BREAK ends it and it uses the RSP's own registers.
+pub fn plausible_program(text: &[u8], imem: u32) -> bool {
+    let Ok(reach) = reachable_words(text, imem) else {
+        return false;
+    };
+    let word = |pc: u32| {
+        let i = (pc - imem) as usize;
+        u32::from_be_bytes(text[i..i + 4].try_into().unwrap())
+    };
+    !reach.indirect
+        && reach.exits.is_empty()
+        && reach
+            .words
+            .iter()
+            .all(|&pc| is_control(word(pc)) || simple(word(pc), pc, "").is_ok())
+        && reach
+            .words
+            .iter()
+            .any(|&pc| word(pc) >> 26 == 0 && word(pc) & 63 == 13)
+        && reach.words.iter().any(|&pc| rsp_specific(word(pc)))
+}
+
 /// Lowers the IMEM bytes `text` at offset `imem` to
 /// `int plaid_rsp_<name>(plaid_rsp *r, u32 pc)` and the descriptor
 /// `plaid_rsp_text_<name>`. The function runs from `pc` until the RSP halts

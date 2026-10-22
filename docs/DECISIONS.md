@@ -7281,3 +7281,39 @@ targets, invalid pointer-table entries from other evidence, unsupported scope
 effects, table immutability/identity proofs, and one direct target/delay-slot
 case. See `research/rogue-squadron-table-provenance.md` for the evidence and
 next blocker details. No ROM bytes are included in the repository.
+
+## ADR-0253: Boot loaders that jump, and short task texts
+
+Status: accepted
+
+Context: Ocarina of Time (USA 1.2) resolves with 0 blockers and compiles, but
+stopped at VI 2 on its first audio task with "unknown or ambiguous ROM-derived
+RSP microcode". Its RSP boot loader (in the uncompressed boot segment) jumps
+ahead, loads `OSTask.ucode` in a delay slot as `lw s0, -0x30(zero)` and only
+then returns to the IMEM DMA. The boot recognizer read the first 64 words in
+straight-line order and compared the unwrapped address 0xffffffd0 with 0xfd0,
+so no candidate was a boot. The task's microcode is then a 0x20-byte program
+followed directly by data, which the whole-text content filter rejects and
+which is shorter than the 0xf80-byte DMA the boot issues.
+
+Decision:
+- `boot_ucode_size` walks paths from IMEM 0 within the first 0x200 bytes:
+  jumps, both branch arms, delay slots and JR through a constant register,
+  bounded at 4096 path states. DMEM addresses wrap at 4 KiB, so
+  `-0x30(zero)` names `OSTask.ucode`. It stays a search contract, not a proof.
+- `plausible_program` accepts a short text when every word reachable from its
+  entry lowers, no path leaves the text or jumps indirectly, a BREAK is
+  reached and an RSP-specific instruction is used. A root whose bytes end
+  before 0xf80 also becomes a text of that length at IMEM 0x80.
+- The runtime no longer refuses a match because the boot's DMA is longer than
+  the candidate text: matching still compares every reachable word within the
+  DMA, and any executed word outside the text fails its fetch guard.
+- A refused match prints the boot or text size and RDRAM address to stderr.
+
+Consequences: Ocarina of Time builds from the ROM alone (40 RSP texts) and
+runs its 30 s validation to the time limit: VI 1749, 660 graphics and 1275
+audio tasks, 5116 PI DMAs, fault 0. Controls, 30 s or the usual length,
+fault 0: F-Zero X and Mario Kart 64 (compiled graphics microcode),
+Banjo-Kazooie, Paper Mario and Majora's Mask. Synthetic tests cover the jump-and-wrap
+boot (and an ucode_data load and an unreachable DMA, both refused) and a short
+program (and a missing BREAK and a missing RSP instruction, both refused).
