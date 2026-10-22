@@ -176,7 +176,7 @@ static void observe(u64 address, u32 word) {
     if(!entered) return;
     // An unproven indirect transfer's target, read from its register before it
     // executes: discovery evidence, never a target certificate (ADR-0222).
-    if(openSites.contains(pc) && word >> 26 == 0 && ((word & 63) == 8 || (word & 63) == 9)) {
+    if(word >> 26 == 0 && ((word & 63) == 8 || (word & 63) == 9) && openSites.contains(pc)) {
       u32 site, target;
       if(project(pc, site) && project((u32)cpu.ipu.r[word >> 21 & 31].u64, target)) {
         observedTargets.insert({site, target});

@@ -271,7 +271,18 @@ fn static_identity_blockers(
     // Fragment boundaries cannot hide two values for one exact execution
     // identity and guest PC. Check supplied words before selecting block roots.
     let mut words: BTreeMap<(&str, u64, u32), u32> = BTreeMap::new();
+    let mut holders: BTreeMap<(&str, u64), usize> = BTreeMap::new();
     for image in images {
+        *holders
+            .entry((image.base.image.as_str(), image.base.generation))
+            .or_default() += 1;
+    }
+    for image in images {
+        // One image's words have distinct PCs: only another image with the
+        // same identity can disagree with them.
+        if holders[&(image.base.image.as_str(), image.base.generation)] < 2 {
+            continue;
+        }
         for (index, word) in image.words.iter().copied().enumerate() {
             let pc = crate::GuestAddr(image.base.pc.0 + (index as u32) * 4);
             let key = (image.base.image.as_str(), image.base.generation, pc.0);
