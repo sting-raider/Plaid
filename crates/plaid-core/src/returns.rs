@@ -10,7 +10,7 @@
 //! entry, or from no function, receives no certificate.
 use crate::{
     EvidenceKind, GuestAddr,
-    discovery::CodeImage,
+    discovery::{CodeImage, decode},
     indirect::{MapIndex, verify_constant_in, verify_static_in},
     program::*,
     rom::sha256,
@@ -38,8 +38,58 @@ pub struct ReturnCertificate {
     pub host_entered: bool,
 }
 
-fn is_jr_ra(word: u32) -> bool {
-    word == 0x03e0_0008
+/// The register a `jr` returns through: `$ra`, or one that holds a copy of it
+/// (ADR-0244, checked per function by [`holds_entry_ra`]).
+fn jr_register(word: u32) -> Option<u32> {
+    (word & 0xfc1f_ffff == 8).then_some(word >> 21 & 31)
+}
+
+/// `or`/`addu`/`daddu` of `$ra` and `$zero` into `rd`.
+fn copies_ra(word: u32) -> Option<u32> {
+    let (rs, rt, rd) = (word >> 21 & 31, word >> 16 & 31, word >> 11 & 31);
+    (word >> 26 == 0
+        && word >> 6 & 31 == 0
+        && matches!(word & 63, 0x21 | 0x25 | 0x2d)
+        && matches!((rs, rt), (31, 0) | (0, 31)))
+    .then_some(rd)
+}
+
+/// Writes `$ra`: a linking jump or branch, or any instruction with `$ra` as
+/// its destination.
+fn writes_ra(word: u32, pc: GuestAddr) -> bool {
+    let (op, rt) = (word >> 26, word >> 16 & 31);
+    op == 3
+        || (op == 0 && word & 63 == 9)
+        || (op == 1 && (16..=19).contains(&rt))
+        || decode(word, pc).destination_gpr() == Some(31)
+}
+
+/// `register` holds the `$ra` the function was entered with at every point of
+/// its body: its only writes are copies of `$ra` in the entry block, before
+/// anything there writes `$ra`. Lowered returns still check the value.
+fn holds_entry_ra(
+    image: &CodeImage,
+    sizes: &BTreeMap<CodeAddress, u32>,
+    body: &BTreeSet<CodeAddress>,
+    entry: &CodeAddress,
+    register: u32,
+) -> Option<bool> {
+    let mut copied = false;
+    for block in body {
+        let mut ra_written = false;
+        for n in 0..sizes.get(block)? / 4 {
+            let pc = GuestAddr(block.pc.0.wrapping_add(4 * n));
+            let word = image.word(pc)?;
+            if decode(word, pc).destination_gpr() == Some(register) {
+                if block != entry || ra_written || copies_ra(word) != Some(register) {
+                    return Some(false);
+                }
+                copied = true;
+            }
+            ra_written |= writes_ra(word, pc);
+        }
+    }
+    Some(copied)
 }
 
 fn in_block(block: &BasicBlock, site: &CodeAddress) -> bool {
@@ -228,6 +278,8 @@ pub struct Closure<'a> {
     containing: BTreeMap<CodeAddress, BTreeSet<CodeAddress>>,
     /// Block start -> host entries whose body contains it (ADR-0146).
     hosted: BTreeMap<CodeAddress, BTreeSet<CodeAddress>>,
+    succ: BTreeMap<CodeAddress, Vec<CodeAddress>>,
+    sizes: BTreeMap<CodeAddress, u32>,
 }
 
 impl<'a> Closure<'a> {
@@ -269,24 +321,36 @@ impl<'a> Closure<'a> {
         for (site, target) in calls {
             callers.entry(target).or_default().push(site);
         }
+        let mut sizes = BTreeMap::new();
+        for block in &map.blocks {
+            sizes.entry(block.start.clone()).or_insert(block.size);
+        }
         Self {
             index,
             callers,
             entered,
             containing,
             hosted,
+            succ,
+            sizes,
         }
     }
 
     /// Recompute the certificate from the current CFG and bytes.
     pub fn certificate(&self, image: &CodeImage, site: &CodeAddress) -> Option<ReturnCertificate> {
-        if !is_jr_ra(image.word(site.pc)?) {
-            return None;
-        }
+        let register = jr_register(image.word(site.pc)?)?;
         // the first containing block in map order, as the CFG partitions it
         let block = self.index.containing(site).last()?.start.clone();
         let hosts = self.hosted.get(&block).cloned().unwrap_or_default();
         let mut functions = self.containing.get(&block).cloned().unwrap_or_default();
+        if register != 31
+            && !functions.iter().chain(&hosts).all(|f| {
+                holds_entry_ra(image, &self.sizes, &body_from(&self.succ, f), f, register)
+                    == Some(true)
+            })
+        {
+            return None;
+        }
         let continuations: BTreeSet<_> = functions
             .iter()
             .filter_map(|f| self.callers.get(f))

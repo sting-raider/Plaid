@@ -7078,3 +7078,26 @@ under the ADR-0240 key only the largest is marked matchable
 (plaid_rsp_rom_matchable, and "matchable" in rsp-files.json); the runtime's
 boot and text matching skip the others, so Banjo-Kazooie's task still has one
 match, while execution can use any text that holds IMEM's words. F-Zero X with --rsp-gfx runs 20 s again (50 texts, VI 1166, fault 0); Banjo-Kazooie runs 30 s (45 texts, VI 1773, fault 0).
+
+## ADR-0244: A jump through a saved copy of $ra is a checked return
+
+Status: accepted. ADR-0127 closes `jr $ra` as a return to the continuations of
+the calls into the containing functions, checked at run time against the
+caller's link. A function that calls helpers often copies `$ra` to another
+register first and returns through that (`or s3, ra, zero` ... `jr s3`). Such a
+site had no proof, and residual dispatch (ADR-0233) covers function entries
+only, so Mario Kart 64 faulted 3 at 80040c8c returning to 8004072c, mid-caller.
+
+A `jr rX` now gets the same return certificate when, in every function whose
+body contains it, every write to rX is an `or`/`addu`/`daddu` of `$ra` and
+`$zero` in the function's entry block before anything there writes `$ra`, and
+at least one such copy exists. rX then holds the entry `$ra` throughout the
+body. Lowering already emits returns through the site's own register with the
+same `t != ret` check (fault 5), so a wrong proof cannot transfer control
+silently.
+
+crates/plaid-core/tests/core/saved_ra_returns.rs closes the saved-`$ra` return
+to the caller's continuation and leaves it open when the copy follows a call,
+when the register has another write, or when it never holds `$ra`. Mario Kart
+64's residual sites fall from four to two. Banjo-Kazooie, Paper Mario and
+Majora's Mask still run without faults with it.
