@@ -14,7 +14,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 ## Where it stands
 
-*As of main `e688c5c`, 2026-10-22. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
+*As of main `721bce7f`, 2026-10-22. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
@@ -39,6 +39,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0247 | `721bce7f` | Builds are faster: ares replays are cached by exact inputs and the oracle is built at -O2; Banjo-Kazooie builds in 335 s (was 606 s), 109 s when rebuilt |
 | 0244 | `19c2cf4` | A jump through a saved copy of `$ra` is a checked return, like `jr $ra` |
 | 0246 | `e688c5c` | Overlays also run inside their resident microcode; Mario Kart 64 runs 60 s with fault 0 |
 | 0245 | `deaa5d4` | Corrects 0240: every RSP text is kept for execution, one per indistinguishable group is matched; F-Zero X with compiled graphics microcode runs again |
