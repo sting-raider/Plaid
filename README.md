@@ -14,7 +14,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 ## Where it stands
 
-*As of main `0cb6a044`, 2026-10-23. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
+*As of main `42887dfa`, 2026-10-23. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
@@ -26,7 +26,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 | Ocarina of Time (USA 1.2) | code segment, 2 load files (earlier builds) | 🟨 | title and file select in older builds (ADR-0182); current main: the ROM-only build resolves with 0 blockers and compiles, then stops at VI 2 on its first audio task: its RSP boot loader is not recognized | recognize boot loaders that jump before the microcode DMA |
 | GoldenEye 007 (USA) | **none** | refused | not reached: OPEN, 175 blockers (172 with residual dispatch, was 327; ADR-0250) | executable sources and paging for the `7f` engine range (85 unresolved direct targets) |
 | Mario Kart 64 (USA) | **none** | 🟨 residual dispatch, 2 sites | 60 s with compiled graphics microcode and audio: VI 2762, 1270 graphics / 2635 audio tasks, fault 0 (ADR-0246) | prove the 2 residual sites; longer play |
-| Star Fox 64, Rogue Squadron (USA) | **none** | refused | not reached: OPEN, 294 (Star Fox 64) and 184 (Rogue Squadron) residual blockers on main `003be9a5` | Star Fox 64: undeclared overlay code; Rogue Squadron: indirect targets and tables; see [research/rom-sweep.md](research/rom-sweep.md) |
+| Star Fox 64, Rogue Squadron (USA) | **none** | refused | not reached: OPEN, 294 (Star Fox 64) and 151 (Rogue Squadron, ADR-0251) residual blockers | Star Fox 64: DMA-catalog overlays (296 -> 8 in a pending candidate); Rogue Squadron: indirect targets and tables; see [research/rom-sweep.md](research/rom-sweep.md) |
 
 "Native build ✅" means analysis is `CLOSED` under a declared scope (usually `--address-taken`) and `native.py` emits the executable. Since ADR-0233, `native.py` also builds by default when the only open items are indirect jumps it cannot prove: they go through a fail-closed run-time lookup over the translated code (still no emulation), and `native-manifest.json` records `native_complete: false`. `--strict` builds only proven maps.
 
@@ -39,6 +39,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0251 | `42887dfa` | Jump-table candidates whose bytes overlap decoded code stay unresolved instead of adding false targets; Rogue Squadron residual blockers 184 -> 151 |
 | 0250 | `0cb6a044` | Initialized table data recovered from the boot replay, kept as data and checked natively where it is used; GoldenEye blockers 338 -> 175 |
 | 0249 | `36dacb92` | Profiled hot spots removed: solve 4.2 -> 2.65 s, discovery on every core, ares harvest replays 77 -> 61 s; Banjo-Kazooie first build 282 s, outputs identical |
 | 0248 | `b4fcfc55` | Rebuilds reuse identical identify/discover/solve runs: Banjo-Kazooie rebuilds in 38 s (was 109 s), byte-identical; the local gate runs in 4 min (was 25) |
