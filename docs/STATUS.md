@@ -1,5 +1,12 @@
 # Status
 
+## Mario Kart 64 runs 60 s (ADR-0246)
+
+Overlays also become candidates inside their resident microcode, and a
+transfer whose delay slot is outside its text leaves instead of faulting.
+Mario Kart 64 runs 60 s natively with compiled graphics microcode and audio:
+VI 2762, 1270 graphics / 2635 audio tasks, fault 0.
+
 ## Saved-$ra returns (ADR-0244)
 
 `jr rX` where rX is a copy of the entry `$ra` closes like `jr $ra`, with the

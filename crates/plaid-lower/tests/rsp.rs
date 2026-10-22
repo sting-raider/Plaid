@@ -98,11 +98,13 @@ fn words_that_cannot_be_lowered_become_fault_stubs() {
     }
     let lowered = lower_rsp(&text(&[JR_T0, JR_T0, 0]), 0, "u").unwrap();
     assert_eq!(lowered.stubs, ["000: transfer in a delay slot"]);
+    // a final transfer leaves for a text that also holds its delay slot (ADR-0246)
     let lowered = lower_rsp(&text(&[0, JR_T0]), 0, "u").unwrap();
-    assert_eq!(
-        lowered.stubs,
-        ["004: transfer without a delay slot in the text"]
-    );
+    assert!(lowered.stubs.is_empty());
+    assert!(lowered.c.contains(
+        "L_004:
+  return plaid_rsp_leave(r, 0x004u);"
+    ));
     // a transfer whose delay slot cannot be lowered is a stub itself
     let lowered = lower_rsp(&text(&[JR_T0, 24]), 0, "u").unwrap();
     assert_eq!(lowered.stubs.len(), 2);

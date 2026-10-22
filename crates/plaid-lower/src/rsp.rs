@@ -327,10 +327,13 @@ pub fn lower_rsp(text: &[u8], imem: u32, name: &str) -> Result<LoweredRsp, Strin
             continue;
         }
         let slot = match words.get(i + 1) {
+            // The delay slot lies past this text: leave, so the runtime runs a
+            // text that holds both words (ADR-0246).
             None => {
-                out += &stub(format!(
-                    "{pc:03x}: transfer without a delay slot in the text"
-                ));
+                out += &format!(
+                    "  return plaid_rsp_leave(r, 0x{pc:03x}u);
+"
+                );
                 continue;
             }
             Some(&slot) if is_control(slot) => {

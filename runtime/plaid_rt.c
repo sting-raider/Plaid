@@ -1270,24 +1270,24 @@ static void rsp_dump_imem(u32 pc) {
 }
 static int rsp_run(u32 pc) {
   u32 xpc = ~0u, xgen = 0;
-  u64 xmask = 0;
+  u64 xmask[4] = {0}; /* texts that left at xpc, one bit per registry entry (256 max) */
   for (;;) {
     const plaid_rsp_text *t = NULL;
     int i, rc;
     /* Oracle only: capture recognized placements too, without feeding their
        bytes back into ROM discovery or native compilation. */
     rsp_dump_imem(pc);
-    for (i = 0; plaid_rsp_texts[i] && i < 64; i++) {
+    for (i = 0; plaid_rsp_texts[i] && i < 256; i++) {
       const plaid_rsp_text *c = plaid_rsp_texts[i];
-      if (pc == xpc && rsp.imem_gen == xgen && (xmask >> i & 1)) continue;
+      if (pc == xpc && rsp.imem_gen == xgen && (xmask[i >> 6] >> (i & 63) & 1)) continue;
       if (pc < c->start || pc + 4 > c->start + c->size) continue;
       if (!memcmp(rsp.imem + pc, c->bytes + (pc - c->start), 4)) { t = c; break; }
     }
     if (!t) { rsp.pc = pc; return -1; }
     rc = t->run(&rsp, pc);
     if (rc != 2) return rc;
-    if (rsp.pc != xpc || rsp.imem_gen != xgen) { xpc = rsp.pc; xgen = rsp.imem_gen; xmask = 0; }
-    xmask |= (u64)1 << i;
+    if (rsp.pc != xpc || rsp.imem_gen != xgen) { xpc = rsp.pc; xgen = rsp.imem_gen; memset(xmask, 0, sizeof xmask); }
+    xmask[i >> 6] |= (u64)1 << (i & 63);
     pc = rsp.pc;
   }
 }
