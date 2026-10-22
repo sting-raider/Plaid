@@ -261,7 +261,9 @@ def main():
         command.extend(['--press', press])
     if a.require_audio:
         command.extend(['--wav', str(out / 'validation.wav')])
-    r = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, errors='replace', timeout=a.seconds + 60)
+    # Validation runs are silent (SDL's dummy driver); --wav still records the audio.
+    env = {'SDL_AUDIODRIVER': 'dummy', **os.environ}
+    r = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, errors='replace', timeout=a.seconds + 60, env=env)
     stops = [line for line in r.stdout.splitlines() if line.startswith('{"stop"')]
     print(stops[-1][:400] if stops else r.stderr[-400:])
     if r.returncode:
