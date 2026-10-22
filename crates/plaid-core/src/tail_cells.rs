@@ -259,8 +259,10 @@ pub fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap, String
     let mut out = map.clone();
     let index = MapIndex::new(map);
     let mut produced = BTreeSet::new();
-    for old in &map.indirect_sites {
-        let Some((certificate, detail, id)) = detail(&index, image, old) else {
+    let sites: Vec<_> = map.indirect_sites.iter().collect();
+    let found = crate::indirect::par_map(&sites, |old| detail(&index, image, old));
+    for (old, found) in sites.into_iter().zip(found) {
+        let Some((certificate, detail, id)) = found else {
             continue;
         };
         let targets: BTreeSet<_> = certificate.targets.iter().cloned().collect();
@@ -290,6 +292,18 @@ pub fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap, String
         }
         produced.insert((site.site.clone(), id));
         out.indirect_sites.insert(site);
+    }
+    // Nothing produced and no tail-cell claim to recheck: `out` is the
+    // validated input, unchanged.
+    if produced.is_empty()
+        && !out.indirect_sites.iter().any(|site| {
+            site.closed_proof
+                .as_deref()
+                .and_then(|id| out.evidence.get(id))
+                .is_some_and(|evidence| evidence.producer == PRODUCER)
+        })
+    {
+        return Ok(out);
     }
 
     // A proof only closes an exact candidate set whose executable targets are

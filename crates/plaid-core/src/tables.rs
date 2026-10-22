@@ -1280,8 +1280,10 @@ pub fn table_range(
 pub(crate) fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap, String> {
     let mut out = map.clone();
     let index = MapIndex::new(map);
-    for old in &map.indirect_sites {
-        let Some((table, words, detail)) = evidence(&index, image, old) else {
+    let sites: Vec<_> = map.indirect_sites.iter().collect();
+    let found = crate::indirect::par_map(&sites, |old| evidence(&index, image, old));
+    for (old, found) in sites.into_iter().zip(found) {
+        let Some((table, words, detail)) = found else {
             continue;
         };
         let id = format!("table-candidates:{}", sha256(detail.as_bytes()));

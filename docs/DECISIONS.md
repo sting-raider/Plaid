@@ -7172,3 +7172,30 @@ Banjo-Kazooie, --rt64, 20 s validation run, fault 0: a rebuild takes 38 s
 files (map, loads, identification, manifests, lowered C, RSP texts) are
 byte-identical to the build before this change. With the ADR-0247 replay
 cache warm, runtime/test_runtime.py takes 247 s instead of 1456 s.
+
+## ADR-0249: Profiled hot spots in solve, discovery and the ares observer
+
+Status: accepted. Profiling a Banjo-Kazooie build after ADR-0248 found three
+costs that do no useful work; each change keeps every output byte-identical.
+
+- `solve` spent 1.4 of its 4.2 s putting every word of every supplied image
+  into one map keyed by (image, generation, pc) to find two images that
+  disagree on an instruction. PCs within one image are distinct, so only
+  images sharing an identity can disagree; words of an identity held by a
+  single image are no longer inserted. `solve` takes 2.65 s.
+- Discovery's indirect analysis (constant, table, tail-cell and recheck
+  passes) evaluates its per-site proofs on every core (`par_map`); they are
+  pure functions of the map, its index and the image, and results are
+  applied in the original order. The index's callback memo is a `Mutex`.
+  A tail-cell pass that produces nothing and has no claim to recheck
+  returns its validated input. Discovery takes 15.9 s instead of 16.8 s.
+- 29% of each analysis-time ares replay was the per-instruction observer's
+  `openSites` set lookup, done before the cheap check that the word is a
+  `jr`/`jalr` at all. Testing the word first gives the same result; a
+  two-billion-instruction harvest replay takes 61 s instead of 77 s with
+  byte-identical output. (`-O3` and a separate cold path were measured and
+  gave nothing; they are not used.)
+
+Banjo-Kazooie first build (empty replay and stage caches, --rt64, 20 s
+validation run, fault 0): 282 s (was 296 s), of which the three harvest replays take 126 s (were about 144 s). Discovery maps, solve reports and all
+generated files match the build before this change.

@@ -1,5 +1,11 @@
 # Status
 
+## Faster analysis (ADR-0249)
+
+`solve` (4.2 -> 2.65 s), discovery (16.8 -> 15.9 s) and each two-billion-
+instruction ares harvest replay (77 -> 61 s) are faster with identical
+outputs. Banjo-Kazooie first build: 282 s (was 296 s), of which the three harvest replays take 126 s (were about 144 s).
+
 ## Faster rebuilds (ADR-0248)
 
 native.py reuses identify, discover and solve results for identical inputs.

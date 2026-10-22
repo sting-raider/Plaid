@@ -7,9 +7,9 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     ops::Bound::{self, Excluded, Included, Unbounded},
+    sync::{Mutex, PoisonError},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -96,7 +96,7 @@ pub struct MapIndex<'a> {
     edges: BTreeMap<Key<'a>, Vec<&'a DirectEdge>>,
     indirect: BTreeMap<Key<'a>, Vec<&'a IndirectSite>>,
     external: BTreeSet<Key<'a>>,
-    callbacks: RefCell<BTreeMap<(String, u64), BTreeSet<CodeAddress>>>,
+    callbacks: Mutex<BTreeMap<(String, u64), BTreeSet<CodeAddress>>>,
 }
 
 impl<'a> MapIndex<'a> {
@@ -174,7 +174,7 @@ impl<'a> MapIndex<'a> {
             edges,
             indirect,
             external,
-            callbacks: RefCell::new(BTreeMap::new()),
+            callbacks: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -221,7 +221,8 @@ impl<'a> MapIndex<'a> {
             return false;
         }
         self.callbacks
-            .borrow_mut()
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
             .entry((image.base.image.clone(), image.base.generation))
             .or_insert_with(|| crate::callbacks::targets(self.source, image))
             .contains(at)
@@ -351,14 +352,31 @@ fn certificate_in(
 
 /// Sets a closed local target only when a straight-line prefix dominates the site
 /// in this declared CFG. Whole-ROM coverage and modification are separate gates.
+/// `f` over `items` on every core, in order. Per-site proofs are pure
+/// functions of the map, index and image, so order is the only shared state.
+pub(crate) fn par_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R> {
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let f = &f;
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = items
+            .chunks(items.len().div_ceil(threads).max(1))
+            .map(|chunk| scope.spawn(move || chunk.iter().map(f).collect::<Vec<_>>()))
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|w| w.join().unwrap_or_else(|e| std::panic::resume_unwind(e)))
+            .collect()
+    })
+}
+
 pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap, String> {
     map.validate()?;
     let mut out = map.clone();
     out.indirect_sites.clear();
     let index = MapIndex::new(map);
-    for old in &map.indirect_sites {
-        let mut site = old.clone();
-        let proof = if let Some(proof) = certificate_in(&index, image, &old.site) {
+    let sites: Vec<_> = map.indirect_sites.iter().collect();
+    let proofs = par_map(&sites, |old| {
+        if let Some(proof) = certificate_in(&index, image, &old.site) {
             Some((
                 "plaid-local-constant/v0",
                 proof.target.clone(),
@@ -378,7 +396,10 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
                     serde_json::to_string(&proof),
                 )
             })
-        };
+        }
+    });
+    for (old, proof) in sites.into_iter().zip(proofs) {
+        let mut site = old.clone();
         if let Some((producer, target, detail)) = proof {
             let detail = detail.map_err(|e| e.to_string())?;
             let id = format!("constant:{}", sha256(detail.as_bytes()));
@@ -410,12 +431,14 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
     out = crate::tables::analyze(&out, image)?;
     // New candidate edges may themselves enter a prefix and break dominance.
     let index = MapIndex::new(&out);
-    let sites = out
-        .indirect_sites
-        .iter()
-        .map(|old| {
+    let sites: Vec<_> = out.indirect_sites.iter().collect();
+    let verified = par_map(&sites, |old| verify_static_in(&index, &out, image, old));
+    let sites = sites
+        .into_iter()
+        .zip(verified)
+        .map(|(old, verified)| {
             let mut site = old.clone();
-            if !verify_static_in(&index, &out, image, old) {
+            if !verified {
                 site.closed_proof = None;
             }
             site
