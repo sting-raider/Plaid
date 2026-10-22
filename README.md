@@ -14,7 +14,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 ## Where it stands
 
-*As of main `36dacb92`, 2026-10-22. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
+*As of main `0cb6a044`, 2026-10-23. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
@@ -23,10 +23,10 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 | F-Zero X (USA) | **none** | ✅ | 65 s races with compiled graphics microcode and audio, fault 0 (ADR-0186); current main: 20 s with `--rsp-gfx`, fault 0, now built through residual dispatch (1 open blocker) | longer play |
 | Banjo-Kazooie (USA) (Rev 1) | **none** | 🟨 residual dispatch, 2 sites | 60 s: Nintendo opening and title, audio, fault 0; puzzle transitions in 75 s runs (ADR-0200, ADR-0201); current main: 60 s, VI 3568, fault 0 (ADR-0240) | re-prove the 2 table jumps lost in 94a4d7cb |
 | Paper Mario (USA) | **none** | 🟨 builds by default with residual dispatch (ADR-0233) | 60 s: storybook intro, VI 3590, audio, fault 0 (ADR-0230); a fresh default build stops at VI 2908 on an undiscovered shared-slot occupant | find that code; prove 8 indirect jumps for `native_complete` |
-| Ocarina of Time (USA 1.2) | code segment, 2 load files (earlier builds) | 🟨 | title and file select in older builds (ADR-0182); the ROM-only build stops at VI 3 | lower the RSP code it reaches at IMEM `0x080` (ADR-0219) |
-| GoldenEye 007 (USA) | **none** | refused | not reached: OPEN, 327 residual blockers | bounded ERET exposes return-target obligations; qualified tables and sources remain (ADR-0237, `0c4d9010`); [receipt](research/eret-lowering.md) |
+| Ocarina of Time (USA 1.2) | code segment, 2 load files (earlier builds) | 🟨 | title and file select in older builds (ADR-0182); current main: the ROM-only build resolves with 0 blockers and compiles, then stops at VI 2 on its first audio task: its RSP boot loader is not recognized | recognize boot loaders that jump before the microcode DMA |
+| GoldenEye 007 (USA) | **none** | refused | not reached: OPEN, 175 blockers (172 with residual dispatch, was 327; ADR-0250) | executable sources and paging for the `7f` engine range (85 unresolved direct targets) |
 | Mario Kart 64 (USA) | **none** | 🟨 residual dispatch, 2 sites | 60 s with compiled graphics microcode and audio: VI 2762, 1270 graphics / 2635 audio tasks, fault 0 (ADR-0246) | prove the 2 residual sites; longer play |
-| Star Fox 64, Rogue Squadron (USA) | **none** | refused | not reached in the ADR-0233 sweep | overlay and instruction coverage; see [research/rom-sweep.md](research/rom-sweep.md) |
+| Star Fox 64, Rogue Squadron (USA) | **none** | refused | not reached: OPEN, 294 (Star Fox 64) and 184 (Rogue Squadron) residual blockers on main `003be9a5` | Star Fox 64: undeclared overlay code; Rogue Squadron: indirect targets and tables; see [research/rom-sweep.md](research/rom-sweep.md) |
 
 "Native build ✅" means analysis is `CLOSED` under a declared scope (usually `--address-taken`) and `native.py` emits the executable. Since ADR-0233, `native.py` also builds by default when the only open items are indirect jumps it cannot prove: they go through a fail-closed run-time lookup over the translated code (still no emulation), and `native-manifest.json` records `native_complete: false`. `--strict` builds only proven maps.
 
@@ -39,6 +39,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0250 | `0cb6a044` | Initialized table data recovered from the boot replay, kept as data and checked natively where it is used; GoldenEye blockers 338 -> 175 |
 | 0249 | `36dacb92` | Profiled hot spots removed: solve 4.2 -> 2.65 s, discovery on every core, ares harvest replays 77 -> 61 s; Banjo-Kazooie first build 282 s, outputs identical |
 | 0248 | `b4fcfc55` | Rebuilds reuse identical identify/discover/solve runs: Banjo-Kazooie rebuilds in 38 s (was 109 s), byte-identical; the local gate runs in 4 min (was 25) |
 | 0247 | `721bce7f` | Builds are faster: ares replays are cached by exact inputs and the oracle is built at -O2; Banjo-Kazooie builds in 335 s (was 606 s), 109 s when rebuilt |
