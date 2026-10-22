@@ -14,7 +14,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 ## Where it stands
 
-*As of main `b4fcfc55`, 2026-10-22. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
+*As of main `36dacb92`, 2026-10-22. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
@@ -39,6 +39,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0249 | `36dacb92` | Profiled hot spots removed: solve 4.2 -> 2.65 s, discovery on every core, ares harvest replays 77 -> 61 s; Banjo-Kazooie first build 282 s, outputs identical |
 | 0248 | `b4fcfc55` | Rebuilds reuse identical identify/discover/solve runs: Banjo-Kazooie rebuilds in 38 s (was 109 s), byte-identical; the local gate runs in 4 min (was 25) |
 | 0247 | `721bce7f` | Builds are faster: ares replays are cached by exact inputs and the oracle is built at -O2; Banjo-Kazooie builds in 335 s (was 606 s), 109 s when rebuilt |
 | 0244 | `19c2cf4` | A jump through a saved copy of `$ra` is a checked return, like `jr $ra` |
