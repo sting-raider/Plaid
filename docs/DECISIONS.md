@@ -7149,3 +7149,26 @@ Banjo-Kazooie harvest replay (100 entries, 2e9-instruction budget) took
 
 Banjo-Kazooie, full native.py build with --rt64, 20 s validation run, both
 fault 0: 606 s before; 335 s for a first build; 109 s for a rebuild.
+
+## ADR-0248: native.py reuses identical identify, discover and solve runs
+
+Status: accepted. After ADR-0247 a Banjo-Kazooie rebuild with an unchanged
+`plaid` binary (a runtime, launcher or script change) still took 109 s,
+74 s of it in identify, discover and solve repeated over four harvest rounds.
+
+Each of those commands is deterministic in the plaid binary, its arguments,
+the contents of the files the arguments name, and the analysis-time ares
+sources it may replay (ADR-0247). native.py now keys each invocation on
+exactly those (`memo_plaid`), records its stdout and the files it writes
+under target/native-cache, and restores them for an identical invocation.
+Files a command only writes (discover's map) are not part of the key; files
+it reads are hashed on every call, never trusted by timestamp. Failed runs
+are never recorded. scripts/test_native.py checks one run per identical
+invocation and a rerun when the binary, an argument file or an ares source
+changes, or after a failure.
+
+Banjo-Kazooie, --rt64, 20 s validation run, fault 0: a rebuild takes 38 s
+(was 109 s; 20 s of it is the validation run itself). All 236 generated
+files (map, loads, identification, manifests, lowered C, RSP texts) are
+byte-identical to the build before this change. With the ADR-0247 replay
+cache warm, runtime/test_runtime.py takes 247 s instead of 1456 s.

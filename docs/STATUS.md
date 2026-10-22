@@ -1,5 +1,11 @@
 # Status
 
+## Faster rebuilds (ADR-0248)
+
+native.py reuses identify, discover and solve results for identical inputs.
+Rebuilding Banjo-Kazooie after a runtime-only change takes 38 s (was 109 s),
+with byte-identical outputs.
+
 ## Faster builds (ADR-0247)
 
 Analysis-time ares replays are cached by their exact inputs and the oracle is
