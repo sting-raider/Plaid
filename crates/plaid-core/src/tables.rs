@@ -1198,6 +1198,25 @@ fn evidence(
     let mut table = pattern(index, image, site).or_else(|| guarded(index, image, site))?;
     // a slot alternate's table is read from its placed copy (ADR-0185)
     table.table_start = GuestAddr(image.slot_view(site.site.pc, table.table_start.0));
+    // A scalar bound is not enough to identify the memory as a table. In
+    // particular, a bounded load from a code address can look exactly like a
+    // switch dispatch while the loaded words are executable instructions.
+    // Such a range stays an ordinary unresolved indirect site; treating
+    // instruction words as target pointers would add false roots and invalid
+    // pointer-table blockers. Residual dispatch still checks its run-time
+    // target against lowered entries.
+    let table_end = table
+        .table_start
+        .0
+        .checked_add(table.count.checked_mul(4)?)?;
+    if index.source().blocks.iter().any(|block| {
+        block.start.image == site.site.image
+            && block.start.generation == site.site.generation
+            && block.start.pc.0 < table_end
+            && table.table_start.0 < block.start.pc.0.saturating_add(block.size)
+    }) {
+        return None;
+    }
     let words: Option<Vec<_>> = (0..table.count)
         .map(|n| image.word(GuestAddr(table.table_start.0 + n * 4)))
         .collect();
@@ -1277,6 +1296,41 @@ pub fn table_range(
     Some((table.table_start, table.count))
 }
 
+fn overlaps_decoded_code(index: &MapIndex, site: &IndirectSite, evidence_id: &str) -> bool {
+    let Some(evidence) = index.source().evidence.get(evidence_id) else {
+        return false;
+    };
+    if evidence.producer != PRODUCER {
+        return false;
+    }
+    let Ok(detail) = serde_json::from_str::<serde_json::Value>(&evidence.detail) else {
+        return false;
+    };
+    let (Some(start), Some(count)) = (
+        detail
+            .get("table_start")
+            .and_then(serde_json::Value::as_u64),
+        detail.get("count").and_then(serde_json::Value::as_u64),
+    ) else {
+        return false;
+    };
+    let (Ok(start), Ok(count)) = (u32::try_from(start), u32::try_from(count)) else {
+        return false;
+    };
+    let Some(end) = count
+        .checked_mul(4)
+        .and_then(|size| start.checked_add(size))
+    else {
+        return false;
+    };
+    index.source().blocks.iter().any(|block| {
+        block.start.image == site.site.image
+            && block.start.generation == site.site.generation
+            && block.start.pc.0 < end
+            && start < block.start.pc.0.saturating_add(block.size)
+    })
+}
+
 pub(crate) fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap, String> {
     let mut out = map.clone();
     let index = MapIndex::new(map);
@@ -1284,6 +1338,45 @@ pub(crate) fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap,
     let found = crate::indirect::par_map(&sites, |old| evidence(&index, image, old));
     for (old, found) in sites.into_iter().zip(found) {
         let Some((table, words, detail)) = found else {
+            // Candidate history survives ordinary proof revocation, but an
+            // independently decoded instruction overlap disproves the old
+            // interpretation of these bytes as pointer-table entries. Keep
+            // its evidence record for audit while withdrawing those edges.
+            let stale: BTreeSet<_> = old
+                .candidates
+                .values()
+                .flatten()
+                .filter(|id| overlaps_decoded_code(&index, old, id))
+                .cloned()
+                .collect();
+            if stale.is_empty() {
+                continue;
+            }
+            let mut site = old.clone();
+            site.candidates.retain(|_, refs| {
+                refs.retain(|id| !stale.contains(id));
+                !refs.is_empty()
+            });
+            if site
+                .closed_proof
+                .as_ref()
+                .is_some_and(|id| stale.contains(id))
+            {
+                site.closed_proof = None;
+            }
+            out.indirect_sites.remove(old);
+            out.indirect_sites.insert(site);
+            out.unresolved.retain(|item| {
+                item.site.as_ref() != Some(&old.site)
+                    || !item.evidence.iter().any(|id| stale.contains(id))
+                    || !matches!(
+                        item.kind.as_str(),
+                        "invalid_pointer_table_entry"
+                            | "pointer_table_immutability_unproven"
+                            | "pointer_table_target_identity_unproven"
+                            | "pointer_table_source_missing"
+                    )
+            });
             continue;
         };
         let id = format!("table-candidates:{}", sha256(detail.as_bytes()));

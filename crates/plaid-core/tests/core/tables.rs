@@ -134,6 +134,100 @@ fn guarded_pointer_table_closes_only_under_the_guarded_scope() {
 }
 
 #[test]
+fn executable_words_are_not_reclassified_as_pointer_table_entries() {
+    let mut i = image();
+    // The computed jump now reads the first words of its own decoded function
+    // as if they were table entries. Their instruction encodings must not
+    // become candidate targets or invalid-pointer diagnostics.
+    i.words[4] = 0x2508_0000; // addiu t0,t0,0: table starts at image entry
+    let initial = map(&i);
+    let analyzed = analyze_indirect(&initial, &i).unwrap();
+    let site = analyzed
+        .indirect_sites
+        .iter()
+        .find(|site| site.site.pc.0 == 0x8000_0020)
+        .unwrap();
+    assert!(site.candidates.is_empty());
+    assert!(site.closed_proof.is_none());
+    assert!(
+        !analyzed
+            .evidence
+            .keys()
+            .any(|id| id.starts_with("table-candidates:"))
+    );
+    assert!(!analyzed.unresolved.iter().any(|u| {
+        u.site.as_ref().is_some_and(|site| site.pc.0 == 0x8000_0020)
+            && u.kind == "invalid_pointer_table_entry"
+    }));
+    assert!(
+        solve(
+            &analyzed,
+            std::slice::from_ref(&i),
+            Scope::DeclaredStaticImagesGuardedRam,
+        )
+        .unwrap()
+        .blockers
+        .iter()
+        .any(|blocker| blocker.kind == "unresolved_indirect_site")
+    );
+}
+
+#[test]
+fn later_decoded_code_withdraws_stale_table_candidate_edges() {
+    let i = image();
+    let mut prior = analyze_indirect(&map(&i), &i).unwrap();
+    let table_site = prior
+        .indirect_sites
+        .iter()
+        .find(|site| site.site.pc.0 == 0x8000_0020)
+        .unwrap()
+        .clone();
+    let table_evidence: Vec<_> = table_site.candidates.values().flatten().cloned().collect();
+    assert!(!table_evidence.is_empty());
+
+    // A later independently decoded block overlaps the snapshot. Preserve
+    // historical evidence, but stop using those words as candidate targets.
+    let root_evidence = prior.entries.values().next().unwrap().clone();
+    prior.blocks.insert(BasicBlock {
+        start: i.address(GuestAddr(0x8000_0100)),
+        size: 4,
+        delay_slot_entry: false,
+        evidence: root_evidence,
+    });
+    let revised = analyze_indirect(&prior, &i).unwrap();
+    let site = revised
+        .indirect_sites
+        .iter()
+        .find(|site| site.site.pc.0 == 0x8000_0020)
+        .unwrap();
+    assert!(site.candidates.is_empty());
+    assert!(site.closed_proof.is_none());
+    assert!(
+        table_evidence
+            .iter()
+            .all(|id| revised.evidence.contains_key(id))
+    );
+    assert!(!revised.unresolved.iter().any(|item| {
+        item.site
+            .as_ref()
+            .is_some_and(|site| site.pc.0 == 0x8000_0020)
+            && (item.kind == "invalid_pointer_table_entry"
+                || item.kind.starts_with("pointer_table_"))
+    }));
+    assert!(
+        solve(
+            &revised,
+            std::slice::from_ref(&i),
+            Scope::DeclaredStaticImagesGuardedRam,
+        )
+        .unwrap()
+        .blockers
+        .iter()
+        .any(|blocker| blocker.kind == "unresolved_indirect_site")
+    );
+}
+
+#[test]
 fn incomplete_or_invalid_table_snapshots_remain_explicit() {
     let mut i = image();
     i.words.pop();

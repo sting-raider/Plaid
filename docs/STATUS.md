@@ -1,5 +1,16 @@
 # Status
 
+## Rogue Squadron table/code overlap (ADR-0251)
+
+Table snapshots that overlap decoded executable blocks no longer contribute
+pointer candidates. Rogue Squadron Rev 1 residual blockers fell 184 -> 151
+(17 sites); ordinary harvested blockers ended at 168 vs. 201 observed. The
+map remains OPEN and native.py emitted no artifact. Banjo-Kazooie, Paper Mario
+and Majora's Mask each built and ran headlessly for 30 seconds with fault 0
+under `SDL_AUDIODRIVER=dummy`. See
+`research/rogue-squadron-table-provenance.md` for evidence and remaining
+blockers.
+
 ## GoldenEye first-use table data (ADR-0250)
 
 The automatic ROM-only pipeline improves from OPEN 338/327 ordinary/residual
