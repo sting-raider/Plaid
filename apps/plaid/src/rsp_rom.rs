@@ -5,6 +5,13 @@ use std::{
     fs,
 };
 
+#[derive(Clone, Copy)]
+enum Kind {
+    Text,
+    Overlay,
+    Composite,
+}
+
 /// What the runtime compares when it matches a task (ADR-0240): the IMEM
 /// base and the value of every word reachable from it. Texts equal under it
 /// cannot be told apart there, though they may differ where code is entered
@@ -75,12 +82,22 @@ pub fn generate(
             let boot = (bytes.len() < 0x1000
                 && plaid_core::rsp_rom::boot_ucode_size(&bytes).is_some())
             .then_some((0, bytes.len() as u32, 0));
+            // An overlay in the resident text's range also becomes that text
+            // with the overlay in place (ADR-0246): its code may run on into,
+            // or take a delay slot from, the resident words around it.
             let variants = [(0, 0x1000, 0), (0, 0xf80, 0x80)]
                 .into_iter()
                 .chain(boot)
-                .map(|v| (v, false))
-                .chain(overlays.iter().map(|&v| (v, true)));
-            for ((offset, requested_size, imem), from_table) in variants {
+                .map(|v| (v, Kind::Text))
+                .chain(overlays.iter().map(|&v| (v, Kind::Overlay)))
+                .chain(
+                    overlays
+                        .iter()
+                        .filter(|&&(_, size, imem)| imem >= 0x80 && imem + size <= 0x1000)
+                        .map(|&v| (v, Kind::Composite)),
+                );
+            let resident: Vec<u8> = bytes.iter().copied().take(0xf80).collect();
+            for ((offset, requested_size, imem), kind) in variants {
                 let address = root.0.checked_add(offset).ok_or("RSP address overflow")?;
                 let text: Vec<_> = (0..requested_size)
                     .step_by(4)
@@ -88,14 +105,23 @@ pub fn generate(
                     .flat_map(u32::to_be_bytes)
                     .collect();
                 // An overlay table states its entry's extent (ADR-0243).
-                let plausible = if from_table {
-                    plaid_lower::rsp::plausible_overlay(&text)
-                } else {
-                    plaid_lower::rsp::plausible_text(&text)
+                let plausible = match kind {
+                    Kind::Text => plaid_lower::rsp::plausible_text(&text),
+                    _ => plaid_lower::rsp::plausible_overlay(&text),
                 };
                 if text.len() != requested_size as usize || !plausible {
                     continue;
                 }
+                let (text, imem) = match kind {
+                    Kind::Composite if resident.len() == 0xf80 => {
+                        let mut full = resident.clone();
+                        let at = (imem - 0x80) as usize;
+                        full[at..at + text.len()].copy_from_slice(&text);
+                        (full, 0x80)
+                    }
+                    Kind::Composite => continue,
+                    _ => (text, imem),
+                };
                 let size = text.len();
                 let text = text.as_slice();
                 let hash = plaid_core::rom::sha256(text);
@@ -125,7 +151,7 @@ pub fn generate(
                     mask[pc as usize / 32] |= 1 << (pc / 4 % 8);
                 }
                 let entry = serde_json::json!({"name":name,"image":image.base.image,
-                            "guest_address":address,"root":root.0,"source_kind":if dma {"pi_dma"} else if offset == 0 {"pointer"} else {"overlay_descriptor"},"imem":imem,"size":size,"sha256":hash,
+                            "guest_address":address,"root":root.0,"source_kind":if dma {"pi_dma"} else if matches!(kind, Kind::Composite) {"overlay_composite"} else if offset == 0 {"pointer"} else {"overlay_descriptor"},"imem":imem,"size":size,"sha256":hash,
                             "fault_stubs":lowered.stubs.len(),
                             "reachable_words":reachable.words,
                             "unresolved_indirect":reachable.indirect,
@@ -148,7 +174,7 @@ pub fn generate(
         fs::write(out.join(format!("{name}.bin")), text).map_err(|e| e.to_string())?;
         registry += &format!("extern const plaid_rsp_text plaid_rsp_text_{name};\n");
     }
-    if names.len() > 64 {
+    if names.len() > 256 {
         return Err(format!(
             "{} RSP texts exceed runtime registry limit",
             names.len()

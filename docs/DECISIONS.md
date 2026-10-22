@@ -7101,3 +7101,25 @@ to the caller's continuation and leaves it open when the copy follows a call,
 when the register has another write, or when it never holds `$ra`. Mario Kart
 64's residual sites fall from four to two. Banjo-Kazooie, Paper Mario and
 Majora's Mask still run without faults with it.
+
+## ADR-0246: Overlays also run inside their resident microcode
+
+Status: accepted. An overlay-table entry (ADR-0243) was lowered on its own, so
+code that runs off its end or takes a delay slot from the resident words after
+it had no text holding both: Mario Kart 64's graphics microcode ends its IMEM
+0x7a8 overlay with `jalr` at 0x9c4, whose delay slot is resident code, and
+stopped with RSP fault 6 at VI 1189.
+
+Each overlay that lands inside the resident text's range (IMEM 0x80..0x1000)
+now also becomes a candidate equal to that resident text with the overlay in
+place. A transfer whose delay slot lies past the end of its text no longer
+lowers to a fault stub: it leaves, and the runtime runs a text that holds the
+word IMEM has there, as for any other stale or missing word. The registry
+limit rises from 64 to 256 texts (the runtime's per-PC "already left" set is
+now four words). Task matching is unchanged (ADR-0245): a composite with the
+overlay the task loads first is the resident text itself.
+
+crates/plaid-lower/tests/rsp.rs expects the leave at a final transfer. Mario
+Kart 64 (63 RSP texts) now runs 60 s with compiled graphics microcode: VI
+2762, 1270 graphics and 2635 audio tasks, fault 0. F-Zero X (55 texts, VI
+1170) and Banjo-Kazooie (52 texts, VI 1774) still run without faults.

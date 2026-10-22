@@ -1,5 +1,11 @@
 # Next
 
+## After Mario Kart 64 runs (ADR-0244, ADR-0246)
+
+Mario Kart 64 still builds with two residual dispatch sites; prove them for
+native_complete. Re-run the ROM sweep (GoldenEye, Star Fox 64, Rogue Squadron,
+OoT) on the current pipeline.
+
 ## After short RSP overlays (ADR-0243)
 
 Mario Kart 64 faults 3 at 80040c8c after VI 526: an indirect jump reaches a
