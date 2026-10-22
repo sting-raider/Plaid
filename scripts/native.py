@@ -27,6 +27,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -34,7 +35,7 @@ from pathlib import Path
 
 from native_audio import audio_peak
 from harvest_boot import harvest
-from ares_boot import capture_many
+from ares_boot import ORACLE_SOURCES, capture_many
 
 ROOT = Path(__file__).resolve().parents[1]
 SIGNATURES = ROOT / '.refs/n64sym/src/builtin_signatures.sig'
@@ -50,19 +51,56 @@ def plaid(*args, **kw):
     return run(ROOT / 'target/release/plaid', *args, **kw)
 
 
-def discover_map(arguments, overlay_support):
+def digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def memo_plaid(*args, writes=()):
+    """An analysis command is deterministic in the plaid binary, its arguments,
+    the files they name and the analysis-time ares sources it may replay, so
+    an identical invocation restores the recorded stdout and written files
+    (ADR-0248). `writes` are outputs only, never read, so not part of the key."""
+    exe = ROOT / ('target/release/plaid.exe' if os.name == 'nt' else 'target/release/plaid')
+    inputs = [digest(exe), [digest(ROOT / p) for p in ORACLE_SOURCES]]
+    for a in args:
+        path = Path(str(a))
+        inputs.append([str(a), digest(path)] if a not in writes and path.is_file() else str(a))
+    store = ROOT / 'target/native-cache' / hashlib.sha256(json.dumps(inputs).encode()).hexdigest()
+    if not (store / 'stdout').exists():
+        try:
+            result = plaid(*args, capture_output=True, text=True)
+        except subprocess.CalledProcessError as error:
+            sys.stderr.write(error.stderr)
+            raise
+        sys.stderr.write(result.stderr)
+        partial = store.with_name(f'{store.name}.{os.getpid()}.tmp')
+        partial.mkdir(parents=True, exist_ok=True)
+        for n, path in enumerate(writes):
+            (partial / str(n)).write_bytes(Path(path).read_bytes())
+        (partial / 'stdout').write_text(result.stdout)
+        try:
+            partial.replace(store)
+        except OSError:  # an identical concurrent invocation recorded it first
+            shutil.rmtree(partial)
+    else:
+        print('+ (cached)', *args, flush=True)
+    for n, path in enumerate(writes):
+        Path(path).write_bytes((store / str(n)).read_bytes())
+    return (store / 'stdout').read_text()
+
+
+def discover_map(arguments, overlay_support, output):
     """File-table presence is immutable across refinements of the same ROM."""
     if overlay_support is False:
-        plaid(*arguments)
+        print(memo_plaid(*arguments, writes=(output,)).strip())
         return False
-    tried = subprocess.run([str(ROOT / 'target/release/plaid'), *map(str, arguments), '--overlays'],
-                           cwd=ROOT, capture_output=True, text=True)
-    if tried.returncode != 0:
-        if 'file table' not in tried.stderr:
-            sys.exit(tried.stderr)
-        plaid(*arguments)
+    try:
+        print(memo_plaid(*arguments, '--overlays', writes=(output,)).strip().splitlines()[-1])
+    except subprocess.CalledProcessError as error:
+        if 'file table' not in error.stderr:
+            sys.exit(error.stderr)
+        print(memo_plaid(*arguments, writes=(output,)).strip())
         return False
-    print(tried.stdout.strip().splitlines()[-1])
     return True
 
 
@@ -147,11 +185,10 @@ def main():
     for attempt in range(16):
         # A ROM with no file table and no reset stub has no loads to declare.
         with_loads = ['--loads', loads] if json.loads(loads.read_text())['loads'] else []
-        with open(out / 'id.json', 'w') as f:
-            plaid('identify', *window, SIGNATURES, *with_loads, stdout=f)
+        (out / 'id.json').write_text(memo_plaid('identify', *window, SIGNATURES, *with_loads), newline='')
         discover = ['discover', *window, entry, m, out / 'id.json', *with_loads, '--address-taken', '--fr0']
-        overlay_support = discover_map(discover, overlay_support)
-        verdict = json.loads(plaid('solve', rom, m, '--address-taken', capture_output=True, text=True).stdout)
+        overlay_support = discover_map(discover, overlay_support, m)
+        verdict = json.loads(memo_plaid('solve', rom, m, '--address-taken'))
         if verdict['status'] == 'closed' or a.loads or attempt == 15:
             break
         previous_loads = loads.read_bytes()
@@ -164,7 +201,7 @@ def main():
     print('solve', verdict['status'], len(verdict['blockers']), 'blockers')
     residual = verdict['status'] != 'closed' and not a.strict
     if residual:
-        verdict = json.loads(plaid('solve', rom, m, '--residual-dispatch', capture_output=True, text=True).stdout)
+        verdict = json.loads(memo_plaid('solve', rom, m, '--residual-dispatch'))
         print('residual-dispatch solve', verdict['status'], len(verdict['blockers']), 'blockers,', len(verdict.get('residual_sites', [])), 'residual sites')
     if verdict['status'] != 'closed':
         sys.exit('not CLOSED under the address-taken scope' + ('' if a.strict else ', even with residual dispatch') + ': nothing is built')

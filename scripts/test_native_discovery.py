@@ -1,5 +1,5 @@
 """Check the native builder's immutable-ROM overlay detection boundary."""
-from subprocess import CompletedProcess
+from subprocess import CalledProcessError, CompletedProcess
 from unittest.mock import patch
 import json
 from pathlib import Path
@@ -11,34 +11,36 @@ import native
 def run_contract():
     arguments = ['discover', 'synthetic.z64', '0x1000', '0x80000000', '0x20',
                  '0x80000000', 'map.json']
-    absent = CompletedProcess([], 1, '', 'no self-describing ROM file table')
-    with patch.object(native.subprocess, 'run', return_value=absent) as probe, \
-            patch.object(native, 'plaid') as discover:
-        supported = native.discover_map(arguments, None)
+    output = 'map.json'
+
+    def probe(stderr):
+        def memo(*args, writes=()):
+            assert writes == (output,)
+            if stderr and (args[-1] == '--overlays' or 'file table' not in stderr):
+                raise CalledProcessError(1, args, '', stderr)
+            return 'discovered synthetic map'
+        return patch.object(native, 'memo_plaid', side_effect=memo)
+
+    with probe('no self-describing ROM file table') as memo:
+        supported = native.discover_map(arguments, None, output)
         assert supported is False
-        assert native.discover_map(arguments, supported) is False
-        assert probe.call_count == 1
-        assert probe.call_args.args[0][-1] == '--overlays'
-        assert [call.args for call in discover.call_args_list] == [tuple(arguments)] * 2
+        assert native.discover_map(arguments, supported, output) is False
+        assert [call.args for call in memo.call_args_list] == [(*arguments, '--overlays'), *[tuple(arguments)] * 2]
 
-    present = CompletedProcess([], 0, 'discovered synthetic map\n', '')
-    with patch.object(native.subprocess, 'run', return_value=present) as probe, \
-            patch.object(native, 'plaid') as discover:
-        supported = native.discover_map(arguments, None)
+    with probe(None) as memo:
+        supported = native.discover_map(arguments, None, output)
         assert supported is True
-        assert native.discover_map(arguments, supported) is True
-        assert probe.call_count == 2 and discover.call_count == 0
+        assert native.discover_map(arguments, supported, output) is True
+        assert [call.args for call in memo.call_args_list] == [(*arguments, '--overlays')] * 2
 
-    invalid = CompletedProcess([], 1, '', 'declared source identity mismatch')
-    with patch.object(native.subprocess, 'run', return_value=invalid), \
-            patch.object(native, 'plaid') as discover:
+    with probe('declared source identity mismatch') as memo:
         try:
-            native.discover_map(arguments, None)
+            native.discover_map(arguments, None, output)
         except SystemExit as error:
-            assert str(error) == invalid.stderr
+            assert str(error) == 'declared source identity mismatch'
         else:
             raise AssertionError('non-file-table errors must stop discovery')
-        assert discover.call_count == 0
+        assert memo.call_count == 1
     print('PASS native discovery: immutable negative overlay probe and fatal-error propagation')
     # The manifest records whether the build is closed or dispatches residual
     # sites at run time; --strict refuses anything but a CLOSED map (ADR-0233).
@@ -60,7 +62,7 @@ def run_contract():
                 return CompletedProcess([], 0, json.dumps(payload), '')
             argv = ['native.py', 'synthetic.z64', '--name', 'manifest', '--loads', str(loads), *(['--strict'] if strict else [])]
             with patch.object(native, 'ROOT', root), patch.object(native, 'plaid', side_effect=plaid), \
-                    patch.object(native, 'run'), patch.object(native, 'discover_map'), \
+                    patch.object(native, 'memo_plaid', side_effect=lambda *a, writes=(): plaid(*a).stdout),                     patch.object(native, 'run'), patch.object(native, 'discover_map'), \
                     patch.object(native, 'capture_many', side_effect=ValueError('test stop after manifest')), \
                     patch('sys.argv', argv):
                 try:
