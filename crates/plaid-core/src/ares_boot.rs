@@ -32,6 +32,29 @@ pub struct Capture {
     pub budget: u64,
 }
 
+impl Capture {
+    /// A data read can use a physical alias of a mapped capture. The replay
+    /// still authenticates the first fetch and complete producer extent.
+    pub fn data_slice(&self, physical: u32, size: u32) -> Result<Vec<u8>, String> {
+        let source = self
+            .physical_start
+            .unwrap_or(self.destination & 0x1fff_ffff);
+        let offset = physical
+            .checked_sub(source)
+            .ok_or("data precedes replayed source")?;
+        let end = offset
+            .checked_add(size)
+            .ok_or("replayed data range overflow")?;
+        if size == 0 || (physical | size) & 3 != 0 {
+            return Err("replayed data must be nonempty aligned words".into());
+        }
+        self.bytes
+            .get(offset as usize..end as usize)
+            .map(<[u8]>::to_vec)
+            .ok_or_else(|| "data exceeds replayed source".into())
+    }
+}
+
 /// Run from reset to the first fetch of `entry`. An in-process memo only avoids
 /// replaying the same ROM/entry multiple times in one process.
 pub fn execute(rom: &CanonicalRom, entry: u32) -> Result<Capture, String> {
@@ -239,6 +262,89 @@ fn parse_capture_rows(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mapped_data_slices_require_the_replayed_physical_extent() {
+        let mut row = capture(&rom(), 0x60001000, 0);
+        row["physical_start"] = serde_json::json!(0x1000);
+        let words: [u32; 4] = [0x2402002a, 0x03e00008, 0, 0x60001000];
+        row["bytes"] = serde_json::json!(
+            words
+                .iter()
+                .flat_map(|w| w.to_be_bytes())
+                .collect::<Vec<_>>()
+        );
+        let captured: Capture = serde_json::from_value(row).unwrap();
+        assert_eq!(
+            captured.data_slice(0x100c, 4).unwrap(),
+            words[3].to_be_bytes()
+        );
+        for (physical, size) in [
+            (0xffc, 4),
+            (0x1000, 0),
+            (0x1001, 4),
+            (0x100c, 8),
+            (u32::MAX - 3, 8),
+        ] {
+            assert!(captured.data_slice(physical, size).is_err());
+        }
+    }
+
+    #[test]
+    fn replayed_data_composition_preserves_preload_and_refuses_execution_or_wrong_source() {
+        use crate::{GuestAddr, declared_loads::*, program::*};
+        let rom = rom();
+        let entry = 0x60001234;
+        let mut row = capture(&rom, entry, 0);
+        row["destination"] = serde_json::json!(0x60001000);
+        row["physical_start"] = serde_json::json!(0x1000);
+        let mut bytes = vec![0; 0x400];
+        bytes[..4].copy_from_slice(&0x03e00008u32.to_be_bytes());
+        row["bytes"] = serde_json::json!(bytes);
+        row["output_sha256"] = serde_json::json!(sha256(&bytes));
+        let captured: Capture = serde_json::from_value(row).unwrap();
+        validate_capture(&captured, &rom, entry).unwrap();
+        MEMO.get_or_init(Default::default)
+            .lock()
+            .unwrap()
+            .insert((rom.identity.sha256.clone(), entry), captured);
+        let mut spec = LoadImage {
+            base_offset: RomOffset(64),
+            base: GuestRange {
+                start: GuestAddr(0x80001000),
+                size: 8,
+            },
+            loads: vec![DeclaredLoad {
+                destination: GuestRange {
+                    start: GuestAddr(0x80001000),
+                    size: 8,
+                },
+                source: RomOffset(0),
+                encoding: LoadEncoding::AresData {
+                    entry: GuestAddr(entry),
+                    physical: 0x1000,
+                },
+                evidence: EvidenceRefs::new(),
+                relocatable: false,
+                linked: None,
+            }],
+        };
+        let (preload, image) = compose(rom.bytes(), &spec).unwrap();
+        assert_eq!(preload.words, [0, 0]);
+        assert_eq!(image.word(GuestAddr(0x80001000)), Some(0x03e00008));
+        assert_eq!(image.instruction_word(GuestAddr(0x80001000)), None);
+        assert!(verify_slots(&image, Some(&spec)));
+        let map = crate::discovery::direct_cfg(rom.identity.clone(), &image, &[image.base.pc], 100)
+            .unwrap()
+            .map;
+        assert!(map.blocks.is_empty());
+        assert!(map.unresolved.iter().any(|u| u.kind == "unmapped_target"));
+        spec.loads[0].encoding = LoadEncoding::AresData {
+            entry: GuestAddr(entry),
+            physical: 0x2000,
+        };
+        assert!(compose(rom.bytes(), &spec).is_err());
+    }
 
     fn rom() -> CanonicalRom {
         let mut bytes = vec![0; 0x1000];

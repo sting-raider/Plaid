@@ -7199,3 +7199,57 @@ costs that do no useful work; each change keeps every output byte-identical.
 Banjo-Kazooie first build (empty replay and stage caches, --rt64, 20 s
 validation run, fault 0): 282 s (was 296 s), of which the three harvest replays take 126 s (were about 144 s). Discovery maps, solve reports and all
 generated files match the build before this change.
+
+
+## ADR-0250: Replay-authenticated first-use table data
+
+Status: accepted partial analysis fix, 2026-10-23.
+
+GoldenEye's initial mapped fetch authenticates produced bytes, not their later
+interpretation as initialized data. The mapped-text hypothesis was tested:
+trimming the 1 MiB text candidate to the last return before its compressed data
+removes six blocks but leaves OPEN 338/327 ordinary/residual blockers unchanged.
+The example switch at mapped 70001674 is genuine code; its fixed table source
+80028400 still held packed boot bytes in the analysis image. The stream expands
+to the initialized-data span ending at BSS. No title-specific boundary or new
+compression-layout assumption is used in production.
+
+An ares_data declaration now supplies a bounded aligned physical RAM slice from
+a pinned whole-ROM reset replay at a first-fetch entry. Composition repeats the
+replay and validates its source/range; saved RAM is never an input. The fixed
+KSEG0 data uses an identity-linked, zero-text partition with the existing
+content/declaration verifier, so even instruction-looking data cannot authorize
+execution. IPL preload remains unchanged. Harvesting splits overlapping raw
+sources with exact offset preservation and refuses conflicting/unsupported
+sources. Previously authenticated data anchors can supply newly found tables
+without waiting for neutral input to execute every case. That replay takes
+2.776 s instead of 29.903 s with identical payload SHA-256.
+
+Table recovery is candidate-source evidence, not target closure or a lifetime
+proof. Data-only loads have no executable entry; their consuming native transfer
+checks the source bytes after guest initialization. Existing write invalidation
+forces rechecking after later stores. Mismatches fault with code 8. Table
+rechecks, actual target dispatch, source bindings, all non-indirect blockers and
+the closed-world gate remain. No assumption is
+retired; no native guest decoder, interpreter or JIT is introduced. Pinned ares
+9408cb43d4948fc3ea6e152a307a34348df3fe04 (ISC) is read/executed as an oracle;
+no upstream implementation is copied into the native artifact.
+
+The normal ROM-only pipeline now discovers 4706 blocks, OPEN 175 ordinary /
+172 residual blockers. Ten data slices (1024 bytes) remove all 106 invalid
+pointer-entry blockers. All 85 unresolved direct destinations are in the 7f
+engine range; their executable sources/paging, callbacks, mapped helper and
+COP0 effects remain open. Native GoldenEye emission is refused. The producer
+extent's writable-data/text distinction remains an independent prerequisite
+before native acceptance, not a blocker-count fix claimed by this milestone.
+
+Authored Rust tests cover physical slices, preserved preload, nonexecutable
+reads and forged/wrong-source refusal. Python tests cover exact source splitting,
+unique replay projection, late-case anchor reuse and malformed/conflicting
+snapshot refusal; the complete synthetic ares harvest suite passes. Existing
+native/reference table and TLB contracts remain required in the full local gate.
+An authored native fixture matches pinned ares CPU state/RAM after initialization,
+refuses first-use/post-write tampering and detects a missing-guard mutation.
+Research, scope limits, commands, control-game and exact-tree gate receipt paths:
+research/mapped-boot-text-extents.md. DECISIONS is appended as bytes, preserving
+its historical CRLF/non-UTF-8 prefix.

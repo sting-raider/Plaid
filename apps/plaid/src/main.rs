@@ -1681,9 +1681,13 @@ fn load_declarations(
             Some("ares_boot") => LoadEncoding::AresBoot {
                 entry: GuestAddr(u32::try_from(field("entry")?).map_err(|e| e.to_string())?),
             },
+            Some("ares_data") => LoadEncoding::AresData {
+                entry: GuestAddr(u32::try_from(field("entry")?).map_err(|e| e.to_string())?),
+                physical: u32::try_from(field("physical")?).map_err(|e| e.to_string())?,
+            },
             _ => {
                 return Err(
-                    "load encoding is raw, tlb_raw, ares_tlb, yaz0, rare_pair, segment, boot or ares_boot"
+                    "load encoding is raw, tlb_raw, ares_tlb, yaz0, rare_pair, segment, boot, ares_boot or ares_data"
                         .into(),
                 );
             }

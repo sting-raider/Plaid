@@ -1590,6 +1590,18 @@ pub fn lower_c_parts(
         return Err("at most 64 declared loads are supported".into());
     }
     let load_of = |start: u32| loads.iter().position(|(s, e)| *s <= start && start < *e);
+    let data_loads: BTreeSet<usize> = declared
+        .iter()
+        .filter(|l| !l.relocatable)
+        .enumerate()
+        .filter_map(|(i, l)| {
+            matches!(
+                l.encoding,
+                plaid_core::declared_loads::LoadEncoding::AresData { .. }
+            )
+            .then_some(i)
+        })
+        .collect();
     // Relocatable overlays run only through a run-time binding (ADR-0181).
     let relocatable: Vec<&plaid_core::declared_loads::DeclaredLoad> =
         declared.iter().filter(|l| l.relocatable).collect();
@@ -1846,6 +1858,7 @@ pub fn lower_c_parts(
     }
     // Jump tables are store-protected like code (ADR-0132).
     let mut guarded = vec![Vec::new(); overlays.len()];
+    let mut data_guards = BTreeMap::new();
     let index = plaid_core::indirect::MapIndex::new(map);
     for site in &map.indirect_sites {
         let cell = plaid_core::tail_cells::source_cell_range_in(&index, map, image, site)
@@ -1870,6 +1883,11 @@ pub fn lower_c_parts(
                 physical(start.0 + count * 4 - 1)? + 1,
                 load_of(start.0).map_or(-2, |l| l as i64)
             ));
+            if let Some(l) = load_of(start.0).filter(|l| data_loads.contains(l)) {
+                // Data-only loads have no executable entry to trigger validation.
+                // Verify at their consuming transfer, after guest initialization.
+                data_guards.insert(site.site.pc.0, l);
+            }
         }
     }
     let mut out = String::from(PRELUDE);
@@ -2149,6 +2167,11 @@ pub fn lower_c_parts(
             let mut pc = start;
             let mut transferred = false;
             while pc < end {
+                if let Some(l) = data_guards.get(&pc) {
+                    out += &format!(
+                        "  if (!s->load_ok[{l}] && plaid_verify_load(s, {l}, 0x{pc:08x}u)) return 1;\n"
+                    );
+                }
                 let w = word(pc)?;
                 if plaid_core::solver::is_eret(w) {
                     out += &format!("  {}\n", lowerer.control(w, pc, "")?);

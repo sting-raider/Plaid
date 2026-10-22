@@ -33,6 +33,84 @@ def missing_tables(program):
     return out
 
 
+def repair_table_data(rom, loads, program, base, size, receipt_path):
+    """A malformed early table snapshot is not executable-source evidence.
+
+    Replay to its first use and supply only the table's data bytes. Composition
+    repeats that fetch; native table checks still guard any accepted certificate.
+    """
+    tables = set()
+    for item in program.get('unresolved', []):
+        if item['kind'] == 'invalid_pointer_table_entry':
+            table = json.loads(program['evidence'][item['evidence'][0]]['detail'])
+            tables.add((item['site']['pc'], table['table_start'], table['count'] * 4))
+    if not tables:
+        return False
+    bindings = replay_bindings(program, base, size)
+    def runtime(pc):
+        matches = {target + pc - start for start, target, length, _ in bindings
+                   if start <= pc < start + length}
+        if len(matches) != 1:
+            raise ValueError(f'table use {pc:08x} has no unique replay address')
+        return matches.pop()
+    try:
+        # Newly decoded cases can reveal another table that neutral input never
+        # uses. An already authenticated data fetch can supply that same snapshot.
+        entries = {int(l['entry'], 0) for l in loads['loads'] if l['encoding'] == 'ares_data'}
+        if not entries:
+            entries = {runtime(site) for site, _, _ in tables}
+        captures = capture_many(rom, sorted(entries))
+    except ValueError:
+        return False
+    additions = []
+    for capture in captures:
+        if 'bytes' not in capture:
+            continue
+        source = capture.get('physical_start', capture['destination'] & 0x1fffffff)
+        data = bytes(capture['bytes'])
+        for _, start, length in sorted(tables):
+            # Fixed KSEG0 data only; mapped/slot table placement needs its own binding.
+            physical = start - 0x80000000
+            offset = physical - source
+            if not (0 <= physical < physical + length <= 0x800000 and
+                    0 <= offset < offset + length <= len(data)):
+                continue
+            payload = data[offset:offset + length]
+            if any(int.from_bytes(payload[n:n+4], 'big') % 4 for n in range(0, length, 4)):
+                continue
+            load = dict(destination=hex(start), size=hex(length), rom='0x0', encoding='ares_data',
+                        entry=hex(capture['entry']), physical=hex(physical))
+            if load not in additions and load not in loads['loads']:
+                additions.append(load)
+    if not additions:
+        return False
+    # Preserve every supplied byte outside the data ranges. Unsupported source
+    # encodings and conflicting data witnesses refuse instead of being overwritten.
+    refined = loads['loads'][:]
+    for data in additions:
+        lo, hi = int(data['destination'], 0), int(data['destination'], 0) + int(data['size'], 0)
+        pieces = []
+        for load in refined:
+            start, end = int(load['destination'], 0), int(load['destination'], 0) + int(load['size'], 0)
+            if load.get('slot') or start >= hi or lo >= end:
+                pieces.append(load)
+                continue
+            if load['encoding'] not in ('raw', 'ares_boot'):
+                return False
+            for a, b in ((start, min(end, lo)), (max(start, hi), end)):
+                if a < b:
+                    piece = dict(load, destination=hex(a), size=hex(b - a))
+                    if load['encoding'] == 'raw':
+                        piece['rom'] = hex(int(load['rom'], 0) + a - start)
+                    pieces.append(piece)
+        refined = pieces + [data]
+    loads['loads'] = sorted(refined, key=lambda l: (bool(l.get('slot')), 0 if l.get('slot') else int(l['destination'], 0)))
+    loads['source'] += '; first-use table data from whole-ROM ares reset replay; nonexecutable, native table guards required'
+    Path(receipt_path).write_text(json.dumps({'table_data': additions,
+        'captures': [{k: v for k, v in c.items() if k != 'bytes'} for c in captures]}, indent=2) + '\n')
+    return True
+
+
 def replay_bindings(program, base, size):
     """Map declared storage to execution addresses; ROM spans guard slot identity.
 
@@ -94,6 +172,9 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
     loads = json.loads(loads_path.read_text())
     program = json.loads(Path(map_path).read_text())
     base, size = info['header']['boot_address'], info.get('boot_image_size') or 0x100000
+    if repair_table_data(rom, loads, program, base, size, receipt_path):
+        loads_path.write_text(json.dumps(loads, indent=2) + '\n')
+        return True
     targets = missing_targets(program, loads, base, size)
     # A table is read when its jump site runs: capture there (ADR-0197).
     tables = missing_tables(program)

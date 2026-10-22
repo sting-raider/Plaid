@@ -1,5 +1,18 @@
 # Status
 
+## GoldenEye first-use table data (ADR-0250)
+
+The automatic ROM-only pipeline improves from OPEN 338/327 ordinary/residual
+blockers to 175/172, with 4706 blocks. Ten replay-authenticated, nonexecutable
+data slices replace packed boot bytes at later table sources; all 106 invalid
+table-entry blockers disappear. A controlled mapped-text trim leaves blocker
+counts unchanged, refuting it as the cause. All 85 missing direct destinations
+are in the 7f engine range; their sources/paging, callbacks and COP0 effects
+remain unresolved. Native emission is still refused; no GoldenEye run is
+accepted. Replayed data is checked at its consuming native transfer after guest
+initialization, and rechecked after writes. Closure and source gates remain.
+See research/mapped-boot-text-extents.md and its local validation receipts.
+
 ## Faster analysis (ADR-0249)
 
 `solve` (4.2 -> 2.65 s), discovery (16.8 -> 15.9 s) and each two-billion-

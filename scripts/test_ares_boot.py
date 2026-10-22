@@ -165,6 +165,59 @@ def replay_cache_contract():
             os.environ['PLAID_REPLAY_CACHE'] = saved_root
 
 
+def table_data_contract():
+    with tempfile.TemporaryDirectory(prefix='plaid-table-data-') as temporary:
+        receipt = Path(temporary) / 'receipt.json'
+        initial = dict(source='synthetic', loads=[dict(destination='0x80001000', size='0x40', rom='0x200', encoding='raw')])
+        table = dict(table_start=0x80001010, count=2)
+        program = dict(unresolved=[dict(kind='invalid_pointer_table_entry', site=dict(pc=0x80800020), evidence=['table'])],
+                       evidence={'table': dict(detail=json.dumps(table))},
+                       load_images={'fixture': dict(base=dict(start=0x80000400, size=0x100), loads=[
+                           dict(destination=dict(start=0x80800000, size=0x100), linked=0x60000000,
+                                relocatable=True, encoding={'ares_tlb': {'text_size': 0x100}}, source=0)])})
+        payload = (bytes(0x10) + struct.pack('>2I', 0x60000040, 0x60000050) + bytes(8) +
+                   struct.pack('>2I', 0x60000060, 0x60000070) + bytes(0x18))
+        captured = dict(entry=0x60000020, destination=0x60001000, physical_start=0x1000, bytes=list(payload))
+        calls, saved = [], harvest_boot.capture_many
+        def replay(rom, entries):
+            calls.append(entries)
+            return [captured]
+        harvest_boot.capture_many = replay
+        try:
+            loads = json.loads(json.dumps(initial))
+            assert harvest_boot.repair_table_data('unused.z64', loads, program, 0x80000400, 0x100, receipt)
+            assert calls == [[0x60000020]]
+            assert loads['loads'] == [
+                dict(destination='0x80001000', size='0x10', rom='0x200', encoding='raw'),
+                dict(destination='0x80001010', size='0x8', rom='0x0', encoding='ares_data', entry='0x60000020', physical='0x1010'),
+                dict(destination='0x80001018', size='0x28', rom='0x218', encoding='raw')]
+            before = json.dumps(loads, sort_keys=True)
+            assert not harvest_boot.repair_table_data('unused.z64', loads, program, 0x80000400, 0x100, receipt)
+            assert json.dumps(loads, sort_keys=True) == before
+            later = json.loads(json.dumps(program))
+            later['unresolved'][0]['site']['pc'] += 4
+            later['evidence']['table']['detail'] = json.dumps(dict(table_start=0x80001020, count=2))
+            assert harvest_boot.repair_table_data('unused.z64', loads, later, 0x80000400, 0x100, receipt)
+            assert calls[-1] == [0x60000020]  # do not wait for an unexecuted later case
+            assert any(l['destination'] == '0x80001020' and l['entry'] == '0x60000020'
+                       for l in loads['loads'] if l['encoding'] == 'ares_data')
+            for change in [dict(physical_start=0x2000), dict(bytes=[]),
+                           dict(bytes=list(payload[:0x10] + struct.pack('>2I', 0x60000041, 0x60000050) + payload[0x18:]))]:
+                loads = json.loads(json.dumps(initial))
+                harvest_boot.capture_many = lambda *a: [dict(captured, **change)]
+                assert not harvest_boot.repair_table_data('unused.z64', loads, program, 0x80000400, 0x100, receipt)
+                assert loads == initial
+            loads = json.loads(json.dumps(initial))
+            loads['loads'][0]['encoding'] = 'yaz0'
+            before = json.dumps(loads)
+            harvest_boot.capture_many = replay
+            assert not harvest_boot.repair_table_data('unused.z64', loads, program, 0x80000400, 0x100, receipt)
+            assert json.dumps(loads) == before
+        finally:
+            harvest_boot.capture_many = saved
+    print('PASS first-use table data: unique replay address, physical slice, source-preserving splits and invalid/conflicting refusal')
+
+
 def main():
     if os.name == 'nt':
         script = subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(Path(__file__).resolve())], text=True).strip()
@@ -174,6 +227,7 @@ def main():
     replay_cache_contract()
     raw_occupant_contract()
     mapped_harvest_contract()
+    table_data_contract()
     for coverage in ([], [None], [[1]], [[4, 4]], [[0, 3]], [[False, 4]], [[0, 0x100000000]]):
         try:
             capture_many('never-read.z64', [], covered=coverage)

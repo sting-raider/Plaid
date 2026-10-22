@@ -708,6 +708,8 @@ def main():
     indexed_slot_call_contracts()
     from test_boot_execution import main as boot_execution_contracts
     boot_execution_contracts()
+    from test_replayed_data import main as replayed_data_contracts
+    replayed_data_contracts()
     subprocess.run([sys.executable, str(ROOT / 'scripts/test_ares_boot.py')], check=True)
     dpc = OUT / 'dpc-contract.exe'
     subprocess.run([cc, '-O2', '-std=c11', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function',
