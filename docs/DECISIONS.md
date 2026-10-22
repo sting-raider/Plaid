@@ -7339,3 +7339,11 @@ Consequences: Banjo-Kazooie built with an empty replay cache produces
 route (only the recorded `replay_seconds` differ: 0.54 s vs 1.52 s for the
 boot state). The oracle builds in 195 s; harvest rounds take about 35 s each,
 including rediscovery.
+
+## ADR-0252: Star Fox 64 DMA overlay catalog
+
+SF64 US Rev 1 provides a virtual-to-physical DMA catalog with packed ROM extents and a compression flag, plus scene descriptors containing VROM, BSS, text and data bounds. Generic discovery accepts structurally validated catalogs, matches scene descriptors to catalog VROM keys, bounds MIO0 and raw decoding by catalog extents, and records overlay text/BSS metadata. Shared link addresses remain content-bound alternate slots checked by the existing runtime binding; discovery does not claim an overlay load was observed or close unproven control flow. No title, ROM hash, fixed table location or per-game load declaration is used.
+
+A deterministic synthetic test covers packed physical extents with distinct virtual keys; existing MIO0 tests cover literal, backreference and malformed streams. A CC0 decompilation at `4235c59f00b04440e3fd5fec49f0bc80e48cf212` was consulted; no code was copied.
+
+SF64 USA Rev 1: baseline 296 blockers (294 with residual dispatch); current map 8 blockers before residual dispatch and 1 after, with 7 residual sites. The one residual-mode blocker is an indirect candidate at `0xa40000b0` reached from `0x8001efb8`, with no lowered block. `native.py --seconds 30` therefore still emits no native artifact; the result meets the substantial blocker-reduction criterion, not native-build acceptance. This run took about 71 seconds including cached analysis and exited before validation. Full cross-game native validation remains outstanding.

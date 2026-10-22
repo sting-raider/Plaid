@@ -2,7 +2,7 @@
 //! A catalog is a discovery input; it does not certify reachability or a load lifetime.
 use crate::{
     GuestAddr,
-    declared_loads::{DeclaredLoad, LoadEncoding, yaz0},
+    declared_loads::{DeclaredLoad, LoadEncoding, OverlayCompression, mio0, yaz0},
     program::{EvidenceRefs, GuestRange, RomOffset},
     rom::sha256,
 };
@@ -427,17 +427,159 @@ pub struct Overlay {
     pub source_sha256: String,
     pub layout: Layout,
     pub table_offsets: Vec<u32>,
+    pub encoding: LoadEncoding,
+}
+
+/// Catalog offset, its files, and each file's compression by virtual start.
+type DmaCatalog = (u32, Vec<RomFile>, BTreeMap<u32, OverlayCompression>);
+
+fn dma_file_table(rom: &[u8]) -> Result<DmaCatalog, String> {
+    let mut result = None;
+    for start in (0..rom.len().saturating_sub(32)).step_by(16) {
+        if word(rom, start)? != 0
+            || word(rom, start + 4)? != 0
+            || word(rom, start + 8)? == 0
+            || word(rom, start + 12)? != 0
+        {
+            continue;
+        }
+        let mut files = Vec::new();
+        let mut physical = 0u32;
+        let mut previous_vrom = 0u32;
+        let mut compression = BTreeMap::new();
+        for at in (start..rom.len().saturating_sub(15)).step_by(16).take(4097) {
+            let (vs, ps, pe, flag) = (
+                word(rom, at)?,
+                word(rom, at + 4)?,
+                word(rom, at + 8)?,
+                word(rom, at + 12)?,
+            );
+            if vs == 0 && ps == 0 && pe == 0 && flag == 0 {
+                if files.len() >= 8 && result.is_none() {
+                    result = Some((start as u32, files, compression));
+                }
+                break;
+            }
+            if ps != physical
+                || pe <= ps
+                || pe as usize > rom.len()
+                || (!files.is_empty() && vs <= previous_vrom)
+                || !matches!(flag, 0 | 1)
+                || (flag == 1 && pe - ps < 16)
+            {
+                break;
+            }
+            let logical_end = vs.checked_add(if flag == 1 {
+                word(rom, pe as usize - (pe - ps) as usize + 4)?
+            } else {
+                pe - ps
+            });
+            let Some(ve) = logical_end else { break };
+            if ve <= vs {
+                break;
+            }
+            files.push(RomFile {
+                virtual_start: vs,
+                virtual_end: ve,
+                rom_start: ps,
+                rom_end: pe,
+            });
+            compression.insert(
+                vs,
+                if flag == 1 {
+                    OverlayCompression::Mio0
+                } else {
+                    OverlayCompression::Raw
+                },
+            );
+            physical = pe;
+            previous_vrom = vs;
+        }
+    }
+    result.ok_or_else(|| "no self-describing ROM file table".into())
 }
 
 /// Find contiguous VROM start/end, link start/end tuples in a supplied static
 /// image. File identity and trailer layout must independently agree. Callers
 /// retain that image's identity alongside these offsets.
 pub fn discover(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> {
-    let (_, files) = file_table(rom)?;
+    let (dma_catalog, files, compression) = match file_table(rom) {
+        Ok((_, files)) => (false, files, BTreeMap::new()),
+        Err(_) => {
+            let (_, files, compression) = dma_file_table(rom)?;
+            (true, files, compression)
+        }
+    };
     let files: BTreeMap<_, _> = files.into_iter().map(|f| (f.virtual_start, f)).collect();
     let mut found: BTreeMap<(u32, u32), Overlay> = BTreeMap::new();
-    for at in (0..table_image.len().saturating_sub(15)).step_by(4) {
+    for at in (0..table_image.len().saturating_sub(31)).step_by(4) {
         let a = word(table_image, at)?;
+        if dma_catalog {
+            // Generic eight-word scene descriptors: VROM range, BSS range,
+            // text range, data range. The matching VROM file is the identity.
+            if let Some(file) = files
+                .get(&a)
+                .filter(|f| word(table_image, at + 4).ok() == Some(f.virtual_end))
+            {
+                let (bss_start, bss_end, text_start, text_end, data_start, data_end) = (
+                    word(table_image, at + 8)?,
+                    word(table_image, at + 12)?,
+                    word(table_image, at + 16)?,
+                    word(table_image, at + 20)?,
+                    word(table_image, at + 24)?,
+                    word(table_image, at + 28)?,
+                );
+                let link = text_start;
+                let file_size = file.virtual_end - file.virtual_start;
+                if !(0x8000_0000..0xa000_0000).contains(&link)
+                    || text_end <= link
+                    || data_start != text_end
+                    || data_end < data_start
+                    || bss_start != data_end
+                    || bss_end < bss_start
+                    || bss_end < link
+                    || bss_end - link > MAX_IMAGE as u32
+                {
+                    continue;
+                }
+                let encoding = compression[&a];
+                let decoded = match encoding {
+                    OverlayCompression::Mio0 => mio0(
+                        rom.get(file.rom_start as usize..file.rom_end as usize)
+                            .ok_or("DMA file outside ROM")?,
+                    ),
+                    OverlayCompression::Raw => rom
+                        .get(file.rom_start as usize..file.rom_start as usize + file_size as usize)
+                        .ok_or_else(|| "DMA raw file outside ROM".to_string())
+                        .map(<[u8]>::to_vec),
+                };
+                let Ok(decoded) = decoded else { continue };
+                if decoded.len() != file_size as usize {
+                    continue;
+                }
+                let text_size = text_end - link;
+                let layout = crate::overlays::slot_layout_bounded(&decoded, link, text_size)?;
+                let key = (a, link);
+                found
+                    .entry(key)
+                    .or_insert_with(|| Overlay {
+                        file: file.clone(),
+                        link,
+                        source_sha256: sha256(&decoded),
+                        layout,
+                        table_offsets: Vec::new(),
+                        encoding: LoadEncoding::CatalogOverlay {
+                            encoding,
+                            encoded_size: file.rom_end - file.rom_start,
+                            text_size,
+                            bss_size: bss_end - bss_start,
+                        },
+                    })
+                    .table_offsets
+                    .push(at as u32);
+            }
+            continue;
+        }
         let Some(file) = files.get(&a) else { continue };
         if word(table_image, at + 4)? != file.virtual_end {
             continue;
@@ -467,6 +609,11 @@ pub fn discover(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> 
                 source_sha256: sha256(&bytes),
                 layout,
                 table_offsets: Vec::new(),
+                encoding: if file.rom_end == 0 {
+                    LoadEncoding::Raw
+                } else {
+                    LoadEncoding::Yaz0
+                },
             })
             .table_offsets
             .push(at as u32);
@@ -490,23 +637,25 @@ pub fn loads(overlays: &[Overlay], evidence: &EvidenceRefs) -> Vec<DeclaredLoad>
                 && u64::from(o.link)
                     < u64::from(p.link) + u64::from(p.layout.file_size + p.layout.bss)
         };
-        if sorted[..i].iter().chain(&sorted[i + 1..]).any(clash) {
+        let overlap = sorted[..i].iter().chain(&sorted[i + 1..]).any(clash);
+        let slot = sorted.iter().filter(|p| p.link == o.link).count() > 1;
+        if overlap && !slot {
             continue;
         }
         out.push(DeclaredLoad {
             destination: GuestRange {
-                start: GuestAddr(o.link),
+                start: GuestAddr(if slot {
+                    0x8080_0000 + i as u32 * 0x0010_0000
+                } else {
+                    o.link
+                }),
                 size: o.layout.file_size,
             },
             source: RomOffset(u64::from(o.file.rom_start)),
-            encoding: if o.file.rom_end == 0 {
-                LoadEncoding::Raw
-            } else {
-                LoadEncoding::Yaz0
-            },
+            encoding: o.encoding,
             evidence: evidence.clone(),
             relocatable: true,
-            linked: None,
+            linked: slot.then_some(GuestAddr(o.link)),
         });
     }
     out
@@ -844,6 +993,84 @@ pub fn reset_stub(rom: &[u8], window: u32) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn dma_catalog_uses_virtual_keys_and_bounded_packed_physical_extents() {
+        let mut rom = vec![0; 0x400];
+        for index in 0..8u32 {
+            let row = [index * 0x100, index * 16, (index + 1) * 16, 0];
+            for (word_index, value) in row.into_iter().enumerate() {
+                put(
+                    &mut rom,
+                    0x100 + index as usize * 16 + word_index * 4,
+                    value,
+                );
+            }
+        }
+        let (at, files, _) = dma_file_table(&rom).unwrap();
+        assert_eq!(at, 0x100);
+        assert_eq!(files.len(), 8);
+        assert_eq!(
+            (files[1].virtual_start, files[1].rom_start, files[1].rom_end),
+            (0x100, 16, 32)
+        );
+    }
+
+    #[test]
+    fn dma_scene_records_discover_raw_overlays_sharing_a_link_address() {
+        let mut rom = vec![0; 0x400];
+        for index in 0..8u32 {
+            let (vrom, start, end) = match index {
+                0 => (0, 0, 16),
+                1 => (0x100, 16, 48),
+                2 => (0x200, 48, 80),
+                _ => (
+                    0x200 + (index - 1) * 16,
+                    80 + (index - 3) * 16,
+                    96 + (index - 3) * 16,
+                ),
+            };
+            for (word_index, value) in [vrom, start, end, 0].into_iter().enumerate() {
+                put(
+                    &mut rom,
+                    0x100 + index as usize * 16 + word_index * 4,
+                    value,
+                );
+            }
+        }
+        let link = 0x8010_0000;
+        let mut scene = vec![0; 64];
+        for (index, vrom) in [0x100, 0x200].into_iter().enumerate() {
+            let descriptor = [
+                vrom,
+                vrom + 32,
+                link + 32,
+                link + 32,
+                link,
+                link + 16,
+                link + 16,
+                link + 32,
+            ];
+            for (word_index, value) in descriptor.into_iter().enumerate() {
+                put(&mut scene, index * 32 + word_index * 4, value);
+            }
+        }
+        let catalog = discover(&rom, &scene).unwrap();
+        assert_eq!(catalog.len(), 2);
+        let refs: EvidenceRefs = ["overlays:dma-test".to_string()].into();
+        let loads = loads(&catalog, &refs);
+        assert_eq!(loads.len(), 2);
+        assert_eq!(loads[0].destination.start, GuestAddr(0x8080_0000));
+        assert_eq!(loads[1].destination.start, GuestAddr(0x8090_0000));
+        assert_eq!(loads[0].linked, Some(GuestAddr(link)));
+        assert!(matches!(
+            loads[0].encoding,
+            LoadEncoding::CatalogOverlay {
+                encoding: OverlayCompression::Raw,
+                ..
+            }
+        ));
+    }
+
     fn fixture() -> Vec<u8> {
         let mut words = vec![
             0x3c088080, 0x25080020, 0x0c200004, 0, 0x03e00008, 0, 0, 0, 0x80800034, 0x06001234, 0,

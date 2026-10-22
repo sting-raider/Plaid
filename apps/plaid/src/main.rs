@@ -1633,7 +1633,7 @@ fn load_declarations(
     base_offset: RomOffset,
     base: GuestRange,
 ) -> Result<LoadDeclarations, String> {
-    use plaid_core::declared_loads::{DeclaredLoad, LoadEncoding, LoadImage};
+    use plaid_core::declared_loads::{DeclaredLoad, LoadEncoding, LoadImage, OverlayCompression};
     let Some(path) = path else {
         return Ok(None);
     };
@@ -1669,6 +1669,16 @@ fn load_declarations(
                 text_size: u32::try_from(field("text_size")?).map_err(|e| e.to_string())?,
             },
             Some("yaz0") => LoadEncoding::Yaz0,
+            Some("catalog_overlay") => LoadEncoding::CatalogOverlay {
+                encoding: match l["compression"].as_str() {
+                    Some("raw") => OverlayCompression::Raw,
+                    Some("mio0") => OverlayCompression::Mio0,
+                    _ => return Err("catalog overlay compression is raw or mio0".into()),
+                },
+                encoded_size: u32::try_from(field("encoded_size")?).map_err(|e| e.to_string())?,
+                text_size: u32::try_from(field("text_size")?).map_err(|e| e.to_string())?,
+                bss_size: u32::try_from(field("bss_size")?).map_err(|e| e.to_string())?,
+            },
             Some("rare_pair") => LoadEncoding::RarePair {
                 end: RomOffset(field("rom_end")?),
                 text_size: u32::try_from(field("text_size")?).map_err(|e| e.to_string())?,
@@ -1687,7 +1697,7 @@ fn load_declarations(
             },
             _ => {
                 return Err(
-                    "load encoding is raw, tlb_raw, ares_tlb, yaz0, rare_pair, segment, boot, ares_boot or ares_data"
+                    "load encoding is raw, tlb_raw, ares_tlb, yaz0, catalog_overlay, rare_pair, segment, boot, ares_boot or ares_data"
                         .into(),
                 );
             }

@@ -1,5 +1,11 @@
 # Status
 
+## SF64 DMA overlays (ADR-0252)
+
+Generic overlay discovery now recognizes structurally validated virtual-to-physical DMA catalogs and scene descriptors, including MIO0-compressed overlays and raw files with catalog-bounded extents. The CC0 SF64 US Rev 1 decompilation was used as format evidence; no source was copied. Synthetic checks cover catalog extents and MIO0 bounds.
+
+SF64 US Rev 1 moved from 296 blockers (294 with residual dispatch) to 8 before residual dispatch and 1 after, with 7 residual sites. The remaining residual blocker is the indirect candidate `0xa40000b0` from `0x8001efb8`. No native artifact was emitted. See ADR-0252 for the evidence and limitation.
+
 ## Native Windows ares oracle (ADR-0254)
 
 Analysis-time ares replays run natively on Windows with MinGW instead of in
