@@ -274,7 +274,7 @@ mod tests {
         for name in ["mfc0", "dmfc0", "mtc0", "dmtc0", "tlbwi", "tlbr", "tlbp"] {
             assert!(c[name], "{name}");
         }
-        assert!(!c["tlbwr"] && !c["cache"]);
+        assert!(!c["tlbwr"] && c["cache"]);
         assert!(c["eret"] && !c["syscall"]);
         assert!(!c.contains_key("nop") && !c.contains_key("movn"));
     }

@@ -490,8 +490,9 @@ fn allowed_static_effect(word: u32, pc: crate::GuestAddr, guarded_ram: bool) -> 
                 word & 63,
                 4 | 6 | 7 | 16..=20 | 22..=32 | 34 | 42..=44 | 46 | 47 | 56 | 58..=60 | 62 | 63
             ),
-            // LL LLD SC SCD (ADR-0145) are guarded memory accesses too.
-            8 | 10 | 11 | 24 | 26 | 27 | 32..=39 | 40..=46 | 48 | 52 | 55 | 56 | 60 | 63 => true,
+            // LL LLD SC SCD (ADR-0145) are guarded memory accesses too, and
+            // CACHE acts on the modelled D-cache tags (ADR-0259).
+            8 | 10 | 11 | 24 | 26 | 27 | 32..=39 | 40..=48 | 52 | 55 | 56 | 60 | 63 => true,
             _ => false,
         }
     {

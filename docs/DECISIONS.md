@@ -7463,3 +7463,34 @@ Consequences: Mario Party 2 discovers 157,064 blocks (was 17,130) and its
 residual-dispatch solve has 3 blockers (was 301), all `CACHE` instructions in
 cache initialisation loops, which lowering does not model yet. Star Fox 64's
 slots move but it still runs 30 s with fault 0.
+
+## ADR-0259: Lowered CACHE on the modelled D-cache
+
+Status: accepted
+
+Context: after ADR-0258 the last three Mario Party 2 blockers were `CACHE`
+instructions in the game's own cache initialisation and I-cache invalidation
+loops. Lowering had no `CACHE`, and the solver excluded it from the guarded
+scope; libultra's cache calls were the only maintenance (ADR-0183). The
+initialisation loop also writes TagLo and TagHi, which COP0 rejected.
+
+Decision: under the guarded scope `CACHE` lowers to `plaid_cache`:
+- I-cache operations do nothing observable: native code fetches no guest
+  instructions.
+- D-cache Index Writeback Invalidate, Hit Writeback, Hit Writeback
+  Invalidate and Hit Invalidate act on the modelled tags exactly as the
+  libultra calls do. A dirty line dropped without write-back (Hit Invalidate,
+  Index Store Tag) is marked lost, so a later access fails closed, as
+  `osInvalDCache` does.
+- Index Store Tag is accepted only with an invalid TagLo state; Index Load
+  Tag, Create Dirty Exclusive, a valid stored tag and secondary-cache
+  operations fault (12).
+- COP0 TagLo (masked to `0x0fffffc0`) and TagHi (reads 0) are plain
+  registers.
+
+`runtime/test_cache_ops.py` runs the write-back, invalidate, store-tag and
+I-cache forms natively and in pinned ares and compares RAM; dropped dirty
+lines read the old bytes in ares and fault 4 natively. A Hit Invalidate that
+kept dirty data fails it.
+
+Consequences: Mario Party 2 analysis closes under residual dispatch.

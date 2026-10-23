@@ -38,7 +38,7 @@ typedef struct plaid_state_s {
   /* Known Status.FR: 2 = FR 1, 1 = FR 0, 0 = unchecked bare harness.
      Boot receipts, native Status writes and SDK restores establish it. */
   u32 fr_mode;
-  u32 cp0_known, cp0_index, cp0_wired;
+  u32 cp0_known, cp0_index, cp0_wired, cp0_taglo, cp0_taghi;
   u64 cp0_entryhi, cp0_epc, cp0_error_epc; plaid_tlb_entry cp0_tlb;
   u8 ram[PLAID_RAM_SIZE];
   /* The VR4300 D-cache as pinned ares models it (ADR-0183): 512 direct-mapped
@@ -1103,6 +1103,7 @@ fn simple_lo(word: u32, pc: u32, fr0: bool, lo: Option<&str>) -> Result<String, 
             pair(rt)
         ),
         (63, _) => store(8),
+        (47, _) => format!("if (plaid_cache(s, {rt}u, {addr}, 0x{pc:08x}u)) return 1;"),
         (0, 33) => set(rd, format!("SX32((u32){a} + (u32){b})")),
         (0, 35) => set(rd, format!("SX32((u32){a} - (u32){b})")),
         (0, 36) => set(rd, format!("{a} & {b}")),

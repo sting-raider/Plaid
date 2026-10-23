@@ -1,5 +1,11 @@
 # Status
 
+## Lowered CACHE (ADR-0259)
+
+`CACHE` lowers onto the modelled D-cache; I-cache forms are no-ops, and
+discarding a dirty line fails closed. TagLo/TagHi are modelled for Index
+Store Tag. Checked against pinned ares.
+
 ## Mario Party 2 overlays from its segment table (ADR-0258)
 
 Mario Party 2 (USA) overlays are found from the linker segment table in its
