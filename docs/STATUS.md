@@ -1,5 +1,24 @@
 # Status
 
+## GoldenEye mapped engine-page sources (ADR-0255)
+
+The ROM-only pipeline now recovers 48 replay-authenticated 4 KiB engine pages
+and reaches 9035 blocks (was 4706). Destinations for 81 of the original 85
+missing direct edges are decoded; four still name 7f010290 or 7f08fe74.
+Whole-map OPEN counts rise from 175/172 ordinary/residual to 592/589 as the
+new code exposes more dependencies. Native emission remains refused.
+Unsupported mapped call projection no longer blocks independent known-source
+replays; it still supplies no call observations. Existing replay, source,
+physical mapping, content and generation guards are unchanged. Research traces
+the raw 8 KiB DMA page loader and copied TLBWR refill stub, separately from
+the 1172 initialized-data stream. Unobserved sources, page-boundary instruction
+coverage and exception/paging lifetimes remain open. See
+research/mapped-page-source-recovery.md for concrete addresses and receipts.
+Fresh baseline/expanded pipeline wall times were 274.641/196.988 s. The
+baseline included a cold release build; replay caches and coverage differed,
+so these are receipts, not a speedup comparison.
+
+
 ## SF64 DMA overlays (ADR-0252)
 
 Generic overlay discovery now recognizes structurally validated virtual-to-physical DMA catalogs and scene descriptors, including MIO0-compressed overlays and raw files with catalog-bounded extents. The CC0 SF64 US Rev 1 decompilation was used as format evidence; no source was copied. Synthetic checks cover catalog extents and MIO0 bounds.

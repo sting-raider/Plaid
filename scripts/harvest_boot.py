@@ -15,6 +15,10 @@ def coverage(loads, base, size, slots=False):
 
 def missing_targets(program, loads, base, size):
     covered = coverage(loads, base, size)
+    # A replay-authenticated mapped source already supplies this virtual text.
+    # Requesting another entry in it would redeclare the same page as a slot.
+    covered += [(int(l['destination'], 0), int(l['destination'], 0) + int(l['text_size'], 0))
+                for l in loads['loads'] if l['encoding'] == 'ares_tlb']
     targets = {e['target']['pc'] for e in program['direct_edges']}
     for site in program['indirect_sites']:
         for name in ('candidates', 'observed'):
@@ -188,13 +192,25 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
         # Calls only: a computed jr is often a return or an in-function jump,
         # whose target is no function start (ADR-0222).
         bindings = replay_bindings(program, base, size)
-        sites = replay_sites(program, bindings)
+        try:
+            sites = replay_sites(program, bindings)
+        except ValueError as error:
+            # Unsupported call projection cannot invalidate an independent
+            # first-fetch source replay. Keep those calls unobserved.
+            if not entries:
+                raise
+            sites = []
+            projection_refusal = str(error)
+        else:
+            projection_refusal = None
         captures = (capture_many(rom, entries, covered=coverage(loads, base, size, slots=True), sites=sites, bindings=bindings)
-                    if unknown_indirect else capture_many(rom, entries))
+                    if unknown_indirect and projection_refusal is None else capture_many(rom, entries))
     except ValueError as error:
         Path(receipt_path).write_text(json.dumps({'targets': targets, 'refusal': str(error)}, indent=2) + '\n')
         return False
     receipt = {'targets': targets, 'runtime_sites': sites, 'bindings': bindings, 'captures': []}
+    if projection_refusal is not None:
+        receipt['call_projection_refusal'] = projection_refusal
     added = False
     uncovered = next((c['uncovered_entry'] for c in captures if c.get('uncovered_entry') is not None), None)
     if uncovered is not None:

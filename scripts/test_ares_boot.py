@@ -165,6 +165,65 @@ def replay_cache_contract():
             os.environ['PLAID_REPLAY_CACHE'] = saved_root
 
 
+def independent_source_contract():
+    mapped_load = dict(destination='0x61000000', size='0x100', text_size='0x80',
+                       encoding='ares_tlb', slot=True)
+    edges = dict(direct_edges=[dict(target=dict(pc=pc)) for pc in
+                              (0x61000000, 0x6100007c, 0x61000080, 0x61000100)], indirect_sites=[])
+    assert harvest_boot.missing_targets(edges, dict(loads=[mapped_load]), 0x80000400, 0x100) == [0x61000080, 0x61000100]
+    with tempfile.TemporaryDirectory(prefix='plaid-independent-source-') as temporary:
+        d = Path(temporary)
+        loads, program, receipt = (d / f'{n}.json' for n in ('loads', 'map', 'receipt'))
+        initial = dict(source='synthetic', loads=[])
+        unsupported = dict(site=dict(pc=0x80800000), closed_proof=None, link_register=31,
+                           candidates=[], observed=[])
+        p = dict(direct_edges=[dict(target=dict(pc=0x61000000))], indirect_sites=[unsupported],
+                 load_images={'fixture': dict(base=dict(start=0x80000400, size=0x100), loads=[
+                     dict(destination=dict(start=0x80800000, size=0x100), linked=0x60000000,
+                          relocatable=True, encoding={'ares_tlb': {'text_size': 0x100}}, source=0)])})
+        captured = dict(destination=0x61000000, physical_start=0x2000, entry=0x61000000,
+                        bytes=list(struct.pack('>3I', 0x2402002a, 0x03e00008, 0)),
+                        revision='synthetic', rom_sha256='synthetic')
+        saved, calls = harvest_boot.capture_many, []
+        def replay(rom, entries, **kwargs):
+            calls.append((entries, kwargs))
+            assert not kwargs  # source-only replay cannot acquire call observations
+            return [captured]
+        harvest_boot.capture_many = replay
+        try:
+            info = dict(header=dict(boot_address=0x80000400), boot_image_size=0x100)
+            loads.write_text(json.dumps(initial))
+            program.write_text(json.dumps(p))
+            assert harvest_boot.harvest('unused.z64', loads, program, info, receipt)
+            assert calls[0][0] == [0x61000000]
+            result = json.loads(loads.read_text())
+            assert result.get('observed_roots', []) == []
+            assert result['loads'][0]['encoding'] == 'ares_tlb'
+            assert 'call_projection_refusal' in json.loads(receipt.read_text())
+            # Invalid image identity must refuse before source-only fallback.
+            loads.write_text(json.dumps(initial))
+            p['load_images']['ambiguous'] = p['load_images']['fixture']
+            program.write_text(json.dumps(p))
+            assert not harvest_boot.harvest('unused.z64', loads, program, info, receipt)
+            assert len(calls) == 1 and json.loads(loads.read_text()) == initial
+            del p['load_images']['ambiguous']
+            # No known source request: unsupported projection still refuses.
+            loads.write_text(json.dumps(initial))
+            p['direct_edges'] = []
+            program.write_text(json.dumps(p))
+            assert not harvest_boot.harvest('unused.z64', loads, program, info, receipt)
+            assert len(calls) == 1 and json.loads(loads.read_text()) == initial
+            # Missing bytes do not turn a numeric target into executable code.
+            p['direct_edges'] = [dict(target=dict(pc=0x61000000))]
+            program.write_text(json.dumps(p))
+            harvest_boot.capture_many = lambda *a, **kw: [dict(rejected_entry=0x61000000)]
+            assert not harvest_boot.harvest('unused.z64', loads, program, info, receipt)
+            assert json.loads(loads.read_text()) == initial
+        finally:
+            harvest_boot.capture_many = saved
+    print('PASS independent missing-source replay: unsupported calls remain unobserved, no bytes/no request refuse')
+
+
 def table_data_contract():
     with tempfile.TemporaryDirectory(prefix='plaid-table-data-') as temporary:
         receipt = Path(temporary) / 'receipt.json'
@@ -227,6 +286,7 @@ def main():
     replay_cache_contract()
     raw_occupant_contract()
     mapped_harvest_contract()
+    independent_source_contract()
     table_data_contract()
     for coverage in ([], [None], [[1]], [[4, 4]], [[0, 3]], [[False, 4]], [[0, 0x100000000]]):
         try:
@@ -314,6 +374,24 @@ def main():
             changed[13], changed[15] = 0x240a0000 | lo0, 0x240a0000 | lo1
             rejected = mapped_replay(changed)
             assert not any('physical_start' in row for row in rejected), rejected
+        # Two virtual neighbors can have nonadjacent physical page sources.
+        # A source-only batch must keep each first-fetch mapping independent.
+        pages = words[:9] + [
+            0x3c090800, 0x35290400, 0xad090000, 0xad000004,  # j 60001000; nop
+            0x3c08a000, 0x35083000,
+            0x3c092402, 0x3529002a, 0xad090000,
+            0x3c0903e0, 0x35290008, 0xad090004, 0xad000008,
+        ] + mapped_words[9:]
+        pages[-6] = 0x240a00df  # odd half physical 3000, global/valid/cache3
+        fixture = bytearray(rom)
+        fixture[0x1000:0x1000 + 4 * len(pages)] = struct.pack(f'>{len(pages)}I', *pages)
+        source.write_bytes(fixture)
+        batch = run('0x60000000,0x60001000', 1000)
+        assert batch == run('0x60000000,0x60001000', 1000, exact=True)
+        rows = [json.loads(line) for line in batch.splitlines()]
+        assert [(r['destination'], r['physical_start'], len(r['bytes'])) for r in rows[:-1]] == [
+            (0x60000000, 0x1000, 12), (0x60001000, 0x3000, 12)], rows
+        assert rows[-1]['remaining'] == 0
         source.write_bytes(rom)
         print('PASS mapped fetch: guest COP0/TLB writes, identical produced physical bytes, exact replay, non-global/invalid refusal')
         # No named target: an indirect fetch beyond supplied images must still
