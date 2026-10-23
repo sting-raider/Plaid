@@ -1,5 +1,11 @@
 # Status
 
+## Mario Party 2 reaches its process system (ADR-0260)
+
+COP0 WatchLo is modelled while disarmed and `__osGetCause` is a runtime
+function, so Mario Party 2 passes `osInitialize`. It now stops at VI 2 on
+Hudson's `setjmp`/`longjmp` coroutine switch (fault 5).
+
 ## Lowered CACHE (ADR-0259)
 
 `CACHE` lowers onto the modelled D-cache; I-cache forms are no-ops, and

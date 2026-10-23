@@ -15,6 +15,8 @@ static inline int plaid_cp0_read(plaid_state *s, u32 reg, u64 *v, u32 pc) {
   case 6: *v = s->cp0_wired; break;
   case 10: *v = s->cp0_entryhi; break;
   case 14: *v = s->cp0_epc; break;
+  case 18: *v = s->cp0_watchlo; break;
+  case 19: *v = 0; break;
   case 28: *v = s->cp0_taglo; break;
   case 29: *v = s->cp0_taghi; break;
   case 30: *v = s->cp0_error_epc; break;
@@ -31,6 +33,12 @@ static inline int plaid_cp0_write(plaid_state *s, u32 reg, u64 v, u32 pc) {
   case 6: s->cp0_wired = (u32)v & 63u; break;
   case 10: s->cp0_entryhi = v & 0xc00000ffffffe0ffull; break;
   case 14: s->cp0_epc = v; break;
+  /* WatchLo with neither R nor W set watches nothing, as libultra's
+     osInitialize writes it; an armed watch is outside the subset (ADR-0260) */
+  case 18:
+    if (v & 3u) return plaid_fault(s, pc, 12);
+    s->cp0_watchlo = (u32)v & 0xfffffff8u; break;
+  case 19: break;
   /* TagLo/TagHi feed CACHE Index Store Tag only (ADR-0259) */
   case 28: s->cp0_taglo = (u32)v & 0x0fffffc0u; break;
   case 29: s->cp0_taghi = 0; break;

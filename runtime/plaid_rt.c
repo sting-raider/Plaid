@@ -650,6 +650,17 @@ RT(__osDisableInt) { u32 was = (u32)ints_enabled; ints_enabled = 0; if (S->statu
 RT(__osRestoreInt) { ints_enabled |= arg(0) & 1; if (S->status_known) S->cp0_status |= arg(0) & 1; if (ints_enabled) maybe_preempt(0); return 0; }
 RT(osSetIntMask) { return ret(0x003fff01u); }
 RT(osGetIntMask) { return ret(0x003fff01u); } /* the same unmasked OS_IM_ALL */
+/* Cause's interrupt-pending bits from undelivered events (ADR-0260): RCP
+   events raise IP2, the counter IP7, pre-NMI IP4; no exception is in progress.
+   shortcut: events, not raw MI_INTR state; upgrade when MI_INTR is modelled raw. */
+RT(__osGetCause) {
+  u32 cause = 0;
+  int ev;
+  for (ev = EV_SP; ev <= EV_DP; ev++) if (pending[ev]) cause |= 0x400u;
+  if (pending[3]) cause |= 0x8000u;
+  if (pending[14]) cause |= 0x1000u;
+  return ret(cause);
+}
 RT(__osGetSR) {
   if (!S->status_known) return plaid_fault(S, (u32)S->r[31] - 8, 11);
   return ret(S->cp0_status);
