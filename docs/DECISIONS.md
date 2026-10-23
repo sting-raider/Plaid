@@ -7347,3 +7347,42 @@ SF64 US Rev 1 provides a virtual-to-physical DMA catalog with packed ROM extents
 A deterministic synthetic test covers packed physical extents with distinct virtual keys; existing MIO0 tests cover literal, backreference and malformed streams. A CC0 decompilation at `4235c59f00b04440e3fd5fec49f0bc80e48cf212` was consulted; no code was copied.
 
 SF64 USA Rev 1: baseline 296 blockers (294 with residual dispatch); current map 8 blockers before residual dispatch and 1 after, with 7 residual sites. The one residual-mode blocker is an indirect candidate at `0xa40000b0` reached from `0x8001efb8`, with no lowered block. `native.py --seconds 30` therefore still emits no native artifact; the result meets the substantial blocker-reduction criterion, not native-build acceptance. This run took about 71 seconds including cached analysis and exited before validation. Full cross-game native validation remains outstanding.
+
+## ADR-0255: Independent replay of mapped executable source requests
+
+Status: accepted, partial executable-source coverage; native emission refused.
+
+A replay-site projection failure for an unsupported mapped open call must not
+cancel an independent known first-fetch source request. Harvest now records the
+projection refusal and runs the existing bounded source-only replay, omitting
+call-site, coverage-probe and observation-binding inputs. No known entry still
+refuses, and invalid composed binding metadata is not bypassed. Unsupported
+calls gain no observations or target closure. Declared ares_tlb text supplies
+its virtual source already; only that text, not its data tail, is excluded from
+new missing-source requests. Raw alternate-occupant handling is unchanged.
+
+Reuse ADR-0236's ares_tlb whole-ROM exact first-fetch replay and existing native
+physical/content/generation/lifetime binding, and ADR-0250's separate first-use
+data recovery. No new encoding, game constant, runtime interpreter/JIT, TLBWR
+lowering, exception delivery or weakened solver acceptance is introduced.
+
+GoldenEye USA reaches 9035 blocks and 48 engine-page sources, versus 4706.
+81 of the original 85 missing direct-edge destinations now decode; four still
+name 7f010290 or 7f08fe74. Newly reached code exposes more obligations: OPEN
+175/172 ordinary/residual becomes 592/589, not a net blocker reduction. The
+normal pipeline still refuses before lowering/building. The observed loader
+uses raw 8 KiB cartridge copies, a reusable page pool and paired 4 KiB TLB
+refills; its empirical ROM/virtual displacement is research evidence only and
+is not extrapolated to unvisited pages. The earlier 1172 initialized-data stream
+is distinct. Later mappings, exception lifetimes, cross-page instruction bounds
+and broad boot text/data classification remain open.
+
+Authored deterministic contracts cover independent source capture with mapped
+calls still refused, no-entry/no-byte negatives, text/data coverage boundaries,
+and pinned-ares exact batch agreement for adjacent virtual/nonadjacent physical
+pages. Reversing each new selection/coverage condition fails the contract.
+Retained native/reference producer, TLB, state/RAM and mutation tests remain in
+the complete local gate. No reference code is copied into the native artifact;
+the locked ISC ares implementation remains analysis/test-only. Research,
+commands, full local gate and silent visible BK/MM control receipt locations:
+research/mapped-page-source-recovery.md. README remains owner-maintained.

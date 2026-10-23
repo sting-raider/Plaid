@@ -1,5 +1,19 @@
 # Next
 
+## GoldenEye after mapped-page source recovery (ADR-0255)
+
+48 engine pages are authenticated; 81/85 original direct-edge destinations
+are decoded. Four edges still name 7f010290 or 7f08fe74. The expanded 9035-block
+map remains OPEN 592/589 ordinary/residual. Recover unvisited source pages and
+model instructions/delay slots across independently bound pages without using
+synthetic storage adjacency as virtual continuity. Then establish the copied
+TLB refill/exception contract: Context, Random/Wired, TLBWR at 70001b94 (running
+at vector 80000034), ERET and page-pool eviction/reload generations. A first-fetch
+physical source is not a permanent placement proof. Keep unsupported mapped
+call observations refused, boot text/data bounds conservative, native source
+checks and BK/MM controls. Receipt: research/mapped-page-source-recovery.md.
+
+
 ## GoldenEye after first-use data recovery (ADR-0250)
 
 The normal ROM-only pipeline remains OPEN 175/172 ordinary/residual. Establish
