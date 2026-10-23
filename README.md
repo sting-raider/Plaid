@@ -14,7 +14,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 ## Where it stands
 
-*As of main `aa8b5f18`, 2026-10-23. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
+*As of main `243d051c`, 2026-10-23. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
@@ -28,6 +28,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 | Mario Kart 64 (USA) | **none** | 🟨 residual dispatch, 2 sites | 60 s with compiled graphics microcode and audio: VI 2762, 1270 graphics / 2635 audio tasks, fault 0 (ADR-0246) | prove the 2 residual sites; longer play |
 | Star Fox 64 (USA) (Rev 1) | **none** | 🟨 residual dispatch, 8 sites | 30 s from the ROM alone: VI 1798, 945 graphics / 1730 audio tasks, fault 0 (ADR-0256, ADR-0257) | prove the 8 residual sites; longer play |
 | Rogue Squadron (USA) | **none** | refused | not reached: OPEN, 151 residual blockers (ADR-0251) | indirect targets and tables; see [research/rom-sweep.md](research/rom-sweep.md) |
+| Mario Party 2 (USA) | **none** | 🟨 builds with residual dispatch, 8 sites | runs past `osInitialize` to VI 2, then faults 5 on Hudson's `setjmp`/`longjmp` coroutine switch (ADR-0258..0260) | model the coroutine switch |
 
 "Native build ✅" means analysis is `CLOSED` under a declared scope (usually `--address-taken`) and `native.py` emits the executable. Since ADR-0233, `native.py` also builds by default when the only open items are indirect jumps it cannot prove: they go through a fail-closed run-time lookup over the translated code (still no emulation), and `native-manifest.json` records `native_complete: false`. `--strict` builds only proven maps.
 
@@ -40,6 +41,9 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0260 | `243d051c` | COP0 WatchLo modelled while disarmed; `__osGetCause` is a runtime function. Mario Party 2 passes `osInitialize` |
+| 0259 | `56b88a6d` | `CACHE` lowers onto the modelled D-cache; I-cache forms are no-ops and discarded dirty lines fail closed (checked against ares) |
+| 0258 | `c9726afb` | Overlays discovered from linker segment tables; slots packed above every load. Mario Party 2 blockers 301 -> 0 with 0259 |
 | 0256, 0257 | `aa8b5f18` | SP-memory residual targets fault instead of blocking; libultra dev-board stubs; catalog overlay verifiers relocate pointer tables. Star Fox 64 runs 30 s with fault 0 |
 | 0255 | `d0f8bcf7` | Mapped page sources recovered for GoldenEye's `7f` engine: 48 pages, 81 of 85 missing direct targets resolved (blockers rise to 592 as more code is exposed) |
 | 0252 | `714e1275` | Overlays are discovered from DMA catalogs and scene descriptors (MIO0 or raw); Star Fox 64 blockers 296 -> 8, 1 with residual dispatch |
