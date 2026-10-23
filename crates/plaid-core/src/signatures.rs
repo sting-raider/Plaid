@@ -50,6 +50,9 @@ pub const RUNTIME_FUNCTIONS: &[&str] = &[
     "osVoiceMaskDictionary", "osVoiceStartReadData", "osVoiceControlGain",
     "osVoiceGetReadData", "osVoiceClearDictionary",
     "osSetIntMask", "__osDisableInt", "__osRestoreInt", "__osGetSR",
+    // not in N64Recomp's list: osInitialize reads Cause for a pending reset
+    // (ADR-0260)
+    "__osGetCause",
     // in N64Recomp's `ignored_funcs`; OoT hands its address to the 64DD
     // driver (ADR-0183)
     "osGetIntMask",

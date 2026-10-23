@@ -7494,3 +7494,27 @@ lines read the old bytes in ares and fault 4 natively. A Hit Invalidate that
 kept dirty data fails it.
 
 Consequences: Mario Party 2 analysis closes under residual dispatch.
+
+## ADR-0260: osInitialize's WatchLo write and Cause read
+
+Status: accepted
+
+Context: Mario Party 2's native run faulted 12 before its first VI. libultra's
+`osInitialize` writes WatchLo with `0x04900000` through `__osSetWatchLo`
+(neither the R nor the W watch bit is set) and reads Cause through
+`__osGetCause`, spinning forever if IP4 (pre-NMI) is pending. Neither COP0
+register was modelled.
+
+Decision:
+- COP0 WatchLo is a plain register while it watches nothing; a write that
+  sets R or W faults 12, since watch exceptions are not modelled. WatchHi
+  reads 0.
+- `__osGetCause` (named by n64sym) is a runtime function returning the
+  interrupt-pending bits of undelivered events: IP2 for SP, SI, AI, VI, PI
+  and DP, IP7 for the counter, IP4 for pre-NMI, and no exception code. This
+  is a documented shortcut: events stand in for raw MI_INTR state.
+
+Consequences: Mario Party 2 runs past `osInitialize` to VI 2 and two PI DMAs,
+then faults 5 at `0x80092e70`: Hudson's process system switches coroutines
+with `setjmp`/`longjmp` (`0x80092da8`, `0x80092e04`), which the checked
+call/return model does not yet represent.
