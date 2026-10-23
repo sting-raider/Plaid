@@ -1725,6 +1725,17 @@ RT(__ull_to_f) {
   return 0;
 }
 
+/* ---- development-board debug output: no board is attached --------------- */
+
+RT(__osRdbSend) { return ret(arg(1)); } /* (buf, size, type): every byte "sent" */
+RT(is_proutSyncPrintf) { return ret(1); }
+RT(__checkHardware_msp) { return ret(0); }
+RT(__checkHardware_kmc) { return ret(0); }
+RT(__checkHardware_isv) { return ret(0); }
+RT(__osInitialize_msp) { return 0; }
+RT(__osInitialize_kmc) { return 0; }
+RT(__osInitialize_isv) { return 0; }
+
 /* ---- entry -------------------------------------------------------------- */
 
 int main(int argc, char **argv) {

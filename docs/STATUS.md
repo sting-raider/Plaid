@@ -1,5 +1,13 @@
 # Status
 
+## Star Fox 64 runs natively (ADR-0256, ADR-0257)
+
+Star Fox 64 US Rev 1 builds from the ROM alone and runs the 30-second
+validation with fault 0 (1798 VIs, 945 graphics tasks). Residual dispatch
+now treats SP-memory targets as faults, libultra's development-board helpers
+have runtime stubs, and catalog overlay verifiers relocate their pointer
+tables, so the level overlays bind at `0x80187520`.
+
 ## GoldenEye mapped engine-page sources (ADR-0255)
 
 The ROM-only pipeline now recovers 48 replay-authenticated 4 KiB engine pages

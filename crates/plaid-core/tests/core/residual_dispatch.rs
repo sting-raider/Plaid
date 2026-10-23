@@ -175,3 +175,67 @@ fn residual_dispatch_does_not_hide_an_unmapped_candidate() {
             .any(|b| b.kind == "unresolved_indirect_target")
     );
 }
+
+#[test]
+fn residual_dispatch_faults_on_an_sp_memory_candidate_instead_of_refusing() {
+    let image = image();
+    let mut map = map(&image);
+    let original = map
+        .indirect_sites
+        .iter()
+        .find(|s| s.site.pc == GuestAddr(BASE + 12))
+        .unwrap()
+        .clone();
+    map.indirect_sites.remove(&original);
+    let mut site = original;
+    // CPU code copied into SP DMEM and entered there (uncached KSEG1).
+    let dmem = CodeAddress {
+        pc: GuestAddr(0xa400_00b0),
+        ..image.base.clone()
+    };
+    site.candidates
+        .insert(dmem.clone(), map.entries[&image.base].clone());
+    map.indirect_sites.insert(site.clone());
+    let residual = solve(
+        &map,
+        std::slice::from_ref(&image),
+        Scope::DeclaredStaticImagesGuardedRamResidualDispatch,
+    )
+    .unwrap();
+    assert!(
+        !residual
+            .blockers
+            .iter()
+            .any(|b| b.kind == "unresolved_indirect_target")
+    );
+    assert!(residual.residual_sites.contains(&site.site));
+    // Without residual dispatch the same candidate still refuses closure.
+    let strict = solve(
+        &map,
+        std::slice::from_ref(&image),
+        Scope::DeclaredStaticImagesGuardedRam,
+    )
+    .unwrap();
+    assert!(
+        strict
+            .blockers
+            .iter()
+            .any(|b| b.kind == "unresolved_indirect_target")
+    );
+    // A target the replay actually took there is still a blocker.
+    map.indirect_sites.remove(&site);
+    site.observed.insert(dmem, map.entries[&image.base].clone());
+    map.indirect_sites.insert(site);
+    let observed = solve(
+        &map,
+        &[image],
+        Scope::DeclaredStaticImagesGuardedRamResidualDispatch,
+    )
+    .unwrap();
+    assert!(
+        observed
+            .blockers
+            .iter()
+            .any(|b| b.kind == "unresolved_indirect_target")
+    );
+}
