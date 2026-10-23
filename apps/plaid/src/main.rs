@@ -871,7 +871,27 @@ fn run() -> Result<(), String> {
                 let catalog = plaid_core::overlays::discover(rom.bytes(), &table)?;
                 let detail = serde_json::to_vec(&catalog).map_err(|e| e.to_string())?;
                 let id = format!("overlays:{}", plaid_core::rom::sha256(&detail));
-                let loads = plaid_core::overlays::loads(&catalog, &[id.clone()].into());
+                // a validated catalog file supersedes an inferred slot view of
+                // part of its bytes, which names the wrong link (ADR-0258)
+                if let Some((spec, _)) = &mut declared {
+                    spec.loads.retain(|l| {
+                        l.linked.is_none()
+                            || !catalog.iter().any(|o| {
+                                (u64::from(o.file.rom_start)..u64::from(o.file.rom_end))
+                                    .contains(&l.source.0)
+                            })
+                    });
+                }
+                // catalog slots go above RAM and every load declared so far
+                let slot_base = declared
+                    .iter()
+                    .flat_map(|(spec, _)| &spec.loads)
+                    .map(|l| l.destination.end())
+                    .chain([0x8080_0000])
+                    .max()
+                    .map_or(Ok(0x8080_0000), u32::try_from)
+                    .map_err(|e| e.to_string())?;
+                let loads = plaid_core::overlays::loads(&catalog, &[id.clone()].into(), slot_base);
                 println!(
                     "{} of {} overlay candidates placed at their link addresses",
                     loads.len(),
@@ -1404,7 +1424,19 @@ fn run() -> Result<(), String> {
             let base = bytes
                 .get(0x1000..end)
                 .ok_or("ROM ends before its boot window")?;
-            let found = plaid_core::overlays::static_loads(bytes, base, rom.header.boot_address.0)?;
+            let mut found =
+                plaid_core::overlays::static_loads(bytes, base, rom.header.boot_address.0)?;
+            // a fixed load of bytes inside a bounded main image would overwrite
+            // that image with itself elsewhere; slots and in-place copies stay
+            // (ADR-0258)
+            if rom.boot_image_size().is_some() {
+                let boot = rom.header.boot_address.0;
+                found.retain(|l| {
+                    l.alternate
+                        || l.file.rom_start as usize >= end
+                        || l.destination.wrapping_sub(boot) == l.file.rom_start.wrapping_sub(0x1000)
+                });
+            }
             let paired = plaid_core::paired_streams::infer(bytes, base);
             let segments = plaid_core::segments::infer(
                 bytes,

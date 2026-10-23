@@ -499,16 +499,85 @@ fn dma_file_table(rom: &[u8]) -> Result<DmaCatalog, String> {
     result.ok_or_else(|| "no self-describing ROM file table".into())
 }
 
+/// Linker segment tables in a static image, for a ROM without a file table
+/// (ADR-0258): ROM start/end, RAM start, then text, data and BSS start/end.
+/// The ROM range holds exactly the raw text and data.
+fn segment_table(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> {
+    let mut found: BTreeMap<(u32, u32), Overlay> = BTreeMap::new();
+    for at in (0..table_image.len().saturating_sub(35)).step_by(4) {
+        let mut w = [0u32; 9];
+        for (k, v) in w.iter_mut().enumerate() {
+            *v = word(table_image, at + 4 * k)?;
+        }
+        let [
+            rom_start,
+            rom_end,
+            ram,
+            text_start,
+            text_end,
+            data_start,
+            data_end,
+            bss_start,
+            bss_end,
+        ] = w;
+        if ram != text_start
+            || !(0x8000_0000..0xa000_0000).contains(&ram)
+            || text_end <= text_start
+            || data_start != text_end
+            || data_end < data_start
+            || bss_start != data_end
+            || bss_end < bss_start
+            || bss_end - ram > MAX_IMAGE as u32
+            || rom_end <= rom_start
+            || rom_end as usize > rom.len()
+            || rom_end - rom_start != data_end - text_start
+        {
+            continue;
+        }
+        let bytes = &rom[rom_start as usize..rom_end as usize];
+        let text_size = text_end - ram;
+        let Ok(layout) = slot_layout_bounded(bytes, ram, text_size) else {
+            continue;
+        };
+        found
+            .entry((rom_start, ram))
+            .or_insert_with(|| Overlay {
+                file: RomFile {
+                    virtual_start: rom_start,
+                    virtual_end: rom_end,
+                    rom_start,
+                    rom_end,
+                },
+                link: ram,
+                source_sha256: sha256(bytes),
+                layout,
+                table_offsets: Vec::new(),
+                encoding: LoadEncoding::CatalogOverlay {
+                    encoding: OverlayCompression::Raw,
+                    encoded_size: rom_end - rom_start,
+                    text_size,
+                    bss_size: bss_end - bss_start,
+                },
+            })
+            .table_offsets
+            .push(at as u32);
+    }
+    Ok(found.into_values().collect())
+}
+
 /// Find contiguous VROM start/end, link start/end tuples in a supplied static
 /// image. File identity and trailer layout must independently agree. Callers
 /// retain that image's identity alongside these offsets.
 pub fn discover(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> {
     let (dma_catalog, files, compression) = match file_table(rom) {
         Ok((_, files)) => (false, files, BTreeMap::new()),
-        Err(_) => {
-            let (_, files, compression) = dma_file_table(rom)?;
-            (true, files, compression)
-        }
+        Err(_) => match dma_file_table(rom) {
+            Ok((_, files, compression)) => (true, files, compression),
+            Err(e) => {
+                let found = segment_table(rom, table_image)?;
+                return if found.is_empty() { Err(e) } else { Ok(found) };
+            }
+        },
     };
     let files: BTreeMap<_, _> = files.into_iter().map(|f| (f.virtual_start, f)).collect();
     let mut found: BTreeMap<(u32, u32), Overlay> = BTreeMap::new();
@@ -626,10 +695,13 @@ pub fn discover(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> 
 /// relocation trailer) as the table stores them. Data-only overlays and
 /// overlays sharing a link range are left out; their code, if any, stays
 /// outside the image and fails closed.
-pub fn loads(overlays: &[Overlay], evidence: &EvidenceRefs) -> Vec<DeclaredLoad> {
+pub fn loads(overlays: &[Overlay], evidence: &EvidenceRefs, slot_base: u32) -> Vec<DeclaredLoad> {
     let mut out: Vec<DeclaredLoad> = Vec::new();
     let mut sorted: Vec<&Overlay> = overlays.iter().filter(|o| o.layout.text > 0).collect();
     sorted.sort_by_key(|o| o.link);
+    // Slots are packed from `slot_base`, each at its link address modulo
+    // 64 KiB, so moving it changes only the high half of a HI16/LO16 pair.
+    let mut next = slot_base;
     for (i, o) in sorted.iter().enumerate() {
         let end = u64::from(o.link) + u64::from(o.layout.file_size + o.layout.bss);
         let clash = |p: &&Overlay| {
@@ -642,13 +714,17 @@ pub fn loads(overlays: &[Overlay], evidence: &EvidenceRefs) -> Vec<DeclaredLoad>
         if overlap && !slot {
             continue;
         }
+        let start = if slot {
+            next += o.link.wrapping_sub(next) & 0xffff;
+            let start = next;
+            next += o.layout.file_size;
+            start
+        } else {
+            o.link
+        };
         out.push(DeclaredLoad {
             destination: GuestRange {
-                start: GuestAddr(if slot {
-                    0x8080_0000 + i as u32 * 0x0010_0000
-                } else {
-                    o.link
-                }),
+                start: GuestAddr(start),
                 size: o.layout.file_size,
             },
             source: RomOffset(u64::from(o.file.rom_start)),
@@ -1057,10 +1133,11 @@ mod tests {
         let catalog = discover(&rom, &scene).unwrap();
         assert_eq!(catalog.len(), 2);
         let refs: EvidenceRefs = ["overlays:dma-test".to_string()].into();
-        let loads = loads(&catalog, &refs);
+        let loads = loads(&catalog, &refs, 0x8080_0000);
         assert_eq!(loads.len(), 2);
         assert_eq!(loads[0].destination.start, GuestAddr(0x8080_0000));
-        assert_eq!(loads[1].destination.start, GuestAddr(0x8090_0000));
+        // packed after the first file, at the link address modulo 64 KiB
+        assert_eq!(loads[1].destination.start, GuestAddr(0x8081_0000));
         assert_eq!(loads[0].linked, Some(GuestAddr(link)));
         assert!(matches!(
             loads[0].encoding,
@@ -1069,6 +1146,65 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn segment_tables_name_raw_overlays_sharing_a_link_address() {
+        let link = 0x8010_2800;
+        // two raw files: jr ra; nop, then data pointing back at the text
+        let mut rom = vec![0; 0x200];
+        for file in [0x100, 0x180] {
+            put(&mut rom, file, 0x03e0_0008);
+            put(&mut rom, file + 0x20, link);
+        }
+        let mut table = vec![0; 4 * 9 * 3];
+        for (row, file) in [0x100u32, 0x180].into_iter().enumerate() {
+            let entry = [
+                file,
+                file + 0x40,
+                link,
+                link,
+                link + 0x20,
+                link + 0x20,
+                link + 0x40,
+                link + 0x40,
+                link + 0x60,
+            ];
+            for (k, value) in entry.into_iter().enumerate() {
+                put(&mut table, row * 36 + k * 4, value);
+            }
+        }
+        // a row whose ROM size disagrees with its text and data is not an overlay
+        for (k, value) in [
+            0x100,
+            0x150,
+            link,
+            link,
+            link + 0x20,
+            link + 0x20,
+            link + 0x40,
+            link + 0x40,
+            link + 0x60,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            put(&mut table, 72 + k * 4, value);
+        }
+        let catalog = discover(&rom, &table).unwrap();
+        assert_eq!(catalog.len(), 2);
+        assert_eq!(catalog[0].layout.text, 0x20);
+        assert_eq!(catalog[0].layout.relocations.len(), 1);
+        let loads = loads(
+            &catalog,
+            &["overlays:segments".to_string()].into(),
+            0x8090_0000,
+        );
+        assert_eq!(loads[0].destination.start, GuestAddr(0x8090_2800));
+        assert_eq!(loads[1].destination.start, GuestAddr(0x8091_2800));
+        assert!(loads.iter().all(|l| l.linked == Some(GuestAddr(link))));
+        // with neither a ROM file table nor a segment table, discovery refuses
+        assert!(discover(&rom, &[0; 64]).is_err());
     }
 
     fn fixture() -> Vec<u8> {
@@ -1395,7 +1531,7 @@ mod tests {
 
     fn loads_place_executable_overlays_at_their_link_addresses(catalog: &[Overlay]) {
         let refs: EvidenceRefs = ["overlays:test".to_string()].into();
-        let [load] = loads(catalog, &refs).try_into().unwrap();
+        let [load] = loads(catalog, &refs, 0x8080_0000).try_into().unwrap();
         assert_eq!(load.destination.start, GuestAddr(0x80800000));
         assert_eq!(load.destination.size, catalog[0].layout.file_size);
         assert_eq!(load.source, RomOffset(0x400));
@@ -1404,10 +1540,10 @@ mod tests {
         // an overlay sharing its link range makes both ambiguous
         let mut twin = catalog[0].clone();
         twin.link += 4;
-        assert!(loads(&[catalog[0].clone(), twin], &refs).is_empty());
+        assert!(loads(&[catalog[0].clone(), twin], &refs, 0x8080_0000).is_empty());
         // a data-only overlay supplies no code
         let mut data = catalog[0].clone();
         data.layout.text = 0;
-        assert!(loads(&[data], &refs).is_empty());
+        assert!(loads(&[data], &refs, 0x8080_0000).is_empty());
     }
 }
