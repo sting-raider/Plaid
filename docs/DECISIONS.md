@@ -7608,3 +7608,22 @@ The acceptance receipt is research/native-coroutines.md. The GCC builtin
 contract is https://gcc.gnu.org/onlinedocs/gcc/Nonlocal-Gotos.html; the buffer
 contains five intptr_t words and builtin longjmp runs in a separate callee.
 Project-owned implementation; no reference runtime code was copied.
+
+## ADR-0263: Catalogs do not replace validated slot formats
+
+Status: accepted
+
+Context: ADR-0258's segment-table scan also matches Paper Mario's two named
+section descriptors (ROM `0x135ee0` and `0x163400`, linked `0x80242ba0`),
+which ADR-0184 already declares as `segment` slots. The supersede rule
+dropped those slots and re-declared the files as catalog overlays. Paper
+Mario then faulted 3 at VI 2 (`0x802001f0`); at `18ce31f4`, before
+ADR-0258, it ran 30 s with fault 0.
+
+Decision: a catalog file supersedes only an inferred *raw* slot inside its
+bytes (Mario Party 2's copy-call views); a slot in a validated format of its
+own (`segment`, `rare_pair`, ...) stays. A catalog file whose ROM source is
+already declared is not declared again.
+
+Consequences: Paper Mario keeps its `segment` slots; Mario Party 2 keeps its
+segment-table overlays.

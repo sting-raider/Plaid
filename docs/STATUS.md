@@ -1,5 +1,11 @@
 # Status
 
+## Paper Mario regression fixed (ADR-0263)
+
+ADR-0258 had replaced Paper Mario's validated `segment` slots with duplicate
+catalog overlays (fault 3 at VI 2). Catalogs now supersede only inferred raw
+slots and never re-declare a declared file.
+
 ## Structural native coroutine contract (ADR-0262)
 
 Fixed-text word-layout setjmp/longjmp bodies are recognized structurally.
