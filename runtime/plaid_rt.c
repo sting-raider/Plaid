@@ -61,21 +61,37 @@
 enum { T_FREE, T_STOPPED, T_RUNNABLE, T_RUNNING, T_BLOCKED, T_DEAD };
 enum { EV_SP = 4, EV_SI = 5, EV_AI = 6, EV_VI = 7, EV_PI = 8, EV_DP = 9, EV_COUNT = 15 };
 
-typedef struct {
+typedef struct rt_context_s rt_context;
+typedef struct rt_thread_s {
   int state;
   u32 guest, id, entry, arg, sp;
   s32 pri;
-  u64 seq;
+  u64 seq, generation;
+  unsigned contexts;
   u32 wait_queue; /* blocked: the queue address */
   int wait_full;  /* blocked: 1 waiting for space, 0 for a message */
+  rt_context *context;
   int host_started;
   pthread_t host;
-  pthread_cond_t wake;
   u64 r[32], hi, lo, f[32];
   u32 fcc, fcsr, llbit;
   u32 status_global;
   int status_known, ie;
 } rt_thread;
+
+/* A guest thread can suspend several host stacks, but owns one active stack. */
+struct rt_context_s {
+  rt_thread *thread;
+  pthread_cond_t wake;
+  struct plaid_jump_s *resume;
+  rt_context *retire_waiter;
+  unsigned retire_pending;
+  int root, retired;
+  u32 entry;
+};
+static _Thread_local rt_context *host_context;
+static rt_context *new_context(rt_thread *thread, int root, u32 entry);
+static void retire_context(rt_context *context);
 
 typedef struct { u32 mq, msg; int set; } rt_event;
 typedef struct { int used; u32 guest, mq, msg; u64 due, interval; } rt_timer;
@@ -86,7 +102,7 @@ static pthread_mutex_t big = PTHREAD_MUTEX_INITIALIZER;
 static rt_thread threads[MAX_THREADS];
 static rt_thread *running; /* NULL when every guest thread is blocked */
 static rt_thread boot;     /* the pre-thread boot context (main_func) */
-static u64 seq_counter;
+static u64 seq_counter, thread_generation;
 static int ints_enabled = 1;
 static u32 status_kernel_global; /* the SDK copy whose exception vectors are installed */
 static rt_event events[EV_COUNT];
@@ -311,6 +327,8 @@ static void hand_to(rt_thread *next) {
   if (!next) return;
   next->state = T_RUNNING;
   restore(next);
+  if (!next->context) next->context = new_context(next, 1, next->entry);
+  S->native_context = next->context;
   if (!next->host_started) {
     pthread_attr_t a;
     next->host_started = 1;
@@ -319,11 +337,14 @@ static void hand_to(rt_thread *next) {
     if (pthread_create(&next->host, &a, thread_main, next)) finish(1, "pthread_create failed");
     pthread_attr_destroy(&a);
   } else {
-    pthread_cond_signal(&next->wake);
+    pthread_cond_signal(&next->context->wake);
   }
 }
 static void wait_for_baton(rt_thread *self) {
-  while (running != self) pthread_cond_wait(&self->wake, &big);
+  while (running != self || self->context != host_context) {
+    if (host_context->retired) retire_context(host_context);
+    pthread_cond_wait(&host_context->wake, &big);
+  }
   apply_rounding();
 }
 /* The running thread gives up the baton (it is runnable, blocked or dead). */
@@ -529,6 +550,7 @@ static rt_thread *thread_of(u32 guest) {
 static void *thread_main(void *p) {
   rt_thread *self = p;
   int r;
+  host_context = self->context;
   pthread_mutex_lock(&big);
   wait_for_baton(self);
   pthread_mutex_unlock(&big);
@@ -549,6 +571,8 @@ int plaid_rt_safepoint(plaid_state *s) {
   return 0;
 }
 
+#include "jumps.h"
+
 /* Every runtime function below runs on the baton holder; LOCKED takes `big`
    so host event sources see consistent scheduler state. */
 #define RT(name) static int rt_##name(void); \
@@ -563,9 +587,12 @@ RT(osCreateThread) {
   for (i = 0; !t && i < MAX_THREADS; i++)
     if (threads[i].state == T_FREE || threads[i].state == T_DEAD) t = &threads[i];
   if (!t) finish(1, "too many guest threads");
+  if (jump_thread_busy(t)) return plaid_fault(S, (u32)S->r[31], 13);
   if (t->host_started) pthread_join(t->host, NULL);
+  jump_thread_forget(t);
+  if (t->context) { pthread_cond_destroy(&t->context->wake); free(t->context); context_count--; }
   memset(t, 0, sizeof *t);
-  pthread_cond_init(&t->wake, NULL);
+  t->generation = ++thread_generation;
   t->state = T_STOPPED; t->guest = arg(0); t->id = arg(1); t->entry = arg(2);
   t->ie = 1;
   t->arg = arg(3); t->sp = arg(4); t->pri = (s32)arg(5);
@@ -594,6 +621,7 @@ RT(osStartThread) {
 RT(osDestroyThread) {
   rt_thread *t = thread_of(arg(0));
   if (!t) return 0;
+  if (jump_thread_busy(t)) return plaid_fault(S, (u32)S->r[31], 13);
   if (t == running) return RT_EXIT_THREAD;
   t->state = T_DEAD;
   return 0;
@@ -1818,8 +1846,9 @@ int main(int argc, char **argv) {
   clock_gettime(CLOCK_MONOTONIC, &t0);
   plaid_load_images(S);
   pthread_mutex_lock(&big);
-  pthread_cond_init(&boot.wake, NULL);
   boot.pri = -1; boot.state = T_RUNNING; running = &boot;
+  host_context = boot.context = new_context(&boot, 1, 0);
+  S->native_context = host_context;
   pthread_mutex_unlock(&big);
   pthread_create(&pump, NULL, event_pump, NULL);
   S->r[31] = THREAD_RETURN;

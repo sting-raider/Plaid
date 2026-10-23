@@ -1,5 +1,19 @@
 # Status
 
+## Structural native coroutine contract (ADR-0262)
+
+Fixed-text word-layout setjmp/longjmp bodies are recognized structurally.
+Caller-owned host jump buffers and per-SDK-thread host contexts preserve
+creation, sleep/yield and exit continuations. Context-tagged registrations
+release discarded fixed-text and overlay pins without touching other stacks.
+The deterministic native/ares contract compares full architectural state and
+64 KiB RAM; mutation, ownership, scheduler and refusal cases pass. Edited
+entry values require residual-dispatch mode; this is not native completeness.
+Mario Party 2 now passes its process switches and starts audio tasks; the
+latest run reaches VI 8, fault 8 at overlay base 80102800. The previous
+stop was VI 2, fault 5 at 80092e70. See research/native-coroutines.md for
+the exact validation receipt and declared limits.
+
 ## Constant pairs stop at register rewrites (ADR-0261)
 
 Load inference no longer pairs a `lui` with a low half after its register was
