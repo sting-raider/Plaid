@@ -15,6 +15,8 @@ static inline int plaid_cp0_read(plaid_state *s, u32 reg, u64 *v, u32 pc) {
   case 6: *v = s->cp0_wired; break;
   case 10: *v = s->cp0_entryhi; break;
   case 14: *v = s->cp0_epc; break;
+  case 28: *v = s->cp0_taglo; break;
+  case 29: *v = s->cp0_taghi; break;
   case 30: *v = s->cp0_error_epc; break;
   default: return plaid_fault(s, pc, 12);
   }
@@ -29,6 +31,9 @@ static inline int plaid_cp0_write(plaid_state *s, u32 reg, u64 v, u32 pc) {
   case 6: s->cp0_wired = (u32)v & 63u; break;
   case 10: s->cp0_entryhi = v & 0xc00000ffffffe0ffull; break;
   case 14: s->cp0_epc = v; break;
+  /* TagLo/TagHi feed CACHE Index Store Tag only (ADR-0259) */
+  case 28: s->cp0_taglo = (u32)v & 0x0fffffc0u; break;
+  case 29: s->cp0_taghi = 0; break;
   case 30: s->cp0_error_epc = v; break;
   case 12:
     /* Timer/exception delivery and SDK scheduler Status writes need a separate
@@ -115,4 +120,42 @@ static inline int plaid_cp0_eret(plaid_state *s, u64 *target, u32 pc) {
   s->cp0_status = status; s->llbit = 0; s->pc = (u32)t;
   *target = t;
   return 0;
+}
+/* CACHE (ADR-0259). Native code fetches no guest instructions, so the
+   I-cache operations change nothing observable; D-cache operations act on the
+   modelled tags (ADR-0183). A dirty line dropped without write-back keeps its
+   stores in RAM here but not on hardware: like osInvalDCache, it is marked
+   lost so a later access fails closed. Index Load Tag, Create Dirty Exclusive
+   and a valid Index Store Tag are outside the subset. */
+static inline void plaid_ddrop(plaid_state *s, u32 i) {
+  if (s->ddirty[i]) s->line_lost[((s->dtag[i] & ~0xfffu) | (i & 0xffu) << 4) >> 4] = 1;
+  s->dtag[i] = 0; s->ddirty[i] = 0; s->dstale[i] = 0;
+}
+static inline int plaid_cache(plaid_state *s, u32 op, u64 va, u32 pc) {
+  u32 v = (u32)va, p, i = (v >> 4) & 0x1ffu;
+  u8 seg;
+  if (plaid_cp0_kernel(s, pc)) return 1;
+  if ((op & 3u) == 0) return 0;
+  if ((op & 3u) != 1) return plaid_fault(s, pc, 12);
+  switch (op >> 2) {
+  case 0: /* Index Writeback Invalidate */
+    if (s->dtag[i]) plaid_dwriteback(s, (int)i);
+    s->dtag[i] = 0; s->ddirty[i] = 0; s->dstale[i] = 0;
+    return 0;
+  case 2: /* Index Store Tag, of an invalid line only */
+    if (s->cp0_taglo & 0xc0u) return plaid_fault(s, pc, 12);
+    plaid_ddrop(s, i);
+    return 0;
+  case 4: case 5: case 6: /* Hit Invalidate, Hit Writeback Invalidate, Hit Writeback */
+    if (va != SX32(v)) return plaid_fault(s, pc, 1);
+    if (v >= 0x80000000u && v < 0xc0000000u) p = v & 0x1fffffffu;
+    else if (plaid_tlb(s, v, 0, &p, &seg)) return plaid_fault(s, pc, 1);
+    if (p >= PLAID_RAM_SIZE || s->dtag[i] != ((p & ~0xfffu) | 1)) return 0;
+    if (op >> 2 == 4) { plaid_ddrop(s, i); return 0; }
+    plaid_dwriteback(s, (int)i);
+    if (op >> 2 == 5) { s->dtag[i] = 0; s->ddirty[i] = 0; s->dstale[i] = 0; }
+    return 0;
+  default:
+    return plaid_fault(s, pc, 12);
+  }
 }
