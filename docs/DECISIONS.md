@@ -7429,3 +7429,37 @@ the decoded file from its link address.
 Consequences: Star Fox 64 US Rev 1 builds natively with RT64 and runs the
 30-second silent validation with fault 0 (1798 VIs, 945 graphics and 1730
 audio tasks, 5062 PI DMAs). `native_complete` is false (8 residual sites).
+
+## ADR-0258: Linker segment tables name shared-address overlays
+
+Status: accepted
+
+Context: Mario Party 2 (USA) has neither a Zelda file table nor a DMA
+catalog. Its 116 board and minigame overlays are all linked at
+`0x80102800` and listed in the main image as nine-word linker segment
+entries: ROM start/end, RAM start, then text, data and BSS start/end. Without
+them 301 residual-dispatch blockers remained, most of them calls into the
+unloaded overlay range. The copy-call inference had meanwhile placed three
+slices of those overlays as slots at the wrong link addresses, and the boot
+window inference had paired the data page at ROM `0x9c200` with a function
+pointer, overwriting main-image code at `0x80094058` with other main-image
+bytes.
+
+Decision:
+- When a ROM has no file table, overlay discovery reads segment entries from
+  the composed image. An entry is accepted only when RAM equals text start,
+  text, data and BSS are contiguous, and the ROM range holds exactly the text
+  and data. Each file becomes a raw `CatalogOverlay`; files sharing a link
+  address become slots bound by content at run time (ADR-0185, ADR-0257).
+- Catalog slots are packed from above RAM and every declared load, each at its
+  link address modulo 64 KiB, instead of 1 MiB apart from `0x80800000`.
+- A validated catalog file supersedes an inferred slot whose ROM source lies
+  inside it.
+- With a bounded main image, `infer-loads` drops a fixed (non-slot) load of
+  bytes inside that image unless it is an in-place copy. Of ten local ROMs only
+  Mario Party 2's inferred loads change.
+
+Consequences: Mario Party 2 discovers 157,064 blocks (was 17,130) and its
+residual-dispatch solve has 3 blockers (was 301), all `CACHE` instructions in
+cache initialisation loops, which lowering does not model yet. Star Fox 64's
+slots move but it still runs 30 s with fault 0.

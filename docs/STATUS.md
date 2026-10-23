@@ -1,5 +1,12 @@
 # Status
 
+## Mario Party 2 overlays from its segment table (ADR-0258)
+
+Mario Party 2 (USA) overlays are found from the linker segment table in its
+main image: 116 overlays sharing `0x80102800`, bound by content at run time.
+Residual-dispatch blockers fall from 301 to 3; the last three are `CACHE`
+instructions, which lowering does not model yet.
+
 ## Star Fox 64 runs natively (ADR-0256, ADR-0257)
 
 Star Fox 64 US Rev 1 builds from the ROM alone and runs the 30-second
