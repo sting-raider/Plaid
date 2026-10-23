@@ -14,7 +14,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 ## Where it stands
 
-*As of main `714e1275`, 2026-10-23. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
+*As of main `aa8b5f18`, 2026-10-23. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
@@ -24,9 +24,10 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 | Banjo-Kazooie (USA) (Rev 1) | **none** | 🟨 residual dispatch, 2 sites | 60 s: Nintendo opening and title, audio, fault 0; puzzle transitions in 75 s runs (ADR-0200, ADR-0201); current main: 60 s, VI 3568, fault 0 (ADR-0240) | re-prove the 2 table jumps lost in 94a4d7cb |
 | Paper Mario (USA) | **none** | 🟨 builds by default with residual dispatch (ADR-0233) | 60 s: storybook intro, VI 3590, audio, fault 0 (ADR-0230); a fresh default build stops at VI 2908 on an undiscovered shared-slot occupant | find that code; prove 8 indirect jumps for `native_complete` |
 | Ocarina of Time (USA 1.2) | **none** | ✅ ROM-only, 0 blockers | 30 s from the ROM alone: VI 1749, 660 graphics / 1275 audio tasks, fault 0 (ADR-0253); title and file select in older hand-input builds (ADR-0182) | longer play |
-| GoldenEye 007 (USA) | **none** | refused | not reached: OPEN, 175 blockers (172 with residual dispatch, was 327; ADR-0250) | executable sources and paging for the `7f` engine range (85 unresolved direct targets) |
+| GoldenEye 007 (USA) | **none** | refused | not reached: OPEN, 592 blockers (589 with residual dispatch): 48 `7f` engine pages now recovered, resolving 81 of 85 missing direct targets but exposing more code (ADR-0255) | unvisited engine pages, cross-page instructions, TLB refill/exception semantics |
 | Mario Kart 64 (USA) | **none** | 🟨 residual dispatch, 2 sites | 60 s with compiled graphics microcode and audio: VI 2762, 1270 graphics / 2635 audio tasks, fault 0 (ADR-0246) | prove the 2 residual sites; longer play |
-| Star Fox 64, Rogue Squadron (USA) | **none** | refused | not reached: OPEN, 1 (Star Fox 64, was 294; ADR-0252) and 151 (Rogue Squadron, ADR-0251) residual blockers | Star Fox 64: the indirect candidate `0xa40000b0` from `0x8001efb8`; Rogue Squadron: indirect targets and tables; see [research/rom-sweep.md](research/rom-sweep.md) |
+| Star Fox 64 (USA) (Rev 1) | **none** | 🟨 residual dispatch, 8 sites | 30 s from the ROM alone: VI 1798, 945 graphics / 1730 audio tasks, fault 0 (ADR-0256, ADR-0257) | prove the 8 residual sites; longer play |
+| Rogue Squadron (USA) | **none** | refused | not reached: OPEN, 151 residual blockers (ADR-0251) | indirect targets and tables; see [research/rom-sweep.md](research/rom-sweep.md) |
 
 "Native build ✅" means analysis is `CLOSED` under a declared scope (usually `--address-taken`) and `native.py` emits the executable. Since ADR-0233, `native.py` also builds by default when the only open items are indirect jumps it cannot prove: they go through a fail-closed run-time lookup over the translated code (still no emulation), and `native-manifest.json` records `native_complete: false`. `--strict` builds only proven maps.
 
@@ -39,6 +40,8 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0256, 0257 | `aa8b5f18` | SP-memory residual targets fault instead of blocking; libultra dev-board stubs; catalog overlay verifiers relocate pointer tables. Star Fox 64 runs 30 s with fault 0 |
+| 0255 | `d0f8bcf7` | Mapped page sources recovered for GoldenEye's `7f` engine: 48 pages, 81 of 85 missing direct targets resolved (blockers rise to 592 as more code is exposed) |
 | 0252 | `714e1275` | Overlays are discovered from DMA catalogs and scene descriptors (MIO0 or raw); Star Fox 64 blockers 296 -> 8, 1 with residual dispatch |
 | 0254 | `dc6e8664` | Analysis-time ares runs natively on Windows (MinGW) instead of in WSL; Banjo-Kazooie analysis is byte-identical and replays are about 3x faster |
 | 0253 | `a0dbaf22` | RSP boot loaders that jump and short task programs are recognized; Ocarina of Time runs 30 s from the ROM alone with fault 0 |
