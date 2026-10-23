@@ -911,8 +911,15 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             !returns && !table && !constant && address_taken_ok && site.link_register.is_some();
         uses_address_taken |= dispatched;
         let proof_valid = returns || table || constant || dispatched;
-        let residual =
-            !proof_valid && scope == Scope::DeclaredStaticImagesGuardedRamResidualDispatch;
+        // Native code cannot run from SP memory: a residual site faults there
+        // instead of requiring a block that cannot exist (ADR-0256).
+        let sp_memory = |target: &CodeAddress| {
+            (0x8000_0000..0xc000_0000).contains(&target.pc.0)
+                && (0x0400_0000..0x0400_2000).contains(&(target.pc.0 & 0x1fff_ffff))
+                && !site.observed.contains_key(target)
+        };
+        let residual = (!proof_valid || site.candidates.keys().any(sp_memory))
+            && scope == Scope::DeclaredStaticImagesGuardedRamResidualDispatch;
         if residual {
             residual_sites.insert(site.site.clone());
         }
@@ -926,6 +933,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         }
         for target in site.candidates.keys().chain(site.observed.keys()) {
             if !starts.contains(target)
+                && !(residual && sp_memory(target))
                 && !(site.link_register.is_some() && map.runtime_functions.contains_key(target))
                 && !((site.link_register.is_some()
                     || !(0x8000_0000..0xc000_0000).contains(&target.pc.0))

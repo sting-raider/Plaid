@@ -7386,3 +7386,46 @@ the complete local gate. No reference code is copied into the native artifact;
 the locked ISC ares implementation remains analysis/test-only. Research,
 commands, full local gate and silent visible BK/MM control receipt locations:
 research/mapped-page-source-recovery.md. README remains owner-maintained.
+
+## ADR-0256: Residual dispatch faults on SP-memory targets
+
+Status: accepted
+
+Context: Star Fox 64 US Rev 1 kept one residual-dispatch blocker after
+ADR-0252: the site at `0x8001efb8` has a constant-proved jump to
+`0xa40000b0`, inside SP DMEM. CPU code there (the boot loader's) can never
+be a lowered block, so the closure could not close. Its libultra
+development-board helpers (`__osRdbSend` and kin) were also bound to runtime
+functions that did not exist, so the artifact failed to link.
+
+Decision: under residual dispatch, a site whose candidates include an
+unobserved SP-memory target (KSEG0/KSEG1 `0x04000000..0x04002000`) becomes a
+residual site even when it has a proof. It dispatches over its lowered
+targets and faults on the SP one; no block is required for it. A target the
+replay actually took there is still a blocker, and the strict scope still
+refuses it. The runtime gains stubs for the board-only libultra entries:
+`__osRdbSend` reports every byte sent, `is_proutSyncPrintf` succeeds,
+`__checkHardware_*` find no board, `__osInitialize_*` do nothing.
+
+Consequences: Star Fox 64 residual-dispatch solve closes with 0 blockers and
+8 residual sites (was 1 blocker, 7 residual sites).
+
+## ADR-0257: Catalog overlay verifiers see their relocated pointers
+
+Status: accepted
+
+Context: ADR-0252 places each DMA-catalog overlay in its own analysis slot and
+rebases its pointers there. The run-time binding verifier is built from that
+slot copy, but the catalog layout scanned it for pointers into the link
+range, which no longer held any. Pointer tables (jump tables in the
+overlay's data) were then compared literally: RAM holds `0x8019....` while
+the verifier expected the slot's `0x80e1....`. No Star Fox 64 overlay ever
+bound, and the first call into `0x80187520` faulted after 162 VIs.
+
+Decision: like RarePair and Segment slots, a catalog overlay's layout scans
+the slot copy against its slot address; composing the slot still relocates
+the decoded file from its link address.
+
+Consequences: Star Fox 64 US Rev 1 builds natively with RT64 and runs the
+30-second silent validation with fault 0 (1798 VIs, 945 graphics and 1730
+audio tasks, 5062 PI DMAs). `native_complete` is false (8 residual sites).

@@ -176,7 +176,12 @@ impl DeclaredLoad {
                 {
                     return Err("MIO0 overlay needs bounded text and BSS extents".into());
                 }
-                let mut layout = crate::overlays::slot_layout_bounded(bytes, linked.0, text_size)?;
+                // Like RarePair, the bytes here are the slot copy (ADR-0257).
+                let mut layout = crate::overlays::slot_layout_bounded(
+                    bytes,
+                    self.destination.start.0,
+                    text_size,
+                )?;
                 layout.bss = bss_size;
                 Ok(layout)
             }
@@ -535,8 +540,9 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
             load.layout(&data)?;
             return Ok(data);
         }
-        if matches!(load.encoding, LoadEncoding::CatalogOverlay { .. }) {
-            let layout = load.layout(&data)?;
+        if let LoadEncoding::CatalogOverlay { text_size, .. } = load.encoding {
+            load.layout(&data)?;
+            let layout = crate::overlays::slot_layout_bounded(&data, linked.0, text_size)?;
             let mut relocated = layout.apply(&data, linked.0, load.destination.start.0)?;
             relocated.truncate(data.len());
             return Ok(relocated);
@@ -670,6 +676,32 @@ mod tests {
             relocatable: false,
             linked: None,
         }
+    }
+
+    #[test]
+    fn catalog_slot_copy_keeps_its_rebased_pointers_relocatable() {
+        // text: jr ra; nop. data at 0x40 points into text at the link address.
+        let mut rom = vec![0u8; 0x80];
+        rom[..4].copy_from_slice(&0x03e0_0008u32.to_be_bytes());
+        rom[0x40..0x44].copy_from_slice(&0x8010_0004u32.to_be_bytes());
+        let mut slot = load(
+            0x8080_0000,
+            0,
+            0x80,
+            LoadEncoding::CatalogOverlay {
+                encoding: OverlayCompression::Raw,
+                encoded_size: 0x80,
+                text_size: 0x20,
+                bss_size: 0,
+            },
+        );
+        slot.relocatable = true;
+        slot.linked = Some(GuestAddr(0x8010_0000));
+        let data = decoded(&rom, &slot).unwrap();
+        assert_eq!(data[0x40..0x44], 0x8080_0004u32.to_be_bytes());
+        // The binding verifier is built from the slot copy (ADR-0257).
+        let layout = slot.layout(&data).unwrap();
+        assert!(layout.relocations.iter().any(|r| r.offset == 0x40));
     }
 
     #[test]
