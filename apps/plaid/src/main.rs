@@ -871,11 +871,13 @@ fn run() -> Result<(), String> {
                 let catalog = plaid_core::overlays::discover(rom.bytes(), &table)?;
                 let detail = serde_json::to_vec(&catalog).map_err(|e| e.to_string())?;
                 let id = format!("overlays:{}", plaid_core::rom::sha256(&detail));
-                // a validated catalog file supersedes an inferred slot view of
-                // part of its bytes, which names the wrong link (ADR-0258)
+                // a validated catalog file supersedes an inferred raw slot view
+                // of part of its bytes, which names the wrong link (ADR-0258);
+                // a slot in a validated format of its own stays (ADR-0262)
                 if let Some((spec, _)) = &mut declared {
                     spec.loads.retain(|l| {
                         l.linked.is_none()
+                            || l.encoding != plaid_core::declared_loads::LoadEncoding::Raw
                             || !catalog.iter().any(|o| {
                                 (u64::from(o.file.rom_start)..u64::from(o.file.rom_end))
                                     .contains(&l.source.0)
@@ -891,7 +893,17 @@ fn run() -> Result<(), String> {
                     .max()
                     .map_or(Ok(0x8080_0000), u32::try_from)
                     .map_err(|e| e.to_string())?;
-                let loads = plaid_core::overlays::loads(&catalog, &[id.clone()].into(), slot_base);
+                // a file already declared is not declared again (ADR-0262)
+                let declared_sources: BTreeSet<u64> = declared
+                    .iter()
+                    .flat_map(|(spec, _)| &spec.loads)
+                    .map(|l| l.source.0)
+                    .collect();
+                let loads: Vec<_> =
+                    plaid_core::overlays::loads(&catalog, &[id.clone()].into(), slot_base)
+                        .into_iter()
+                        .filter(|l| !declared_sources.contains(&l.source.0))
+                        .collect();
                 println!(
                     "{} of {} overlay candidates placed at their link addresses",
                     loads.len(),
