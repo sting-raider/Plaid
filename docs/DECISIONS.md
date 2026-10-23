@@ -7518,3 +7518,29 @@ Consequences: Mario Party 2 runs past `osInitialize` to VI 2 and two PI DMAs,
 then faults 5 at `0x80092e70`: Hudson's process system switches coroutines
 with `setjmp`/`longjmp` (`0x80092da8`, `0x80092e04`), which the checked
 call/return model does not yet represent.
+
+## ADR-0261: A constant pair ends where its register is rewritten
+
+Status: accepted
+
+Context: load inference (ADR-0183, ADR-0184) reads code constants as a `lui`
+followed, within 16 words, by an `addiu`/`ori` from the same register. It
+did not stop when that register was written in between, so it combined a
+`lui` with an unrelated later low half. In Rogue Squadron (USA) (Rev 1)
+`lui v0, 0x3` met the `addiu v0, v0, 0x2f20` that follows `lui v0, 0x0`,
+naming a file at ROM `0x32f20`, and `addiu s0, s0, 0x407c` after
+`addu s0, v0, zero` became the destination `0x8003407c`. The resulting fixed
+load overwrote main-image data in the composed image, including a jump table
+at `0x80034520`, whose snapshot then read instruction words as targets.
+
+Decision: a pair ends at the first later word whose destination register is
+the `lui`'s register (decoded with `destination_gpr`), after that word is
+itself considered as the low half.
+
+Consequences: across ten local ROMs, inferred loads change only for Rogue
+Squadron (3 -> 0, all from stale pairs), Mario Party 2 (3 -> 0; ADR-0258
+already superseded them) and Paper Mario (18 -> 17: ROM `0x13880` at
+`0x802dbd40`, named only through a stale pair). Rogue Squadron's
+residual-dispatch blockers fall from 140 to 5. Its overlays, built as
+descriptors with a PI address, a RAM destination `0x800960e0`, a size and an
+end, are not yet recognised, so calls into that region remain open.

@@ -1,5 +1,12 @@
 # Status
 
+## Constant pairs stop at register rewrites (ADR-0261)
+
+Load inference no longer pairs a `lui` with a low half after its register was
+rewritten. Rogue Squadron's three stale loads are gone and its
+residual-dispatch blockers fall from 140 to 5; its descriptor-built overlays
+at `0x800960e0` are the next gap.
+
 ## Mario Party 2 reaches its process system (ADR-0260)
 
 COP0 WatchLo is modelled while disarmed and `__osGetCause` is a runtime

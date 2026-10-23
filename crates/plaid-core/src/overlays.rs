@@ -780,14 +780,19 @@ fn each_constant(bytes: &[u8], base: u32) -> Vec<(u32, u32)> {
         }
         let (rt, hi) = ((w >> 16) & 31, w << 16);
         for (m, &v) in words.iter().enumerate().skip(k + 1).take(16) {
+            let pc = base.wrapping_add(4 * m as u32);
             let lo = v & 0xffff;
             let value = match v >> 26 {
-                9 => hi.wrapping_add(lo as i16 as u32),
-                0xd => hi | lo,
-                _ => continue,
+                9 => Some(hi.wrapping_add(lo as i16 as u32)),
+                0xd => Some(hi | lo),
+                _ => None,
             };
-            if (v >> 21) & 31 == rt {
-                out.push((value, base.wrapping_add(4 * m as u32)));
+            if let Some(value) = value.filter(|_| (v >> 21) & 31 == rt) {
+                out.push((value, pc));
+            }
+            // a later write of the register ends the pair (ADR-0261)
+            if crate::discovery::decode(v, GuestAddr(pc)).destination_gpr() == Some(rt) {
+                break;
             }
         }
     }
@@ -1146,6 +1151,28 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn a_constant_pair_ends_where_its_register_is_rewritten() {
+        // lui v0,3; lui v0,0; addiu v0,v0,0x2f20; addu s0,v0,zero; addiu s0,s0,0x407c
+        // lui a0,0x8009; sw s0,4(s3); addiu a0,a0,0x6d50
+        let words = [
+            0x3c02_0003u32,
+            0x3c02_0000,
+            0x2442_2f20,
+            0x0040_8021,
+            0x2610_407c,
+            0x3c04_8009,
+            0xae70_0004,
+            0x2484_6d50,
+        ];
+        let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_be_bytes()).collect();
+        let found: BTreeSet<u32> = each_constant(&bytes, 0x8000_0000)
+            .into_iter()
+            .map(|(v, _)| v)
+            .collect();
+        assert_eq!(found, [0x2f20, 0x8009_6d50].into());
     }
 
     #[test]
