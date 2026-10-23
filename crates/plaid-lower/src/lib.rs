@@ -15,6 +15,7 @@ use plaid_core::{
 use std::collections::{BTreeMap, BTreeSet};
 
 pub mod coverage;
+mod jumps;
 pub mod overlay;
 pub mod rsp;
 
@@ -30,6 +31,7 @@ typedef struct { u32 start, end; } plaid_text_range;
 typedef struct plaid_native_frame_s {
   struct plaid_native_frame_s *prev, *next;
   const plaid_text_range *ranges; u32 count;
+  void *owner, *jumps; int overlay;
 } plaid_native_frame;
 typedef struct plaid_state_s {
   u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 fcsr; u32 llbit; u32 pc; u32 fault; u32 fault_pc;
@@ -55,6 +57,8 @@ typedef struct plaid_state_s {
      253 immutable proof data, 254 revoked fixed text, 255 bound overlay. */
   u8 prot[PLAID_RAM_SIZE / 4]; u8 prot_ready, text_dirty;
   plaid_native_frame *native_frames; /* includes suspended SDK threads */
+  void *native_context;
+  void (*frame_leave)(struct plaid_state_s *, plaid_native_frame *);
   plaid_tlb_entry tlb[32]; /* written by the runtime's osMapTLB family */
   u64 tlb_generation[32];
   /* uncached access to RCP memory, registers and the PI buses (physical
@@ -97,7 +101,8 @@ typedef struct { u32 start, end; int load; } plaid_range;
    9: a BREAK was reached (its exception handler is not modeled);
    10: a conditional trap was taken (its exception handler is not modeled);
    11: Status observation/acquisition outside the supported SDK context;
-   12: COP0 state, mode or event effects outside the verified subset. */
+   12: COP0 state, mode or event effects outside the verified subset;
+   13: unsupported nonlocal jump or expired/cross-thread host continuation. */
 static inline int plaid_fault(plaid_state *s, u32 pc, u32 code) {
   s->fault = code; s->fault_pc = pc; return 1;
 }
@@ -139,11 +144,15 @@ const HELPERS: &str = r#"/* Native frames pin their fixed-text bodies; one suspe
 __attribute__((noinline, unused))
 #endif
 static void plaid_text_pin(plaid_state *s, plaid_native_frame *f) {
+  f->owner = s->native_context;
+  if (f->overlay >= 0) s->ovl_active[f->overlay]++;
   f->prev = 0; f->next = s->native_frames;
   if (f->next) f->next->prev = f;
   s->native_frames = f;
 }
 static inline void plaid_text_unpin(plaid_state *s, plaid_native_frame *f) {
+  if (f->jumps && s->frame_leave) s->frame_leave(s, f);
+  if (f->overlay >= 0) s->ovl_active[f->overlay]--;
   if (f->prev) f->prev->next = f->next; else s->native_frames = f->next;
   if (f->next) f->next->prev = f->prev;
 }
@@ -1220,6 +1229,7 @@ struct Lowerer<'a> {
     functions: &'a BTreeSet<u32>,
     /// Declared runtime functions (ADR-0129): host-provided `plaid_rt_<name>`.
     runtime: &'a BTreeMap<u32, String>,
+    jumps: &'a BTreeMap<u32, jumps::Jump>,
     /// Residual sites (ADR-0218): a jump's candidate outside this function
     /// faults 3 instead of refusing the lowering (ADR-0223).
     residual: &'a BTreeSet<u32>,
@@ -1274,6 +1284,28 @@ impl Lowerer<'_> {
     }
     /// A guest call: the callee returns 0 only after a checked return to `link`.
     fn call(&self, target: u32, link: u32, pc: u32, bound: bool) -> Result<String, String> {
+        if let Some(jump) = self.jumps.get(&target) {
+            let check = format!("if (plaid_jump_check_{target:08x}(s)) return 1;");
+            if jump.restore {
+                return Ok(format!(
+                    "{check} return plaid_jump_to(s, J_{target:08x}, {}, {}, 0x{pc:08x}u);",
+                    u8::from(self.fr0),
+                    u8::from(jump.nonzero)
+                ));
+            }
+            // The builtin must live in this lowered caller, never in a dispatcher.
+            let repin = self.frame.map_or_else(String::new, |(f, full)| {
+                format!("frame->ranges = R_{f:08x}; frame->count = {full}u;")
+            });
+            return Ok(format!(
+                "{check} if (s->r[31] != {}) return plaid_fault(s, 0x{pc:08x}u, 5); {{ intptr_t *jb = plaid_jump_begin(s, frame, J_{target:08x}, {}, 0x{pc:08x}u); if (!jb) return 1; if (__builtin_setjmp(jb)) {{ {repin} if (plaid_jump_resume(s, jb)) return 1; }} else {{ static const plaid_text_range range = {{{}u, {}u}}; plaid_native_frame leaf = {{0,0,&range,1,0,0,-1}}; int r; plaid_text_pin(s, &leaf); r = plaid_jump_save(s, jb); plaid_text_unpin(s, &leaf); if (r) return r; }} }} {}",
+                self.link(link),
+                u8::from(self.fr0),
+                physical(target)?,
+                physical(target)? + jump.words * 4,
+                self.fallthrough(link, pc)
+            ));
+        }
         if let Some(name) = self.runtime.get(&target) {
             return Ok(format!(
                 "{} {}",
@@ -1308,6 +1340,13 @@ impl Lowerer<'_> {
     /// A tail transfer keeps the entering call's continuation and balances
     /// overlay pins through the callee's ordinary native wrapper.
     fn tail(&self, target: u32, pc: u32) -> Result<String, String> {
+        if self.jumps.contains_key(&target) {
+            return if self.jumps[&target].restore {
+                self.call(target, 0, pc, true)
+            } else {
+                Ok(format!("return plaid_fault(s, 0x{pc:08x}u, 13);"))
+            };
+        }
         if self.labels.contains(&target) {
             return self.goto(target);
         }
@@ -1383,8 +1422,16 @@ impl Lowerer<'_> {
             }
             (0, 9, _) => {
                 if let Some(k) = self.dispatch.get(proven()?) {
+                    let mut special = String::new();
+                    for &target in proven()?.iter().filter(|t| self.jumps.contains_key(t)) {
+                        special += &format!(
+                            "if (t == {}) {{ {} }} ",
+                            sx(target),
+                            self.call(target, after, pc, true)?
+                        );
+                    }
                     return Ok(format!(
-                        "{{ u64 t = {a}; {} {slot} {} {} }}",
+                        "{{ u64 t = {a}; {} {slot} {special} {} {} }}",
                         set(rd, self.link(after)),
                         self.pin(
                             after,
@@ -1468,6 +1515,11 @@ impl Lowerer<'_> {
                 Ok(format!("{slot} return plaid_fault(s, 0x{pc:08x}u, 3);"))
             }
             (2, _, _) => Ok(format!("{slot} {}", self.tail(jump, pc)?)),
+            (3, _, _) if self.jumps.contains_key(&jump) => Ok(format!(
+                "s->r[31] = {}; {slot} {}",
+                self.link(after),
+                self.call(jump, after, pc, true)?
+            )),
             (3, _, _) if self.targets.contains_key(&pc) => {
                 let k = self.dispatch[proven()?];
                 Ok(format!(
@@ -1808,11 +1860,40 @@ pub fn lower_c_parts(
     callees.retain(|f| blocks.contains(&f.pc.0) || runtime.contains_key(&f.pc.0));
     let entered = plaid_core::callbacks::targets(map, image);
     callees.extend(entered.iter().cloned());
+    let has_jumps = callees
+        .iter()
+        .chain(map.address_taken.keys())
+        .any(|a| ovl_of(a.pc.0).is_none() && jumps::recognize(image, a.pc.0).is_some());
+    if has_jumps {
+        callees.extend(
+            map.address_taken
+                .keys()
+                .filter(|a| blocks.contains(&a.pc.0))
+                .cloned(),
+        );
+    }
     callees.retain(|f| !runtime.contains_key(&f.pc.0));
     let functions: BTreeSet<u32> = callees.iter().map(|f| f.pc.0).collect();
     // A residual site dispatches over every lowered entry, never beyond
     // (ADR-0218), and over its own candidate and observed targets: entries for
     // a call, block starts for a jump (ADR-0223).
+    let jumps: BTreeMap<u32, jumps::Jump> = functions
+        .iter()
+        .filter_map(|&entry| {
+            // Overlay recognition needs binding-qualified instruction verification.
+            if ovl_of(entry).is_some() {
+                return None;
+            }
+            let jump = jumps::recognize(image, entry)?;
+            Some((entry, jump))
+        })
+        .collect();
+    if !jumps.is_empty() && !residual_dispatch {
+        return Err(
+            "nonlocal jumps require residual-dispatch; edited entries have no closed target proof"
+                .into(),
+        );
+    }
     let every_entry: BTreeSet<u32> = functions.iter().chain(runtime.keys()).copied().collect();
     for (&pc, (call, known)) in &residual {
         let own = known.iter().copied().filter(|t| {
@@ -1928,7 +2009,28 @@ pub fn lower_c_parts(
         words.join(", "),
         words.len(),
     );
-    let mut declarations = String::new();
+    let mut declarations = String::from(
+        "intptr_t *plaid_jump_begin(plaid_state *, plaid_native_frame *, const uint16_t *, int, u32);\nint plaid_jump_save(plaid_state *, intptr_t *);\nint plaid_jump_resume(plaid_state *, intptr_t *);\nint plaid_jump_to(plaid_state *, const uint16_t *, int, int, u32);\n",
+    );
+    for (&entry, jump) in &jumps {
+        declarations += &format!(
+            "static const uint16_t J_{entry:08x}[] = {{{}}};\n",
+            jump.offsets
+                .iter()
+                .map(u16::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        let words = (0..jump.words)
+            .map(|i| word(entry + i * 4).map(|w| format!("0x{w:08x}u")))
+            .collect::<Result<Vec<_>, _>>()?;
+        declarations += &format!(
+            "static inline int plaid_jump_check_{entry:08x}(plaid_state *s) {{ static const u32 words[] = {{{}}}; return plaid_text_enter(s, {}u, words, {}u, 0x{entry:08x}u); }}\n",
+            words.join(","),
+            physical(entry)?,
+            jump.words
+        );
+    }
     for name in runtime.values() {
         if !bound_names.contains(name) {
             declarations += &format!("int plaid_rt_{name}(plaid_state *s);\n");
@@ -1964,7 +2066,9 @@ pub fn lower_c_parts(
             relink(ts.iter().any(|t| ovl_of(*t).is_some()))
         );
         for &t in ts {
-            cases += &if let Some(name) = runtime.get(&t) {
+            cases += &if jumps.contains_key(&t) {
+                format!(" case {}: return plaid_fault(s, pc, 13);", sx(t))
+            } else if let Some(name) = runtime.get(&t) {
                 format!(
                     " case {}: s->cp0_known &= 1u << 10; return plaid_rt_{name}(s);",
                     sx(t)
@@ -1992,6 +2096,18 @@ pub fn lower_c_parts(
         out += &format!("  case 0x{0:08x}u: return F_{0:08x}(s, ret);\n", t.pc.0);
     }
     out += "  }\n  return plaid_fault(s, entry, 3);\n}\n";
+    out += "typedef int (*plaid_coroutine_fn)(plaid_state *, u64);\nplaid_coroutine_fn plaid_coroutine_target(plaid_state *s, u32 entry) {\n";
+    out += "  (void)s;\n";
+    if !overlays.is_empty() {
+        out += "  entry = plaid_link(s, entry);\n";
+    }
+    out += "  switch (entry) {\n";
+    for &t in &functions {
+        if !jumps.is_empty() && !jumps.contains_key(&t) {
+            out += &format!("case 0x{t:08x}u: return F_{t:08x};\n");
+        }
+    }
+    out += "} return 0; }\nint plaid_coroutine_enter(plaid_state *s, u32 entry, u64 ret) { plaid_coroutine_fn f = plaid_coroutine_target(s, entry); return f ? f(s, ret) : plaid_fault(s, entry, 3); }\n";
     // Loop headers: targets of a backward direct transfer or table case.
     // Every other transfer inside a function moves forward, so a path that
     // never returns passes a header again and again (ADR-0159).
@@ -2078,6 +2194,7 @@ pub fn lower_c_parts(
             returns: &returns,
             functions: &functions,
             runtime: &runtime,
+            jumps: &jumps,
             residual: &residual,
             dispatch: &dispatch,
             overlays: &overlays,
@@ -2107,7 +2224,7 @@ pub fn lower_c_parts(
         // A wrapper balances the pin on every exit, including faults and tails.
         let body_name = if let Some(k) = lowerer.ovl {
             out += &format!(
-                "static int B_{0:08x}(plaid_state *s, u64 ret, plaid_native_frame *frame);\n{link}int F_{0:08x}(plaid_state *s, u64 ret) {{\n  int r;\n  s->ovl_active[{k}]++;\n  r = B_{0:08x}(s, ret, 0);\n  s->ovl_active[{k}]--;\n  return r;\n}}\n",
+                "static int B_{0:08x}(plaid_state *s, u64 ret, plaid_native_frame *frame);\n{link}int F_{0:08x}(plaid_state *s, u64 ret) {{\n  int r;\n  plaid_native_frame frame = {{0, 0, 0, 0, 0, 0, {k}}};\n  plaid_text_pin(s, &frame);\n  r = B_{0:08x}(s, ret, &frame);\n  plaid_text_unpin(s, &frame);\n  return r;\n}}\n",
                 f.pc.0
             );
             format!("static int B_{:08x}", f.pc.0)
@@ -2117,7 +2234,7 @@ pub fn lower_c_parts(
                 .map(&range)
                 .collect::<Result<Vec<_>, String>>()?;
             out += &format!(
-                "static const plaid_text_range R_{0:08x}[] = {{{1}}};\n{pins}static int B_{0:08x}(plaid_state *s, u64 ret, plaid_native_frame *frame);\n{link}int F_{0:08x}(plaid_state *s, u64 ret) {{\n  plaid_native_frame frame = {{0, 0, R_{0:08x}, {2}}};\n  int r;\n  plaid_text_pin(s, &frame);\n  r = B_{0:08x}(s, ret, &frame);\n  plaid_text_unpin(s, &frame);\n  return r;\n}}\n",
+                "static const plaid_text_range R_{0:08x}[] = {{{1}}};\n{pins}static int B_{0:08x}(plaid_state *s, u64 ret, plaid_native_frame *frame);\n{link}int F_{0:08x}(plaid_state *s, u64 ret) {{\n  plaid_native_frame frame = {{0, 0, R_{0:08x}, {2}, 0, 0, -1}};\n  int r;\n  plaid_text_pin(s, &frame);\n  r = B_{0:08x}(s, ret, &frame);\n  plaid_text_unpin(s, &frame);\n  return r;\n}}\n",
                 f.pc.0,
                 ranges.join(", "),
                 ranges.len()

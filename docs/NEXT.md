@@ -1,5 +1,18 @@
 # Next
 
+## Continue Mario Party 2 after structural coroutine support
+
+Preserve the native/ares save/restore, context ownership, pin-unwind,
+scheduler and refusal contracts. Re-run the visible silent native controls
+and investigate Mario Party 2's overlay identity/binding refusal at 80102800
+(fault 8 after its process switches and first audio tasks). Compare executable
+DMA/copy sources and relocation/binding evidence before changing guards.
+Edited coroutine entry targets still require residual dispatch; copied buffers,
+other layouts and SDK thread destruction with live continuations stay refused.
+An explicitly retargeted last saved handle retires its old stack. Merely
+abandoning a buffer still needs a proven reclamation model before reuse.
+Receipt: research/native-coroutines.md.
+
 ## GoldenEye after mapped-page source recovery (ADR-0255)
 
 48 engine pages are authenticated; 81/85 original direct-edge destinations

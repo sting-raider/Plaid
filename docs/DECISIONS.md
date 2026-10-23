@@ -7544,3 +7544,67 @@ already superseded them) and Paper Mario (18 -> 17: ROM `0x13880` at
 residual-dispatch blockers fall from 140 to 5. Its overlays, built as
 descriptors with a PI address, a RAM destination `0x800960e0`, a size and an
 end, are not yet recognised, so calls into that region remain open.
+
+## ADR-0262: Structural nonlocal jumps keep native coroutine stacks
+
+Status: accepted
+
+Context: a checked host call cannot return twice or return to a different
+guest continuation. The larger process jump routines do not match the pinned
+n64sym signatures. A longjmp may have no reachable continuation of its own;
+process creation also edits the saved guest return address and stack pointer.
+
+Decision: recognize fixed-text leaf bodies by their complete instructions:
+23 aligned, distinct a0-relative word stores/loads of sp, ra, s0-s7, fp and
+f20-f31, followed by a checked result move and return. The restore may contain
+the explicit zero-to-one result adjustment. No symbol or title address is used.
+Unsupported instruction shapes retain ordinary checked lowering.
+
+Each recognized save call emits GCC's builtin setjmp in the lowered caller's
+own frame, including calls selected by a shared indirect dispatcher. The
+runtime writes every guest buffer word through the normal memory/cache guards,
+records its native frame/context and preserves the recognized result behavior.
+A restore of unchanged words resumes that live save continuation on its owning
+host stack. A resumed buffer stays live until its owning frame leaves, including
+across repeated context handoffs. A context parks while any saved continuation
+frame remains live; otherwise it releases its stack and exits.
+Only the active host context of each libultra thread receives its scheduler
+baton; coroutine handoffs keep the same guest thread and release the scheduler
+mutex before a host longjmp.
+
+An authored ra/sp change creates a fresh native context that enters only an
+already-lowered function. A directly authored initial buffer without a prior
+save is also accepted only at such an entry, with aligned ra/sp. It cannot
+name an arbitrary unlowered continuation. Entry return faults. Other saved
+register edits, unknown entries, expired continuations, cross-thread and
+generation restores fail closed.
+
+Retargeting a parked buffer to a compiled entry detaches that continuation.
+If another saved handle owns the old stack, it stays parked and pinned.
+Otherwise its own host thread releases its registrations and acknowledges
+retirement before replacement execution. No other SDK thread's frames are
+released. This models explicit entry replacement without guessing guest heap
+liveness. Abandoned parked buffers whose memory is merely freed remain live
+and pinned; context and record limits (256 and 4096) fault 13. SDK destruction
+or reuse with live continuations, multiple contexts or an active coroutine
+entry is refused. Expired records detach on slot reuse. Copied buffers,
+overlay-resident jump routines and other layouts are outside this model.
+
+Native frame registration now owns both fixed-text and overlay pins, tagged
+with the host context. Unwind removes only that context's frames above the
+target; the resumed caller restores its full text pins, and a normally
+returned frame invalidates its saved continuations. Other
+SDK threads and suspended coroutine frames remain pinned.
+
+Edited entry values have no closed target proof, so this support requires
+residual-dispatch lowering. It does not authorize a fully native completeness
+claim. Every executed guest instruction remains ahead-of-time host code;
+there is no runtime guest decoder, interpreter or JIT.
+
+Verification: runtime/test_coroutines.py compares native state and changed
+RAM with pinned ares, tests creation/yield/exit and self-unwind, mutates away
+discarded-frame release, and checks ownership, scheduler and refusal contracts.
+The acceptance receipt is research/native-coroutines.md. The GCC builtin
+contract is https://gcc.gnu.org/onlinedocs/gcc/Nonlocal-Gotos.html; the buffer
+contains five intptr_t words and builtin longjmp runs in a separate callee.
+Project-owned implementation; no reference runtime code was copied.

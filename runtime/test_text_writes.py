@@ -71,7 +71,7 @@ int main(void) {
   active = 0; s.fault = 0;
   /* Suspended frames can leave in non-LIFO order without losing other pins. */
   { static const plaid_text_range ranges[] = {{LEAF, LEAF + 8}};
-    plaid_native_frame first = {0, 0, ranges, 1}, second = {0, 0, ranges, 1};
+    plaid_native_frame first = {0, 0, ranges, 1, 0, 0, -1}, second = {0, 0, ranges, 1, 0, 0, -1};
     plaid_text_pin(&s, &first); plaid_text_pin(&s, &second); plaid_text_unpin(&s, &first);
     assert(dma(LEAF) == 1 && s.fault == 2);
     s.fault = 0;

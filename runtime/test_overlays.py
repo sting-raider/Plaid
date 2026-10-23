@@ -11,8 +11,9 @@ def main():
     out = ROOT / 'target/overlay-verifier'
     out.mkdir(parents=True, exist_ok=True)
     source = out / 'check.c'
+    cargo = shutil.which('cargo') or str(Path.home() / '.cargo/bin/cargo.exe')
     with source.open('wb') as stream:
-        subprocess.run(['cargo', 'run', '--locked', '--quiet', '-p', 'plaid-lower',
+        subprocess.run([cargo, 'run', '--locked', '--quiet', '-p', 'plaid-lower',
                         '--example', 'overlay_verifier_fixture'], cwd=ROOT,
                        stdout=stream, check=True)
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')

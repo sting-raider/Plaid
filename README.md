@@ -28,7 +28,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 | Mario Kart 64 (USA) | **none** | 🟨 residual dispatch, 2 sites | 60 s with compiled graphics microcode and audio: VI 2762, 1270 graphics / 2635 audio tasks, fault 0 (ADR-0246) | prove the 2 residual sites; longer play |
 | Star Fox 64 (USA) (Rev 1) | **none** | 🟨 residual dispatch, 8 sites | 30 s from the ROM alone: VI 1798, 945 graphics / 1730 audio tasks, fault 0 (ADR-0256, ADR-0257) | prove the 8 residual sites; longer play |
 | Rogue Squadron (USA) | **none** | refused | not reached: OPEN, 151 residual blockers (ADR-0251) | indirect targets and tables; see [research/rom-sweep.md](research/rom-sweep.md) |
-| Mario Party 2 (USA) | **none** | 🟨 builds with residual dispatch, 8 sites | runs past `osInitialize` to VI 2, then faults 5 on Hudson's `setjmp`/`longjmp` coroutine switch (ADR-0258..0260) | model the coroutine switch |
+| Mario Party 2 (USA) | **none** | 🟨 builds with residual dispatch, 8 sites | runs native coroutine switches to VI 8 with three audio tasks, then faults 8 at overlay base `80102800` (ADR-0262) | verify the overlay identity/binding |
 
 "Native build ✅" means analysis is `CLOSED` under a declared scope (usually `--address-taken`) and `native.py` emits the executable. Since ADR-0233, `native.py` also builds by default when the only open items are indirect jumps it cannot prove: they go through a fail-closed run-time lookup over the translated code (still no emulation), and `native-manifest.json` records `native_complete: false`. `--strict` builds only proven maps.
 

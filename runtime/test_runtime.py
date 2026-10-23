@@ -565,7 +565,7 @@ def tlb_unmap(exe, cc):
     subprocess.run([str(effects)], check=True, timeout=30)
 
 
-def build(exe, cc, name, program, runtime, extra=(), status_globals=None, fr0=False, data_bindings=None):
+def build(exe, cc, name, program, runtime, extra=(), status_globals=None, fr0=False, data_bindings=None, address_taken=False, residual_dispatch=False):
     (OUT / f'{name}.bin').write_bytes(A.assemble(program))
     labels = A.label_pcs(program)
     decl = dict(format='plaid-runtime-functions-v0', source='runtime test declaration',
@@ -578,7 +578,8 @@ def build(exe, cc, name, program, runtime, extra=(), status_globals=None, fr0=Fa
             function['data_bindings'] = {k: hex(v) for k, v in data_bindings[function['name']].items()}
     (OUT / f'{name}.runtime.json').write_text(json.dumps(decl))
     subprocess.run([str(exe), 'lower-c', str(OUT / f'{name}.bin'), hex(A.BASE), hex(A.BASE), hex(A.EXIT),
-                    str(OUT / f'{name}.c'), str(OUT / f'{name}.runtime.json'), *(['--fr0'] if fr0 else [])], check=True)
+                    str(OUT / f'{name}.c'), str(OUT / f'{name}.runtime.json'), *(['--fr0'] if fr0 else []), *(['--address-taken'] if address_taken else []),
+                    *(['--residual-dispatch'] if residual_dispatch else [])], check=True)
     native = OUT / (f'{name}-native.exe' if os.name == 'nt' else f'{name}-native')
     subprocess.run([cc, '-O2', '-std=gnu11', '-Wall', '-Werror', '-Wno-unused-label', '-Wno-unused-function',
                     '-DPLAID_SAFEPOINTS', f'-DPLAID_LOWERED="{name}.c"', '-I', str(OUT), *extra,
@@ -651,6 +652,8 @@ def main():
     test_cache_writeback.run(exe, cc, sys.modules[__name__])
     import test_cache_ranges
     test_cache_ranges.run(exe, cc, sys.modules[__name__])
+    import test_coroutines
+    test_coroutines.run(exe, cc, sys.modules[__name__])
     import test_cache_ops
     test_cache_ops.run(exe, cc, sys.modules[__name__])
     import test_controller_policy
