@@ -51,6 +51,7 @@ pub mod boot_execution;
 pub mod callbacks;
 mod callee_effects;
 pub mod declared_loads;
+pub mod descriptor_loads;
 pub mod discovery;
 pub mod evidence_manifest;
 pub mod exception_pif;

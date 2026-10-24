@@ -77,6 +77,53 @@ def main():
         section_doc['loads'][0]['slot'] = False
         section_loads.write_text(json.dumps(section_doc), encoding='utf-8')
         run(*section_args, ok=False)
+        # PI descriptors may describe data-first files. Only call-reached code
+        # is rooted; construction alone never makes the payload start an entry.
+        descriptor_rom = bytearray(0x3000)
+        descriptor_rom[:4] = bytes.fromhex('80371240')
+        descriptor_rom[8:12] = (0x80000400).to_bytes(4, 'big')
+        cursor = 0x1000
+        for source in [0x2000, 0x2100]:
+            for value, offset in [(0xb0000000 | source, 0x10),
+                                  (0x80040000, 0x30), (0x80, 0x50),
+                                  (0x80040080, 0x74)]:
+                for word in [0x3c080000 | value >> 16,
+                             0x35080000 | value & 0xffff, 0xafa80000 | offset]:
+                    descriptor_rom[cursor:cursor+4] = word.to_bytes(4, 'big')
+                    cursor += 4
+            descriptor_rom[source:source+4] = (0x48000000).to_bytes(4, 'big')
+            # A preceding return provides an independent function-layout clue.
+            descriptor_rom[source+0x10:source+0x14] = (0x03e00008).to_bytes(4, 'big')
+            descriptor_rom[source+0x20:source+0x24] = (0x03e00008).to_bytes(4, 'big')
+        for word in [0x0c010008, 0, 0x08000000 | ((0x80000400 + cursor - 0x1000 + 8) >> 2 & 0x3ffffff), 0]:
+            descriptor_rom[cursor:cursor+4] = word.to_bytes(4, 'big')
+            cursor += 4
+        descriptor_path = directory/'descriptors.z64'
+        descriptor_path.write_bytes(descriptor_rom)
+        descriptor_loads = directory/'descriptors-loads.json'
+        run('infer-loads', descriptor_path, descriptor_loads)
+        declared = json.loads(descriptor_loads.read_bytes())['loads']
+        assert len(declared) == 2 and all(l['slot'] for l in declared)
+        descriptor_map = directory/'descriptors-map.json'
+        run('discover', descriptor_path, '0x1000', '0x80000400', '0x100',
+            '0x80000400', descriptor_map, '--loads', descriptor_loads,
+            '--address-taken', '--overlays')
+        mapped = json.loads(descriptor_map.read_bytes())
+        assert any(len(spec['loads']) == 2 for spec in mapped['load_images'].values())
+        assert all(any(b['start']['pc'] == pc for b in mapped['blocks'])
+                   for pc in [0x80800020, 0x80810020])
+        assert not any(b['start']['pc'] in [0x80800000, 0x80810000]
+                       for b in mapped['blocks'])
+        # The overlay scan also works without pre-inferred declarations.
+        run('discover', descriptor_path, '0x1000', '0x80000400', '0x100',
+            '0x80000400', descriptor_map, '--address-taken', '--overlays')
+        mapped = json.loads(descriptor_map.read_bytes())
+        assert any(len(spec['loads']) == 2 for spec in mapped['load_images'].values())
+        for at in [0x1028, 0x1058]:
+            descriptor_rom[at:at+4] = (0x35080084).to_bytes(4, 'big')
+        descriptor_path.write_bytes(descriptor_rom)
+        run('infer-loads', descriptor_path, descriptor_loads)
+        assert json.loads(descriptor_loads.read_bytes())['loads'] == []
         registers=[0]*32
         registers[16]=0xffffffffa0001000; registers[17]=0xffffffffa0002000
         loaded=registers.copy(); loaded[8]=0xffffffff89abcdef

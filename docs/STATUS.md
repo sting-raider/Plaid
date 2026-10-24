@@ -1,5 +1,19 @@
 # Status
 
+## Code-built PI load descriptors (ADR-0264)
+
+Load inference and overlay discovery recognize structurally connected
+PI/RAM/size/end stores and place their bounded sources in content-bound
+slots. Rogue Squadron Rev 1 now declares its three files at `0x800960e0`
+and discovers 50,862 blocks (was 39,550), but its residual solve remains OPEN
+with 13 blockers (was 5). The original false BLTZAL target and data at
+`0x80096d50` remain, and alternate data introduces further blockers. No
+native artifact is emitted; VI/fault/PC are unavailable before and after.
+See research/descriptor-built-overlays.md for tests and control receipts.
+The six fault-code controls match baseline. SF64 border garbage is a real
+pre-existing rendering defect, reproduced on current main with VI/framebuffer
+evidence in the receipt; visual acceptance remains open.
+
 ## Paper Mario regression fixed (ADR-0263)
 
 ADR-0258 had replaced Paper Mario's validated `segment` slots with duplicate

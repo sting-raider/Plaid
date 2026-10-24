@@ -7627,3 +7627,43 @@ already declared is not declared again.
 
 Consequences: Paper Mario keeps its `segment` slots; Mario Party 2 keeps its
 segment-table overlays.
+
+## ADR-0264: Code-built PI descriptors supply content-bound load candidates
+
+Status: accepted
+
+Context: some ROMs build their load catalog in code instead of storing a
+contiguous table. Rogue Squadron Rev 1 builds three descriptors with a PI
+cartridge address, RAM address, byte count and RAM end. Ordinary ROM-offset
+constant inference cannot connect their sources to their destinations.
+
+Decision: recognize ordered constant word stores through one unchanged base
+register, with field offsets relative to the PI source of `0`, `0x20`, `0x40`
+and `0x64`. Require an uncached cartridge alias, a word-aligned nonempty ROM
+range inside the cartridge, a word-aligned range inside 8 MiB RDRAM, and
+nonwrapping `end == RAM + size`. Track LUI, ADDIU, ORI, ADDU and OR constants;
+discard knowledge at control transfers, register rewrites, possible aliasing
+or partial stores, and after a 64-instruction store window. Neither the
+descriptor base nor its absolute offsets or addresses identify a game.
+
+Both `infer-loads` and `discover --overlays` consume the recognizer. The
+former declares raw slots; the latter records source hashes and uses the
+existing raw `CatalogOverlay` layout, deduplication and slot machinery.
+Catalog overlays always receive a content-bound slot, including singleton
+catalogs without a relocation footer. Descriptor construction supplies no
+entry root, executable section boundary, BSS size or load-lifetime proof.
+The optional tail fields supply none of those facts either. Existing raw
+slot text-boundary heuristics, relocation verification, byte binding, write
+revocation and the closed-world gate remain authoritative.
+
+Consequences: Rogue Squadron's three files at RAM `0x800960e0` are found,
+and discovery expands from 39,550 to 50,862 blocks. It remains OPEN: residual
+blockers increase from 5 to 13 as alternate data is also exposed as code.
+The original data call at `0x80096d50` and false BLTZAL target remain;
+recognizing a load does not establish its internal code/data layout.
+No Rogue Squadron native artifact or gameplay result is accepted. Synthetic
+unit/CLI tests cover positive construction, end mismatch, bounds, clobbers,
+aliases and independent entry rooting; deleting the end-equality guard is
+detected. Evidence and remaining work: research/descriptor-built-overlays.md.
+Project-owned code recovered from the earlier Plaid candidate; no external
+implementation was copied.
