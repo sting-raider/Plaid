@@ -26,7 +26,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 | Ocarina of Time (USA 1.2) | **none** | ✅ ROM-only, 0 blockers | 60 s with scripted save load: VI 3596, fault 0; opening Link/Kokiri scene after NJPEG (ADR-0265) | longer play |
 | GoldenEye 007 (USA) | **none** | refused | not reached: OPEN, 592 blockers (589 with residual dispatch): 48 `7f` engine pages now recovered, resolving 81 of 85 missing direct targets but exposing more code (ADR-0255) | unvisited engine pages, cross-page instructions, TLB refill/exception semantics |
 | Mario Kart 64 (USA) | **none** | 🟨 residual dispatch, 2 sites | 60 s with compiled graphics microcode and audio: VI 2762, 1270 graphics / 2635 audio tasks, fault 0 (ADR-0246) | prove the 2 residual sites; longer play |
-| Star Fox 64 (USA) (Rev 1) | **none** | 🟨 residual dispatch, 8 sites | 30 s from the ROM alone: VI 1798, 945 graphics / 1730 audio tasks, fault 0 (ADR-0256, ADR-0257); the left, right and bottom borders show tiled garbage | prove the 8 residual sites; longer play |
+| Star Fox 64 (USA) (Rev 1) | **none** | 🟨 residual dispatch, 8 sites | 30 s from the ROM alone: VI 1798, 945 graphics / 1730 audio tasks, fault 0 (ADR-0256, ADR-0257); borders clean since ADR-0266 | prove the 8 residual sites; longer play |
 | Rogue Squadron (USA) | **none** | refused | not reached: OPEN, 13 blockers after three descriptor-built overlays were recognised (ADR-0264) | executable section boundaries; a false `BLTZAL` path to `8334b334`; see [research/rom-sweep.md](research/rom-sweep.md) |
 | Mario Party 2 (USA) | **none** | 🟨 builds with residual dispatch, 8 sites | runs native coroutine switches to VI 8 with three audio tasks, then faults 8 at overlay base `80102800` (ADR-0262) | verify the overlay identity/binding |
 
@@ -41,6 +41,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0266 | `5b00eb84` | RT64 fill clears are clipped to the RDP scissor; Star Fox 64's uncleared borders (tiled star trails) are fixed, frame interior unchanged |
 | 0265 | `3b94f6c0` | RSP boots that patch themselves and the NJPEG task program are discovered from the ROM (checked against ares); Ocarina of Time plays 60 s through a scripted save load |
 | 0264 | `2447e9a0` | PI load descriptors built in code are recognised by structure (`end == ram + size`) and bound by content; Rogue Squadron covers 39,550 -> 50,862 blocks |
 | 0263 | `72ac595c` | Catalog overlays no longer replace validated `segment` slots; fixes the Paper Mario regression from 0258 (fault 3 at VI 2) |
