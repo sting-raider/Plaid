@@ -41,6 +41,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0265 | `3b94f6c0` | RSP boots that patch themselves and the NJPEG task program are discovered from the ROM (checked against ares); Ocarina of Time plays 60 s through a scripted save load |
 | 0264 | `2447e9a0` | PI load descriptors built in code are recognised by structure (`end == ram + size`) and bound by content; Rogue Squadron covers 39,550 -> 50,862 blocks |
 | 0263 | `72ac595c` | Catalog overlays no longer replace validated `segment` slots; fixes the Paper Mario regression from 0258 (fault 3 at VI 2) |
 | 0262 | `ed3f421e` | setjmp/longjmp coroutines run natively on host stacks; Mario Party 2 VI 2 -> 8 |
