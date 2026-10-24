@@ -7830,3 +7830,34 @@ retained inferred-load build path, controls, OoT save-load and full local
 gate are recorded in research/mp2-thread-lifecycle.md. SDK documentation
 and pinned N64ModernRuntime threads.cpp were read only; its GPL-3.0
 implementation was not copied. This is project-owned C code.
+
+## ADR-0269: Compare copy-call declarations after catalog replay trimming
+
+Status: accepted
+
+Context: fresh MP2 analysis discovers catalog overlays, then harvests a fixed
+first-fetch replay. ADR-0267 trims that replay's executable text at the catalog
+boundary, but infer-call-loads compares the mapped slice against the original
+full declaration and refuses it as stale. Fresh and retained loads.json files
+are byte-identical; explicit --loads skips refinement and hides the mismatch.
+ADR-0258's raw-slot replacement and ADR-0263's validated-format preservation
+remain correct.
+
+Decision: rebuild and hash-check the map's ROM images, then apply the existing
+catalog-over-replay text subtraction to the current declarations before their
+exact stale-map comparison. Use discovered catalog declarations from the rebuilt
+map as context. Never import a catalog carrying loads-file evidence from that
+map: it must still match the current loads file itself. Preserve exact source,
+encoding/replay entry, resulting ranges, slot/fixed kind and relocatability
+checks. Candidate overlap/deduplication uses the same effective declarations;
+the original loads file and replay witness are not rewritten into slices.
+
+Consequences: a valid catalog-trimmed prefix/suffix can be refined, while a
+changed or missing source, replay witness, arbitrary slice, nonbinding catalog
+or removed declared catalog still refuses. A deterministic authored test checks
+these cases; disabling normalization and removing the declared-catalog exclusion
+guard each fail it. No game-specific rule, runtime guard relaxation or guest
+execution is added. Fresh native observations, controls and exact-tree local
+validation are recorded in research/mp2-fresh-analysis.md. MP2 retains eight
+residual sites and native_complete:false; board gameplay and full closure remain
+unverified.

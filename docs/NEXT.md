@@ -42,14 +42,16 @@ now passes the VI 520 deadlock. A 30-second Start/A run reaches destination
 selection at VI 1798, fault 0/fault_pc 00000000. Preserve the thread-owned
 context registry, retirement acknowledgements before reuse, owner-specific
 pin release, stale-generation refusals and lifecycle/mutation tests. Continue
-into board play and longer runs. The bare native.py path needs a separate
-reconciliation fix: infer-call-loads rejects the catalog-trimmed map as stale
-after ADR-0267; retained inferred loads permit discovery/build/run with --loads.
+into board play and longer runs. ADR-0269 fixes the bare native.py path by
+reapplying catalog text trimming before the stale-declaration comparison;
+fresh-ROM discovery/build/run reaches destination selection without --loads.
+Preserve its exact-source/witness/range and declared-catalog refusal tests.
 Edited coroutine targets still require residual dispatch. Copied buffers,
 other layouts and running-thread self-reinitialization remain refused.
 Abandoned buffers within a still-live generation retain the existing caps;
 thread teardown does not prove arbitrary buffer-liveness/reclamation.
-Receipts: research/mp2-thread-lifecycle.md and research/mp2-overlay-binding.md.
+Receipts: research/mp2-thread-lifecycle.md, research/mp2-overlay-binding.md and
+research/mp2-fresh-analysis.md.
 
 ## GoldenEye after mapped-page source recovery (ADR-0255)
 
