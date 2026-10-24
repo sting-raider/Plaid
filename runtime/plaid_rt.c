@@ -72,8 +72,8 @@ typedef struct rt_thread_s {
   u32 wait_queue; /* blocked: the queue address */
   int wait_full;  /* blocked: 1 waiting for space, 0 for a message */
   rt_context *context;
+  rt_context *all_contexts;
   int host_started;
-  pthread_t host;
   u64 r[32], hi, lo, f[32];
   u32 fcc, fcsr, llbit;
   u32 status_global;
@@ -83,6 +83,7 @@ typedef struct rt_thread_s {
 /* A guest thread can suspend several host stacks, but owns one active stack. */
 struct rt_context_s {
   rt_thread *thread;
+  rt_context *next;
   pthread_cond_t wake;
   struct plaid_jump_s *resume;
   rt_context *retire_waiter;
@@ -93,6 +94,7 @@ struct rt_context_s {
 static _Thread_local rt_context *host_context;
 static rt_context *new_context(rt_thread *thread, int root, u32 entry);
 static void retire_context(rt_context *context);
+static void destroy_thread(rt_thread *thread);
 
 typedef struct { u32 mq, msg; int set; } rt_event;
 typedef struct { int used; u32 guest, mq, msg; u64 due, interval; } rt_timer;
@@ -331,19 +333,22 @@ static void hand_to(rt_thread *next) {
   if (!next->context) next->context = new_context(next, 1, next->entry);
   S->native_context = next->context;
   if (!next->host_started) {
+    pthread_t host;
     pthread_attr_t a;
     next->host_started = 1;
     pthread_attr_init(&a);
     pthread_attr_setstacksize(&a, 64u << 20); /* -O0 frames of large guest functions */
-    if (pthread_create(&next->host, &a, thread_main, next)) finish(1, "pthread_create failed");
+    if (pthread_create(&host, &a, thread_main, next->context)) finish(1, "pthread_create failed");
     pthread_attr_destroy(&a);
+    pthread_detach(host);
   } else {
     pthread_cond_signal(&next->context->wake);
   }
 }
 static void wait_for_baton(rt_thread *self) {
-  while (running != self || self->context != host_context) {
+  for (;;) {
     if (host_context->retired) retire_context(host_context);
+    if (running == self && self->context == host_context) break;
     pthread_cond_wait(&host_context->wake, &big);
   }
   apply_rounding();
@@ -549,9 +554,10 @@ static rt_thread *thread_of(u32 guest) {
   return NULL;
 }
 static void *thread_main(void *p) {
-  rt_thread *self = p;
+  rt_context *context = p;
+  rt_thread *self = context->thread;
   int r;
-  host_context = self->context;
+  host_context = context;
   pthread_mutex_lock(&big);
   wait_for_baton(self);
   pthread_mutex_unlock(&big);
@@ -559,9 +565,7 @@ static void *thread_main(void *p) {
   pthread_mutex_lock(&big);
   if (r == 2) finish(0, "exit");
   if (r && r != RT_EXIT_THREAD) finish(1, "guest fault");
-  self->state = T_DEAD; /* returned from its entry, or destroyed itself */
-  yield_from(self, 0);
-  pthread_mutex_unlock(&big);
+  destroy_thread(self); /* returned from its entry, or destroyed itself */
   return NULL;
 }
 int plaid_rt_safepoint(plaid_state *s) {
@@ -588,10 +592,8 @@ RT(osCreateThread) {
   for (i = 0; !t && i < MAX_THREADS; i++)
     if (threads[i].state == T_FREE || threads[i].state == T_DEAD) t = &threads[i];
   if (!t) finish(1, "too many guest threads");
-  if (jump_thread_busy(t)) return plaid_fault(S, (u32)S->r[31], 13);
-  if (t->host_started) pthread_join(t->host, NULL);
-  jump_thread_forget(t);
-  if (t->context) { pthread_cond_destroy(&t->context->wake); free(t->context); context_count--; }
+  if (t == running) return plaid_fault(S, (u32)S->r[31], 13);
+  destroy_thread(t);
   memset(t, 0, sizeof *t);
   t->generation = ++thread_generation;
   t->state = T_STOPPED; t->guest = arg(0); t->id = arg(1); t->entry = arg(2);
@@ -601,6 +603,7 @@ RT(osCreateThread) {
      area its entry may store its argument registers into */
   t->r[4] = SX32(t->arg); t->r[29] = SX32(t->sp - 16); t->r[31] = THREAD_RETURN;
   t->fcsr = 0x01000800u; /* libultra's thread FPCSR: FS and the invalid enable */
+  wr32(t->guest, 0); wr32(t->guest + 8, 0); /* next and queue */
   wr32(t->guest + 4, (u32)t->pri); wr32(t->guest + 0x14, t->id);
   wr16(t->guest + 0x10, 1); /* OS_STATE_STOPPED */
   return 0;
@@ -622,9 +625,7 @@ RT(osStartThread) {
 RT(osDestroyThread) {
   rt_thread *t = thread_of(arg(0));
   if (!t) return 0;
-  if (jump_thread_busy(t)) return plaid_fault(S, (u32)S->r[31], 13);
-  if (t == running) return RT_EXIT_THREAD;
-  t->state = T_DEAD;
+  destroy_thread(t);
   return 0;
 }
 RT(osSetThreadPri) {

@@ -29,6 +29,7 @@ static rt_context *new_context(rt_thread *thread, int root, u32 entry) {
   if (!c) { plaid_fault(S, S->pc, 13); finish(1, "coroutine allocation failed"); }
   context_count++; thread->contexts++;
   c->thread = thread; c->root = root; c->entry = entry;
+  c->next = thread->all_contexts; thread->all_contexts = c;
   pthread_cond_init(&c->wake, NULL);
   return c;
 }
@@ -49,15 +50,6 @@ static void jump_leave(plaid_state *s, plaid_native_frame *frame) {
     j = next;
   }
   frame->jumps = NULL;
-}
-/* Slot reuse/destruction with suspended jump stacks is outside this model.
-   Expired records never retain pointers to a context being freed. */
-static int jump_thread_busy(rt_thread *t) {
-  plaid_jump *j;
-  if (t->contexts > 1 || (t->context && !t->context->root)) return 1;
-  for (j = jumps; j; j = j->next)
-    if (j->thread == t && j->generation == t->generation && j->owner) return 1;
-  return 0;
 }
 static void jump_thread_forget(rt_thread *t) {
   plaid_jump *j;
@@ -81,7 +73,11 @@ static int jump_unwind(rt_context *owner, plaid_native_frame *target, u32 pc) {
 /* big is held. A retired parked thread releases its own registrations and
    acknowledges completion before the replacement stack may execute. */
 static void retire_context(rt_context *c) {
+  rt_context **link = &c->thread->all_contexts;
   jump_unwind(c, NULL, S->pc);
+  while (*link && *link != c) link = &(*link)->next;
+  if (*link) *link = c->next;
+  if (c->thread->context == c) c->thread->context = NULL;
   if (c->retire_waiter) {
     c->retire_waiter->retire_pending--;
     pthread_cond_signal(&c->retire_waiter->wake);
@@ -90,6 +86,27 @@ static void retire_context(rt_context *c) {
   free(c); host_context = NULL;
   pthread_mutex_unlock(&big);
   pthread_exit(NULL);
+}
+/* big is held; acknowledgements release it without lending the guest baton.
+   The old stacks may only unpin/exit, never return to their suspended code. */
+static void destroy_thread(rt_thread *t) {
+  rt_context *c, *self = host_context;
+  t->state = T_DEAD;
+  t->wait_queue = 0; t->wait_full = 0;
+  jump_thread_forget(t);
+  if (t->contexts) {
+    for (c = t->all_contexts; c; c = c->next) if (c != self) {
+      c->retired = 1; c->retire_waiter = self; self->retire_pending++;
+      pthread_cond_signal(&c->wake);
+    }
+    while (self->retire_pending) pthread_cond_wait(&self->wake, &big);
+    if (t == running) {
+      yield_from(t, 0);
+      retire_context(self);
+    }
+  }
+  t->context = NULL;
+  t->host_started = 0;
 }
 static int jump_read(u32 address, const uint16_t *layout, u32 *words, u32 pc) {
   unsigned i;
