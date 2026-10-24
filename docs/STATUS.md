@@ -1,5 +1,19 @@
 # Status
 
+## Fresh catalog/replay declaration reconciliation (ADR-0269)
+
+The ROM-alone MP2 pipeline now applies discovery's catalog text subtraction
+before infer-call-loads compares declarations. Fresh and retained loads files
+are identical; the old refusal compared a trimmed 0x1140 mapped slice with its
+original 0x1360 replay declaration. Source-image reconstruction and exact stale
+source/witness/range checks remain required, including refusal when a removed
+declared catalog tries to authenticate itself. Synthetic normalization and guard
+mutations fail as expected. From an empty output directory, a silent visible
+30-second run with scripted Start/A reaches the explicit destination-selection
+prompt: VI 1798, fault 0, fault_pc 00000000, graphics 2349/audio 1788. No supplied
+--loads is needed. Eight residual sites remain, native_complete:false; board
+gameplay and full closure are unverified. Receipt: research/mp2-fresh-analysis.md.
+
 ## Parked SDK thread and coroutine retirement (ADR-0268)
 
 Thread destruction/recreation retires every owned host context, invalidates
@@ -8,9 +22,9 @@ waits release the scheduler mutex; no host join holds the guest baton. MP2
 passes the VI 520 deadlock and a silent visible 30-second Start/A run reaches
 destination selection: VI 1798, fault 0, fault_pc 00000000, graphics 2351/audio
 1788. Deterministic stopped/blocked recreation, live coroutine, self-destroy,
-repeated reuse and mutation checks cover the lifetime rule. The bare pipeline
-separately refuses stale load declarations after ADR-0267; retained inferred
-loads complete discovery/build/run. Eight residual sites remain, with
+repeated reuse and mutation checks cover the lifetime rule. ADR-0269 resolves
+the separately observed bare-pipeline declaration refusal. Eight residual
+sites remain, with
 native_complete:false. Receipt: research/mp2-thread-lifecycle.md.
 
 ## Catalog overlay binding over first-fetch replay text (ADR-0267)
