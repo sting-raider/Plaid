@@ -34,18 +34,22 @@ Remaining renderer accuracy work includes fractional scissors, interlace,
 VI filtering/coverage and broader gameplay comparisons; this bounded fix
 does not certify those behaviors.
 
-## Continue Mario Party 2 after structural coroutine support
+## Continue Mario Party 2 after catalog binding (ADR-0267)
 
-Preserve the native/ares save/restore, context ownership, pin-unwind,
-scheduler and refusal contracts. Re-run the visible silent native controls
-and investigate Mario Party 2's overlay identity/binding refusal at 80102800
-(fault 8 after its process switches and first audio tasks). Compare executable
-DMA/copy sources and relocation/binding evidence before changing guards.
-Edited coroutine entry targets still require residual dispatch; copied buffers,
-other layouts and SDK thread destruction with live continuations stay refused.
-An explicitly retargeted last saved handle retires its old stack. Merely
-abandoning a buffer still needs a proven reclamation model before reuse.
-Receipt: research/native-coroutines.md.
+Preserve catalog-over-replay text reconciliation and unique runtime binding,
+text/data/BSS checks and revocation. The VI 8/fault 8 refusal is fixed. MP2
+now displays HUDSON, then stalls at VI 520 (graphics 504, audio 514, PI 48),
+fault 0/fault_pc 00000000, RA 80016174. A diagnostic-free 30-second run
+confirms osCreateThread joins an old host thread while holding `big`; that
+host is parked waiting for its scheduler baton. Investigate guest thread
+recreation/destruction and root-context retirement with deterministic lifetime,
+pin-unwind and scheduler tests before changing joins or unlocking around them.
+No title/menu reached, and external termination is still necessary. Preserve
+the structural coroutine refusal cases, including suspended jump ownership.
+Edited coroutine targets still require residual dispatch; copied buffers,
+other layouts and destruction with live continuations remain refused.
+Abandoned saved buffers still need a proven reclamation model before reuse.
+Receipt: research/mp2-overlay-binding.md.
 
 ## GoldenEye after mapped-page source recovery (ADR-0255)
 

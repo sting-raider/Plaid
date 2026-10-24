@@ -36,11 +36,14 @@ def main():
                 a.lui(a.t2, 0xa000), a.ori(a.t2, a.t2, offset),
                 *[word for at in range(0, 16, 4)
                   for word in (a.lw(a.t1, at, a.t0), a.sw(a.t1, at, a.t2))]]
-    for mode in ('switch', 'tamper', 'ambiguous', 'paired-switch', 'paired-tamper', 'paired-ambiguous'):
-        case = mode.removeprefix('paired-')
+    for mode in ('switch', 'tamper', 'ambiguous', 'paired-switch', 'paired-tamper', 'paired-ambiguous',
+                 'catalog-switch', 'catalog-tamper', 'catalog-ambiguous', 'catalog-bss'):
+        case = mode.removeprefix('paired-').removeprefix('catalog-')
         items = [*copy('one', 'copy1')]
         if case == 'tamper':
             items += [a.sw(0, -16, a.s1)]
+        if case == 'bss':
+            items += [a.sw(a.s1, 0, a.s1)]
         items += [*call, a.addu(a.s3, a.v0, 0), *snapshot(0x1000)]
         if case == 'switch':
             items += [*copy('two', 'copy2'), *call, a.addu(a.s4, a.v0, 0), *snapshot(0x1010),
@@ -61,6 +64,9 @@ def main():
             offset = 0x1000 + labels[label] - a.BASE
             entry = {'destination': hex(slot), 'size': '0x10', 'rom': hex(offset),
                      'encoding': 'raw', 'slot': True}
+            if mode.startswith('catalog-'):
+                entry.update(encoding='catalog_overlay', compression='raw', encoded_size='0x10',
+                             text_size='0xc', bss_size='0x10')
             if mode.startswith('paired-'):
                 def stream(data):
                     compressor = zlib.compressobj(wbits=-15)
@@ -113,7 +119,7 @@ def main():
             assert ref.returncode == 0 and state == json.loads(ref.stdout), (state, ref.stdout, ref.stderr)
         else:
             assert run.returncode == 6 and state['fault'] == 3, (mode, state)
-    print('PASS raw and paired-stream slots match pinned ares (7/11/7); tampered and ambiguous text fail closed')
+    print('PASS raw, paired-stream and catalog slots match pinned ares (7/11/7); tampered/ambiguous text and nonzero BSS fail closed')
 
 
 if __name__ == '__main__':

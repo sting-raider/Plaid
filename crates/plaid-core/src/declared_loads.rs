@@ -288,6 +288,52 @@ pub struct LoadImage {
     pub loads: Vec<DeclaredLoad>,
 }
 
+/// A first-fetch replay observes one occupant, not permanent code in a shared
+/// slot. Keep its bytes outside catalog text; every slot entry still requires
+/// the catalog's content binding (ADR-0267).
+pub fn exclude_replayed_catalog_text(spec: &mut LoadImage) {
+    let text: Vec<_> = spec
+        .loads
+        .iter()
+        .filter_map(|load| match (load.linked, load.encoding) {
+            (Some(link), LoadEncoding::CatalogOverlay { text_size, .. }) if load.relocatable => {
+                Some((u64::from(link.0), u64::from(link.0) + u64::from(text_size)))
+            }
+            _ => None,
+        })
+        .collect();
+    spec.loads = spec
+        .loads
+        .iter()
+        .flat_map(|load| {
+            if load.linked.is_some()
+                || load.relocatable
+                || !matches!(load.encoding, LoadEncoding::AresBoot { .. })
+            {
+                return vec![load.clone()];
+            }
+            let mut pieces = vec![(u64::from(load.destination.start.0), load.destination.end())];
+            for &(start, end) in &text {
+                pieces = pieces
+                    .into_iter()
+                    .flat_map(|(left, right)| [(left, right.min(start)), (left.max(end), right)])
+                    .filter(|(a, b)| a < b)
+                    .collect();
+            }
+            pieces
+                .into_iter()
+                .map(|(start, end)| DeclaredLoad {
+                    destination: GuestRange {
+                        start: GuestAddr(start as u32),
+                        size: (end - start) as u32,
+                    },
+                    ..load.clone()
+                })
+                .collect()
+        })
+        .collect();
+}
+
 /// Decode one Yaz0 stream (header `Yaz0`, big-endian decoded size, 8 reserved
 /// bytes, then flag-byte groups of literals and back-references).
 pub fn yaz0(data: &[u8]) -> Result<Vec<u8>, String> {
@@ -676,6 +722,88 @@ mod tests {
             relocatable: false,
             linked: None,
         }
+    }
+
+    #[test]
+    fn catalog_text_supersedes_only_fixed_first_fetch_replays() {
+        let start = 0x8000_2000;
+        let mut replay = load(
+            start,
+            0,
+            0x100,
+            LoadEncoding::AresBoot {
+                entry: GuestAddr(start + 0x40),
+            },
+        );
+        replay.evidence.insert("synthetic-first-fetch".into());
+        let mut slot = load(
+            0x8080_2000,
+            0x1000,
+            0x60,
+            LoadEncoding::CatalogOverlay {
+                encoding: OverlayCompression::Raw,
+                encoded_size: 0x60,
+                text_size: 0x40,
+                bss_size: 0x20,
+            },
+        );
+        slot.relocatable = true;
+        slot.linked = Some(GuestAddr(start + 0x40));
+        let mut alternate = slot.clone();
+        alternate.destination.start.0 += 0x10000;
+        alternate.source.0 += 0x100;
+        if let LoadEncoding::CatalogOverlay { text_size, .. } = &mut alternate.encoding {
+            *text_size = 0x50;
+        }
+        let raw = load(start, 0x1000, 0x100, LoadEncoding::Raw);
+        let data = load(
+            start,
+            0,
+            0x100,
+            LoadEncoding::AresData {
+                entry: GuestAddr(start),
+                physical: 0x2000,
+            },
+        );
+        let mut spec = LoadImage {
+            base_offset: RomOffset(0),
+            base: GuestRange {
+                start: GuestAddr(0x8000_0400),
+                size: 4,
+            },
+            loads: vec![
+                replay.clone(),
+                raw.clone(),
+                data.clone(),
+                slot.clone(),
+                alternate.clone(),
+            ],
+        };
+        exclude_replayed_catalog_text(&mut spec);
+        let mut prefix = replay.clone();
+        prefix.destination.size = 0x40;
+        let mut suffix = replay.clone();
+        suffix.destination.start.0 += 0x90;
+        suffix.destination.size = 0x70;
+        assert_eq!(
+            spec.loads,
+            [prefix, suffix, raw, data, slot.clone(), alternate]
+        );
+        let once = spec.clone();
+        exclude_replayed_catalog_text(&mut spec);
+        assert_eq!(spec, once);
+        // Exact coverage removes the fixed executable identity entirely.
+        let mut covered = replay.clone();
+        covered.destination.start.0 += 0x40;
+        covered.destination.size = 0x40;
+        spec.loads = vec![covered, slot.clone()];
+        exclude_replayed_catalog_text(&mut spec);
+        assert_eq!(spec.loads, [slot.clone()]);
+        // A nonbinding declaration cannot override replay authority.
+        slot.relocatable = false;
+        spec.loads = vec![replay.clone(), slot.clone()];
+        exclude_replayed_catalog_text(&mut spec);
+        assert_eq!(spec.loads, [replay, slot]);
     }
 
     #[test]
