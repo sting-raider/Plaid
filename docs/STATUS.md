@@ -1,5 +1,17 @@
 # Status
 
+## Scissored RT64 fill clears (ADR-0266)
+
+RT64's optimized fill-cycle GPU clears now intersect each call's scissor
+and skip empty intersections. SF64's out-of-scissor stars no longer
+accumulate tiled border garbage; the defect was also present in read-back
+RDRAM and reproduced with a fresh build of the original shim. Synthetic
+RGBA16/RGBA32 tests check all pixels, four edges, overlaps, touching and
+empty scissors; removing the left clip is detected. Build/test instructions,
+matched-input captures, six silent visible controls and the full local gate
+are recorded in research/sf64-border.md. This does not establish full VI,
+subpixel/field-mode accuracy or gameplay closure.
+
 ## OoT save-load boot and NJPEG (ADR-0265)
 
 Pinned ares confirms the protection task's boot rewrite (268 instructions,

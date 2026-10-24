@@ -7717,3 +7717,42 @@ wrap; removing boot-pointer provenance is detected. The non-graphics DPC
 contract also fails against the previous disconnected bus. Native save-load,
 controls, validation and pacing receipts: research/oot-jpeg-boot.md.
 Project-owned implementation; no reference runtime code was copied.
+
+
+## ADR-0266: Clip RT64 fill-mode clears to the RDP scissor
+
+Status: accepted
+
+Context: Star Fox 64's intro emits one-pixel fill-cycle stars beyond its
+inset scissor. The pinned RT64 renderer optimizes fill-cycle draws into GPU
+clear operations. Unlike rasterized triangles, these operations do not
+inherit a rasterizer scissor, and the clear rectangle was never intersected
+with the call's scissor. Stars leaked into the border on each buffered frame;
+the inset clear never erased them. The corruption also exists in read-back
+RDRAM, independently of VI presentation. Rebuilding the original Plaid shim
+from its pinned source and existing patches reproduces the defect.
+
+Decision: generate a patched rt64_framebuffer_renderer.cpp alongside the
+existing RDP and state build copies. Convert the fill and its own scissor
+into render-target coordinates with their respective alignment origins,
+intersect their bounds, and submit an Unknown/no-op instance for an empty
+intersection. This preserves call indexing and avoids issuing an empty GPU
+clear. Both color and depth clears use this common path. VI registers,
+framebuffer contents, guest execution and non-fill draws are not cropped or
+special-cased. Original reference sources remain untouched; configure-time
+context checks require exactly one patch match.
+
+Consequences: a ROM-free visible/silent GPU contract checks every pixel in
+RGBA16 and RGBA32 buffers for interior fills, disjoint fills on all four
+sides, partial overlaps, touching edges and zero-area scissors. It fails on
+the old DLL and when the left clipping guard is removed, then passes after
+restoration. CTest registers it for the Windows shim. Pinned ares
+parallel-RDP scissor/primitive clipping was read as independent semantic
+reference; no implementation was copied. This is a bounded integer-coordinate
+contract, not a claim of complete subpixel, field-mode or VI accuracy.
+
+Build the shim through runtime/rt64/CMakeLists.txt so all three patched units
+are compiled. Rebuilding a game against an old DLL is insufficient. See
+runtime/README.md for exact build/test commands and research/sf64-border.md
+for same-input screenshots, RAM evidence, controls and local validation.
+Project-owned patch and test; RT64's MIT notices are retained in build copies.
