@@ -1501,6 +1501,15 @@ fn run() -> Result<(), String> {
                     "encoding": "segment", "slot": true,
                 }));
             }
+            let descriptors = plaid_core::descriptor_loads::infer(bytes, base);
+            for d in &descriptors {
+                loads.push(serde_json::json!({
+                    "destination": format!("{:#x}", d.destination),
+                    "size": format!("{:#x}", d.size),
+                    "rom": format!("{:#x}", d.source),
+                    "encoding": "raw", "slot": true,
+                }));
+            }
             let mut evidence: Vec<_> = stub
                 .map(|size| format!("reset stub of {size:#x} bytes before the first file in the boot window"))
                 .into_iter()
@@ -1527,6 +1536,12 @@ fn run() -> Result<(), String> {
                 evidence.push(format!(
                     "named section descriptor {:#x}: ROM {:#x}..{:#x}, linked {:#x}, text {:#x}, BSS {:#x}",
                     file.descriptor.0, file.source, file.end, file.linked.0, file.text, file.bss
+                ));
+            }
+            for d in &descriptors {
+                evidence.push(format!(
+                    "code-built PI descriptor at image offset {:#x}: ROM {:#x}+{:#x}, RAM {:#x}, checked end {:#x}",
+                    d.built_at, d.source, d.size, d.destination, d.destination + d.size
                 ));
             }
             match plaid_core::boot_execution::execute(&rom) {

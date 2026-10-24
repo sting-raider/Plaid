@@ -565,6 +565,36 @@ fn segment_table(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String>
     Ok(found.into_values().collect())
 }
 
+fn descriptor_catalog(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> {
+    let mut found = Vec::new();
+    for d in crate::descriptor_loads::infer(rom, table_image) {
+        let bytes = &rom[d.source as usize..(d.source + d.size) as usize];
+        // Data-first files have no prefix text boundary. Keep their full candidate
+        // range, as raw slots do; only independently discovered entries are rooted.
+        let layout = slot_layout(bytes, d.destination);
+        let text_size = layout.text;
+        found.push(Overlay {
+            file: RomFile {
+                virtual_start: d.source,
+                virtual_end: d.source + d.size,
+                rom_start: d.source,
+                rom_end: d.source + d.size,
+            },
+            link: d.destination,
+            source_sha256: sha256(bytes),
+            layout,
+            table_offsets: vec![d.built_at],
+            encoding: LoadEncoding::CatalogOverlay {
+                encoding: OverlayCompression::Raw,
+                encoded_size: d.size,
+                text_size,
+                bss_size: 0,
+            },
+        });
+    }
+    Ok(found)
+}
+
 /// Find contiguous VROM start/end, link start/end tuples in a supplied static
 /// image. File identity and trailer layout must independently agree. Callers
 /// retain that image's identity alongside these offsets.
@@ -574,7 +604,8 @@ pub fn discover(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> 
         Err(_) => match dma_file_table(rom) {
             Ok((_, files, compression)) => (true, files, compression),
             Err(e) => {
-                let found = segment_table(rom, table_image)?;
+                let mut found = segment_table(rom, table_image)?;
+                found.extend(descriptor_catalog(rom, table_image)?);
                 return if found.is_empty() { Err(e) } else { Ok(found) };
             }
         },
@@ -687,6 +718,11 @@ pub fn discover(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> 
             .table_offsets
             .push(at as u32);
     }
+    for overlay in descriptor_catalog(rom, table_image)? {
+        found
+            .entry((overlay.file.virtual_start, overlay.link))
+            .or_insert(overlay);
+    }
     Ok(found.into_values().collect())
 }
 
@@ -710,7 +746,8 @@ pub fn loads(overlays: &[Overlay], evidence: &EvidenceRefs, slot_base: u32) -> V
                     < u64::from(p.link) + u64::from(p.layout.file_size + p.layout.bss)
         };
         let overlap = sorted[..i].iter().chain(&sorted[i + 1..]).any(clash);
-        let slot = sorted.iter().filter(|p| p.link == o.link).count() > 1;
+        let slot = matches!(o.encoding, LoadEncoding::CatalogOverlay { .. })
+            || sorted.iter().filter(|p| p.link == o.link).count() > 1;
         if overlap && !slot {
             continue;
         }

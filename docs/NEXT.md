@@ -1,5 +1,29 @@
 # Next
 
+## Rogue Squadron after descriptor load recognition (ADR-0264)
+
+Preserve the three structurally recognized descriptor sources and their
+content-bound slots. Establish executable sections inside data-first files
+and distinguish the fallback boot window's overlapping resident bytes from
+alternate code. At linked `0x80096d50`, the first two alternates contain data
+and the third contains a function. Descriptor construction alone does not
+resolve that distinction; residual blockers are now 13, including the
+original five. Independently, `BLTZAL $zero` at `0x800919bc` is never taken
+but discovery follows it into data at `0x80091a48`, whose first word appears
+to call `0x8334b334`. Prove any branch-reachability refinement and preserve
+the link-register side effect. Do not drop blockers or narrow payload text
+by game address. Receipt: research/descriptor-built-overlays.md.
+
+## SF64 border rendering defect (separate follow-up)
+
+Current main c8a0bf5f reproduces tiled border garbage in the starfield intro.
+At reproduced VI 600: scanout origin 003daa80, width 320, H_VIDEO 006c02ec,
+V_VIDEO 002501ff, X/Y scales 200/400. Trace VI crop/origin against the RDP
+color-image width, scissor and clear bounds; inspect texture/TMEM addresses
+if needed. Descriptor recognition leaves SF64 generated C byte-identical.
+Fault 0 alone is not visual acceptance. Local images, full VI registers and
+hashes: research/descriptor-built-overlays.md. No renderer fix is included.
+
 ## Continue Mario Party 2 after structural coroutine support
 
 Preserve the native/ares save/restore, context ownership, pin-unwind,
