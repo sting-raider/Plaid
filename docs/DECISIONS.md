@@ -7756,3 +7756,35 @@ are compiled. Rebuilding a game against an old DLL is insufficient. See
 runtime/README.md for exact build/test commands and research/sf64-border.md
 for same-input screenshots, RAM evidence, controls and local validation.
 Project-owned patch and test; RT64's MIT notices are retained in build copies.
+
+## ADR-0267: Catalog slot text supersedes fixed first-fetch replay code
+
+Status: accepted
+
+Context: Mario Party 2's first native overlay entry failed its fixed-load
+byte check at `80102800` (VI 8, fault 8). Discovery had found all 116
+segment-table overlays, but an earlier ares harvest also declared its first
+observed occupant as fixed `AresBoot` code at that address. Native loading
+selected a different, correctly declared file. The fixed function shadowed
+the runtime slot selector; both files' text was valid, but only one matched
+the snapshot. Native copy logging and pinned ares PI/RDRAM capture identify
+the two ROM sources independently.
+
+Decision: after assembling catalog slots, remove their linked executable
+text from fixed `AresBoot` declarations and recompose the image. Preserve
+replay bytes outside that text, their original first-fetch witness, explicit
+data and all other encodings. Only relocatable catalog declarations can
+supersede replay text. Catalog identity, relocated text, guarded data, BSS,
+unique candidate selection and executable-write revocation retain their
+existing runtime verifiers. No runtime guest execution is added.
+
+Consequences: the fixed replay ends at the slot boundary; three snapshot
+blocks disappear while all 116 candidates remain. The residual build stays
+`native_complete: false` (8 sites). MP2 passes the entry and displays the
+HUDSON logo, then stalls at VI 520 in a separate SDK thread-recreation join.
+At the 30-second observation it has fault 0, fault_pc `00000000`, RA
+`80016174`, 504 graphics and 514 audio tasks; the screen is black. External
+termination was necessary, so this is not successful timed completion or
+playable-game acceptance. No title/menu was reached. Synthetic slicing,
+mutation, native/ares catalog switching/refusal, controls and exact-tree
+validation are recorded in research/mp2-overlay-binding.md.

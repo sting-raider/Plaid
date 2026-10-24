@@ -925,6 +925,7 @@ fn run() -> Result<(), String> {
                     }
                 };
                 spec.loads.extend(loads);
+                plaid_core::declared_loads::exclude_replayed_catalog_text(spec);
                 spec.loads.sort();
                 image = plaid_core::declared_loads::compose(rom.bytes(), spec)?.1;
                 overlay_evidence = Some((id, overlay_evidence_of(&catalog)));

@@ -1,5 +1,16 @@
 # Status
 
+## Catalog overlay binding over first-fetch replay text (ADR-0267)
+
+Validated catalog text now supersedes overlapping fixed AresBoot text,
+preserving the replay's other bytes and every runtime binding guard. MP2
+passes the old VI 8/fault 8 entry and displays the HUDSON logo. Its 30-second
+observation reaches VI 520, fault 0, fault_pc 00000000, RA 80016174, graphics
+504/audio 514, then remains on black in an osCreateThread host-join deadlock.
+It requires external termination; title/menu/gameplay acceptance remains open.
+Core mutation and native/ares catalog-switch/refusal tests pass. Receipt:
+research/mp2-overlay-binding.md. The build remains natively incomplete.
+
 ## Scissored RT64 fill clears (ADR-0266)
 
 RT64's optimized fill-cycle GPU clears now intersect each call's scissor
