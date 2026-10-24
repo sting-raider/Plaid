@@ -28,7 +28,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 | Mario Kart 64 (USA) | **none** | 🟨 residual dispatch, 2 sites | 60 s with compiled graphics microcode and audio: VI 2762, 1270 graphics / 2635 audio tasks, fault 0 (ADR-0246) | prove the 2 residual sites; longer play |
 | Star Fox 64 (USA) (Rev 1) | **none** | 🟨 residual dispatch, 8 sites | 30 s from the ROM alone: VI 1798, 945 graphics / 1730 audio tasks, fault 0 (ADR-0256, ADR-0257); borders clean since ADR-0266 | prove the 8 residual sites; longer play |
 | Rogue Squadron (USA) | **none** | refused | not reached: OPEN, 13 blockers after three descriptor-built overlays were recognised (ADR-0264) | executable section boundaries; a false `BLTZAL` path to `8334b334`; see [research/rom-sweep.md](research/rom-sweep.md) |
-| Mario Party 2 (USA) | **none** | 🟨 builds with residual dispatch, 8 sites | shows the HUDSON logo, then black: VI 520, fault 0, 504 graphics / 514 audio tasks (ADR-0267); then deadlocks in `osCreateThread` | fix the thread-creation deadlock |
+| Mario Party 2 (USA) | **none** | 🟨 builds with residual dispatch, 8 sites | 30 s with scripted Start/A: HUDSON logo to destination selection, VI 1798, fault 0 (ADR-0268) | a fresh analysis without retained `--loads` refuses a stale load; prove the 8 residual sites |
 
 "Native build ✅" means analysis is `CLOSED` under a declared scope (usually `--address-taken`) and `native.py` emits the executable. Since ADR-0233, `native.py` also builds by default when the only open items are indirect jumps it cannot prove: they go through a fail-closed run-time lookup over the translated code (still no emulation), and `native-manifest.json` records `native_complete: false`. `--strict` builds only proven maps.
 
@@ -41,6 +41,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0268 | `47de0d34` | Re-creating a destroyed thread retires its parked host and coroutine contexts instead of joining under the scheduler lock; Mario Party 2 reaches destination selection |
 | 0267 | `37fb6706` | Catalog overlays are bound by content instead of being shadowed by fixed replay text; Mario Party 2 VI 8 -> 520 with fault 0 |
 | 0266 | `5b00eb84` | RT64 fill clears are clipped to the RDP scissor; Star Fox 64's uncleared borders (tiled star trails) are fixed, frame interior unchanged |
 | 0265 | `3b94f6c0` | RSP boots that patch themselves and the NJPEG task program are discovered from the ROM (checked against ares); Ocarina of Time plays 60 s through a scripted save load |
