@@ -34,22 +34,22 @@ Remaining renderer accuracy work includes fractional scissors, interlace,
 VI filtering/coverage and broader gameplay comparisons; this bounded fix
 does not certify those behaviors.
 
-## Continue Mario Party 2 after catalog binding (ADR-0267)
+## Continue Mario Party 2 after thread retirement (ADR-0268)
 
 Preserve catalog-over-replay text reconciliation and unique runtime binding,
 text/data/BSS checks and revocation. The VI 8/fault 8 refusal is fixed. MP2
-now displays HUDSON, then stalls at VI 520 (graphics 504, audio 514, PI 48),
-fault 0/fault_pc 00000000, RA 80016174. A diagnostic-free 30-second run
-confirms osCreateThread joins an old host thread while holding `big`; that
-host is parked waiting for its scheduler baton. Investigate guest thread
-recreation/destruction and root-context retirement with deterministic lifetime,
-pin-unwind and scheduler tests before changing joins or unlocking around them.
-No title/menu reached, and external termination is still necessary. Preserve
-the structural coroutine refusal cases, including suspended jump ownership.
-Edited coroutine targets still require residual dispatch; copied buffers,
-other layouts and destruction with live continuations remain refused.
-Abandoned saved buffers still need a proven reclamation model before reuse.
-Receipt: research/mp2-overlay-binding.md.
+now passes the VI 520 deadlock. A 30-second Start/A run reaches destination
+selection at VI 1798, fault 0/fault_pc 00000000. Preserve the thread-owned
+context registry, retirement acknowledgements before reuse, owner-specific
+pin release, stale-generation refusals and lifecycle/mutation tests. Continue
+into board play and longer runs. The bare native.py path needs a separate
+reconciliation fix: infer-call-loads rejects the catalog-trimmed map as stale
+after ADR-0267; retained inferred loads permit discovery/build/run with --loads.
+Edited coroutine targets still require residual dispatch. Copied buffers,
+other layouts and running-thread self-reinitialization remain refused.
+Abandoned buffers within a still-live generation retain the existing caps;
+thread teardown does not prove arbitrary buffer-liveness/reclamation.
+Receipts: research/mp2-thread-lifecycle.md and research/mp2-overlay-binding.md.
 
 ## GoldenEye after mapped-page source recovery (ADR-0255)
 

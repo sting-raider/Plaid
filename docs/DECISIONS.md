@@ -7788,3 +7788,45 @@ termination was necessary, so this is not successful timed completion or
 playable-game acceptance. No title/menu was reached. Synthetic slicing,
 mutation, native/ares catalog switching/refusal, controls and exact-tree
 validation are recorded in research/mp2-overlay-binding.md.
+
+
+## ADR-0268: Retire all owned native contexts before SDK thread reuse
+
+Status: accepted
+
+Context: MP2 destroys OSThread 800d7920, then recreates it from thread 3.
+The old runtime only marks the slot dead. Its host remains parked in
+wait_for_baton; osCreateThread joins it with big held, preventing both
+host and event pump progress. Debugger stacks and a timeout-bounded
+synthetic stopped-thread recreation independently reproduce the deadlock.
+ADR-0262 also refused destruction with live coroutine stacks.
+
+Decision: explicitly list every context owned by an SDK thread. Destruction
+and recreation invalidate its jump registrations, remove its run/message-wait
+eligibility and mark its parked contexts retired. Wake them only to unwind
+their own text registrations and exit. Await acknowledgements with condition
+waits that release big while retaining the caller's guest baton. Check
+retirement before granting a host the baton, including its initial wake.
+Only then may creation clear/reinitialize the slot, priority, ID and guest
+next/queue fields. Root hosts, like coroutine hosts, are detached and receive
+their immutable context pointer at launch. Normal return and self-destruction
+share retirement, including a live coroutine's suspended root. No host join
+is needed; no retired context executes guest code again.
+
+Consequences: four synthetic variants repeat 140 times, crossing the context
+cap if stacks leak. Tests check stopped/blocked recreation, destroy/create,
+live saves/coroutines, self-destruction, priority/ID, queue reset, argument,
+message order, old-body sentinels and released text pins. Disabling the
+retirement guard causes a detected timeout. Retained native/ares register,
+memory, ownership and stale-generation refusals remain authoritative.
+Running-thread self-reinitialization remains refused. Abandoned buffers in
+a live generation are not reclaimed; bounded jump-address tombstones retain
+stale-generation refusal rather than treating old templates as new contexts.
+
+MP2 completes 30 seconds; Start/A reaches destination selection (VI 1798,
+fault 0, fault_pc 00000000). Eight residual sites remain: no full gameplay
+or native-complete claim. The separate bare-pipeline stale-load refusal,
+retained inferred-load build path, controls, OoT save-load and full local
+gate are recorded in research/mp2-thread-lifecycle.md. SDK documentation
+and pinned N64ModernRuntime threads.cpp were read only; its GPL-3.0
+implementation was not copied. This is project-owned C code.

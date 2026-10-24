@@ -332,7 +332,6 @@ def lifecycle_refusals(exe, cc, T):
     cases = {
         'foreign-edit': ('scheduler_resumed', [*T.poke(WORKER, 0x8000EF00), *T.call('restore', WORKER, 1)], []),
         'repeat-created': ('worker', T.call('restore', WORKER, 1), []),
-        'destroy-live': ('scheduler_resumed', T.call('osDestroyThread', 0), ['osDestroyThread']),
         'reuse-live': ('scheduler_resumed', T.call('osCreateThread', t1, 1, 'thread', 0, 0x80007F00, 10), ['osCreateThread']),
     }
     for name, (site, inject, rt) in cases.items():
@@ -367,7 +366,7 @@ def lifecycle_refusals(exe, cc, T):
     result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30)
     stop = next(json.loads(l) for l in result.stdout.splitlines() if l.startswith('{"stop"'))
     assert result.returncode == 1 and stop['fault'] == 13, (result.stdout, result.stderr)
-    print('coroutines: foreign/repeated creation edits, live thread destruction/reuse and stale slot generations refuse')
+    print('coroutines: foreign/repeated creation edits, running thread reuse and stale slot generations refuse')
 
 
 def authored_creation(exe, cc, T, oracle, expected):

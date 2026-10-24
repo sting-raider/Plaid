@@ -654,6 +654,8 @@ def main():
     test_cache_ranges.run(exe, cc, sys.modules[__name__])
     import test_coroutines
     test_coroutines.run(exe, cc, sys.modules[__name__])
+    import test_thread_lifecycle
+    test_thread_lifecycle.run(exe, cc, sys.modules[__name__])
     import test_cache_ops
     test_cache_ops.run(exe, cc, sys.modules[__name__])
     import test_controller_policy

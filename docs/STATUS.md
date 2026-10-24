@@ -1,5 +1,18 @@
 # Status
 
+## Parked SDK thread and coroutine retirement (ADR-0268)
+
+Thread destruction/recreation retires every owned host context, invalidates
+its jump registrations and releases text pins before reuse. Acknowledgement
+waits release the scheduler mutex; no host join holds the guest baton. MP2
+passes the VI 520 deadlock and a silent visible 30-second Start/A run reaches
+destination selection: VI 1798, fault 0, fault_pc 00000000, graphics 2351/audio
+1788. Deterministic stopped/blocked recreation, live coroutine, self-destroy,
+repeated reuse and mutation checks cover the lifetime rule. The bare pipeline
+separately refuses stale load declarations after ADR-0267; retained inferred
+loads complete discovery/build/run. Eight residual sites remain, with
+native_complete:false. Receipt: research/mp2-thread-lifecycle.md.
+
 ## Catalog overlay binding over first-fetch replay text (ADR-0267)
 
 Validated catalog text now supersedes overlapping fixed AresBoot text,
