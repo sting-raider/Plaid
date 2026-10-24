@@ -1,5 +1,15 @@
 # Next
 
+## Continue OoT after NJPEG save load (ADR-0265)
+
+Preserve the protection-task and NJPEG pinned-ares memory/state comparisons,
+self-DMA provenance/bounds, startup ambiguity and per-word fetch guards.
+Continue past the opening cutscene into interactive play and longer save
+loads. Candidate discovery is not RSP closure. DPC clock uses the existing
+wall-time event model; synchronous graphics/busy assumptions remain open.
+Keep screenshot pauses out of pacing measurements; follow the timing
+receipt in research/oot-jpeg-boot.md for any remaining stutter.
+
 ## Rogue Squadron after descriptor load recognition (ADR-0264)
 
 Preserve the three structurally recognized descriptor sources and their

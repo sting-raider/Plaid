@@ -46,6 +46,7 @@
 #include "status.h"
 #include "joybus.h"
 #include "pi_bus.h"
+#include "dpc.h"
 #ifdef _WIN32
 #include <windows.h>
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
@@ -136,6 +137,7 @@ static u64 time_base; /* osSetTime offset in count ticks */
 static u32 vi_regs[14], vi_field; /* VI registers as the guest wrote them (ADR-0199) */
 static u64 vi_retrace_ns;
 static u32 dpc_flags; /* DPC_STATUS without --rsp-gfx: 1 source, 2 freeze, 4 flush, 0x400 start valid */
+static u64 dpc_clock_origin;
 static int dp_held; /* a graphics task's DP interrupt, held while the RDP is frozen (ADR-0198) */
 /* With PLAID_RT64 the runtime links plaid_rt64.dll (runtime/rt64, ADR-0163). */
 #ifdef PLAID_RT64
@@ -162,7 +164,6 @@ static const char *rsp_dump_dir, *rsp_capture_dir;
 static long rsp_capture;
 static int rsp_graphics;
 #ifdef PLAID_RT64
-#include "dpc.h"
 static u8 rsp_gfx_dirty[PLAID_RAM_SIZE / 4096];
 static int rsp_dpc_consume(u32 current, u32 size, int dmem) {
   if (dmem) {
@@ -1110,6 +1111,8 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
   }
   if (p >= 0x04100000u && p < 0x04100020u) { /* DPC registers, as ares rdp/io.cpp; RT64 draws, so the DP is
                                                   never busy and a command list is consumed when its end is written */
+    if (!write && (p & 0x1fu) == 0x10u) { *v = plaid_dpc_clock(now_ns() - dpc_clock_origin); return 0; }
+    if (write && (p & 0x1fu) == 0x0cu && (*v & 0x200u)) dpc_clock_origin = now_ns();
     if (write && (p & 0x1fu) == 0x0cu && (*v & 4) && dp_held) { dp_held = 0; post(EV_DP); } /* the thaw */
 #if defined(PLAID_RSP) && defined(PLAID_RT64)
     if (rsp_graphics) {
@@ -1282,6 +1285,14 @@ static void report_gfx_task(u32 task) {
   printf("]}\n");
 }
 #ifdef PLAID_RSP
+/* Every task shares the CPU's DPC model, including non-graphics boot code.
+   rt_io selects the raw-command bus only when --rsp-gfx is enabled. */
+static int rsp_dpc_bus(u32 reg, u32 *value, int write) {
+  u64 data = write ? *value : 0;
+  int result = rt_io(S, 0x04100000u + 4 * reg, 4, write, &data);
+  if (!write) *value = (u32)data;
+  return result;
+}
 /* RSP DMA into RDRAM obeys the same write checks as the CPU's runtime writes */
 static int rsp_rdram_write(u32 p, u32 size) {
   int r = plaid_runtime_write(S, p, size, 0);
@@ -1462,6 +1473,7 @@ RT(osSpTaskLoad) {
   rsp.interrupt_on_break = 1;
   rsp.pc = 0;
   rsp.rdram = S->ram; rsp.rdram_size = PLAID_RAM_SIZE; rsp.rdram_write = rsp_rdram_write;
+  rsp.dpc = rsp_dpc_bus;
 #endif
   return 0;
 }

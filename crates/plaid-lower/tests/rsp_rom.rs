@@ -1,5 +1,6 @@
 use plaid_lower::rsp::{
-    lower_rsp, plausible_overlay, plausible_program, plausible_text, reachable_words,
+    lower_rsp, plausible_overlay, plausible_program, plausible_task, plausible_text,
+    reachable_words,
 };
 
 fn reach(words: &[u32], imem: u32) -> plaid_lower::rsp::RspReachability {
@@ -74,6 +75,33 @@ fn content_filter_requires_rsp_operations_and_decodable_entry_words() {
             .collect::<Vec<_>>()
     ));
     assert!(!plausible_text(&bytes[..64]));
+}
+
+#[test]
+fn task_filter_follows_scalar_prologues_to_rsp_dma_subroutines() {
+    let mut words = [0u32; 128];
+    words[0] = 0x8c21_0004; // scalar DMEM setup
+    words[1] = 0x0c00_0060; // jal IMEM 0x180, beyond the old 256-byte prefix
+    words[64..68].copy_from_slice(&[
+        0x4008_3000, // mfc0 t0, SP_DMA_BUSY
+        0x4080_3800, // mtc0 zero, SP_SEMAPHORE
+        0x03e0_0008,
+        0, // checked indirect return
+    ]);
+    let bytes = |w: &[u32]| w.iter().flat_map(|w| w.to_be_bytes()).collect::<Vec<_>>();
+    assert!(!plausible_text(&bytes(&words)));
+    assert!(plausible_task(&bytes(&words), 0x80));
+    for (at, value) in [
+        (64, 0xffff_ffff),
+        (65, 0),
+        (1, 0x0c00_0100),
+        (1, 0x0000_000d),
+    ] {
+        let mut bad = words;
+        bad[at] = value;
+        assert!(!plausible_task(&bytes(&bad), 0x80), "{at}: {value:08x}");
+    }
+    assert!(!plausible_task(&bytes(&words[..16]), 0x80));
 }
 
 #[test]

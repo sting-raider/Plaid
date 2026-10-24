@@ -669,6 +669,8 @@ def main():
     test_gfx_readback.run(exe, cc, sys.modules[__name__])
     save_file(exe, cc)
     rsp_tasks(exe, cc)
+    import test_rsp_dpc
+    test_rsp_dpc.run(exe, cc, sys.modules[__name__])
     import test_rsp_rom
     test_rsp_rom.run(exe, cc, sys.modules[__name__])
     rsp_state_abi(exe, cc)

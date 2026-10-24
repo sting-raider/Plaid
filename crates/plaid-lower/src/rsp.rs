@@ -253,6 +253,33 @@ pub fn plausible_text(text: &[u8]) -> bool {
             .all(|(i, &w)| is_control(w) || simple(w, i as u32 * 4, "").is_ok())
 }
 
+/// Task programs can reach their RSP operations through a scalar prologue or
+/// a direct call beyond the prefix filter. Indirect returns remain guarded by
+/// native dispatch and per-word identity, as for every other candidate text.
+pub fn plausible_task(text: &[u8], imem: u32) -> bool {
+    if text.len() < 128 {
+        return false;
+    }
+    let Ok(reach) = reachable_words(text, imem) else {
+        return false;
+    };
+    let word = |pc: u32| {
+        let at = (pc - imem) as usize;
+        u32::from_be_bytes(text[at..at + 4].try_into().unwrap())
+    };
+    reach.exits.is_empty()
+        && reach.words.iter().all(|&pc| {
+            let w = word(pc);
+            is_control(w) || simple(w, pc, "").is_ok()
+        })
+        && reach
+            .words
+            .iter()
+            .filter(|&&pc| rsp_specific(word(pc)))
+            .count()
+            >= 2
+}
+
 /// Content filter for a short program followed by data (ADR-0253): every
 /// word reachable from `imem` lowers, no path leaves the text or jumps
 /// indirectly, a BREAK ends it and it uses the RSP's own registers.

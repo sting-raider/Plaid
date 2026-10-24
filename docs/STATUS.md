@@ -1,5 +1,19 @@
 # Status
 
+## OoT save-load boot and NJPEG (ADR-0265)
+
+Pinned ares confirms the protection task's boot rewrite (268 instructions,
+complete RAM/SP memory and checked RSP state agree). Discovery derives its
+bounded self-DMA entry replacements and follows scalar task prologues to
+RSP operations, adding both boot variants and NJPEG (41 -> 44 texts).
+SDK RSP tasks now share the CPU DPC bus and advancing/resettable DPC clock.
+The complete NJPEG task matches pinned ares after 9,668 instructions across
+all 8 MiB RAM, both SP memories and checked RSP state. The save-load refusal
+is passed: the same-press 60 s run reaches VI 3596, fault 0, fault_pc
+00000000 (main stops at VI 1845). The opening Link/Kokiri scene is reached.
+This is finite tested coverage, not complete gameplay or RSP closure.
+See research/oot-jpeg-boot.md for final VI/fault/PC, controls and pacing.
+
 ## Code-built PI load descriptors (ADR-0264)
 
 Load inference and overlay discovery recognize structurally connected

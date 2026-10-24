@@ -2,6 +2,12 @@
    pinned ares n64/rdp/io.cpp. The consumer must refuse unsupported ranges. */
 #ifndef PLAID_DPC_H
 #define PLAID_DPC_H
+/* RDP runs at 187.5 MHz / 3 on the pinned NTSC model. The runtime supplies
+   elapsed emulated wall time, like its VI, AI and Count event model. */
+static u32 plaid_dpc_clock(u64 elapsed_ns) {
+  return (u32)(elapsed_ns / 16) & 0xffffffu;
+}
+
 typedef struct {
   u32 start, end, current, status;
   int (*consume)(u32 address, u32 size, int dmem);
