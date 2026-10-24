@@ -24,15 +24,15 @@ to call `0x8334b334`. Prove any branch-reachability refinement and preserve
 the link-register side effect. Do not drop blockers or narrow payload text
 by game address. Receipt: research/descriptor-built-overlays.md.
 
-## SF64 border rendering defect (separate follow-up)
+## Preserve scissored fill clears (ADR-0266)
 
-Current main c8a0bf5f reproduces tiled border garbage in the starfield intro.
-At reproduced VI 600: scanout origin 003daa80, width 320, H_VIDEO 006c02ec,
-V_VIDEO 002501ff, X/Y scales 200/400. Trace VI crop/origin against the RDP
-color-image width, scissor and clear bounds; inspect texture/TMEM addresses
-if needed. Descriptor recognition leaves SF64 generated C byte-identical.
-Fault 0 alone is not visual acceptance. Local images, full VI registers and
-hashes: research/descriptor-built-overlays.md. No renderer fix is included.
+The SF64 border defect is fixed in the shared RT64 fill-clear path. Keep
+all three generated patched compilation units when rebuilding the shim;
+run its CTest framebuffer contract. Preserve the same-input VI 600 capture
+and empty/partial/disjoint-scissor tests in research/sf64-border.md.
+Remaining renderer accuracy work includes fractional scissors, interlace,
+VI filtering/coverage and broader gameplay comparisons; this bounded fix
+does not certify those behaviors.
 
 ## Continue Mario Party 2 after structural coroutine support
 

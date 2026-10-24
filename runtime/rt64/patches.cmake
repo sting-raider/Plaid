@@ -42,3 +42,19 @@ plaid_rt64_patch(hle/rt64_rdp
 plaid_rt64_patch(hle/rt64_state
     "                pairCursor = framebufferPairCursor;\n                while (pairCursor < maxFramebufferPair) {\n                    if (getFramebufferPairs(pairCursor)) {\n                        colorFb->copyNativeToRAM(&RDRAM[colorFb->addressStart], colorWriteWidth, colorRowStart, std::min(colorRowEnd, colorFb->height));\n\n                        if (depthWriteWidth > 0) {\n                            depthFb->copyNativeToRAM(&RDRAM[depthFb->addressStart], depthWriteWidth, depthRowStart, std::min(depthRowEnd, depthFb->height));\n                        }\n                    }\n\n                    pairCursor++;\n                }"
     "                extern void plaidReadback(uint32_t address, uint32_t size);\n                pairCursor = framebufferPairCursor;\n                while (pairCursor < maxFramebufferPair) {\n                    if (getFramebufferPairs(pairCursor)) {\n                        colorFb->copyNativeToRAM(&RDRAM[colorFb->addressStart], colorWriteWidth, colorRowStart, std::min(colorRowEnd, colorFb->height));\n                        const uint32_t colorReadbackRowBytes = colorFb->imageRowBytes(colorWriteWidth);\n                        const uint32_t colorReadbackRowEnd = std::min(colorRowEnd, colorFb->height);\n                        plaidReadback(colorFb->addressStart + colorRowStart * colorReadbackRowBytes,\n                            (colorReadbackRowEnd - colorRowStart) * colorReadbackRowBytes);\n\n                        if (depthWriteWidth > 0) {\n                            depthFb->copyNativeToRAM(&RDRAM[depthFb->addressStart], depthWriteWidth, depthRowStart, std::min(depthRowEnd, depthFb->height));\n                            const uint32_t depthReadbackRowBytes = depthFb->imageRowBytes(depthWriteWidth);\n                            const uint32_t depthReadbackRowEnd = std::min(depthRowEnd, depthFb->height);\n                            plaidReadback(depthFb->addressStart + depthRowStart * depthReadbackRowBytes,\n                                (depthReadbackRowEnd - depthRowStart) * depthReadbackRowBytes);\n                        }\n                    }\n\n                    pairCursor++;\n                }")
+
+# Fill mode uses GPU clears, which ignore the rasterizer's scissor state.
+# Clip in render-target coordinates, using each rectangle's own alignment.
+plaid_rt64_patch(render/rt64_framebuffer_renderer
+    [=[                    clearRect.rect = convertFixedRect(call.callDesc.rect, p.resolutionScale, p.fbWidth, invRatioScale, extOriginPercentage, horizontalMisalignment, call.callDesc.rectLeftOrigin, call.callDesc.rectRightOrigin);]=]
+    [=[                    clearRect.rect = convertFixedRect(call.callDesc.rect, p.resolutionScale, p.fbWidth, invRatioScale, extOriginPercentage, horizontalMisalignment, call.callDesc.rectLeftOrigin, call.callDesc.rectRightOrigin);
+                    const RenderRect fillScissor = convertFixedRect(call.callDesc.scissorRect, p.resolutionScale, p.fbWidth, invRatioScale, extOriginPercentage, horizontalMisalignment, call.callDesc.scissorLeftOrigin, call.callDesc.scissorRightOrigin);
+                    clearRect.rect = RenderRect{
+                        std::max(clearRect.rect.left, fillScissor.left),
+                        std::max(clearRect.rect.top, fillScissor.top),
+                        std::min(clearRect.rect.right, fillScissor.right),
+                        std::min(clearRect.rect.bottom, fillScissor.bottom)
+                    };
+                    if (clearRect.rect.isEmpty()) {
+                        instanceDrawCall.type = InstanceDrawCall::Type::Unknown;
+                    }]=])

@@ -35,3 +35,11 @@ add_custom_command(TARGET plaid_rt64 POST_BUILD
         "${RT64_DIR}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64/SDL2.dll"
         "$<TARGET_FILE_DIR:plaid_rt64>"
     COMMAND "$<TARGET_FILE:plaid_rt64_contract>")
+
+include(CTest)
+if(BUILD_TESTING AND WIN32)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME plaid_rt64_fill_scissor
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test_scissor.py"
+            "$<TARGET_FILE:plaid_rt64>")
+endif()

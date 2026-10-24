@@ -99,12 +99,23 @@ DLL. On Windows, build it with MSVC. D3D12 headers newer than Windows SDK
 ```bash
 cmake -S runtime/rt64 -B target/rt64-shim -G "Visual Studio 17 2022" -A x64 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES="<DirectX-Headers>/include/directx;<DirectX-Headers>/include"
 cmake --build target/rt64-shim --config Release --target plaid_rt64
+ctest --test-dir target/rt64-shim -C Release --output-on-failure
 gcc -O1 -std=gnu11 -DPLAID_SAFEPOINTS -DPLAID_RT64 -DPLAID_LOWERED='"game.c"' -I . -c runtime/plaid_rt.c -o game.o
 gcc game.o target/rt64-shim/Release/plaid_rt64.dll -pthread -o target/rt64-shim/Release/game.exe
 ```
 
 The executable must sit next to `plaid_rt64.dll`, `SDL2.dll`,
 `dxcompiler.dll` and `dxil.dll`; the build copies those DLLs there.
+
+Configure from `runtime/rt64`, rather than building RT64 directly. The pinned
+source stays unchanged: `patches.cmake` generates and compiles copies of
+`rt64_rdp.cpp`, `rt64_state.cpp` and `rt64_framebuffer_renderer.cpp` under the
+build directory's `patched/`. These enforce empty tile-load bounds, report
+completed RAM readbacks and clip fill-mode GPU clears to the RDP scissor
+(ADR-0266). Reconfigure and rebuild the shim after changing these patches;
+an old DLL does not acquire them from a native game rebuild. The CTest GPU
+contract opens a visible window with dummy audio and checks every pixel in
+synthetic RGBA16/RGBA32 framebuffers; Python is required for that test.
 
 ### Native graphics microcode
 
