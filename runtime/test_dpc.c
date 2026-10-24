@@ -17,6 +17,9 @@ static int bus(u32 reg, u32 *v, int write) { return plaid_dpc_access(&dp, reg, v
 #define READ(reg, expected) do { u32 got; CHECK(!plaid_rsp_mfc0(&rsp, reg, &got, 0x104)); CHECK(got == (expected)); } while (0)
 
 int main(void) {
+  CHECK(plaid_dpc_clock(0) == 0 && plaid_dpc_clock(15) == 0);
+  CHECK(plaid_dpc_clock(16) == 1 && plaid_dpc_clock(160) == 10);
+  CHECK(plaid_dpc_clock(0x1000000ull * 16 + 32) == 2);
   plaid_rsp rsp = {0};
   rsp.dpc = bus;
   WRITE(11, 8); /* freeze */

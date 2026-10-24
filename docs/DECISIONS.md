@@ -7667,3 +7667,53 @@ aliases and independent entry rooting; deleting the end-equality guard is
 detected. Evidence and remaining work: research/descriptor-built-overlays.md.
 Project-owned code recovered from the earlier Plaid candidate; no external
 implementation was copied.
+
+
+## ADR-0265: Derive boot self-DMA variants and follow RSP task prologues
+
+Status: accepted
+
+Context: OoT USA 1.2 refuses its save-load NJPEG task because the registry
+contains only the original protection boot. Pinned ares executes that first
+task in 268 instructions and reproduces the native boot rewrite exactly:
+only byte 0x65c3 changes (11 -> 39). The boot copies its own entry doubleword
+back through OSTask.ucode_boot; it does not relocate its whole text. NJPEG
+also has a scalar prologue whose direct calls reach RSP-specific operations
+beyond the old 256-byte content filter.
+
+Decision: extend the bounded boot path analysis with separate provenance for
+OSTask.ucode and OSTask.ucode_boot. A single contiguous SP_WR_LEN DMA from
+known bytes of that boot's IMEM to its own task boot pointer supplies a
+candidate prefix replacement. Require an IMEM source, available bounded
+bytes, no bank wrap, and no count/skip fields. Register clobbers, unknown
+bases and zero-register writes cannot supply pointer provenance. Stop the
+path when its recognized ucode DMA replaces IMEM. Existing task-loader size
+recognition retains its first observed candidate size.
+
+The generator lowers the original and composed candidates and marks the
+latter boot_self_dma. Hashes, startup matching, indistinguishable-group
+handling and every executed word's identity guard remain authoritative.
+No runtime snapshots enter production discovery. The registry stays
+complete:false; this candidate search does not close the RSP universe.
+A second content filter follows direct startup control flow at the actual
+IMEM placement, requiring lowerable reachable instructions, no direct exits
+and at least two reachable RSP operations. Indirect returns still use the
+existing native dispatcher and fetch guard. Unreachable RSP-looking data
+cannot qualify this filter.
+
+SDK-submitted RSP tasks share the CPU's existing DPC bus in both rendering
+modes. The patched boot reads DPC_CLOCK even without --rsp-gfx. A constant
+zero clock sent it through an unintended DMA to RAM zero; use a shared
+62.5 MHz, 24-bit elapsed clock with DPC_STATUS clear-clock reset, following
+pinned ares rdp/rdp.cpp and rdp/io.cpp. This uses the runtime's existing
+wall-time event model, not cycle-accurate RDP scheduling. Busy counters and
+HLE command consumption retain their declared synchronous model.
+
+Consequences: the OoT registry grows from 41 to 44 texts: two self-DMA boot
+variants and NJPEG. The complete 9,668-instruction NJPEG task matches ares
+in all RDRAM, IMEM, DMEM and checked RSP architectural state. Synthetic
+recognizer, task-filter and CPU/RSP DPC contracts cover refusals, rate and
+wrap; removing boot-pointer provenance is detected. The non-graphics DPC
+contract also fails against the previous disconnected bus. Native save-load,
+controls, validation and pacing receipts: research/oot-jpeg-boot.md.
+Project-owned implementation; no reference runtime code was copied.

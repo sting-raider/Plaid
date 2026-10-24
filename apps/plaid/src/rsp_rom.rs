@@ -73,106 +73,125 @@ pub fn generate(
                 .map_while(|n| image.word(GuestAddr(root.0 + n)))
                 .flat_map(u32::to_be_bytes)
                 .collect();
-            // A short task text may be followed directly by data (ADR-0253).
-            let short = &bytes[..bytes.len().min(0xf80)];
-            if !plaid_lower::rsp::plausible_text(&bytes)
-                && !plaid_lower::rsp::plausible_program(short, 0x80)
+            let replacements = plaid_core::rsp_rom::boot_self_replacements(&bytes);
+            for (bytes, self_dma) in std::iter::once((bytes, false))
+                .chain(replacements.into_iter().map(|bytes| (bytes, true)))
             {
-                continue;
-            }
-            // Both standard rspboot placements are candidates. Word identity
-            // guards retain the exact origin when microcode overlays IMEM.
-            // A recognized task boot shorter than IMEM is its own candidate.
-            let boot = (bytes.len() < 0x1000
-                && plaid_core::rsp_rom::boot_ucode_size(&bytes).is_some())
-            .then_some((0, bytes.len() as u32, 0));
-            let short =
-                (bytes.len() < 0xf80 && boot.is_none()).then_some((0, bytes.len() as u32, 0x80));
-            // An overlay in the resident text's range also becomes that text
-            // with the overlay in place (ADR-0246): its code may run on into,
-            // or take a delay slot from, the resident words around it.
-            let variants = [(0, 0x1000, 0), (0, 0xf80, 0x80)]
-                .into_iter()
-                .chain(boot)
-                .chain(short)
-                .map(|v| (v, Kind::Text))
-                .chain(overlays.iter().map(|&v| (v, Kind::Overlay)))
-                .chain(
-                    overlays
-                        .iter()
-                        .filter(|&&(_, size, imem)| imem >= 0x80 && imem + size <= 0x1000)
-                        .map(|&v| (v, Kind::Composite)),
-                );
-            let resident: Vec<u8> = bytes.iter().copied().take(0xf80).collect();
-            for ((offset, requested_size, imem), kind) in variants {
-                let address = root.0.checked_add(offset).ok_or("RSP address overflow")?;
-                let text: Vec<_> = (0..requested_size)
-                    .step_by(4)
-                    .map_while(|n| image.word(GuestAddr(address + n)))
-                    .flat_map(u32::to_be_bytes)
-                    .collect();
-                // An overlay table states its entry's extent (ADR-0243).
-                let plausible = match kind {
-                    Kind::Text => {
-                        plaid_lower::rsp::plausible_text(&text)
-                            || plaid_lower::rsp::plausible_program(&text, imem)
-                    }
-                    _ => plaid_lower::rsp::plausible_overlay(&text),
-                };
-                if text.len() != requested_size as usize || !plausible {
+                // A short task text may be followed directly by data (ADR-0253).
+                let short = &bytes[..bytes.len().min(0xf80)];
+                if !plaid_lower::rsp::plausible_text(&bytes)
+                    && !plaid_lower::rsp::plausible_program(short, 0x80)
+                    && !plaid_lower::rsp::plausible_task(short, 0x80)
+                {
                     continue;
                 }
-                let (text, imem) = match kind {
-                    Kind::Composite if resident.len() == 0xf80 => {
-                        let mut full = resident.clone();
-                        let at = (imem - 0x80) as usize;
-                        full[at..at + text.len()].copy_from_slice(&text);
-                        (full, 0x80)
+                // Both standard rspboot placements are candidates. Word identity
+                // guards retain the exact origin when microcode overlays IMEM.
+                // A recognized task boot shorter than IMEM is its own candidate.
+                let boot = (bytes.len() < 0x1000
+                    && plaid_core::rsp_rom::boot_ucode_size(&bytes).is_some())
+                .then_some((0, bytes.len() as u32, 0));
+                let short = (bytes.len() < 0xf80 && boot.is_none()).then_some((
+                    0,
+                    bytes.len() as u32,
+                    0x80,
+                ));
+                // An overlay in the resident text's range also becomes that text
+                // with the overlay in place (ADR-0246): its code may run on into,
+                // or take a delay slot from, the resident words around it.
+                let variants = [(0, 0x1000, 0), (0, 0xf80, 0x80)]
+                    .into_iter()
+                    .chain(boot)
+                    .chain(short)
+                    .map(|v| (v, Kind::Text))
+                    .chain(overlays.iter().map(|&v| (v, Kind::Overlay)))
+                    .chain(
+                        overlays
+                            .iter()
+                            .filter(|&&(_, size, imem)| imem >= 0x80 && imem + size <= 0x1000)
+                            .map(|&v| (v, Kind::Composite)),
+                    );
+                let resident: Vec<u8> = bytes.iter().copied().take(0xf80).collect();
+                for ((offset, requested_size, imem), kind) in variants {
+                    let address = root.0.checked_add(offset).ok_or("RSP address overflow")?;
+                    let text: Vec<_> = if self_dma {
+                        bytes
+                            .iter()
+                            .skip(offset as usize)
+                            .take(requested_size as usize)
+                            .copied()
+                            .collect()
+                    } else {
+                        (0..requested_size)
+                            .step_by(4)
+                            .map_while(|n| image.word(GuestAddr(address + n)))
+                            .flat_map(u32::to_be_bytes)
+                            .collect()
+                    };
+                    // An overlay table states its entry's extent (ADR-0243).
+                    let plausible = match kind {
+                        Kind::Text => {
+                            plaid_lower::rsp::plausible_text(&text)
+                                || plaid_lower::rsp::plausible_program(&text, imem)
+                                || plaid_lower::rsp::plausible_task(&text, imem)
+                        }
+                        _ => plaid_lower::rsp::plausible_overlay(&text),
+                    };
+                    if text.len() != requested_size as usize || !plausible {
+                        continue;
                     }
-                    Kind::Composite => continue,
-                    _ => (text, imem),
-                };
-                let size = text.len();
-                let text = text.as_slice();
-                let hash = plaid_core::rom::sha256(text);
-                if !seen.insert((imem, hash.clone())) {
-                    continue;
-                }
-                let name = format!("rom_{}_{imem:x}", &hash[..16]);
-                let reachable = plaid_lower::rsp::reachable_words(text, imem)?;
-                // Two matches for one task are refused at run time, so only the
-                // largest of texts it cannot tell apart is matched against a
-                // task; it accepts every task size the others do. All still run.
-                let key = match_key(text, imem, &reachable);
-                let matched = match same_code.get(&key) {
-                    Some(&k) if texts[k].0.len() >= size => false,
-                    Some(&k) => {
-                        matchable[k] = false;
-                        true
+                    let (text, imem) = match kind {
+                        Kind::Composite if resident.len() == 0xf80 => {
+                            let mut full = resident.clone();
+                            let at = (imem - 0x80) as usize;
+                            full[at..at + text.len()].copy_from_slice(&text);
+                            (full, 0x80)
+                        }
+                        Kind::Composite => continue,
+                        _ => (text, imem),
+                    };
+                    let size = text.len();
+                    let text = text.as_slice();
+                    let hash = plaid_core::rom::sha256(text);
+                    if !seen.insert((imem, hash.clone())) {
+                        continue;
                     }
-                    None => true,
-                };
-                if matched {
-                    same_code.insert(key, names.len());
-                }
-                let lowered = plaid_lower::rsp::lower_rsp(text, imem, &name)?;
-                let mut mask = [0u8; 128];
-                for &pc in &reachable.words {
-                    mask[pc as usize / 32] |= 1 << (pc / 4 % 8);
-                }
-                let entry = serde_json::json!({"name":name,"image":image.base.image,
-                            "guest_address":address,"root":root.0,"source_kind":if dma {"pi_dma"} else if matches!(kind, Kind::Composite) {"overlay_composite"} else if offset == 0 {"pointer"} else {"overlay_descriptor"},"imem":imem,"size":size,"sha256":hash,
+                    let name = format!("rom_{}_{imem:x}", &hash[..16]);
+                    let reachable = plaid_lower::rsp::reachable_words(text, imem)?;
+                    // Two matches for one task are refused at run time, so only the
+                    // largest of texts it cannot tell apart is matched against a
+                    // task; it accepts every task size the others do. All still run.
+                    let key = match_key(text, imem, &reachable);
+                    let matched = match same_code.get(&key) {
+                        Some(&k) if texts[k].0.len() >= size => false,
+                        Some(&k) => {
+                            matchable[k] = false;
+                            true
+                        }
+                        None => true,
+                    };
+                    if matched {
+                        same_code.insert(key, names.len());
+                    }
+                    let lowered = plaid_lower::rsp::lower_rsp(text, imem, &name)?;
+                    let mut mask = [0u8; 128];
+                    for &pc in &reachable.words {
+                        mask[pc as usize / 32] |= 1 << (pc / 4 % 8);
+                    }
+                    let entry = serde_json::json!({"name":name,"image":image.base.image,
+                            "guest_address":address,"root":root.0,"source_kind":if self_dma {"boot_self_dma"} else if dma {"pi_dma"} else if matches!(kind, Kind::Composite) {"overlay_composite"} else if offset == 0 {"pointer"} else {"overlay_descriptor"},"imem":imem,"size":size,"sha256":hash,
                             "fault_stubs":lowered.stubs.len(),
                             "reachable_words":reachable.words,
                             "unresolved_indirect":reachable.indirect,
                             "reachability_exits":reachable.exits});
-                let boot_size = plaid_core::rsp_rom::boot_ucode_size(text).unwrap_or(0);
-                names.push(name);
-                texts.push((text.to_vec(), lowered.c));
-                boot_sizes.push(boot_size);
-                masks.push(mask);
-                manifest.push(entry);
-                matchable.push(matched);
+                    let boot_size = plaid_core::rsp_rom::boot_ucode_size(text).unwrap_or(0);
+                    names.push(name);
+                    texts.push((text.to_vec(), lowered.c));
+                    boot_sizes.push(boot_size);
+                    masks.push(mask);
+                    manifest.push(entry);
+                    matchable.push(matched);
+                }
             }
         }
     }

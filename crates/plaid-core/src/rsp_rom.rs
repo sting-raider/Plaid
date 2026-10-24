@@ -55,6 +55,16 @@ pub fn constants(image: &CodeImage, map: &ProgramMap) -> BTreeSet<GuestAddr> {
 /// Paths from IMEM 0 follow jumps, both branch arms and constant JR targets
 /// (ADR-0251): a boot may load the ucode pointer after the code that uses it.
 pub fn boot_ucode_size(bytes: &[u8]) -> Option<u32> {
+    boot_dma_contract(bytes).0
+}
+
+/// ROM-byte compositions a boot can write back to OSTask.ucode_boot through
+/// one bounded, contiguous IMEM-to-RDRAM DMA. These remain candidates only.
+pub fn boot_self_replacements(bytes: &[u8]) -> BTreeSet<Vec<u8>> {
+    boot_dma_contract(bytes).1
+}
+
+fn boot_dma_contract(bytes: &[u8]) -> (Option<u32>, BTreeSet<Vec<u8>>) {
     // A task boot is small; a whole microcode at IMEM 0 is not searched past it.
     const WINDOW: u32 = 0x200;
     let words: Vec<u32> = bytes
@@ -65,17 +75,18 @@ pub fn boot_ucode_size(bytes: &[u8]) -> Option<u32> {
         .collect();
     let mut state = [None; 32];
     state[0] = Some(0);
-    // pc, registers, registers holding the ucode pointer, DMA address, source
-    // flag, and the targets a pending delay slot leaves to.
+    // Task-field provenance is separate from numeric register constants.
     type Path = (
         [Option<u64>; 32],
-        [bool; 32],
+        [Option<u32>; 32],
         Option<u64>,
-        bool,
+        Option<u32>,
         [Option<u32>; 2],
     );
-    let mut work: Vec<(u32, Path)> = vec![(0, (state, [false; 32], None, false, [None; 2]))];
+    let mut work: Vec<(u32, Path)> = vec![(0, (state, [None; 32], None, None, [None; 2]))];
     let mut seen = std::collections::HashSet::new();
+    let mut size = None;
+    let mut replacements = BTreeSet::new();
     while let Some((pc, path)) = work.pop() {
         if seen.len() >= 4096 || pc >= WINDOW || !seen.insert((pc, path)) {
             continue;
@@ -93,11 +104,33 @@ pub fn boot_ucode_size(bytes: &[u8]) -> Option<u32> {
             match rd {
                 0 => mem = state[rt],
                 1 => source = ucode[rt],
-                2 if source && mem == Some(0x1080) => {
+                2 if source == Some(0xfd0) && mem == Some(0x1080) => {
                     if let Some(n) = state[rt] {
                         let n = ((n as u32 & 0xfff) | 7) + 1;
                         if n <= 0xf80 {
-                            return Some(n);
+                            size.get_or_insert(n);
+                        }
+                    }
+                    // This DMA replaces the boot's IMEM; do not inspect its
+                    // former words for further self-write candidates.
+                    continue;
+                }
+                3 if source == Some(0xfc8) => {
+                    if let (Some(mem), Some(length)) = (mem, state[rt]) {
+                        let start = (mem & 0xff8) as usize;
+                        let n = ((length as usize & 0xfff) | 7) + 1;
+                        // Refuse DMEM, multi-row/skip, wrap and unknown bytes.
+                        if mem & 0x1000 != 0
+                            && length <= 0xfff
+                            && start + n <= bytes.len()
+                            && start + n <= 0x1000
+                            && n <= bytes.len()
+                        {
+                            let mut variant = bytes.to_vec();
+                            variant[..n].copy_from_slice(&bytes[start..start + n]);
+                            if variant != bytes {
+                                replacements.insert(variant);
+                            }
                         }
                     }
                 }
@@ -115,10 +148,14 @@ pub fn boot_ucode_size(bytes: &[u8]) -> Option<u32> {
         };
         let control = targets[0].is_some() || matches!((word >> 26, word & 63), (0, 8 | 9));
         // DMEM addresses wrap at 4 KiB, so -0x30(zero) is OSTask.ucode too.
-        let pointer = word >> 26 == 35
-            && state[rs]
-                .is_some_and(|v| (v as u32).wrapping_add(word as i16 as u32) & 0xfff == 0xfd0);
-        if let Some(dest) = crate::discovery::decode(word, GuestAddr(0)).destination_gpr() {
+        let pointer = (word >> 26 == 35)
+            .then(|| state[rs].map(|v| (v as u32).wrapping_add(word as i16 as u32) & 0xfff))
+            .flatten()
+            .filter(|&field| matches!(field, 0xfc8 | 0xfd0));
+        if let Some(dest) = crate::discovery::decode(word, GuestAddr(0))
+            .destination_gpr()
+            .filter(|&dest| dest != 0)
+        {
             ucode[dest as usize] = pointer;
         }
         // ADDI has wrapping RSP semantics, unlike the trapping CPU form.
@@ -142,7 +179,7 @@ pub fn boot_ucode_size(bytes: &[u8]) -> Option<u32> {
             work.push((pc + 4, (state, ucode, mem, source, [None; 2])));
         }
     }
-    None
+    (size, replacements)
 }
 
 /// SDK overlay-table hints: u32 offset from ucode, u16 DMA length minus one,
@@ -295,5 +332,52 @@ mod tests {
             ),
             None
         );
+    }
+
+    #[test]
+    fn boot_self_dma_requires_its_own_task_pointer_and_bounded_imem_bytes() {
+        // Copy one doubleword from this boot's IMEM tail to its RAM prefix.
+        // The replacement jumps straight to the ordinary ucode loader.
+        let words = [
+            0x3401_1028u32, // ori at, zero, IMEM source
+            0x8c02_ffc8,    // lw v0, OSTask.ucode_boot(zero), wrapped DMEM
+            0x4081_0000,    // mtc0 at, SP_MEM_ADDR
+            0x4082_0800,    // mtc0 v0, SP_DRAM_ADDR
+            0x4080_1800,    // mtc0 zero, SP_WR_LEN (eight bytes)
+            0x0000_000d,    // break
+            0,
+            0,
+            0,
+            0,
+            0x0800_0406,
+            0, // replacement entry, not a CPU/ROM address
+        ];
+        let bytes = |w: &[u32]| w.iter().flat_map(|w| w.to_be_bytes()).collect::<Vec<_>>();
+        let original = bytes(&words);
+        let mut expected = original.clone();
+        expected[..8].copy_from_slice(&original[0x28..0x30]);
+        assert_eq!(boot_self_replacements(&original), [expected].into());
+        for (at, word) in [
+            (1, 0x8c02_ffd0), // a different task field
+            (1, 0x8c22_ffc8), // unknown base
+            (1, 0x3402_2000), // constant destination, no task provenance
+            (2, 0x4080_0000), // DMEM is not this text
+            (0, 0x3401_1030), // source beyond available ROM bytes
+            (0, 0x3401_1ff8), // source crosses IMEM wrap
+            (4, 0x4080_1000), // read DMA, not write DMA
+            (4, 0x4081_1800), // length includes row/skip bits
+            (2, 0x3402_2000), // overwrite the loaded pointer
+        ] {
+            let mut bad = words;
+            bad[at] = word;
+            assert!(
+                boot_self_replacements(&bytes(&bad)).is_empty(),
+                "{at}: {word:08x}"
+            );
+        }
+        let mut zero = words;
+        zero[1] = 0x8c00_ffc8; // a load into zero cannot supply a DMA pointer
+        zero[3] = 0x4080_0800;
+        assert!(boot_self_replacements(&bytes(&zero)).is_empty());
     }
 }
