@@ -648,6 +648,8 @@ def main():
     test_interrupts.run(exe, cc, sys.modules[__name__])
     import test_status
     test_status.run(exe, cc, sys.modules[__name__])
+    import test_sdk_dispatch
+    test_sdk_dispatch.run(exe, cc, sys.modules[__name__])
     import test_cache_writeback
     test_cache_writeback.run(exe, cc, sys.modules[__name__])
     import test_cache_ranges

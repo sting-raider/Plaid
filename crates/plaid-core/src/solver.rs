@@ -29,7 +29,8 @@ pub enum Scope {
     /// indirect site with no closure proof is accepted as a residual site. A
     /// native artifact dispatches it over every lowered entry and faults 3 on
     /// any other target. The report stays `native_complete: false` and lists
-    /// the residual sites; every other blocker still refuses.
+    /// the residual sites, including unknown direct SDK thread entry arguments
+    /// (ADR-0272); every other blocker still refuses.
     DeclaredStaticImagesGuardedRamResidualDispatch,
 }
 
@@ -861,6 +862,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         for c in crate::callbacks::callbacks(map, image) {
             forwarded_callbacks |= c.forwarded && c.target.is_some();
             if !c.target.as_ref().is_some_and(|t| starts.contains(t)) {
+                if scope == Scope::DeclaredStaticImagesGuardedRamResidualDispatch
+                    && crate::callbacks::residual_thread_entry(map, &c)
+                {
+                    residual_sites.insert(c.site.clone());
+                    continue;
+                }
                 let evidence = map
                     .direct_edges
                     .iter()
@@ -1298,7 +1305,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     }
     if !residual_sites.is_empty() {
         assumptions.push(format!(
-            "VALIDATION ONLY (ADR-0218/0233/0270): {} transfer site(s) lack full target/slot-identity closure; native dispatch accepts only lowered entries with verified bindings and faults 3 on any other target. The artifact is not natively complete.",
+            "VALIDATION ONLY (ADR-0218/0233/0270/0272): {} transfer site(s) lack full target/slot-identity closure; native dispatch accepts only lowered entries with verified bindings and faults 3 on any other target. This includes unproven direct osCreateThread entry arguments. The artifact is not natively complete.",
             residual_sites.len()
         ));
     }

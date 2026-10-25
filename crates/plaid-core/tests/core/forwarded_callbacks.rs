@@ -165,3 +165,66 @@ fn forwarding_fails_closed() {
     // the wrapper is also a program entry, so it has callers nobody sees
     assert_eq!(measure(program(), &[BASE, GO]).1, 1);
 }
+
+#[test]
+fn only_unknown_direct_sdk_thread_entries_can_be_residual() {
+    for (name, register, known_missing, admitted) in [
+        ("osCreateThread", 6, false, true),
+        ("other_callback", 6, false, false),
+        ("osCreateThread", 4, false, false),
+        ("osCreateThread", 6, true, false),
+    ] {
+        let mut words = program();
+        words[0] = 0x3c06_8000;
+        words[1] = 0x24c6_0000 | (CB1 & 0xffff);
+        words[2] = jal(SPAWN);
+        words[4] = if known_missing {
+            0x3c06_8000
+        } else {
+            0x8f86_0000
+        };
+        words[5] = if known_missing { 0x24c6_1000 } else { 0 };
+        words[6] = jal(SPAWN);
+        let i = image(words);
+        let map = discover_image_with_runtime(
+            RomIdentity {
+                sha256: "f".repeat(64),
+                size: 4096,
+            },
+            &i,
+            &[GuestAddr(BASE)],
+            &[(GuestAddr(SPAWN), name.into(), vec![register])],
+            Some((
+                "runtime".into(),
+                Evidence {
+                    kind: EvidenceKind::Signature,
+                    producer: "test".into(),
+                    revision: "0".into(),
+                    detail: "authored SDK callback contract".into(),
+                },
+            )),
+            1000,
+        )
+        .unwrap()
+        .map;
+        let site = i.address(GuestAddr(BASE + 24));
+        for scope in [
+            Scope::DeclaredStaticImagesGuardedRamAddressTaken,
+            Scope::DeclaredStaticImagesGuardedRamResidualDispatch,
+        ] {
+            let report = solve(&map, std::slice::from_ref(&i), scope).unwrap();
+            let residual =
+                scope == Scope::DeclaredStaticImagesGuardedRamResidualDispatch && admitted;
+            assert_eq!(report.residual_sites.contains(&site), residual);
+            assert_eq!(
+                report.blockers.iter().any(|b| {
+                    b.kind == "unresolved_runtime_callback" && b.site.as_ref() == Some(&site)
+                }),
+                !residual,
+                "{name}, r{register}, missing={known_missing}: {:?}",
+                report.blockers
+            );
+            assert!(!report.native_complete);
+        }
+    }
+}

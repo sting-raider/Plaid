@@ -27,6 +27,9 @@ pub fn verify(map: &crate::program::ProgramMap) -> Result<(), String> {
 }
 
 fn supported(image: &CodeImage, m: &Match, signatures: &[Signature]) -> bool {
+    if sdk::supported_status(image, m) {
+        return true;
+    }
     if !matches!(
         m.name.as_str(),
         "osCreateThread" | "osSetIntMask" | "osInitialize"

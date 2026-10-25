@@ -18,15 +18,24 @@ obligations, strict refusal, residual site lists and byte-bound native-only
 dispatch. Admission heuristics do not establish data sections or prove an
 alternate unreachable. The emitted build still has 19 residual sites.
 
-ADR-0271 models CDE without a RAM fill and passes the boot cache clear. The
-next stop is raw SDK dispatch restoring Status `0000ff03` at `80025bf4`, VI 0,
-fault 12, RA `80025bb0`. Only 14 runtime functions are identified; thread
-create/start paths remain guest code and no host SDK threads exist at the stop.
-Establish exact SDK-body identification and the saved Status/EPC/ERET context
-contract before accepting this transition. Do not weaken the IE/scheduler guard.
+ADR-0271 passes the CDE boot clear. ADR-0272 identifies the differently compiled
+SDK thread family (25 runtime functions), binds it to the existing scheduler
+and records a RAM-loaded native thread entry as the twentieth residual site.
+The raw Status restore and missed current-thread priority getter are passed.
+Preserve authenticated full bodies/peer calls/globals/MI tables, strict callback
+refusal, native entry guards and scheduler saved-register/mask/queue tests.
+
+The later stop is VI 0/fault 3/PC `8002a2e4`, computed target `8002a2ec` in the
+SDK PI-manager switch. Its seven-word table is at `80000cb0`, held in `s6`
+across calls/loop paths, with no decoded-code overlap; discovery has no table
+candidates or selected case block. A message-call preservation summary alone
+does not recover it and was removed. Establish a reproducible bounded witness
+or verified SDK PI-family replacement before adding targets. Five host SDK
+threads exist, but no graphics/audio task, PI transfer or first frame/menu is
+reached. Do not weaken the table or native target guard.
 Preserve unknown-cache-byte refusals, dirty victim/retained-byte tests and the
-explicit manual-versus-ares dirty-mask distinction. No first frame or menu is
-reached. Receipts: research/rs-blockers.md and research/rs-cache-cde.md.
+explicit manual-versus-ares dirty-mask distinction. Receipts:
+research/rs-blockers.md, research/rs-cache-cde.md and research/rs-thread-dispatch.md.
 
 ## Preserve scissored fill clears (ADR-0266)
 
