@@ -27,7 +27,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 | GoldenEye 007 (USA) | **none** | refused | not reached: OPEN, 592 blockers (589 with residual dispatch): 48 `7f` engine pages now recovered, resolving 81 of 85 missing direct targets but exposing more code (ADR-0255) | unvisited engine pages, cross-page instructions, TLB refill/exception semantics |
 | Mario Kart 64 (USA) | **none** | 🟨 residual dispatch, 2 sites | 60 s with compiled graphics microcode and audio: VI 2762, 1270 graphics / 2635 audio tasks, fault 0 (ADR-0246) | prove the 2 residual sites; longer play |
 | Star Fox 64 (USA) (Rev 1) | **none** | 🟨 residual dispatch, 8 sites | 30 s from the ROM alone: VI 1798, 945 graphics / 1730 audio tasks, fault 0 (ADR-0256, ADR-0257); borders clean since ADR-0266 | prove the 8 residual sites; longer play |
-| Rogue Squadron (USA) | **none** | 🟨 builds with residual dispatch, 19 sites (ADR-0270) | stops before the first frame: VI 0, fault 12 at `8000041c` (CACHE Create Dirty Exclusive) | model that CACHE form |
+| Rogue Squadron (USA) | **none** | 🟨 builds with residual dispatch, 19 sites (ADR-0270) | stops before the first frame: VI 0, fault 12 at `80025bf4`, where its own thread dispatcher restores Status `0000ff03` (ADR-0271) | a contract for raw SDK thread dispatch |
 | Mario Party 2 (USA) | **none** | 🟨 builds with residual dispatch, 8 sites | 30 s from the ROM alone with scripted Start/A: HUDSON logo to destination selection, VI 1798, fault 0 (ADR-0268, ADR-0269) | prove the 8 residual sites; board gameplay; the 476 s analysis |
 
 "Native build ✅" means analysis is `CLOSED` under a declared scope (usually `--address-taken`) and `native.py` emits the executable. Since ADR-0233, `native.py` also builds by default when the only open items are indirect jumps it cannot prove: they go through a fail-closed run-time lookup over the translated code (still no emulation), and `native-manifest.json` records `native_complete: false`. `--strict` builds only proven maps.
@@ -41,6 +41,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0271 | `890e21b7` | `CACHE` Create Dirty Exclusive allocates a line without filling it; unknown bytes fail closed until stored (checked against ares) |
 | 0270 | `1e1d6771` | Statically untaken branches (`BLTZAL $zero`) and data in alternate overlay copies no longer create required targets; Rogue Squadron blockers 13 -> 0, first executable |
 | 0269 | `aab10e1d` | Load refinement applies the same catalog trimming as discovery; Mario Party 2 builds from the ROM alone without retained loads |
 | 0268 | `47de0d34` | Re-creating a destroyed thread retires its parked host and coroutine contexts instead of joining under the scheduler lock; Mario Party 2 reaches destination selection |
