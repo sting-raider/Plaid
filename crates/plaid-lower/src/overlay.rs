@@ -32,6 +32,27 @@ pub fn verifier_guarded(
     id: u32,
     guarded: &[(u32, u32)],
 ) -> Result<String, String> {
+    let text = (layout.text > 0).then_some((0, layout.text));
+    verifier_text_ranges(bytes, layout, compared, link, id, text.as_slice(), guarded)
+}
+
+/// Compare every emitted instruction range and immutable dispatch input. A slot's
+/// candidate extent may also contain mutable data before or between functions.
+/// The lowerer supplies all emitted blocks; gaps never authorize native entry.
+pub(crate) fn verifier_text_ranges(
+    bytes: &[u8],
+    layout: &Layout,
+    compared: usize,
+    link: u32,
+    id: u32,
+    text_ranges: &[(u32, u32)],
+    guarded: &[(u32, u32)],
+) -> Result<String, String> {
+    if text_ranges.iter().any(|&(start, end)| {
+        start >= end || !start.is_multiple_of(4) || !end.is_multiple_of(4) || end > layout.text
+    }) {
+        return Err("overlay instruction range lies outside its text".into());
+    }
     if guarded.iter().any(|&(start, end)| {
         start >= end
             || !start.is_multiple_of(4)
@@ -121,8 +142,18 @@ int plaid_overlay_verify_{id}(const uint8_t *ram, size_t ram_size, uint32_t base
             end - start
         );
     }
+    for &(start, end) in text_ranges {
+        out += &format!(
+            "  if (memcmp(ram + p + {start}u, expected + {start}u, {}u)) valid = 0;\n",
+            end - start
+        );
+    }
+    // Non-slot images retain their complete initialized-file comparison.
+    if compared > layout.text as usize {
+        out += &format!("  if (memcmp(ram + p, expected, {compared}u)) valid = 0;\n");
+    }
     out += &format!(
-        "  if (memcmp(ram + p, expected, {compared}u)) valid = 0;\n  free(expected);\n  for (i = {}u; valid && i < {span}u; i++) if (ram[p + i]) valid = 0;\n  return valid;\n}}\n",
+        "  free(expected);\n  for (i = {}u; valid && i < {span}u; i++) if (ram[p + i]) valid = 0;\n  return valid;\n}}\n",
         bytes.len()
     );
     Ok(out)
@@ -152,5 +183,10 @@ mod tests {
             assert!(verifier_guarded(&[0; 12], &layout, 8, 0x80000000, 0, &guarded).is_err());
         }
         assert!(verifier_guarded(&[0; 12], &layout, 8, 0x80000000, 0, &[(8, 12)]).is_ok());
+        for ranges in [vec![(0, 12)], vec![(4, 4)], vec![(1, 8)], vec![(0, 7)]] {
+            assert!(
+                verifier_text_ranges(&[0; 12], &layout, 8, 0x80000000, 0, &ranges, &[]).is_err()
+            );
+        }
     }
 }

@@ -8081,3 +8081,53 @@ Pinned N64ModernRuntime's thread code was read but does not implement stopping
 another thread and is not an oracle for that behavior. Shared references and
 shim are unchanged. The private wrapper links existing RT64 static libraries;
 rebuild/distribution instructions for the shared DLL are in the receipt.
+
+
+## ADR-0275: Bind slot overlays over emitted instructions and immutable proof inputs
+
+Decision: a raw slot's inferred text extent is a candidate address range, not
+proof of contiguous executable sections. Derive its executable byte ranges
+from every lowered map block, including delay slots. Merge adjacent ranges,
+verify their relocated bytes at binding, and protect them alongside every
+existing dispatch-table/tail-cell proof input. Keep ordinary relocatable
+images' complete-file/BSS checks. Preserve relocation validation, unique
+binding, declared target sets and fail-closed unknown native transfers.
+
+Represent the protection union as sorted disjoint intervals, with immutable
+proof inputs taking priority even inside the candidate text extent. Search
+membership with binary search. Any live or suspended overlay frame still
+prevents writes to all bound emitted code. Inactive code writes revoke the
+binding; entry compares again. Mutable prefix/inter-function data does not
+revoke it or become part of the identity check, so restored code can rebind
+after data changes. This does not certify unlowered bytes as executable.
+
+Rogue Squadron's synthetic slot PC80884650 maps to linked800a4650, instruction
+SB v0,1(v1). It writes41 to80096bfd in the raw overlay from ROMfdec0..126660,
+loaded at800960e0. The whole165792-byte candidate was falsely protected as
+text. Native RDRAM and pinned ares identify the same payload byte for byte;
+ares executes the store, changing the cached byte5f to41. No slot relocation
+or BSS gap causes this refusal. No game addresses seed the fix.
+
+The game advances from48 to53 graphics tasks and reaches a readable copyright
+screen. VI-aware640x480 RGBA5551 RDRAM readback contains19496 nonblack pixels
+and48 colors. The next refusal is fault12 at80013c34: a matrix routine changes
+Status.FR0 toFR1 in an SDK-owned thread. The runtime rejects that Status write;
+the map's fixed FR0 lowering would also reject its following FPR accesses.
+Dynamic FPR layout transitions require their own verified contract and remain
+open. Start/A does not pass this guard. No interactive menu/gameplay or native
+completeness is claimed; nineteen residual sites remain.
+
+Consequences: the deterministic data-first slot test compares full CPU state
+with pinned ares, including prefix/gap byte stores, registers and observed
+memory; it tests code tampering, restoration/rebinding after data writes,
+immutable tail-cell data, live-frame writes and an active-frame guard mutation.
+Existing raw/catalog/paired slot, mapped overlay, lifetime and runtime tests
+remain required. Per-block comparisons initially made GCC terminate without a
+diagnostic; merging adjacent blocks cuts the three RS protection tables to
+145/39/10 intervals and restores successful compilation. Required local gates,
+controls and exact-tree receipts are documented in research/rs-first-frame.md.
+
+Reference use: pinned ares9408cb43 (ISC), CPU SB, D-cache byte stores and FPR
+layout/Status handlers were read; an analysis-only private observer compares
+actual execution. No reference implementation body, SDK/game body or assets
+were copied into production. Shared references and RT64 shim are unchanged.
