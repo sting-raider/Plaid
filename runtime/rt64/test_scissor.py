@@ -20,15 +20,23 @@ def worker(path):
     lib.plaid_gfx_open.argtypes = [C.c_void_p]
     assert lib.plaid_gfx_open(header) == 0, 'renderer setup'
     writeback = C.CFUNCTYPE(C.c_int, C.c_void_p, C.c_uint32, C.c_uint32, C.c_void_p)
+    writes = []
 
     @writeback
     def copy(_context, address, size, data):
         if address > len(ram) or size > len(ram) - address:
             return 1
+        writes.append((address, size))
         C.memmove(C.addressof(ram) + address, data, size)
         return 0
 
     lib.plaid_gfx_rdp.argtypes = [C.c_void_p, C.c_void_p, C.c_uint32, C.c_void_p, writeback, C.c_void_p]
+    lib.plaid_gfx_task.argtypes = [C.c_void_p, C.c_uint32, C.c_uint32, C.c_uint32, writeback, C.c_void_p]
+    # Unknown bytes and out-of-range microcode refuse HLE before a list can
+    # draw or write back. A later raw RDP submission must still work.
+    for address in (0, 0x7ffff8, 0x81000000):
+        assert lib.plaid_gfx_task(ram, address, address, 0, copy, None) == 2
+        assert not writes
     width, height = 64, 48
     scissor = (8, 8, 56, 40)
 

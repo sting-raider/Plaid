@@ -61,6 +61,23 @@ static int plaid_joy_run(plaid_joybus *bus, u8 *eeprom_bytes, u64 ticks, u32 con
     } else if (channel == 0 && command == 1 && p->send == 1 && p->receive == 4) {
       unsigned byte;
       for (byte = 0; byte < 4; byte++) reply[byte] = (u8)(controller >> (24 - 8 * byte));
+    } else if (channel == 0 && command == 2 && p->send >= 3 && p->receive >= 1) {
+      /* No Pak: zero data and the inverted CRC of 32 zero bytes (ares gamepad). */
+      memset(reply, 0, p->receive < 33 ? p->receive : 33);
+      if (p->receive >= 33) reply[32] = 0xff;
+    } else if (channel == 0 && command == 3 && p->send >= 4 && p->receive >= 1) {
+      unsigned byte, bit;
+      u8 crc = 0;
+      /* A full write returns CRC-8/0x85 with eight appended zero bits,
+         complemented when no Pak is attached; short writes return 0xff. */
+      if (p->send >= 35)
+        for (byte = 0; byte < 33; byte++)
+          for (bit = 0; bit < 8; bit++) {
+            u8 feedback = crc & 0x80 ? 0x85 : 0;
+            crc = (u8)((crc << 1) | (byte < 32 ? (request[3 + byte] >> (7 - bit)) & 1 : 0));
+            crc ^= feedback;
+          }
+      reply[0] = crc ^ 0xff;
     } else if (channel == 4 && command == 4 && p->send == 2 && p->receive == 8) {
       unsigned byte, block = request[1] & 63u;
       for (byte = 0; byte < 8; byte++)

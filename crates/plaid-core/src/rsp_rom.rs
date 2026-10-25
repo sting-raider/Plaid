@@ -216,6 +216,148 @@ pub fn overlay_descriptors(
             out.insert((offset, size, dest & 0xfff));
         }
     }
+    let layouts = roots
+        .iter()
+        .flat_map(|root| {
+            let bytes: Vec<_> = (0..0x1000)
+                .step_by(4)
+                .map_while(|n| image.word(GuestAddr(root.0.saturating_add(n))))
+                .flat_map(u32::to_be_bytes)
+                .collect();
+            packed_overlay_layouts(&bytes, 0x80)
+        })
+        .collect();
+    out.extend(packed_overlay_descriptors(image, roots, &layouts));
+    out
+}
+
+/// Recognize a packed-table DMA loader's field accesses and native SP DMA
+/// helper. This supplies a table layout hint, not a control-flow certificate.
+fn packed_overlay_layouts(text: &[u8], imem: u32) -> BTreeSet<(u32, u32)> {
+    let words: Vec<_> = text
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_be_bytes(*w))
+        .collect();
+    let rs = |w: u32| (w >> 21) & 31;
+    let rt = |w: u32| (w >> 16) & 31;
+    let rd = |w: u32| (w >> 11) & 31;
+    let mut layouts = BTreeSet::new();
+    for (i, &load) in words.iter().enumerate().filter(|(_, w)| *w >> 26 == 37) {
+        let length = rt(load);
+        if length == 0 {
+            continue;
+        }
+        let window = &words[i..words.len().min(i + 32)];
+        if !window.contains(&(0x3000_0fff | length << 21 | length << 16)) {
+            continue;
+        }
+        for &shift in window
+            .iter()
+            .filter(|&&w| w & 0xffe0_07ff == 0x302 && rt(w) == length)
+        {
+            let destination = rd(shift);
+            for &source in window.iter().filter(|&&w| {
+                w >> 26 == 37 && rs(w) == rs(load) && (w & 0xffff) == (load & 0xffff) + 2
+            }) {
+                let address = rt(source);
+                if address == 0 {
+                    continue;
+                }
+                // The source offset is added to OSTask.ucode, not an arbitrary
+                // pointer loaded from DMEM. The task base itself remains a hint.
+                let adds_ucode = window.iter().any(|&w| {
+                    w >> 26 == 35
+                        && w & 0xffff == 0x10
+                        && window.iter().any(|&add| {
+                            add & 0xfc00_07ff == 0x21
+                                && rd(add) == address
+                                && ((rs(add) == address && rt(add) == rt(w))
+                                    || (rt(add) == address && rs(add) == rt(w)))
+                        })
+                });
+                if !adds_ucode {
+                    continue;
+                }
+                for pair in window.windows(2).filter(|pair| pair[0] >> 26 == 3) {
+                    let slot = pair[1];
+                    if slot >> 26 != 37 || rs(slot) != destination || rt(slot) != destination {
+                        continue;
+                    }
+                    let target = (pair[0] << 2) & 0xfff;
+                    let Some(at) = target.checked_sub(imem).map(|v| v as usize / 4) else {
+                        continue;
+                    };
+                    let Some(helper) = words.get(at..words.len().min(at + 32)) else {
+                        continue;
+                    };
+                    let dma = [
+                        0x4080_0000 | destination << 16,
+                        0x4080_0800 | address << 16,
+                        0x4080_1000 | length << 16,
+                    ];
+                    if helper.windows(3).any(|w| w == dma) {
+                        let (len, dest) = (load & 0xffff, slot & 0xffff);
+                        if len > dest && (len - dest).is_multiple_of(2) && len - dest <= 16 {
+                            layouts.insert((len, dest));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    layouts
+}
+
+/// Decode only layouts named by a rooted RSP loader. Packed lengths select
+/// a destination halfword by byte offset; low twelve bits are SP_RD_LEN.
+/// The resulting ROM candidates still require content and live-fetch guards.
+fn packed_overlay_descriptors(
+    image: &CodeImage,
+    roots: &BTreeSet<GuestAddr>,
+    layouts: &BTreeSet<(u32, u32)>,
+) -> BTreeSet<(u32, u32, u32)> {
+    let half = |at: u32| {
+        image
+            .word(GuestAddr(at & !3))
+            .map(|w| if at & 2 == 0 { w >> 16 } else { w & 0xffff })
+    };
+    let mut out = BTreeSet::new();
+    for root in roots {
+        for &(length, destination) in layouts {
+            let mut entries = BTreeSet::new();
+            for offset_at in (length..0xffc).step_by(4) {
+                let (Some(packed), Some(offset)) = (
+                    half(root.0.saturating_add(offset_at)),
+                    half(root.0.saturating_add(offset_at + 2)),
+                ) else {
+                    break;
+                };
+                let selector = packed >> 12;
+                if selector & 1 != 0 || selector >= length - destination {
+                    break;
+                }
+                let Some(dest) = half(root.0.saturating_add(destination + selector)) else {
+                    break;
+                };
+                let size = ((packed & 0xfff) | 7) + 1;
+                if !(0x1000..0x2000).contains(&dest)
+                    || !dest.is_multiple_of(8)
+                    || offset == 0
+                    || !offset.is_multiple_of(8)
+                    || size < 64
+                    || size > 0x2000 - dest
+                {
+                    break;
+                }
+                entries.insert((offset, size, dest & 0xfff));
+            }
+            if entries.len() >= 2 {
+                out.extend(entries);
+            }
+        }
+    }
     out
 }
 
@@ -279,6 +421,105 @@ mod tests {
             [(0x1000, 0x170, 0)].into()
         );
         assert!(overlay_descriptors(&image, &BTreeSet::new()).is_empty());
+    }
+
+    #[test]
+    fn packed_layout_needs_the_length_selector_task_source_and_exact_dma_helper() {
+        let mut words = vec![
+            0x94a4_0024,
+            0x0004_1b02,
+            0x94a2_0026,
+            0x8c28_0010,
+            0x3084_0fff,
+            0x0048_1021,
+            0x0c00_0040,
+            0x9463_0020,
+            0x0060_0008,
+            0,
+        ];
+        words.resize(32, 0);
+        words.extend([0x4083_0000, 0x4082_0800, 0x4084_1000, 0x03e0_0008, 0]);
+        let bytes = |w: &[u32]| w.iter().flat_map(|v| v.to_be_bytes()).collect::<Vec<_>>();
+        assert_eq!(
+            packed_overlay_layouts(&bytes(&words), 0x80),
+            [(0x24, 0x20)].into()
+        );
+        for (at, bad) in [
+            (1, 0x0004_1ac2),
+            (2, 0x94a2_0028),
+            (3, 0x8c28_0018),
+            (4, 0x3084_07ff),
+            (5, 0x0049_1021),
+            (7, 0x9462_0020),
+            (34, 0x4085_1000),
+        ] {
+            let mut changed = words.clone();
+            changed[at] = bad;
+            assert!(
+                packed_overlay_layouts(&bytes(&changed), 0x80).is_empty(),
+                "{at}: {bad:08x}"
+            );
+        }
+        assert!(packed_overlay_layouts(&bytes(&words), 0).is_empty());
+    }
+
+    #[test]
+    fn packed_overlays_require_rooted_complete_tables_and_bounded_destinations() {
+        let mut image = CodeImage {
+            base: CodeAddress {
+                pc: GuestAddr(0x8000_0000),
+                image: "synthetic".into(),
+                generation: 0,
+            },
+            words: vec![0; 0x1100 / 4],
+            rom_offset: None,
+            physical_start: None,
+            holes: vec![],
+            slots: vec![],
+        };
+        // Two destinations, then three length/offset pairs. The second pair
+        // selects destination byte offset two, and DMA rounds lengths up.
+        image.words[8..13].copy_from_slice(&[
+            0x1d00_1200,
+            0x0043_0800,
+            0x2080_0900,
+            0x007f_0a00,
+            0,
+        ]);
+        let roots = [image.base.pc].into();
+        let layouts = [(0x24, 0x20)].into();
+        let expected = [
+            (0x800, 0x48, 0xd00),
+            (0x900, 0x88, 0x200),
+            (0xa00, 0x80, 0xd00),
+        ]
+        .into();
+        assert_eq!(
+            packed_overlay_descriptors(&image, &roots, &layouts),
+            expected
+        );
+        assert!(packed_overlay_descriptors(&image, &BTreeSet::new(), &layouts).is_empty());
+        for bad in [0x1080_0900, 0x4080_0900, 0x2080_0901, 0x2fff_0900] {
+            let mut changed = image.clone();
+            changed.words[10] = bad;
+            assert!(
+                packed_overlay_descriptors(&changed, &roots, &layouts).is_empty(),
+                "{bad:08x}"
+            );
+        }
+        image.holes.push(GuestRange {
+            start: GuestAddr(0x8000_0028),
+            size: 4,
+        });
+        assert!(packed_overlay_descriptors(&image, &roots, &layouts).is_empty());
+        image.holes.clear();
+        image.words[0x1000 / 4..0x1000 / 4 + 3].copy_from_slice(&[
+            0x1d00_1200,
+            0x0043_0800,
+            0x2080_0900,
+        ]);
+        image.words[8..13].fill(0);
+        assert!(packed_overlay_descriptors(&image, &roots, &layouts).is_empty());
     }
 
     #[test]

@@ -1,5 +1,21 @@
 # Next
 
+## Continue Rogue Squadron beyond initial native custom-microcode tasks (ADR-0274)
+
+Investigate the byte store to80096bfd (SB v0,1(v1)) refused with fault2 at
+slotPC80884650/linked800a4650, after48 graphics tasks. Establish its data/text
+binding and write lifetime; preserve the guard. RDRAM readback remains black.
+Preserve rooted packed-descriptor hints, native overlay/fetch guards and the
+2,694-instruction real-task ares comparison. Use automatic unknown-GBI LLE
+or explicit --rsp-gfx with the updated bridge. Verify later task variants,
+actual RDP/framebuffer effects and title/menu input through RDRAM readback;
+do not promote a black frame, an SDK refusal with CPUfault0, or one matched
+task into gameplay/RSP closure. Preserve terminal-jump callback filtering,
+absent-Pak CRC replies and stopped send/receive continuations. Final bounded
+run and remaining guard evidence live in research/rs-rsp-ucode.md and its
+ignored receipts; unresolved CPU/overlay/indirect targets still fault.
+
+
 ## Continue OoT after NJPEG save load (ADR-0265)
 
 Preserve the protection-task and NJPEG pinned-ares memory/state comparisons,

@@ -350,7 +350,7 @@ def rsp_graphics(exe, cc):
                *[w for i, v in enumerate(words) for w in poke(BOOT + 4 * i, v)],
                *[w for i, v in enumerate(task) for w in poke(RTASK + 4 * i, v)],
                *poke(0xA410000C, 8),  # freeze from the CPU, observed by the RSP
-               *call('osSpTaskLoad', RTASK), *call('osSpTaskStartGo', RTASK),
+               'before_gfx_load', *call('osSpTaskLoad', RTASK), *call('osSpTaskStartGo', RTASK),
                *log_word(0xA4100000), *log_word(0xA4100004), *log_word(0xA4100008),
                *poke(0xA410000C, 4), *log_word(0xA4100008),  # unfreeze drains wrapped DMEM
                *log_word(0xA4000FF8),  # executed microcode leaves known SP memory
@@ -383,6 +383,30 @@ def rsp_graphics(exe, cc):
         0xFF8, 0x1008, 0xFF8, 0x1008, commands[0]], lines
     assert next(line['stop'] for line in lines if 'stop' in line) == 'exit', lines
     assert not any('stub_task' in line for line in lines), lines
+    # Unknown HLE microcode must select the same native RSP/DPC path without
+    # --rsp-gfx, including a CPU freeze set before the renderer's refusal.
+    (OUT / 'stub.c').write_text(GFX_STUB.replace(
+        '(void)writeback; (void)context;',
+        '(void)writeback; (void)context; return 2;', 1))
+    for corrupt in (False, True):
+        variant = program.copy()
+        if corrupt:
+            before_load = variant.index('before_gfx_load')
+            variant[before_load:before_load] = poke(BOOT, 0xFFFFFFFF)
+        auto = build(exe, cc, f'rsp-gfx-auto-{int(corrupt)}', variant, runtime,
+                     ['-DPLAID_RSP', '-DPLAID_RT64', '-I', str(ROOT / 'crates/plaid-lower/src'),
+                      str(lowered), str(registry), str(OUT / 'stub.c')])
+        result = subprocess.run([str(auto), '--rom', str(OUT / 'stub.z64'), '--stop-at', 'none',
+                                 '--dump', hex(LOG), '5'], capture_output=True, text=True, timeout=30)
+        auto_lines = [json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')]
+        assert 'switching to native RSP LLE' in result.stderr, result.stderr
+        if corrupt:
+            assert result.returncode == 1 and 'unlowered RSP code' in result.stdout, result.stdout
+            assert not any('stub_rdp' in line for line in auto_lines), auto_lines
+        else:
+            assert result.returncode == 0, (result.stdout, result.stderr)
+            assert [line for line in auto_lines if 'stub_rdp' in line or 'words' in line] == [
+                line for line in lines if 'stub_rdp' in line or 'words' in line], auto_lines
     print('native graphics RSP: shared CPU/RSP DPC, frozen lists, wrapped DMEM, RDRAM and CPU RAM visibility')
 
 
