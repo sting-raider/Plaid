@@ -1,5 +1,24 @@
 # Status
 
+## Rogue Squadron residual build and infeasible paths (ADR-0270)
+
+Rogue Squadron now emits a native residual-dispatch executable: 13 residual
+blockers become zero, 50,862 decoded blocks become 47,866, and 19 transfer
+sites remain explicitly residual (`native_complete: false`). Statically
+untaken integer branches preserve link writes and ordinary delay slots;
+likely slots are annulled. Calls into content-bound overlay slots no longer
+decode the overlapping fallback window as another executable identity.
+Undecodable alternate call entries remain solver obligations: strict mode
+refuses them, residual dispatch accepts only lowered, byte-bound entries,
+and selecting an omitted identity faults. This does not prove data sections.
+
+A silent visible 30-second request stops before VI 1: fault 12 at
+`0x8000041c`, CACHE Create Dirty Exclusive (`0xbd0d0000`), RA `0x80001eb0`.
+There are no graphics/audio tasks or PI DMA, and no title/menu is reached.
+This is an emitted build, not native gameplay acceptance. Native/ares branch
+state comparison, alternate switching/refusal, missing-identity and guard
+mutation tests are retained. Receipt: research/rs-blockers.md.
+
 ## Fresh catalog/replay declaration reconciliation (ADR-0269)
 
 The ROM-alone MP2 pipeline now applies discovery's catalog text subtraction

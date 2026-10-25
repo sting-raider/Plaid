@@ -172,6 +172,39 @@ pub fn decode(word: u32, pc: GuestAddr) -> Instruction {
     Instruction::new(word, pc.0, InstrCategory::CPU)
 }
 
+/// Register identities that make an integer branch impossible, independently
+/// of incoming state. Link writes and non-likely delay slots still execute.
+pub fn branch_never_taken(word: u32) -> bool {
+    let (op, rs, rt) = (word >> 26, (word >> 21) & 31, (word >> 16) & 31);
+    match op {
+        1 => rs == 0 && matches!(rt, 0 | 2 | 16 | 18), // BLTZ/L/AL/ALL zero
+        7 | 23 => rs == 0 && rt == 0,                  // BGTZ/L zero
+        5 | 21 => rs == rt,                            // BNE/L r,r
+        _ => false,
+    }
+}
+
+/// Admission heuristic for an alternate call identity, never a code/data proof.
+/// Reject a reserved encoding in a short straight-line prefix; transfers and
+/// the scan limit keep the identity for ordinary discovery. Rejected identities
+/// must be reported by the solver and refused by native slot dispatch.
+pub(crate) fn slot_entry_decodable(image: &CodeImage, pc: GuestAddr) -> bool {
+    for n in 0..64 {
+        let at = GuestAddr(pc.0.wrapping_add(4 * n));
+        let Some(word) = image.instruction_word(at) else {
+            return false;
+        };
+        let instruction = decode(word, at);
+        if !instruction.is_valid() {
+            return false;
+        }
+        if instruction.has_delay_slot() || unsupported(&instruction) {
+            return true;
+        }
+    }
+    true
+}
+
 /// TGE TGEU TLT TLTU TEQ TNE and their immediate forms (ADR-0145). Their
 /// not-taken path falls through, so discovery continues past them.
 pub fn is_conditional_trap(word: u32) -> bool {
@@ -292,6 +325,8 @@ pub fn direct_cfg_bounded(
             }
         }
         if i.has_delay_slot() {
+            let never_taken = i.is_valid() && branch_never_taken(word);
+            let annulled = never_taken && i.is_branch_likely();
             let links = i.does_link() && !(i.opcode_name() == "jalr" && i.get_rd() == 0);
             let ds = GuestAddr(pc.0.wrapping_add(4));
             let ds_word = image.instruction_word(ds);
@@ -301,16 +336,16 @@ pub fn direct_cfg_bounded(
             });
             terminal.insert(
                 pc,
-                if ds_word.is_some() && ds.0 > pc.0 {
+                if !annulled && ds_word.is_some() && ds.0 > pc.0 {
                     8
                 } else {
                     4
                 },
             );
-            if let Some(w) = ds_word {
+            if let Some(w) = ds_word.filter(|_| !annulled) {
                 words.insert(image.address(ds), w);
             }
-            if !ds_valid {
+            if !annulled && !ds_valid {
                 map.unresolved.insert(Unresolved {
                     kind: "unsupported_delay_slot".into(),
                     site: Some(site.clone()),
@@ -325,7 +360,7 @@ pub fn direct_cfg_bounded(
             } else {
                 DelaySlot::Always
             };
-            if i.is_branch() || i.is_jump_with_address() {
+            if (i.is_branch() || i.is_jump_with_address()) && !never_taken {
                 // Rabbitizer treats PC=0 as an unspecified address for J. Use
                 // literal ISA arithmetic so low-address synthetic inputs work.
                 let target = GuestAddr(if i.is_jump_with_address() {
@@ -348,11 +383,15 @@ pub fn direct_cfg_bounded(
                     delay_slot: delay,
                     evidence: evidence.clone(),
                 });
-                if !(runtime.contains(&target) && kind != EdgeKind::Branch) {
+                // A linked slot call selects an executable identity at run time;
+                // the overlapping fallback ROM window is not another identity.
+                let slot_call = kind == EdgeKind::Call
+                    && image.slot_copies(target.0).iter().any(|&t| t != target.0);
+                if !slot_call && !(runtime.contains(&target) && kind != EdgeKind::Branch) {
                     leaders.insert(target);
                     pending.insert(target);
                 }
-            } else {
+            } else if !never_taken {
                 map.indirect_sites.insert(IndirectSite {
                     site: site.clone(),
                     link_register: if links { Some(i.get_rd() as u8) } else { None },

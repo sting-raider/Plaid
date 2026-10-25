@@ -37,15 +37,17 @@ def main():
                 *[word for at in range(0, 16, 4)
                   for word in (a.lw(a.t1, at, a.t0), a.sw(a.t1, at, a.t2))]]
     for mode in ('switch', 'tamper', 'ambiguous', 'paired-switch', 'paired-tamper', 'paired-ambiguous',
-                 'catalog-switch', 'catalog-tamper', 'catalog-ambiguous', 'catalog-bss'):
+                 'catalog-switch', 'catalog-tamper', 'catalog-ambiguous', 'catalog-bss',
+                 'catalog-overlap', 'catalog-partial', 'catalog-refused', 'catalog-no-entry'):
         case = mode.removeprefix('paired-').removeprefix('catalog-')
-        items = [*copy('one', 'copy1')]
+        partial = case in ('partial', 'refused', 'no-entry')
+        items = [*copy('two' if case == 'refused' else 'one', 'copy1')]
         if case == 'tamper':
             items += [a.sw(0, -16, a.s1)]
         if case == 'bss':
             items += [a.sw(a.s1, 0, a.s1)]
         items += [*call, a.addu(a.s3, a.v0, 0), *snapshot(0x1000)]
-        if case == 'switch':
+        if case in ('switch', 'overlap'):
             items += [*copy('two', 'copy2'), *call, a.addu(a.s4, a.v0, 0), *snapshot(0x1010),
                       *copy('one', 'copy3'), a.lui(a.t9, 0x8000), a.ori(a.t9, a.t9, 0x4000),
                       a.jalr(a.ra, a.t9), a.nop, a.addu(a.s5, a.v0, 0), *snapshot(0x1020)]
@@ -55,6 +57,18 @@ def main():
                   'two', a.addiu(a.v0, 0, 7 if case == 'ambiguous' else 11), a.jr(a.ra), a.nop, slot]
         raw = a.assemble(items)
         labels = a.label_pcs(items)
+        if case == 'overlap':
+            # The base ROM window has data where the linked slot executes.
+            # Only the declared, content-bound alternates are call identities.
+            raw += bytes(slot - a.BASE - len(raw)) + bytes.fromhex('7677696e 7677696e 7677696e')
+        if partial:
+            # This alternate has an undecodable straight-line prefix at the
+            # shared call offset. It must remain an explicit residual identity.
+            raw = bytearray(raw)
+            for label in (('one', 'two') if case == 'no-entry' else ('two',)):
+                at = labels[label] - a.BASE
+                raw[at:at + 12] = bytes.fromhex('00000000 00000000 7677696e')
+            raw = bytes(raw)
         rom = bytearray(0x1000)
         rom[:4] = bytes.fromhex('80371240')
         rom.extend(raw)
@@ -88,8 +102,23 @@ def main():
         solve = subprocess.run([str(exe), 'solve', str(source), str(m), '--address-taken'],
                                check=True, capture_output=True, text=True)
         verdict = json.loads(solve.stdout)
-        assert verdict['status'] == 'closed', (mode, verdict['blockers'])
-        subprocess.run([str(exe), 'lower-map', str(source), str(m), hex(a.BASE), hex(a.EXIT), str(c)], check=True, capture_output=True)
+        if case == 'no-entry':
+            assert verdict['status'] == 'open', verdict
+            assert any(b['kind'] == 'unresolved_direct_target' for b in verdict['blockers']), verdict
+            residual = json.loads(subprocess.check_output(
+                [str(exe), 'solve', str(source), str(m), '--residual-dispatch'], text=True))
+            assert residual['status'] == 'open', residual
+            continue
+        if partial:
+            assert verdict['status'] == 'open', verdict
+            assert {b['kind'] for b in verdict['blockers']} == {'unresolved_slot_call_identity'}, verdict
+            verdict = json.loads(subprocess.check_output(
+                [str(exe), 'solve', str(source), str(m), '--residual-dispatch'], text=True))
+            assert verdict['status'] == 'closed' and len(verdict['residual_sites']) == 1, verdict
+        else:
+            assert verdict['status'] == 'closed', (mode, verdict['blockers'])
+        subprocess.run([str(exe), 'lower-map', str(source), str(m), hex(a.BASE), hex(a.EXIT), str(c),
+                        *(['--residual-dispatch'] if partial else [])], check=True, capture_output=True)
         with c.open('a') as f:
             f.write('\nint plaid_rt_icache(plaid_state *s) { (void)s; return 0; }\n')
         native = OUT / (mode + ('.exe' if os.name == 'nt' else ''))
@@ -98,8 +127,9 @@ def main():
                         str(SLICE / 'harness.c'), '-lm', '-o', str(native)], check=True)
         run = subprocess.run([str(native)], capture_output=True, text=True, timeout=30)
         state = json.loads(run.stdout)
-        if case == 'switch':
-            assert run.returncode == 0 and state['regs'][19:22] == [7, 11, 7], (mode, state)
+        if case in ('switch', 'overlap', 'partial'):
+            assert run.returncode == 0, (mode, state)
+            assert state['regs'][19:22] == ([7, 11, 7] if case in ('switch', 'overlap') else [7, 0, 0]), (mode, state)
             raw_path = OUT / 'switch.bin'
             raw_path.write_bytes(raw)
             oracle = ROOT / 'target/native-slice/oracle/oracle'
@@ -119,7 +149,7 @@ def main():
             assert ref.returncode == 0 and state == json.loads(ref.stdout), (state, ref.stdout, ref.stderr)
         else:
             assert run.returncode == 6 and state['fault'] == 3, (mode, state)
-    print('PASS raw, paired-stream and catalog slots match pinned ares (7/11/7); tampered/ambiguous text and nonzero BSS fail closed')
+    print('PASS raw, paired-stream and catalog slots match pinned ares; partial identities require residual dispatch; rejected/tampered/ambiguous text and nonzero BSS fail closed')
 
 
 if __name__ == '__main__':

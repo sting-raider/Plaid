@@ -76,6 +76,33 @@ fn open_programs_are_rejected() {
 }
 
 #[test]
+fn impossible_branch_link_and_delay_effects_lower_without_the_target() {
+    for (branch, link, likely) in [
+        (0x04100040, true, false),
+        (0x04120040, true, true),
+        (0x04000040, false, false),
+        (0x04020040, false, true),
+        (0x1c000040, false, false),
+        (0x5c000040, false, true),
+        (0x15080040, false, false),
+        (0x55080040, false, true),
+    ] {
+        let words = [
+            [branch, if likely { 0x7677696e } else { 0xac020100 }].as_slice(),
+            &HALT,
+        ]
+        .concat();
+        let c = lower(&words, BASE + 8).unwrap();
+        assert_eq!(c.contains("s->r[31] = 0xffffffff80000008ull;"), link, "{c}");
+        assert_eq!(
+            c.contains("plaid_store(s, s->r[0] + (u64)(s64)256"),
+            !likely
+        );
+        assert!(!c.contains("L_80000104"));
+    }
+}
+
+#[test]
 fn instructions_outside_the_model_are_rejected() {
     // TLBWR needs a modeled Random timeline; never emulated.
     let words = [[0x4200_0006, 0, 0, 0].as_slice(), &HALT].concat();

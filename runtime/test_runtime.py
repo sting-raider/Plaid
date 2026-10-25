@@ -698,6 +698,8 @@ def main():
     heap_contracts()
     from test_slots import main as slot_contracts
     slot_contracts()
+    from test_branch_paths import main as branch_path_contracts
+    branch_path_contracts()
     tlb_unmap(exe, cc)
     from test_cop0 import main as cop0_contracts
     cop0_contracts()

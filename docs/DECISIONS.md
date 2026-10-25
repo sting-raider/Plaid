@@ -7861,3 +7861,35 @@ execution is added. Fresh native observations, controls and exact-tree local
 validation are recorded in research/mp2-fresh-analysis.md. MP2 retains eight
 residual sites and native_complete:false; board gameplay and full closure remain
 unverified.
+
+## ADR-0270: Prune impossible branches and expose missing slot call identities
+
+Status: accepted
+
+Context: Rogue Squadron's get-PC BLTZAL-zero idiom is never taken, but
+recursive discovery follows it into data. Calls into data-first overlay
+files also seed invalid code at shared offsets and in the overlapping
+fallback ROM window. Thirteen non-residual blockers prevent emission.
+
+Decision: share a statically-untaken integer-branch predicate between CFG
+recovery and native lowering. Preserve link writes, ordinary delay slots
+and separately entered slot roots; annul untaken likely slots. Unknown
+conditions and required targets remain conservative.
+
+A linked slot call discovers placed identities instead of the fallback
+window. A bounded reserved-encoding prefix check may withhold speculative
+alternate call roots, but it is not section or reachability proof. Every
+missing alternate entry remains a strict solver obligation. Residual scope
+records the call site and dispatches only to lowered entries through the
+existing byte-verified binding, faulting on an omitted identity. If no
+alternate is lowered, the unresolved direct target still blocks emission.
+No required direct edge, declaration or content guard is removed.
+
+Consequences: 50,862 blocks become 47,866; thirteen residual blockers become
+zero and nineteen explicit residual sites remain. The emitted build stays
+native_complete:false and faults 12 before the first VI at CACHE Create
+Dirty Exclusive, 8000041c. No title, menu or gameplay acceptance is claimed.
+Deterministic branch/slot tests, native/ares state comparison, strict-guard
+mutation, silent visible controls and local gate receipts are documented
+in research/rs-blockers.md. Reference source was read only; no guest
+interpreter, JIT, per-game address rule or upstream code copy is introduced.

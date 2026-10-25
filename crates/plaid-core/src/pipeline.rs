@@ -225,15 +225,17 @@ fn discover_bounded(
         }
         map = analyze_indirect(&map, image)?;
         let old_count = (roots.len(), external.len());
-        // Linked calls into a content-bound slot discover every supplied text
-        // alternate. Keep the edge's architectural target; native dispatch
-        // chooses the byte-verified alternate when the call executes.
+        // Linked calls discover decodable CPU entries in content-bound slots.
+        // Missing identities remain solver obligations; residual dispatch may
+        // refuse them at run time, never execute their bytes as guest code.
         for edge in map.direct_edges.iter().filter(|e| {
             e.kind == EdgeKind::Call || !(0x8000_0000..0xc000_0000).contains(&e.target.pc.0)
         }) {
             for target in image.slot_copies(edge.target.pc.0) {
                 if target != edge.target.pc.0
                     && image.instruction_word(GuestAddr(target)).is_some()
+                    && (edge.kind != EdgeKind::Call
+                        || crate::discovery::slot_entry_decodable(image, GuestAddr(target)))
                     && !boundary.contains(&GuestAddr(target))
                 {
                     roots.insert(GuestAddr(target));

@@ -13,11 +13,12 @@ OUT = ROOT / 'target/eret-contract'
 
 def fixture():
     cp = lambda sub, rt, rd: 16 << 26 | sub << 21 | rt << 16 | rd << 11
-    items = [A.lui(A.gp, 0x8000), A.ori(A.gp, A.gp, 0x1000)]
+    items = [A.lui(A.gp, 0x8000), A.ori(A.gp, A.gp, 0x1000), A.addiu(A.t7, 0, 0)]
     for n, status in enumerate((0x24000002, 0x20000004, 0x24000006)):
         label = f'resume{n}'
-        # A static alternate path retains the target without inventing ERET closure.
-        items += [A.bne(0, 0, label), A.nop]
+        # Distinct registers retain an analysis path without inventing ERET
+        # closure. The initialized t7 makes it untaken during execution.
+        items += [A.bne(A.t7, 0, label), A.nop]
         for reg in (14, 30):
             selected = 30 if status & 4 else 14
             target = label if reg == selected else f'poison{n}'
