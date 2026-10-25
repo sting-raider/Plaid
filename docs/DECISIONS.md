@@ -7934,3 +7934,49 @@ See research/rs-cache-cde.md for reference differences, validation, controls
 and timings. Reference source (ISC ares) and NEC documentation were read for
 semantics only; the production implementation is project-owned, with no
 copied upstream code, guest decoder, interpreter, JIT or per-game address rule.
+
+
+## ADR-0272: Authenticate SDK thread families and list residual native thread entries
+
+Status: accepted
+
+Context: Rogue Squadron Rev1 reaches MTC0 Status at __osDispatchThread+0x54,
+restoring ff03 without any host SDK threads. Its create/start/message and
+priority bodies differ from the pinned n64sym variants. Recognizing create
+also exposes a callback loaded from mutable RAM that the bounded constant/
+forwarded-argument callback proof cannot close.
+
+Decision: authenticate the reviewed SDK family with relocation-normalized
+SHA-256 full-body identities, verified extents, exact internal jump offsets,
+external calls to authenticated peers, consistent nonaliasing scheduler
+globals and all 64 MI clear/set table entries. Reject ambiguous peers/globals,
+changed instructions/edges, missing words, holes and slot-resident SDK bodies.
+Retain only metadata; no SDK bodies or game addresses enter production.
+Bind public SDK APIs to the existing host-thread scheduler, and annotate
+create/mask with the existing verified FR=0 Status ABI. Helper dispatcher,
+queue and yield identities establish semantics/dependencies; they are not
+new raw runtime entry points. The Status/ERET instruction guards remain.
+
+In explicit residual-dispatch mode, an unknown a2 at a direct call to the
+declared osCreateThread API is a listed residual transfer. plaid_enter may
+then dispatch over emitted native functions, retaining text/overlay binding
+checks, and faults 3 for any other target. This does not discover additional
+code or execute guest instructions. Strict mode, known missing callback
+blocks, other APIs/registers and forwarded unknown callbacks still refuse.
+The manifest stays native_complete:false; the runtime ABI remains an
+assumption, not a whole-ROM or arbitrary saved-context certificate.
+
+Consequences: identification finds 25 runtime functions instead of 14.
+The previously hidden RAM-loaded thread entry is recorded explicitly,
+increasing Rogue Squadron's residual site list from 19 to 20. Authored
+signature/relocation/ambiguity/table tests, a scheduler context/priority/
+queue/Status test, strict/residual callback tests and a generated native-entry
+guard mutation verify the contract. Requested native observations, controls,
+full local gate and exact-head integration are recorded in
+research/rs-thread-dispatch.md and its ignored receipts/issue #4 closeout.
+
+Reuse: pinned n64sym (MIT), ares (ISC) and N64ModernRuntime (GPLv3 repository
+COPYING) were read for metadata/behavior only, at refs.lock.toml revisions.
+No upstream implementation or copyrighted SDK/game body was copied or linked.
+Production code and synthetic bodies are project-owned. The exact SDK release
+and compiler version are not established by these semantic identities.

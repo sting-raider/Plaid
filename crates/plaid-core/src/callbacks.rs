@@ -5,7 +5,8 @@
 //! call or tail jump into the runtime function, the register's value after the
 //! delay slot must be a constant proven by the same straight-line prefix rule
 //! as local indirect targets. Proven targets are functions the runtime enters;
-//! anything unproven stays a blocker.
+//! anything unproven stays a blocker except a direct SDK thread entry in
+//! explicit residual-dispatch mode (ADR-0272).
 //!
 //! A wrapper may forward its own argument to the runtime (ADR-0149), as
 //! SM64's `create_thread` does through an IDO `-O0` stack spill. The targets
@@ -31,6 +32,22 @@ pub struct Callback {
     pub target: Option<CodeAddress>,
     /// The value reached the runtime through a wrapper's argument (ADR-0149).
     pub forwarded: bool,
+}
+
+/// The SDK scheduler enters this unproven pointer through native-only
+/// `plaid_enter`. Other runtime callbacks retain their closure obligation.
+pub fn residual_thread_entry(map: &ProgramMap, callback: &Callback) -> bool {
+    !callback.forwarded
+        && callback.target.is_none()
+        && callback.register == 6
+        && map.direct_edges.iter().any(|edge| {
+            edge.site == callback.site
+                && matches!(edge.kind, EdgeKind::Call | EdgeKind::Jump)
+                && map
+                    .runtime_functions
+                    .get(&edge.target)
+                    .is_some_and(|f| f.name == "osCreateThread" && f.callbacks.contains(&6))
+        })
 }
 
 /// Value of `register` when control reaches the callee of the direct transfer

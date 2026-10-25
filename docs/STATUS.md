@@ -1,5 +1,28 @@
 # Status
 
+## SDK thread family and native entry dispatch (ADR-0272)
+
+Relocation-normalized full-body SDK identities now bind Rogue Squadron's
+create/start/message/priority APIs to the host scheduler, with verified peer
+calls, shared globals and MI table contents. Identification rises from 14 to
+25 functions. The failing `80025bf4` instruction is the standard-layout SDK
+dispatcher's saved Status write; its differently compiled family was missed.
+The existing Status/ERET guards remain. The newly exposed RAM-loaded thread
+entry is an explicit residual site, dispatched only to emitted native code;
+strict mode and unknown native-target refusals are tested. The manifest has
+20 residual sites and `native_complete: false`.
+
+The game passes dispatch and a second missed `osGetThreadPri(NULL)` getter.
+Five SDK host threads are live at the later PI-manager switch refusal:
+VI 0/fault 3/PC `8002a2e4`, computed target `8002a2ec`. No graphics/audio task,
+PI transfer or rendered game frame/title/menu is reached. The switch has no
+discovered candidates; recovering its base across calls/loop paths remains
+open. A speculative message-call summary did not fix it and was removed.
+Synthetic signature, strict/residual callback, scheduler saved-register/mask/
+queue and native-entry mutation tests cover this change. Receipt:
+research/rs-thread-dispatch.md; required controls and exact-tree local gate
+are recorded in the ignored receipts and issue #4 closeout.
+
 ## Rogue Squadron cache boot clear (ADR-0271)
 
 D-cache Create Dirty Exclusive now retains witnessed slot bytes, writes back a

@@ -15,6 +15,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 mod bindings;
 #[path = "signature_cache_profile.rs"]
 mod cache_profile;
+#[path = "signature_sdk.rs"]
+mod sdk;
 #[path = "signature_status.rs"]
 mod status;
 pub use status::verify as verify_status_abi;
@@ -270,6 +272,7 @@ pub fn identify(image: &CodeImage, signatures: &[Signature], wanted: &[&str]) ->
         combine(global, resolve(image, found, &namespace))
     };
     cache_profile::merge(image, &mut out, &wanted);
+    sdk::merge(image, &mut out, &wanted);
     status::annotate(image, signatures, &mut out);
     out
 }

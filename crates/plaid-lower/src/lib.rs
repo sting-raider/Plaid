@@ -1895,6 +1895,12 @@ pub fn lower_c_parts(
         );
     }
     callees.retain(|f| !runtime.contains_key(&f.pc.0));
+    let residual_thread_entries = plaid_core::callbacks::callbacks(map, image)
+        .iter()
+        .any(|c| {
+            report.residual_sites.contains(&c.site)
+                && plaid_core::callbacks::residual_thread_entry(map, c)
+        });
     let functions: BTreeSet<u32> = callees.iter().map(|f| f.pc.0).collect();
     // A residual site dispatches over every lowered entry, never beyond
     // (ADR-0218), and over its own candidate and observed targets: entries for
@@ -2108,16 +2114,26 @@ pub fn lower_c_parts(
         shared += &format!("int plaid_call_{k}(plaid_state *s, u64 t, u64 ret, u32 pc);\n");
         dispatch.insert(ts, k);
     }
-    // The runtime enters guest code only here, and only at proven callbacks.
-    out += "int plaid_enter(plaid_state *s, u32 entry, u64 ret) {\n";
-    if !overlays.is_empty() {
-        out += "  entry = plaid_link(s, entry);\n";
+    // Runtime entries are proven callbacks, or emitted native functions when
+    // an explicitly listed residual SDK thread callback needs dispatch.
+    out += "int plaid_coroutine_enter(plaid_state *, u32, u64);\nint plaid_enter(plaid_state *s, u32 entry, u64 ret) {\n";
+    if residual_thread_entries {
+        // Share the already emitted native lookup instead of compiling a
+        // second full function table. Recognized jump helpers are fixed text.
+        for &t in jumps.keys() {
+            out += &format!("  if (entry == 0x{t:08x}u) return F_{t:08x}(s, ret);\n");
+        }
+        out += "  return plaid_coroutine_enter(s, entry, ret);\n}\n";
+    } else {
+        if !overlays.is_empty() {
+            out += "  entry = plaid_link(s, entry);\n";
+        }
+        out += "  switch (entry) {\n";
+        for t in &entered {
+            out += &format!("  case 0x{0:08x}u: return F_{0:08x}(s, ret);\n", t.pc.0);
+        }
+        out += "  }\n  return plaid_fault(s, entry, 3);\n}\n";
     }
-    out += "  switch (entry) {\n";
-    for t in &entered {
-        out += &format!("  case 0x{0:08x}u: return F_{0:08x}(s, ret);\n", t.pc.0);
-    }
-    out += "  }\n  return plaid_fault(s, entry, 3);\n}\n";
     out += "typedef int (*plaid_coroutine_fn)(plaid_state *, u64);\nplaid_coroutine_fn plaid_coroutine_target(plaid_state *s, u32 entry) {\n";
     out += "  (void)s;\n";
     if !overlays.is_empty() {
@@ -2125,7 +2141,7 @@ pub fn lower_c_parts(
     }
     out += "  switch (entry) {\n";
     for &t in &functions {
-        if !jumps.is_empty() && !jumps.contains_key(&t) {
+        if (residual_thread_entries || !jumps.is_empty()) && !jumps.contains_key(&t) {
             out += &format!("case 0x{t:08x}u: return F_{t:08x};\n");
         }
     }
