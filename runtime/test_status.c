@@ -152,6 +152,40 @@ static void control_registers_in_both_fr_modes(void) {
   S->fault = 0; S->fcsr = 0; S->fcc = 0; S->status_known = 0; S->fr_mode = 0;
 }
 
+static void dynamic_fr_contexts(void) {
+  rt_thread one = {0}, two = {0};
+  static plaid_state before;
+  unsigned i;
+  one.guest = 0x80002400u; two.guest = 0x80002600u;
+  one.status_known = two.status_known = 1;
+  one.status_global = two.status_global = global_a;
+  wr32(global_a, 0x003fff01u);
+  wr32(one.guest + 0x118, 0x2000ff03u);
+  wr32(two.guest + 0x118, 0x2000ff03u);
+  restore(&one);
+  for (i = 0; i < 32; i++) S->f[i] = 0x1234567800000000ull + i;
+  assert(!plaid_cp0_write(S, 12, 0x2400ff01u, 0x80000400u));
+  assert(S->fr_mode == 2 && ints_enabled);
+  /* No other SDK-owned Status change is admitted, even combined with FR. */
+  before = *S;
+  assert(plaid_cp0_write(S, 12, 0x2000ff00u, 0x80000404u));
+  assert(S->fault == 12 && S->fault_pc == 0x80000404u);
+  S->fault = before.fault; S->fault_pc = before.fault_pc;
+  assert(!memcmp(S, &before, sizeof before) && ints_enabled);
+  save(&one);
+  assert(rd32(one.guest + 0x118) == 0x2400ff03u);
+  restore(&two);
+  assert(S->fr_mode == 1 && S->cp0_status == 0x2000ff01u);
+  memset(S->f, 0xa5, sizeof S->f);
+  save(&two); restore(&one);
+  assert(S->fr_mode == 2 && S->cp0_status == 0x2400ff01u);
+  for (i = 0; i < 32; i++) assert(S->f[i] == 0x1234567800000000ull + i);
+  assert(!plaid_cp0_write(S, 12, 0x2000ff01u, 0x80000408u));
+  for (i = 0; i < 32; i++) assert(S->f[i] == 0x1234567800000000ull + i);
+  assert(S->fr_mode == 1 && ints_enabled);
+  S->status_known = S->status_thread = S->fr_mode = 0;
+}
+
 int main(int argc, char **argv) {
   unsigned batch = argc == 2 ? (unsigned)strtoul(argv[1], NULL, 0) : 0, i;
   assert(batch < sizeof status_cases / sizeof status_cases[0] / 16);
@@ -159,6 +193,7 @@ int main(int argc, char **argv) {
   contexts_and_events();
   fr_outside_sdk_context();
   control_registers_in_both_fr_modes();
+  dynamic_fr_contexts();
   memset(timers, 0, sizeof timers); memset(pending, 0, sizeof pending);
   for (i = 16; i < 24; i++) S->r[i] = 0x1234567800000000ull + i;
   S->hi = 0x123456789abcdef0ull; S->lo = 0xfedcba9876543210ull;

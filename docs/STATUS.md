@@ -1,5 +1,26 @@
 # Status
 
+## Verified dynamic FR and Rogue Squadron continuation (ADR-0276)
+
+Native lowering derives Status.FR facts from guest data flow across blocks,
+joins, loops and delay slots. Every FPR access retains its layout check;
+unknown entry/call facts do not become constants. Canonical32x64-bit FPR
+storage survives mode changes and thread handoffs. SDK-owned Status writes
+may change only FR. Twelve pinned-ares full-state differentials, scheduler,
+unknown-join and guard-mutation contracts cover the declared subset.
+
+Rogue Squadron passes VI114/fault12/80013c34. A measured RSP DPC dirty-page
+bug rescanned8MiB per register write; native RSP execution now preserves
+sparse DMA dirtiness while CPU submissions still invalidate all pages.
+Inactive overlay proof writes revoke the binding and require full code/proof
+verification on reentry; active/suspended frames remain protected.
+The game advances past its copyright/model screen and idle-overlay clear,
+then stops near VI350/fault3/8003dc58 on unresolved target8003dc68. The final
+readback is mostly black/noisy after the transition; no title/menu/gameplay
+claim. CPU native_complete:false/19 residual sites remain. Design, reference
+evidence, before/after timings, acceptance procedure and ignored receipts:
+research/rs-dynamic-fr.md.
+
 ## Slot data and Rogue Squadron's first visible screen (ADR-0275)
 
 Slot binding now verifies/protects every emitted instruction plus immutable

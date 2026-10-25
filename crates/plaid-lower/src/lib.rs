@@ -15,6 +15,7 @@ use plaid_core::{
 use std::collections::{BTreeMap, BTreeSet};
 
 pub mod coverage;
+mod fr;
 mod jumps;
 pub mod overlay;
 pub mod rsp;
@@ -780,7 +781,8 @@ int plaid_ovl_write(plaid_state *s, u32 p, u32 pc) {
     if (!s->ovl_ok[k]) continue;
     a = plaid_ovls[k].link + s->ovl_backing[k];
     if (!plaid_ovl_contains(k, p - a)) continue;
-    if (plaid_ovl_contains(k, p - a) == 2) return 1; /* proof data stays immutable */
+    /* Proof data, like text, may change only after every frame has left.
+       Revoke the binding below; reentry verifies all proof inputs again. */
     if (s->ovl_active[k] || pc - plaid_ovls[k].link < plaid_ovls[k].text) return 1;
   }
   for (k = 0; k < PLAID_OVLS; k++)
@@ -1054,7 +1056,7 @@ fn simple_lo(word: u32, pc: u32, fr0: bool, lo: Option<&str>) -> Result<String, 
                     "{{ u64 v; if (plaid_cp0_read(s, {rd}, &v, 0x{pc:08x}u)) return 1; {assign} }}"
                 )
             }
-            _ => format!("if (plaid_cp0_write(s, {rd}, s->r[{rt}], 0x{pc:08x}u)) return 1;"),
+            _ => format!("if (plaid_cp0_write(s, {rd}, s->r[{rt}], 0x{pc:08x}u)) {{ return 1; }}"),
         },
         (16, _) if plaid_core::solver::is_cop0_tlb(word) => {
             let operation = match word & 63 {
@@ -1265,6 +1267,7 @@ fn continuation_blocks<'b>(
 struct Lowerer<'a> {
     image: &'a CodeImage,
     fr0: bool,
+    fr_modes: &'a BTreeMap<u32, bool>,
     /// Block starts of the function being emitted (exits included).
     labels: BTreeSet<u32>,
     /// Constant-proven indirect targets by site.
@@ -1291,6 +1294,9 @@ struct Lowerer<'a> {
 }
 
 impl Lowerer<'_> {
+    fn fr0_at(&self, pc: u32) -> bool {
+        self.fr_modes.get(&pc).copied().unwrap_or(self.fr0)
+    }
     /// While a call is outstanding, the suspended frame pins only the text its
     /// continuation can still reach; the full body is pinned again on return.
     fn pin(&self, link: u32, call: String) -> String {
@@ -1335,7 +1341,7 @@ impl Lowerer<'_> {
             if jump.restore {
                 return Ok(format!(
                     "{check} return plaid_jump_to(s, J_{target:08x}, {}, {}, 0x{pc:08x}u);",
-                    u8::from(self.fr0),
+                    u8::from(self.fr0_at(pc)),
                     u8::from(jump.nonzero)
                 ));
             }
@@ -1346,7 +1352,7 @@ impl Lowerer<'_> {
             return Ok(format!(
                 "{check} if (s->r[31] != {}) return plaid_fault(s, 0x{pc:08x}u, 5); {{ intptr_t *jb = plaid_jump_begin(s, frame, J_{target:08x}, {}, 0x{pc:08x}u); if (!jb) return 1; if (__builtin_setjmp(jb)) {{ {repin} if (plaid_jump_resume(s, jb)) return 1; }} else {{ static const plaid_text_range range = {{{}u, {}u}}; plaid_native_frame leaf = {{0,0,&range,1,0,0,-1}}; int r; plaid_text_pin(s, &leaf); r = plaid_jump_save(s, jb); plaid_text_unpin(s, &leaf); if (r) return r; }} }} {}",
                 self.link(link),
-                u8::from(self.fr0),
+                u8::from(self.fr0_at(pc)),
                 physical(target)?,
                 physical(target)? + jump.words * 4,
                 self.fallthrough(link, pc)
@@ -1530,7 +1536,7 @@ impl Lowerer<'_> {
             .map(|code| {
                 format!(
                     "if (plaid_status_fp(s, 0x{pc:08x}u, {})) {{ return 1; }}\n{code}",
-                    u8::from(self.fr0)
+                    u8::from(self.fr0_at(pc))
                 )
             }),
             (17, _, _) if rs == 8 => conditional(format!(
@@ -1540,7 +1546,7 @@ impl Lowerer<'_> {
             .map(|code| {
                 format!(
                     "if (plaid_status_fp(s, 0x{pc:08x}u, {})) {{ return 1; }}\n{code}",
-                    u8::from(self.fr0)
+                    u8::from(self.fr0_at(pc))
                 )
             }),
             (1, _, 0) => conditional(format!("(s64){a} < 0")),
@@ -2250,6 +2256,7 @@ pub fn lower_c_parts(
             .push(e.target.pc.0);
     }
     let mut lowered = Vec::new();
+    let relocated = relocations.keys().copied().collect();
     for f in callees.iter().filter(|f| seen.insert(f.pc.0)) {
         let mut out = String::new();
         let body = &bodies[f];
@@ -2286,11 +2293,13 @@ pub fn lower_c_parts(
                 continuations.insert(link, ranges.len());
             }
         }
+        let fr_modes = fr::modes(f.pc.0, &blocks, image, &targets, &relocated, &word)?;
         let lowerer = Lowerer {
             frame: fixed.then_some((f.pc.0, blocks.len())),
             continuations,
             image,
             fr0: map.cop1_fr0,
+            fr_modes: &fr_modes,
             labels: body.iter().map(|b| b.pc.0).collect(),
             targets: &targets,
             returns: &returns,
@@ -2305,7 +2314,7 @@ pub fn lower_c_parts(
         // Relocated immediates are read from the bound copy (ADR-0181).
         let lower = |w: u32, pc: u32| -> Result<String, String> {
             let Some(&(k, kind)) = relocations.get(&pc) else {
-                return simple(w, pc, map.cop1_fr0);
+                return simple(w, pc, lowerer.fr0_at(pc));
             };
             match kind {
                 5 => Ok(set(
@@ -2315,7 +2324,7 @@ pub fn lower_c_parts(
                 6 => simple_lo(
                     w,
                     pc,
-                    map.cop1_fr0,
+                    lowerer.fr0_at(pc),
                     Some(&format!("plaid_ow(s, {k}, 0x{pc:08x}u)")),
                 ),
                 _ => Err(format!(

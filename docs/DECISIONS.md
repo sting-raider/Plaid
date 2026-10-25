@@ -8131,3 +8131,63 @@ Reference use: pinned ares9408cb43 (ISC), CPU SB, D-cache byte stores and FPR
 layout/Status handlers were read; an analysis-only private observer compares
 actual execution. No reference implementation body, SDK/game body or assets
 were copied into production. Shared references and RT64 shim are unchanged.
+
+## ADR-0276: Derive native FPR layouts from Status.FR data flow
+
+Decision: keep one canonical32x64-bit FPR storage array, selecting operand
+access rules per instruction from conservative Status.FR data flow. Track
+known GPR bits through Status reads, masks, moves/shifts, joins, loops and
+actual delay-slot semantics. Relocated immediates and call effects are
+unknown. Retain the existing layout/CU1 guard at every FPR access, including
+when falling back to the map's checked default. Do not infer FR preservation
+from an ABI or assume an FR1 region restores FR0. Unknown incompatible paths
+fault closed; interprocedural FR1 specialization remains outside this scope.
+
+SDK-owned raw Status writes may change only FR, preserving interrupt/event,
+CU1 and privilege state. Save/restore both canonical FPR bits and FR mode in
+runtime contexts; authenticated saved SDK Status remains authoritative. New
+SDK threads start FR0. This changes no guest instruction storage at runtime
+and introduces no decoder, interpreter, JIT or emulation fallback.
+
+Pinned ares9408cb43 leaves FPR bits unmoved across FR changes. Its transfer,
+arithmetic source, second source and destination rules are distinct in FR0;
+Plaid retains those existing helpers rather than applying one pairing rule
+to every operand. Twelve deterministic native/ares full-state comparisons
+exercise FR0->FR1->FR0, independent odd slots, hidden halves, memory, loops,
+jump/likely slots, both map defaults and SDK ownership. Conflicting-mode
+joins and inferred-guard mutation preserve refusal behavior. Scheduler and
+Status contracts cover preemption, all FPR bits, saved FR and rejection
+without interrupt/state changes. Reference use is read-only, ares ISC with
+upstream notices; no implementation body or copyrighted input is copied.
+
+Rogue Squadron's first FR writer is a bounded leaf at80013c14, switching
+at80013c34 and clearing at80013e14. Related ROM routines include one calling
+FR1 helpers and one returning in FR1; neither supplies a general leaf/restore
+assumption. The first region's arithmetic is single precision with independent
+odd registers. Supported emitted regions now pass the former VI114/fault12.
+
+Continuation exposed a measured performance bug: native RSP DPC writes
+were treated as CPU writes, dirtying all8MiB on every submission. During
+synchronous native RSP execution suppress only that CPU invalidation; retain
+full task-entry/CPU invalidation and exact RSP DMA pages. The synthetic
+2048/0/1/2048 page census, command bytes, DMA output and guard mutation
+verify this boundary. Raw-command order and readbacks are unchanged. No
+production RT64 patch or shared-shim rebuild is needed.
+
+The next clear covers an inactive overlay's proof byte96660, active count0.
+Extend ADR-0275: proof data is immutable for the lifetime of a live binding,
+not forever after its last frame leaves. Inactive proof writes revoke the
+binding like text writes; every subsequent entry verifies all code and proof
+ranges. Active/suspended frames and fixed-image proof data remain protected.
+Native/ares guest write/restore/reentry and altered-proof/active-frame/mutation
+contracts verify this extension. No modified proof can justify a live native
+transfer or a new binding.
+
+Consequences: RS advances past the copyright/model and overlay retirement,
+then30s ordinary/input requests stop near VI350/fault3/8003dc58, targeting
+8003dc68 through an unresolved runtime-based table. Preserve that refusal;
+19 residual sites/native_complete:false remain. Final readback is mostly
+black/noisy, not a title/menu or gameplay claim. Detailed characterization,
+measurements, local gate and silent visible controls are recorded in
+research/rs-dynamic-fr.md, ignored receipts and the issue4 closeout. No ROM,
+assets, captures, README edits or shared reference modifications are committed.

@@ -44,9 +44,17 @@ static inline int plaid_cp0_write(plaid_state *s, u32 reg, u64 v, u32 pc) {
   case 29: s->cp0_taghi = 0; break;
   case 30: s->cp0_error_epc = v; break;
   case 12:
+    /* SDK-owned code may change only FR. Interrupt/event and privilege state
+       must be identical before accepting this write (ADR-0276). */
+    if (s->status_thread) {
+      if (((u32)v ^ s->cp0_status) & ~0x04000000u) return plaid_fault(s, pc, 12);
+      s->cp0_status = (u32)v;
+      s->fr_mode = (s->cp0_status & 0x04000000u) ? 2 : 1;
+      break;
+    }
     /* Timer/exception delivery and SDK scheduler Status writes need a separate
        contract. Reject before changing state, including FR. */
-    if (s->status_thread || ((v ^ s->cp0_status) & 1u) || (v & 0x030000f8u) ||
+    if (((v ^ s->cp0_status) & 1u) || (v & 0x030000f8u) ||
         ((v & 1u) && !(v & 6u) && (v & 0xff00u))) return plaid_fault(s, pc, 12);
     s->cp0_status = ((u32)v & 0xff57ffffu) | (s->cp0_status & 0x00200000u);
     s->fr_mode = (s->cp0_status & 0x04000000u) ? 2 : 1;

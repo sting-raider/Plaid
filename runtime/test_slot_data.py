@@ -41,6 +41,12 @@ def main():
              3 << 26 | ((SLOT + 16) >> 2 & 0x3ffffff), a.nop,
              a.addu(a.s3, a.v0, 0),
              3 << 26 | ((SLOT + 48) >> 2 & 0x3ffffff), a.nop,
+             # Retire and reuse an idle overlay's proof bytes. Restoration is
+             # required before the same tail transfer can bind again.
+             a.lui(a.t0, 0x8000), a.ori(a.t0, a.t0, SLOT & 0xffff),
+             a.addiu(a.t1, 0, 123), a.sw(a.t1, 76, a.t0), a.lw(a.s6, 76, a.t0),
+             a.lui(a.t1, 0x8000), a.ori(a.t1, a.t1, (SLOT + 80) & 0xffff), a.sw(a.t1, 76, a.t0),
+             3 << 26 | ((SLOT + 48) >> 2 & 0x3ffffff), a.nop,
              a.lui(a.t0, 0x8000), a.ori(a.t0, a.t0, SLOT & 0xffff),
              a.lw(a.s4, 0, a.t0), a.lw(a.s5, 44, a.t0), *a.DONE,
              'icache', a.jr(a.ra), a.nop, 'payload', *payload]
@@ -74,9 +80,14 @@ int main(void) {
   assert(slice_main() == 0 && !s.native_frames);
   assert(s.r[19] == 65 && s.r[20] == 0x7641696eu && s.r[21] == 0x7641696eu);
   assert(s.ovl_ok[0] && !s.fault);
-  /* A proven tail cell inside the candidate extent is immutable even idle. */
-  assert(plaid_runtime_write(&s, 0x404c, 1, 0) == 1 && s.fault == 2);
-  assert(s.ram[0x404c] == 0x80 && s.ovl_ok[0]); s.fault = 0;
+  /* Idle proof writes revoke; altered proof inputs must prevent reentry. */
+  assert(s.r[22] == 123);
+  mapped = plaid_link(&s, 0x80004030u);
+  assert(plaid_runtime_write(&s, 0x404c, 1, 0) == 0 && !s.ovl_ok[0]);
+  s.ram[0x404c] = 0;
+  assert(plaid_link(&s, 0x80004030u) != mapped && !s.ovl_ok[0]);
+  s.ram[0x404c] = 0x80;
+  assert(plaid_link(&s, 0x80004030u) == mapped && s.ovl_ok[0]);
   /* Mutations before first entry and after a revocation must also bind. */
   assert(plaid_runtime_write(&s, 0x4001, 1, 0) == 0 && s.ovl_ok[0]);
   s.ram[0x4001] = 66;
@@ -93,6 +104,9 @@ int main(void) {
     assert(plaid_store(&s, SX32(0x80004001u), 1, 67, 0) == 0);
     assert(plaid_runtime_write(&s, 0x4010, 1, 0) == 1 && s.fault == 2);
     assert(s.ram[0x4010] == original && s.ovl_ok[0]);
+    s.fault = 0;
+    assert(plaid_runtime_write(&s, 0x404c, 1, 0) == 1 && s.fault == 2);
+    assert(s.ram[0x404c] == 0x80 && s.ovl_ok[0]);
     plaid_text_unpin(&s, &frame); s.fault = 0;
   }
   return 0;
@@ -124,7 +138,7 @@ int main(void) {
     finally:
         c.write_text(original)
     print('PASS slot data: prefix/inter-function byte writes and full CPU state match pinned ares; '
-          'changed text refuses, restored text rebinds after data writes, proof data/active code stay protected; '
+          'changed text/proof refuses, restored inputs rebind, active code/proof stay protected; '
           'active-frame guard mutation killed')
 
 

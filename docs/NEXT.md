@@ -1,5 +1,23 @@
 # Next
 
+## Rogue Squadron after dynamic FR (ADR-0276)
+
+Preserve per-instruction FR analysis, canonical FPR bits, strict SDK Status
+changes, unknown-path layout checks and scheduler save/restore. Calls kill
+FR facts; arbitrary FR1 call contexts still require verified specialization.
+Keep sparse RSP DMA dirtiness without losing full CPU/task-entry invalidation.
+Idle overlay proof writes may revoke; active/suspended frames refuse writes,
+and altered proof bytes must prevent rebinding.
+
+The30s ordinary/input requests pass the copyright/model and overlay clear,
+then stop at VI351/349,fault3/8003dc58. JR v0 requests8003dc68 through a
+halfword selector bounded by4c and runtime table base t4=80031740. This is one
+of the19 existing residual sites. Establish table-base provenance and discover
+the internal targets; do not seed targets from the stop or weaken dispatch.
+Final sampled readback is mostly black/noisy, without a verified title/menu.
+Commands, PNGs, full-state/mutation tests and gate/control receipts are in
+research/rs-dynamic-fr.md and ignored target/receipts/rs-dynamic-fr.
+
 ## Continue Rogue Squadron after its first copyright screen (ADR-0275)
 
 Preserve sparse slot instruction verification/protection, immutable dispatch

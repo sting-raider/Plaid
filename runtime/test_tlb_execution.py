@@ -145,12 +145,20 @@ int main(void) {{
   assert(s.ovl_delta[k0] == before_delta0 && s.ovl_backing[k0] == before_backing0 && s.ovl_tlb[k0] == before_tlb0 && s.ovl_generation[k0] == before_ovl_generation0);
   assert(s.ovl_delta[k1] == before_delta1 && s.ovl_backing[k1] == before_backing1 && s.ovl_tlb[k1] == before_tlb1 && s.ovl_generation[k1] == before_ovl_generation1);
   s.ovl_active[k1] = 0; s.fault = s.fault_pc = 0;
-  /* Tail-pointer cells in module data are byte-bound and protected; nearby
-     mutable data stays writable. Refusal happens before changing any bytes. */
+  /* Tail-pointer cells are protected while active; nearby mutable data stays
+     writable. Idle proof writes revoke and must reverify through the TLB. */
   assert(s.prot[(0x{P1:08x}u + 0x20u) >> 2] == 255);
   assert(plaid_runtime_write(&s, 0x{P1:08x}u + 0x18u, 4, 0x{PC:08x}u) == 0 && s.ovl_ok[k1]);
+  s.ovl_active[k1] = 1;
   assert(plaid_runtime_write(&s, 0x{P1:08x}u + 0x20u, 4, 0x{PC:08x}u) == 1 && s.fault == 2 && s.ovl_ok[k1]);
-  s.fault = s.fault_pc = 0;
+  s.ovl_active[k1] = 0; s.fault = s.fault_pc = 0;
+  u8 original_proof = s.ram[0x{P1:08x}u + 0x20u];
+  assert(plaid_runtime_write(&s, 0x{P1:08x}u + 0x20u, 4, 0x{PC:08x}u) == 0 && !s.ovl_ok[k1]);
+  s.ram[0x{P1:08x}u + 0x20u] ^= 1;
+  assert(plaid_link(&s, 0x{E1:08x}u) == 1 && !s.ovl_ok[k1]);
+  s.ram[0x{P1:08x}u + 0x20u] = original_proof;
+  assert(plaid_link(&s, 0x{E1:08x}u) == plaid_ovls[k1].link && s.ovl_ok[k1]);
+  binding(&s, k1, 1, 0x{E1:08x}u, 0x{P1:08x}u);
   printf("{{\\"pc\\":%u,\\"regs\\":[", s.pc);
   for (int r = 0; r < 32; r++) printf("%s%llu", r ? "," : "", (unsigned long long)s.r[r]);
   printf("],\\"hi\\":%llu,\\"lo\\":%llu,\\"fpr\\":[", (unsigned long long)s.hi, (unsigned long long)s.lo);
