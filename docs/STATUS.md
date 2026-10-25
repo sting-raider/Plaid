@@ -1,5 +1,24 @@
 # Status
 
+## Slot data and Rogue Squadron's first visible screen (ADR-0275)
+
+Slot binding now verifies/protects every emitted instruction plus immutable
+proof inputs, rather than treating a raw candidate extent as a contiguous
+section. Mutable prefix/inter-function data remains writable; code tampering,
+active/suspended frame writes, ambiguous bindings and unknown targets still
+fail closed. Synthetic CPU/ares, rebind, tail-cell and guard-mutation coverage
+is retained in runtime/test_slot_data.py.
+
+Rogue Squadron passes SB at80884650 to80096bfd: its loaded overlay exactly
+matches ROMfdec0..126660 in native RDRAM and pinned ares. The game advances
+48 ->53 graphics tasks. A silent visible request stops at VI114/fault12/
+80013c34; an independent VI111 readback shows the readable640x480 copyright
+screen,19496 nonblack pixels/48 colors. Start/A repeats the new refusal.
+A matrix routine's Status.FR0->FR1 transition in an SDK thread is unsupported;
+its FPR accesses also need dynamic layout lowering. No interactive menu or
+native completeness is established. Full receipts: research/rs-first-frame.md
+and ignored target/receipts/rs-first-frame. No shared RT64 rebuild is needed.
+
 ## Native custom RSP overlays and unknown-GBI LLE (ADR-0274)
 
 Packed RSP DMA descriptors now supply nonstandard ROM-derived IMEM

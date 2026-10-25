@@ -1,19 +1,27 @@
 # Next
 
-## Continue Rogue Squadron beyond initial native custom-microcode tasks (ADR-0274)
+## Continue Rogue Squadron after its first copyright screen (ADR-0275)
 
-Investigate the byte store to80096bfd (SB v0,1(v1)) refused with fault2 at
-slotPC80884650/linked800a4650, after48 graphics tasks. Establish its data/text
-binding and write lifetime; preserve the guard. RDRAM readback remains black.
-Preserve rooted packed-descriptor hints, native overlay/fetch guards and the
-2,694-instruction real-task ares comparison. Use automatic unknown-GBI LLE
-or explicit --rsp-gfx with the updated bridge. Verify later task variants,
-actual RDP/framebuffer effects and title/menu input through RDRAM readback;
-do not promote a black frame, an SDK refusal with CPUfault0, or one matched
-task into gameplay/RSP closure. Preserve terminal-jump callback filtering,
-absent-Pak CRC replies and stopped send/receive continuations. Final bounded
-run and remaining guard evidence live in research/rs-rsp-ucode.md and its
-ignored receipts; unresolved CPU/overlay/indirect targets still fault.
+Preserve sparse slot instruction verification/protection, immutable dispatch
+inputs (including those within candidate text), rebind/ambiguity guards and
+native-only residual dispatch. The write to80096bfd is mutable prefix data,
+not code; native and pinned ares identify the second descriptor overlay at
+800960e0 and agree on SB41. Do not restore whole-candidate protection.
+
+The next blocker is fault12 at80013c34, MTC0 Status, requesting2400ff01 from
+2000ff01 while an SDK thread owns execution. The matrix routine switches FR0
+toFR1 before loading odd FPRs independently. A verified dynamic-FR contract
+must preserve all GPR/FPR bits, Status/interrupt effects, thread save/restore
+and refusals for unsupported Status changes. Merely allowing MTC0 would hit
+the fixed-map FPR-layout guard next. Keep that guard until lowering and its
+native/ares verifier cover transitions.
+
+The readable copyright screen is640x480 RGBA5551:19496 nonblack pixels/48
+colors in RDRAM. Ordinary30s request: VI114,53 graphics/62 audio,36 PI DMAs;
+independent readback VI111; Start100/A110 repeats fault12 nearVI112. No menu
+or gameplay is established. Preserve ADR-0274 native RSP task/fetch tests and
+19 residual CPU sites/native_complete:false. Evidence and complete acceptance
+commands are in research/rs-first-frame.md.
 
 
 ## Continue OoT after NJPEG save load (ADR-0265)

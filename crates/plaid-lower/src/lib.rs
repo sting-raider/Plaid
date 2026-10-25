@@ -583,12 +583,18 @@ fn relink(overlay: bool) -> &'static str {
 /// overlay text to its link address and binds an overlay on first entry
 /// when exactly one overlay and base verify byte for byte; and
 /// `plaid_ovl_write`, which revokes a binding when its text is written.
+#[derive(Clone, Default)]
+struct OverlayGuards {
+    text: Vec<(u32, u32)>,
+    data: Vec<(u32, u32)>,
+}
+
 fn overlay_runtime(
     overlays: &[(u32, u32)],
     mapped_bases: &[(Option<u32>, Option<u32>)],
     layouts: &[(Vec<u8>, plaid_core::overlays::Layout)],
     compared: &[usize],
-    guarded: &[Vec<(u32, u32)>],
+    guarded: &[OverlayGuards],
     functions: &BTreeSet<u32>,
     image: &CodeImage,
 ) -> Result<String, String> {
@@ -598,23 +604,53 @@ fn overlay_runtime(
         ));
     }
     let mut out = String::from(
-        "typedef struct { u32 f, w, probe; } plaid_ovl_fn;\ntypedef struct { u32 start, end; } plaid_ovl_range;\ntypedef struct { u32 link, text, mapped, virtual_base, physical_base, span, guards; const plaid_ovl_range *ranges; int (*verify)(const uint8_t *, size_t, uint32_t); u32 n; const plaid_ovl_fn *f; } plaid_ovl;\n",
+        "typedef struct { u32 f, w, probe; } plaid_ovl_fn;\ntypedef struct { u32 start, end, proof; } plaid_ovl_range;\ntypedef struct { u32 link, text, mapped, virtual_base, physical_base, span, guards; const plaid_ovl_range *ranges; int (*verify)(const uint8_t *, size_t, uint32_t); u32 n; const plaid_ovl_fn *f; } plaid_ovl;\n",
     );
     let mut table = Vec::new();
     for (k, (&(link, _), (bytes, layout))) in overlays.iter().zip(layouts).enumerate() {
-        // a slot alternate is checked over its text (ADR-0185)
-        out += &overlay::verifier_guarded(bytes, layout, compared[k], link, k as u32, &guarded[k])?;
-        let ranges: Vec<_> = std::iter::once((0, layout.text))
-            .chain(guarded[k].iter().copied())
-            .collect();
-        let span = ranges.iter().map(|r| r.1).max().unwrap_or(layout.text);
+        // Slot text bounds are candidate extents, not a section certificate.
+        out += &overlay::verifier_text_ranges(
+            bytes,
+            layout,
+            compared[k],
+            link,
+            k as u32,
+            &guarded[k].text,
+            &guarded[k].data,
+        )?;
+        let mut boundaries = BTreeSet::new();
+        for &(start, end) in guarded[k].text.iter().chain(&guarded[k].data) {
+            boundaries.extend([start, end]);
+        }
+        let boundaries: Vec<_> = boundaries.into_iter().collect();
+        let mut ranges: Vec<(u32, u32, bool)> = Vec::new();
+        for pair in boundaries.windows(2) {
+            let (start, end) = (pair[0], pair[1]);
+            let proof = guarded[k].data.iter().any(|&(s, e)| s <= start && end <= e);
+            if !proof && !guarded[k].text.iter().any(|&(s, e)| s <= start && end <= e) {
+                continue;
+            }
+            if let Some(last) = ranges.last_mut()
+                && last.1 == start
+                && last.2 == proof
+            {
+                last.1 = end;
+            } else {
+                ranges.push((start, end, proof));
+            }
+        }
+        let span = ranges.last().map_or(layout.text, |r| r.1);
         out += &format!(
             "static const plaid_ovl_range plaid_ovl_ranges_{k}[] = {{{}}};\n",
-            ranges
-                .iter()
-                .map(|(s, e)| format!("{{{s}u,{e}u}}"))
-                .collect::<Vec<_>>()
-                .join(",")
+            if ranges.is_empty() {
+                "{0,0,0}".into()
+            } else {
+                ranges
+                    .iter()
+                    .map(|(s, e, proof)| format!("{{{s}u,{e}u,{}}}", u8::from(*proof)))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            }
         );
         let relocated: BTreeSet<u32> = layout.relocations.iter().map(|r| link + r.offset).collect();
         let entries: Vec<_> = functions
@@ -699,9 +735,14 @@ static int plaid_ovl_mapping(plaid_state *s, u32 k, u32 *base, u32 *index,
   }
 }
 static int plaid_ovl_contains(u32 k, u32 offset) {
-  u32 r;
-  for (r = 0; r < plaid_ovls[k].guards; r++)
-    if (offset >= plaid_ovls[k].ranges[r].start && offset < plaid_ovls[k].ranges[r].end) return 1;
+  u32 lo = 0, hi = plaid_ovls[k].guards;
+  while (lo < hi) {
+    u32 mid = lo + (hi - lo) / 2;
+    const plaid_ovl_range *r = &plaid_ovls[k].ranges[mid];
+    if (offset < r->start) hi = mid;
+    else if (offset >= r->end) lo = mid + 1;
+    else return r->proof ? 2 : 1;
+  }
   return 0;
 }
 static void plaid_ovl_protect(plaid_state *s, u32 k, u32 a, u8 value) {
@@ -739,7 +780,7 @@ int plaid_ovl_write(plaid_state *s, u32 p, u32 pc) {
     if (!s->ovl_ok[k]) continue;
     a = plaid_ovls[k].link + s->ovl_backing[k];
     if (!plaid_ovl_contains(k, p - a)) continue;
-    if (p - a >= plaid_ovls[k].text) return 1; /* proof-bearing data stays immutable */
+    if (plaid_ovl_contains(k, p - a) == 2) return 1; /* proof data stays immutable */
     if (s->ovl_active[k] || pc - plaid_ovls[k].link < plaid_ovls[k].text) return 1;
   }
   for (k = 0; k < PLAID_OVLS; k++)
@@ -1945,6 +1986,7 @@ pub fn lower_c_parts(
     let residual: BTreeSet<u32> = residual.into_keys().collect();
 
     let mut code = Vec::new();
+    let mut guarded = vec![OverlayGuards::default(); overlays.len()];
     for block in &map.blocks {
         if block.delay_slot_entry {
             return Err(format!(
@@ -1957,6 +1999,9 @@ pub fn lower_c_parts(
             if end > overlays[k].0 + layouts[k].1.text {
                 return Err(format!("{start:08x}: overlay code outside its text"));
             }
+            guarded[k]
+                .text
+                .push((start - overlays[k].0, end - overlays[k].0));
             continue;
         }
         code.push(format!(
@@ -1966,8 +2011,25 @@ pub fn lower_c_parts(
             load_of(start).map_or(-1, |l| l as i64)
         ));
     }
+    for (k, guards) in guarded.iter_mut().enumerate() {
+        if relocatable[k].linked.is_none() {
+            guards.text = vec![(0, layouts[k].1.text)];
+        } else {
+            guards.text.sort_unstable();
+            let mut merged: Vec<(u32, u32)> = Vec::new();
+            for &(start, end) in &guards.text {
+                if let Some(last) = merged.last_mut()
+                    && start <= last.1
+                {
+                    last.1 = last.1.max(end);
+                } else {
+                    merged.push((start, end));
+                }
+            }
+            guards.text = merged;
+        }
+    }
     // Jump tables are store-protected like code (ADR-0132).
-    let mut guarded = vec![Vec::new(); overlays.len()];
     let mut data_guards = BTreeMap::new();
     let index = plaid_core::indirect::MapIndex::new(map);
     for site in &map.indirect_sites {
@@ -1984,7 +2046,9 @@ pub fn lower_c_parts(
                 if end > overlays[k].1 {
                     return Err("overlay table exceeds its declared source".into());
                 }
-                guarded[k].push((start.0 - overlays[k].0, end - overlays[k].0));
+                guarded[k]
+                    .data
+                    .push((start.0 - overlays[k].0, end - overlays[k].0));
                 continue;
             }
             code.push(format!(
