@@ -1,5 +1,23 @@
 # Status
 
+## SDK PI manager and SP task-load family (ADR-0273)
+
+Full normalized PI-family identities now bind manager creation and DMA to the
+existing runtime. Identical PI/SI queue helpers are disambiguated only through
+the authenticated caller's exact call and shared globals. Missed yield and
+SP-task-load variants also bind existing scheduler/RSP APIs. No jump-table
+or native-target guard is relaxed; ordinary ambiguity refusals are retained.
+
+Rogue Squadron identification rises from 25 to 32 runtime functions; residual
+sites fall from 20 to 19, native_complete:false. The VI0/fault3/8002a2e4 PI
+switch is passed. A silent visible 30-second request with native RSP graphics
+stops at VI1, CPU fault0/PC00000000, 15 PI DMAs and the first graphics task,
+on unlowered RSP entry db0. Readback is essentially black, with no title/menu.
+The ordinary RT64 HLE path rejects the GBI and exits without stop JSON.
+RSP placement/discovery is the next blocker. Synthetic matcher/PI contracts,
+owner-guard mutation and required local/control acceptance receipts are
+recorded in research/rs-pi-jumptable.md and the issue #4 closeout.
+
 ## SDK thread family and native entry dispatch (ADR-0272)
 
 Relocation-normalized full-body SDK identities now bind Rogue Squadron's
