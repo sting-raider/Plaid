@@ -704,6 +704,8 @@ def main():
     rsp_state_abi(exe, cc)
     rsp_completion(exe, cc)
     rsp_graphics(exe, cc)
+    import test_rsp_dirty
+    test_rsp_dirty.run(exe, cc, sys.modules[__name__])
     audio_dma(exe, cc)
     rcp_io(exe, cc)
     sp_boot(exe, cc)
@@ -737,6 +739,8 @@ def main():
     eret_contracts()
     from test_fr import main as fr_contracts
     fr_contracts()
+    from test_dynamic_fr import main as dynamic_fr_contracts
+    dynamic_fr_contracts()
     from test_tlb_execution import main as tlb_execution_contracts
     tlb_execution_contracts()
     from test_indexed_dispatch import main as indexed_dispatch_contracts

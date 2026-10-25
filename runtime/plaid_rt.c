@@ -75,7 +75,7 @@ typedef struct rt_thread_s {
   rt_context *all_contexts;
   int host_started;
   u64 r[32], hi, lo, f[32];
-  u32 fcc, fcsr, llbit;
+  u32 fcc, fcsr, llbit, fr_mode;
   u32 status_global;
   int status_known, ie;
 } rt_thread;
@@ -166,6 +166,7 @@ static plaid_rsp rsp;
 static const char *rsp_dump_dir, *rsp_capture_dir;
 static long rsp_capture;
 static int rsp_graphics;
+static int rsp_executing; /* native RSP tasks run synchronously, without CPU execution */
 #ifdef PLAID_RT64
 static u8 rsp_gfx_dirty[PLAID_RAM_SIZE / 4096];
 static int rsp_dpc_consume(u32 current, u32 size, int dmem) {
@@ -285,6 +286,7 @@ static u64 count_now(void) { return now_ns() * 46875ull / 1000000ull + time_base
 static void save(rt_thread *t) {
   memcpy(t->r, S->r, sizeof t->r); memcpy(t->f, S->f, sizeof t->f);
   t->hi = S->hi; t->lo = S->lo; t->fcc = S->fcc; t->fcsr = S->fcsr; t->llbit = S->llbit;
+  t->fr_mode = S->fr_mode;
   t->ie = ints_enabled;
   if (t->status_known) {
     u32 global = rd32(status_kernel_global ? status_kernel_global : t->status_global);
@@ -297,13 +299,14 @@ static void restore(const rt_thread *t) {
   S->hi = t->hi; S->lo = t->lo; S->fcc = t->fcc; S->fcsr = t->fcsr; S->llbit = t->llbit;
   S->status_known = (u32)t->status_known;
   S->cp0_known &= 1u << 10; /* SDK context switches certify no staging register but EntryHi (ADR-0242). */
-  S->fr_mode = 1; /* every runtime thread is a libultra thread: FR = 0 */
+  S->fr_mode = t->fr_mode ? t->fr_mode : 1; /* new SDK threads start FR=0 */
   S->status_thread = t->status_known ? t->guest : 0;
   ints_enabled = t->ie;
   if (t->status_known) {
     u32 saved = rd32(t->guest + 0x118), global = rd32(status_kernel_global ? status_kernel_global : t->status_global);
-    if (saved & 0x040000fcu) finish(1, "unsupported saved Status mode");
+    if (saved & 0xfcu) finish(1, "unsupported saved Status mode");
     S->cp0_status = (saved & ~0xff02u) | (saved & global & 0xff00u);
+    S->fr_mode = (S->cp0_status & 0x04000000u) ? 2 : 1;
     S->mi_mask = rd32(t->guest + 0x128) & (global >> 16) & 0x3fu;
     ints_enabled = S->cp0_status & 1;
     if (pi_status & 8u) { pending[EV_PI] = 1; plaid_preempt = 1; }
@@ -1122,7 +1125,7 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
     if (rsp_graphics) {
       u32 value = (u32)*v;
       /* CPU command submissions may follow CPU texture writes between tasks. */
-      if (write) memset(rsp_gfx_dirty, 1, sizeof rsp_gfx_dirty);
+      if (write && !rsp_executing) memset(rsp_gfx_dirty, 1, sizeof rsp_gfx_dirty);
       int result = rsp_dpc((p & 0x1fu) >> 2, &value, write);
       if (!write) *v = value;
       return result;
@@ -1435,7 +1438,9 @@ static void rsp_task(void) {
   /* osSpTaskStartGo: SET_INTR_ON_BREAK | CLEAR_SSTEP | CLEAR_BROKE | CLEAR_HALT */
   rsp.interrupt_on_break = 1; rsp.single_step = 0; rsp.broken = 0; rsp.halted = 0;
   if (capture) rsp_save("before");
+  rsp_executing = 1;
   rc = rsp_run(rsp.pc);
+  rsp_executing = 0;
   if (rc < 0) {
     char name[64];
     u32 h = 2166136261u, i;
