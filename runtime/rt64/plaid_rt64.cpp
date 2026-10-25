@@ -154,12 +154,26 @@ __declspec(dllexport) int plaid_gfx_open(const uint8_t *rom_header) {
 __declspec(dllexport) int plaid_gfx_task(const uint8_t *ram, uint32_t ucode, uint32_t ucode_data, uint32_t data_ptr,
                                       plaid_gfx_writeback writeback, void *context) {
     readback.clear();
-    run([=] {
+    const uint32_t textAddress = ucode & 0x3FFFFF8;
+    const uint32_t dataAddress = ucode_data & 0x3FFFFF8;
+    if (textAddress > RamSize - 0x1000 || dataAddress > RamSize - 0x1000)
+        return PLAID_GFX_UNKNOWN_UCODE;
+    int result = 0;
+    run([=, &result] {
         sync_ram(ram);
-        app->interpreter->loadUCodeGBI(ucode & 0x3FFFFFF, ucode_data & 0x3FFFFFF, true);
+        // Query current bytes even when a task reuses the same RAM addresses.
+        const auto *gbi = app->interpreter->gbiManager.getGBIForUCode(
+            rdram.data(), textAddress, dataAddress);
+        if (!gbi || gbi->ucode == RT64::GBIUCode::Unknown) {
+            result = PLAID_GFX_UNKNOWN_UCODE;
+            return;
+        }
+        if (gbi != app->interpreter->hleGBI)
+            app->interpreter->UCode.textAddress = ~0u;
+        app->interpreter->loadUCodeGBI(textAddress, dataAddress, true);
         app->processDisplayLists(rdram.data(), data_ptr & 0x3FFFFFF, 0, true);
     });
-    return readback.finish(rdram, seen, writeback, context);
+    return result ? result : readback.finish(rdram, seen, writeback, context);
 }
 
 // Raw RDP commands produced by lowered RSP microcode, including partial lists.

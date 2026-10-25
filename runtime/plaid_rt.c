@@ -139,6 +139,7 @@ static u64 time_base; /* osSetTime offset in count ticks */
 static u32 vi_regs[14], vi_field; /* VI registers as the guest wrote them (ADR-0199) */
 static u64 vi_retrace_ns;
 static u32 dpc_flags; /* DPC_STATUS without --rsp-gfx: 1 source, 2 freeze, 4 flush, 0x400 start valid */
+static u32 dpc_start, dpc_current;
 static u64 dpc_clock_origin;
 static int dp_held; /* a graphics task's DP interrupt, held while the RDP is frozen (ADR-0198) */
 /* With PLAID_RT64 the runtime links plaid_rt64.dll (runtime/rt64, ADR-0163). */
@@ -653,10 +654,11 @@ RT(osGetThreadId) { rt_thread *t = thread_of(arg(0)); return ret(t ? t->id : 0);
 RT(osStopThread) {
   rt_thread *t = thread_of(arg(0));
   if (!t) return 0;
-  if (t->state == T_BLOCKED) finish(1, "osStopThread on a blocked thread is not modeled");
   if (t->guest) wr16(t->guest + 0x10, 1); /* OS_STATE_STOPPED */
   if (t == running) { t->state = T_STOPPED; yield_from(t, 1); }
-  else if (t->state == T_RUNNABLE) t->state = T_STOPPED;
+  /* Queue waiters are selected by T_BLOCKED; stopping removes that eligibility
+     while retaining the parked receive/send continuation for osStartThread. */
+  else if (t->state == T_RUNNABLE || t->state == T_BLOCKED) t->state = T_STOPPED;
   return 0;
 }
 RT(osGetThreadPri) { rt_thread *t = thread_of(arg(0)); return ret(t ? (u32)t->pri : 0); }
@@ -1126,14 +1128,13 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
       return result;
     }
 #endif
-    static u32 start, current;
     u32 r = (p & 0x1fu) >> 2, d = (u32)*v;
     if (!write) {
-      *v = r == 0 ? start : r == 1 || r == 2 ? current : r == 3 ? dpc_flags | 0x80u : 0;
+      *v = r == 0 ? dpc_start : r == 1 || r == 2 ? dpc_current : r == 3 ? dpc_flags | 0x80u : 0;
       return 0;
     }
-    if (r == 0) { if (!(dpc_flags & 0x400u)) start = d & 0xfffff8u; dpc_flags |= 0x400u; }
-    else if (r == 1) { current = d & 0xfffff8u; dpc_flags &= ~0x400u; }
+    if (r == 0) { if (!(dpc_flags & 0x400u)) dpc_start = d & 0xfffff8u; dpc_flags |= 0x400u; }
+    else if (r == 1) { dpc_current = d & 0xfffff8u; dpc_flags &= ~0x400u; }
     else if (r == 3) {
       if (d & 1) dpc_flags &= ~1u;
       if (d & 2) dpc_flags |= 1u;
@@ -1496,10 +1497,20 @@ RT(osSpTaskStartGo) {
     if (stop_gfx && (long)gfx_tasks >= stop_gfx) finish(0, "graphics task");
 #ifdef PLAID_RT64
 #ifdef PLAID_RSP
+    if (!rsp_graphics) {
+      int result = plaid_gfx_task(S->ram, rd32(task + 0x10), rd32(task + 0x18), rd32(task + 0x30), gfx_writeback, S);
+      if (result == PLAID_GFX_UNKNOWN_UCODE) {
+        fprintf(stderr, "unknown graphics microcode: switching to native RSP LLE\n");
+        rsp_dp.start = dpc_start; rsp_dp.end = rsp_dp.current = dpc_current;
+        rsp_dp.status = dpc_flags | 0x80u;
+        rsp_graphics = 1;
+        if (rt_osSpTaskLoad()) return 1;
+      } else if (result) return 1;
+    }
     if (rsp_graphics) { sp_unknown = 0; memset(rsp_gfx_dirty, 1, sizeof rsp_gfx_dirty); rsp_task(); }
-    else
-#endif
+#else
       if (plaid_gfx_task(S->ram, rd32(task + 0x10), rd32(task + 0x18), rd32(task + 0x30), gfx_writeback, S)) return 1;
+#endif
 #endif
     post(EV_SP);
     /* a frozen RDP consumes nothing, so the DP interrupt waits for the thaw

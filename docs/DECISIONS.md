@@ -8032,3 +8032,52 @@ shygoo) supplies SDK names/variants; pinned N64ModernRuntime pi.cpp (GPL-3.0)
 confirms its public API replacement boundary. No implementation or SDK/game
 instruction body is copied. New production content is project-owned matcher
 logic plus normalized digests, extents and relocation/call metadata.
+
+## ADR-0274: Discover packed RSP overlays and route unknown GBI through native LLE
+
+Decision: derive packed halfword overlay descriptors only from rooted RSP
+loader layouts: selector shift/mask, task-ucode-relative source, delay-slot
+destination load and exact SP read-DMA register helper. Validate the selector,
+alignment, source and IMEM extent before proposing ROM-backed placements.
+Existing content tests, startup uniqueness, native per-fetch identity and
+unknown-target faults remain; these candidates do not prove RSP closure.
+
+Rogue Squadron's db0 is a missing placement. Its first task loads a d8-byte
+segment from RDRAM1f918 (ucode+d38, ROM20518) into IMEMdb0. The previously
+harvested resident placement cannot substitute for that PC. A fresh real task
+matches pinned ares9408cb43 in all331 RSP state words, 8MiB RDRAM, IMEM and
+DMEM after2694 instructions in equivalent submission-only DPC harnesses.
+RT64 framebuffer writebacks are checked separately from RSP-only state.
+
+The RT64 bridge returns PLAID_GFX_UNKNOWN_UCODE before display-list/RDP
+execution or writeback when its current-byte GBI query cannot identify the
+microcode. The runtime then loads the task and selects its existing native
+RSP -> raw RDP -> RT64 path, preserving CPU DPC start/current/freeze state.
+Known GBI remains on HLE. Both runtime and bridge must be updated together.
+There is no game exception, runtime guest decoder, interpreter or MIPS JIT.
+
+The continuation exposed general CPU/SDK gaps: named frame-prologue functions can follow a
+terminal J and bounded zero padding; the declared no-Pak controller must
+answer normal Pak probes with absent-device data/CRC; stopping a blocked
+SDK thread removes its wake eligibility while preserving its parked
+continuation for restart. Discovery still filters CPU bodies and treats the
+new layout as a hint, not a target certificate. Calls and conditional
+branches do not supply the terminal boundary. Other unknown native entries
+still fault, and native_complete remains false.
+
+Consequences: synthetic tests cover packed loader-field/helper mutations,
+bounds/holes/selectors, actual ROM-discovery/task-DMA/native entry, corrupt
+fetch refusal, terminal/call/branch/padded layouts, explicit/automatic LLE
+DPC equivalence, absent-Pak replies and stopped send/receive continuations.
+Packed-selector and stopped-waiter guard mutations are caught. The private
+RT64 contract verifies unknown/bounds/alias refusal without writes, followed
+by raw-RDP framebuffer clears. Full gate, visible silent controls, framebuffer
+readback, timings and remaining scope are recorded in research/rs-rsp-ucode.md
+and its ignored receipts. A task-level differential is not whole-game closure.
+
+Reference reuse: pinned ares (ISC) and RT64 (MIT) were consulted read-only;
+no reference implementation body or SDK/game instruction body was copied.
+Pinned N64ModernRuntime's thread code was read but does not implement stopping
+another thread and is not an oracle for that behavior. Shared references and
+shim are unchanged. The private wrapper links existing RT64 static libraries;
+rebuild/distribution instructions for the shared DLL are in the receipt.

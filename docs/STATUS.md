@@ -1,5 +1,23 @@
 # Status
 
+## Native custom RSP overlays and unknown-GBI LLE (ADR-0274)
+
+Packed RSP DMA descriptors now supply nonstandard ROM-derived IMEM
+placements, passing Rogue Squadron's db0 refusal. Its first real graphics
+task matches pinned ares after 2,694 instructions in all 331 RSP state words,
+8 MiB RDRAM, IMEM and DMEM under equivalent DPC submission conditions.
+Unknown GBI selects guarded native RSP LLE before HLE display-list effects;
+raw RDP continues through RT64. Named CPU callbacks following terminal J,
+absent-Pak probes and blocked SDK thread stop/restart are also covered.
+A 30s request now stops at VI105/fault2/80884650 after48 graphics and53 audio
+tasks; automatic LLE reproduces the stop. RDRAM framebuffer readback is black;
+first-frame/gameplay acceptance remains open. This is finite coverage, not
+native completeness. Detailed run,
+framebuffer, controls, mutation and local-gate receipts are in
+research/rs-rsp-ucode.md. Deploy the updated RT64 bridge DLL with the runtime;
+the shared DLL was not rebuilt by this worker.
+
+
 ## SDK PI manager and SP task-load family (ADR-0273)
 
 Full normalized PI-family identities now bind manager creation and DMA to the

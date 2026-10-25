@@ -60,9 +60,42 @@ def program(T, coroutine, destroy):
     return p, runtime, output
 
 
+def stopped_waiter(exe, cc, T):
+    A = T.A
+    coordinator, worker, queue, buffer, output = (0x80005000, 0x80005200, 0x80005400, 0x80005420, 0x80005440)
+    runtime = ['osCreateThread', 'osStartThread', 'osStopThread', 'osCreateMesgQueue', 'osRecvMesg', 'osSendMesg']
+    for send in (False, True):
+        p = [*T.li(A.sp, 0x80027F00),
+             *T.call('osCreateThread', coordinator, 1, 'coordinator', 0, 0x80017F00, 10),
+             *T.call('osStartThread', coordinator), *A.DONE,
+             'coordinator', *T.call('osCreateMesgQueue', queue, buffer, 1),
+             *([*T.call('osSendMesg', queue, 42, 0)] if send else []),
+             *T.call('osCreateThread', worker, 2, 'worker', 0, 0x8000FF00, 20),
+             *T.call('osStartThread', worker), *T.call('osStopThread', worker),
+             *T.call('osStopThread', worker), *T.log(1),
+             *([*T.call('osRecvMesg', queue, output, 0)] if send else [*T.call('osSendMesg', queue, 99, 0)]),
+             *T.log(2), *T.log_word(queue + 8), *T.log_word(worker + 0x10),
+             *T.call('osStartThread', worker), *T.log(3),
+             *([*T.call('osRecvMesg', queue, output, 0)] if send else []),
+             *T.log_word(output), *A.DONE,
+             'worker', *T.li(A.s0, 0x31415926),
+             *([*T.call('osSendMesg', queue, 99, 1)] if send else [*T.call('osRecvMesg', queue, output, 1)]),
+             *T.li(A.t0, output + 4), A.sw(A.s0, 0, A.t0), *T.log(4), *T.call('osStopThread', 0), *A.DONE]
+        p += [item for name in runtime for item in [name, A.jr(A.ra), A.nop]]
+        binary = T.build(exe, cc, f'stopped-waiter-{int(send)}', p, runtime)
+        result = subprocess.run([str(binary), '--dump', hex(T.LOG), '7'], capture_output=True, text=True, timeout=10)
+        rows = [json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')]
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        assert next(row['words'] for row in rows if 'dump' in row) == [1, 2, 0 if send else 1, 0x10000, 4, 3, 99], rows
+        result = subprocess.run([str(binary), '--dump', hex(output + 4), '1'], capture_output=True, text=True, timeout=10)
+        assert result.returncode == 0 and next(json.loads(line)['words'] for line in result.stdout.splitlines()
+                                               if line.startswith('{"dump"')) == [0x31415926], result.stdout
+
+
 def run(exe, cc, T):
     os.environ['SDL_AUDIODRIVER'] = 'dummy'
     T.OUT.mkdir(parents=True, exist_ok=True)
+    stopped_waiter(exe, cc, T)
     for coroutine in (False, True):
         for destroy in (False, True):
             p, runtime, output = program(T, coroutine, destroy)
@@ -97,7 +130,7 @@ def run(exe, cc, T):
         pass
     else:
         raise AssertionError(('retirement guard mutation survived', result.stdout, result.stderr))
-    print('thread lifecycle: 140 stopped/blocked recreations, destroy/create, live coroutines, self-destroy, pins, queue and arguments pass')
+    print('thread lifecycle: stopped send/receive restart, 140 stopped/blocked recreations, destroy/create, live coroutines, self-destroy, pins, queue and arguments pass')
 
 
 if __name__ == '__main__':

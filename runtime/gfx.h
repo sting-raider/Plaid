@@ -9,6 +9,8 @@
 extern "C" {
 #endif
 typedef int (*plaid_gfx_writeback)(void *context, uint32_t physical, uint32_t size, const uint8_t *bytes);
+/* No display-list/RDP side effects occurred; execute the native RSP instead. */
+#define PLAID_GFX_UNKNOWN_UCODE 2
 PLAID_GFX_API int plaid_gfx_task(const uint8_t *ram, uint32_t ucode, uint32_t ucode_data, uint32_t data_ptr,
                    plaid_gfx_writeback writeback, void *context);
 PLAID_GFX_API int plaid_gfx_rdp(const uint8_t *ram, const uint8_t *commands, uint32_t size, const uint8_t *dirty_pages,

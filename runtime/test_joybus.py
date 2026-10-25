@@ -14,7 +14,7 @@ def run(exe, cc, T):
     result = subprocess.run([str(native)], capture_output=True, text=True, timeout=30)
     assert result.returncode == 0 and '"joybus":"ok"' in result.stdout, (result.stdout, result.stderr)
     print('joybus: gamepad/absent-channel status, controller read and repeat, skipped headers, '
-          'EEPROM write/busy/read with block masking, refused packets, SI DMA through PIF RAM and '
+          'absent-Pak reads/write CRC, EEPROM write/busy/read with block masking, refused packets, SI DMA through PIF RAM and '
           'the busy state shared with __osEepStatus')
 
 

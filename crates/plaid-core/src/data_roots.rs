@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 const JR_RA: u32 = 0x03e0_0008;
 
 /// Whether `pc` starts a function by layout: the image start, a declared
-/// load's start (`starts`), or right after a `jr ra` and its delay slot,
+/// load's start (`starts`), or right after a return/jump and its delay slot,
 /// possibly followed by zero padding.
 fn after_return(image: &CodeImage, pc: GuestAddr, starts: &BTreeSet<u32>) -> bool {
     if pc == image.base.pc || starts.contains(&pc.0) {
@@ -26,21 +26,27 @@ fn after_return(image: &CodeImage, pc: GuestAddr, starts: &BTreeSet<u32>) -> boo
         pc.0.checked_sub(back)
             .and_then(|a| image.word(GuestAddr(a)))
     };
+    // Jump-table cases also follow J. Require a new O32 stack frame before
+    // treating that weaker layout clue as an independent callable entry.
+    let frame = image
+        .word(pc)
+        .is_some_and(|w| w & 0xffff_0000 == 0x27bd_0000 && (w as i16) < 0 && (w & 7) == 0);
+    let terminal = |word: Option<u32>| word.is_some_and(|w| w == JR_RA || (w >> 26 == 2 && frame));
     // after a hole: a declared load (a relocatable overlay's text, say)
     // begins with a function (ADR-0181)
     if word(4).is_none() {
         return true;
     }
-    if word(8) == Some(JR_RA) {
+    if terminal(word(8)) {
         return true;
     }
-    // `jr ra` and its delay slot, then padding: skip at least one zero word
+    // A terminal jump and its delay slot, then padding: skip at least one zero word
     // (a `nop` slot is skipped with it, a working one is not; ADR-0183)
     let mut back = 4;
     while back <= 32 && word(back) == Some(0) {
         back += 4;
     }
-    back > 4 && (word(back) == Some(JR_RA) || word(back + 4) == Some(JR_RA))
+    back > 4 && (terminal(word(back)) || terminal(word(back + 4)))
 }
 
 /// Addresses built in code by `lui r, hi` and a later `addiu`/`ori` from `r`
@@ -503,6 +509,45 @@ pub fn discover_address_taken_with_loads(
 mod tests {
     use super::*;
     use crate::program::CodeAddress;
+
+    #[test]
+    fn named_functions_can_follow_a_terminal_jump() {
+        let mut image = CodeImage {
+            base: CodeAddress {
+                pc: GuestAddr(0x8000_0000),
+                image: "roots".into(),
+                generation: 0,
+            },
+            words: vec![0x0800_0000, 0x2404_0001, 0x27bd_ffe8, JR_RA, 0x27bd_0018],
+            rom_offset: None,
+            physical_start: None,
+            holes: vec![],
+            slots: vec![],
+        };
+        let data = 0x8000_0008u32.to_be_bytes();
+        assert_eq!(
+            rom_words(&data, &image, &BTreeSet::new()),
+            [GuestAddr(0x8000_0008)].into()
+        );
+        // A call/conditional branch may fall through; neither supplies a boundary.
+        for word in [0x0c00_0000, 0x1080_fffe] {
+            image.words[0] = word;
+            assert!(rom_words(&data, &image, &BTreeSet::new()).is_empty());
+        }
+        image.words[0] = 0x0800_0000;
+        image.words[2] = 0x2402_0001;
+        assert!(rom_words(&data, &image, &BTreeSet::new()).is_empty());
+        image.words[2] = 0x4800_0000;
+        assert!(rom_words(&data, &image, &BTreeSet::new()).is_empty());
+        image.words.splice(2..3, [0, 0, 0x27bd_ffe8]);
+        let padded = 0x8000_0010u32.to_be_bytes();
+        assert_eq!(
+            rom_words(&padded, &image, &BTreeSet::new()),
+            [GuestAddr(0x8000_0010)].into()
+        );
+        image.words[0] = 0x0c00_0000;
+        assert!(rom_words(&padded, &image, &BTreeSet::new()).is_empty());
+    }
 
     #[test]
     fn pointers_to_function_starts_become_roots() {

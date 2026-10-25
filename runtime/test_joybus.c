@@ -105,6 +105,25 @@ static void refusals(void) {
   assert(plaid_joy_parse(&bus) == 0 && plaid_joy_run(&bus, NULL, 0, 0) == 1);  /* wrong length */
 }
 
+static void absent_pak(void) {
+  plaid_joybus bus;
+  u8 read[] = {2, 0x80, 1}, write[35] = {3, 0x80, 1};
+  unsigned at, i;
+  memset(&bus, 0, sizeof bus);
+  at = put(bus.ram, 0, 3, 34, read);
+  bus.ram[at] = 0xfe; bus.ram[63] = 1;
+  assert(!plaid_joy_parse(&bus) && !plaid_joy_run(&bus, NULL, 0, 0));
+  for (i = 0; i < 32; i++) assert(bus.ram[6 + i] == 0);
+  assert(bus.ram[38] == 0xff && bus.ram[39] == 0xff);
+  /* CRC-8 of 32 bytes 0..31 is 0x33; absence complements it. */
+  for (i = 0; i < 32; i++) write[3 + i] = (u8)i;
+  memset(&bus, 0, sizeof bus);
+  at = put(bus.ram, 0, 35, 1, write);
+  bus.ram[at] = 0xfe; bus.ram[63] = 1;
+  assert(!plaid_joy_parse(&bus) && !plaid_joy_run(&bus, NULL, 0, 0));
+  assert(bus.ram[38] == 0xcc && !bus.changed);
+}
+
 /* SI DMA into PIF RAM, the packet run, DMA back, and the shared busy state. */
 static void si_and_status(void) {
   const u32 dram = 0x00010000u, block = 0xa0010000u, out = 0xa0020000u;
@@ -141,6 +160,7 @@ static void si_and_status(void) {
 int main(void) {
   S = &state; running = &boot;
   controllers();
+  absent_pak();
   eeprom_device();
   refusals();
   si_and_status();
