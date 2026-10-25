@@ -1,5 +1,22 @@
 # Next
 
+## Rogue Squadron after the N64 logo (ADR-0277)
+
+Preserve renamed ADDIU source tracking, partial table evidence/native-only
+residual guards, rooted packed tables and contextual short-overlay filtering.
+The76-word ROM table at80031740 is recovered; do not seed targets from captures.
+RSP db0 placements after valid short records and scalar DMA trampolines now
+load.51 RSP candidates and16 residual CPU sites remain; native_complete:false.
+
+The next ordinary/input stops are fault4/80095040, showing the N64 logo in
+400x442 VI-derived RDRAM readback. A private diagnostic identifies CDE targeting
+p0017da60 with line_lost1. The model previously wrote back unknown cache-slot
+bytes and marked their RAM line lost. Establish retained invalid-slot history
+or a verified partial/full recovery contract, with CPU/ares, byte masks,
+aliases, writeback and DMA checks. Keep the refusal until then. No title/menu
+or working gameplay presses yet. Exact commands, attempted inputs and receipts:
+research/rs-title.md and ignored target/receipts/rs-title.
+
 ## Rogue Squadron after dynamic FR (ADR-0276)
 
 Preserve per-instruction FR analysis, canonical FPR bits, strict SDK Status

@@ -152,6 +152,10 @@ pub struct RspReachability {
 }
 
 pub fn reachable_words(text: &[u8], imem: u32) -> Result<RspReachability, String> {
+    reachable_from(text, imem, imem)
+}
+
+fn reachable_from(text: &[u8], imem: u32, entry: u32) -> Result<RspReachability, String> {
     if text.is_empty()
         || !text.len().is_multiple_of(4)
         || !imem.is_multiple_of(4)
@@ -163,7 +167,7 @@ pub fn reachable_words(text: &[u8], imem: u32) -> Result<RspReachability, String
     let mut seen = std::collections::BTreeSet::new();
     let mut visited = std::collections::BTreeSet::new();
     let mut exits = std::collections::BTreeSet::new();
-    let mut pending = vec![imem];
+    let mut pending = vec![entry];
     let mut indirect = false;
     while let Some(pc) = pending.pop() {
         if !(imem..end).contains(&pc) {
@@ -225,6 +229,38 @@ pub fn plausible_overlay(text: &[u8]) -> bool {
             .iter()
             .enumerate()
             .all(|(i, &w)| is_control(w) || simple(w, i as u32 * 4, "").is_ok())
+}
+
+/// A short table-named overlay may be a scalar trampoline into the resident
+/// RSP DMA helper. Require its actual placed control flow to reach an RSP
+/// operation without leaving the composite or executing unsupported words.
+/// Indirect transfers remain native-dispatch/fetch guarded, never closure.
+pub fn plausible_short_overlay(text: &[u8], imem: u32, resident: &[u8]) -> bool {
+    if !(8..64).contains(&text.len())
+        || !text.len().is_multiple_of(4)
+        || !imem.is_multiple_of(8)
+        || imem < 0x80
+        || imem as usize + text.len() > 0x1000
+        || resident.len() != 0xf80
+    {
+        return false;
+    }
+    let mut composite = resident.to_vec();
+    let at = (imem - 0x80) as usize;
+    composite[at..at + text.len()].copy_from_slice(text);
+    let Ok(reach) = reachable_from(&composite, 0x80, imem) else {
+        return false;
+    };
+    let word = |pc: u32| {
+        let at = (pc - 0x80) as usize;
+        u32::from_be_bytes(composite[at..at + 4].try_into().unwrap())
+    };
+    reach.exits.is_empty()
+        && reach.words.iter().all(|&pc| {
+            let w = word(pc);
+            is_control(w) || simple(w, pc, "").is_ok()
+        })
+        && reach.words.iter().any(|&pc| rsp_specific(word(pc)))
 }
 
 fn rsp_specific(w: u32) -> bool {

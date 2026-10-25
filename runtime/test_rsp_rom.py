@@ -56,7 +56,7 @@ def run(exe, cc, T):
     overlay = T.rsp_words([V.mfc0(A.t0, 6), V.mtc0(A.zero, 7),
                            A.ori(A.t1, A.zero, 0x789A), A.sw(A.t1, 0x200, A.zero), V.BREAK], 0xE00)
     overlay += [0] * (16 - len(overlay))
-    loader_code = [A.ori(A.at, A.zero, 0xFC0), A.ori(A.a1, A.zero, 0),
+    loader_code = [A.ori(A.at, A.zero, 0xFC0), A.lhu(A.a1, 0x78, A.zero),
                    A.lhu(A.a0, 0x42, A.a1), A.srl(A.v1, A.a0, 12),
                    A.lhu(A.v0, 0x44, A.a1), A.lw(A.t0, 0x10, A.at),
                    A.andi(A.a0, A.a0, 0xFFF), A.addu(A.v0, A.v0, A.t0),
@@ -64,9 +64,20 @@ def run(exe, cc, T):
     loader_code += [A.nop] * (16 - len(loader_code))
     loader_code += ['packed_dma', V.mtc0(A.v1, 0), V.mtc0(A.v0, 1), V.mtc0(A.a0, 2), A.jr(A.ra), A.nop]
     loader = T.rsp_words(loader_code, 0x80)
-    table = [0x1E00003F, 0x0300003F, 0x03800000]
-    patches = [(T.UCODE, loader), (T.UCODE + 0x300, overlay), (T.UCODE + 0x380, overlay),
-               (T.UDATA + 0x40, table)]
+    # A valid short DMA record is not a terminator. Its placed resident path
+    # must pass content filtering alongside the following full overlay.
+    table = [0x1E00003F, 0x0300002B, 0x0280003F, 0x03800000]
+    later = overlay.copy()
+    later[2] = A.ori(A.t1, A.zero, 0x789B)
+    # This short scalar trampoline reaches the resident DMA helper, then
+    # returns to its own continuation. No RSP-specific opcode is in the span.
+    short = T.rsp_words([A.ori(A.a0, A.zero, 7), A.ori(A.v0, A.zero, T.UDATA & 0xffff),
+                         A.ori(A.v1, A.zero, 0x400), 2 << 26 | 0xC0 >> 2,
+                         A.ori(A.ra, A.zero, 0xE20), 0, 0, 0,
+                         A.ori(A.t1, A.zero, 0x6543), A.sw(A.t1, 0x200, A.zero), V.BREAK, 0], 0xE00)
+    patches = [(T.UCODE, loader), (T.UCODE + 0x280, short),
+               (T.UCODE + 0x300, overlay), (T.UCODE + 0x380, later),
+               (T.UDATA + 0x40, table), (T.UDATA + 0x78, [0])]
     for address, words in patches:
         at = 0x1000 + address - A.BASE
         packed_raw[at:at + len(words) * 4] = b''.join(w.to_bytes(4, 'big') for w in words)
@@ -80,6 +91,10 @@ def run(exe, cc, T):
     pm = json.loads((packed_texts / 'rsp-files.json').read_text())
     assert any(t['guest_address'] == T.UCODE + 0x300 and t['imem'] == 0xE00 and t['size'] == 64
                for t in pm['texts']), pm
+    assert any(t['guest_address'] == T.UCODE + 0x380 and t['imem'] == 0xE00 and t['size'] == 64
+               for t in pm['texts']), pm
+    assert any(t['guest_address'] == T.UCODE + 0x280 and t['imem'] == 0xE00 and t['size'] == 48
+               for t in pm['texts']), pm
     files = [str(texts / (t['name'] + '.c')) for t in manifest['texts']] + [str(texts / 'rsp_registry.c')]
     def compile_text(source):
         obj = source + '.o'
@@ -90,26 +105,30 @@ def run(exe, cc, T):
     packed_files = [str(packed_texts / (t['name'] + '.c')) for t in pm['texts']] + [str(packed_texts / 'rsp_registry.c')]
     with ThreadPoolExecutor(min(8, os.cpu_count() or 1)) as pool:
         packed_objects = list(pool.map(compile_text, packed_files))
-    for corrupt in (False, True):
+    for selector, corrupt in ((0, False), (4, False), (0, True)):
         variant = program.copy()
         at = variant.index('before_load')
         edits = [*T.poke(T.RTASK + 0x1C, 0x80),
                  *[w for address, words in patches for i, v in enumerate(words) for w in T.poke(address + i * 4, v)]]
+        edits += T.poke(T.UDATA + 0x78, selector << 16)
         if corrupt:
             edits += T.poke(T.UCODE + 0x300, 0xFFFFFFFF)
         variant[at:at] = edits
         at = variant.index('before_start') + 1 + len(T.call('osSpTaskStartGo', T.RTASK))
-        variant[at:at] = T.log_word(0xA4000200)
-        packed_native = T.build(exe, cc, f'rsp-rom-packed-{int(corrupt)}', variant, runtime,
+        variant[at:at] = T.log_word(0xA4000200) + T.log_word(0xA4000400)
+        packed_native = T.build(exe, cc, f'rsp-rom-packed-{selector}-{int(corrupt)}', variant, runtime,
                                 ['-DPLAID_RSP', '-DPLAID_RSP_ROM', '-I', str(T.ROOT / 'crates/plaid-lower/src'),
                                  *packed_objects])
-        result = subprocess.run([str(packed_native), '--dump', hex(T.LOG), '1'], capture_output=True, text=True, timeout=30)
+        result = subprocess.run([str(packed_native), '--dump', hex(T.LOG), '2'], capture_output=True, text=True, timeout=30)
         if corrupt:
             assert result.returncode == 1 and 'unlowered RSP code' in result.stdout, (result.stdout, result.stderr)
             assert 'IMEM e00' in result.stderr, result.stderr
         else:
             rows = [json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')]
-            assert result.returncode == 0 and next(row['words'] for row in rows if 'words' in row) == [0x789A], (result.stdout, result.stderr)
+            words = next(row['words'] for row in rows if 'words' in row)
+            assert result.returncode == 0 and words[0] == (0x6543 if selector else 0x789A), (result.stdout, result.stderr)
+            if selector:
+                assert words[1] == T.UDATA_WORDS[0], words
     flags = ['-DPLAID_RSP', '-DPLAID_RSP_ROM', '-I', str(T.ROOT / 'crates/plaid-lower/src'), *objects]
     native = T.build(exe, cc, 'rsp-rom', program, runtime, flags)
     for mutation in [None, 'boot', 'text', 'reachable', 'tail', 'pointer']:
@@ -262,4 +281,4 @@ def run(exe, cc, T):
     snapshot[0x80:0x84] = bytes.fromhex('ffffffff')
     sample.write_bytes(snapshot)
     assert check_rsp_rom.check(texts / 'rsp-files.json', snaps)['covered'] == 0
-    print('ROM RSP: 14 task contracts; startup ambiguity/reachable corruption refuse; JR target and fallthrough mutations fault at fetch; unexecuted data accepted')
+    print('ROM RSP: 15 task contracts; short-overlay DMA/return; startup ambiguity/reachable corruption refuse; JR target and fallthrough mutations fault at fetch; unexecuted data accepted')
