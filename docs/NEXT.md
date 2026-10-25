@@ -18,13 +18,15 @@ obligations, strict refusal, residual site lists and byte-bound native-only
 dispatch. Admission heuristics do not establish data sections or prove an
 alternate unreachable. The emitted build still has 19 residual sites.
 
-The first native stop is now CACHE Create Dirty Exclusive at `0x8000041c`
-(`0xbd0d0000`): VI 0, fault 12, RA `0x80001eb0`, no title/menu. Model and
-verify the operation's retained cache bytes, dirty victim writeback,
-address translation/aliasing and following writes before admitting it;
-treating it as a no-op or a RAM fill would invent cache contents. Preserve
-the three descriptor sources and continue section/reachability evidence
-for their data-first files. Receipt: research/rs-blockers.md.
+ADR-0271 models CDE without a RAM fill and passes the boot cache clear. The
+next stop is raw SDK dispatch restoring Status `0000ff03` at `80025bf4`, VI 0,
+fault 12, RA `80025bb0`. Only 14 runtime functions are identified; thread
+create/start paths remain guest code and no host SDK threads exist at the stop.
+Establish exact SDK-body identification and the saved Status/EPC/ERET context
+contract before accepting this transition. Do not weaken the IE/scheduler guard.
+Preserve unknown-cache-byte refusals, dirty victim/retained-byte tests and the
+explicit manual-versus-ares dirty-mask distinction. No first frame or menu is
+reached. Receipts: research/rs-blockers.md and research/rs-cache-cde.md.
 
 ## Preserve scissored fill clears (ADR-0266)
 

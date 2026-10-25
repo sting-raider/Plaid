@@ -1,5 +1,21 @@
 # Status
 
+## Rogue Squadron cache boot clear (ADR-0271)
+
+D-cache Create Dirty Exclusive now retains witnessed slot bytes, writes back a
+conflicting dirty victim and allocates without a RAM fill. Unknown invalid-slot
+bytes fault on reads until written; incomplete writeback marks RAM lost. Native
+and pinned-ares memory/CPU contracts cover full writes, dirty victims, stale
+bytes and hits. Native dirty state follows the NEC manual; pinned ares instead
+clears its dirty mask on a miss until a store. This difference is explicit.
+
+Rogue Squadron advances from CACHE at `8000041c` to raw SDK thread dispatch
+Status restore at `80025bf4`: VI 0/fault 12, no first frame/title/menu. Thread
+create/start identification and the Status/ERET scheduler contract remain open;
+no guard was weakened. Nineteen residual sites and native_complete:false remain.
+Receipt: research/rs-cache-cde.md; full local gate and silent visible controls
+are recorded in the issue #4 closeout and ignored exact-tree receipts.
+
 ## Rogue Squadron residual build and infeasible paths (ADR-0270)
 
 Rogue Squadron now emits a native residual-dispatch executable: 13 residual

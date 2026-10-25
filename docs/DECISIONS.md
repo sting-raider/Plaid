@@ -7893,3 +7893,44 @@ Deterministic branch/slot tests, native/ares state comparison, strict-guard
 mutation, silent visible controls and local gate receipts are documented
 in research/rs-blockers.md. Reference source was read only; no guest
 interpreter, JIT, per-game address rule or upstream code copy is introduced.
+
+
+## ADR-0271: Create Dirty Exclusive retains cache bytes without a RAM fill
+
+Status: accepted
+
+Context: Rogue Squadron Rev 1 stopped at its first CDE (`8000041c`), VI 0,
+fault 12. The VR4300 manual specifies allocation as valid and dirty, retaining
+slot bytes and writing back a different dirty victim. Pinned ares retains
+those bytes and writes the victim, but clears its internal dirty mask on a
+miss until a following store. That distinction is not oracle agreement.
+
+Decision: lower D-cache CDE in the shared cache model. Translate the address,
+use its virtual index and physical tag, write back a conflicting dirty victim,
+and retain its witnessed bytes through the existing stale-byte shadow. A hit
+keeps its bytes. Set the new line dirty as the manual requires. Never fill it
+from destination RAM. Invalid-slot contents have no retained witness in this
+model: a per-slot byte mask records them as unknown. Cached stores recover
+only their bytes; a read touching an unknown byte faults 4. Writing back an
+incompletely known dirty line marks its RAM line lost, preventing later CPU
+or DMA observation of invented data. Normal fills and invalidation reset the
+slot mask. Existing translation, alias, lost-line and protected-text refusals
+remain; non-RAM CDE refuses rather than accessing unchecked storage.
+
+Consequences: deterministic native/ares tests cover full writes/writeback,
+dirty victims, retained clean/stale bytes, hits, partial writes and refusal
+of unknown bytes. Positive tests compare complete GPR/FPR/HI/LO/FCSR/PC and
+the oracle's RAM log window; a separate native state contract checks the
+manual's dirty-state rule, byte recovery, translation and refusal boundaries.
+Removing the unknown-read guard is detected. No other unsupported CACHE
+form appears in lowered code for the seven tested games; Index Load Tag and
+valid stored tags remain refused rather than synthesizing missing tag state.
+
+Rogue Squadron passes the cache boot clear and reaches raw SDK thread
+context restoration at `80025bf4`: still VI 0/fault 12, no frame or menu.
+Its missing thread create/start identification and Status/ERET scheduler
+contract remain open. Nineteen residual sites/native_complete:false remain.
+See research/rs-cache-cde.md for reference differences, validation, controls
+and timings. Reference source (ISC ares) and NEC documentation were read for
+semantics only; the production implementation is project-owned, with no
+copied upstream code, guest decoder, interpreter, JIT or per-game address rule.

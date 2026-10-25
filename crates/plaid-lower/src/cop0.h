@@ -133,11 +133,12 @@ static inline int plaid_cp0_eret(plaid_state *s, u64 *target, u32 pc) {
    I-cache operations change nothing observable; D-cache operations act on the
    modelled tags (ADR-0183). A dirty line dropped without write-back keeps its
    stores in RAM here but not on hardware: like osInvalDCache, it is marked
-   lost so a later access fails closed. Index Load Tag, Create Dirty Exclusive
-   and a valid Index Store Tag are outside the subset. */
+   lost so a later access fails closed. CDE retains known resident bytes;
+   unavailable invalid-slot bytes stay unknown until written (ADR-0271).
+   Index Load Tag and a valid Index Store Tag are outside the subset. */
 static inline void plaid_ddrop(plaid_state *s, u32 i) {
   if (s->ddirty[i]) s->line_lost[((s->dtag[i] & ~0xfffu) | (i & 0xffu) << 4) >> 4] = 1;
-  s->dtag[i] = 0; s->ddirty[i] = 0; s->dstale[i] = 0;
+  s->dtag[i] = 0; s->ddirty[i] = 0; s->dstale[i] = 0; s->dunknown[i] = 0;
 }
 static inline int plaid_cache(plaid_state *s, u32 op, u64 va, u32 pc) {
   u32 v = (u32)va, p, i = (v >> 4) & 0x1ffu;
@@ -148,20 +149,37 @@ static inline int plaid_cache(plaid_state *s, u32 op, u64 va, u32 pc) {
   switch (op >> 2) {
   case 0: /* Index Writeback Invalidate */
     if (s->dtag[i]) plaid_dwriteback(s, (int)i);
-    s->dtag[i] = 0; s->ddirty[i] = 0; s->dstale[i] = 0;
+    s->dtag[i] = 0; s->ddirty[i] = 0; s->dstale[i] = 0; s->dunknown[i] = 0;
     return 0;
   case 2: /* Index Store Tag, of an invalid line only */
     if (s->cp0_taglo & 0xc0u) return plaid_fault(s, pc, 12);
     plaid_ddrop(s, i);
     return 0;
-  case 4: case 5: case 6: /* Hit Invalidate, Hit Writeback Invalidate, Hit Writeback */
+  case 3: case 4: case 5: case 6: /* CDE and Hit operations */
     if (va != SX32(v)) return plaid_fault(s, pc, 1);
     if (v >= 0x80000000u && v < 0xc0000000u) p = v & 0x1fffffffu;
     else if (plaid_tlb(s, v, 0, &p, &seg)) return plaid_fault(s, pc, 1);
+    if (op >> 2 == 3) { /* Create Dirty Exclusive: no RAM fill */
+      u32 b, base = (s->dtag[i] & ~0xfffu) | (i & 0xffu) << 4;
+      if (p >= PLAID_RAM_SIZE) return plaid_fault(s, pc, 1);
+      if (s->line_lost[p >> 4]) return plaid_fault(s, pc, 4);
+      if (s->dtag[i] != ((p & ~0xfffu) | 1)) {
+        if (s->dtag[i ^ 0x100] == ((p & ~0xfffu) | 1)) return plaid_fault(s, pc, 4);
+        if (plaid_protected(s, p & ~15u, 16, pc)) return plaid_fault(s, pc, 2);
+        if (s->dtag[i]) {
+          for (b = 0; b < 16; b++)
+            if (!(s->dstale[i] >> b & 1)) s->dold[i][b] = s->ram[base + b];
+          plaid_dwriteback(s, (int)i);
+        } else s->dunknown[i] = 0xffffu;
+        s->dtag[i] = (p & ~0xfffu) | 1; s->dstale[i] = 0xffffu;
+      }
+      s->ddirty[i] = 1;
+      return 0;
+    }
     if (p >= PLAID_RAM_SIZE || s->dtag[i] != ((p & ~0xfffu) | 1)) return 0;
     if (op >> 2 == 4) { plaid_ddrop(s, i); return 0; }
     plaid_dwriteback(s, (int)i);
-    if (op >> 2 == 5) { s->dtag[i] = 0; s->ddirty[i] = 0; s->dstale[i] = 0; }
+    if (op >> 2 == 5) { s->dtag[i] = 0; s->ddirty[i] = 0; s->dstale[i] = 0; s->dunknown[i] = 0; }
     return 0;
   default:
     return plaid_fault(s, pc, 12);
