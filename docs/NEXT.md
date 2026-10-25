@@ -10,19 +10,21 @@ wall-time event model; synchronous graphics/busy assumptions remain open.
 Keep screenshot pauses out of pacing measurements; follow the timing
 receipt in research/oot-jpeg-boot.md for any remaining stutter.
 
-## Rogue Squadron after descriptor load recognition (ADR-0264)
+## Rogue Squadron after residual build emission (ADR-0270)
 
-Preserve the three structurally recognized descriptor sources and their
-content-bound slots. Establish executable sections inside data-first files
-and distinguish the fallback boot window's overlapping resident bytes from
-alternate code. At linked `0x80096d50`, the first two alternates contain data
-and the third contains a function. Descriptor construction alone does not
-resolve that distinction; residual blockers are now 13, including the
-original five. Independently, `BLTZAL $zero` at `0x800919bc` is never taken
-but discovery follows it into data at `0x80091a48`, whose first word appears
-to call `0x8334b334`. Prove any branch-reachability refinement and preserve
-the link-register side effect. Do not drop blockers or narrow payload text
-by game address. Receipt: research/descriptor-built-overlays.md.
+The infeasible BLTZAL-zero path and speculative fallback/alternate call
+decodes no longer prevent emission. Preserve explicit missing-slot-identity
+obligations, strict refusal, residual site lists and byte-bound native-only
+dispatch. Admission heuristics do not establish data sections or prove an
+alternate unreachable. The emitted build still has 19 residual sites.
+
+The first native stop is now CACHE Create Dirty Exclusive at `0x8000041c`
+(`0xbd0d0000`): VI 0, fault 12, RA `0x80001eb0`, no title/menu. Model and
+verify the operation's retained cache bytes, dirty victim writeback,
+address translation/aliasing and following writes before admitting it;
+treating it as a no-op or a RAM fill would invent cache contents. Preserve
+the three descriptor sources and continue section/reachability evidence
+for their data-first files. Receipt: research/rs-blockers.md.
 
 ## Preserve scissored fill clears (ADR-0266)
 

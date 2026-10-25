@@ -204,3 +204,106 @@ fn likely_conditional_link_has_call_return_and_annulled_fallthrough() {
             .any(|e| e.kind == EdgeKind::ReturnContinuation && e.delay_slot == DelaySlot::None)
     );
 }
+
+#[test]
+fn impossible_integer_branches_keep_only_the_executable_path() {
+    for branch in [
+        0x04000040u32,
+        0x04020040,
+        0x04100040,
+        0x04120040, // BLTZ/L/AL/ALL zero
+        0x1c000040,
+        0x5c000040, // BGTZ/L zero
+        0x15080040,
+        0x55080040, // BNE/L t0,t0
+    ] {
+        let annulled = decode(branch, GuestAddr(0)).is_branch_likely();
+        let d = discover(&image(
+            0x80000000,
+            vec![
+                branch,
+                if annulled { 0x7677696e } else { 0xac020100 },
+                j(0x80000008),
+                0,
+            ],
+        ));
+        assert!(
+            d.map.unresolved.is_empty(),
+            "{branch:08x}: {:?}",
+            d.map.unresolved
+        );
+        assert!(
+            !d.map
+                .direct_edges
+                .iter()
+                .any(|e| e.target.pc.0 == 0x80000104)
+        );
+        let edge = d
+            .map
+            .direct_edges
+            .iter()
+            .find(|e| e.kind == EdgeKind::Fallthrough)
+            .unwrap();
+        assert_eq!(edge.target.pc.0, 0x80000008);
+        assert_eq!(
+            edge.delay_slot,
+            if annulled {
+                DelaySlot::None
+            } else {
+                DelaySlot::Always
+            }
+        );
+        assert_eq!(
+            d.map.blocks.first().unwrap().size,
+            if annulled { 4 } else { 8 }
+        );
+        assert_eq!(
+            d.words
+                .contains_key(&image(0x80000000, vec![]).address(GuestAddr(0x80000004))),
+            !annulled
+        );
+    }
+    // Unknown conditions and known-taken identities still require their targets.
+    for branch in [0x05100040, 0x07f00040, 0x04010040, 0x1d000040, 0x15090040] {
+        assert!(
+            discover(&image(0x80000000, vec![branch, 0, j(0x80000008), 0]))
+                .map
+                .unresolved
+                .iter()
+                .any(|u| u.kind == "unmapped_target"),
+            "{branch:08x}"
+        );
+    }
+    // A non-likely untaken branch still executes (and validates) its slot.
+    assert!(
+        discover(&image(
+            0x80000000,
+            vec![0x04100040, 0x7677696e, j(0x80000008), 0]
+        ))
+        .map
+        .unresolved
+        .iter()
+        .any(|u| u.kind == "unsupported_delay_slot")
+    );
+}
+
+#[test]
+fn an_annulled_slot_is_still_checked_when_separately_entered() {
+    let i = image(0x80000000, vec![0x04120040, 0x7677696e, j(0x80000008), 0]);
+    let d = direct_cfg(
+        RomIdentity {
+            sha256: "a".repeat(64),
+            size: 4096,
+        },
+        &i,
+        &[i.base.pc, GuestAddr(0x80000004)],
+        100,
+    )
+    .unwrap();
+    assert!(
+        d.map
+            .unresolved
+            .iter()
+            .any(|u| u.site.as_ref().is_some_and(|s| s.pc.0 == 0x80000004))
+    );
+}

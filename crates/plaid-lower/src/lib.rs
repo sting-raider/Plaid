@@ -1370,6 +1370,23 @@ impl Lowerer<'_> {
             .wrapping_add(4)
             .wrapping_add_signed(i32::from(word as u16 as i16) * 4);
         let jump = self.image.jump_target(GuestAddr(pc), word).0;
+        if plaid_core::discovery::branch_never_taken(word) {
+            let instruction = plaid_core::discovery::decode(word, GuestAddr(pc));
+            let link = if instruction.does_link() {
+                set(31, self.link(after))
+            } else {
+                String::new()
+            };
+            let slot = if instruction.is_branch_likely() {
+                ""
+            } else {
+                slot
+            };
+            return Ok(format!(
+                "{link}\n  {slot}\n  {}",
+                self.fallthrough(after, pc)
+            ));
+        }
         let conditional = |cond: String| -> Result<String, String> {
             Ok(format!(
                 "{{ int t = {cond}; {slot} if (t) {} }} {}",
@@ -2299,9 +2316,15 @@ pub fn lower_c_parts(
                         return Err(format!("{start:08x}: block continues past ERET"));
                     }
                 } else if is_control(w) {
-                    let slot = lower(word(pc + 4)?, pc + 4)?;
+                    let annulled = plaid_core::discovery::branch_never_taken(w)
+                        && plaid_core::discovery::decode(w, GuestAddr(pc)).is_branch_likely();
+                    let slot = if annulled {
+                        String::new()
+                    } else {
+                        lower(word(pc + 4)?, pc + 4)?
+                    };
                     out += &format!("  {}\n", lowerer.control(w, pc, &slot)?);
-                    pc += 8;
+                    pc += if annulled { 4 } else { 8 };
                     transferred = true;
                     if pc != end {
                         return Err(format!("{start:08x}: block continues past its transfer"));

@@ -525,6 +525,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         });
     }
     let mut discharged = BTreeSet::new();
+    let mut residual_sites = BTreeSet::new();
     let mut add = |kind: &str, site: Option<CodeAddress>, detail: &str, evidence: EvidenceRefs| {
         blockers.insert(Blocker {
             kind: kind.into(),
@@ -553,8 +554,8 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         }
     }
     // A call into a slot (ADR-0185) lands on whichever alternate RAM holds:
-    // closed when some alternate has a block there; the binding verifies the
-    // one that runs, and none faults.
+    // some alternate must have a block there; the binding verifies the one
+    // that runs. Missing call identities additionally require residual scope.
     let into_slot = |a: &CodeAddress| {
         scope.guarded()
             && images.iter().any(|i| {
@@ -798,6 +799,28 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         }
         let into_runtime = matches!(edge.kind, EdgeKind::Call | EdgeKind::Jump)
             && map.runtime_functions.contains_key(&edge.target);
+        if edge.kind == EdgeKind::Call
+            && into_slot(&edge.target)
+            && images.iter().any(|image| {
+                image.base.image == edge.target.image
+                    && image.base.generation == edge.target.generation
+                    && image
+                        .slot_copies(edge.target.pc.0)
+                        .iter()
+                        .any(|&target| !starts.contains(&image.address(crate::GuestAddr(target))))
+            })
+        {
+            if scope == Scope::DeclaredStaticImagesGuardedRamResidualDispatch {
+                residual_sites.insert(edge.site.clone());
+            } else {
+                add(
+                    "unresolved_slot_call_identity",
+                    Some(edge.site.clone()),
+                    "a linked slot call has an undecoded executable identity; requires guarded residual dispatch",
+                    edge.evidence.clone(),
+                );
+            }
+        }
         if !starts.contains(&edge.target)
             && !into_runtime
             && !((edge.kind == EdgeKind::Call
@@ -884,7 +907,6 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 })
         });
     let mut uses_address_taken = false;
-    let mut residual_sites = BTreeSet::new();
     for site in &map.indirect_sites {
         // Return certificates hold only under the guarded scope's checked
         // call/return assumption; every other scope keeps such sites OPEN.
@@ -1276,7 +1298,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     }
     if !residual_sites.is_empty() {
         assumptions.push(format!(
-            "VALIDATION ONLY (ADR-0218): {} indirect site(s) have no closure proof; a native artifact dispatches each over every lowered entry and faults 3 on any other target. The artifact is not natively complete.",
+            "VALIDATION ONLY (ADR-0218/0233/0270): {} transfer site(s) lack full target/slot-identity closure; native dispatch accepts only lowered entries with verified bindings and faults 3 on any other target. The artifact is not natively complete.",
             residual_sites.len()
         ));
     }
