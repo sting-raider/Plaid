@@ -48,9 +48,9 @@ typedef struct plaid_state_s {
      line's physical page | 1. RAM holds the latest store: ddirty marks a
      resident line with stores hardware has not yet written back, dstale the
      bytes whose cached copy is older than RAM (an uncached store or DMA
-     since), dold those older bytes, and line_lost a RAM line holding stores
-     hardware discarded. */
-  u32 dtag[512]; u8 ddirty[512]; u16 dstale[512]; u8 dold[512][16];
+     since or a CDE retag), dold those retained bytes, dunknown bytes with
+     no cache witness, and line_lost RAM that cannot be observed faithfully. */
+  u32 dtag[512]; u8 ddirty[512]; u16 dstale[512], dunknown[512]; u8 dold[512][16];
   u8 line_lost[PLAID_RAM_SIZE / 16];
   u8 load_ok[64]; /* declared load verified in RAM (ADR-0136) */
   /* Per RAM word: 0 data, 1 fixed text, 2+n declared load n,
@@ -251,9 +251,11 @@ static inline void plaid_dstale(plaid_state *s, int i, u32 p, u16 m) {
    writes the whole cached line */
 static inline void plaid_dwriteback(plaid_state *s, int i) {
   u32 b, base = (s->dtag[i] & ~0xfffu) | ((u32)i & 0xffu) << 4;
+  /* Unknown retained CDE bytes cannot become observable RAM (ADR-0271). */
+  if (s->ddirty[i] && s->dunknown[i]) s->line_lost[base >> 4] = 1;
   if (s->ddirty[i] && s->dstale[i])
     for (b = 0; b < 16; b++)
-      if (s->dstale[i] >> b & 1) s->ram[base + b] = s->dold[i][b];
+      if ((s->dstale[i] & ~s->dunknown[i]) >> b & 1) s->ram[base + b] = s->dold[i][b];
   if (s->ddirty[i]) s->dstale[i] = 0;
   s->ddirty[i] = 0;
 }
@@ -299,9 +301,12 @@ static inline int plaid_addr(plaid_state *s, u64 va, u32 size, u32 pc, int write
       if (s->dtag[i] != t) {
         if (s->dtag[i ^ 0x100] == t) return plaid_fault(s, pc, 4);
         if (s->dtag[i]) plaid_dwriteback(s, (int)i);
-        s->dtag[i] = t; s->ddirty[i] = 0; s->dstale[i] = 0;
-      } else if (!write && (s->dstale[i] & m)) { *out = p; return 3; }
-      if (write) { s->ddirty[i] = 1; s->dstale[i] &= (u16)~m; }
+        s->dtag[i] = t; s->ddirty[i] = 0; s->dstale[i] = 0; s->dunknown[i] = 0;
+      } else if (!write) {
+        if (s->dunknown[i] & m) return plaid_fault(s, pc, 4);
+        if (s->dstale[i] & m) { *out = p; return 3; }
+      }
+      if (write) { s->ddirty[i] = 1; s->dstale[i] &= (u16)~m; s->dunknown[i] &= (u16)~m; }
     }
   }
   if (write && plaid_protected(s, p, size, pc)) return plaid_fault(s, pc, 2);

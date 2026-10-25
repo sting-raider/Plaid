@@ -844,7 +844,7 @@ static u32 v2p(u32 a) {
 RT(osVirtualToPhysical) { return ret(v2p(arg(0))); }
 
 /* ---- D-cache maintenance (ADR-0183) --------------------------------------
-   Lowered code never runs CACHE, so these calls are the only maintenance.
+   These libultra calls share the lowered CACHE state model.
    RAM already holds every store; the tags say which lines may differ from
    hardware (see plaid_addr). */
 #define DCACHE_SIZE 0x2000u
@@ -859,6 +859,7 @@ static void dcache_all(void) { /* Index Writeback Invalidate D over every line *
   for (i = 0; i < 512; i++) write_back_slot(i);
   memset(S->dtag, 0, sizeof S->dtag); memset(S->dstale, 0, sizeof S->dstale);
   memset(S->ddirty, 0, sizeof S->ddirty);
+  memset(S->dunknown, 0, sizeof S->dunknown);
 }
 RT(osWritebackDCache) {
   u32 va = arg(0), n = arg(1), a;
@@ -882,7 +883,7 @@ RT(osInvalDCache) {
     if ((i = dslot(a)) >= 0) {
       if (a >= va && a + 16 <= va + n) { if (S->ddirty[i]) S->line_lost[v2p(a) >> 4] = 1; }
       else write_back_slot(i);
-      S->dtag[i] = 0; S->ddirty[i] = 0; S->dstale[i] = 0;
+      S->dtag[i] = 0; S->ddirty[i] = 0; S->dstale[i] = 0; S->dunknown[i] = 0;
     }
   return 0;
 }
