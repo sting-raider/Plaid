@@ -688,6 +688,8 @@ def main():
     import test_boot_entryhi
     test_boot_entryhi.run(exe, cc, sys.modules[__name__])
     raw_pi_dma(exe, cc)
+    import test_pi_manager
+    test_pi_manager.run(exe, cc, sys.modules[__name__])
     import test_pi_bus
     test_pi_bus.run(exe, cc, sys.modules[__name__])
     import test_raw_pi

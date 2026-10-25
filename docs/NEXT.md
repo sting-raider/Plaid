@@ -10,32 +10,26 @@ wall-time event model; synchronous graphics/busy assumptions remain open.
 Keep screenshot pauses out of pacing measurements; follow the timing
 receipt in research/oot-jpeg-boot.md for any remaining stutter.
 
-## Rogue Squadron after residual build emission (ADR-0270)
+## Rogue Squadron after PI-family binding (ADR-0273)
 
-The infeasible BLTZAL-zero path and speculative fallback/alternate call
-decodes no longer prevent emission. Preserve explicit missing-slot-identity
-obligations, strict refusal, residual site lists and byte-bound native-only
-dispatch. Admission heuristics do not establish data sections or prove an
-alternate unreachable. The emitted build still has 19 residual sites.
+The PI switch at 8002a2e4 is passed by authenticating the public PI manager/DMA
+family and binding the existing host APIs. Preserve full-body/peer/global and
+caller-owned helper authentication, strict/residual native guards, cache
+unknown-byte refusal and scheduler/RSP contracts. Identification is 32 runtime
+functions; 19 residual sites remain and native_complete:false.
 
-ADR-0271 passes the CDE boot clear. ADR-0272 identifies the differently compiled
-SDK thread family (25 runtime functions), binds it to the existing scheduler
-and records a RAM-loaded native thread entry as the twentieth residual site.
-The raw Status restore and missed current-thread priority getter are passed.
-Preserve authenticated full bodies/peer calls/globals/MI tables, strict callback
-refusal, native entry guards and scheduler saved-register/mask/queue tests.
-
-The later stop is VI 0/fault 3/PC `8002a2e4`, computed target `8002a2ec` in the
-SDK PI-manager switch. Its seven-word table is at `80000cb0`, held in `s6`
-across calls/loop paths, with no decoded-code overlap; discovery has no table
-candidates or selected case block. A message-call preservation summary alone
-does not recover it and was removed. Establish a reproducible bounded witness
-or verified SDK PI-family replacement before adding targets. Five host SDK
-threads exist, but no graphics/audio task, PI transfer or first frame/menu is
-reached. Do not weaken the table or native target guard.
-Preserve unknown-cache-byte refusals, dirty victim/retained-byte tests and the
-explicit manual-versus-ares dirty-mask distinction. Receipts:
-research/rs-blockers.md, research/rs-cache-cde.md and research/rs-thread-dispatch.md.
+Native RSP graphics reaches VI1, 15 PI DMAs and one graphics task, CPU fault0 /
+PC00000000, then refuses unlowered IMEM db0. The stopped framebuffer readback
+is essentially black, without title/menu. RT64 HLE reports unsupported GBI and
+access-violates without stop JSON; do not treat that as a measured CPU fault.
+The 64 bytes at the refused entry uniquely match ROM offset20518. The captured
+predecessor placement has this sequence eight bytes later: establish the RSP
+DMA/placement provenance and add ROM-derived candidates with pinned-ares state,
+memory and fetch-guard verification. Snapshots are diagnostic outputs, never
+native compiler inputs. The native run must continue to refuse absent words.
+No further rendered frame or gameplay is claimed. Receipt:
+research/rs-pi-jumptable.md (prior receipts: rs-thread-dispatch.md,
+rs-cache-cde.md, rs-blockers.md).
 
 ## Preserve scissored fill clears (ADR-0266)
 

@@ -7980,3 +7980,55 @@ COPYING) were read for metadata/behavior only, at refs.lock.toml revisions.
 No upstream implementation or copyrighted SDK/game body was copied or linked.
 Production code and synthetic bodies are project-owned. The exact SDK release
 and compiler version are not established by these semantic identities.
+
+
+## ADR-0273: Authenticate the PI API family and caller-owned SDK helpers
+
+Date: 2026-10-25
+
+Problem: a differently compiled SDK family leaves osCreatePiManager and
+osPiStartDma unidentified. The guest device-manager thread reaches a seven-way
+message switch whose base survives calls and loop paths outside the bounded
+table proof. This is not evidence for adding unchecked switch targets.
+
+Decision: extend the existing complete-body, relocation-normalized SDK
+identities with the PI manager, DMA producer and their reviewed peer graph.
+Authenticate exact named calls, repeated/shared globals and internal edges;
+public functions bind the existing host PI and scheduler APIs. The guest
+manager is not started by the host-owned osCreatePiManager. Its callback/raw
+DMA pointer constants are normalized address metadata, not newly executable
+roots or proven function bodies. Runtime replacement remains the existing
+explicit SDK ABI assumption; no general jump-table theorem is claimed.
+
+PI and SI access-queue initialization have identical normalized instructions.
+An opt-in internal-helper owner requires an authenticated named caller's exact
+direct-call target and agreement on shared globals. Remove broken ownership
+and call dependencies to the same fixed point before ambiguity settlement.
+Unowned helpers, public-name ambiguity, distinct-global aliases, body holes,
+slot refusals and native target guards retain their previous rules.
+
+The same missed family includes osYieldThread and osSpTaskLoad. Authenticate
+their scheduler/SP peer graphs and use the existing host scheduler/RSP task
+load contracts. SP register helpers, copy, TLB probe and disabled-assert bodies
+are identification dependencies; only existing public runtime APIs are bound.
+No new runtime guest instruction execution path is added.
+
+Consequences: synthetic relocated bodies verify owner calls, corrupt/missing
+owners, shared PI globals, peer/body/table mutations and ordinary ambiguity.
+Inverting the owner target equality is caught. Native synthetic PI tests
+verify both priorities, ROM bytes, return/completion messages, saved s6,
+canaries and write/bounds refusals. Retained scheduler and RSP native/ares
+contracts remain the semantic gate.
+
+Rogue Squadron passes VI0/fault3/8002a2e4 to its first graphics task: VI1,
+15 PI DMAs, CPU fault0/PC00000000. Native RSP graphics then refuses unlowered
+IMEM db0; RT64 HLE reports an unsupported GBI and crashes without stop JSON.
+There is no first rendered title/menu. Nineteen residual CPU sites remain,
+native_complete:false. Details, references, timings and acceptance commands
+are in research/rs-pi-jumptable.md and the issue #4 closeout.
+
+Read-only reference comparison: pinned n64sym (MIT, Copyright (c) 2017-2020
+shygoo) supplies SDK names/variants; pinned N64ModernRuntime pi.cpp (GPL-3.0)
+confirms its public API replacement boundary. No implementation or SDK/game
+instruction body is copied. New production content is project-owned matcher
+logic plus normalized digests, extents and relocation/call metadata.

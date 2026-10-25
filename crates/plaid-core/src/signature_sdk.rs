@@ -4,6 +4,7 @@ use super::{CodeImage, GuestAddr, Identification, Match, combine, jump_target};
 use crate::rom::sha256;
 use std::collections::{BTreeMap, BTreeSet};
 
+#[derive(Clone)]
 struct Profile {
     name: &'static str,
     size: u32,
@@ -11,6 +12,8 @@ struct Profile {
     digest: &'static str,
     references: &'static [(&'static str, u32, u32)],
     calls: &'static [(u32, &'static str)],
+    /// An otherwise identical internal helper is named only by its verified caller.
+    owner: Option<&'static str>,
 }
 
 fn body(
@@ -153,7 +156,19 @@ fn identify(image: &CodeImage, profiles: &[Profile]) -> Identification {
         let accepted: Vec<_> = candidates
             .iter()
             .filter(|c| {
-                (!dependencies_stable
+                c.profile.owner.is_none_or(|owner| {
+                    candidates.iter().any(|parent| {
+                        parent.profile.name == owner
+                            && parent.profile.calls.iter().any(|&(offset, name)| {
+                                name == c.profile.name
+                                    && jump_target(image, parent.entry.0 + offset)
+                                        == Some(c.entry.0)
+                            })
+                            && c.data.iter().all(|(name, address)| {
+                                parent.data.get(name).is_none_or(|a| a == address)
+                            })
+                    })
+                }) && (!dependencies_stable
                     || (names[&(scope(c.entry), c.profile.name)].len() == 1
                         && entries[&c.entry].len() == 1))
                     && c.profile.calls.iter().all(|&(offset, name)| {
@@ -236,6 +251,260 @@ pub(super) fn supported_status(image: &CodeImage, m: &Match) -> bool {
 // Relocation-normalized metadata only; reviewed SDK semantics: research/rs-thread-dispatch.md.
 const PROFILES: &[Profile] = &[
     Profile {
+        owner: None,
+        name: "osWritebackDCache",
+        size: 0x74,
+        first: 0x18a00011,
+        digest: "1f0c92717c0320c652883aff97a82af6fc935d0aba9eab058253f183113ec924",
+        references: &[],
+        calls: &[],
+    },
+    // SP task-load peer graph: the existing native RSP runtime owns these APIs.
+    Profile {
+        owner: None,
+        name: "osSpTaskLoad",
+        size: 0x1b8,
+        first: 0x27bdffe0,
+        digest: "105e1c3b62d4e5e05494dee034fad7b9dc01c7d5dd3eab9ba6a091a591ac0b26",
+        references: &[("sptask_buffer", 0xc, 0x14)],
+        calls: &[
+            (0x20, "sdk_bcopy"),
+            (0x34, "osVirtualToPhysical"),
+            (0x4c, "osVirtualToPhysical"),
+            (0x64, "osVirtualToPhysical"),
+            (0x7c, "osVirtualToPhysical"),
+            (0x94, "osVirtualToPhysical"),
+            (0xac, "osVirtualToPhysical"),
+            (0xc4, "osVirtualToPhysical"),
+            (0x128, "osWritebackDCache"),
+            (0x130, "__osSpSetStatus"),
+            (0x140, "__osSpSetPc"),
+            (0x164, "__osSpRawStartDma"),
+            (0x174, "__osSpDeviceBusy"),
+            (0x194, "__osSpRawStartDma"),
+        ],
+    },
+    Profile {
+        owner: None,
+        name: "sdk_bcopy",
+        size: 0x344,
+        first: 0x00a03821,
+        digest: "2407c1719e19e27f60f925049ebc80082902c8398eed13cd069731d178b2b37a",
+        references: &[],
+        calls: &[],
+    },
+    Profile {
+        owner: None,
+        name: "osVirtualToPhysical",
+        size: 0x60,
+        first: 0x27bdffe8,
+        digest: "1fd61e8cd691c6c4824e77be78046d39524a4edd7fbd839d611807a05e0661d4",
+        references: &[],
+        calls: &[(0x4c, "__osProbeTLB")],
+    },
+    Profile {
+        owner: None,
+        name: "__osProbeTLB",
+        size: 0xb8,
+        first: 0x40085000,
+        digest: "18237953face59e0e8aa8025ac66a25c0d1779351935dd0be13df094bf3d5008",
+        references: &[],
+        calls: &[],
+    },
+    Profile {
+        owner: None,
+        name: "__osSpDeviceBusy",
+        size: 0x18,
+        first: 0x3c02a404,
+        digest: "fd0a3402b8b79b21fdc4cced62867ada1720ac539eea3e7736846caeab47270f",
+        references: &[],
+        calls: &[],
+    },
+    Profile {
+        owner: None,
+        name: "__osSpRawStartDma",
+        size: 0xf4,
+        first: 0x27bdffd8,
+        digest: "f461ada960e51d94d2ed7ff2da5c1161bef11d67d7eb44a9060f41e908ba079c",
+        references: &[
+            ("sp_assert_expression", 0x30, 0x34),
+            ("sp_assert_filename", 0x38, 0x3c),
+            ("sp_assert_expression", 0x50, 0x54),
+            ("sp_assert_filename", 0x58, 0x5c),
+            ("sp_assert_expression", 0x70, 0x74),
+            ("sp_assert_filename", 0x78, 0x7c),
+        ],
+        calls: &[
+            (0x40, "sdk_disabled_assert"),
+            (0x60, "sdk_disabled_assert"),
+            (0x80, "sdk_disabled_assert"),
+            (0x88, "__osSpDeviceBusy"),
+            (0xa4, "osVirtualToPhysical"),
+        ],
+    },
+    Profile {
+        owner: None,
+        name: "__osSpSetPc",
+        size: 0x2c,
+        first: 0x3c02a404,
+        digest: "e2e8cbd5cc1f362f0e914d0188b2785076f2ef4115725efa9f9b7aca6a2b1a44",
+        references: &[],
+        calls: &[],
+    },
+    Profile {
+        owner: None,
+        name: "__osSpSetStatus",
+        size: 0x14,
+        first: 0x3c02a404,
+        digest: "065a70ecec174a0843614f5e647fcdef099a897b51543467641ed3bcca2ce111",
+        references: &[],
+        calls: &[],
+    },
+    Profile {
+        owner: Some("__osSpRawStartDma"),
+        name: "sdk_disabled_assert",
+        size: 0x8,
+        first: 0x03e00008,
+        digest: "78aa5094d5ec7291c79f799c009d04f06c2f20187988e3dcc8d35ee5efdbb378",
+        references: &[],
+        calls: &[],
+    },
+    Profile {
+        owner: None,
+        name: "osYieldThread",
+        size: 0x48,
+        first: 0x27bdffe8,
+        digest: "0392ce90bf5a8c9fe0cb2fe73981b9f0022f4ff8ed30ec7cbed6c049124ae860",
+        references: &[
+            ("__osRunQueue", 0x10, 0x14),
+            ("__osRunningThread", 0x18, 0x1c),
+        ],
+        calls: &[
+            (0x8, "__osDisableInt"),
+            (0x28, "__osEnqueueAndYield"),
+            (0x30, "__osRestoreInt"),
+        ],
+    },
+    // PI API variants: reviewed host-owned manager/DMA semantics (ADR-0273).
+    Profile {
+        owner: None,
+        name: "osCreatePiManager",
+        size: 0x18c,
+        first: 0x27bdffc8,
+        digest: "4af483ea47ffbb6eff9fe053377adb95a5a9f7f4585216885d63cf21d08d5e17",
+        references: &[
+            ("__osPiDevMgr", 0x8, 0xc),
+            ("__osPiDevMgr", 0x8, 0x34),
+            ("pi_event_queue", 0x5c, 0x60),
+            ("pi_event_buffer", 0x68, 0x6c),
+            ("__osPiAccessQueueEnabled", 0x78, 0x7c),
+            ("pi_thread", 0xd4, 0xd8),
+            ("__osDevMgrMain", 0xe4, 0xe8),
+            ("__osPiDevMgr", 0x8, 0xf0),
+            ("__osPiAccessQueue", 0xf4, 0xf8),
+            ("__osPiRawStartDma", 0x100, 0x104),
+            ("__osEPiRawStartDma", 0x10c, 0x110),
+            ("pi_event_queue", 0x118, 0x11c),
+        ],
+        calls: &[
+            (0x44, "__osPiInit"),
+            (0x54, "osCreateMesgQueue"),
+            (0x70, "osCreateMesgQueue"),
+            (0x88, "__osPiCreateAccessQueue"),
+            (0x9c, "osSetEventMesg"),
+            (0xa8, "osGetThreadPri"),
+            (0xc8, "osSetThreadPri"),
+            (0xd0, "__osDisableInt"),
+            (0x138, "osCreateThread"),
+            (0x140, "osStartThread"),
+            (0x148, "__osRestoreInt"),
+            (0x15c, "osSetThreadPri"),
+        ],
+    },
+    Profile {
+        owner: None,
+        name: "__osPiInit",
+        size: 0xa0,
+        first: 0x3c05a460,
+        digest: "4d00b6eab4b545a090563577d483cb04e0e7da4da85668c5a54e0eb58c893a50",
+        references: &[
+            ("pi_domain1_handle", 0x40, 0x44),
+            ("pi_domain2_handle", 0x48, 0x4c),
+        ],
+        calls: &[],
+    },
+    Profile {
+        owner: Some("osCreatePiManager"),
+        name: "__osPiCreateAccessQueue",
+        size: 0x54,
+        first: 0x27bdffe8,
+        digest: "ceb9cf61ee137be2f097dc2e46b22c3ad67490b98abec72cabaae859326e376c",
+        references: &[
+            ("__osPiAccessQueue", 0x10, 0x14),
+            ("pi_access_buffer", 0x1c, 0x20),
+            ("__osPiAccessQueueEnabled", 0x4, 0x30),
+        ],
+        calls: &[(0x2c, "osCreateMesgQueue"), (0x3c, "osSendMesg")],
+    },
+    Profile {
+        owner: None,
+        name: "osPiStartDma",
+        size: 0xac,
+        first: 0x3c020000,
+        digest: "9142b74e4f1f785a14420d0f4bd2df3bc46ba8ab7a07f94ea894030e0e229109",
+        references: &[("__osPiDevMgr", 0x0, 0x4)],
+        calls: &[
+            (0x64, "osPiGetCmdQueue"),
+            (0x74, "osJamMesg"),
+            (0x84, "osPiGetCmdQueue"),
+            (0x94, "osSendMesg"),
+        ],
+    },
+    Profile {
+        owner: None,
+        name: "osPiGetCmdQueue",
+        size: 0x24,
+        first: 0x3c020000,
+        digest: "f89c7d12bc98a0d6bb745e66d3969937f0015dd51cc2a126c6ad253d14ebb898",
+        references: &[("__osPiDevMgr", 0x0, 0x4), ("__osPiDevMgr", 0x0, 0xc)],
+        calls: &[],
+    },
+    Profile {
+        owner: None,
+        name: "osJamMesg",
+        size: 0x140,
+        first: 0x27bdffd0,
+        digest: "a8c64aaaab1c36d3eee8ca8a54e20dba70f441e8b123cec39ddee578f0db1271",
+        references: &[("__osRunningThread", 0x4c, 0x6c)],
+        calls: &[
+            (0x2c, "__osDisableInt"),
+            (0x5c, "__osRestoreInt"),
+            (0x70, "__osEnqueueAndYield"),
+            (0xf8, "__osPopThread"),
+            (0x100, "osStartThread"),
+            (0x108, "__osRestoreInt"),
+        ],
+    },
+    Profile {
+        owner: None,
+        name: "osCreateMesgQueue",
+        size: 0x24,
+        first: 0x3c020000,
+        digest: "092466f82d4abb01a18ed0df561605be723de1736d87c04a0e88ee29fab917ff",
+        references: &[("__osThreadTail", 0x0, 0x4)],
+        calls: &[],
+    },
+    Profile {
+        owner: None,
+        name: "osSetEventMesg",
+        size: 0x5c,
+        first: 0x27bdffe0,
+        digest: "9df5ff3d73cbbdff7a945d3b799ee03fafef6a7ea1ae4eb0dcc49e6c4fefba38",
+        references: &[("__osEventStateTab", 0x28, 0x2c)],
+        calls: &[(0x1c, "__osDisableInt"), (0x3c, "__osRestoreInt")],
+    },
+    Profile {
+        owner: None,
         name: "osGetThreadPri",
         size: 0x18,
         first: 0x14800002,
@@ -244,6 +513,7 @@ const PROFILES: &[Profile] = &[
         calls: &[],
     },
     Profile {
+        owner: None,
         name: "osCreateThread",
         size: 0xd0,
         first: 0x27bdffe8,
@@ -256,6 +526,7 @@ const PROFILES: &[Profile] = &[
         calls: &[(0xa0, "__osDisableInt"), (0xb8, "__osRestoreInt")],
     },
     Profile {
+        owner: None,
         name: "osDestroyThread",
         size: 0xd4,
         first: 0x27bdffe0,
@@ -276,6 +547,7 @@ const PROFILES: &[Profile] = &[
         ],
     },
     Profile {
+        owner: None,
         name: "__osEnqueueAndYield",
         size: 0x108,
         first: 0x3c050000,
@@ -288,6 +560,7 @@ const PROFILES: &[Profile] = &[
         calls: &[(0xf8, "__osEnqueueThread"), (0x100, "__osDispatchThread")],
     },
     Profile {
+        owner: None,
         name: "__osEnqueueThread",
         size: 0x4c,
         first: 0x0080c821,
@@ -296,6 +569,7 @@ const PROFILES: &[Profile] = &[
         calls: &[],
     },
     Profile {
+        owner: None,
         name: "__osPopThread",
         size: 0x14,
         first: 0x8c820000,
@@ -304,6 +578,7 @@ const PROFILES: &[Profile] = &[
         calls: &[],
     },
     Profile {
+        owner: None,
         name: "__osDispatchThread",
         size: 0x184,
         first: 0x3c040000,
@@ -318,6 +593,7 @@ const PROFILES: &[Profile] = &[
         calls: &[(0x8, "__osPopThread")],
     },
     Profile {
+        owner: None,
         name: "__osCleanupThread",
         size: 0x8,
         first: 0x0c000000,
@@ -326,6 +602,7 @@ const PROFILES: &[Profile] = &[
         calls: &[(0x0, "osDestroyThread")],
     },
     Profile {
+        owner: None,
         name: "__osDisableInt",
         size: 0x24,
         first: 0x40086000,
@@ -334,6 +611,7 @@ const PROFILES: &[Profile] = &[
         calls: &[],
     },
     Profile {
+        owner: None,
         name: "__osRestoreInt",
         size: 0x1c,
         first: 0x40086000,
@@ -342,6 +620,7 @@ const PROFILES: &[Profile] = &[
         calls: &[],
     },
     Profile {
+        owner: None,
         name: "osRecvMesg",
         size: 0x128,
         first: 0x27bdffd0,
@@ -357,6 +636,7 @@ const PROFILES: &[Profile] = &[
         ],
     },
     Profile {
+        owner: None,
         name: "osSendMesg",
         size: 0x138,
         first: 0x27bdffd0,
@@ -372,6 +652,7 @@ const PROFILES: &[Profile] = &[
         ],
     },
     Profile {
+        owner: None,
         name: "osSetIntMask",
         size: 0xac,
         first: 0x400c6000,
@@ -383,6 +664,7 @@ const PROFILES: &[Profile] = &[
         calls: &[],
     },
     Profile {
+        owner: None,
         name: "osSetThreadPri",
         size: 0xc0,
         first: 0x27bdffe0,
@@ -404,6 +686,7 @@ const PROFILES: &[Profile] = &[
         ],
     },
     Profile {
+        owner: None,
         name: "osStartThread",
         size: 0x110,
         first: 0x27bdffe0,
@@ -428,6 +711,7 @@ const PROFILES: &[Profile] = &[
         ],
     },
     Profile {
+        owner: None,
         name: "osStopThread",
         size: 0xb0,
         first: 0x27bdffe0,
@@ -441,6 +725,7 @@ const PROFILES: &[Profile] = &[
         ],
     },
     Profile {
+        owner: None,
         name: "__osDequeueThread",
         size: 0x34,
         first: 0x8c820000,
@@ -458,6 +743,7 @@ mod tests {
     // Authored miniature call/branch/data graph, not an SDK body.
     const FIXTURES: &[Profile] = &[
         Profile {
+            owner: None,
             name: "fixture_caller",
             size: 48,
             first: 0x3c08_0000,
@@ -466,6 +752,7 @@ mod tests {
             calls: &[(20, "fixture_peer")],
         },
         Profile {
+            owner: None,
             name: "fixture_peer",
             size: 12,
             first: 0x4002_6000,
@@ -474,6 +761,7 @@ mod tests {
             calls: &[],
         },
         Profile {
+            owner: None,
             name: "fixture_thunk",
             size: 8,
             first: 0x0c00_0000,
@@ -615,5 +903,64 @@ mod tests {
     #[test]
     fn distinct_sdk_globals_cannot_alias() {
         assert!(!has_caller(&fixture(0x8000_0400, 0x8000_0500)));
+    }
+
+    #[test]
+    fn owned_helpers_require_the_authenticated_callers_exact_call() {
+        let mut profiles = FIXTURES.to_vec();
+        profiles[1].owner = Some("fixture_caller");
+        let mut image = fixture(0x8000_0400, 0x8000_1000);
+        image.words[20..23].copy_from_slice(&[0x4002_6000, 0x03e0_0008, 0]);
+        let matched = identify(&image, &profiles);
+        assert!(matched.matches.iter().any(|m| m.name == "fixture_caller"));
+        assert_eq!(
+            matched
+                .matches
+                .iter()
+                .filter(|m| m.name == "fixture_peer")
+                .map(|m| m.entry)
+                .collect::<Vec<_>>(),
+            [GuestAddr(0x8000_0440)]
+        );
+        // A damaged owner cannot authenticate an otherwise matching helper.
+        image.words[2] ^= 1;
+        assert!(identify(&image, &profiles).matches.is_empty());
+    }
+
+    #[test]
+    fn pi_producer_and_manager_must_agree_on_the_device_global() {
+        // Authored miniature bodies; no SDK instructions or addresses.
+        let profiles = [
+            Profile {
+                owner: None,
+                name: "osCreatePiManager",
+                size: 12,
+                first: 0x3c08_0000,
+                digest: "93a04dc0384a15c77f6444109aed95af230107b52e30262ead5efea210a4b545",
+                references: &[("__osPiDevMgr", 0, 4)],
+                calls: &[],
+            },
+            Profile {
+                owner: None,
+                name: "osPiStartDma",
+                size: 12,
+                first: 0x3c09_0000,
+                digest: "a403bb2500f44f2849d5fac4a653c28a75635ba05fe1d56c8deda7879810a57b",
+                references: &[("__osPiDevMgr", 0, 4)],
+                calls: &[],
+            },
+        ];
+        for base in [0x8000_0400, 0x8050_0000] {
+            let mut image = fixture(base, 0x8000_1000);
+            image.words[..3].copy_from_slice(&[0x3c08_8000, 0x2508_1000, 0x03e0_0008]);
+            image.words[16..19].copy_from_slice(&[0x3c09_8000, 0x2529_1000, 0x03e0_0008]);
+            assert_eq!(identify(&image, &profiles).matches.len(), 2);
+            // Masked relocations must still name one shared device manager.
+            image.words[17] += 4;
+            assert!(identify(&image, &profiles).matches.is_empty());
+            image.words[17] -= 4;
+            image.words[18] ^= 1;
+            assert_eq!(identify(&image, &profiles).matches.len(), 1);
+        }
     }
 }
