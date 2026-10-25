@@ -27,7 +27,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 | GoldenEye 007 (USA) | **none** | refused | not reached: OPEN, 592 blockers (589 with residual dispatch): 48 `7f` engine pages now recovered, resolving 81 of 85 missing direct targets but exposing more code (ADR-0255) | unvisited engine pages, cross-page instructions, TLB refill/exception semantics |
 | Mario Kart 64 (USA) | **none** | 🟨 residual dispatch, 2 sites | 60 s with compiled graphics microcode and audio: VI 2762, 1270 graphics / 2635 audio tasks, fault 0 (ADR-0246) | prove the 2 residual sites; longer play |
 | Star Fox 64 (USA) (Rev 1) | **none** | 🟨 residual dispatch, 8 sites | 30 s from the ROM alone: VI 1798, 945 graphics / 1730 audio tasks, fault 0 (ADR-0256, ADR-0257); borders clean since ADR-0266 | prove the 8 residual sites; longer play |
-| Rogue Squadron (USA) | **none** | 🟨 builds with residual dispatch (ADR-0275) | first frame: the copyright screen renders natively through its custom microcode (53 graphics tasks); stops at VI 114, fault 12 at `80013c34`, where a matrix routine switches `Status.FR` 0 -> 1 | verified dynamic FR switching |
+| Rogue Squadron (USA) | **none** | 🟨 builds with residual dispatch, 19 sites (ADR-0276) | copyright and Expansion Pak screens render natively; runs to VI 351 through a `Status.FR` switch, then faults closed at `8003dc58` on an indirect jump to `8003dc68` during the next transition | that jump table's run-time provenance; title and gameplay |
 | Mario Party 2 (USA) | **none** | 🟨 builds with residual dispatch, 8 sites | 30 s from the ROM alone with scripted Start/A: HUDSON logo to destination selection, VI 1798, fault 0 (ADR-0268, ADR-0269) | prove the 8 residual sites; board gameplay; the 476 s analysis |
 
 "Native build ✅" means analysis is `CLOSED` under a declared scope (usually `--address-taken`) and `native.py` emits the executable. Since ADR-0233, `native.py` also builds by default when the only open items are indirect jumps it cannot prove: they go through a fail-closed run-time lookup over the translated code (still no emulation), and `native-manifest.json` records `native_complete: false`. `--strict` builds only proven maps.
@@ -41,6 +41,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0276 | `92d0733c` | `Status.FR` can switch at run time: FR mode follows data flow from Status writes over one canonical FPR file (12 full-state ares comparisons); RSP RAM scans cached (20,000 RDP calls 23.3 s -> 0.34 s). Rogue Squadron VI 114 -> 351 |
 | 0275 | `57805a18` | Raw-overlay protection covers emitted instructions and dispatch inputs, not mutable string data (checked against ares). Rogue Squadron shows its copyright screen |
 | 0274 | `7db712ec` | Packed RSP overlays are discovered (27 texts, was 21); unknown graphics microcode automatically runs as native LLE (a real task matches ares over 2,694 instructions). Rogue Squadron VI 1 -> 105 |
 | 0273 | `33366296` | SDK PI-manager, yield and SP-task-load variants bind to the runtime; Rogue Squadron reaches its first graphics task |
