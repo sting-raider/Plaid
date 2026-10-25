@@ -135,7 +135,10 @@ pub fn generate(
                                 || plaid_lower::rsp::plausible_program(&text, imem)
                                 || plaid_lower::rsp::plausible_task(&text, imem)
                         }
-                        _ => plaid_lower::rsp::plausible_overlay(&text),
+                        _ => {
+                            plaid_lower::rsp::plausible_overlay(&text)
+                                || plaid_lower::rsp::plausible_short_overlay(&text, imem, &resident)
+                        }
                     };
                     if text.len() != requested_size as usize || !plausible {
                         continue;

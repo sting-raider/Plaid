@@ -1,6 +1,6 @@
 use plaid_lower::rsp::{
-    lower_rsp, plausible_overlay, plausible_program, plausible_task, plausible_text,
-    reachable_words,
+    lower_rsp, plausible_overlay, plausible_program, plausible_short_overlay, plausible_task,
+    plausible_text, reachable_words,
 };
 
 fn reach(words: &[u32], imem: u32) -> plaid_lower::rsp::RspReachability {
@@ -120,6 +120,33 @@ fn table_named_overlays_need_only_code_and_one_rsp_operation() {
     assert!(!plausible_overlay(&bytes(&words[..15])));
     words[25] = 0xffff_ffff;
     assert!(!plausible_overlay(&bytes(&words)));
+}
+
+#[test]
+fn short_scalar_overlays_require_a_valid_resident_rsp_path() {
+    let bytes = |words: &[u32]| {
+        words
+            .iter()
+            .flat_map(|w| w.to_be_bytes())
+            .collect::<Vec<_>>()
+    };
+    let mut resident = vec![0; 0xf80];
+    resident[0x180..0x18c].copy_from_slice(&bytes(&[0x4008_3000, 0x03e0_0008, 0]));
+    let text = bytes(&[0x3408_0042, 0x0800_0080, 0x2508_0001, 0]);
+    assert!(plausible_short_overlay(&text, 0xd00, &resident));
+    assert!(!plausible_overlay(&text));
+    assert!(!plausible_short_overlay(&text, 0xd04, &resident));
+    assert!(!plausible_short_overlay(&text, 0xff8, &resident));
+    assert!(!plausible_short_overlay(&text, 0xd00, &resident[..0xf7c]));
+    for bad in [0xffff_ffffu32, 0, 0x0800_0000] {
+        let mut changed = resident.clone();
+        changed[0x180..0x184].copy_from_slice(&bad.to_be_bytes());
+        assert!(!plausible_short_overlay(&text, 0xd00, &changed));
+    }
+    let invalid_slot = bytes(&[0x3408_0042, 0x0800_0080, 0xffff_ffff, 0]);
+    assert!(!plausible_short_overlay(&invalid_slot, 0xd00, &resident));
+    let indirect_only = bytes(&[0x03e0_0008, 0]);
+    assert!(!plausible_short_overlay(&indirect_only, 0xd00, &resident));
 }
 
 #[test]

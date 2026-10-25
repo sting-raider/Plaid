@@ -346,7 +346,6 @@ fn packed_overlay_descriptors(
                     || !dest.is_multiple_of(8)
                     || offset == 0
                     || !offset.is_multiple_of(8)
-                    || size < 64
                     || size > 0x2000 - dest
                 {
                     break;
@@ -497,6 +496,17 @@ mod tests {
         assert_eq!(
             packed_overlay_descriptors(&image, &roots, &layouts),
             expected
+        );
+        let mut short = image.clone();
+        short.words[10] = 0x202b_0900;
+        assert_eq!(
+            packed_overlay_descriptors(&short, &roots, &layouts),
+            [
+                (0x800, 0x48, 0xd00),
+                (0x900, 0x30, 0x200),
+                (0xa00, 0x80, 0xd00)
+            ]
+            .into()
         );
         assert!(packed_overlay_descriptors(&image, &BTreeSet::new(), &layouts).is_empty());
         for bad in [0x1080_0900, 0x4080_0900, 0x2080_0901, 0x2fff_0900] {

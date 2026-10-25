@@ -630,7 +630,7 @@ impl Need {
                 self.scaled = Some(d);
                 self.base = Some(other);
                 self.operands = None;
-            } else if word >> 26 == 15 || word >> 26 == 9 && field(word, 21) == d {
+            } else if matches!(word >> 26, 9 | 15) {
                 self.base = Some(d);
                 self.scaled = Some(other);
                 self.operands = None;
@@ -672,8 +672,12 @@ impl Need {
                     self.base_value = Some((word << 16).wrapping_add(self.base_low));
                     self.base = None;
                 }
-                9 if field(word, 21) == d => {
-                    self.base_low = self.base_low.wrapping_add(i32::from(word as i16) as u32)
+                9 => {
+                    // ADDIU may rename the constant before the old register is
+                    // reused for the index/flag. Follow its actual source.
+                    let source = field(word, 21);
+                    self.base_low = self.base_low.wrapping_add(i32::from(word as i16) as u32);
+                    self.base = Some(source);
                 }
                 _ => return None,
             }

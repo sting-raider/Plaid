@@ -1,5 +1,22 @@
 # Status
 
+## Rogue Squadron table bases, short RSP overlays and N64 logo (ADR-0277)
+
+Guarded-table analysis now follows renamed ADDIU constant bases. RS's resident
+76-word switch at80031740 supplies the missing local native cases for8003dc58;
+unknown paths remain residual/native guarded. Packed RSP tables continue past
+short DMA records; scalar short overlays require a valid placed resident path
+to an RSP operation. Native target, live-byte and startup ambiguity guards stay.
+Deterministic full-state ares comparisons and guard mutations cover the subset.
+
+CPU residual sites fall19->16,native_complete:false; RSP candidates27->51.
+The game reaches a readable400x442 N64 logo. Ordinary30s request:VI362/fault4/
+PC80095040; early-input request:VI221/same refusal. CDE targets a RAM line
+already marked lost; recovery/invalid-slot history is unresolved. No title/menu,
+gameplay or working press list is claimed. Receipt:research/rs-title.md;
+local gate, silent visible controls and framebuffer readbacks are retained
+under ignored target/receipts/rs-title. No shared RT64 rebuild is needed.
+
 ## Verified dynamic FR and Rogue Squadron continuation (ADR-0276)
 
 Native lowering derives Status.FR facts from guest data flow across blocks,

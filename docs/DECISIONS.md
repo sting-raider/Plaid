@@ -8191,3 +8191,44 @@ black/noisy, not a title/menu or gameplay claim. Detailed characterization,
 measurements, local gate and silent visible controls are recorded in
 research/rs-dynamic-fr.md, ignored receipts and the issue4 closeout. No ROM,
 assets, captures, README edits or shared reference modifications are committed.
+
+
+## ADR-0277: Follow renamed table bases and short resident RSP overlay paths
+
+Decision: backward guarded-table analysis follows the actual source of ADDIU,
+including register renames and signed chained offsets, rather than requiring
+an in-place update. Preserve CFG/call/loop/generation checks, complete source
+rechecking and unknown-source refusals. Newly recovered numeric targets seed
+native block discovery; they never become an emulator fallback or an automatic
+closed-world claim. Partial predecessor proofs remain candidate-only with
+native-only residual dispatch and native_complete:false.
+
+Rogue Squadron's8003dc58 switch uses76 resident ROM words at80031740. LUI v0
+followed by ADDIU t4,v0 supplies its base; no runtime-built table is required.
+ROM and stopped RDRAM agree in all304 bytes.8003dc68 already has a native
+local label but lacked this JR's candidate case. Pinned ares bounded stopped-
+state replay selects index1 ->8003dc68 ->8003dc94 without exception. This is
+finite local evidence; no snapshot becomes a compiler input. Synthetic native/
+ares full-state, signed/scheduled/unknown-source and proof-byte mutation tests
+verify the change. Relocating only the table's protection interval in generated
+C makes a corrupt pointer hit the still-closed native target guard.
+
+Packed RSP descriptor traversal must not terminate at a structurally valid
+short DMA. Retain rooted loader, selector, bounds and source checks. A short
+8..60-byte scalar overlay is a candidate only when placed in its complete
+resident080..fff context, its direct control flow remains inside that context,
+every reachable word lowers and it reaches an RSP-specific operation. Unknown
+register targets remain guarded. Keep ordinary long-overlay filtering,
+startup uniqueness and per-instruction live-byte checks. Native tests cover
+short DMA/return, later descriptors, invalid helpers/slots/targets and altered
+live bytes. These are candidate placements, not RSP closure.
+
+Consequences: RS residual CPU sites19->16 and RSP candidates27->51. The game
+passes both new db0 refusals and reaches a readable400x442 N64 logo, then
+faults4 at80095040 on CDE into a line already marked lost. Preserve that cache
+provenance guard; title/menu/gameplay and a working press list remain open.
+Full root-cause evidence, acceptance commands, timings, readback PNG locations
+and remaining scope are in research/rs-title.md and ignored receipts. Reference
+use is read-only pinned ares9408cb43 (ISC); no upstream implementation body,
+ROM/assets, README change, shared reference/shim rebuild or runtime decoder is
+introduced. No shared RT64 rebuild is required.

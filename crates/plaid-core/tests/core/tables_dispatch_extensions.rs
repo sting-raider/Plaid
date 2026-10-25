@@ -106,6 +106,55 @@ fn precomputed_address() -> Vec<u32> {
     ]
 }
 
+fn renamed_base() -> Vec<u32> {
+    vec![
+        lui(V0),
+        addiu(T3, V0, TABLE),
+        sltiu(T8, A0, 3),
+        branch(4, T8, 0, 0x0c, EXIT),
+        sll(V0, A0),
+        addu(V0, V0, T3),
+        lw(V0, V0, 0),
+        jr(V0),
+        0,
+    ]
+}
+
+#[test]
+fn table_base_addiu_can_rename_the_lui_register() {
+    assert_eq!(targets(&renamed_base(), 0x1c), Some(vec![0x50, 0x60]));
+    let mut changed = renamed_base();
+    changed[1] = addiu(T3, V1, TABLE); // unknown source cannot inherit V0's LUI
+    assert_eq!(targets(&changed, 0x1c), None);
+    let (mut image, map) = analyzed(&renamed_base());
+    let site = map.indirect_sites.first().unwrap();
+    image.words[0] = lui(V1);
+    assert!(!plaid_core::tables::verify(&map, &image, site));
+}
+
+#[test]
+fn renamed_base_can_be_scheduled_after_the_scale_and_use_signed_offsets() {
+    let code = [
+        sltiu(T8, A0, 3),
+        branch(4, T8, 0, 4, EXIT),
+        sll(V0, A0),
+        lui(V1),
+        addiu(T3, V1, TABLE + 4),
+        addiu(AT, T3, 0xfffc),
+        addu(V0, V0, AT),
+        lw(V0, V0, 0),
+        jr(V0),
+        0,
+    ];
+    assert_eq!(targets(&code, 0x20), Some(vec![0x50, 0x60]));
+    let mut unknown = code;
+    unknown[4] = addiu(T3, T9, TABLE + 4);
+    assert_eq!(targets(&unknown, 0x20), None);
+    let mut scale_lost = code;
+    scale_lost[5] = addiu(V0, T3, 0xfffc);
+    assert_eq!(targets(&scale_lost, 0x20), None);
+}
+
 #[test]
 fn a_precomputed_table_pointer_survives_a_current_index_guard() {
     assert_eq!(

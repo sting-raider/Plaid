@@ -730,6 +730,8 @@ def main():
     slot_contracts()
     from test_slot_data import main as slot_data_contracts
     slot_data_contracts()
+    from test_table_base import main as table_base_contracts
+    table_base_contracts()
     from test_branch_paths import main as branch_path_contracts
     branch_path_contracts()
     tlb_unmap(exe, cc)
