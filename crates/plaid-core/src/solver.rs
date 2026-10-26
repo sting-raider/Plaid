@@ -897,6 +897,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         .iter()
         .map(|image| (image.base.image.as_str(), load_starts(map, image)))
         .collect();
+    let mut code_roots = BTreeMap::new();
     let address_taken_ok = scope.address_taken()
         && !map.address_taken.is_empty()
         && map.address_taken.keys().all(|a| {
@@ -911,6 +912,14 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                     });
                     crate::data_roots::plausible_at(image, a.pc, starts)
                         || called && crate::data_roots::executed_start(image, a.pc)
+                        // Recheck explicit PC-relative shared-tail roots from
+                        // decoded source bytes; map membership alone is not evidence.
+                        || code_roots
+                            .entry(image.base.image.as_str())
+                            .or_insert_with(|| {
+                                crate::data_roots::block_constants(image, map, starts)
+                            })
+                            .contains_key(&a.pc)
                 })
         });
     let mut uses_address_taken = false;

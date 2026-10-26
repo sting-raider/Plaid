@@ -751,6 +751,8 @@ def main():
     fr_contracts()
     from test_dynamic_fr import main as dynamic_fr_contracts
     dynamic_fr_contracts()
+    from test_call_fr import main as call_fr_contracts
+    call_fr_contracts()
     from test_tlb_execution import main as tlb_execution_contracts
     tlb_execution_contracts()
     from test_indexed_dispatch import main as indexed_dispatch_contracts
@@ -759,6 +761,8 @@ def main():
     residual_dispatch_contracts()
     from test_rom_pointer_roots import main as rom_pointer_root_contracts
     rom_pointer_root_contracts()
+    from test_pc_link_roots import main as pc_link_root_contracts
+    pc_link_root_contracts()
     from test_indexed_slot_calls import main as indexed_slot_call_contracts
     indexed_slot_call_contracts()
     from test_boot_execution import main as boot_execution_contracts

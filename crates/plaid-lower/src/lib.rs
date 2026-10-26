@@ -121,6 +121,12 @@ static inline int plaid_status_fp(plaid_state *s, u32 pc, int fr0) {
   } else if (s->fr_mode && s->fr_mode != (fr0 ? 1u : 2u)) return plaid_fault(s, pc, 11);
   return plaid_status_cop1(s, pc);
 }
+/* Status is authoritative; fr_mode also supports saved contexts without a
+   complete Status receipt. Only bare harnesses use the declared default. */
+static inline int plaid_fp_fr0(plaid_state *s, int fallback) {
+  return s->status_known ? !(s->cp0_status & 0x04000000u) :
+         s->fr_mode ? s->fr_mode == 1u : fallback;
+}
 "#;
 
 const BUILD_PROT: &str = r#"/* Executable ranges are word-aligned, so a per-word map answers the same
@@ -879,12 +885,8 @@ fn is_control(word: u32) -> bool {
 /// and 64-bit transfers use the even register of a pair, a 32-bit transfer
 /// of an odd register is the upper word of its even partner, and ft and fd
 /// index the register itself.
-fn simple(word: u32, pc: u32, fr0: bool) -> Result<String, String> {
-    simple_lo(word, pc, fr0, None)
-}
-
-/// [`simple`] with the 16-bit immediate of an address computation (ADDIU or
-/// a load/store offset) given as a C expression: an overlay's LO16
+/// The 16-bit immediate of an address computation (ADDIU or a load/store
+/// offset) may be a C expression: an overlay's LO16
 /// relocation, read from its bound bytes (ADR-0181).
 fn simple_lo(word: u32, pc: u32, fr0: bool, lo: Option<&str>) -> Result<String, String> {
     if lo.is_some() && !matches!(word >> 26, 9 | 32..=63) {
@@ -1300,6 +1302,22 @@ impl Lowerer<'_> {
     fn fr0_at(&self, pc: u32) -> bool {
         self.fr_modes.get(&pc).copied().unwrap_or(self.fr0)
     }
+    fn simple(&self, word: u32, pc: u32, lo: Option<&str>) -> Result<String, String> {
+        if !matches!(word >> 26, 17 | 49 | 53 | 57 | 61)
+            || self.fr_modes.contains_key(&pc)
+            || (word >> 26 == 17 && matches!(word >> 21 & 31, 2 | 6))
+        {
+            return simple_lo(word, pc, self.fr0_at(pc), lo);
+        }
+        // Unknown call/entry/join facts require both native layouts. The same
+        // instruction-specific guards run before either layout touches state.
+        let fr0 = simple_lo(word, pc, true, lo)?;
+        let fr1 = simple_lo(word, pc, false, lo)?;
+        Ok(format!(
+            "if (plaid_fp_fr0(s, {})) {{ {fr0} }} else {{ {fr1} }}",
+            u8::from(self.fr0)
+        ))
+    }
     /// While a call is outstanding, the suspended frame pins only the text its
     /// continuation can still reach; the full body is pinned again on return.
     fn pin(&self, link: u32, call: String) -> String {
@@ -1536,22 +1554,12 @@ impl Lowerer<'_> {
                 "(s->fcsr &= ~0x3f000u, {}s->fcc)",
                 if rt & 1 == 0 { "!" } else { "" }
             ))
-            .map(|code| {
-                format!(
-                    "if (plaid_status_fp(s, 0x{pc:08x}u, {})) {{ return 1; }}\n{code}",
-                    u8::from(self.fr0_at(pc))
-                )
-            }),
+            .map(|code| format!("if (plaid_status_cop1(s, 0x{pc:08x}u)) {{ return 1; }}\n{code}")),
             (17, _, _) if rs == 8 => conditional(format!(
                 "(s->fcsr &= ~0x3f000u, {}s->fcc)",
                 if rt & 1 == 0 { "!" } else { "" }
             ))
-            .map(|code| {
-                format!(
-                    "if (plaid_status_fp(s, 0x{pc:08x}u, {})) {{ return 1; }}\n{code}",
-                    u8::from(self.fr0_at(pc))
-                )
-            }),
+            .map(|code| format!("if (plaid_status_cop1(s, 0x{pc:08x}u)) {{ return 1; }}\n{code}")),
             (1, _, 0) => conditional(format!("(s64){a} < 0")),
             (1, _, 1) => conditional(format!("(s64){a} >= 0")),
             // BLTZAL BGEZAL (likely: 18, 19) link first, then test rs, as ares.
@@ -2317,19 +2325,14 @@ pub fn lower_c_parts(
         // Relocated immediates are read from the bound copy (ADR-0181).
         let lower = |w: u32, pc: u32| -> Result<String, String> {
             let Some(&(k, kind)) = relocations.get(&pc) else {
-                return simple(w, pc, lowerer.fr0_at(pc));
+                return lowerer.simple(w, pc, None);
             };
             match kind {
                 5 => Ok(set(
                     (w >> 16) & 31,
                     format!("SX32((plaid_ow(s, {k}, 0x{pc:08x}u) & 0xffffu) << 16)"),
                 )),
-                6 => simple_lo(
-                    w,
-                    pc,
-                    lowerer.fr0_at(pc),
-                    Some(&format!("plaid_ow(s, {k}, 0x{pc:08x}u)")),
-                ),
+                6 => lowerer.simple(w, pc, Some(&format!("plaid_ow(s, {k}, 0x{pc:08x}u)"))),
                 _ => Err(format!(
                     "{pc:08x}: relocation kind {kind} on executed {w:08x}"
                 )),

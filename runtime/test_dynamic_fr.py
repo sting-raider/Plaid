@@ -79,7 +79,7 @@ def fixture(branch=False, taken=False):
 
 def unproven_join(exe, compile_run):
     # A single generated join can be entered in either mode. The analysis must
-    # retain its checked default, never carry the first predecessor's FR fact.
+    # select the live layout, never carry the first predecessor's FR fact.
     program = [A.lui(A.t0, 0x2000), 0x40886000,
                A.beq(A.t3, A.zero, 'join'), A.nop,
                A.lui(A.t0, 0x2400), 0x40886000, 'join',
@@ -95,10 +95,8 @@ def unproven_join(exe, compile_run):
                 f'  s.r[{A.t3}] = {taken};\n  s.r[31] ='))
             result = compile_run()
             actual = json.loads(result.stdout)
-            if taken:
-                assert result.returncode == 6 and actual == dict(fault=11, fault_pc=A.BASE + 24), actual
-            else:
-                assert result.returncode == 0 and actual['status'] == 0x20000000, actual
+            assert result.returncode == 0 and actual['status'] == (0x24000000 if taken else 0x20000000), actual
+            assert actual['regs'][A.t2] == (1 if taken else 0x12345678), actual
     finally:
         (OUT / 'harness.c').write_text(harness)
 
@@ -162,7 +160,7 @@ def main():
     (OUT / 'receipt.json').write_text(json.dumps(dict(ares=A.builder().REV, matched=matched,
         state=list(expected), mutation='inferred FR1 guard inverted: fault 11',
         fixtures=['jump slot', 'likely annulled', 'likely taken'], layouts=2, contexts=2,
-        unproven_join='FR0 accepted; FR1 faults before FPR access'), indent=2))
+        unproven_join='FR0/FR1 select their live canonical FPR layout'), indent=2))
     scheduler_contract(exe, cc)
     print(f'PASS dynamic FR: {matched} native/ares full-state matches; FR0/FR1 aliasing, loops, slots, both defaults/SDK contexts; guard mutation killed')
 

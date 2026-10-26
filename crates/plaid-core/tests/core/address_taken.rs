@@ -104,6 +104,49 @@ fn register_calls_close_only_over_plausible_address_taken_functions() {
 }
 
 #[test]
+fn shared_tail_dispatch_rechecks_the_pc_relative_source() {
+    let mut image = image();
+    image.words = vec![
+        0x0410_003f, // untaken BLTZAL zero still writes RA = BASE+8
+        0,
+        0x27eb_001c, // addiu t3, ra, 0x1c: internal shared tail at BASE+36
+        0x0160_f809, // jalr t3
+        0,
+        0x1000_ffff,
+        0,
+        0x2402_0001,
+        0x2402_0002,
+        0x03e0_0008,
+        0,
+    ];
+    let bytes: Vec<u8> = image.words.iter().flat_map(|w| w.to_be_bytes()).collect();
+    let map = discover_address_taken(
+        RomIdentity {
+            sha256: "e".repeat(64),
+            size: 4096,
+        },
+        &bytes,
+        &image,
+        &[GuestAddr(BASE)],
+        &[],
+        None,
+        &Default::default(),
+        100,
+    )
+    .unwrap()
+    .map;
+    assert!(
+        map.address_taken
+            .contains_key(&image.address(GuestAddr(BASE + 36)))
+    );
+    let scope = Scope::DeclaredStaticImagesGuardedRamAddressTaken;
+    assert_eq!(open_sites(&map, &image, scope), 0);
+    // Membership and an unchanged target body cannot replace the source proof.
+    image.words[1] = 0x241f_0000; // overwrite RA before constructing the pointer
+    assert_eq!(open_sites(&map, &image, scope), 1);
+}
+
+#[test]
 fn a_pointer_in_the_image_but_not_the_rom_is_address_taken() {
     // a decompressed or captured load: the ROM holds its bytes only encoded,
     // so f is named by a data word of the image alone (ADR-0197)

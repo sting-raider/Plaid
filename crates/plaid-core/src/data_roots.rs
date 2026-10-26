@@ -15,6 +15,12 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 const JR_RA: u32 = 0x03e0_0008;
 
+// An untaken BLTZAL/L $zero still writes PC+8 without entering a callee.
+fn local_pc_link(word: u32) -> bool {
+    crate::discovery::branch_never_taken(word)
+        && crate::discovery::decode(word, GuestAddr(0)).does_link()
+}
+
 /// Whether `pc` starts a function by layout: the image start, a declared
 /// load's start (`starts`), or right after a return/jump and its delay slot,
 /// possibly followed by zero padding.
@@ -209,7 +215,7 @@ pub fn rom_words(bytes: &[u8], image: &CodeImage, starts: &BTreeSet<u32>) -> BTr
     out
 }
 
-/// Address constants (`lui r, hi` then `addiu`/`ori` from `r`) built in
+/// Address constants (`lui r, hi` or an untaken PC link, then `addiu`/`ori`) built in
 /// decoded code of `map`, as `(function start, lui site)`. The walk follows
 /// decoded control flow from the `lui` (fallthrough, branches, jumps and call
 /// continuations, not into callees) for up to 64 instructions per path, until
@@ -224,11 +230,16 @@ pub fn block_constants(
 ) -> BTreeMap<GuestAddr, GuestAddr> {
     pointer_constants(image, map)
         .into_iter()
-        .filter(|(pc, _)| plausible_at(image, *pc, starts))
+        .filter(|(pc, site)| {
+            plausible_at(image, *pc, starts)
+                // Explicit PC-relative pointers may name shared-tail entries
+                // without a conventional function boundary. Still candidates.
+                || (image.word(*site).is_some_and(local_pc_link) && executed_start(image, *pc))
+        })
         .collect()
 }
 
-/// Bounded LUI pairs before CPU-function filtering; data consumers verify content.
+/// Bounded LUI/PC-link pairs before CPU filtering; data consumers verify content.
 pub(crate) fn pointer_constants(
     image: &CodeImage,
     map: &ProgramMap,
@@ -269,11 +280,13 @@ pub(crate) fn pointer_constants(
         let Some(w) = image.word(GuestAddr(at)) else {
             continue;
         };
-        let rt = (w >> 16) & 31;
-        if w >> 26 != 15 || rt == 0 {
+        let (rt, hi) = if local_pc_link(w) {
+            (31, image.linked_pc(GuestAddr(at)).0.wrapping_add(8))
+        } else if w >> 26 == 15 && (w >> 16) & 31 != 0 {
+            ((w >> 16) & 31, (w & 0xffff) << 16)
+        } else {
             continue;
-        }
-        let hi = (w & 0xffff) << 16;
+        };
         let mut seen = std::collections::HashSet::new();
         let mut work = vec![(at, 0u32)];
         while let Some((q, n)) = work.pop() {
@@ -317,7 +330,13 @@ pub(crate) fn pointer_constants(
                         }
                     }
                 }
-                if crate::discovery::decode(x, GuestAddr(0)).destination_gpr() != Some(rt) {
+                let instruction = crate::discovery::decode(x, GuestAddr(q));
+                let link = instruction.does_link().then_some(if x >> 26 == 0 {
+                    (x >> 11) & 31
+                } else {
+                    31
+                });
+                if instruction.destination_gpr() != Some(rt) && link != Some(rt) {
                     work.push((q, n + 1));
                 }
             }
@@ -509,6 +528,87 @@ pub fn discover_address_taken_with_loads(
 mod tests {
     use super::*;
     use crate::program::CodeAddress;
+
+    #[test]
+    fn untaken_links_supply_pc_relative_shared_tail_candidates() {
+        let mut image = CodeImage {
+            base: CodeAddress {
+                pc: GuestAddr(0x8000_0000),
+                image: "pc-link".into(),
+                generation: 0,
+            },
+            // Untaken link; construct a pointer to an internal shared-tail entry.
+            words: vec![
+                0x0410_003f,
+                0,
+                0x27eb_001c,
+                0x0160_f809,
+                0,
+                0x1000_ffff,
+                0,
+                0x2402_0001,
+                0x2402_0002,
+                JR_RA,
+                0,
+            ],
+            rom_offset: None,
+            physical_start: None,
+            holes: vec![],
+            slots: vec![],
+        };
+        let map = |image: &CodeImage| {
+            crate::discovery::direct_cfg(
+                crate::program::RomIdentity {
+                    sha256: "a".repeat(64),
+                    size: 4096,
+                },
+                image,
+                &[image.base.pc],
+                100,
+            )
+            .unwrap()
+            .map
+        };
+        let roots = |image: &CodeImage| block_constants(image, &map(image), &BTreeSet::new());
+        let target = GuestAddr(0x8000_0024);
+        assert!(!plausible(&image, target));
+        assert_eq!(roots(&image), [(target, image.base.pc)].into());
+        // Architectural PC, not packed storage PC, supplies a slot's link.
+        image.slots.push((
+            crate::program::GuestRange {
+                start: image.base.pc,
+                size: 44,
+            },
+            0x8020_0000,
+            44,
+        ));
+        assert_eq!(roots(&image), [(target, image.base.pc)].into());
+        image.slots.clear();
+        let original = image.clone();
+        // A likely slot is annulled; the same pointer in its continuation counts.
+        image.words[0] = 0x0412_003f;
+        image.words[1] = 0x27eb_001c;
+        image.words[2] = 0;
+        assert!(roots(&image).is_empty());
+        image.words[2] = 0x27eb_001c;
+        assert_eq!(roots(&image), [(target, image.base.pc)].into());
+        // A new explicit or implicit link write invalidates the source.
+        image.words[0] = 0x0410_003f;
+        for clobber in [0x241f_0000, 0x0c00_0005] {
+            image.words[1] = clobber;
+            assert!(roots(&image).is_empty());
+        }
+        image = original.clone();
+        image.words[2] = 0x0c00_0005;
+        image.words[3] = 0x27eb_001c; // a call writes RA before its slot
+        assert!(roots(&image).is_empty());
+        image = original;
+        image.words[0] = 0x0490_003f; // unknown $a0 condition is not a PC-only idiom
+        assert!(roots(&image).is_empty());
+        image.words[0] = 0x0410_003f;
+        image.words[9] = 0x4800_0000; // COP2 at the proposed target
+        assert!(roots(&image).is_empty());
+    }
 
     #[test]
     fn named_functions_can_follow_a_terminal_jump() {
