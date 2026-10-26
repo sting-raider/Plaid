@@ -133,6 +133,11 @@ for name in GFX_RUNTIME:
     GFX_PROGRAM += [name, A.jr(A.ra), A.nop]
 GFX_STUB = r'''#include <stdio.h>
 #include <stdint.h>
+int plaid_gfx_native_rsp(int (*work)(void *), void *context) {
+  int result = work(context);
+  printf("{\"stub_native_rsp\":%d}\n", result);
+  return result;
+}
 int plaid_gfx_open(const uint8_t *h) { printf("{\"stub_open\":%u}\n", h[0]); return 0; }
 int plaid_gfx_task(const uint8_t *ram, uint32_t ucode, uint32_t data, uint32_t dl,
                    int (*writeback)(void *, uint32_t, uint32_t, const uint8_t *), void *context) {
@@ -382,6 +387,7 @@ def rsp_graphics(exe, cc):
     assert next(line['words'] for line in lines if 'words' in line) == [
         0xFF8, 0x1008, 0xFF8, 0x1008, commands[0]], lines
     assert next(line['stop'] for line in lines if 'stop' in line) == 'exit', lines
+    assert [line['stub_native_rsp'] for line in lines if 'stub_native_rsp' in line] == [0], lines
     assert not any('stub_task' in line for line in lines), lines
     # Unknown HLE microcode must select the same native RSP/DPC path without
     # --rsp-gfx, including a CPU freeze set before the renderer's refusal.

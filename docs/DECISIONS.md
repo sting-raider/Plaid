@@ -8232,3 +8232,67 @@ and remaining scope are in research/rs-title.md and ignored receipts. Reference
 use is read-only pinned ares9408cb43 (ISC); no upstream implementation body,
 ROM/assets, README change, shared reference/shim rebuild or runtime decoder is
 introduced. No shared RT64 rebuild is required.
+## ADR-0278: CDE allocation and byte-precise lost backing
+
+Status: accepted
+
+Context: Rogue Squadron Rev1 stopped at CACHE CDE80095040 after the N64 logo.
+The native model marked physical17da60 lost after writing back a partially
+initialized CDE line (unknown byte mask0f00). Pinned ares retags without a
+RAM fill, retaining concrete slot contents. Its natural run initializes only
+12 object-field bytes (maskf0ff), not a complete framebuffer clear. CDE need
+not observe the prior destination's lost RAM. Later ordinary stores and reads
+also exposed over-conservative loss of all16 backing bytes.
+
+Decision: accept CDE over lost backing after existing translation, physical
+alias, protection and dirty-victim checks. Transfer uncertainty into the
+resident cache witness: invalid slots remain completely unknown; known
+resident victim bytes remain witnessed. Establish dirty residency before
+clearing the destination's old loss marker. Cached stores similarly allocate
+unknown backing bytes and recover only the bytes written. Represent line_lost
+as a16-bit mask. Dirty writeback publishes precisely the unknown cache-byte
+mask; dirty discard conservatively marks the entire line unknown. Cached
+fills import backing uncertainty; both fills and hits reject reads touching
+unknown bytes. Uncached reads inspect their byte mask. DMA retains its
+conservative refusal for any lost byte or dirty resident line; existing
+complete-line DMA recovery remains. Partial writes and repeated CDE cannot
+manufacture unwritten data. No game address or runtime guest execution is
+introduced.
+
+Consequences: state grows512KiB. Original native/pinned-ares differentials
+compare complete CPU state and the256-byte log window after discard/reuse,
+partial-writeback/refill and full recovery. Negative padding reads, repeated
+CDE, exact byte masks, known dirty victims, alias/translation/protected-text
+boundaries and DMA refusals remain checked; deleting the private generated
+unknown-read guard is detected. Timing/event semantics use the existing cache
+model, not a cycle-accuracy claim. Pinned ares's pre-store CDE dirty mask still
+differs from the NEC manual as documented in ADR0271. Reference source and
+ISC license were read only; no upstream implementation is copied into native
+production. Continuation, input, framebuffer and exact-tree local/control
+receipts are in research/rs-cde-lost.md and ignored target/receipts/rs-cde-lost.
+The manifest remains native_complete:false with16 residual CPU sites; these
+finite checks do not prove whole-ROM closure.
+
+
+Presentation and pacing follow-up: use RT64's4:3 TV surface by disabling
+removeBlackBorders, preserving Original projection and live VI registers.
+The old crop-to-storage default misfit RS400x444 non-square storage; SF64's
+320x240 already fit. Real viewport and wide/square resize checks verify the
+global correction. Run already-lowered RSP tasks synchronously on the renderer
+owner, so nested raw RDP calls/readbacks execute inline in original order.
+The callback borrows context until return and preserves result/refusal state.
+Real-DLL owner/reentrancy/readback and native frozen-DPC/automatic-LLE tests
+cover the boundary. Quiet30s no-trace VI progress improves777->1285, fault0;
+traced VI p95 improves194.341->90.918ms. Remaining long synchronous tasks and
+an unknown-entry FR1 pilot-menu refusal are explicit follow-up work. A new
+bridge DLL export is required; see research/rs-cde-lost.md for the shared
+rebuild command, before/after frame histogram, reference/license boundaries
+and exact-tree gate/control receipts. This is not whole-game acceptance.
+
+Final control qualification: all five30s controls and OoT save-load60s fault0.
+The supplied MP2 list alone misses the explicit prompt on both retained
+baseline and candidate on this host; adding A2000/2100/2200 after its unchanged
+prefix reaches destination/rules at VI2691/fault0. This timing limit remains
+open. Final RS also reaches SELECT GAME/fault0, while a longer drive confirms
+name-entry FR11 at VI1873/80013408; no interactive mission closure. Final
+receipts, save provenance and exact-tree gate: research/rs-cde-lost.md.

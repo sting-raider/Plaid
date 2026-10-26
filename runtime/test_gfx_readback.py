@@ -6,6 +6,7 @@ import subprocess
 STUB = r'''#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+int plaid_gfx_native_rsp(int (*work)(void *), void *context) { return work(context); }
 int plaid_gfx_open(const uint8_t *h) { (void)h; return 0; }
 int plaid_gfx_task(const uint8_t *ram, uint32_t ucode, uint32_t data, uint32_t dl,
                    int (*writeback)(void *, uint32_t, uint32_t, const uint8_t *), void *context) {

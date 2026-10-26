@@ -886,7 +886,7 @@ RT(osInvalDCache) {
   if (n >= DCACHE_SIZE) { dcache_all(); return 0; }
   for (a = va & ~15u; a < va + n; a += 16)
     if ((i = dslot(a)) >= 0) {
-      if (a >= va && a + 16 <= va + n) { if (S->ddirty[i]) S->line_lost[v2p(a) >> 4] = 1; }
+      if (a >= va && a + 16 <= va + n) { if (S->ddirty[i]) S->line_lost[v2p(a) >> 4] = 0xffffu; }
       else write_back_slot(i);
       S->dtag[i] = 0; S->ddirty[i] = 0; S->dstale[i] = 0; S->dunknown[i] = 0;
     }
@@ -1347,6 +1347,9 @@ static int rsp_run(u32 pc) {
     pc = rsp.pc;
   }
 }
+#ifdef PLAID_RT64
+static int rsp_native_work(void *context) { return rsp_run(*(u32 *)context); }
+#endif
 static void rsp_file(const char *dir, const char *name, const void *bytes, size_t size) {
   char path[1024];
   FILE *f;
@@ -1439,7 +1442,13 @@ static void rsp_task(void) {
   rsp.interrupt_on_break = 1; rsp.single_step = 0; rsp.broken = 0; rsp.halted = 0;
   if (capture) rsp_save("before");
   rsp_executing = 1;
+#ifdef PLAID_RT64
+  /* One synchronous owner transfer avoids a round trip for every RDP chunk. */
+  u32 pc = rsp.pc;
+  rc = plaid_gfx_native_rsp(rsp_native_work, &pc);
+#else
   rc = rsp_run(rsp.pc);
+#endif
   rsp_executing = 0;
   if (rc < 0) {
     char name[64];

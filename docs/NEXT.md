@@ -1,5 +1,37 @@
 # Next
 
+## Rogue Squadron pilot entry and remaining pacing (ADR-0278)
+
+Preserve byte-precise line_lost/dunknown masks, CDE no-fill allocation, known
+refill bytes, dirty-discard/DMA refusals, native fetch guards and16 residual
+CPU sites. The working pilot-menu prefix is Start600/1000/1200/1500, each4VIs.
+It reaches ENTER NAME but refuses SWC1 f26,0x24(s2) at80013408, VI1523/fault11,
+Status2400ff01. This function uses the checked default FR0 for unknown entry;
+its caller arrives in FR1. Establish incoming FR facts/specialization or
+verified dynamic FPR accesses across calls, with pinned-ares odd-register,
+state, scheduler and mutation contracts. Do not delete the guard. No mission
+or interactive-gameplay acceptance yet.
+
+Keep Original projection/aspect plus the4:3 TV presentation surface; verify
+PAL, overscan and intentional guest anamorphic modes separately. Rebuild and
+deploy the bridge DLL with the native-RSP callback export. Native RSP and
+nested RDP/readback remain synchronous and in order on the renderer owner.
+Quiet measurements isolate recurring stalls from vsync/audio: VI p95 improves
+194->91ms, but long native RSP/RDP tasks still block the scheduler and drop
+retraces. Profile exclusive RSP CPU/RT64 workload/driver time, then test async
+RSP/event scheduling or RAM-write-aware batching against complete task state,
+readback visibility and SP/DP/VI event ordering. Do not batch blindly across
+RAM producers. Histogram, resize checks and remaining limits:
+research/rs-cde-lost.md and ignored target/receipts/rs-cde-lost.
+
+The final retained-save runs also reach SELECT GAME without a fault, but a
+longer Start/A drive reproduces the FR11 name-entry boundary at VI1873.
+Keep save-state provenance when comparing these paths. MP2's original input
+list alone currently ends before its explicit destination prompt on both
+baseline and candidate; A2000/2100/2200 after that prefix reaches the retained
+destination/rules screen. Investigate VI-relative input/poll scheduling with
+an SI trace before claiming the original list is timing-independent.
+
 ## Rogue Squadron after the N64 logo (ADR-0277)
 
 Preserve renamed ADDIU source tracking, partial table evidence/native-only
