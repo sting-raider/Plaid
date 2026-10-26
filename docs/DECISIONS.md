@@ -8341,3 +8341,43 @@ successive creations match all CPU/FPR/PC/HI/LO/FCSR/64KiB RAM in pinned ares,
 release retired contexts, and kill a restored one-use refusal. Existing foreign,
 stale, edited-register, frame and resource negatives remain. MP2's supplied
 full input list now completes45s at VI2696/fault0 and shows Rules Land.
+
+## ADR-0280: Select live FPR layouts at unknown entries and recover PC-relative callable roots
+
+Decision: unknown incoming/call/join Status.FR facts select between the existing
+guarded FR0 and FR1 native instruction bodies. Live known Status is authoritative;
+otherwise use a saved fr_mode receipt, then the declared bare-harness default.
+Proven local FR facts retain their fixed-layout checks. Canonical32x64-bit FPR
+storage is unchanged. BC1 tests CU1 without imposing an unrelated FPR layout.
+No runtime guest instruction decoding, interpreter or JIT is introduced.
+
+The captured Rogue Squadron SWC1 at80013408 runs in FR1/Status2400ff01, while
+the old unknown-entry lowering checks FR0. Pinned ares9408cb43 accepts the store;
+all32 canonical FPRs, all GPRs, HI/LO, FCSR, PC+4 and its output word match the
+captured input contract. Four shared-helper native/ares differentials cover both
+map defaults and SDK/plain contexts, FR1/FR0/FR1 calls and a callee changing FR.
+Twelve retained dynamic-FR cases, live receipt precedence, CU1 refusal and
+fixed-map/inferred-guard mutations verify the declared scope.
+
+The subsequent mission-selection JALR uses a pointer built from PC+8 after an
+untaken BLTZAL zero. Add that statically untaken link idiom to the existing
+bounded decoded address-constant walk. Explicit/implicit register writes kill
+the source; likely annulment and architectural slot PCs are respected. A valid
+CPU shared tail may be an entry without a conventional layout boundary. Solver
+admission rederives that root from source bytes; map membership alone is not
+authority. Original ordinary/likely-link calls match pinned ares in complete
+CPU/FPR/output RAM state, a removed-entry mutation faults3, and overwriting the
+source invalidates stale-map dispatch. Unknown-condition links and invalid
+bodies remain excluded. These are discovery candidates, not closed target sets.
+
+Fresh ROM-bound discovery reproduces47918 blocks and16 residual sites, with
+native_complete:false. The old VI1271/fault11/80013408 and VI2520/fault3/80091d88
+boundaries pass. Native name entry and first-mission continuation, exact inputs,
+framebuffer readbacks, timing qualifications and local gates are recorded in
+research/rs-name-entry.md. Finite tested execution does not establish whole-game
+closure, hardware accuracy or arbitrary FR-changing coroutine compatibility.
+
+Reference use: exact pinned ares FPR accessors, Status handling and linked branch
+semantics were read with ISC/SLJIT notices retained in ignored oracle builds.
+No reference implementation body or copyrighted asset enters production. RT64,
+its bridge and default GCC15.2/RSP flags are unchanged; no shared rebuild needed.

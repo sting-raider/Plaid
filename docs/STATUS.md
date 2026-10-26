@@ -1,5 +1,26 @@
 # Status
 
+## Rogue Squadron name entry and first mission (ADR-0280)
+
+Unknown entry/call/join FR facts now select the live guarded native FPR layout;
+proven local facts retain fixed-layout checks. The captured FR1 SWC1 at80013408
+matches pinned ares across all32 FPRs, all GPRs, HI/LO, FCSR, PC and store output.
+Shared-helper, dynamic-FR, precedence/CU1 and mutation contracts cover the change.
+
+Mission selection then exposed PC-relative callable pointers after untaken
+BLTZAL zero. Bounded discovery follows the link value, register kills, likely
+annulment and linked slot PCs; solver admission rederives shared-tail roots from
+source bytes. Full-state ares, missing-entry mutation and source-clobber negatives
+verify this candidate discovery. Fresh map:47918 blocks,16 residual CPU sites,
+native_complete:false. No guest interpreter/decoder/JIT or bridge change.
+
+The baseline VI1271/fault11/80013408 and later fault3/80091d88 pass. A retained-save
+empty-slot route reaches ENTER NAME at VI1918/fault0. The complete new-pilot drive
+reaches the first mission HUD at VI12284/fault0/PC00000000 in205s, with X-wing,
+reticle, radar and weapon count verified through RDRAM framebuffer readback.
+This is finite first-mission coverage, not whole-game or native-complete closure.
+Exact presses, PNG locations, timing and local validation:research/rs-name-entry.md.
+
 ## Native LLE pacing and shadow-RAM synchronization (ADR-0279)
 
 Rogue Squadron's silent30s matched measurement advances VI1602->1798,

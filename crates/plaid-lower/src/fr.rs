@@ -1,6 +1,6 @@
 //! Status.FR facts from native guest data flow (ADR-0276).
-//! Unknown entry/call state is never a constant: the emitted layout guard
-//! checks the map's default in that case. Status writes can prove either mode.
+//! Unknown entry/call state is never a constant: native accesses select the
+//! live layout in that case. Status writes can prove either guarded mode.
 use super::*;
 use std::collections::VecDeque;
 
@@ -150,7 +150,7 @@ pub(super) fn modes(
             .iter()
             .flat_map(|b| (b.start.pc.0..b.start.pc.0 + b.size).step_by(4))
     };
-    // Almost every function has no Status writer; retain the checked default.
+    // Almost every function has no Status writer; use live-layout accesses.
     let mut writes_status = false;
     for pc in pcs() {
         let w = word(pc)?;

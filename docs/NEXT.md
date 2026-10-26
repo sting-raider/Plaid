@@ -1,5 +1,21 @@
 # Next
 
+## Rogue Squadron after name entry and first mission (ADR-0280)
+
+Preserve live guarded FPR selection for unknown entry/call/join facts, proven-FR
+checks, canonical FPR storage, CU1 refusals and all reference/mutation contracts.
+PC-relative shared-tail roots remain bounded source-derived candidates; stale map
+membership, unknown-condition links and captured targets must not authorize them.
+Native completeness remains false with16 residual CPU sites.
+
+The retained-save new-pilot route now reaches the first mission's playable HUD:
+VI12284/fault0/PC00000000 in205s. Continue flight, combat, mission completion,
+later overlays and longer save/load paths; do not infer them from the initial HUD.
+The exact Start/D-right/A/B list, EEPROM provenance and RDRAM PNGs are recorded in
+research/rs-name-entry.md. Fresh EEPROM logo timing differs from that retained
+input. Arbitrary FR-changing coroutine compatibility remains separately guarded.
+Keep the ADR0279 synchronous RSP/RDP/readback and sparse-dirty-page pacing rules.
+
 ## Rogue Squadron after restored VI pacing (ADR-0279)
 
 Keep sparse dirty pages, changed-word-only shadow writes and synchronous
