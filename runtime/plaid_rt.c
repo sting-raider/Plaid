@@ -138,6 +138,8 @@ static struct timespec t0;
 static u64 time_base; /* osSetTime offset in count ticks */
 static u32 vi_regs[14], vi_field; /* VI registers as the guest wrote them (ADR-0199) */
 static u64 vi_retrace_ns;
+#define VI_PERIOD_NS 16683350ull /* NTSC: 60000/1001 Hz */
+static u64 next_vi = VI_PERIOD_NS;
 static u32 dpc_flags; /* DPC_STATUS without --rsp-gfx: 1 source, 2 freeze, 4 flush, 0x400 start valid */
 static u32 dpc_start, dpc_current;
 static u64 dpc_clock_origin;
@@ -515,27 +517,29 @@ static void tick_sleep(void) {
 #endif
   nanosleep(&d, NULL);
 }
-#define VI_PERIOD_NS 16683350ull /* NTSC: 60000/1001 Hz */
+/* Called by the baton holder, or its synchronous renderer callback. Pending
+   events are delivered only by the scheduler, never from native RSP work. */
+static void vi_poll(u64 now) {
+  if (now >= next_vi) {
+    /* fixed deadlines, so sleep jitter does not stretch the period; a host
+       stall longer than a frame drops the missed retraces */
+    next_vi = now - next_vi < VI_PERIOD_NS ? next_vi + VI_PERIOD_NS : now + VI_PERIOD_NS;
+    vi_count++;
+    vi_retrace_ns = now;
+    if (!(vi_regs[6] & 1)) vi_field ^= 1; /* an interlaced mode alternates fields */
+    post(EV_VI);
+#ifdef PLAID_RT64
+    if (vi_regs[0] & 3) plaid_gfx_screen(vi_regs); /* a color depth: video on */
+    if (plaid_gfx_closed()) finish(0, "window closed");
+#endif
+  }
+}
 static void *event_pump(void *unused) {
-  u64 next_vi = VI_PERIOD_NS, now; /* the first retrace is a frame after boot */
   (void)unused;
   for (;;) {
     tick_sleep();
     pthread_mutex_lock(&big);
-    now = now_ns();
-    if (now >= next_vi) {
-      /* fixed deadlines, so sleep jitter does not stretch the period; a host
-         stall longer than a frame drops the missed retraces */
-      next_vi = now - next_vi < VI_PERIOD_NS ? next_vi + VI_PERIOD_NS : now + VI_PERIOD_NS;
-      vi_count++;
-      vi_retrace_ns = now;
-      if (!(vi_regs[6] & 1)) vi_field ^= 1; /* an interlaced mode alternates fields */
-      post(EV_VI);
-#ifdef PLAID_RT64
-      if (vi_regs[0] & 3) plaid_gfx_screen(vi_regs); /* a color depth: video on */
-      if (plaid_gfx_closed()) finish(0, "window closed");
-#endif
-    }
+    vi_poll(now_ns());
     ai_update(); /* posts the AI event when the next buffer starts */
     plaid_preempt = 1; /* timers are checked at delivery */
     if (run_seconds > 0 && now_ns() > (u64)(run_seconds * 1e9)) finish(0, "time limit");
@@ -1294,6 +1298,9 @@ static void report_gfx_task(u32 task) {
 /* Every task shares the CPU's DPC model, including non-graphics boot code.
    rt_io selects the raw-command bus only when --rsp-gfx is enabled. */
 static int rsp_dpc_bus(u32 reg, u32 *value, int write) {
+  /* The CPU is parked while this owner callback runs. Retraces still occur
+     between ordered RDP submissions, using the last guest-written VI state. */
+  if (rsp_graphics) vi_poll(now_ns());
   u64 data = write ? *value : 0;
   int result = rt_io(S, 0x04100000u + 4 * reg, 4, write, &data);
   if (!write) *value = (u32)data;
@@ -1348,7 +1355,11 @@ static int rsp_run(u32 pc) {
   }
 }
 #ifdef PLAID_RT64
-static int rsp_native_work(void *context) { return rsp_run(*(u32 *)context); }
+static int rsp_native_work(void *context) {
+  int result = rsp_run(*(u32 *)context);
+  if (rsp_graphics) vi_poll(now_ns());
+  return result;
+}
 #endif
 static void rsp_file(const char *dir, const char *name, const void *bytes, size_t size) {
   char path[1024];

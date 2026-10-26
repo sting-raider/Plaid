@@ -37,6 +37,10 @@ add_custom_command(TARGET plaid_rt64 POST_BUILD
     COMMAND "$<TARGET_FILE:plaid_rt64_contract>")
 
 include(CTest)
+if(BUILD_TESTING)
+    add_executable(plaid_rt64_ram_contract test_ram.cpp)
+    add_test(NAME plaid_rt64_ram COMMAND plaid_rt64_ram_contract)
+endif()
 if(BUILD_TESTING AND WIN32)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME plaid_rt64_fill_scissor

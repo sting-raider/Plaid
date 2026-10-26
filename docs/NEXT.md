@@ -1,5 +1,19 @@
 # Next
 
+## Rogue Squadron after restored VI pacing (ADR-0279)
+
+Keep sparse dirty pages, changed-word-only shadow writes and synchronous
+RDP/readback ordering. VI polling on the borrowed renderer owner may post
+events and present the last guest VI state, but must never run CPU code or
+deliver guest queue writes inside native RSP work. Preserve the exact-clock
+and removed-poll mutation contract. Default GCC15.2/O2 RSP flags remain.
+
+The matched30s RS run now reaches VI1798/fault0 with post-startup VI
+p9518.180ms; SF64 remains near60VI/s. Longer play, PAL timing and RSP/CPU
+cycle overlap are separate coverage. Continue the unknown-entry FR1 fault
+at80013408 using the pinned ares oracle and complete FPR state comparisons;
+then record name-entry and mission milestones from RDRAM readbacks.
+
 ## Rogue Squadron pilot entry and remaining pacing (ADR-0278)
 
 Preserve byte-precise line_lost/dunknown masks, CDE no-fill allocation, known

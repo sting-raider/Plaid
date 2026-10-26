@@ -8296,3 +8296,48 @@ prefix reaches destination/rules at VI2691/fault0. This timing limit remains
 open. Final RS also reaches SELECT GAME/fault0, while a longer drive confirms
 name-entry FR11 at VI1873/80013408; no interactive mission closure. Final
 receipts, save provenance and exact-tree gate: research/rs-cde-lost.md.
+
+
+## ADR-0279: Skip unchanged shadow RAM and poll VI during synchronous native RSP work
+
+Decision: retain the exact changed-word shadow-RAM transfer rule, but reject
+clean64-page groups and unchanged64-byte blocks with bulk comparisons before
+testing individual words. Do not copy entire dirty pages over renderer-owned
+bytes. All nonzero dirty flags retain their existing meaning. Deterministic
+whole-buffer equivalence tests cover sparse/full/clean maps, non-boolean flags,
+boundaries, both guest change directions and untouched renderer words.
+
+Use the existing fixed-deadline VI source from both the event pump and the
+borrowed synchronous native RSP owner, before DPC bus operations and after
+owner completion. Post VI events and present the last guest-written VI state
+between ordered raw submissions; never interrupt parsing, execute CPU code,
+deliver guest queue writes or switch guest threads inside the callback. Keep
+synchronous readbacks/DPC state and SP/DP task completion order. This does not
+introduce asynchronous CPU/RSP overlap or a catch-up counter for missed VIs.
+
+Evidence: quiet visible/dummy-audio RS30s VI1602->1798/fault0, post5s VI
+p9537.768->18.180ms and actual present p9538.109->20.360ms; SF64 HLE stays
+VI1798/fault0, VI p9517.759->17.793ms. Nested RAM sync per raw call falls
+1.845->0.704us. Exact-clock native tests observe10 retraces inside RSP work,
+no queue-memory writes there, unchanged raw bytes and later SP/10VI/DP order;
+removed-poll mutation fails. Conservative batching and stronger compiler
+flags are not retained. Native fetch/DMA guards and16 residual RS CPU sites
+remain; native_complete:false. These are finite pacing observations, not
+60 distinct guest frames/s, cycle accuracy, name-entry or mission closure.
+
+Reference use: pinned ares9408cb43 VI/RSP scheduling and RT6443373749 raw parser
+and presentation code were read at their locked revisions, ISC/MIT notices
+preserved; no implementation body/assets enter production. Bridge compiled
+privately against unchanged pinned RT64; shared deployment requires a rebuild.
+Full measurements, histograms, verification and deployment commands:
+research/rs-speed-nameentry.md. README remains integrator-owned.
+
+MP2 control continuation: both retained baseline and candidate hit the same
+one-use authored-coroutine guard at8007dbd8 (VI2502/2503). Replace the accepted
+serialized descriptor after creation, allowing later distinct entry/stack
+edits under the same layout/register/thread-generation/native-entry checks.
+An unchanged descriptor without a live saved owner still refuses. Three
+successive creations match all CPU/FPR/PC/HI/LO/FCSR/64KiB RAM in pinned ares,
+release retired contexts, and kill a restored one-use refusal. Existing foreign,
+stale, edited-register, frame and resource negatives remain. MP2's supplied
+full input list now completes45s at VI2696/fault0 and shows Rules Land.

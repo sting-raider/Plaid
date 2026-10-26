@@ -1,5 +1,32 @@
 # Status
 
+## Native LLE pacing and shadow-RAM synchronization (ADR-0279)
+
+Rogue Squadron's silent30s matched measurement advances VI1602->1798,
+fault0. After startup, VI p95 falls37.768->18.180ms; actual present p95
+38.109->20.360ms. SF64 HLE stays VI1798/fault0, VI p9517.759->17.793ms.
+These are finite host timing measurements, not an instruction-cycle or
+mission-play certificate. The game still has16 residual CPU sites and
+native_complete:false.
+
+Grouped dirty flags and unchanged64-byte RAM comparisons cut measured sync
+time per raw RDP call1.845->0.704us without changing any word-store condition.
+The VI source now polls between synchronous native RSP bus operations and
+at owner completion. CPU execution stays parked; VI events remain pending
+until scheduler delivery. Exact-clock, queue-memory, SP/VI/DP-order and
+removed-poll mutation contracts cover that boundary. Submission/readback
+order is unchanged; no command batching or compiler-flag change is retained.
+
+The full MP2 list exposed the same one-use coroutine-buffer refusal on the
+retained baseline and candidate. Successive verified authored descriptors now
+replace the prior descriptor while unchanged stale resumes still refuse.
+Full-state ares, ownership/generation negatives and a one-use mutation cover
+the fix. The supplied inputs reach Rules Land at VI2696/fault0 in45s.
+
+Receipt: research/rs-speed-nameentry.md. Build the bridge privately and
+rebuild the shared bridge before deployment. Name-entry FR1 continuation
+remains the next task; no mission acceptance is added by this pacing change.
+
 ## Rogue Squadron lost-line reuse, pilot menu and presentation (ADR-0278)
 
 CDE can allocate over lost RAM without reading it. Byte-precise backing/cache
