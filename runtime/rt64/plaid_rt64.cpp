@@ -38,12 +38,14 @@ std::condition_variable wake;
 std::function<void()> job;
 bool idle = true, ready = false, opened = false, closed = false;
 std::atomic<uint32_t> input{0};  // buttons << 16 | stick x << 8 | stick y
+thread_local bool on_renderer = false;
 SDL_AudioDeviceID audio = 0;
 uint32_t audio_rate = 0;
 std::vector<int16_t> pcm;
 
 // Runs f on the renderer thread and waits for it.
 void run(std::function<void()> f) {
+    if (on_renderer) { f(); return; }
     std::unique_lock<std::mutex> l(lock);
     wake.wait(l, [] { return idle; });
     job = std::move(f);
@@ -66,6 +68,7 @@ void sync_ram(const uint8_t *ram, const uint8_t *dirty_pages = nullptr) {
 }
 
 void renderer() {
+    on_renderer = true;
     RT64::Application::Core core{};
     core.window = {};  // RT64 opens its own window on this thread
     core.HEADER = header.data();
@@ -87,6 +90,9 @@ void renderer() {
     config.appId = "plaid";
     config.useConfigurationFile = false;
     app = std::make_unique<RT64::Application>(core, config);
+    // Framebuffer storage can have non-square pixels; present on the 4:3 TV
+    // surface instead of fitting its storage dimensions to the window.
+    app->enhancementConfig.presentation.removeBlackBorders = false;
     bool ok = app->setup(0) == RT64::Application::SetupResult::Success;
     {
         std::lock_guard<std::mutex> l(lock);
@@ -147,6 +153,13 @@ __declspec(dllexport) int plaid_gfx_open(const uint8_t *rom_header) {
     std::unique_lock<std::mutex> l(lock);
     wake.wait(l, [] { return ready; });
     return opened ? 0 : 1;
+}
+
+__declspec(dllexport) int plaid_gfx_native_rsp(int (*work)(void *), void *context) {
+    if (!work) return 1;
+    int result = 0;
+    run([&] { result = work(context); });
+    return result;
 }
 
 // Renders one graphics task. ram: guest RAM in big-endian order; the

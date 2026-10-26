@@ -145,7 +145,7 @@ static inline int plaid_cp0_eret(plaid_state *s, u64 *target, u32 pc) {
    unavailable invalid-slot bytes stay unknown until written (ADR-0271).
    Index Load Tag and a valid Index Store Tag are outside the subset. */
 static inline void plaid_ddrop(plaid_state *s, u32 i) {
-  if (s->ddirty[i]) s->line_lost[((s->dtag[i] & ~0xfffu) | (i & 0xffu) << 4) >> 4] = 1;
+  if (s->ddirty[i]) s->line_lost[((s->dtag[i] & ~0xfffu) | (i & 0xffu) << 4) >> 4] = 0xffffu;
   s->dtag[i] = 0; s->ddirty[i] = 0; s->dstale[i] = 0; s->dunknown[i] = 0;
 }
 static inline int plaid_cache(plaid_state *s, u32 op, u64 va, u32 pc) {
@@ -170,7 +170,6 @@ static inline int plaid_cache(plaid_state *s, u32 op, u64 va, u32 pc) {
     if (op >> 2 == 3) { /* Create Dirty Exclusive: no RAM fill */
       u32 b, base = (s->dtag[i] & ~0xfffu) | (i & 0xffu) << 4;
       if (p >= PLAID_RAM_SIZE) return plaid_fault(s, pc, 1);
-      if (s->line_lost[p >> 4]) return plaid_fault(s, pc, 4);
       if (s->dtag[i] != ((p & ~0xfffu) | 1)) {
         if (s->dtag[i ^ 0x100] == ((p & ~0xfffu) | 1)) return plaid_fault(s, pc, 4);
         if (plaid_protected(s, p & ~15u, 16, pc)) return plaid_fault(s, pc, 2);
@@ -182,6 +181,9 @@ static inline int plaid_cache(plaid_state *s, u32 op, u64 va, u32 pc) {
         s->dtag[i] = (p & ~0xfffu) | 1; s->dstale[i] = 0xffffu;
       }
       s->ddirty[i] = 1;
+      /* No destination RAM was read. Dirty residency guards it until writeback;
+         unknown bytes still refuse reads and make an incomplete writeback lost. */
+      s->line_lost[p >> 4] = 0;
       return 0;
     }
     if (p >= PLAID_RAM_SIZE || s->dtag[i] != ((p & ~0xfffu) | 1)) return 0;

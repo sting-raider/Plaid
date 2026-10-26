@@ -8,6 +8,7 @@ from pathlib import Path
 import struct
 import subprocess
 import sys
+import threading
 import traceback
 
 
@@ -50,7 +51,7 @@ def worker(path):
                 (0xf6000000 | ((right - 1) * 4) << 12 | (bottom - 1) * 4,
                  (left * 4) << 12 | top * 4)]
 
-    def draw(address, siz, bounds, rectangles):
+    def draw(address, siz, bounds, rectangles, dirty=None):
         left, top, right, bottom = bounds
         words = [(0xef300000, 0),
                  (0xff000000 | siz << 19 | (width - 1), address),
@@ -65,7 +66,7 @@ def worker(path):
         words += [(0xe9000000, 0)]
         raw = b''.join(struct.pack('>II', *word) for word in words)
         data = (C.c_ubyte * len(raw)).from_buffer_copy(raw)
-        assert lib.plaid_gfx_rdp(ram, data, len(data), None, copy, None) == 0
+        assert lib.plaid_gfx_rdp(ram, data, len(data), dirty, copy, None) == 0
 
     cases = [
         ('inside', (12, 12, 16, 16)),
@@ -97,7 +98,38 @@ def worker(path):
             draw(address, siz, bounds, [((0, 0, width, height), 0xffffffff)])
             raw = bytes(ram[address:address + width * height * pixel_bytes])
             assert raw == (1 if siz == 2 else black).to_bytes(pixel_bytes, 'big') * (width * height), bounds
-    print('PASS RT64 fill scissor: RGBA16/RGBA32, four edges, partial overlaps, touching and empty bounds; all framebuffer pixels checked', flush=True)
+    native_work = C.CFUNCTYPE(C.c_int, C.c_void_p)
+    lib.plaid_gfx_native_rsp.argtypes = [native_work, C.c_void_p]
+    caller = threading.get_ident()
+    calls, errors = [], []
+    context = C.c_uint32(0x12345678)
+
+    @native_work
+    def inner(opaque):
+        calls.append(('inner', threading.get_ident()))
+        return C.cast(opaque, C.POINTER(C.c_uint32))[0] & 255
+
+    @native_work
+    def work(opaque):
+        try:
+            calls.append(('outer', threading.get_ident()))
+            assert lib.plaid_gfx_native_rsp(inner, opaque) == 0x78
+            # A nested RDP/readback must finish on the owner without queuing
+            # behind the very callback that is waiting for its completion.
+            address = 0x60000
+            clean_pages = (C.c_ubyte * 2048)()
+            draw(address, 2, (0, 0, width, height), [((0, 0, width, height), 0xffffffff)], clean_pages)
+            assert bytes(ram[address + 2:address + 4]) == b'\xff\xff'
+            return 37
+        except Exception as error:
+            errors.append(repr(error))
+            return -1
+
+    assert lib.plaid_gfx_native_rsp(work, C.byref(context)) == 37, errors
+    assert not errors and len(calls) == 2 and calls[0][1] == calls[1][1] != caller, calls
+    assert lib.plaid_gfx_native_rsp(native_work(), None) == 1
+    assert len(calls) == 2
+    print('PASS RT64 fill scissor and native RSP owner: framebuffer bytes, nested RDP/readback, borrowed context, exact result and null refusal', flush=True)
     # The renderer owns a detached window thread, as in the native runtime.
     # Exit the test process after readback instead of unloading a live DLL.
     os._exit(0)

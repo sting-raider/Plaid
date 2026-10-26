@@ -1,5 +1,39 @@
 # Status
 
+## Rogue Squadron lost-line reuse, pilot menu and presentation (ADR-0278)
+
+CDE can allocate over lost RAM without reading it. Byte-precise backing/cache
+masks retain unknown data through cached stores, partial writeback and refill;
+unwritten reads and DMA still refuse. Original native/ares full-state tests,
+negative padding/DMA cases and a killed unknown-read mutation cover the change.
+
+The VI501/fault4/80095040 baseline passes. Thirty seconds reaches rendered
+X-wing/terrain with fault0;90s reaches the film intro. A Start sequence reaches
+ENTER NAME, then VI1523/fault11/80013408: an unknown-entry FR0 layout guard
+meets live FR1. Preserve that guard; interactive mission play remains open.
+Native completeness stays false with16 residual CPU sites.
+
+The bridge now presents on the4:3 TV surface, preserving guest VI/projection
+state instead of fitting non-square framebuffer storage. RS actual viewport
+700x776 becomes1034x776 in1302x776; SF64 stays4:3. Wide/square resize checks
+pass. Native RSP work now runs synchronously on the renderer owner, avoiding
+per-DPC-chunk thread handoffs. Quiet30s no-trace comparison advances VI777->1285,
+both fault0; traced VI p95 falls194.341->90.918ms. Longer RSP/RDP stalls remain;
+this is a measured improvement, not smooth-gameplay or cycle-accuracy closure.
+
+Receipt: research/rs-cde-lost.md, including histogram, input, RDRAM PNGs,
+local gate/control receipts and concrete remaining work. The private rebuilt
+DLL passes parser/readback/GPU owner contracts. Deploy a rebuilt RT64 bridge
+with the native-RSP callback export; the shared DLL was not overwritten.
+
+Final controls: PM/BK/MM/SF64/OoT30s and OoT save-load60s all fault0.
+RS30s reaches VI1247/fault0; retained-save Start-only reaches SELECT GAME,
+VI3369/fault0. A longer drive reproduces name-entry FR11 at VI1873/80013408.
+MP2's supplied list is timing-sensitive on this host in both the retained
+pre-change executable and candidate. The same prefix plus A2000/2100/2200
+(each4VIs),45s, reaches the destination/rules prompt at VI2691/fault0.
+The supplied list alone passed fault0 but did not reproduce that prompt here.
+
 ## Rogue Squadron table bases, short RSP overlays and N64 logo (ADR-0277)
 
 Guarded-table analysis now follows renamed ADDIU constant bases. RS's resident

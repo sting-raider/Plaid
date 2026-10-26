@@ -113,6 +113,55 @@ def _cde_unknown(partial=False, writeback=False):
     return body
 
 
+def _cde_lost(op, partial=False, writeback=False, allocate=True):
+    def body(T):
+        A, address = T.A, 0x80004000
+        out = [*_dirty(T, address), _cache(op, A.t0)]
+        if allocate:
+            out += [_cache(0x0d, A.t0)]
+        for i in range(1 if partial else 4):
+            out += T.poke(address + 4 * i, NEW + i)
+        if partial:
+            out += [A.lw(A.t1, 0, A.t0), A.sw(A.t1, 0, A.gp), A.addiu(A.gp, A.gp, 4)]
+        if writeback or not partial:
+            out += [*T.li(A.t0, address), _cache(0x15, A.t0)]
+            if partial:
+                out += _log_uncached(T, address + 4)
+            else:
+                for i in range(4):
+                    out += _log_uncached(T, address + 4 * i)
+        else:
+            out += [A.lw(A.t1, 4, A.t0)]
+        return out
+    return body
+
+
+def _cde_recycle(T):
+    A, address = T.A, 0x80004000
+    # Like a reused object: only some fields were initialized before eviction.
+    out = [*T.li(A.t0, address), _cache(0x0d, A.t0), *T.poke(address, OLD),
+           _cache(0x19, A.t0), _cache(0x0d, A.t0)]
+    for i in range(4):
+        out += T.poke(address + 4 * i, NEW + i)
+    out += [*T.li(A.t0, address), _cache(0x15, A.t0)]
+    for i in range(4):
+        out += _log_uncached(T, address + 4 * i)
+    return out
+
+
+def _cde_known_refill(T, unknown=False):
+    A, address = T.A, 0x80004000
+    out = [*T.li(A.t0, address), _cache(0x0d, A.t0), *T.poke(address, NEW),
+           _cache(0x15, A.t0), A.lw(A.t1, 0, A.t0),
+           A.sw(A.t1, 0, A.gp), A.addiu(A.gp, A.gp, 4),
+           *T.poke(address + 4, NEW + 1), _cache(0x15, A.t0)]
+    for i in range(2):
+        out += _log_uncached(T, address + 4 * i)
+    if unknown:
+        out += [*T.li(A.t0, address), A.lw(A.t1, 8, A.t0)]
+    return out
+
+
 def _model_contract(cc, T):
     # The manual requires dirty after CDE; pinned ares instead clears its
     # dirty mask on a miss. Check this distinction without calling it agreement.
@@ -137,6 +186,33 @@ int main(void) {
   assert(!plaid_load(&s, SX32(0x80006000u), 1, 0x118, &value) && value == 0x12);
   assert(!plaid_cache(&s, 25, SX32(0x80006000u), 0x11c));
   assert(s.ram[0x6000] == 0x12 && s.ram[0x600f] == 15);
+  /* Lost destination RAM is never a fill source. Invalid slots are unknown. */
+  assert(!plaid_store(&s, SX32(0x80006000u), 1, 0x12, 0x13c));
+  plaid_ddrop(&s, 0);
+  assert(s.line_lost[0x600]);
+  assert(!plaid_cache(&s, 13, SX32(0x80006000u), 0x140));
+  assert(!s.line_lost[0x600] && s.ddirty[0] && s.dunknown[0] == 0xffffu);
+  assert(plaid_load(&s, SX32(0xa0006000u), 1, 0x144, &value) && s.fault == 4);
+  assert(!plaid_store(&s, SX32(0x80006000u), 1, 0x34, 0x148));
+  assert(!plaid_cache(&s, 25, SX32(0x80006000u), 0x14c));
+  assert(s.line_lost[0x600] == 0xfffeu && s.dunknown[0] == 0xfffeu);
+  /* A same-tag CDE after partial writeback must not recover unknown bytes. */
+  assert(!plaid_cache(&s, 13, SX32(0x80006000u), 0x150));
+  assert(s.dunknown[0] == 0xfffeu);
+  assert(!plaid_load(&s, SX32(0x80006000u), 1, 0x154, &value) && value == 0x34);
+  assert(plaid_load(&s, SX32(0x80006001u), 1, 0x158, &value) && s.fault == 4);
+  for (u32 b = 1; b < 16; b++) assert(!plaid_store(&s, SX32(0x80006000u + b), 1, b, 0x15c));
+  assert(!plaid_cache(&s, 21, SX32(0x80006000u), 0x160));
+  assert(!s.line_lost[0x600]);
+  assert(!plaid_load(&s, SX32(0xa000600fu), 1, 0x164, &value) && value == 15);
+  /* A known dirty victim is retained, not filled from the lost destination. */
+  assert(!plaid_store(&s, SX32(0x80006000u), 1, 0x56, 0x168));
+  s.line_lost[0x400] = 1;
+  assert(!plaid_cache(&s, 13, SX32(0x80004000u), 0x16c));
+  assert(!s.line_lost[0x400] && !s.dunknown[0] && s.ddirty[0]);
+  assert(!plaid_load(&s, SX32(0x80004000u), 1, 0x170, &value) && value == 0x56);
+  assert(!plaid_cache(&s, 21, SX32(0x80004000u), 0x174));
+  assert(!plaid_load(&s, SX32(0xa0004000u), 1, 0x178, &value) && value == 0x56);
   /* A mapped CDE uses the virtual index and translated physical tag. */
   s.tlb[0] = (plaid_tlb_entry){0, 0x00100000u, {0x11fu, 0x15fu}};
   assert(!plaid_cache(&s, 13, 0x00100000ull, 0x120));
@@ -149,6 +225,24 @@ int main(void) {
   assert(plaid_cache(&s, 13, SX32(0x80800000u), 0x130) && s.fault == 1);
   s.cp0_status = 0x34000010u;
   assert(plaid_cache(&s, 13, SX32(0x80004000u), 0x134) && s.fault == 12);
+  /* An eviction preserves known object fields without inventing its padding. */
+  memset(&s, 0, sizeof s); s.status_known = 1; s.cp0_status = 0x34000000u;
+  assert(!plaid_cache(&s, 13, SX32(0x80004000u), 0x180));
+  for (u32 b = 0; b < 16; b++) if ((0xf0ffu >> b) & 1)
+    assert(!plaid_store(&s, SX32(0x80004000u + b), 1, b, 0x184));
+  assert(!plaid_cache(&s, 21, SX32(0x80004000u), 0x188));
+  assert(s.line_lost[0x400] == 0x0f00u);
+  assert(!plaid_load(&s, SX32(0xa000400cu), 4, 0x18c, &value) && value == 0x0c0d0e0fu);
+  assert(!plaid_load(&s, SX32(0x80004000u), 4, 0x190, &value) && value == 0x00010203u);
+  assert(!s.ddirty[0] && s.dunknown[0] == 0x0f00u && s.line_lost[0x400] == 0x0f00u);
+  assert(plaid_load(&s, SX32(0x80004008u), 4, 0x194, &value) && s.fault == 4);
+  assert(!plaid_store(&s, SX32(0x80004008u), 4, 0x11223344u, 0x198));
+  assert(!s.dunknown[0] && !s.line_lost[0x400] && s.ddirty[0]);
+  assert(!plaid_cache(&s, 21, SX32(0x80004000u), 0x19c));
+  assert(!plaid_load(&s, SX32(0xa0004008u), 4, 0x1a0, &value) && value == 0x11223344u);
+  s.line_lost[0x400] = 0xffffu; s.prot_ready = 1; s.prot[0x4000 >> 2] = 253;
+  assert(plaid_cache(&s, 13, SX32(0x80004000u), 0x1a4) && s.fault == 2);
+  assert(s.line_lost[0x400] == 0xffffu && !s.dtag[0]);
   return 0;
 }
 ''')
@@ -156,6 +250,47 @@ int main(void) {
     subprocess.run([cc, '-O2', '-std=gnu11', '-Wall', '-Werror', '-Wno-unused-label',
                     '-Wno-unused-function', str(source), '-lm', '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=30)
+
+
+def _unknown_guard_mutation(cc, T):
+    original = (T.OUT / 'cache-cde-full.c').read_text()
+    guard = 'if (s->dunknown[i] & m) return plaid_fault(s, pc, 4);'
+    assert original.count(guard) == 1
+    (T.OUT / 'cache-cde-mutant.c').write_text(original.replace(guard, '/* mutated unknown-read guard */'))
+    source = T.OUT / 'cache-cde-mutation.c'
+    source.write_text('''#include "cache-cde-mutant.c"
+static plaid_state s;
+int main(void) {
+  u64 value;
+  s.status_known = 1; s.cp0_status = 0x34000000u;
+  s.line_lost[0x400] = 1;
+  if (plaid_cache(&s, 13, SX32(0x80004000u), 0x100)) return 2;
+  return plaid_load(&s, SX32(0x80004000u), 1, 0x104, &value) && s.fault == 4 ? 0 : 1;
+}
+''')
+    binary = T.OUT / ('cache-cde-mutation.exe' if os.name == 'nt' else 'cache-cde-mutation')
+    subprocess.run([cc, '-O2', '-std=gnu11', '-w', str(source), '-lm', '-o', str(binary)], check=True)
+    assert subprocess.run([str(binary)], timeout=30).returncode == 1, 'unknown-read guard mutation survived'
+
+
+def _dma_contract(exe, cc, T):
+    for writeback in (False, True):
+        def body(T):
+            A, address, handle = T.A, 0x80004000, 0x80005000
+            out = [*_dirty(T, address), _cache(0x11, A.t0), _cache(0x0d, A.t0),
+                   *T.poke(address, NEW)]
+            if writeback:
+                out += [*T.li(A.t0, address), _cache(0x15, A.t0)]
+            return [*out, *T.poke(handle + 12, 0x08000000),
+                    *T.call('osEPiRawStartDma', handle, 1, 0, address, 16)]
+        label = f'cache-cde-dma-{writeback}'
+        program = [*_program(T, body), 'osEPiRawStartDma', T.A.jr(T.A.ra), T.A.nop]
+        binary = T.build(exe, cc, label, program, ['osEPiRawStartDma'],
+                         ['-DPLAID_BOOT_STATUS=0x34000000u', '-DPLAID_BOOT_ENTRYHI=0ull'])
+        result = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30)
+        stop = next(json.loads(line) for line in result.stdout.splitlines() if line.startswith('{"stop"'))
+        assert result.returncode == 1 and stop['stop'] == "DMA reads RAM that differs from hardware's", (
+            label, result.stdout, result.stderr)
 
 
 def _run(exe, cc, T, label, body, expect_lost=False, values=None, reference_values=None):
@@ -213,6 +348,22 @@ def run(exe, cc, T):
     _run(exe, cc, T, 'cache-ops-hit-invalidate', _dropped(0x11), True)
     _run(exe, cc, T, 'cache-ops-store-tag', _dropped(0x09), True)
     _run(exe, cc, T, 'cache-cde-full', _cde_full, values=[NEW + i for i in range(4)])
+    _run(exe, cc, T, 'cache-cde-recycle', _cde_recycle, values=[NEW + i for i in range(4)])
+    _run(exe, cc, T, 'cache-cde-known-refill', _cde_known_refill, values=[NEW, NEW, NEW + 1])
+    _run(exe, cc, T, 'cache-cde-unknown-refill', lambda T: _cde_known_refill(T, unknown=True), True,
+         values=[NEW, NEW, NEW + 1, 0], reference_values=[NEW, NEW, NEW + 1, 0])
+    for op in (0x11, 0x09):
+        _run(exe, cc, T, f'cache-cde-lost-{op}', _cde_lost(op),
+             values=[NEW + i for i in range(4)])
+        for writeback in (False, True):
+            _run(exe, cc, T, f'cache-cde-lost-{op}-partial-{writeback}',
+                 _cde_lost(op, partial=True, writeback=writeback), True,
+                 values=[NEW, 0], reference_values=[NEW, 0])
+    _run(exe, cc, T, 'cache-store-lost', _cde_lost(0x11, allocate=False),
+         values=[NEW + i for i in range(4)])
+    _run(exe, cc, T, 'cache-store-lost-partial',
+         _cde_lost(0x11, partial=True, allocate=False), True,
+         values=[NEW, 0], reference_values=[NEW, 0])
     for label, body, victim in [('victim', _cde_retained(), NEW),
                                 ('stale', _cde_retained(stale=True), OLD),
                                 ('hit', _cde_retained(same=True), NEW)]:
@@ -223,7 +374,9 @@ def run(exe, cc, T):
     _run(exe, cc, T, 'cache-cde-partial-wb', _cde_unknown(partial=True, writeback=True), True,
          values=[NEW, 0], reference_values=[NEW, 0])
     _model_contract(cc, T)
-    print('CACHE ops: ares RAM agrees for writeback, CDE full writes, dirty victims, retained/stale bytes and hits; unknown/discarded bytes fail closed')
+    _unknown_guard_mutation(cc, T)
+    _dma_contract(exe, cc, T)
+    print('CACHE ops: ares CPU/RAM agrees for writeback, CDE full writes, lost-line reuse, dirty victims, retained/stale bytes and hits; unknown reads/writeback fail closed; guard mutation killed')
 
 
 if __name__ == '__main__':
