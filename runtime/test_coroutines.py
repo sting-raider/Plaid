@@ -151,6 +151,7 @@ def run(exe, cc, T):
     assert actual.returncode == 0, (actual.stdout, actual.stderr)
     state = next(json.loads(l)['state'] for l in actual.stdout.splitlines() if l.startswith('{"state"'))
     assert state == expected, {k: (state[k], expected[k]) for k in state if k != 'ram' and state[k] != expected[k]}
+    authored_reuse(exe, cc, T, oracle, report)
 
     # Removing context unwind leaves two suspended fixed-text pins. The guest
     # overwrite above must expose that regression, rather than silently pass.
@@ -415,6 +416,67 @@ def retargeted_creation(exe, cc, T, oracle, expected):
                                                       hex(A.EXIT), 'fr0'], text=True, timeout=120))
     assert result.returncode == 0 and ram[0x400:0x40C] == expected and ram == oracle_state['ram'], (result.stdout[-3000:], result.stderr)
     print('coroutines: retargeting a parked stack retires its last continuation and releases its text pins; RAM matches ares')
+
+
+def authored_reuse(exe, cc, T, oracle, report):
+    """One serialized template may author successive distinct entry/stack descriptors."""
+    A, counter = T.A, 0x80001200
+    seed = [w for reg in range(A.s0, A.s7 + 1) for w in T.li(reg, 0x12340000 + reg)]
+    seed += [w for reg in range(20, 32) for w in [*T.li(A.t0, 0x3f800000 + reg), A.mtc1(A.t0, reg)]]
+    p = [*T.li(A.sp, 0x80007f00), *T.li(A.t0, counter), A.lw(A.t1, 0, A.t0),
+         A.bne(A.t1, A.zero, 'call_roots'), A.nop, *seed, *T.call('save', WORKER), *T.call('save', SCHED),
+         *T.li(A.t0, counter), A.lw(A.t1, 0, A.t0), A.addiu(A.t2, A.zero, 3),
+         A.beq(A.t1, A.t2, 'done'), A.nop, A.addiu(A.t1, A.t1, 1), A.sw(A.t1, 0, A.t0),
+         A.addiu(A.t2, A.zero, 1), A.beq(A.t1, A.t2, 'author_one'), A.nop,
+         A.addiu(A.t2, A.zero, 2), A.beq(A.t1, A.t2, 'author_two'), A.nop,
+         'author_three', *T.li(A.t0, WORKER), *T.li(A.t1, 0x8000fd00), A.sw(A.t1, 0, A.t0),
+         A.lui(A.t1, 0x8000), A.LO(A.t1, A.t1, 'worker_three'), A.sw(A.t1, 4, A.t0), A.j('enter'), A.nop,
+         'author_two', *T.li(A.t0, WORKER), *T.li(A.t1, 0x8000fe00), A.sw(A.t1, 0, A.t0),
+         A.lui(A.t1, 0x8000), A.LO(A.t1, A.t1, 'worker_two'), A.sw(A.t1, 4, A.t0), A.j('enter'), A.nop,
+         'author_one', *T.li(A.t0, WORKER), *T.li(A.t1, 0x8000ff00), A.sw(A.t1, 0, A.t0),
+         A.lui(A.t1, 0x8000), A.LO(A.t1, A.t1, 'worker_one'), A.sw(A.t1, 4, A.t0),
+         'enter', *T.call('restore', WORKER, 7), 0x0000000d, 'done', *A.DONE,
+         # Unknown mutable input retains these direct native function roots.
+         'call_roots', A.jal('worker_one'), A.nop, A.jal('worker_two'), A.nop,
+         A.jal('worker_three'), A.nop, 0x0000000d]
+    for n, label in enumerate(['worker_one', 'worker_two', 'worker_three']):
+        p += [label, *T.li(A.t0, LOG + 16 * n), A.sw(A.v0, 0, A.t0), A.sw(A.sp, 4, A.t0),
+              A.sw(A.s0, 8, A.t0), A.swc1(21, 12, A.t0), *T.li(A.s0, 0xdeadbeef),
+              *T.li(A.t0, 0x76543210), A.mtc1(A.t0, 21), *T.call('restore', SCHED, 1), 0x0000000d]
+    p += bodies(A)
+    name = 'coroutines-authored-reuse'
+    T.build(exe, cc, name, p, [], ['-DPLAID_BOOT_STATUS=0x30000000u', '-DPLAID_BOOT_ENTRYHI=0ull'],
+            fr0=True, address_taken=True, residual_dispatch=True)
+    expected = json.loads(subprocess.check_output([str(oracle), str(T.OUT / f'{name}.bin'),
+        hex(A.EXIT), 'fr0'], text=True, timeout=120))
+    runtime = (T.ROOT / 'runtime/plaid_rt.c').read_text()
+    source = T.OUT / 'coroutines-authored-reuse-probe.c'
+    binary = T.OUT / ('coroutines-authored-reuse-check.exe' if os.name == 'nt' else 'coroutines-authored-reuse-check')
+    for mutant in (False, True):
+        text = runtime.replace('#include "status.h"', '#include "status.h"\nstatic unsigned context_count;')
+        text = text.replace('  fflush(stdout);',
+            '  printf("{\\"host_contexts\\":%u}\\n", context_count);\n' + report + '\n  fflush(stdout);')
+        if mutant:
+            header = (T.ROOT / 'runtime/jumps.h').read_text()
+            needle = '    rt_context *old = j->owner;'
+            assert header.count(needle) == 1
+            (T.OUT / 'jumps-reuse-mutant.h').write_text(header.replace(needle, needle + '\n    if (!old) goto refused;'))
+            text = text.replace('#include "jumps.h"', '#include "jumps-reuse-mutant.h"')
+        source.write_text(text)
+        subprocess.run([cc, '-O2', '-std=gnu11', '-w', '-DPLAID_SAFEPOINTS', '-DPLAID_BOOT_STATUS=0x30000000u',
+            '-DPLAID_BOOT_ENTRYHI=0ull', f'-DPLAID_LOWERED="{name}.c"', '-I', str(T.OUT),
+            '-I', str(T.ROOT / 'runtime'), str(source), '-pthread', '-o', str(binary)], check=True)
+        actual = subprocess.run([str(binary)], capture_output=True, text=True, timeout=30)
+        rows = [json.loads(line) for line in actual.stdout.splitlines() if line.startswith('{')]
+        stop = next(row for row in rows if 'stop' in row)
+        if mutant:
+            assert actual.returncode == 1 and stop['fault'] == 13, (actual.stdout[-2000:], actual.stderr)
+        else:
+            assert actual.returncode == 0 and stop['fault'] == 0, (actual.stdout[-2000:], actual.stderr)
+            assert next(row['state'] for row in rows if 'state' in row) == expected
+            assert next(row['host_contexts'] for row in rows if 'host_contexts' in row) == 1
+    print('coroutines: three successive authored entry/stack descriptors in one buffer match full ares state; '
+          'retired contexts released; one-use mutation killed')
 
 
 if __name__ == '__main__':

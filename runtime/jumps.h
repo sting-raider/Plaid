@@ -8,7 +8,7 @@ typedef struct plaid_jump_s {
   const uint16_t *layout;
   u32 address, saved[23], pc;
   u64 generation;
-  int armed, fr0, spawned;
+  int armed, fr0;
 } plaid_jump;
 static plaid_jump *jumps;
 static unsigned jump_count, context_count;
@@ -132,7 +132,7 @@ intptr_t *plaid_jump_begin(plaid_state *s, plaid_native_frame *frame,
   if (j->owner && j->owner != host_context) { plaid_fault(s, pc, 13); return NULL; }
   jump_detach(j);
   j->address = address; j->layout = layout; j->fr0 = fr0; j->pc = pc;
-  j->owner = host_context; j->thread = host_context->thread; j->generation = j->thread->generation; j->frame = frame; j->spawned = 0;
+  j->owner = host_context; j->thread = host_context->thread; j->generation = j->thread->generation; j->frame = frame;
   j->frame_next = frame->jumps; frame->jumps = j;
   s->frame_leave = jump_leave;
   return j->host;
@@ -214,12 +214,13 @@ int plaid_jump_to(plaid_state *s, const uint16_t *layout, int fr0, int nonzero, 
   if (!edited && (!j->owner || !j->frame)) goto refused;
   if (edited) {
     rt_context *old = j->owner;
-    if (j->spawned) goto refused;
     if ((words[0] & 7) || (words[1] & 3)) goto refused;
-    if (old && old != self && !plaid_coroutine_target(s, words[1])) goto refused;
-    j->spawned = 1;
+    if (old != self && !plaid_coroutine_target(s, words[1])) goto refused;
     jump_detach(j);
     j->owner = NULL;
+    /* A new authored descriptor replaces its predecessor. Repeating it without
+       a live saved continuation still refuses; later entry/stack edits recheck. */
+    memcpy(j->saved, words, sizeof words);
     if (old && old != self) {
       int live = 0;
       for (p = jumps; p; p = p->next) if (p->owner == old && p->frame) live = 1;

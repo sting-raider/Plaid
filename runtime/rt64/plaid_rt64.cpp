@@ -12,6 +12,7 @@
 #include "hle/rt64_application.h"
 #define PLAID_GFX_API __declspec(dllexport)
 #include "readback.h"
+#include "ram.h"
 
 #include <SDL.h>
 
@@ -55,16 +56,7 @@ void run(std::function<void()> f) {
 }
 
 void sync_ram(const uint8_t *ram, const uint8_t *dirty_pages = nullptr) {
-    for (uint32_t page = 0; page < RamSize; page += 4096) {
-        if (dirty_pages && !dirty_pages[page / 4096]) continue;
-        for (uint32_t p = page; p < page + 4096; p += 4) {
-            if (std::memcmp(&seen[p], &ram[p], 4)) {
-                std::memcpy(&seen[p], &ram[p], 4);
-                uint32_t w = uint32_t(ram[p]) << 24 | uint32_t(ram[p + 1]) << 16 | uint32_t(ram[p + 2]) << 8 | ram[p + 3];
-                std::memcpy(&rdram[p], &w, 4);
-            }
-        }
-    }
+    sync_ram_words(rdram.data(), seen.data(), ram, dirty_pages);
 }
 
 void renderer() {

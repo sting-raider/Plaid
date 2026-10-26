@@ -712,6 +712,8 @@ def main():
     rsp_graphics(exe, cc)
     import test_rsp_dirty
     test_rsp_dirty.run(exe, cc, sys.modules[__name__])
+    import test_rsp_vi
+    test_rsp_vi.run(exe, cc, sys.modules[__name__])
     audio_dma(exe, cc)
     rcp_io(exe, cc)
     sp_boot(exe, cc)
