@@ -755,6 +755,8 @@ def main():
     call_fr_contracts()
     from test_tlb_execution import main as tlb_execution_contracts
     tlb_execution_contracts()
+    from test_mapped_branches import main as mapped_branch_contracts
+    mapped_branch_contracts()
     from test_indexed_dispatch import main as indexed_dispatch_contracts
     indexed_dispatch_contracts()
     from test_residual_dispatch import main as residual_dispatch_contracts

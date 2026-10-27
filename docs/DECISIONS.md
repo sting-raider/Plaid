@@ -8381,3 +8381,33 @@ Reference use: exact pinned ares FPR accessors, Status handling and linked branc
 semantics were read with ISC/SLJIT notices retained in ignored oracle builds.
 No reference implementation body or copyrighted asset enters production. RT64,
 its bridge and default GCC15.2/RSP flags are unchanged; no shared rebuild needed.
+
+## ADR-0281: Relative transfers across independently placed mapped fragments
+
+Status: accepted
+
+Decision: derive branch targets from the architectural virtual PC, retaining
+analysis storage identity only inside the source fragment. Discovery, CPU-body
+candidate validation and lowering share the helper. External targets use existing
+source-derived alternate discovery and guarded native mapping/content/generation
+dispatch. Conditional tails retain the entering continuation; linked branches
+retain virtual RA/call continuations. Ordinary/likely slot behavior is unchanged.
+No decoder/interpreter/JIT, game-specific source rule or permanent TLB mapping.
+
+GoldenEye placed8093fff0/virtual7f0cfff0 formerly named absent8094000c instead of
+virtual7f0d000c, supplied at809c000c. With the same48 authenticated pages, missing
+direct targets fall331->317;46 formerly blocked sites resolve while33 newly
+exposed sites add obligations. Coverage expands9035->11633 blocks and48->55 pages,
+with591/588->909/903 ordinary/residual blockers. The automatic run reaches its
+16-attempt cap and refuses emission. Larger obligations are not native acceptance.
+337.255/314.663s timings include unequal build/cache/coverage, not a speedup.
+
+Baseline-red discovery/lowering fixtures and eight full-state pinned-ares
+comparisons cover linked/unlinked ordinary/likely taken/untaken branches, both
+directions, internal/absent targets, inverted-arm mutations and changed-destination
+fault3. CPU/FPR/PC/HI/LO/FCSR/output RAM agree. This does not establish timing
+accuracy or new exception delivery. Pinned ares9408cb43 ISC semantics are read
+only; no reference implementation body/assets are copied. Default GCC15.2,
+runtime and RT64 bridge/patches are unchanged; no shared rebuild. Full breakdown,
+local gates/controls and remaining cross-page/source/refill/table/callback gaps:
+research/ge-blockers.md.

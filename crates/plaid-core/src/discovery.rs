@@ -68,6 +68,16 @@ impl CodeImage {
         let target = (virtual_pc.wrapping_add(4) & 0xf000_0000) | ((word & 0x03ff_ffff) << 2);
         GuestAddr(self.slot_view(pc, target))
     }
+    /// Relative transfers use the executing virtual PC, then select storage
+    /// only when the destination remains inside this same alternate.
+    pub fn branch_target(&self, pc: GuestAddr, word: u32) -> GuestAddr {
+        let target = self
+            .linked_pc(pc)
+            .0
+            .wrapping_add(4)
+            .wrapping_add_signed(i32::from(word as i16) * 4);
+        GuestAddr(self.slot_view(pc, target))
+    }
     /// Every placed copy of `address` when it is in a slot's linked text:
     /// a pointer there names whichever alternate is loaded (ADR-0185).
     pub fn slot_copies(&self, address: u32) -> Vec<u32> {
@@ -366,8 +376,7 @@ pub fn direct_cfg_bounded(
                 let target = GuestAddr(if i.is_jump_with_address() {
                     image.jump_target(pc, word).0
                 } else {
-                    pc.0.wrapping_add(4)
-                        .wrapping_add_signed(i32::from(word as i16) * 4)
+                    image.branch_target(pc, word).0
                 });
                 let kind = if links {
                     EdgeKind::Call

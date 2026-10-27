@@ -1,5 +1,18 @@
 # Next
 
+## GoldenEye mapped-code continuation (ADR-0281)
+
+Preserve architectural relative targets and guarded cross-fragment native
+dispatch. The fixed48-page direct-target challenge improves331->317; expanded
+coverage reaches55 pages/11633 blocks and909/903 ordinary/residual blockers at
+the16-attempt pipeline cap. Emission remains refused. Recover unvisited bytes
+from a decoded general loader relation without extrapolating the observed ROM
+offset into a game-specific rule. Model cross-page slots/continuations without
+merging independent physical bindings. Verify TLBWR/Random/Wired, Context/refill/
+exception entry and mapping lifetimes against pinned ares; retain source/table/
+callback guards. No GoldenEye native VI/logo/title exists. Evidence and control
+receipts:research/ge-blockers.md.
+
 ## Rogue Squadron after name entry and first mission (ADR-0280)
 
 Preserve live guarded FPR selection for unknown entry/call/join facts, proven-FR

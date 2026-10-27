@@ -101,6 +101,55 @@ fn unchanged_tlb_bytes_keep_virtual_jump_regions_and_internal_identity() {
 }
 
 #[test]
+fn mapped_relative_branches_leave_storage_at_the_virtual_page_boundary() {
+    let (mut bytes, mut spec) = fixture();
+    spec.loads[1].linked = Some(GuestAddr(0xe000_0100));
+    // The two virtual fragments are nearby, but independently placed.
+    bytes[0x40..0x44].copy_from_slice(&0x1000_003fu32.to_be_bytes());
+    bytes[0x80..0x84].copy_from_slice(&0x1000_ffbfu32.to_be_bytes());
+    let (_, image) = compose(&bytes, &spec).unwrap();
+    assert_eq!(
+        image.branch_target(GuestAddr(0x8001_0000), 0x1000_0003),
+        GuestAddr(0x8001_0010)
+    );
+    assert_eq!(
+        image.branch_target(GuestAddr(0x8001_0000), 0x1000_007f),
+        GuestAddr(0xe000_0200)
+    );
+    let d = plaid_core::pipeline::discover_image(
+        RomIdentity {
+            sha256: "0".repeat(64),
+            size: bytes.len() as u64,
+        },
+        &image,
+        &[GuestAddr(0x8001_0000)],
+        1000,
+    )
+    .unwrap();
+    for (site, target) in [(0x8001_0000, 0xe000_0100), (0x8001_0040, 0xe000_0000)] {
+        assert!(
+            d.map
+                .direct_edges
+                .iter()
+                .any(|e| e.site.pc == GuestAddr(site) && e.target.pc == GuestAddr(target)),
+            "branch at {site:08x} must name virtual target {target:08x}"
+        );
+    }
+    assert!(
+        d.map
+            .blocks
+            .iter()
+            .any(|b| b.start.pc == GuestAddr(0x8001_0040))
+    );
+    assert!(
+        !d.map
+            .direct_edges
+            .iter()
+            .any(|e| e.target.pc == GuestAddr(0x8001_0100))
+    );
+}
+
+#[test]
 fn tlb_load_refuses_nonvirtual_links_missing_slots_and_bad_text_bounds() {
     let (bytes, spec) = fixture();
     for mode in 0..6 {
