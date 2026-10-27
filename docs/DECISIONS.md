@@ -8447,3 +8447,33 @@ runtime decoder/interpreter/JIT, RT64 patch/bridge or shared-reference change.
 Default GCC15.2 is unchanged. Exact-tree gates, controls, remaining obligations
 and later source-round measurements: research/ge-closure.md and its ignored
 receipt paths. README is updated in the worker's follow-up fast-forward commit.
+
+## ADR-0283: Dispatch sequential continuations across source fragments
+
+Status: accepted
+
+Decision: advance linear execution and branch/call continuations using the guest
+PC, retaining analysis storage only inside the same fragment. End blocks at that
+boundary, prefer source-derived alternates over overlapping fallback ROM bytes,
+and enter the continuation through its own existing mapping/content/generation
+binding. Tail dispatch retains the entering return continuation. Guest RA still
+comes from the source mapping plus PC+8, even beyond the source extent. A single
+source lookup bounds the new advancement cost. External delay slots stay refused,
+including when unrelated analysis storage or fallback ROM words are available.
+
+On fixed222-page GoldenEye sources, residual blockers432->202: direct132->30,
+unmapped104->2 and load straddles67->0; blocks45418->46512. Genuine unsupported
+slots26->42 and new table obligations remain visible. No executable, native VI,
+logo/title or native-completeness claim. Preliminary warm release discovery
+29.735s before/31.828s after includes expanded coverage, not a speedup.
+
+Nine full CPU/FPR/PC/HI/LO/FCSR/output-RAM pinned-ares comparisons cover linear,
+JAL/JALR, ordinary/likely taken/untaken and untaken linked continuations with
+independent nonadjacent physical backing. Changed-source and wrong-continuation
+mutations are detected. Rust boundary/wrap/foreign-storage/fallback-overlap and
+cross-slot refusals cover source selection. No fixture events are queued; refill,
+Random/Wired, interrupt and cycle-accuracy work remains separate. Exact pinned
+ISC/SLJIT ares notices are retained; no reference body/assets or runtime guest
+interpreter/decoder/JIT is introduced. Default GCC15.2, runtime and RT64 are
+unchanged; no shared rebuild. Measurements, controls and remaining gaps:
+research/ge-continuations.md. README follows in the worker-owned commit.

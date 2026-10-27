@@ -1277,6 +1277,8 @@ struct Lowerer<'a> {
     labels: BTreeSet<u32>,
     /// Constant-proven indirect targets by site.
     targets: &'a BTreeMap<u32, BTreeSet<u32>>,
+    /// Source-derived alternates for a sequential fragment continuation.
+    sequential: &'a BTreeMap<u32, BTreeSet<u32>>,
     /// `jr $ra` sites closed by a return certificate: lowered as checked returns.
     returns: &'a BTreeSet<u32>,
     /// Function entries, each emitted as one C function.
@@ -1352,6 +1354,14 @@ impl Lowerer<'_> {
         }
     }
     fn fallthrough(&self, next: u32, pc: u32) -> String {
+        let next = self
+            .image
+            .sequential_pc(GuestAddr(pc), next.wrapping_sub(pc))
+            .0;
+        if let Some(set) = self.sequential.get(&pc) {
+            let k = self.dispatch[set];
+            return format!("return plaid_call_{k}(s, {}, ret, 0x{pc:08x}u);", sx(next));
+        }
         self.goto(next)
             .unwrap_or_else(|_| format!("return plaid_fault(s, 0x{pc:08x}u, 3);"))
     }
@@ -1922,6 +1932,30 @@ pub fn lower_c_parts(
         callees.extend(slot.iter().map(|&t| image.address(GuestAddr(t))));
         targets.insert(e.site.pc.0, slot);
     }
+    let mut sequential = BTreeMap::new();
+    for edge in map
+        .direct_edges
+        .iter()
+        .filter(|e| matches!(e.kind, EdgeKind::Fallthrough | EdgeKind::ReturnContinuation))
+    {
+        let pc = edge.site.pc.0;
+        let bytes = if is_control(word(pc)?) { 8 } else { 4 };
+        let expected = image.sequential_pc(GuestAddr(pc), bytes);
+        if expected != edge.target.pc || expected.0 == pc.wrapping_add(bytes) {
+            continue;
+        }
+        let mut slots: BTreeSet<_> = plaid_core::declared_loads::slot_targets(declared, expected.0)
+            .into_iter()
+            .filter(|t| blocks.contains(t))
+            .collect();
+        if slots.is_empty() && blocks.contains(&expected.0) {
+            slots.insert(expected.0);
+        }
+        if !slots.is_empty() {
+            callees.extend(slots.iter().map(|&t| image.address(GuestAddr(t))));
+            sequential.insert(pc, slots);
+        }
+    }
     // A proven register-call constant can name the linked slot too. Its
     // native dispatcher must contain the placed alternatives, not a phantom
     // function at the shared address.
@@ -2180,11 +2214,14 @@ pub fn lower_c_parts(
     // A JALR with several proven targets calls one dispatcher per target set
     // instead of inlining a call per target at every site (ADR-0174).
     let mut dispatch = BTreeMap::new();
-    for (&pc, ts) in &targets {
+    for (&pc, ts) in targets.iter().chain(&sequential) {
         let w = word(pc)?;
         let jalr = w >> 26 == 0 && w & 63 == 9;
         let direct = plaid_core::discovery::decode(w, GuestAddr(pc));
-        if !(jalr && ts.len() >= 2 || direct.is_branch() || direct.is_jump_with_address())
+        if !(sequential.get(&pc) == Some(ts)
+            || jalr && ts.len() >= 2
+            || direct.is_branch()
+            || direct.is_jump_with_address())
             || dispatch.contains_key(ts)
         {
             continue;
@@ -2333,6 +2370,7 @@ pub fn lower_c_parts(
             fr_modes: &fr_modes,
             labels: body.iter().map(|b| b.pc.0).collect(),
             targets: &targets,
+            sequential: &sequential,
             returns: &returns,
             functions: &functions,
             runtime: &runtime,

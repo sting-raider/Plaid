@@ -78,6 +78,22 @@ impl CodeImage {
             .wrapping_add_signed(i32::from(word as i16) * 4);
         GuestAddr(self.slot_view(pc, target))
     }
+    /// Sequential execution follows the guest PC across fragment boundaries;
+    /// neighboring analysis storage does not identify the next guest bytes.
+    pub fn sequential_pc(&self, pc: GuestAddr, bytes: u32) -> GuestAddr {
+        for (placed, linked, _) in &self.slots {
+            let offset = pc.0.wrapping_sub(placed.start.0);
+            if offset < placed.size {
+                let next = offset.wrapping_add(bytes);
+                return GuestAddr(if next < placed.size {
+                    placed.start.0.wrapping_add(next)
+                } else {
+                    linked.wrapping_add(next)
+                });
+            }
+        }
+        GuestAddr(pc.0.wrapping_add(bytes))
+    }
     /// Every placed copy of `address` when it is in a slot's linked text:
     /// a pointer there names whichever alternate is loaded (ADR-0185).
     pub fn slot_copies(&self, address: u32) -> Vec<u32> {
@@ -338,15 +354,17 @@ pub fn direct_cfg_bounded(
             let never_taken = i.is_valid() && branch_never_taken(word);
             let annulled = never_taken && i.is_branch_likely();
             let links = i.does_link() && !(i.opcode_name() == "jalr" && i.get_rd() == 0);
-            let ds = GuestAddr(pc.0.wrapping_add(4));
-            let ds_word = image.instruction_word(ds);
+            let ds = image.sequential_pc(pc, 4);
+            let ds_word = (ds.0 == pc.0.wrapping_add(4))
+                .then(|| image.instruction_word(ds))
+                .flatten();
             let ds_valid = ds_word.is_some_and(|w| {
                 let d = decode(w, ds);
                 !unsupported(&d) && !d.has_delay_slot()
             });
             terminal.insert(
                 pc,
-                if !annulled && ds_word.is_some() && ds.0 > pc.0 {
+                if !annulled && ds_word.is_some() && ds.0 == pc.0.wrapping_add(4) {
                     8
                 } else {
                     4
@@ -412,7 +430,7 @@ pub fn direct_cfg_bounded(
                 });
             }
             if (i.is_branch() && !i.is_unconditional_branch()) || links {
-                let next = GuestAddr(pc.0.wrapping_add(8));
+                let next = image.sequential_pc(pc, 8);
                 if links {
                     map.direct_edges.insert(DirectEdge {
                         site: site.clone(),
@@ -435,12 +453,16 @@ pub fn direct_cfg_bounded(
                         evidence: evidence.clone(),
                     });
                 }
-                leaders.insert(next);
-                pending.insert(next);
+                let bound_next = next.0 != pc.0.wrapping_add(8)
+                    && image.slot_copies(next.0).iter().any(|&copy| copy != next.0);
+                if !bound_next {
+                    leaders.insert(next);
+                    pending.insert(next);
+                }
             }
         } else {
-            let next = GuestAddr(pc.0.wrapping_add(4));
-            if image.instruction_word(next).is_some() {
+            let next = image.sequential_pc(pc, 4);
+            if next.0 == pc.0.wrapping_add(4) && image.instruction_word(next).is_some() {
                 pending.insert(next);
             } else {
                 terminal.insert(pc, 4);
@@ -451,7 +473,12 @@ pub fn direct_cfg_bounded(
                     delay_slot: DelaySlot::None,
                     evidence: evidence.clone(),
                 });
-                pending.insert(next);
+                let bound_next = next.0 != pc.0.wrapping_add(4)
+                    && image.slot_copies(next.0).iter().any(|&copy| copy != next.0);
+                if !bound_next {
+                    leaders.insert(next);
+                    pending.insert(next);
+                }
             }
         }
     }

@@ -49,6 +49,119 @@ fn fixture() -> (Vec<u8>, LoadImage) {
 }
 
 #[test]
+fn sequential_edges_do_not_inherit_neighboring_storage_identity() {
+    let (mut bytes, mut spec) = fixture();
+    bytes[0x40..0x80].fill(0);
+    spec.loads[0].encoding = LoadEncoding::TlbRaw { text_size: 0x40 };
+    let (_, image) = compose(&bytes, &spec).unwrap();
+    assert_eq!(
+        image.sequential_pc(GuestAddr(0x8001_0000), 4),
+        GuestAddr(0x8001_0004)
+    );
+    assert_eq!(
+        image.sequential_pc(GuestAddr(0x8001_003c), 4),
+        GuestAddr(0xe000_0040)
+    );
+    assert_eq!(
+        image.sequential_pc(GuestAddr(0x8000_0000), 4),
+        GuestAddr(0x8000_0004)
+    );
+    for pc in [
+        0,
+        0x8000_0000,
+        0x8001_0000,
+        0x8001_003c,
+        0x8001_0040,
+        u32::MAX,
+    ] {
+        for bytes in [0, 4, 8, u32::MAX - 3] {
+            let pc = GuestAddr(pc);
+            let virtual_next = image.linked_pc(pc).0.wrapping_add(bytes);
+            assert_eq!(
+                image.sequential_pc(pc, bytes),
+                GuestAddr(image.slot_view(pc, virtual_next))
+            );
+        }
+    }
+    let discover = |image: &plaid_core::discovery::CodeImage| {
+        direct_cfg(
+            RomIdentity {
+                sha256: "0".repeat(64),
+                size: bytes.len() as u64,
+            },
+            image,
+            &[GuestAddr(0x8001_0000)],
+            100,
+        )
+        .unwrap()
+    };
+    let d = discover(&image);
+    assert_eq!(d.map.blocks.len(), 1);
+    assert_eq!(d.map.blocks.iter().next().unwrap().size, 0x40);
+    assert!(
+        d.map
+            .direct_edges
+            .iter()
+            .any(|e| e.target.pc == GuestAddr(0xe000_0040))
+    );
+    // A call's guest RA/continuation is beyond this fragment, even though its
+    // delay instruction is still inside the original source.
+    let mut image = image;
+    let index = ((0x8001_0038 - image.base.pc.0) / 4) as usize;
+    image.words[index] = 0x0c08_0000;
+    let d = discover(&image);
+    assert!(d.map.direct_edges.iter().any(|e| e.kind
+        == plaid_core::program::EdgeKind::ReturnContinuation
+        && e.target.pc == GuestAddr(0xe000_0040)));
+    // Moving the transfer into the last word cannot borrow the next placed
+    // load as its delay slot. Cross-fragment slot execution remains refused.
+    image.words[index] = 0;
+    image.words[index + 1] = 0x0c08_0000;
+    image.words[index + 2] = 0;
+    let d = discover(&image);
+    assert!(
+        d.map
+            .unresolved
+            .iter()
+            .any(|u| u.kind == "unsupported_delay_slot")
+    );
+    assert!(
+        d.map
+            .blocks
+            .iter()
+            .all(|b| b.start.pc.0 + b.size <= 0x8001_0040)
+    );
+    // A conventional slot can overlap the fallback ROM window numerically.
+    // Its neighbor is still selected from bound alternates, not that fallback.
+    spec.base.size = bytes.len() as u32;
+    for (load, linked) in spec.loads.iter_mut().zip([0x8000_0000, 0x8000_0040]) {
+        load.linked = Some(GuestAddr(linked));
+        load.encoding = LoadEncoding::Raw;
+    }
+    let (_, image) = compose(&bytes, &spec).unwrap();
+    assert!(image.instruction_word(GuestAddr(0x8000_0040)).is_some());
+    let d = discover(&image);
+    assert_eq!(d.map.blocks.len(), 1);
+    assert_eq!(d.map.blocks.iter().next().unwrap().size, 0x40);
+    assert!(
+        d.map
+            .direct_edges
+            .iter()
+            .any(|e| e.target.pc == GuestAddr(0x8000_0040))
+    );
+    let mut image = image;
+    let index = ((0x8001_003c - image.base.pc.0) / 4) as usize;
+    image.words[index] = 0x0c00_0010;
+    let d = discover(&image);
+    assert!(
+        d.map
+            .unresolved
+            .iter()
+            .any(|u| u.kind == "unsupported_delay_slot")
+    );
+}
+
+#[test]
 fn unchanged_tlb_bytes_keep_virtual_jump_regions_and_internal_identity() {
     let (bytes, spec) = fixture();
     let (_, image) = compose(&bytes, &spec).unwrap();
