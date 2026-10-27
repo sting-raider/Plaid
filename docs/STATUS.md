@@ -1,5 +1,22 @@
 # Status
 
+## Verified refill source discovery (ADR-0282)
+
+Missing mapped pages can now be recovered by explicit counterfactual PC roots
+after a naturally authenticated anchor. Actual ROM half reads, ordered complete
+PI writes, surviving producer identity, unique global TLB mapping and cache/RAM
+agreement verify each raw source. Counterfactual rows never authenticate neutral
+replay or call-target closure. Native mapping/content/generation guards remain.
+
+The first fixed-source GoldenEye batch authenticates49 more pages in217.344s,
+expanding11633->19746 blocks. Unmapped obligations fall317->231 while new code
+exposes tables/indirect edges; residual total grows903->1391. Subsequent pipeline
+rounds are separate measurements. Emission remains refused; no VI/logo/title.
+The standalone silent30s retained-main MM control reaches1798VIs/fault0/PC0,
+so the earlier1612-VI result is not reproduced. Negative replay memoization
+cuts one repeated source refusal3.688->0.093s. Contracts, limits and receipts:
+research/ge-closure.md.
+
 ## Mapped relative branches (ADR-0281)
 
 Relative branches now derive their target from the architectural virtual PC,

@@ -3,7 +3,56 @@ import hashlib
 import json
 from pathlib import Path
 
-from ares_boot import capture_many
+from ares_boot import capture_many, capture_refill
+
+
+def harvest_refills(rom, loads_path, map_path, info, receipt_path):
+    """Recover missing mapped sources through explicit counterfactual roots.
+
+    Only raw source declarations leave this protocol. No altered-run indirect
+    targets, data snapshots or natural reachability evidence are imported.
+    """
+    loads = json.loads(Path(loads_path).read_text())
+    program = json.loads(Path(map_path).read_text())
+    base, size = info['header']['boot_address'], info.get('boot_image_size') or 0x100000
+    entries = sorted({int(l['entry'], 0) for l in loads['loads'] if l['encoding'] == 'ares_tlb'})
+    if not entries:
+        return False
+    anchors = [r for r in capture_many(rom, entries, exact=True) if 'physical_start' in r and 'bytes' in r]
+    if not anchors:
+        return False
+    # A later naturally reached boundary lets the guest finish more of its own
+    # initialization. This is search policy, never authority to admit a page.
+    anchor = max(anchors, key=lambda r: (r['steps'], r['entry']))['entry']
+    candidates = {}
+    for target in missing_targets(program, loads, base, size):
+        if not 0x80000000 <= target < 0xc0000000:
+            candidates.setdefault(target >> 12, target)
+    receipt = dict(format='plaid-refill-harvest-v1', anchor=hex(anchor), sources=[], refusals=[])
+    for target in sorted(candidates.values())[:64]:
+        if any(int(l['destination'], 0) <= target < int(l['destination'], 0) + int(l['size'], 0)
+               for l in loads['loads'] if l.get('slot')):
+            continue
+        try:
+            capture = capture_refill(rom, anchor, target)
+        except ValueError as error:
+            receipt['refusals'].append(dict(target=hex(target), reason=str(error)))
+            continue
+        start, source, data = capture['destination'], capture['rom_source'], bytes(capture['bytes'])
+        load = dict(destination=hex(start), size=hex(len(data)), rom=hex(source), encoding='tlb_raw',
+                    text_size=hex(len(data)), slot=True)
+        if load not in loads['loads']:
+            loads['loads'].append(load)
+            receipt['sources'].append({k: v for k, v in capture.items() if k != 'bytes'})
+    Path(receipt_path).write_text(json.dumps(receipt, indent=2) + '\n')
+    if not receipt['sources']:
+        return False
+    loads['source'] += (f"; explicit counterfactual refill roots after natural anchor {anchor:#x}, "
+                       "complete surviving PI sources and actual ROM reads; source candidates only, "
+                       "not neutral reachability; native mapping/content/generation guards required (ADR-0282)")
+    loads['loads'].sort(key=lambda l: (bool(l.get('slot')), 0 if l.get('slot') else int(l['destination'], 0)))
+    Path(loads_path).write_text(json.dumps(loads, indent=2) + '\n')
+    return True
 
 
 def coverage(loads, base, size, slots=False):
@@ -18,7 +67,7 @@ def missing_targets(program, loads, base, size):
     # A replay-authenticated mapped source already supplies this virtual text.
     # Requesting another entry in it would redeclare the same page as a slot.
     covered += [(int(l['destination'], 0), int(l['destination'], 0) + int(l['text_size'], 0))
-                for l in loads['loads'] if l['encoding'] == 'ares_tlb']
+                for l in loads['loads'] if l['encoding'] in ('ares_tlb', 'tlb_raw')]
     targets = {e['target']['pc'] for e in program['direct_edges']}
     for site in program['indirect_sites']:
         for name in ('candidates', 'observed'):

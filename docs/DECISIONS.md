@@ -8411,3 +8411,39 @@ only; no reference implementation body/assets are copied. Default GCC15.2,
 runtime and RT64 bridge/patches are unchanged; no shared rebuild. Full breakdown,
 local gates/controls and remaining cross-page/source/refill/table/callback gaps:
 research/ge-blockers.md.
+
+## ADR-0282: Verify raw page sources through explicit counterfactual refill roots
+
+Status: accepted
+
+Decision: missing mapped text can be searched through a separate versioned
+counterfactual reset protocol. Authenticate a natural anchor, complete that
+instruction, record the single PC/pipeline redirect, then let the pinned reference
+execute all exception/refill/DMA semantics. Require actual ROM-device half reads,
+ordered full PI writes/completion, a unique surviving producer covering the full
+page, identity backing, unique global TLB mapping and cache/RAM agreement. Later
+overlapping producers invalidate history even when values agree. Neutral Rust
+replay rejects counterfactual rows and footers; cache namespaces remain distinct.
+
+Harvest emits existing guarded tlb_raw declarations reconstructed from ROM bytes,
+not snapshots or altered-run edge certificates. Runtime mapping/content/generation
+checks remain mandatory; captured physical placement never becomes a permanent
+mapping. Search uses natural replay boundaries and missing targets, no game hash,
+address or source-offset rule. Normal replay/table repair runs first. Refinement
+limit16->64 permits source convergence; completed deterministic negative replays
+are cached and revalidated, with a measured3.688->0.093s repeated refusal.
+
+GoldenEye's first fixed batch authenticates49 additional pages in217.344s and
+expands11633->19746 blocks. Unmapped317->231; newly exposed tables/indirect edges
+raise residual obligations903->1391, so no aggregate closure or executable is
+claimed. Synthetic actual TLB-miss/DMA/TLBWI/ERET contracts, malformed-root/source
+negatives, equal-value different-source/write variants, neutral isolation, native
+binding contracts and an inverted-source-verifier mutation cover this scope.
+Standalone silent retained-main MM reaches1798VIs/30s/fault0, not the prior1612.
+
+Pinned ares9408cb43 is a separate ISC reference; existing license notices and
+project-owned device-observer boundaries are retained. No reference body/assets,
+runtime decoder/interpreter/JIT, RT64 patch/bridge or shared-reference change.
+Default GCC15.2 is unchanged. Exact-tree gates, controls, remaining obligations
+and later source-round measurements: research/ge-closure.md and its ignored
+receipt paths. README is updated in the worker's follow-up fast-forward commit.

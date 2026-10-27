@@ -283,6 +283,8 @@ def main():
         subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', script], check=True, timeout=600)
         return
     boot_header_contract()
+    from test_refill_sources import main as refill_contract
+    refill_contract()
     replay_cache_contract()
     raw_occupant_contract()
     mapped_harvest_contract()
