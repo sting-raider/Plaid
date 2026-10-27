@@ -14,7 +14,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 ## Where it stands
 
-*As of ADR-0265, 2026-10-24. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
+*As of ADR-0281, 2026-10-28. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
@@ -24,7 +24,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 | Banjo-Kazooie (USA) (Rev 1) | **none** | 🟨 residual dispatch, 2 sites | 60 s: Nintendo opening and title, audio, fault 0; puzzle transitions in 75 s runs (ADR-0200, ADR-0201); current main: 60 s, VI 3568, fault 0 (ADR-0240) | re-prove the 2 table jumps lost in 94a4d7cb |
 | Paper Mario (USA) | **none** | 🟨 builds by default with residual dispatch (ADR-0233) | 60 s: storybook intro, VI 3590, audio, fault 0 (ADR-0230); a fresh default build runs 30 s with fault 0 again (ADR-0263); earlier 60 s runs stopped at VI 2908 on an undiscovered shared-slot occupant | find that code; prove 8 indirect jumps for `native_complete` |
 | Ocarina of Time (USA 1.2) | **none** | ✅ ROM-only, 0 blockers | 60 s with scripted save load: VI 3596, fault 0; opening Link/Kokiri scene after NJPEG (ADR-0265) | longer play |
-| GoldenEye 007 (USA) | **none** | refused | not reached: OPEN, 592 blockers (589 with residual dispatch): 48 `7f` engine pages now recovered, resolving 81 of 85 missing direct targets but exposing more code (ADR-0255) | unvisited engine pages, cross-page instructions, TLB refill/exception semantics |
+| GoldenEye 007 (USA) | **none** | refused | not reached: OPEN, 909 blockers (903 with residual dispatch), 55 mapped engine pages (ADR-0281). Relative-branch repair reduces missing direct targets 331 -> 317 on the same 48-page scope, then exposes more code | unvisited sources, cross-page slots, TLB refill/exception semantics and tables |
 | Mario Kart 64 (USA) | **none** | 🟨 residual dispatch, 2 sites | 60 s with compiled graphics microcode and audio: VI 2762, 1270 graphics / 2635 audio tasks, fault 0 (ADR-0246) | prove the 2 residual sites; longer play |
 | Star Fox 64 (USA) (Rev 1) | **none** | 🟨 residual dispatch, 8 sites | 30 s from the ROM alone: VI 1798, 945 graphics / 1730 audio tasks, fault 0 (ADR-0256, ADR-0257); borders clean since ADR-0266 | prove the 8 residual sites; longer play |
 | Rogue Squadron (USA) | **none** | 🟨 builds with residual dispatch, 16 sites (ADR-0280) | full speed (1798 VIs in 30 s); menus, name entry and the first mission fly natively: an X-wing over Tatooine with the HUD at VI 12284, fault 0 (press list in `research/rs-name-entry.md`) | combat and mission completion; the 16 residual sites |
@@ -41,6 +41,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0281 | `1b40f62a` | Relative branches between mapped code fragments use the guest PC and guarded native dispatch (checked against ares); GoldenEye recovers 55 engine pages, with emission still refused |
 | 0280 | `3f737fe5` | Code reached from unknown entries uses the live `Status.FR` register layout, and discovery recovers PC-relative shared-tail entries after untaken linked branches (checked against ares). Rogue Squadron goes from a name-entry fault to flying its first mission |
 | 0279 | `5b17ba06` | Native LLE graphics no longer stalls the VI: unchanged RAM is skipped when syncing to the renderer (1.85 -> 0.70 us per RDP call) and VI ticks are delivered between RSP bus operations. Rogue Squadron 30 s run VI 1602 -> 1798, frame-time p95 38 -> 18 ms |
 | 0278 | `ac22e04b` | Create Dirty Exclusive over a lost cache line is accepted with per-byte unknown tracking (checked against ares); RT64 shows non-square framebuffers at the right aspect; native RSP tasks hand off to the renderer once instead of per command (+65% VIs in 30 s). Rogue Squadron reaches SELECT GAME |
