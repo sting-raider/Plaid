@@ -34,7 +34,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from native_audio import audio_peak
-from harvest_boot import harvest
+from harvest_boot import harvest, harvest_refills
 from ares_boot import ORACLE_SOURCES, capture_many
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -182,21 +182,22 @@ def main():
     window = [rom, '0x1000', entry, hex(info.get('boot_image_size') or 0x100000)]
     m = out / 'map.json'
     overlay_support = None
-    for attempt in range(16):
+    for attempt in range(64):
         # A ROM with no file table and no reset stub has no loads to declare.
         with_loads = ['--loads', loads] if json.loads(loads.read_text())['loads'] else []
         (out / 'id.json').write_text(memo_plaid('identify', *window, SIGNATURES, *with_loads), newline='')
         discover = ['discover', *window, entry, m, out / 'id.json', *with_loads, '--address-taken', '--fr0']
         overlay_support = discover_map(discover, overlay_support, m)
         verdict = json.loads(memo_plaid('solve', rom, m, '--address-taken'))
-        if verdict['status'] == 'closed' or a.loads or attempt == 15:
+        if verdict['status'] == 'closed' or a.loads or attempt == 63:
             break
         previous_loads = loads.read_bytes()
         plaid('infer-call-loads', rom, m, loads)
         if loads.read_bytes() != previous_loads:
             continue
         print('solve', verdict['status'], len(verdict['blockers']), 'blockers; analysis-time boot harvest', flush=True)
-        if not harvest(rom, loads, m, info, out / f'boot-harvest-{attempt}.json'):
+        if not harvest(rom, loads, m, info, out / f'boot-harvest-{attempt}.json') and not harvest_refills(
+                rom, loads, m, info, out / f'refill-harvest-{attempt}.json'):
             break
     print('solve', verdict['status'], len(verdict['blockers']), 'blockers')
     residual = verdict['status'] != 'closed' and not a.strict
@@ -262,7 +263,7 @@ def main():
     if a.require_audio:
         command.extend(['--wav', str(out / 'validation.wav')])
     # Validation runs are silent (SDL's dummy driver); --wav still records the audio.
-    env = {'SDL_AUDIODRIVER': 'dummy', **os.environ}
+    env = {**os.environ, 'SDL_AUDIODRIVER': 'dummy'}
     r = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, errors='replace', timeout=a.seconds + 60, env=env)
     stops = [line for line in r.stdout.splitlines() if line.startswith('{"stop"')]
     print(stops[-1][:400] if stops else r.stderr[-400:])

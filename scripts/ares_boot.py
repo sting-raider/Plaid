@@ -48,6 +48,92 @@ ORACLE_SOURCES = ('scripts/ares_boot.py', 'scripts/ares_boot.cpp', 'spikes/003-a
                   'spikes/003-ares-oracle/driver.cpp', 'spikes/044-ares-cpu-copy-dataflow/prepare.py')
 
 
+def validate_refill(rows, data, anchor, target, natural):
+    """Counterfactual sources never certify neutral reachability or call edges."""
+    if not isinstance(rows, list) or len(rows) != 3 or any(not isinstance(r, dict) for r in rows):
+        raise ValueError('refill requires anchor, source and footer')
+    first, page, stop = rows
+    root = stop.get('counterfactual')
+    expected = dict(version=1, anchor=anchor, target=target, anchor_step=natural['steps'],
+                    root_step=natural['steps'] + 1, applied=True)
+    before = dict(expected, root_step=0, applied=False)
+    same = lambda a, b: json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+    if (not same(root, expected) or not same(first.get('counterfactual'), before) or
+            not same(page.get('counterfactual'), expected) or stop.get('remaining') != 0 or
+            stop.get('stop_reason') != 'entries_complete' or
+            any(first.get(k) != natural.get(k) for k in
+                ('entry', 'destination', 'physical_start', 'steps', 'bytes')) or
+            page.get('entry') != target or not expected['root_step'] <= page.get('steps', -1) < BUDGET):
+        raise ValueError('invalid counterfactual root/anchor/stop identity')
+    source, start, physical, payload = (page.get(k) for k in
+                                      ('rom_source', 'destination', 'physical_start', 'bytes'))
+    if (any(type(v) is not int or v < 0 for v in (source, start, physical)) or
+            not isinstance(payload, list) or not payload or
+            any(type(b) is not int or not 0 <= b <= 255 for b in payload) or
+            (start | physical | len(payload)) & 3 or source & 1 or
+            not start <= target < start + len(payload) or
+            not (start + len(payload) <= 0x80000000 or
+                 0xc0000000 <= start < start + len(payload) <= 0x100000000) or
+            physical + len(payload) > 0x800000 or
+            source + len(payload) > len(data) or bytes(payload) != data[source:source + len(payload)]):
+        raise ValueError('invalid completed refill ROM source')
+    return page
+
+
+def capture_refill(rom, anchor, target):
+    """Fresh reset, authenticated anchor, one explicit PC root, raw DMA source.
+
+    Cache namespace and output format differ from ordinary reset replay. The
+    result supplies guarded source candidates, never observed call targets.
+    """
+    if (any(type(v) is not int or not 0 <= v <= 0xffffffff or v & 3 for v in (anchor, target)) or
+            anchor == target or 0x80000000 <= target < 0xc0000000):
+        raise ValueError('refill roots require distinct aligned addresses and a mapped target')
+    rom = Path(rom).resolve()
+    data = rom.read_bytes()
+    width = {bytes.fromhex('37804012'): 2, bytes.fromhex('40123780'): 4}.get(data[:4])
+    if width:
+        canonical = bytearray(len(data))
+        for lane in range(width):
+            canonical[lane::width] = data[width - 1 - lane::width]
+        with tempfile.TemporaryDirectory(prefix='plaid-refill-canonical-') as temporary:
+            path = Path(temporary) / 'input.z64'
+            path.write_bytes(canonical)
+            return capture_refill(path, anchor, target)
+    natural_rows = capture_many(rom, [anchor], exact=True)
+    natural = next((r for r in natural_rows if r.get('entry') == anchor), None)
+    if natural is None or natural.get('counterfactual') is not None:
+        raise ValueError('neutral reset did not authenticate the refill anchor')
+    key = hashlib.sha256(json.dumps(['refill-v1', REV,
+        [hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in ORACLE_SOURCES],
+        hashlib.sha256(data).hexdigest(), anchor, target]).encode()).hexdigest()
+    cached = Path(os.environ.get('PLAID_REPLAY_CACHE', Path.home() / '.cache/plaid/ares-replay')) / f'{key}.json'
+    if cached.exists():
+        rows = json.loads(cached.read_text())
+    else:
+        exe = build_oracle()
+        firmware = ROOT / '.refs/ares/ares/System/Nintendo 64/pif.ntsc.rom'
+        if hashlib.sha256(firmware.read_bytes()).hexdigest() != natural['firmware_sha256']:
+            raise ValueError('refill firmware differs from authenticated reset')
+        with tempfile.TemporaryDirectory(prefix='plaid-refill-') as temporary:
+            output = Path(temporary) / 'source.jsonl'
+            command = [str(exe), str(rom), str(firmware), hex(natural_rows[-1]['boot_entry']), hex(target),
+                       str(BUDGET), 'CIC-NUS-' + natural['cic'], str(output), 'refill-v1', hex(anchor)]
+            subprocess.run(command, check=True, timeout=300)
+            rows = [json.loads(line) for line in output.read_text().splitlines()]
+        # A completed, deterministic refusal is worth caching too: unresolved
+        # roots recur across frontier rounds. Validation still runs on every hit.
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        partial = cached.with_name(f'{key}.{os.getpid()}.tmp')
+        partial.write_text(json.dumps(rows))
+        partial.replace(cached)
+    page = dict(validate_refill(rows, data, anchor, target, natural))
+    page.update(format='plaid-ares-refill-source-v1', revision=REV,
+                rom_sha256=hashlib.sha256(data).hexdigest(),
+                output_sha256=hashlib.sha256(bytes(page['bytes'])).hexdigest())
+    return page
+
+
 def capture_many(rom, entries, exact=False, covered=None, sites=None, bindings=None):
     if bindings is not None and (sites is None or not isinstance(bindings, (list, tuple)) or
             any(not isinstance(b, (list, tuple)) or len(b) != 4 or

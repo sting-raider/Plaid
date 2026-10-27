@@ -20,6 +20,10 @@ static std::set<u32> targets;
 static u64 steps = 0;
 static FILE* result;
 static bool exactMany = false;
+// Counterfactual discovery is a distinct protocol, never a neutral replay row.
+static bool refill = false, rootApplied = false, anchorReady = false;
+static u32 rootAnchor = 0, rootTarget = 0;
+static u64 anchorStep = 0, rootStep = 0;
 static bool seekUncovered = false;
 static std::vector<std::array<u32, 2>> covered;
 static u32 uncoveredEntry = 0;
@@ -91,28 +95,55 @@ static std::vector<RawDma> completed;
 static RawDma pending{};
 static u32 copied = 0;
 static bool validCopy = false, foundOccupant = false;
+static bool romRead = false;
+static u32 romReadAddress = 0, romReadValue = 0, readBytes = 0;
+struct SourceObserver : PIDevice {
+  auto piAddress(u32 address, PIDeviceTiming timing) -> bool override {
+    return cartridge.romDevice.piAddress(address, timing);
+  }
+  auto piReadHalf(PIDeviceTiming timing) -> maybe<u16> override {
+    auto offset = cartridge.romDevice.piViewOffset;
+    auto data = cartridge.romDevice.piReadHalf(timing);
+    romRead = (bool)data; romReadAddress = 0x10000000u + offset;
+    if(data) romReadValue = *data;
+    return data;
+  }
+  auto piWriteHalf(u16 data, PIDeviceTiming timing) -> void override {
+    cartridge.romDevice.piWriteHalf(data, timing);
+  }
+};
 static void observeDma(u32 kind, u32 a, u32 p, u32 n, u32, u32 value) {
   if(!entered) return;
   if(kind == 1) {
     dma.push_back({a,p,n});
     pending = {a, p - 0x10000000u, n, (u32)cpu.ipu.pc}; copied = 0;
+    readBytes = 0; romRead = false;
     validCopy = !(a & 7) && !(n & 3) && n && (u64)a + n <= written.size()
-      && p >= 0x10000000u && (u64)pending.rom + n <= sourceRom.size();
+      && !(p & 1) && p >= 0x10000000u && (u64)pending.rom + n <= sourceRom.size();
     // Ordinary snapshots and non-slot data need no raw-occupant history.
-    validCopy = validCopy && seekUncovered && (std::any_of(bindings.begin(), bindings.end(), [&](auto b) {
+    validCopy = validCopy && (refill || (seekUncovered && (std::any_of(bindings.begin(), bindings.end(), [&](auto b) {
       u32 runtime = canonical(b.runtime);
       return b.source >= 0 && runtime >= 0x80000000u && runtime < 0x80800000u &&
         (u64)a < (runtime & 0x1fffffffu) + (u64)b.size && (runtime & 0x1fffffffu) < (u64)a + n;
     }) || std::any_of(completed.begin(), completed.end(), [&](auto d) {
       return d.ram + d.size == a && d.rom + d.size == pending.rom && d.site == pending.site;
-    }));
+    }))));
+  }
+  // Each buffered half must come from the actual ROM device, not an equal latch.
+  if(kind == 3 && refill) {
+    if(!romRead || romReadAddress != p || value != romReadValue ||
+       readBytes >= pending.size || p != 0x10000000u + pending.rom + readBytes ||
+       p < 0x10000000u || (u64)p + 2 > 0x10000000ull + sourceRom.size() ||
+       value != ((u32)sourceRom[p - 0x10000000u] << 8 | sourceRom[p - 0x10000000u + 1])) validCopy = false;
+    romRead = false;
+    readBytes += 2;
   }
   if(kind == 5 && validCopy) {
     if(copied >= pending.size || a != pending.ram + copied || !rdram.mapIdentity ||
        value != sourceRom[pending.rom + copied]) validCopy = false;
     else copied++;
   }
-  if(kind == 7 && validCopy && copied == pending.size) {
+  if(kind == 7 && validCopy && copied == pending.size && (!refill || readBytes == pending.size)) {
     // Join only adjacent complete transfers with the same ROM/RAM displacement.
     for(auto it = completed.begin(); it != completed.end();) {
       if(it->ram + it->size == pending.ram && it->rom + it->size == pending.rom && it->site == pending.site) {
@@ -214,6 +245,7 @@ static void observe(u64 address, u32 word) {
     // Extended replay supplies call roots and completed raw sources only.
     // Snapshot composition retains its reproducible 100M-instruction contract (including its Rust verifier).
     if(steps >= 100000000) return;
+    if(refill && !rootApplied && pc != rootAnchor) return;
     bool mapped = pc < 0x80000000u || pc >= 0xc0000000u;
     bool uncovered = seekUncovered && (mapped || (pc >= 0x80000000u && pc < 0x80800000u))
       && std::none_of(covered.begin(), covered.end(), [&](auto r) { return r[0] <= pc && pc < r[1]; });
@@ -257,7 +289,28 @@ static void observe(u64 address, u32 word) {
         offset = std::min<u32>(((destination + offset) | 0xfffu) - destination + 1, hi - lo - 1);
       }
     }
+    u32 rawSource = 0;
+    if(refill && rootApplied) {
+      unsigned matches = 0;
+      for(auto d : completed) {
+        if(d.ram <= lo && (u64)hi <= (u64)d.ram + d.size) {
+          rawSource = d.rom + lo - d.ram; matches++;
+        }
+      }
+      if(!mapped || matches != 1) { reject("no unique surviving complete ROM DMA source"); return; }
+      for(u32 at = lo; at < hi; at++) {
+        if(rdram.ram.read<Byte>(at, RBusDevice::ARES_DEBUGGER) != sourceRom[rawSource + at - lo]) {
+          reject("completed ROM source differs from RAM"); return;
+        }
+      }
+    }
+    if(refill && !rootApplied) { anchorReady = true; anchorStep = steps; }
     std::fprintf(result, "{\"entry\":%u,\"destination\":%u,\"steps\":%llu,", pc, destination, (unsigned long long)steps);
+    if(refill) {
+      std::fprintf(result, "\"counterfactual\":{\"version\":1,\"anchor\":%u,\"target\":%u,\"anchor_step\":%llu,\"root_step\":%llu,\"applied\":%s},",
+        rootAnchor, rootTarget, (unsigned long long)anchorStep, (unsigned long long)rootStep, rootApplied ? "true" : "false");
+      if(rootApplied) std::fprintf(result, "\"rom_source\":%u,", rawSource);
+    }
     if(mapped) std::fprintf(result, "\"physical_start\":%u,", lo);
     std::fprintf(result, "\"cpu_writes\":");
     ranges(result, lo, hi, 1);
@@ -266,7 +319,7 @@ static void observe(u64 address, u32 word) {
     std::fprintf(result, "],\"previous_fetches\":[[%u,%u],[%u,%u]],\"bytes\":[", previous[0][0], previous[0][1], previous[1][0], previous[1][1]);
     for(u32 a = lo; a < hi; a++) std::fprintf(result, "%s%u", a == lo ? "" : ",", (u32)rdram.ram.read<Byte>(a, RBusDevice::ARES_DEBUGGER));
     std::fprintf(result, "]}\n");
-    if(!exactMany) {
+    if(!exactMany && !refill) {
       for(auto it = targets.begin(); it != targets.end();) {
         if(*it >= destination && (u64)*it < (u64)destination + hi - lo) it = targets.erase(it);
         else ++it;
@@ -277,7 +330,14 @@ int main(int argc, char** argv) {
   if(argc < 8 || argc > 12) return 2;
   if(argc == 9 && std::strcmp(argv[8], "exact-many") != 0) return 2;
   exactMany = argc == 9;
-  if(argc >= 10) {
+  refill = argc == 10 && !std::strcmp(argv[8], "refill-v1");
+  if(refill) {
+    char* end;
+    auto anchor = std::strtoull(argv[9], &end, 0);
+    if(*end || anchor > 0xffffffffull || (anchor & 3)) return 2;
+    rootAnchor = anchor;
+  }
+  if(argc >= 10 && !refill) {
     if(std::strcmp(argv[8], "uncovered")) return 2;
     FILE* f = std::fopen(argv[9], "rb"); if(!f) return 2;
     u32 lo, hi;
@@ -318,6 +378,13 @@ int main(int argc, char** argv) {
     char* end; targets.insert(std::strtoul(targetList.c_str() + at, &end, 0));
     at = end - targetList.c_str(); if(at < targetList.size()) at++;
   }
+  if(refill) {
+    if(targets.size() != 1) return 2;
+    rootTarget = *targets.begin();
+    if((rootTarget & 3) || rootTarget == rootAnchor ||
+       (rootTarget >= 0x80000000u && rootTarget < 0xc0000000u)) return 2;
+    targets.insert(rootAnchor);
+  }
   u64 budget = std::strtoull(argv[5], nullptr, 0);
   if(bytes.size() < 4096 || firmware.size() != 1984 || budget > 2000000000) return 2;
   sourceRom.assign(bytes.data(), bytes.data() + bytes.size());
@@ -334,6 +401,14 @@ int main(int argc, char** argv) {
   cartridgeSlot.port->allocate(); cartridgeSlot.port->connect();
   controllerPort1.port->allocate("Gamepad"); controllerPort1.port->connect();
   ares::Nintendo64::system.power(false);
+  SourceObserver sourceObserver;
+  if(refill) {
+    unsigned replaced = 0;
+    for(auto& device : pi.devices) if(device.device == &cartridge.romDevice) {
+      device.device = &sourceObserver; replaced++;
+    }
+    if(replaced != 1) return 4;
+  }
   if(cpu.recompiler.enabled || rsp.recompiler.enabled) return 4;
   std::vector<u8> hidden(rdram.ram.size / 2); rdram.hidden.data = hidden.data();
   // Test-only declared post-IPL state, never selected by the ROM-only adapter.
@@ -353,13 +428,19 @@ int main(int argc, char** argv) {
   plaidCpuInstructionObserver = [](bool before, u64 pc, u32 word) { if(before) observe(pc, word); };
   u32 vis = 0;
   for(; steps < budget && vis < 3600 && (!targets.empty() || seekUncovered) && !uncoveredEntry && !foundOccupant; steps++) {
+    if(refill && anchorReady && !rootApplied) {
+      // The authenticated anchor instruction has completed. Only PC/pipeline
+      // change; the reference performs every exception, refill and DMA itself.
+      rootApplied = true; rootStep = steps;
+      cpu.pipeline.setPc((u64)(s64)(s32)rootTarget);
+    }
     if(cpu.instruction()) cpu.synchronize();
     if(vi.refreshed) { vis++; vi.refreshed = false; }
     // Extend only while the declared observation frontier remains uncovered.
     if(steps + 1 >= 100000000 && !requestedSites.empty() && seenSites == requestedSites) { steps++; break; }
   }
   std::fprintf(result, "{");
-  if(argc >= 10) {
+  if(argc >= 10 && !refill) {
     if(uncoveredEntry) std::fprintf(result, "\"uncovered_entry\":%u,", uncoveredEntry);
     else std::fprintf(result, "\"uncovered_entry\":null,");
   }
@@ -380,6 +461,8 @@ int main(int argc, char** argv) {
   const char* reason = foundOccupant ? "undeclared_slot_occupant" : uncoveredEntry ? "uncovered_fetch" : steps >= budget ? "instruction_budget"
     : vis >= 3600 ? "vi_budget" : !targets.empty() || seekUncovered ? "sites_covered" : "entries_complete";
   std::fprintf(result, "\"stop_reason\":\"%s\",", reason);
+  if(refill) std::fprintf(result, "\"counterfactual\":{\"version\":1,\"anchor\":%u,\"target\":%u,\"anchor_step\":%llu,\"root_step\":%llu,\"applied\":%s},",
+    rootAnchor, rootTarget, (unsigned long long)anchorStep, (unsigned long long)rootStep, rootApplied ? "true" : "false");
   std::fprintf(result, "\"stop_pc\":%u,\"steps\":%llu,\"vi\":%u,\"entered\":%s,\"remaining\":%zu,\"sp\":[", (u32)cpu.ipu.pc, (unsigned long long)steps, vis, entered ? "true" : "false", targets.size());
   for(size_t i = 0; i < sp.size(); i++) std::fprintf(result, "%s%u", i ? "," : "", (u32)sp[i]);
   std::fprintf(result, "],\"boot_status\":%u,\"boot_entryhi\":%llu", bootStatus, (unsigned long long)bootEntryHi);

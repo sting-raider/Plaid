@@ -1,5 +1,20 @@
 # Next
 
+## GoldenEye after verified refill sources (ADR-0282)
+
+Preserve separate counterfactual/neutral protocols, actual ROM-read and completed
+producer verification, and native mapping/content/generation guards. Continue
+source convergence and first-use table repair; coverage growth exposes new
+obligations and is not an aggregate closure certificate. The first49-page batch
+reduces unmapped targets317->231 but exposes1391 residual blockers. Categorize
+the converged map before choosing each reduction. Sequential PCs/continuations
+and delay slots must cross virtual fragments without assuming adjacent storage
+or physical pages. TLBWR/Random/Wired, refill/exception execution, callbacks and
+tables remain open. No GoldenEye executable/logo/title is yet accepted.
+The standalone MM control returns1798VIs/30s/fault0; retain quiet independent
+timing comparisons before attributing previous variation to a code regression.
+Evidence:research/ge-closure.md.
+
 ## GoldenEye mapped-code continuation (ADR-0281)
 
 Preserve architectural relative targets and guarded cross-fragment native

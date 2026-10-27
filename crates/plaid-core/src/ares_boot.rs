@@ -215,6 +215,9 @@ fn parse_capture_rows(
         let object = row
             .as_object()
             .ok_or("ares batch output contains a non-object row")?;
+        if object.contains_key("counterfactual") {
+            return Err("counterfactual rows cannot authenticate neutral reset replay".into());
+        }
         // The final stop/footer record has no `entry`; it is metadata, not a
         // capture. A payload without an entry is malformed and must fail shut.
         if !object.contains_key("entry") {
@@ -453,6 +456,7 @@ mod tests {
         assert!(parse_capture_rows(&rejected, &rom, &[entry]).is_err());
 
         for (field, value) in [
+            ("counterfactual", serde_json::json!({"version": 1})),
             ("revision", serde_json::json!("unexpected-reference")),
             ("budget", serde_json::json!(99_999_999u64)),
             ("destination", serde_json::json!(0x807ffffcu32)),
