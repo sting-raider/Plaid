@@ -1,5 +1,21 @@
 # Status
 
+## Mapped relative branches (ADR-0281)
+
+Relative branches now derive their target from the architectural virtual PC,
+retaining storage identity only inside the same fragment. Cross-fragment native
+branches reuse guarded mapping/content/generation dispatch. Eight full-state
+pinned-ares contracts cover linked/unlinked ordinary/likely taken/untaken paths,
+inverted-arm mutations and altered-destination refusals.
+
+GoldenEye baseline:9035 blocks/48 pages,591 ordinary/588 residual blockers,
+337.255s. On those same sources, missing direct targets fall331->317 while new
+code adds other obligations. Automatic harvest reaches55 pages/11633 blocks,
+909/903 blockers in314.663s at its16-attempt cap. Timings include unequal build/
+cache/coverage workloads. Emission remains refused; no native VI/logo/title claim.
+Cross-page slots, unvisited sources, refill/exception and table/callback work
+remain open. Exact breakdown and verification:research/ge-blockers.md.
+
 ## Rogue Squadron name entry and first mission (ADR-0280)
 
 Unknown entry/call/join FR facts now select the live guarded native FPR layout;

@@ -1439,9 +1439,7 @@ impl Lowerer<'_> {
         let (rs, rt, rd) = ((word >> 21) & 31, (word >> 16) & 31, (word >> 11) & 31);
         let (a, b) = (format!("s->r[{rs}]"), format!("s->r[{rt}]"));
         let after = pc.wrapping_add(8);
-        let branch = pc
-            .wrapping_add(4)
-            .wrapping_add_signed(i32::from(word as u16 as i16) * 4);
+        let branch = self.image.branch_target(GuestAddr(pc), word).0;
         let jump = self.image.jump_target(GuestAddr(pc), word).0;
         if plaid_core::discovery::branch_never_taken(word) {
             let instruction = plaid_core::discovery::decode(word, GuestAddr(pc));
@@ -1460,10 +1458,21 @@ impl Lowerer<'_> {
                 self.fallthrough(after, pc)
             ));
         }
+        let branch_transfer = || -> Result<String, String> {
+            if let Some(set) = self.targets.get(&pc) {
+                let k = self.dispatch[set];
+                Ok(format!(
+                    "return plaid_call_{k}(s, {}, ret, 0x{pc:08x}u);",
+                    sx(branch)
+                ))
+            } else {
+                self.goto(branch)
+            }
+        };
         let conditional = |cond: String| -> Result<String, String> {
             Ok(format!(
                 "{{ int t = {cond}; {slot} if (t) {} }} {}",
-                self.goto(branch)?,
+                branch_transfer()?,
                 self.fallthrough(after, pc)
             ))
         };
@@ -1471,7 +1480,7 @@ impl Lowerer<'_> {
         let likely = |cond: String| -> Result<String, String> {
             Ok(format!(
                 "{{ int t = {cond}; if (t) {{ {slot} {} }} }} {}",
-                self.goto(branch)?,
+                branch_transfer()?,
                 self.fallthrough(after, pc)
             ))
         };
@@ -1565,7 +1574,14 @@ impl Lowerer<'_> {
             // BLTZAL BGEZAL (likely: 18, 19) link first, then test rs, as ares.
             (1, _, 16..=19) => {
                 let test = format!("(s64){a} {} 0", if rt & 1 == 0 { "<" } else { ">=" });
-                let call = self.call(branch, after, pc, false)?;
+                let call = if let Some(set) = self.targets.get(&pc) {
+                    let k = self.dispatch[set];
+                    format!("{} {}", self.pin(after, format!(
+                        "{{ int r = plaid_call_{k}(s, {}, {}, 0x{pc:08x}u); if (r) return r; }}",
+                        sx(branch), self.link(after))), self.fallthrough(after, pc))
+                } else {
+                    self.call(branch, after, pc, false)?
+                };
                 let link = set(31, self.link(after));
                 Ok(if rt & 2 == 0 {
                     format!(
@@ -1892,7 +1908,8 @@ pub fn lower_c_parts(
     let blocks: BTreeSet<u32> = map.blocks.iter().map(|b| b.start.pc.0).collect();
     for e in map.direct_edges.iter().filter(|e| {
         e.kind == EdgeKind::Call
-            || e.kind == EdgeKind::Jump && ovl_of(e.site.pc.0) != ovl_of(e.target.pc.0)
+            || matches!(e.kind, EdgeKind::Jump | EdgeKind::Branch)
+                && ovl_of(e.site.pc.0) != ovl_of(e.target.pc.0)
     }) {
         let slot: BTreeSet<u32> = plaid_core::declared_loads::slot_targets(declared, e.target.pc.0)
             .into_iter()
@@ -2166,7 +2183,10 @@ pub fn lower_c_parts(
     for (&pc, ts) in &targets {
         let w = word(pc)?;
         let jalr = w >> 26 == 0 && w & 63 == 9;
-        if !(jalr && ts.len() >= 2 || matches!(w >> 26, 2 | 3)) || dispatch.contains_key(ts) {
+        let direct = plaid_core::discovery::decode(w, GuestAddr(pc));
+        if !(jalr && ts.len() >= 2 || direct.is_branch() || direct.is_jump_with_address())
+            || dispatch.contains_key(ts)
+        {
             continue;
         }
         let k = dispatch.len();
