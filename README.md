@@ -14,7 +14,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 ## Where it stands
 
-*As of ADR-0281, 2026-10-28. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
+*As of ADR-0283, 2026-10-28. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
@@ -24,7 +24,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 | Banjo-Kazooie (USA) (Rev 1) | **none** | 🟨 residual dispatch, 2 sites | 60 s: Nintendo opening and title, audio, fault 0; puzzle transitions in 75 s runs (ADR-0200, ADR-0201); current main: 60 s, VI 3568, fault 0 (ADR-0240) | re-prove the 2 table jumps lost in 94a4d7cb |
 | Paper Mario (USA) | **none** | 🟨 builds by default with residual dispatch (ADR-0233) | 60 s: storybook intro, VI 3590, audio, fault 0 (ADR-0230); a fresh default build runs 30 s with fault 0 again (ADR-0263); earlier 60 s runs stopped at VI 2908 on an undiscovered shared-slot occupant | find that code; prove 8 indirect jumps for `native_complete` |
 | Ocarina of Time (USA 1.2) | **none** | ✅ ROM-only, 0 blockers | 60 s with scripted save load: VI 3596, fault 0; opening Link/Kokiri scene after NJPEG (ADR-0265) | longer play |
-| GoldenEye 007 (USA) | **none** | refused | not reached: verified guest-refill probes recover raw ROM page sources (ADR-0282). First batch adds 49 pages and reduces unmapped blockers 317 -> 231; expanded map remains OPEN (1391 residual blockers before table repair) | source convergence, cross-page continuations/slots, refill execution and tables/callbacks |
+| GoldenEye 007 (USA) | **none** | refused | not reached: guarded sequential continuations between mapped fragments reduce fixed-source residual blockers 432 -> 202 across 222 engine pages (ADR-0283) | cross-page delay slots, tables/callbacks, remaining sources and refill execution |
 | Mario Kart 64 (USA) | **none** | 🟨 residual dispatch, 2 sites | 60 s with compiled graphics microcode and audio: VI 2762, 1270 graphics / 2635 audio tasks, fault 0 (ADR-0246) | prove the 2 residual sites; longer play |
 | Star Fox 64 (USA) (Rev 1) | **none** | 🟨 residual dispatch, 8 sites | 30 s from the ROM alone: VI 1798, 945 graphics / 1730 audio tasks, fault 0 (ADR-0256, ADR-0257); borders clean since ADR-0266 | prove the 8 residual sites; longer play |
 | Rogue Squadron (USA) | **none** | 🟨 builds with residual dispatch, 16 sites (ADR-0280) | full speed (1798 VIs in 30 s); menus, name entry and the first mission fly natively: an X-wing over Tatooine with the HUD at VI 12284, fault 0 (press list in `research/rs-name-entry.md`) | combat and mission completion; the 16 residual sites |
@@ -41,6 +41,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0283 | `83540201` | Sequential flow between mapped fragments uses guarded native continuations; GoldenEye blockers fall from 432 to 202 |
 | 0282 | `241f949a` | Verify raw ROM page sources through explicit guest-refill probes, with separate neutral replay and native source guards; GoldenEye still refuses emission |
 | 0281 | `1b40f62a` | Relative branches between mapped code fragments use the guest PC and guarded native dispatch (checked against ares); GoldenEye recovers 55 engine pages, with emission still refused |
 | 0280 | `3f737fe5` | Code reached from unknown entries uses the live `Status.FR` register layout, and discovery recovers PC-relative shared-tail entries after untaken linked branches (checked against ares). Rogue Squadron goes from a name-entry fault to flying its first mission |
