@@ -1,5 +1,21 @@
 # Status
 
+## Native fragment continuations (ADR-0283)
+
+Sequential execution and call/branch continuations now advance the guest PC at
+source boundaries, splitting blocks and dispatching to independently guarded
+native alternates. Guest RA remains architectural PC+8 and tails retain the
+entering return continuation. Adjacent storage and fallback ROM bytes cannot
+supply a neighboring fragment or its delay slot. Cross-fragment slots still
+refuse until separately represented and verified.
+
+On the same222 GoldenEye engine pages, residual blockers fall432->202: direct
+132->30, unmapped104->2, straddles67->0. Coverage grows45418->46512 blocks;
+genuine unsupported slots26->42 and new table obligations remain. No executable,
+native VI/logo/title or completeness claim. Nine complete pinned-ares state
+comparisons, source/continuation mutations, boundary/fallback core contracts and
+the exact-tree gate/control receipts are described in research/ge-continuations.md.
+
 ## Verified refill source discovery (ADR-0282)
 
 Missing mapped pages can now be recovered by explicit counterfactual PC roots

@@ -1,5 +1,18 @@
 # Next
 
+## GoldenEye after sequential fragment continuations (ADR-0283)
+
+Preserve architectural advancement/RA and independently guarded native tail
+continuations. The fixed222-page source set improves432->202 residual blockers,
+with no load straddles and only2 unmapped targets. Continue first-use table repair
+and source convergence, then represent the42 cross-fragment delay slots with
+separate byte identities and guards. Do not borrow neighboring storage or fallback
+ROM words. Remaining direct30, indirect91, table21, runtime-body8, callbacks7 and
+TLBWR1 require general source/closure or execution capabilities. Keep Random/Wired,
+refill/exception delivery and timing unknown until reference contracts establish
+them. No accepted GoldenEye executable or native VI/logo/title yet.
+Evidence:research/ge-continuations.md.
+
 ## GoldenEye after verified refill sources (ADR-0282)
 
 Preserve separate counterfactual/neutral protocols, actual ROM-read and completed

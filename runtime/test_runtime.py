@@ -757,6 +757,8 @@ def main():
     tlb_execution_contracts()
     from test_mapped_branches import main as mapped_branch_contracts
     mapped_branch_contracts()
+    from test_mapped_continuations import main as mapped_continuation_contracts
+    mapped_continuation_contracts()
     from test_indexed_dispatch import main as indexed_dispatch_contracts
     indexed_dispatch_contracts()
     from test_residual_dispatch import main as residual_dispatch_contracts
