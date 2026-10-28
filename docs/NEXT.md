@@ -1,5 +1,16 @@
 # Next
 
+## GoldenEye after independent mapped lifetimes (ADR-0296)
+
+Preserve full natural captures, agreeing virtual/physical offsets, independent
+source guards and proof-consumer grouping. The next measured stop is
+VI1/fault12/PC80801bbc, an MTC0 to Context(reg4), RA70000614. Establish the PTEBase
+write and read-only BadVPN provenance independently before admitting Context
+reads; do not invent reset or exception state. General refill/exception delivery
+and Random/Wired timing remain unverified. There is no initialized VI/framebuffer
+or graphics/audio task, and no logo/title claim. See ge-mapped-fragments.md.
+
+
 ## GoldenEye after native alias ownership (ADR-0294)
 
 Preserve both fixed and mapped source owners, immutable proof data, native frame
@@ -16,12 +27,9 @@ Random/Context/exception and RSP source obligations still apply. Evidence:
 research/ge-source-aliases.md.
 ## GoldenEye after native Windows oracles (ADR-0295)
 
-Recover the separately committed fragment candidate a8bd4513, renumber its
-ADR-0295 to ADR-0296, and validate it on the new base. That experiment reached
-VI1/fault12/PC80801bbc at MTC0 Context; general Context/refill/exception semantics
-remain the next runtime bucket. Keep native-game runs silent and visible and
-inspect RDRAM/framebuffer readbacks. Supported reference gates now require no WSL.
-
+Supported reference gates now execute natively without WSL. The retained mapped
+fragment experiment a8bd4513 is integrated as ADR-0296 with its source guards
+and residual dispatch scope preserved.
 
 ## GoldenEye after authenticated startup data (ADR-0293)
 

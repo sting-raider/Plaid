@@ -24,7 +24,8 @@ pub enum LoadEncoding {
     TlbRaw {
         text_size: u32,
     },
-    /// Replay-produced unchanged text, bound to its observed physical RAM.
+    /// A bounded part of replay-produced text, bound to its observed physical
+    /// RAM. The natural capture entry may lie outside the selected fragment.
     AresTlb {
         entry: GuestAddr,
         physical: u32,
@@ -116,17 +117,13 @@ impl DeclaredLoad {
             });
         }
         if let LoadEncoding::AresTlb {
-            entry,
-            physical,
-            text_size,
+            entry, physical, ..
         } = self.encoding
             && (self.source.0 != 0
                 || !physical.is_multiple_of(4)
                 || u64::from(physical) + bytes.len() as u64 > 0x800000
                 || !entry.0.is_multiple_of(4)
-                || self
-                    .linked
-                    .is_none_or(|link| entry.0.wrapping_sub(link.0) >= text_size))
+                || (0x8000_0000..0xc000_0000).contains(&entry.0))
         {
             return Err(
                 "mapped boot load needs a bounded physical source and executable replay entry"
@@ -559,13 +556,7 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
             let linked = load.linked.ok_or("mapped boot load lacks virtual link")?;
             let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
             let capture = crate::ares_boot::execute(&rom, entry.0)?;
-            if capture.destination != linked.0
-                || capture.physical_start != Some(physical)
-                || capture.bytes.len() != size
-            {
-                return Err("mapped boot load differs from replayed mapping/source extent".into());
-            }
-            capture.bytes
+            capture.mapped_slice(linked.0, physical, load.destination.size)?
         }
     };
     if data.len() != size {

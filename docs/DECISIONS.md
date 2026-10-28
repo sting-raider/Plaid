@@ -8723,6 +8723,29 @@ GoldenEye discharges1678 initial fixed protection conflicts, advancing from
 VI0/fault3/PC800004b4 to VI0-1/fault2/PC80920a04 at a decompression store800411c0.
 The large source's lifetime guard is retained; no logo/title is claimed. See
 research/ge-source-aliases.md. No upstream implementation body was copied.
+
+
+## ADR-0296: Bind mapped subranges of complete natural captures independently
+
+A replayed mapped declaration may extract a bounded aligned interval from its
+complete natural source, retaining its original capture anchor. Its virtual
+and physical offsets must agree. Equal bytes at another physical address,
+fixed captures, empty/overflowing or out-of-source ranges refuse.
+
+The native build partitions large wholly executable mapped sources at4KiB
+boundaries, preserving complete host bodies and every known table/tail-cell
+input with its consuming transfer. Missing consumer metadata suppresses cuts;
+ambiguous source declarations cannot select placement. Rediscovery recomputes
+identities and proofs, and independent runtime content/mapping/generation/frame
+guards remain mandatory. Synthetic composition/identity/bounds/policy contracts
+and retained native state/lifetime tests verify the change.
+
+GoldenEye retains zero static blockers and five residual sites while growing
+49,250->49,374 blocks. Its decompression source-write refusal is discharged;
+the next stop is VI1/fault12/PC80801bbc, MTC0 Context. General exception/refill
+state remains unknown and no logo/title is claimed. No guest execution fallback,
+upstream implementation body or game-specific exception is introduced.
+Evidence: research/ge-mapped-fragments.md.
 ## ADR-0295: Run supported reference oracles directly on Windows
 
 Use the ADR-0254 MinGW build for every live ares differential caller and boot

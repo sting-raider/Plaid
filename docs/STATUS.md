@@ -1,5 +1,19 @@
 # Status
 
+## Independent replayed mapped fragments (ADR-0296)
+
+Mapped declarations may select checked virtual/physical subranges of complete
+natural captures. The build partitions large sources while keeping host bodies
+and each proof input with its consuming transfer. Every fragment retains
+independent content, mapping, generation and native-frame guards.
+
+GoldenEye grows49,250->49,374 blocks with zero static blockers and five residual
+sites. The decompression write now passes; execution stops at
+VI1/fault12/PC80801bbc (MTC0 Context), RA70000614. VI registers/framebuffer and
+graphics/audio tasks remain uninitialized. No logo/title claim. Offset/identity,
+bounds, policy/consumer negatives and retained native contracts verify the
+capability. Receipt: research/ge-mapped-fragments.md.
+
 ## Native Windows reference oracles (ADR-0295)
 
 All supported runtime/analysis reference callers execute directly on Windows.
