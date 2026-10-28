@@ -1,5 +1,16 @@
 # Status
 
+## Verified guest TLB address-exception state (ADR-0299)
+
+Sixty full-state pinned-ares comparisons and four mutations verify bounded
+kernel32 TLB exception state, nested EPC/BD preservation and vector selection.
+Unknown metadata refuses atomically; vector execution is not yet connected.
+Natural GoldenEye tracing proves fast refill first installs an invalid pair,
+then the general handler pages the engine before a later valid refill. Native
+GoldenEye remains at the prior VI0/fault3/PC80805d58 boundary; no logo/title claim.
+Evidence: research/ge-native-refill.md.
+
+
 ## Mapped host ABI callback obligations (ADR-0298)
 
 Direct virtual calls contribute every callback argument obligation of their

@@ -1,5 +1,16 @@
 # Next
 
+## After verified guest TLB address-exception state (ADR-0299)
+
+Connect authenticated lowered vectors and checked ERET retries to real native
+translation failures, retaining source/mapping/generation/frame protections.
+Establish CP0 provenance across SDK calls and context switches, plus Random/Wired
+selection. GoldenEye needs both the fast and general handlers: the first fast
+refill intentionally installs invalid EntryLo0=1/EntryLo1=41, and demand paging
+precedes the final d01f/d05f pair (physical340000/341000). Never preload that mapping.
+The state helper alone does not advance native execution. See ge-native-refill.md.
+
+
 ## After mapped host ABI callback obligations (ADR-0298)
 
 The next stop is the unmapped engine fetch7f000bd0 at VI0/fault3/PC80805d58.

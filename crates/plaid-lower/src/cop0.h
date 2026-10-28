@@ -11,15 +11,20 @@ static inline int plaid_cp0_read(plaid_state *s, u32 reg, u64 *v, u32 pc) {
   switch (reg) {
   case 0: *v = s->cp0_index; break;
   case 2: case 3: *v = s->cp0_tlb.lo[reg - 2]; break;
-  /* A Context write establishes PTEBase only, never read-only BadVPN.
-     Reset/exception provenance is outside this bounded write contract. */
-  case 4: return plaid_fault(s, pc, 12);
+  case 4:
+    if (!(s->cp0_readonly_known & (1u << 4))) return plaid_fault(s, pc, 12);
+    *v = s->cp0_context; break;
   case 5: *v = s->cp0_tlb.mask; break;
   case 6: *v = s->cp0_wired; break;
+  case 8: *v = s->cp0_badvaddr; break;
   case 10: *v = s->cp0_entryhi; break;
+  case 13: *v = s->cp0_cause; break;
   case 14: *v = s->cp0_epc; break;
   case 18: *v = s->cp0_watchlo; break;
   case 19: *v = 0; break;
+  case 20:
+    if (!(s->cp0_readonly_known & (1u << 20))) return plaid_fault(s, pc, 12);
+    *v = s->cp0_xcontext; break;
   case 28: *v = s->cp0_taglo; break;
   case 29: *v = s->cp0_taghi; break;
   case 30: *v = s->cp0_error_epc; break;
@@ -45,6 +50,9 @@ static inline int plaid_cp0_write(plaid_state *s, u32 reg, u64 v, u32 pc) {
     if (v & 3u) return plaid_fault(s, pc, 12);
     s->cp0_watchlo = (u32)v & 0xfffffff8u; break;
   case 19: break;
+  case 20:
+    s->cp0_xcontext = (s->cp0_xcontext & 0x1fffffff0ull) | (v & 0xfffffffe00000000ull);
+    break;
   /* TagLo/TagHi feed CACHE Index Store Tag only (ADR-0259) */
   case 28: s->cp0_taglo = (u32)v & 0x0fffffc0u; break;
   case 29: s->cp0_taghi = 0; break;
@@ -68,6 +76,38 @@ static inline int plaid_cp0_write(plaid_state *s, u32 reg, u64 v, u32 pc) {
   default: return plaid_fault(s, pc, 12);
   }
   s->cp0_known |= 1u << reg;
+  return 0;
+}
+/* Address exception state, independent of vector execution. Call only after
+   classifying a guest TLB miss/invalid/modification, never a source refusal.
+   The bounded native address model is sign-extended 32-bit kernel mode. */
+static inline int plaid_cp0_tlb_exception(plaid_state *s, u64 va, u32 pc,
+                                         int delay, u32 code, int miss, u32 *vector) {
+  const u32 required = (1u << 4) | (1u << 10) | (1u << 13) | (1u << 20);
+  u32 status = s->cp0_status, cause;
+  if (plaid_cp0_kernel(s, pc)) return 1;
+  if ((s->cp0_known & required) != required || (status & 0xe0u) ||
+      va != SX32(va) || (pc & 3u) || (delay != 0 && delay != 1) ||
+      code < 1 || code > 3 || (miss && code == 1) || (miss != 0 && miss != 1) ||
+      ((status & 2u) && !(s->cp0_known & (1u << 14))))
+    return plaid_fault(s, pc, 12);
+  cause = (s->cp0_cause & 0x8000ff00u) | (code << 2);
+  if (!(status & 2u)) {
+    s->cp0_epc = SX32(pc - (delay ? 4u : 0u));
+    cause = (cause & ~0x80000000u) | (delay ? 0x80000000u : 0);
+  }
+  s->cp0_badvaddr = va;
+  s->cp0_entryhi = (s->cp0_entryhi & 255u) | (va & 0xc00000ffffffe000ull);
+  s->cp0_context = (s->cp0_context & 0xffffffffff800000ull) | ((va >> 9) & 0x7ffff0ull);
+  s->cp0_xcontext = (s->cp0_xcontext & 0xfffffffe00000000ull) |
+                    ((va >> 9) & 0x7ffffff0ull) | ((va >> 31) & 0x180000000ull);
+  s->cp0_cause = cause;
+  s->cp0_status = status | 2u;
+  s->cp0_known |= (1u << 8) | (1u << 14);
+  s->cp0_readonly_known |= (1u << 4) | (1u << 20);
+  *vector = (status & 0x00400000u ? 0xbfc00200u : 0x80000000u) +
+            (miss && !(status & 2u) ? 0 : 0x180u);
+  s->pc = *vector;
   return 0;
 }
 /* Both architectural writes share staging normalization and source guards. */

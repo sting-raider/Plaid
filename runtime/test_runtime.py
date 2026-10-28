@@ -804,6 +804,8 @@ def main():
     cop0_contracts()
     from test_context import main as context_contracts
     context_contracts()
+    from test_tlb_exceptions import main as tlb_exception_contracts
+    tlb_exception_contracts()
     from test_eret import main as eret_contracts
     eret_contracts()
     from test_fr import main as fr_contracts
