@@ -12,16 +12,26 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'target/mapped-callback-contract'
 
 
-def main():
+def contract(mapped_callee=False):
     spec = importlib.util.spec_from_file_location('mapped_callback_asm', T.SLICE / 'run.py')
     A = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(A)
     exe = Path(os.environ.get('PLAID_EXE', ROOT / 'target/debug' / ('plaid.exe' if os.name == 'nt' else 'plaid')))
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
     original = T._module_words
+    callback = [A.addiu(A.v0, A.zero, 7), A.addu(A.v1, A.ra, A.zero), A.jr(A.ra), A.addiu(A.v0, A.v0, 3)]
+    # A direct JAL into a mapped ABI must originate in its virtual jump region.
+    # Keep the caller and callback separate entries in the first source.
+    caller = [A.addiu(A.sp, A.sp, -16), A.sw(A.ra, 12, A.sp),
+              A.lui(A.a2, T.E0 >> 16), A.ori(A.a2, A.a2, 0x40),
+              3 << 26 | (T.E1 >> 2 & 0x03ffffff), A.nop,
+              A.lw(A.ra, 12, A.sp), A.jr(A.ra), A.addiu(A.sp, A.sp, 16)]
+    caller += [A.nop] * (16 - len(caller))
+    caller[12:15] = [A.addiu(A.v0, A.zero, 99), A.jr(A.ra), A.nop]
     T._module_words = lambda A: (
-        [A.addiu(A.v0, A.zero, 7), A.addu(A.v1, A.ra, A.zero), A.jr(A.ra), A.addiu(A.v0, A.v0, 3)],
-        [A.addiu(A.v0, A.zero, 99), A.jr(A.ra), A.nop])
+        (caller + callback if mapped_callee else callback),
+        ([A.jr(A.a2), A.nop] if mapped_callee else
+         [A.addiu(A.v0, A.zero, 99), A.jr(A.ra), A.nop]))
     try:
         raw, labels, one, two = T._fixture(A)
     finally:
@@ -30,13 +40,15 @@ def main():
     marker = A.jalr(A.ra, A.t9).to_bytes(4, 'big')
     assert raw.count(marker) == 1
     at = raw.index(marker)
-    raw[at - 4:at] = A.lui(A.a2, T.E0 >> 16).to_bytes(4, 'big')
-    raw[at:at + 4] = (3 << 26 | (labels['leaf'] >> 2 & 0x03ffffff)).to_bytes(4, 'big')
+    callee = T.E1 if mapped_callee else labels['leaf']
+    if not mapped_callee:
+        raw[at - 4:at] = A.lui(A.a2, T.E0 >> 16).to_bytes(4, 'big')
+        raw[at:at + 4] = (3 << 26 | (callee >> 2 & 0x03ffffff)).to_bytes(4, 'big')
     pos = labels['leaf'] - T.BASE
     raw[pos:pos + 4] = A.jr(A.a2).to_bytes(4, 'big')
     OUT.mkdir(parents=True, exist_ok=True)
     for alternate in (False, True):
-        directory = OUT / ('alternates' if alternate else 'single')
+        directory = OUT / (('mapped-callee-' if mapped_callee else '') + ('alternates' if alternate else 'single'))
         directory.mkdir(exist_ok=True)
         program = directory / 'program.bin'
         program.write_bytes(raw)
@@ -49,14 +61,22 @@ def main():
             rom=hex(0x1000 + labels[label] - T.BASE), encoding='tlb_raw', slot=True,
             text_size=hex(len(words) * 4)) for v, words, label in
             [(T.E0, one, 'module0'), (T.E1, two, 'module1')]]
+        if mapped_callee:
+            caller_source = declarations[0]
+            declarations = [dict(caller_source, size='0x40', text_size='0x40'),
+                            dict(caller_source, destination=hex(T.E0 + 0x40), size='0x10', text_size='0x10',
+                                 rom=hex(int(caller_source['rom'], 0) + 0x40)), declarations[1]]
         if alternate:
-            declarations.append(dict(declarations[1], destination=hex(T.E0)))
+            declarations.append(dict(declarations[1], rom=hex(0x1000 + labels['module0'] - T.BASE + 0x30),
+                                     size='0xc', text_size='0xc') if mapped_callee else
+                                dict(declarations[-1], destination=hex(T.E0)))
         loads = directory / 'loads.json'
         loads.write_text(json.dumps(dict(format='plaid-loads-v0', source='synthetic mapped callback sources', loads=declarations)))
         runtime = directory / 'runtime.json'
-        runtime.write_text(json.dumps(dict(format='plaid-runtime-functions-v0', source='synthetic callback ABI', functions=[
-            dict(entry=hex(labels['map']), name='map', callbacks=[]),
-            dict(entry=hex(labels['leaf']), name='invoke', callbacks=['a2'])])))
+        functions = [dict(entry=hex(labels['map']), name='map', callbacks=[])]
+        if not mapped_callee:
+            functions.append(dict(entry=hex(callee), name='invoke', callbacks=['a2']))
+        runtime.write_text(json.dumps(dict(format='plaid-runtime-functions-v0', source='synthetic callback ABI', functions=functions)))
         mapping, native = directory / 'map.json', directory / 'native.c'
         def plaid(*args):
             result = subprocess.run([str(exe), *map(str, args)], capture_output=True, text=True)
@@ -64,13 +84,22 @@ def main():
             return result
         plaid('discover', source, '0x1000', hex(T.BASE), hex(len(raw)), hex(T.BASE), mapping, runtime,
               '--loads', loads, '--address-taken')
+        if mapped_callee:
+            document = json.loads(mapping.read_text())
+            placed = next(load['destination']['start'] for context in document['load_images'].values()
+                          for load in context['loads'] if load.get('linked') == T.E1)
+            functions.append(dict(entry=hex(placed), name='invoke', callbacks=['a2'], size=len(two) * 4))
+            runtime.write_text(json.dumps(dict(format='plaid-runtime-functions-v0', source='synthetic placed callback ABI', functions=functions)))
+            plaid('discover', source, '0x1000', hex(T.BASE), hex(len(raw)), hex(T.BASE), mapping, runtime,
+                  '--loads', loads, '--address-taken')
         if alternate:
             original_map = mapping.read_text()
             incomplete = json.loads(original_map)
             sources = next(iter(incomplete['load_images'].values()))['loads']
-            entries = [load['destination']['start'] for load in sources if load.get('linked') == T.E0]
+            entries = [load['destination']['start'] for load in sources if load.get('linked') == T.E0 + (0x40 if mapped_callee else 0)]
             assert len(entries) == 2
-            incomplete['blocks'] = [b for b in incomplete['blocks'] if b['start']['pc'] != entries[-1]]
+            missing = entries[-1]
+            incomplete['blocks'] = [b for b in incomplete['blocks'] if b['start']['pc'] != missing]
             try:
                 mapping.write_text(json.dumps(incomplete))
                 report = json.loads(plaid('solve', source, mapping, '--residual-dispatch').stdout)
@@ -89,6 +118,8 @@ int plaid_rt_invoke(plaid_state *s) {
   return plaid_enter(s, (u32)s->r[6], s->r[31]);
 }
 '''
+        if mapped_callee:
+            helper = helper.replace('0x200000 +', '0x200040 +')
         (directory / 'harness.c').write_text(prefix + helper + f'''int main(int argc, char **argv) {{
   static plaid_state s;
   damage = argc > 1 ? argv[1][0] - '0' : 0;
@@ -114,7 +145,8 @@ int plaid_rt_invoke(plaid_state *s) {
             bad = subprocess.run([str(binary), str(damage)], capture_output=True, text=True, timeout=30,
                                  env={**os.environ, 'SDL_AUDIODRIVER': 'dummy'})
             result = json.loads(bad.stdout)
-            assert bad.returncode == 6 and result == dict(fault=3, fault_pc=1, v0=0), bad.stdout
+            expected_fault = dict(fault=2, fault_pc=0x80000000, v0=0) if mapped_callee and damage == 3 else dict(fault=3, fault_pc=1, v0=0)
+            assert bad.returncode == 6 and result == expected_fault, bad.stdout
             refusals.append(dict(damage=damage, result=result))
         (directory / 'refusal.json').write_text(json.dumps(refusals, indent=2))
         if not alternate:
@@ -130,7 +162,12 @@ int plaid_rt_invoke(plaid_state *s) {
                 assert json.loads(bad.stdout)['regs'][2] == 10
             finally:
                 native.write_text(generated)
-    print('PASS mapped callbacks: two full-state pinned-ares matches, independent alternate selection and entry/interior corruption, missing mapping and non-entry refusal before guest effects; removed-source-guard mutation detected')
+    print(f'PASS mapped callbacks ({"mapped" if mapped_callee else "fixed"} callee): two full-state pinned-ares matches, independent alternate selection and entry/interior corruption, missing mapping and non-entry refusal before guest effects; removed-source-guard mutation detected')
+
+
+def main():
+    contract()
+    contract(True)
 
 
 if __name__ == '__main__':

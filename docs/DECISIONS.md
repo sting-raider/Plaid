@@ -8771,3 +8771,29 @@ into native game artifacts. Existing ISC/GPL reference notices remain intact.
 See `research/windows-oracles.md` for baseline, equivalence and validation receipts.
 The final exact-tree runtime timing is recorded in the landing commit message
 and local gate receipt; no WSL distribution may start during that gate.
+
+
+## ADR-0297: Accept Context writes without inventing read-only state
+
+Native privileged MTC0/DMTC0 preserve Context.BadVPN while updating PTEBase
+bits23..63, with reserved low bits zero, as the pinned interpreter does. The
+written value is retained in native state; Context reads remain fail-closed
+because neither a register write nor an unknown reset establishes BadVPN.
+Existing host-boundary staging invalidation applies. Eight full-state oracle
+comparisons, explicit independent metadata seeds, atomic read/privilege refusal
+and an unmasked-write mutation verify this bounded capability. General
+Context reads, exception delivery and Random timing require separate contracts.
+See research/ge-context.md. No upstream implementation body was copied.
+
+
+## ADR-0298: Enumerate callbacks of mapped runtime ABI callees
+
+A virtual direct call or tail jump contributes callback argument obligations
+from all declared host ABI sources that its executable alias can select.
+Project only matching image/generation sources, union argument registers and
+retain unresolved callback blockers. The existing residual SDK-thread exception
+requires every ABI consuming the argument to be osCreateThread. Index the small
+ABI set once per pass. Native dispatch still requires verified source bindings
+and accepts only lowered entries; strict closure is not relaxed. Four full-state
+oracle comparisons and identity/alternate/source/mapping refusal contracts
+verify the capability. See research/ge-mapped-abi-callbacks.md.

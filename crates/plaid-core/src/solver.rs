@@ -934,7 +934,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 })
             }) {
                 if scope == Scope::DeclaredStaticImagesGuardedRamResidualDispatch
-                    && crate::callbacks::residual_thread_entry(map, &c)
+                    && crate::callbacks::residual_thread_entry(map, image, &c)
                 {
                     residual_sites.insert(c.site.clone());
                     continue;

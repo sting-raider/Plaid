@@ -11,6 +11,9 @@ static inline int plaid_cp0_read(plaid_state *s, u32 reg, u64 *v, u32 pc) {
   switch (reg) {
   case 0: *v = s->cp0_index; break;
   case 2: case 3: *v = s->cp0_tlb.lo[reg - 2]; break;
+  /* A Context write establishes PTEBase only, never read-only BadVPN.
+     Reset/exception provenance is outside this bounded write contract. */
+  case 4: return plaid_fault(s, pc, 12);
   case 5: *v = s->cp0_tlb.mask; break;
   case 6: *v = s->cp0_wired; break;
   case 10: *v = s->cp0_entryhi; break;
@@ -29,6 +32,9 @@ static inline int plaid_cp0_write(plaid_state *s, u32 reg, u64 v, u32 pc) {
   switch (reg) {
   case 0: s->cp0_index = (u32)v & 0x8000003fu; break;
   case 2: case 3: s->cp0_tlb.lo[reg - 2] = (u32)v & 0x3fffffffu; break;
+  case 4:
+    s->cp0_context = (s->cp0_context & 0x7ffff0ull) | (v & 0xffffffffff800000ull);
+    break;
   case 5: s->cp0_tlb.mask = (u32)v & 0x01ffe000u; break;
   case 6: s->cp0_wired = (u32)v & 63u; break;
   case 10: s->cp0_entryhi = v & 0xc00000ffffffe0ffull; break;

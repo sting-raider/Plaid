@@ -42,7 +42,7 @@ typedef struct plaid_state_s {
      Boot receipts, native Status writes and SDK restores establish it. */
   u32 fr_mode;
   u32 cp0_known, cp0_index, cp0_wired, cp0_taglo, cp0_taghi, cp0_watchlo;
-  u64 cp0_entryhi, cp0_epc, cp0_error_epc; plaid_tlb_entry cp0_tlb;
+  u64 cp0_entryhi, cp0_epc, cp0_error_epc, cp0_context; plaid_tlb_entry cp0_tlb;
   u8 ram[PLAID_RAM_SIZE];
   /* The VR4300 D-cache as pinned ares models it (ADR-0183): 512 direct-mapped
      16-byte lines indexed by virtual address bits 4-12; dtag holds a resident
@@ -2085,7 +2085,7 @@ pub fn lower_c_parts(
         .iter()
         .any(|c| {
             report.residual_sites.contains(&c.site)
-                && plaid_core::callbacks::residual_thread_entry(map, c)
+                && plaid_core::callbacks::residual_thread_entry(map, image, c)
         });
     let functions: BTreeSet<u32> = callees.iter().map(|f| f.pc.0).collect();
     // A residual site dispatches over every lowered entry, never beyond

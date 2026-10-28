@@ -36,18 +36,52 @@ pub struct Callback {
 
 /// The SDK scheduler enters this unproven pointer through native-only
 /// `plaid_enter`. Other runtime callbacks retain their closure obligation.
-pub fn residual_thread_entry(map: &ProgramMap, callback: &Callback) -> bool {
-    !callback.forwarded
-        && callback.target.is_none()
-        && callback.register == 6
-        && map.direct_edges.iter().any(|edge| {
-            edge.site == callback.site
-                && matches!(edge.kind, EdgeKind::Call | EdgeKind::Jump)
-                && map
-                    .runtime_functions
-                    .get(&edge.target)
-                    .is_some_and(|f| f.name == "osCreateThread" && f.callbacks.contains(&6))
-        })
+pub fn residual_thread_entry(map: &ProgramMap, image: &CodeImage, callback: &Callback) -> bool {
+    if callback.forwarded || callback.target.is_some() || callback.register != 6 {
+        return false;
+    }
+    let callees = runtime_callees(map, image);
+    map.direct_edges.iter().any(|edge| {
+        edge.site == callback.site && matches!(edge.kind, EdgeKind::Call | EdgeKind::Jump) && {
+            let functions: Vec<_> = callees
+                .get(&edge.target)
+                .into_iter()
+                .flatten()
+                .filter(|f| f.callbacks.contains(&callback.register))
+                .collect();
+            !functions.is_empty() && functions.iter().all(|f| f.name == "osCreateThread")
+        }
+    })
+}
+
+/// A virtual transfer can select any independently guarded placed source.
+/// Every declared ABI that can consume this argument contributes an obligation.
+fn runtime_callees<'a>(
+    map: &'a ProgramMap,
+    image: &CodeImage,
+) -> BTreeMap<CodeAddress, Vec<&'a RuntimeFunction>> {
+    let mut out: BTreeMap<CodeAddress, Vec<_>> = BTreeMap::new();
+    // Index the small ABI set once, rather than scanning every slot for every
+    // direct edge on each discovery iteration.
+    for (address, function) in &map.runtime_functions {
+        if function.callbacks.is_empty() {
+            continue;
+        }
+        out.entry(address.clone()).or_default().push(function);
+        if address.image != image.base.image || address.generation != image.base.generation {
+            continue;
+        }
+        let linked = image.linked_pc(address.pc);
+        if linked != address.pc && image.slot_copies(linked.0).contains(&address.pc.0) {
+            out.entry(CodeAddress {
+                pc: linked,
+                ..address.clone()
+            })
+            .or_default()
+            .push(function);
+        }
+    }
+    out
 }
 
 /// Value of `register` when control reaches the callee of the direct transfer
@@ -202,17 +236,22 @@ pub fn callbacks(map: &ProgramMap, image: &CodeImage) -> BTreeSet<Callback> {
     let mut out = BTreeSet::new();
     let mut wrappers = BTreeSet::new();
     let index = MapIndex::new(map);
+    let callees = runtime_callees(map, image);
     for edge in &map.direct_edges {
-        let Some(f) = map.runtime_functions.get(&edge.target) else {
-            continue;
-        };
         if !matches!(edge.kind, EdgeKind::Call | EdgeKind::Jump)
             || edge.site.image != image.base.image
             || edge.site.generation != image.base.generation
         {
             continue;
         }
-        for &register in &f.callbacks {
+        let Some(functions) = callees.get(&edge.target) else {
+            continue;
+        };
+        let registers: BTreeSet<_> = functions
+            .iter()
+            .flat_map(|f| f.callbacks.iter().copied())
+            .collect();
+        for register in registers {
             values(
                 &index,
                 image,
@@ -262,4 +301,113 @@ pub fn targets(map: &ProgramMap, image: &CodeImage) -> BTreeSet<CodeAddress> {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture() -> (ProgramMap, CodeImage, Callback) {
+        let image = CodeImage {
+            base: CodeAddress {
+                pc: GuestAddr(0x80000000),
+                image: "source".into(),
+                generation: 0,
+            },
+            words: vec![0; 256],
+            rom_offset: None,
+            physical_start: None,
+            holes: vec![],
+            slots: [0x80000100, 0x80000200]
+                .into_iter()
+                .map(|pc| {
+                    (
+                        GuestRange {
+                            start: GuestAddr(pc),
+                            size: 16,
+                        },
+                        0x60000000,
+                        16,
+                    )
+                })
+                .collect(),
+        };
+        let mut map = ProgramMap::new(RomIdentity {
+            sha256: "a".repeat(64),
+            size: 4096,
+        });
+        for pc in [0x80000100, 0x80000200] {
+            map.runtime_functions.insert(
+                image.address(GuestAddr(pc)),
+                RuntimeFunction {
+                    name: "osCreateThread".into(),
+                    evidence: Default::default(),
+                    source_size: Some(4),
+                    callbacks: vec![6],
+                    status_global: None,
+                    eeprom_timer: None,
+                },
+            );
+        }
+        let site = image.address(GuestAddr(0x80000004));
+        map.direct_edges.insert(DirectEdge {
+            site: site.clone(),
+            target: image.address(GuestAddr(0x60000000)),
+            kind: EdgeKind::Call,
+            delay_slot: DelaySlot::Always,
+            evidence: Default::default(),
+        });
+        (
+            map,
+            image,
+            Callback {
+                site,
+                register: 6,
+                target: None,
+                forwarded: false,
+            },
+        )
+    }
+
+    #[test]
+    fn every_mapped_abi_must_allow_the_residual_thread_contract() {
+        let (mut map, image, mut callback) = fixture();
+        assert!(residual_thread_entry(&map, &image, &callback));
+        let alternate = image.address(GuestAddr(0x80000200));
+        map.runtime_functions.get_mut(&alternate).unwrap().name = "invoke".into();
+        assert!(!residual_thread_entry(&map, &image, &callback));
+        // A separate register's obligation must also survive the alias union.
+        map.runtime_functions.get_mut(&alternate).unwrap().callbacks = vec![4];
+        let lookup = runtime_callees(&map, &image);
+        let registers: BTreeSet<_> = lookup[&image.address(GuestAddr(0x60000000))]
+            .iter()
+            .flat_map(|f| f.callbacks.iter().copied())
+            .collect();
+        assert_eq!(registers, BTreeSet::from([4, 6]));
+        callback.register = 4;
+        assert!(!residual_thread_entry(&map, &image, &callback));
+    }
+
+    #[test]
+    fn callback_abi_aliases_require_matching_source_identity_and_executable_text() {
+        let (mut map, mut image, callback) = fixture();
+        let original = map.runtime_functions.clone();
+        map.runtime_functions.clear();
+        for (mut address, function) in original.clone() {
+            address.generation += 1;
+            map.runtime_functions.insert(address, function);
+        }
+        assert!(!residual_thread_entry(&map, &image, &callback));
+        map.runtime_functions.clear();
+        for (mut address, function) in original.clone() {
+            address.image = "another-source".into();
+            map.runtime_functions.insert(address, function);
+        }
+        assert!(!residual_thread_entry(&map, &image, &callback));
+        map.runtime_functions = original;
+        for (_, _, text) in &mut image.slots {
+            *text = 0;
+        }
+        assert!(!residual_thread_entry(&map, &image, &callback));
+    }
 }
