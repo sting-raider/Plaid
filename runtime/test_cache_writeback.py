@@ -1,4 +1,8 @@
 """SDK whole-cache writeback invalidates; partial hit writeback keeps clean lines."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import ares_oracle
 import json
 import os
 import shutil
@@ -24,11 +28,8 @@ def run(exe, cc, T):
     stop=next(row for row in rows if 'stop' in row)
     assert native.returncode==0 and stop['fault']==0 and stop['stop']=='exit',(native.stdout,native.stderr)
     actual=next(row['words'] for row in rows if 'dump' in row)
-    oracle=T.ROOT/'target/native-slice/oracle/oracle'
+    oracle=ares_oracle.default()
     args=[str(oracle),str(out/'cache-writeback.bin'),hex(A.EXIT)]
-    if os.name=='nt':
-        def linux(p):return subprocess.check_output(['wsl','-d','Ubuntu','--exec','wslpath','-a',str(p)],text=True).strip()
-        args=['wsl','-d','Ubuntu','--exec',linux(oracle),linux(out/'cache-writeback.bin'),hex(A.EXIT)]
     reference=subprocess.run(args,capture_output=True,text=True,timeout=120)
     assert reference.returncode==0,(reference.stdout,reference.stderr)
     expected=json.loads(reference.stdout)

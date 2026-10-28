@@ -1,11 +1,14 @@
 """Statically untaken branches preserve link, delay and complete CPU state."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import ares_oracle
 import hashlib
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
-from test_cop0 import A, linux
+from test_cop0 import A
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'target/branch-path-contract'
@@ -30,12 +33,11 @@ def main():
     items += [*A.DONE, 'data', 0x7677696e]
     raw = OUT / 'program.bin'
     raw.write_bytes(A.assemble(items))
-    oracle = ROOT / 'target/native-slice/oracle/oracle'
+    oracle = ares_oracle.default()
     built = json.loads((oracle.parent / 'build.json').read_text())
     assert built['revision'] == A.builder().REV
     assert built['driver'] == hashlib.sha256((ROOT / 'spikes/096-native-slice/driver.cpp').read_bytes()).hexdigest()
-    command = (['wsl', '-d', 'Ubuntu', '--exec', linux(oracle), linux(raw), hex(A.EXIT)]
-               if os.name == 'nt' else [str(oracle), str(raw), hex(A.EXIT)])
+    command = [str(oracle), str(raw), hex(A.EXIT)]
     expected = json.loads(subprocess.check_output(command, text=True, timeout=120))
     source = OUT / 'native.c'
     subprocess.run([str(exe), 'lower-c', str(raw), hex(A.BASE), hex(A.BASE), hex(A.EXIT), str(source)], check=True)

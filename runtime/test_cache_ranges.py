@@ -1,4 +1,8 @@
 """Signed lengths, line bounds and threshold behavior of D-cache runtime calls."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import ares_oracle
 import json
 import os
 import shutil
@@ -91,13 +95,9 @@ def _run(exe, cc, T, label, name, function, cases, *, probe='uncached', expect_f
     rows = [json.loads(line) for line in run.stdout.splitlines() if line.startswith('{')]
     stop = next(row for row in rows if 'stop' in row)
     words = next(row['words'] for row in rows if 'dump' in row)
-    oracle = T.ROOT / 'target/native-slice/oracle/oracle'
+    oracle = ares_oracle.default()
     image = T.OUT / f'{label}.bin'
     args = [str(oracle), str(image), hex(T.A.EXIT)]
-    if os.name == 'nt':
-        def linux(path):
-            return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(path)], text=True).strip()
-        args = ['wsl', '-d', 'Ubuntu', '--exec', linux(oracle), linux(image), hex(T.A.EXIT)]
     reference = subprocess.run(args, capture_output=True, text=True, timeout=120)
     assert reference.returncode == 0, (reference.stdout, reference.stderr)
     expected = json.loads(reference.stdout)

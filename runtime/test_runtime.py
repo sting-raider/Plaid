@@ -763,6 +763,8 @@ def main():
     import test_rsp_rom
     test_rsp_rom.run(exe, cc, sys.modules[__name__])
     rsp_state_abi(exe, cc)
+    from test_rsp_oracle import main as rsp_oracle_contract
+    rsp_oracle_contract()
     rsp_completion(exe, cc)
     rsp_graphics(exe, cc)
     import test_rsp_dirty

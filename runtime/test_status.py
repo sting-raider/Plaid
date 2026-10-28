@@ -1,8 +1,11 @@
 """SDK mask/Status words against independent COP0 + MI operations on pinned ares."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import ares_oracle
 import hashlib
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 
@@ -22,14 +25,7 @@ def run(exe, cc, T):
     subprocess.run([cc, '-O2', '-std=gnu11', '-Wall', '-Werror', '-Wno-unused-label', '-Wno-unused-function',
                     '-DPLAID_SAFEPOINTS', '-DPLAID_LOWERED="status-fixture.c"', '-I', str(out),
                     str(T.ROOT / 'runtime/test_status.c'), '-pthread', '-o', str(native)], check=True)
-    oracle = T.ROOT / 'target/native-slice/oracle/oracle'
-    def linux(path):
-        return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(path)], text=True).strip()
-    if not oracle.exists():
-        if os.name == 'nt':
-            subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(T.ROOT / 'spikes/096-native-slice/run.py'), '--oracle', '--build-only'], check=True)
-        else:
-            A.builder().build(T.ROOT / 'spikes/096-native-slice/driver.cpp', oracle.parent)
+    oracle = ares_oracle.default()
     metadata = json.loads((oracle.parent / 'build.json').read_text())
     assert metadata['revision'] == A.builder().REV
     for key, source in [('driver', '096-native-slice'), ('fixture_driver', '003-ares-oracle')]:
@@ -39,8 +35,6 @@ def run(exe, cc, T):
     command = lambda mask: sum((2 if mask >> bit & 1 else 1) << (2 * bit) for bit in range(6))
     raw = out / 'status-reference.bin'
     oracle_args = [str(oracle), str(raw), hex(A.EXIT)]
-    if os.name == 'nt':
-        oracle_args = ['wsl', '-d', 'Ubuntu', '--exec', linux(oracle), linux(raw), hex(A.EXIT)]
     def reference_state(program, invalid=None):
         program = [A.j('reference_body'), A.nop] + [A.nop] * (0x2000 // 4 - 2) + ['reference_body'] + program
         labels = A.label_pcs(program)

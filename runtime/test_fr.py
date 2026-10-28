@@ -1,12 +1,14 @@
 """ADR-0238: COP1 control registers are independent of the FPR layout."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import ares_oracle
 import json
 import os
 import re
-from pathlib import Path
 import shutil
 import subprocess
-import sys
-from test_cop0 import A, linux
+from test_cop0 import A
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'target/fr-contract'
@@ -30,7 +32,7 @@ def fixture():
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     if '--oracle-build' in sys.argv:
-        A.builder().build(OUT / 'driver.cpp', OUT / 'oracle')
+        ares_oracle.build(OUT / 'driver.cpp', OUT / 'oracle')
         return
     exe = ROOT / 'target/debug' / ('plaid.exe' if os.name == 'nt' else 'plaid')
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
@@ -41,12 +43,8 @@ def main():
     source = source.replace('cpu.context.setMode();', 'cpu.setControlRegister(12, 0x24000000); cpu.context.setMode();')
     source = source.replace('  std::printf("]}\\n");', '  std::printf("],\\"status\\":%u}\\n", (unsigned)cpu.getControlRegister(12));')
     (OUT / 'driver.cpp').write_text(source)
-    if os.name == 'nt':
-        subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(Path(__file__)), '--oracle-build'], check=True)
-        command = ['wsl', '-d', 'Ubuntu', '--exec', linux(OUT / 'oracle/oracle'), linux(raw), hex(A.EXIT)]
-    else:
-        oracle = A.builder().build(OUT / 'driver.cpp', OUT / 'oracle')
-        command = [str(oracle), str(raw), hex(A.EXIT)]
+    oracle = ares_oracle.build(OUT / 'driver.cpp', OUT / 'oracle')
+    command = [str(oracle), str(raw), hex(A.EXIT)]
     expected = json.loads(subprocess.check_output(command, text=True, timeout=120))
     for fr0 in (False, True):
         cmd = [str(exe), 'lower-c', str(raw), hex(A.BASE), hex(A.BASE), hex(A.EXIT), str(OUT / 'native.c')]

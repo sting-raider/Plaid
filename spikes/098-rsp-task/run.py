@@ -23,7 +23,7 @@ OUT = ROOT / 'target/rsp-task'
 
 
 def builder():
-    s = importlib.util.spec_from_file_location('builder', ROOT / 'spikes/003-ares-oracle/run.py')
+    s = importlib.util.spec_from_file_location('builder', ROOT / 'scripts/ares_oracle.py')
     module = importlib.util.module_from_spec(s)
     s.loader.exec_module(module)
     return module
@@ -38,9 +38,7 @@ def state_bin(state):
 
 
 def oracle(capture):
-    exe = OUT / 'oracle/oracle'
-    if '--rebuild' in sys.argv or not exe.exists():
-        exe = builder().build(HERE / 'driver.cpp', OUT / 'oracle')
+    exe = builder().build(HERE / 'driver.cpp', OUT / 'oracle')
     run = subprocess.run([str(exe), *(str(capture / f) for f in ('before-rdram.bin', 'before-imem.bin',
                                                                   'before-dmem.bin', 'state.bin')), str(capture)],
                          capture_output=True, text=True, timeout=3600)
@@ -51,9 +49,7 @@ def oracle(capture):
 def windows(capture):
     before = json.loads((capture / 'before-state.json').read_text())
     (capture / 'state.bin').write_bytes(state_bin(before))
-    wsl = lambda p: subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(p)], text=True).strip()
-    subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', wsl(HERE / 'run.py'), wsl(capture), '--oracle',
-                    *sys.argv[2:]], check=True)
+    oracle(capture)
     mine = json.loads((capture / 'after-state.json').read_text())
     theirs = json.loads((capture / 'oracle-state.json').read_text())
     for key in ('regs', 'vu', 'vflags', 'signals', 'semaphore', 'halted', 'broken'):

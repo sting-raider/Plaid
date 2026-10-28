@@ -1,4 +1,8 @@
 """SI DMA ordering versus pinned ares: the cache operations after an SI start precede the transfer."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import ares_oracle
 import json
 import hashlib
 import os
@@ -54,15 +58,12 @@ def _run(exe, cc, T, name, terminate):
     memory = next(row['words'] for row in rows if 'dump' in row)
     if terminate:
         return memory
-    oracle = T.ROOT / 'target/native-slice/oracle/oracle'
+    oracle = ares_oracle.default()
     metadata = json.loads((oracle.parent / 'build.json').read_text())
     assert metadata['revision'] == A.builder().REV
     for key, source in [('driver', '096-native-slice'), ('fixture_driver', '003-ares-oracle')]:
         assert metadata[key] == hashlib.sha256((T.ROOT / f'spikes/{source}/driver.cpp').read_bytes()).hexdigest()
     args = [str(oracle), str(out / f'{name}.bin'), hex(A.EXIT)]
-    if os.name == 'nt':
-        def linux(p): return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(p)], text=True).strip()
-        args = ['wsl', '-d', 'Ubuntu', '--exec', linux(oracle), linux(out / f'{name}.bin'), hex(A.EXIT)]
     reference = subprocess.run(args, capture_output=True, text=True, timeout=120)
     assert reference.returncode == 0, (reference.stdout, reference.stderr)
     expected = json.loads(reference.stdout)

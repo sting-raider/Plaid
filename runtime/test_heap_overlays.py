@@ -1,5 +1,8 @@
 """Inactive relocated copies may exchange one binding; active native frames pin it."""
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import ares_oracle
 import importlib.util
 import json
 import os
@@ -86,13 +89,8 @@ def main():
         state = json.loads(run.stdout)
         if mode == 'move':
             assert run.returncode == 0 and state['regs'][16:19] == [42]*3, (mode, run.returncode, state, run.stderr)
-            oracle = ROOT / 'target/native-slice/oracle/oracle'
-            if os.name == 'nt':
-                def linux(path):
-                    return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(path)], text=True).strip()
-                reference = ['wsl', '-d', 'Ubuntu', '--exec', linux(oracle), linux(source), hex(a.EXIT)]
-            else:
-                reference = [str(oracle), str(source), hex(a.EXIT)]
+            oracle = ares_oracle.default()
+            reference = [str(oracle), str(source), hex(a.EXIT)]
             built = json.loads((oracle.parent/'build.json').read_text())
             assert built['revision'] == a.builder().REV
             ref = subprocess.run(reference, capture_output=True, text=True, timeout=120)

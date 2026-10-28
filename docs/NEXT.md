@@ -1,5 +1,18 @@
 # Next
 
+## GoldenEye after native Windows oracles (ADR-0295)
+
+Reconcile the retained ADR-0294 alias-ownership candidate e787a696 onto main and
+finish its exact-tree gate and controls. Its native startup passes all 288 source
+guards and reaches VI0-1/fault2/PC80920a04 at a decompression store, replacing the
+canonical VI0/fault3/PC800004b4 source-protection overlap. It remains unlanded.
+Then recover the separately committed fragment candidate a8bd4513, renumber its
+ADR-0295 to ADR-0296, and validate it on the new base. That experiment reached
+VI1/fault12/PC80801bbc at MTC0 Context; general Context/refill/exception semantics
+remain the next runtime bucket. Keep native-game runs silent and visible and
+inspect RDRAM/framebuffer readbacks. Supported reference gates now require no WSL.
+
+
 ## GoldenEye after authenticated startup data (ADR-0293)
 
 Preserve the full entry-time ROM-copy verification independently of discovery's

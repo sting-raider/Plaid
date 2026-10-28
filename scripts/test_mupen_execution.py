@@ -1,6 +1,6 @@
 """Execute synthetic MIPS on pinned Mupen x64 dynarec and pure interpreter.
 
-Linux needs GCC and NASM. Windows launches the Linux worker through WSL Ubuntu;
+GCC and NASM are required; Windows uses the native MinGW ABI.
 Rust artifact checks run on the calling host. No emulator frontend or game ROM.
 """
 from pathlib import Path
@@ -55,21 +55,24 @@ def worker(directory):
     directory = Path(directory)
     cc = os.environ.get("CC", "gcc")
     nasm = os.environ.get("PLAID_NASM") or shutil.which("nasm")
+    if not nasm and os.name == "nt" and Path("C:/msys64/usr/bin/nasm.exe").exists():
+        nasm = "C:/msys64/usr/bin/nasm.exe"
     if not nasm:
         candidate = ROOT / "target/reference-tools/nasm-root/usr/bin/nasm"
         if candidate.exists(): nasm = str(candidate)
     if not nasm: raise SystemExit("NASM required (set PLAID_NASM)")
     flags = ["-std=gnu99", "-O1", "-ffunction-sections", "-fdata-sections", "-fno-pie", "-DNEW_DYNAREC=NEW_DYNAREC_X64", "-DDYNAREC", "-I", str(REF / "src"), "-I", str(REF / "subprojects/md5"), "-I", str(REF / "subprojects/xxhash")]
+    if os.name == "nt": flags += ["-DWIN32"]
     definitions = directory / "definitions.o"
     subprocess.run([cc, *flags, "-c", str(REF / "src/asm_defines/asm_defines.c"), "-o", str(definitions)], check=True)
     offsets = re.findall(rb"@ASM_DEFINE (offsetof_struct_\w+) (0x[0-9a-fA-F]+)", definitions.read_bytes())
     assert offsets
     (directory / "asm_defines_nasm.h").write_text("".join(f"%define {name.decode()} ({value.decode()})\n" for name, value in sorted(offsets)))
     linkage = directory / "linkage.o"
-    subprocess.run([nasm, "-f", "elf64", "-I", str(directory) + "/", str(REF / "src/device/r4300/new_dynarec/x64/linkage_x64.asm"), "-o", str(linkage)], check=True)
+    subprocess.run([nasm, "-f", "win64" if os.name == "nt" else "elf64", *(["-DWIN64"] if os.name == "nt" else []), "-I", str(directory) + "/", str(REF / "src/device/r4300/new_dynarec/x64/linkage_x64.asm"), "-o", str(linkage)], check=True)
     sources = [ROOT / "instruments/mupen/execution_driver.c", ROOT / "instruments/mupen/execution_traps.c"]
     sources += [REF / "src" / path for path in ["device/r4300/new_dynarec/new_dynarec.c", "device/cart/cart_rom.c", "device/r4300/r4300_core.c", "device/r4300/pure_interp.c", "device/r4300/cp0.c", "device/r4300/cp1.c", "device/r4300/cp2.c", "device/r4300/tlb.c"]]
-    exe = directory / "execute"
+    exe = directory / ("execute.exe" if os.name == "nt" else "execute")
     subprocess.run([cc, *flags, *map(str, sources), str(linkage), "-no-pie", "-Wl,--gc-sections", "-lm", "-o", str(exe)], check=True)
     for scenario in SCENARIOS:
         rom = directory / f"{scenario}.z64"
@@ -95,11 +98,7 @@ def main():
             words = program(scenario)
             for offset, word in words.items(): data[64+offset:68+offset] = word.to_bytes(4, "big")
             (directory / f"{scenario}.z64").write_bytes(data)
-        if os.name == "nt":
-            def linux_path(path):
-                return subprocess.check_output(["wsl", "-d", "Ubuntu", "--exec", "wslpath", "-a", path.as_posix()], text=True).strip()
-            subprocess.run(["wsl", "-d", "Ubuntu", "--exec", "python3", linux_path(Path(__file__).resolve()), "--worker", linux_path(directory)], check=True, timeout=120)
-        else: worker(directory)
+        worker(directory)
         cargo = shutil.which("cargo") or str(Path.home() / ".cargo/bin/cargo.exe")
         for scenario in SCENARIOS:
             states = json.loads((directory / f"{scenario}-states.json").read_text())

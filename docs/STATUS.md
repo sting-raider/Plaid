@@ -1,5 +1,26 @@
 # Status
 
+## Native Windows reference oracles (ADR-0295)
+
+All supported runtime/analysis reference callers execute directly on Windows.
+The shared ares helper retains the exact pinned source, instrumentation, notices
+and build cache. Its compiler flags now match the pinned upstream requirements;
+a gated full-vector-state fixture prevents the MinGW aliasing regression.
+All 166 CPU/boot captures and 27 RSP programs match Linux byte-for-byte. Native
+Mupen CPU/device contracts and their raw state/trace comparisons also pass.
+The final exact-tree gate timing is recorded in the landing commit message and
+`research/windows-oracles.md` points to the local evidence. Historical non-gate
+WSL experiments are identified in DEVELOPMENT.md.
+
+All silent controls pass: at 30 s PM/BK/MM/SF64 are 1798 VIs, OoT 1797 and RS 1799;
+MP2 reaches Rules Land at 2697 VIs/45s and OoT save-load reaches its opening scene
+at 3596 VIs/60s. Every fault is 0. MM alone recovers 1798 VIs, so its earlier 1612
+observation is not reproduced. Framebuffer readbacks were inspected.
+
+GoldenEye ADR-0294 remains committed separately as e787a696 on
+`t3/ge-closure-r4`; it was retained while this migration took priority.
+
+
 ## Complete authenticated startup ROM data (ADR-0293)
 
 Native initialization now distinguishes the BSS-bounded analysis window from
@@ -130,7 +151,7 @@ expanding11633->19746 blocks. Unmapped obligations fall317->231 while new code
 exposes tables/indirect edges; residual total grows903->1391. Subsequent pipeline
 rounds are separate measurements. Emission remains refused; no VI/logo/title.
 The standalone silent30s retained-main MM control reaches1798VIs/fault0/PC0,
-so the earlier1612-VI result is not reproduced. Negative replay memoization
+so the earlier 1612-VI result is not reproduced. Negative replay memoization
 cuts one repeated source refusal3.688->0.093s. Contracts, limits and receipts:
 research/ge-closure.md.
 
