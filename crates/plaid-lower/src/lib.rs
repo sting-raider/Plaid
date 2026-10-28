@@ -2064,6 +2064,19 @@ pub fn lower_c_parts(
     }
     let residual: BTreeSet<u32> = residual.into_keys().collect();
 
+    let external_delays: BTreeMap<_, _> = map
+        .blocks
+        .iter()
+        .filter_map(|block| {
+            let site = image.address(GuestAddr(block.start.pc.0 + block.size - 4));
+            plaid_core::declared_loads::mapped_delay(map, image, &site)
+                .map(|delay| (site.pc.0, delay))
+        })
+        .collect();
+    let delay_entries: BTreeSet<u32> = external_delays
+        .values()
+        .flat_map(|d| d.sources.iter().map(|a| a.pc.0))
+        .collect();
     let mut code = Vec::new();
     let mut guarded = vec![OverlayGuards::default(); overlays.len()];
     for block in &map.blocks {
@@ -2089,6 +2102,12 @@ pub fn lower_c_parts(
             physical(end - 1)? + 1,
             load_of(start).map_or(-1, |l| l as i64)
         ));
+    }
+    for &entry in &delay_entries {
+        let k = ovl_of(entry).ok_or("independent slot source outside mapped text")?;
+        guarded[k]
+            .text
+            .push((entry - overlays[k].0, entry + 4 - overlays[k].0));
     }
     for (entry, function) in &map.runtime_functions {
         if let Some(k) = ovl_of(entry.pc.0) {
@@ -2229,7 +2248,12 @@ pub fn lower_c_parts(
         &layouts,
         &compared,
         &guarded,
-        &functions.iter().chain(runtime.keys()).copied().collect(),
+        &functions
+            .iter()
+            .chain(runtime.keys())
+            .chain(&delay_entries)
+            .copied()
+            .collect(),
         image,
     )?;
     // A JALR with several proven targets calls one dispatcher per target set
@@ -2417,6 +2441,26 @@ pub fn lower_c_parts(
                 )),
             }
         };
+        for block in &blocks {
+            let pc = block.start.pc.0 + block.size - 4;
+            let Some(delay) = external_delays.get(&pc) else {
+                continue;
+            };
+            let native = lowerer.simple(delay.word, delay.virtual_pc.0, None)?;
+            let cases = delay
+                .sources
+                .iter()
+                .map(|source| {
+                    let k = ovl_of(source.pc.0).expect("validated mapped source");
+                    format!("case 0x{:08x}u: k = {k}; break;", source.pc.0)
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            out += &format!(
+                "static int I_{0:08x}_{pc:08x}(plaid_state *s) {{ {native} return 0; }}\nstatic int D_{0:08x}_{pc:08x}(plaid_state *s) {{ u32 t = plaid_link(s, 0x{1:08x}u); int k, r; switch (t) {{ {cases} default: return plaid_fault(s, 0x{1:08x}u, 3); }} plaid_native_frame frame = {{0,0,0,0,0,0,k}}; plaid_text_pin(s, &frame); r = I_{0:08x}_{pc:08x}(s); plaid_text_unpin(s, &frame); return r; }}\n",
+                f.pc.0, delay.virtual_pc.0
+            );
+        }
         // A wrapper balances the pin on every exit, including faults and tails.
         let body_name = if let Some(k) = lowerer.ovl {
             out += &format!(
@@ -2497,13 +2541,16 @@ pub fn lower_c_parts(
                 } else if is_control(w) {
                     let annulled = plaid_core::discovery::branch_never_taken(w)
                         && plaid_core::discovery::decode(w, GuestAddr(pc)).is_branch_likely();
+                    let external = external_delays.contains_key(&pc);
                     let slot = if annulled {
                         String::new()
+                    } else if external {
+                        format!("if (D_{:08x}_{pc:08x}(s)) return 1;", f.pc.0)
                     } else {
                         lower(word(pc + 4)?, pc + 4)?
                     };
                     out += &format!("  {}\n", lowerer.control(w, pc, &slot)?);
-                    pc += if annulled { 4 } else { 8 };
+                    pc += if annulled || external { 4 } else { 8 };
                     transferred = true;
                     if pc != end {
                         return Err(format!("{start:08x}: block continues past its transfer"));

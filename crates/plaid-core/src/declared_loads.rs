@@ -737,6 +737,67 @@ pub fn runtime_source_range(
     })
 }
 
+/// One static native delay instruction, independently fetched from a mapped
+/// source. Slot metadata/provenance must additionally pass `verify_slots`.
+#[derive(Debug, Clone)]
+pub struct MappedDelay {
+    pub virtual_pc: GuestAddr,
+    pub word: u32,
+    pub sources: Vec<CodeAddress>,
+}
+
+pub fn mapped_delay(
+    map: &crate::program::ProgramMap,
+    image: &CodeImage,
+    branch: &CodeAddress,
+) -> Option<MappedDelay> {
+    if branch.image != image.base.image
+        || branch.generation != image.base.generation
+        || image.inline_delay_word(branch.pc).is_some()
+    {
+        return None;
+    }
+    let control = crate::discovery::decode(image.instruction_word(branch.pc)?, branch.pc);
+    if !control.has_delay_slot() {
+        return None;
+    }
+    let virtual_pc = GuestAddr(image.linked_pc(branch.pc).0.wrapping_add(4));
+    let spec = map.load_images.get(&image.base.image)?;
+    let mut sources = Vec::new();
+    let mut word = None;
+    for placed in image.slot_copies(virtual_pc.0) {
+        let load = spec
+            .loads
+            .iter()
+            .find(|l| l.destination.contains(GuestAddr(placed)))?;
+        if !load.relocatable
+            || !matches!(
+                load.encoding,
+                LoadEncoding::TlbRaw { .. } | LoadEncoding::AresTlb { .. }
+            )
+        {
+            return None;
+        }
+        let next = image.instruction_word(GuestAddr(placed))?;
+        let instruction = crate::discovery::decode(next, virtual_pc);
+        if !instruction.is_valid()
+            || instruction.has_delay_slot()
+            || instruction.is_trap()
+            || matches!(instruction.opcode_name(), "syscall" | "break" | "eret")
+            || word.is_some_and(|w| w != next)
+        {
+            return None;
+        }
+        word = Some(next);
+        sources.push(image.address(GuestAddr(placed)));
+    }
+    Some(MappedDelay {
+        virtual_pc,
+        word: word?,
+        sources,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

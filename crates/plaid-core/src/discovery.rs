@@ -37,6 +37,16 @@ impl CodeImage {
         }
         self.word(pc)
     }
+    /// A slot inside the branch's own supplied text. Analyses that require a
+    /// contiguous prefix must refuse an independently fetched delay instruction.
+    pub fn inline_delay_word(&self, branch: GuestAddr) -> Option<u32> {
+        if self.slots.iter().any(|(placed, _, text)| {
+            placed.contains(branch) && branch.0 - placed.start.0 + 4 >= *text
+        }) {
+            return None;
+        }
+        self.instruction_word(GuestAddr(branch.0.checked_add(4)?))
+    }
     /// Where code at `at` finds `address`: in a slot alternate's placed copy
     /// when `at` is in one and `address` is in its linked range (ADR-0185).
     pub fn slot_view(&self, at: GuestAddr, address: u32) -> u32 {

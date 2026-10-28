@@ -1,5 +1,20 @@
 # Next
 
+## GoldenEye after independent native delay slots (ADR-0288)
+
+Preserve separate slot source identities, mapping/content/generation checks,
+balanced source pins, architectural PC+8 and likely annulment. The unchanged
+227-page frontier has 49,241 blocks, one TLBWR blocker and five recorded residual
+transfer sites. Emission remains refused.
+
+Verify the real guest refill routine's Random/Wired selection, Context/EPC and
+exception entry. Pinned ares's sampled replacement index does not establish a
+hardware instruction clock. Wired=31 has a timing-independent singleton domain;
+unknown or wider domains must remain unknown until modeled and verified. Do not
+guess an index to remove the static blocker. Continue with a bounded native
+contract, then obtain VI/fault/PC from the stop JSON and inspect RDRAM readbacks.
+Evidence: research/ge-independent-delay.md.
+
 ## GoldenEye after mapped runtime closure (ADR-0287)
 
 Preserve virtual callback pointers, complete source identities and native

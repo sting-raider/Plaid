@@ -282,6 +282,7 @@ impl Proof<'_, '_> {
     }
 
     fn delay(&mut self, pc: GuestAddr) -> Option<()> {
+        self.image.inline_delay_word(pc)?;
         let slot = GuestAddr(pc.0.checked_add(4)?);
         let word = self.read(slot)?;
         let instruction = decode(word, slot);

@@ -80,6 +80,9 @@ fn holds_entry_ra(
         for n in 0..sizes.get(block)? / 4 {
             let pc = GuestAddr(block.pc.0.wrapping_add(4 * n));
             let word = image.word(pc)?;
+            if decode(word, pc).has_delay_slot() && image.inline_delay_word(pc).is_none() {
+                return None;
+            }
             if decode(word, pc).destination_gpr() == Some(register) {
                 if block != entry || ra_written || copies_ra(word) != Some(register) {
                     return Some(false);

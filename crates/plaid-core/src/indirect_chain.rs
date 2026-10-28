@@ -391,7 +391,7 @@ fn simulate_path(
                     }
                     if edge.delay_slot != DelaySlot::None {
                         let ds = GuestAddr(pc.0.checked_add(4)?);
-                        let slot = image.word(ds)?;
+                        let slot = image.inline_delay_word(pc)?;
                         if !scalar(slot, ds) {
                             return None;
                         }

@@ -89,6 +89,11 @@ fn pattern(map: &MapIndex, image: &CodeImage, site: &IndirectSite) -> Option<Tab
         return None;
     }
     let branch = image.word(edge.site.pc)?;
+    if decode(branch, edge.site.pc).has_delay_slot()
+        && image.inline_delay_word(edge.site.pc).is_none()
+    {
+        return None;
+    }
     // The index scale is the nearest SLL before the add in the dispatch block
     // (GCC may schedule the table base LUI between them) or the delay slot of
     // a non-likely guard branch, which runs on both paths.
@@ -964,6 +969,11 @@ impl Walk<'_, '_> {
         Some(word)
     }
 
+    fn delay(&mut self, pc: u32) -> Option<u32> {
+        self.image.inline_delay_word(GuestAddr(pc))?;
+        self.word(pc.checked_add(4)?)
+    }
+
     /// Walk back from `end` (exclusive) to the start of the block holding
     /// `anchor`, then into every predecessor; `path` holds the block starts
     /// on this path. Nothing may enter between that start and `anchor`
@@ -1046,7 +1056,7 @@ impl Walk<'_, '_> {
             }
             let mut incoming = need.clone();
             let slot = GuestAddr(site.0.checked_add(4)?);
-            incoming.step(slot, self.word(slot.0)?)?;
+            incoming.step(slot, self.delay(site.0)?)?;
             if incoming.done() {
                 self.finish(&incoming)?;
             } else {
@@ -1099,7 +1109,7 @@ impl Walk<'_, '_> {
                     self.runtime.extend(effect.runtime.clone());
                     self.seen.extend(&effect.words);
                 }
-                let slot = self.word(site + 4)?;
+                let slot = self.delay(site)?;
                 need.step(GuestAddr(site + 4), slot)?;
                 if need.done() {
                     self.finish(&need)?;
@@ -1128,7 +1138,7 @@ impl Walk<'_, '_> {
                 return None;
             }
             if edge.delay_slot != DelaySlot::None {
-                let slot = self.word(site + 4)?;
+                let slot = self.delay(site)?;
                 need.step(GuestAddr(site + 4), slot)?;
             }
             if need.done() {

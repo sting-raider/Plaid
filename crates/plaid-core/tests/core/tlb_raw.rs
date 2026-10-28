@@ -95,6 +95,86 @@ fn slot_call_prefix_stops_at_its_source_boundary() {
 }
 
 #[test]
+fn independent_delay_sources_preserve_identity_and_refuse_ambiguous_words() {
+    let (mut bytes, mut spec) = fixture();
+    spec.loads[0].destination.size = 0x20;
+    spec.loads[1].linked = Some(GuestAddr(0xe000_0020));
+    bytes[0x5c..0x60].copy_from_slice(&0x1000_0000u32.to_be_bytes());
+    bytes[0x80..0x84].copy_from_slice(&0x2402_0007u32.to_be_bytes());
+    let make = |bytes: &[u8], spec: &LoadImage| {
+        let (_, image) = compose(bytes, spec).unwrap();
+        assert!(verify_slots(&image, Some(spec)));
+        let mut map = direct_cfg(
+            RomIdentity {
+                sha256: "00".repeat(32),
+                size: bytes.len() as u64,
+            },
+            &image,
+            &[GuestAddr(0x8001_001c)],
+            100,
+        )
+        .unwrap()
+        .map;
+        map.load_images
+            .insert(image.base.image.clone(), spec.clone());
+        (map, image)
+    };
+    let (map, image) = make(&bytes, &spec);
+    let branch = image.address(GuestAddr(0x8001_001c));
+    let get = |map: &plaid_core::program::ProgramMap, image: &plaid_core::discovery::CodeImage| {
+        plaid_core::declared_loads::mapped_delay(map, image, &image.address(branch.pc))
+    };
+    let delay = get(&map, &image).unwrap();
+    assert_eq!(delay.virtual_pc, GuestAddr(0xe000_0020));
+    assert_eq!(delay.word, 0x2402_0007);
+    assert_eq!(delay.sources, vec![image.address(GuestAddr(0x8001_0040))]);
+    for altered in [
+        plaid_core::program::CodeAddress {
+            image: "ff".repeat(32),
+            ..branch.clone()
+        },
+        plaid_core::program::CodeAddress {
+            generation: 1,
+            ..branch.clone()
+        },
+    ] {
+        assert!(plaid_core::declared_loads::mapped_delay(&map, &image, &altered).is_none());
+    }
+    for word in [0x7000_0000u32, 0x03e0_0008, 0x0000_000d, 0x4200_0018] {
+        let mut changed = bytes.clone();
+        changed[0x80..0x84].copy_from_slice(&word.to_be_bytes());
+        let (map, image) = make(&changed, &spec);
+        assert!(get(&map, &image).is_none());
+    }
+    let mut incomplete = map.clone();
+    incomplete.load_images.clear();
+    assert!(get(&incomplete, &image).is_none());
+    let mut unbound = map.clone();
+    unbound
+        .load_images
+        .get_mut(&image.base.image)
+        .unwrap()
+        .loads[1]
+        .relocatable = false;
+    assert!(get(&unbound, &image).is_none());
+    let mut missing = image.clone();
+    missing.holes.push(GuestRange {
+        start: GuestAddr(0x8001_0040),
+        size: 4,
+    });
+    assert!(get(&map, &missing).is_none());
+    let mut alternate = spec.loads[1].clone();
+    alternate.destination.start = GuestAddr(0x8001_0050);
+    spec.loads.push(alternate);
+    let (map, image) = make(&bytes, &spec);
+    assert_eq!(get(&map, &image).unwrap().sources.len(), 2);
+    spec.loads[2].source = RomOffset(0x90);
+    bytes.extend(0x2442_0007u32.to_be_bytes().repeat(4));
+    let (map, image) = make(&bytes, &spec);
+    assert!(get(&map, &image).is_none());
+}
+
+#[test]
 fn return_certificates_follow_the_callers_source_boundary() {
     let (mut bytes, mut spec) = fixture();
     bytes[0x40..0x80].fill(0);

@@ -554,6 +554,30 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             );
         }
     }
+    let mut external_delays = BTreeMap::new();
+    if scope.guarded() {
+        for image in images
+            .iter()
+            .filter(|i| valid_slots.contains(&i.base.image))
+        {
+            for block in map.blocks.iter().filter(|b| {
+                b.start.image == image.base.image && b.start.generation == image.base.generation
+            }) {
+                let pc = image.address(crate::GuestAddr(block.start.pc.0 + block.size - 4));
+                if let Some(delay) = crate::declared_loads::mapped_delay(map, image, &pc)
+                    && allowed_static_effect(delay.word, delay.virtual_pc, true)
+                {
+                    external_delays.insert(pc, delay);
+                }
+            }
+        }
+    }
+    let checked_delay = |u: &Unresolved| {
+        u.kind == "unsupported_delay_slot"
+            && u.site
+                .as_ref()
+                .is_some_and(|a| external_delays.contains_key(a))
+    };
     // A call into a slot (ADR-0185) lands on whichever alternate RAM holds:
     // some alternate must have a block there; the binding verifies the one
     // that runs. Missing call identities additionally require residual scope.
@@ -794,6 +818,15 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 }
             }
         }
+    }
+    for delay in external_delays.values() {
+        let word = delay.word;
+        uses_cop0 |= is_cop0_move(word) || is_cop0_tlb(word) || is_eret(word);
+        uses_cop1 |= is_cop1_move(word)
+            || is_cop1_compare(word)
+            || is_cop1_branch(word)
+            || is_cop1_arith(word);
+        uses_compare |= is_cop1_compare(word) || is_cop1_arith(word);
     }
     let index = MapIndex::new(map);
     for edge in &map.direct_edges {
@@ -1162,6 +1195,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                     .is_some_and(|a| starts.contains(a) || into_slot(a)))
                 && !checked_break(u)
                 && !checked_eret(u)
+                && !checked_delay(u)
             {
                 add(&u.kind, u.site.clone(), &u.detail, provenance.clone());
             }
@@ -1179,6 +1213,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         if table_obligation
             || checked_break
             || checked_eret(u)
+            || checked_delay(u)
             || (u.kind == "unmapped_target"
                 && u.site
                     .as_ref()

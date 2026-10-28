@@ -55,7 +55,7 @@ fn valid_plain(word: u32, pc: GuestAddr) -> bool {
 
 fn delay_word(image: &CodeImage, pc: GuestAddr) -> Option<u32> {
     let slot = GuestAddr(pc.0.checked_add(4)?);
-    let word = image.instruction_word(slot)?;
+    let word = image.inline_delay_word(pc)?;
     valid_plain(word, slot).then_some(word)
 }
 

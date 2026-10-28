@@ -150,6 +150,13 @@ pub(super) fn modes(
             .iter()
             .flat_map(|b| (b.start.pc.0..b.start.pc.0 + b.size).step_by(4))
     };
+    // An independently fetched slot is outside this contiguous CFG's fact
+    // domain. Live mode accesses preserve both incoming possibilities.
+    for pc in pcs() {
+        if is_control(word(pc)?) && image.inline_delay_word(GuestAddr(pc)).is_none() {
+            return Ok(BTreeMap::new());
+        }
+    }
     // Almost every function has no Status writer; use live-layout accesses.
     let mut writes_status = false;
     for pc in pcs() {
