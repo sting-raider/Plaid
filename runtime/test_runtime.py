@@ -759,6 +759,8 @@ def main():
     mapped_branch_contracts()
     from test_mapped_continuations import main as mapped_continuation_contracts
     mapped_continuation_contracts()
+    from test_external_delay import main as external_delay_contracts
+    external_delay_contracts()
     from test_mapped_callbacks import main as mapped_callback_contracts
     mapped_callback_contracts()
     from test_mapped_runtime import main as mapped_runtime_contracts

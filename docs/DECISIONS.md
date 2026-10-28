@@ -8603,3 +8603,37 @@ The remaining 43 independent slots and one TLBWR still refuse emission. No nativ
 VI/logo/title or completeness claim. No reference code, RT64 change, runtime guest
 decoder/interpreter/JIT, ROM-offset formula or game-specific exception is added.
 Evidence: research/ge-mapped-runtime.md.
+
+
+## ADR-0288: Bind independent delay instructions to their native source
+
+Status: accepted after the exact-tree local gate.
+
+Context: a transfer at the end of a mapped fragment fetches its delay instruction
+at virtual PC+4. Adjacent analysis storage can hold unrelated bytes, and the slot
+can have a different mapping, physical source and lifetime from the branch.
+
+Decision: derive independent slot candidates from declared TLB raw/replayed text.
+Require matching supplied words and complete source identities, reject missing,
+conflicting, invalid, control and trapping forms, and verify the native effect
+subset and slot metadata. Emit one static native instruction behind an actual
+virtual-address bind and balanced independent source pin. Compare its source word
+even when no ordinary function starts there. Existing condition, likely-annulment
+and PC+8 ordering remain. Contiguous-only copy/table/callback/return proofs refuse
+cross-source bytes; FPR accesses retain live guarded layout checks.
+
+Verification: thirteen full-state pinned-ares contracts cover JAL/JALR, ordinary,
+likely and linking taken/untaken branches, load/store and FPR slot effects with
+independent analysis/physical placement. Corrupt slot bytes and invalid odd-page
+mapping refuse at the slot PC before slot effects. Missing-slot and removed-source
+check mutations are detected. Core source/image/generation, missing/ambiguous
+bytes, unsupported words and relocation negatives remain deterministic. Full
+exact-tree gates and silent visible controls precede the canonical write.
+
+On unchanged 227 GoldenEye engine pages, blocks remain 49,241 and residual
+blockers fall 44 -> 1: all 43 independent-slot obligations disappear. TLBWR and
+five residual transfer sites remain, and emission is still refused. No executable,
+native VI/logo/title or completeness claim. Random/Wired/refill/exception semantics
+remain separate; no arbitrary index or permanent mapping is added. No reference
+body, ROM asset, runtime decoder/interpreter/JIT or RT64 change is introduced.
+Evidence: research/ge-independent-delay.md.

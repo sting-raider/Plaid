@@ -1,5 +1,20 @@
 # Status
 
+## Independently guarded native delay slots (ADR-0288)
+
+Transfers at a mapped source boundary now execute a separately authenticated
+native slot instruction. Its virtual PC, source identity and mapping remain
+independent; native binding verifies and pins its bytes before effects. Conflicting
+or unsupported words refuse, and straight-line proofs cannot borrow adjacent
+analysis storage. Existing branch/annulment/link ordering is retained.
+
+On the fixed 227-page GoldenEye frontier, blocks stay 49,241 and blockers fall
+44 -> 1, removing all 43 delay-slot obligations. TLBWR and five residual transfer
+sites remain; emission is still refused. Thirteen complete pinned-ares state
+comparisons, load/store/FPR effects, source/mapping refusals and mutation checks
+verify this change. No executable, native VI, logo or title is claimed.
+Evidence and integration receipts: research/ge-independent-delay.md.
+
 ## Guarded mapped runtime boundaries (ADR-0287)
 
 Proven callback pointers keep their virtual values and select independently

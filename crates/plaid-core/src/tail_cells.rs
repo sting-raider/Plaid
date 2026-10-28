@@ -82,7 +82,7 @@ fn certificate(
     }
 
     let slot_pc = GuestAddr(site.site.pc.0.checked_add(4)?);
-    let slot = decode(image.instruction_word(slot_pc)?, slot_pc);
+    let slot = decode(image.inline_delay_word(site.site.pc)?, slot_pc);
     if !slot.is_valid() || slot.is_trap() || slot.has_delay_slot() {
         return None;
     }

@@ -59,7 +59,7 @@ fn argument(index: &MapIndex, image: &CodeImage, site: &CodeAddress, register: u
         return None;
     }
     let slot_pc = GuestAddr(site.pc.0.checked_add(4)?);
-    let slot = image.word(slot_pc)?;
+    let slot = image.inline_delay_word(site.pc)?;
     let i = decode(slot, slot_pc);
     if !i.is_valid() || i.has_delay_slot() || i.is_trap() {
         return None;
@@ -77,7 +77,7 @@ fn argument(index: &MapIndex, image: &CodeImage, site: &CodeAddress, register: u
 fn forwarded(index: &MapIndex, image: &CodeImage, site: &CodeAddress, register: u8) -> Option<u8> {
     let (_, _, prefix) = prefix_state_in(index, image, site)?;
     let slot_pc = GuestAddr(site.pc.0.checked_add(4)?);
-    let slot = image.word(slot_pc)?;
+    let slot = image.inline_delay_word(site.pc)?;
     let i = decode(slot, slot_pc);
     if !i.is_valid() || i.has_delay_slot() || i.is_trap() {
         return None;
