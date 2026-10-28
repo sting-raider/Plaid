@@ -822,6 +822,8 @@ def main():
     load_capacity_contracts()
     from test_mapped_tails import main as mapped_tail_contracts
     mapped_tail_contracts()
+    from test_mapped_aliases import main as mapped_alias_contracts
+    mapped_alias_contracts()
     from test_mapped_callbacks import main as mapped_callback_contracts
     mapped_callback_contracts()
     from test_mapped_runtime import main as mapped_runtime_contracts
