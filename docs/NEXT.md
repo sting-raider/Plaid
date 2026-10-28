@@ -1,5 +1,23 @@
 # Next
 
+## GoldenEye after aligned first-use table repair (ADR-0284)
+
+Preserve neutral data-only replay, complete PC/image/generation selection and
+same-site table evidence. The fixed222-page frontier improves196->124 residual
+blockers; aligned instruction words must not masquerade as initialized tables.
+The remaining20 indirect-target obligations include return certificates that
+still construct source-boundary continuations from analysis PC+8. An isolated
+candidate verifies architectural continuations and independently placed JAL/JALR
+sources; it is not part of this landing. Further verified refill probes recover
+new pages separately, without a source formula.
+
+Cross-fragment delay slots remain42: current raw-source classification finds7
+NOPs,29 ordinary instructions,5 non-raw sources and1 missing slot source. Model
+independent fetch identity/guards and all instruction effects across discovery,
+proof/dataflow and lowering before admission. Direct37, source9, runtime-body8,
+callbacks7 and Random-dependent TLBWR1 remain. No executable or native VI/logo/title.
+Evidence:research/ge-table-snapshots.md; later source rounds require fresh counts.
+
 ## GoldenEye after sequential fragment continuations (ADR-0283)
 
 Preserve architectural advancement/RA and independently guarded native tail

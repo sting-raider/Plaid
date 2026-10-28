@@ -1,5 +1,21 @@
 # Status
 
+## First-use repair of aligned table snapshots (ADR-0284)
+
+Neutral first-use data repair now also requests pointer tables whose aligned
+snapshot candidates lack decoded blocks or runtime entries. Complete address
+identities and same-site table evidence select requests; captured values never
+supply executable roots. Existing replay, physical-source, data-only composition
+and native guards remain mandatory.
+
+On the same222 engine pages, the former malformed-only repair produces46950
+blocks/196 residual blockers; the new rule produces47161/124. Indirect-target
+blockers fall92->20. Ten table data ranges are refreshed instead of two. Slots42,
+direct37, unmapped9, runtime-body8, callbacks7 and TLBWR1 remain. No GoldenEye
+executable, native VI/logo/title or completeness claim. Before/after work timings,
+source refusals, synthetic identity/evidence cases, mutation and full local
+receipts are described in research/ge-table-snapshots.md.
+
 ## Native fragment continuations (ADR-0283)
 
 Sequential execution and call/branch continuations now advance the guest PC at
