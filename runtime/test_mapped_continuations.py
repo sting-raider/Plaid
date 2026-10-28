@@ -90,6 +90,14 @@ def main():
                     rom=hex(0x1000 + labels[label] - T.BASE), encoding='tlb_raw', slot=True,
                     text_size=hex(len(words) * 4)) for v, words, label in
                     [(T.E0, one, 'module0'), (T.E1, two, 'module1')]])))
+            if case in ('jal', 'jalr'):
+                # Separate the continuation's analysis storage as well as its
+                # physical backing; PC+8 must not name this unused alternate.
+                declarations = json.loads(loads.read_text())
+                declarations['loads'].insert(1, dict(destination='0x60000000', size='0x10',
+                    rom=hex(0x1000 + labels['module0'] - T.BASE), encoding='tlb_raw',
+                    slot=True, text_size='0x10'))
+                loads.write_text(json.dumps(declarations))
             runtime = directory / 'runtime.json'
             runtime.write_text(json.dumps(dict(format='plaid-runtime-functions-v0', source='synthetic TLBWI helper',
                 functions=[dict(entry=hex(labels['map']), name='map', callbacks=[])])))

@@ -8508,3 +8508,35 @@ Before/after timings are concurrent work receipts, not a speedup measurement.
 Full evidence and local gates:research/ge-table-snapshots.md. The README follows
 in the worker-owned fast-forward commit. Return proofs and later refill pages
 are separate candidates, not counted in this fixed-source reduction.
+
+## ADR-0285: Preserve caller source boundaries in return certificates
+
+Status: accepted after the exact-tree local gate.
+
+Context: sequential discovery already advances architectural PCs across placed
+fragments (ADR0283), but return certificates still formed every continuation as
+analysis PC+8. A separately allocated next fragment can leave that numeric
+address in an unrelated source. Contiguous allocations had hidden this mismatch.
+
+Decision: for callers in the supplied image/generation, derive the continuation
+with CodeImage::sequential_pc(caller,8). Preserve complete caller identity and
+existing handling of other images/generations. Recompute certificates through
+the same verifier; no additional target, source, runtime decoder or fallback is
+introduced. The existing native continuation dispatch still independently checks
+mapping, content and generation. Register RA remains architectural PC+8.
+
+Verification: the synthetic caller at80010038/virtuale0000038 produces
+e0000040, not neighboring storage80010040. The retained implementation fails;
+a certificate altered to the old storage target is rejected. JAL and JALR native
+contracts insert an unused independently linked alternate between caller and
+continuation allocations. The retained CLI refuses the JAL map; the candidate
+passes nine full CPU/FPR/PC/HI/LO/FCSR/output-RAM comparisons against pinned ares
+and existing corrupted-source/wrong-continuation mutations. Full canonical gates
+and silent visible control receipts must pass before integration.
+
+On unchanged222 GoldenEye engine pages, residual blockers fall124->109 and
+indirect targets20->5 with47161 blocks. Other buckets remain slots42/direct37/
+unmapped9/runtime-body8/callbacks7/TLBWR1. This does not emit a native executable
+or establish VI/logo/title/completeness. Separate source expansion and prefix
+admission experiments must not be included in this fixed-source reduction.
+Evidence:research/ge-return-continuations.md. No reference code is copied.

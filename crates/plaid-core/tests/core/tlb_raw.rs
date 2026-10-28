@@ -49,6 +49,41 @@ fn fixture() -> (Vec<u8>, LoadImage) {
 }
 
 #[test]
+fn return_certificates_follow_the_callers_source_boundary() {
+    let (mut bytes, mut spec) = fixture();
+    bytes[0x40..0x80].fill(0);
+    bytes[0x50..0x54].copy_from_slice(&0x03e0_0008u32.to_be_bytes());
+    bytes[0x78..0x7c].copy_from_slice(&0x0c00_0004u32.to_be_bytes());
+    spec.loads[0].encoding = LoadEncoding::TlbRaw { text_size: 0x40 };
+    let (_, image) = compose(&bytes, &spec).unwrap();
+    let discovery = direct_cfg(
+        RomIdentity {
+            sha256: "0".repeat(64),
+            size: bytes.len() as u64,
+        },
+        &image,
+        &[GuestAddr(0x8001_0038)],
+        100,
+    )
+    .unwrap();
+    let site = image.address(GuestAddr(0x8001_0010));
+    let proof = plaid_core::returns::certificate(&discovery.map, &image, &site).unwrap();
+    assert_eq!(
+        proof.continuations,
+        [image.address(GuestAddr(0xe000_0040))].into()
+    );
+    let mut map = plaid_core::returns::annotate(&discovery.map, &image).unwrap();
+    let returned = map.indirect_sites.iter().find(|s| s.site == site).unwrap();
+    assert!(plaid_core::returns::verify(&map, &image, returned));
+    let id = returned.closed_proof.as_ref().unwrap().clone();
+    let returned = returned.clone();
+    let mut altered = proof;
+    altered.continuations = [image.address(GuestAddr(0x8001_0040))].into();
+    map.evidence.get_mut(&id).unwrap().detail = serde_json::to_string(&altered).unwrap();
+    assert!(!plaid_core::returns::verify(&map, &image, &returned));
+}
+
+#[test]
 fn sequential_edges_do_not_inherit_neighboring_storage_identity() {
     let (mut bytes, mut spec) = fixture();
     bytes[0x40..0x80].fill(0);

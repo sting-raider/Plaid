@@ -356,7 +356,11 @@ impl<'a> Closure<'a> {
             .filter_map(|f| self.callers.get(f))
             .flatten()
             .map(|c| CodeAddress {
-                pc: GuestAddr(c.pc.0.wrapping_add(8)),
+                pc: if c.image == image.base.image && c.generation == image.base.generation {
+                    image.sequential_pc(c.pc, 8)
+                } else {
+                    GuestAddr(c.pc.0.wrapping_add(8))
+                },
                 ..c.clone()
             })
             .collect();

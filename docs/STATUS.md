@@ -1,5 +1,20 @@
 # Status
 
+## Return certificates across fragment boundaries (ADR-0285)
+
+Return closure now derives a caller's continuation with the same architectural
+source-boundary helper as direct discovery. A call at the end of an alternate
+must return to guest PC+8, independently of the next analysis allocation. Other
+image/generation identities retain their existing calculation; they are never
+interpreted with another source's placement metadata.
+
+On the fixed222-page ADR0284 source set, blocks stay47161 and residual blockers
+fall124->109; indirect-target blockers fall20->5. Slots42, direct37, unmapped9,
+runtime-body8, callbacks7 and TLBWR1 remain. No executable/native VI/logo/title.
+A baseline-red core regression, altered-proof rejection, separated JAL/JALR
+allocations and nine complete pinned-ares native state comparisons verify the
+change. Evidence and required local receipts:research/ge-return-continuations.md.
+
 ## First-use repair of aligned table snapshots (ADR-0284)
 
 Neutral first-use data repair now also requests pointer tables whose aligned
