@@ -1,5 +1,31 @@
 # Status
 
+## Mapped host ABI callback obligations (ADR-0298)
+
+Direct virtual calls contribute every callback argument obligation of their
+verified mapped host ABI sources. Image/generation and executable aliases are
+required; the SDK thread residual exception requires all consuming ABIs to agree.
+Four full-state pinned-ares comparisons and source/mapping/identity/alternate
+negatives verify it. GoldenEye callback dispatch grows1->7 entries with49,374
+blocks, zero static blockers and five residual sites (native_complete=false).
+
+Five guest threads exist before VI0/fault3/PC80805d58 at the call to7f000bd0.
+The source is lowered, but stop-time TLB diagnostics confirm no live mapping.
+Its guest refill vector is in RDRAM without a compiled entry; exception state
+and Random/Wired timing remain unsupported. No VI/graphics/audio or logo/title
+is initialized. Evidence: research/ge-mapped-abi-callbacks.md.
+
+## Bounded native Context writes (ADR-0297)
+
+Privileged MTC0/DMTC0 update Context.PTEBase while preserving read-only bits.
+Complete Context reads still refuse because reset/exception BadVPN provenance
+is unknown. Eight synthetic full-state pinned-ares comparisons, atomic refusal
+checks and an unmasked-write mutation verify the general write contract.
+GoldenEye passes the Context write and stops at VI0/fault3/PC8080089c on the
+first SDK thread entry; the already-lowered callback is absent from dispatch.
+No VI/graphics/audio initialized at that earlier stop; ADR-0298 passes it. Evidence: research/ge-context.md.
+
+
 ## Independent replayed mapped fragments (ADR-0296)
 
 Mapped declarations may select checked virtual/physical subranges of complete

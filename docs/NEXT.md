@@ -1,5 +1,24 @@
 # Next
 
+## After mapped host ABI callback obligations (ADR-0298)
+
+The next stop is the unmapped engine fetch7f000bd0 at VI0/fault3/PC80805d58.
+Authenticate and discover the guest refill vector, model native fetch-miss
+Context/BadVPN/EPC/Cause provenance and checked return, then establish
+Random/Wired timing and CP0 preservation across host ABIs independently.
+The initializer writes Wired=2; an ares sample is not a hardware clock proof.
+Preserve unknown-state refusals and all source/mapping/native-frame protections.
+Do not preload captured mappings or add a guest execution fallback. Receipt:
+research/ge-mapped-abi-callbacks.md. No logo/title is verified.
+
+## After bounded Context writes (ADR-0297)
+
+Preserve GoldenEye execution past the MTC0 Context stop without inventing read-only BadVPN
+or exception state. Preserve the unknown-read refusal. Establish native refill
+entry, EPC/Cause/BadVAddr provenance and Random/Wired timing independently as
+measured execution requires. Continue from the mapped-fetch refusal above. Receipt: research/ge-context.md.
+
+
 ## GoldenEye after independent mapped lifetimes (ADR-0296)
 
 Preserve full natural captures, agreeing virtual/physical offsets, independent
