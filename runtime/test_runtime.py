@@ -572,6 +572,38 @@ def sp_boot(exe, cc):
     print('SP boot: DMEM and IMEM start from the declared post-IPL state, not ROM 0x40-0xfff')
 
 
+def boot_rom_copy(exe, cc):
+    """The startup copy is data even beyond the smaller analysis window."""
+    previous = A.BASE
+    try:
+        A.BASE = 0x80000400
+        header = OUT / 'rom-copy-boot.h'
+        header.write_text('#define PLAID_BOOT_ROM_COPY_BASE 1024u\n'
+                          '#define PLAID_BOOT_ROM_COPY_SIZE 1048576u\n'
+                          'static const u8 plaid_ram_boot[0x400] = {0};\n')
+        native = build(exe, cc, 'boot-rom-copy', list(A.DONE), [], ['-DPLAID_RAM_BOOT="rom-copy-boot.h"'])
+        payload = bytearray((i * 13 + i // 256 + 7) & 255 for i in range(0x100000))
+        raw = A.assemble(list(A.DONE))
+        payload[:len(raw)] = raw
+        rom = OUT / 'boot-rom-copy.z64'
+        rom.write_bytes(bytes.fromhex('80371240') + bytes(0xffc) + payload)
+        result = subprocess.run([str(native), '--rom', str(rom), '--dump', hex(A.BASE), str(len(payload) // 4)],
+                                capture_output=True, text=True, timeout=30,
+                                env={**os.environ, 'SDL_AUDIODRIVER': 'dummy'})
+        rows = [json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')]
+        stop = next(row for row in rows if 'stop' in row)
+        copied = b''.join(word.to_bytes(4, 'big') for row in rows if 'words' in row for word in row['words'])
+        assert result.returncode == stop['fault'] == 0 and copied == payload, (stop, len(copied))
+        (OUT / 'boot-rom-copy-state.json').write_text(json.dumps(stop, indent=2))
+        rom.write_bytes(rom.read_bytes()[:-1])
+        short = subprocess.run([str(native), '--rom', str(rom)], capture_output=True, text=True, timeout=30,
+                               env={**os.environ, 'SDL_AUDIODRIVER': 'dummy'})
+        assert short.returncode == 2 and 'shorter than the authenticated' in short.stderr, short.stderr
+    finally:
+        A.BASE = previous
+    print('PASS startup ROM copy: every byte of 1 MiB retained beyond analysis text, native exit/fault state, short ROM refuses before execution')
+
+
 def tlb_unmap(exe, cc):
     names = ['osMapTLB', 'osUnmapTLB', 'osVirtualToPhysical']
     program = [*li(A.sp, 0x80007F00),
@@ -685,6 +717,7 @@ def main():
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
     OUT.mkdir(parents=True, exist_ok=True)
     default_abi_registry(exe, cc)
+    boot_rom_copy(exe, cc)
     native = build(exe, cc, 'sched', PROGRAM, RUNTIME)
     run = subprocess.run([str(native), '--seconds', '5', '--dump', hex(LOG), str(len(EXPECTED) + 1)],
                          capture_output=True, text=True, timeout=30)

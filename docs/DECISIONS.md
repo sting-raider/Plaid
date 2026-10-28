@@ -8681,3 +8681,21 @@ fails the same check. Add no synthetic host stubs and retain prior signature
 reuse attribution. This completes GoldenEye's first residual-dispatch link;
 its first runtime stop is VI0/fault3/PC800004b4, not a logo/title acceptance.
 See research/ge-first-native.md.
+
+
+## ADR-0293: Authenticate startup ROM data separately from analysis text
+
+The BSS start bounds analysis, not IPL3's initial1MiB ROM copy. At the natural
+entry fetch, compare the complete ROM copy against synchronized pinned-ares
+RDRAM with debugger reads and record exact source/destination/size/equality.
+Require that receipt before generating startup macros; missing, malformed or
+mismatched evidence refuses. The runtime copies the verified ROM range before
+its ordinary analysis preload and refuses short ROMs before execution.
+
+Synthetic adapter/header/native full-copy contracts verify equality, entry-time
+provenance, mismatch/short/invalid-record refusals and all1MiB output bytes.
+GoldenEye's first source improves from six failed ranges to all288 matching.
+The remaining VI0/fault3/PC800004b4 is a separate fixed/mapped protection overlap
+(first physical0xb6ac/tag2), not a source mismatch. Preserve that refusal until
+alias ownership has a verifier. No runtime decoder or game-specific exception.
+See research/ge-boot-rom-copy.md; pinned ares was read/instrumented, not copied.

@@ -13,6 +13,7 @@ from native import write_boot_state
 
 def boot_header_contract():
     capture = dict(boot_status=0x34000000, boot_entryhi=0xff, entered=True, boot_entry=0x80000400,
+                   boot_rom_copy=dict(destination=0x400, rom=0x1000, size=0x100000, verified=True),
                    sp=[i % 256 for i in range(0x2000)], ram_prefix=[(i * 7 + 3) % 256 for i in range(0x400)],
                    rom_sha256='synthetic', revision='synthetic')
     with tempfile.TemporaryDirectory(prefix='plaid-boot-header-') as temporary:
@@ -20,6 +21,8 @@ def boot_header_contract():
         sp, ram = write_boot_state(capture, directory, 0x80000400)
         assert '#define PLAID_BOOT_STATUS 872415232u' in ram.read_text()
         assert '#define PLAID_BOOT_ENTRYHI 255ull' in ram.read_text()
+        assert '#define PLAID_BOOT_ROM_COPY_BASE 1024u' in ram.read_text()
+        assert '#define PLAID_BOOT_ROM_COPY_SIZE 1048576u' in ram.read_text()
         assert ','.join(map(str, capture['ram_prefix'])) in ram.read_text()
         assert ','.join(map(str, capture['sp'])) in sp.read_text()
         receipt = json.loads((directory / 'boot-state.json').read_text())
@@ -35,6 +38,15 @@ def boot_header_contract():
             try:
                 write_boot_state(dict(capture, **change), directory, 0x80000400)
                 raise AssertionError(f'invalid boot state accepted: {change.keys()}')
+            except ValueError:
+                pass
+        for proof in [None, {}, dict(capture['boot_rom_copy'], verified=False),
+                      dict(capture['boot_rom_copy'], verified=1), dict(capture['boot_rom_copy'], destination=0x1000),
+                      dict(capture['boot_rom_copy'], rom=0), dict(capture['boot_rom_copy'], size=0x1000),
+                      dict(capture['boot_rom_copy'], size=True)]:
+            try:
+                write_boot_state(dict(capture, boot_rom_copy=proof), directory, 0x80000400)
+                raise AssertionError('unauthenticated boot copy accepted')
             except ValueError:
                 pass
         try:
@@ -357,8 +369,8 @@ def main():
         source, output = directory / 'fixture.z64', directory / 'capture.json'
         source.write_bytes(rom)
 
-        def run(target, budget, exact=False, covered=None, sites=None, bindings=None, check=True):
-            command = [str(exe), str(source), str(firmware), '0x80000400', target,
+        def run(target, budget, exact=False, covered=None, sites=None, bindings=None, check=True, boot='0x80000400'):
+            command = [str(exe), str(source), str(firmware), boot, target,
                        str(budget), 'fixture', str(output)]
             if exact:
                 command.append('exact-many')
@@ -493,6 +505,18 @@ def main():
         # Capturing the stop-time bytes instead would retain 03e00008 at 0x1d8.
         assert bytes(stop['ram_prefix']) == rom[:0x400] == bytes(entry['ram_prefix']), stop['ram_prefix']
         assert stop['boot_entry'] == entry['boot_entry'] == 0x80000400
+        assert stop['boot_rom_copy']['verified'] is False  # the small fixture has no 1 MiB source
+        saved = bytes(rom)
+        extended = bytearray(0x101000)
+        extended[:len(rom)] = rom
+        extended[-1] = 0xa7
+        source.write_bytes(extended)
+        full = json.loads(run('0x80000400', 1000).splitlines()[-1])
+        assert full['boot_rom_copy'] == dict(destination=0x400, rom=0x1000, size=0x100000, verified=True)
+        # A shifted handoff disagrees with the ROM copy even in the same RAM.
+        shifted = json.loads(run('0x80000404', 1, boot='0x80000404').splitlines()[-1])
+        assert shifted['boot_rom_copy']['verified'] is False
+        source.write_bytes(saved)
         # Snapshot Status at entry, before a later guest write in the jump slot.
         changed = bytearray(rom)
         changed[0x1030:0x1034] = struct.pack('>I', 0x40806000)  # mtc0 zero,Status
