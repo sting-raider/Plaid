@@ -1,5 +1,21 @@
 # Next
 
+## GoldenEye after mapped runtime closure (ADR-0287)
+
+Preserve virtual callback pointers, complete source identities and native
+mapping/content/generation checks. Mapped host calls require their whole declared
+guest source pinned before effects; they must never become guest-code roots.
+The fixed 227-page source set now has 49,241 blocks and 44 residual blockers:
+43 independent delay-slot fetches and one TLBWR. Emission is still refused.
+
+Finish the independent delay-fetch representation, native source guards and
+dataflow contracts, including memory effects and negative/mutation cases. The
+TLBWR belongs to a real Context-based refill handler with Wired setup. Verify
+Random/Wired, exception entry, Context/EPC and refill execution without selecting
+an arbitrary replacement index or inventing a permanent page mapping. Source
+discovery is already productized by ADR-0282; counterfactual roots still do not
+prove neutral execution or target closure. Evidence: research/ge-mapped-runtime.md.
+
 ## GoldenEye after source-bounded call admission (ADR-0286)
 
 Preserve separate source identity when checking a call-entry prefix. The fixed

@@ -108,6 +108,7 @@ pub(crate) fn discover_seeded(
                         name: name.clone(),
                         evidence: [id.clone()].into(),
                         callbacks: callbacks.clone(),
+                        source_size: None,
                         status_global: None,
                         eeprom_timer: None,
                     };

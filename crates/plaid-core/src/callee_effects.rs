@@ -638,6 +638,7 @@ mod tests {
             name: "osMapTLB".into(),
             evidence: ["synthetic-callee".into()].into(),
             callbacks: vec![],
+            source_size: None,
             status_global: None,
             eeprom_timer: None,
         };

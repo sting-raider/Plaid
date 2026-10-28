@@ -241,10 +241,25 @@ pub fn callbacks(map: &ProgramMap, image: &CodeImage) -> BTreeSet<Callback> {
     out
 }
 
-/// Proven callback targets: functions the runtime may enter.
+/// Native source entries for proven callback pointers; the pointer itself
+/// remains virtual and selects its independently guarded alternate at run time.
 pub fn targets(map: &ProgramMap, image: &CodeImage) -> BTreeSet<CodeAddress> {
     callbacks(map, image)
         .into_iter()
         .filter_map(|c| c.target)
+        .flat_map(|target| {
+            if target.image == image.base.image && target.generation == image.base.generation {
+                image
+                    .slot_copies(target.pc.0)
+                    .into_iter()
+                    .map(|pc| CodeAddress {
+                        pc: GuestAddr(pc),
+                        ..target.clone()
+                    })
+                    .collect()
+            } else {
+                vec![target]
+            }
+        })
         .collect()
 }

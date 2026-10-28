@@ -573,7 +573,14 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                                         && l.linked == Some(crate::GuestAddr(*linked))
                                 })
                             })
-                            && starts.contains(&i.address(crate::GuestAddr(placed.start.0 + off)))
+                            && {
+                                let target = i.address(crate::GuestAddr(placed.start.0 + off));
+                                starts.contains(&target)
+                                    || map.runtime_functions.get(&target).is_some_and(|f| {
+                                        crate::declared_loads::runtime_source_range(i, &target, f)
+                                            .is_some()
+                                    })
+                            }
                     })
             })
     };
@@ -805,10 +812,13 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             && images.iter().any(|image| {
                 image.base.image == edge.target.image
                     && image.base.generation == edge.target.generation
-                    && image
-                        .slot_copies(edge.target.pc.0)
-                        .iter()
-                        .any(|&target| !starts.contains(&image.address(crate::GuestAddr(target))))
+                    && image.slot_copies(edge.target.pc.0).iter().any(|&target| {
+                        let a = image.address(crate::GuestAddr(target));
+                        !starts.contains(&a)
+                            && !map.runtime_functions.get(&a).is_some_and(|f| {
+                                crate::declared_loads::runtime_source_range(image, &a, f).is_some()
+                            })
+                    })
             })
         {
             if scope == Scope::DeclaredStaticImagesGuardedRamResidualDispatch {
@@ -840,6 +850,19 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     // guarded scope's explicit ABI assumption; their bodies must stay undecoded.
     let runtime_ok = scope.guarded();
     for (a, f) in &map.runtime_functions {
+        if images.iter().any(|i| {
+            i.base.image == a.image
+                && i.base.generation == a.generation
+                && i.slots.iter().any(|(placed, _, _)| placed.contains(a.pc))
+                && crate::declared_loads::runtime_source_range(i, a, f).is_none()
+        }) {
+            add(
+                "runtime_source_extent",
+                Some(a.clone()),
+                "mapped host boundary needs its complete supplied guest source extent",
+                f.evidence.clone(),
+            );
+        }
         if !runtime_ok {
             add(
                 "runtime_boundary_outside_scope",
@@ -861,7 +884,19 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     for image in images {
         for c in crate::callbacks::callbacks(map, image) {
             forwarded_callbacks |= c.forwarded && c.target.is_some();
-            if !c.target.as_ref().is_some_and(|t| starts.contains(t)) {
+            if !c.target.as_ref().is_some_and(|t| {
+                if !into_slot(t) {
+                    return starts.contains(t);
+                }
+                images.iter().any(|image| {
+                    image.base.image == t.image
+                        && image.base.generation == t.generation
+                        && image
+                            .slot_copies(t.pc.0)
+                            .iter()
+                            .all(|&pc| starts.contains(&image.address(crate::GuestAddr(pc))))
+                })
+            }) {
                 if scope == Scope::DeclaredStaticImagesGuardedRamResidualDispatch
                     && crate::callbacks::residual_thread_entry(map, &c)
                 {

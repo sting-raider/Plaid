@@ -130,6 +130,7 @@ mod tests {
                 RuntimeFunction {
                     name: (*name).into(),
                     evidence: BTreeSet::new(),
+                    source_size: None,
                     callbacks: Vec::new(),
                     status_global: (index < 2).then_some(GuestAddr(0x80002000)),
                     eeprom_timer: None,
