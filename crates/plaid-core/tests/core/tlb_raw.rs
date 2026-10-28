@@ -578,11 +578,16 @@ fn replay_mapped_layout_cannot_disable_or_escape_physical_guards() {
     };
     load.encoding = encoding(0xe0000000, 0x2000);
     assert!(load.layout(data).is_ok());
+    // The natural capture anchor may precede or follow an extracted fragment.
+    for entry in [0xdffffffc, 0xe0000020] {
+        load.encoding = encoding(entry, 0x2000);
+        assert!(load.layout(data).is_ok());
+    }
     for (entry, physical) in [
         (0xe0000000, u32::MAX),
         (0xe0000000, 0x800000),
         (0xe0000000, 0x2002),
-        (0xe0000020, 0x2000),
+        (0x80000000, 0x2000),
         (0xe0000002, 0x2000),
     ] {
         load.encoding = encoding(entry, physical);

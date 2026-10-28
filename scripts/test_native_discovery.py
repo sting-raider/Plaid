@@ -6,9 +6,56 @@ from pathlib import Path
 import tempfile
 
 import native
+from fragment_mapped import partition_mapped
+
+
+def mapped_partition_contract():
+    with tempfile.TemporaryDirectory(prefix='plaid-fragments-') as temporary:
+        root = Path(temporary)
+        loads, mapping = root / 'loads.json', root / 'map.json'
+        source = dict(destination='0x60000000', physical='0x2000', size='0x4000', text_size='0x4000',
+                      encoding='ares_tlb', entry='0x60003000', rom='0x0', slot=True)
+        document = dict(source='synthetic complete capture', loads=[source])
+        placed = 0x80800000
+        declaration = dict(destination=dict(start=placed, size=0x4000), linked=0x60000000,
+                           encoding=dict(ares_tlb=dict(entry=0x60003000, physical=0x2000, text_size=0x4000)))
+        program = dict(load_images={'image': dict(loads=[declaration])}, runtime_functions=[
+            [dict(pc=placed + 0xff0, image='image'), dict(source_size=0x30)]], evidence={
+            'table': dict(detail=json.dumps(dict(table_start=placed + 0x1ff0, count=8,
+                                                site=dict(pc=placed + 0x1900))))})
+        loads.write_text(json.dumps(document)); mapping.write_text(json.dumps(program))
+        assert partition_mapped(loads, mapping)
+        parts = json.loads(loads.read_text())['loads']
+        assert parts == [dict(source, size='0x3000', text_size='0x3000'),
+                         dict(source, destination='0x60003000', physical='0x5000', size='0x1000', text_size='0x1000')]
+        before = loads.read_bytes()
+        # The old map cannot select newly partitioned identities, and a map
+        # describing each new part preserves the host/table boundaries again.
+        assert not partition_mapped(loads, mapping) and loads.read_bytes() == before
+        for change in [dict(entry=0x60003004), dict(physical=0x3000)]:
+            altered = json.loads(json.dumps(program))
+            altered['load_images']['image']['loads'][0]['encoding']['ares_tlb'].update(change)
+            loads.write_text(json.dumps(document)); mapping.write_text(json.dumps(altered))
+            before = loads.read_bytes()
+            assert not partition_mapped(loads, mapping) and loads.read_bytes() == before
+        ambiguous = json.loads(json.dumps(program))
+        ambiguous['load_images']['other'] = ambiguous['load_images']['image']
+        mapping.write_text(json.dumps(ambiguous))
+        assert not partition_mapped(loads, mapping)
+        # Keeping table words together is insufficient: a consumer on another
+        # page must bind those words through the very same fragment.
+        for proof in [dict(table_start=placed + 0x3010, count=1, site=dict(pc=placed + 0x100)),
+                      dict(source_cell=placed + 0x3010, site=dict(pc=placed + 0x100)),
+                      dict(table_start=placed + 0x3010, count=1)]:
+            program['evidence'] = {'far': dict(detail=json.dumps(proof))}
+            mapping.write_text(json.dumps(program)); loads.write_text(json.dumps(document))
+            before = loads.read_bytes()
+            assert not partition_mapped(loads, mapping) and loads.read_bytes() == before
+    print('PASS mapped partition policy: exact identities, host/table extents, byte offsets, idempotence and ambiguous-source refusal')
 
 
 def run_contract():
+    mapped_partition_contract()
     arguments = ['discover', 'synthetic.z64', '0x1000', '0x80000000', '0x20',
                  '0x80000000', 'map.json']
     output = 'map.json'

@@ -33,6 +33,21 @@ pub struct Capture {
 }
 
 impl Capture {
+    /// A native fragment borrows bytes from this complete natural capture.
+    /// Virtual and physical offsets must agree; equal payloads are not aliases.
+    pub fn mapped_slice(&self, linked: u32, physical: u32, size: u32) -> Result<Vec<u8>, String> {
+        let source = self
+            .physical_start
+            .ok_or("mapped source requires a mapped capture")?;
+        let offset = linked
+            .checked_sub(self.destination)
+            .ok_or("fragment precedes replayed source")?;
+        if !linked.is_multiple_of(4) || source.checked_add(offset) != Some(physical) {
+            return Err("fragment virtual and physical source offsets differ".into());
+        }
+        self.data_slice(physical, size)
+    }
+
     /// A data read can use a physical alias of a mapped capture. The replay
     /// still authenticates the first fetch and complete producer extent.
     pub fn data_slice(&self, physical: u32, size: u32) -> Result<Vec<u8>, String> {
@@ -265,6 +280,93 @@ fn parse_capture_rows(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mapped_fragments_keep_both_offsets_and_the_natural_capture() {
+        use crate::{GuestAddr, declared_loads::*, program::*};
+        let rom = rom();
+        let entry = 0x60001008;
+        let mut row = capture(&rom, entry, 0);
+        row["destination"] = serde_json::json!(0x60001000);
+        row["physical_start"] = serde_json::json!(0x2000);
+        // Equal bytes at two offsets cannot justify crossed physical identities.
+        let bytes = [0x03e00008u32, 0, 0x03e00008, 0]
+            .into_iter()
+            .flat_map(u32::to_be_bytes)
+            .collect::<Vec<_>>();
+        row["bytes"] = serde_json::json!(bytes);
+        row["output_sha256"] = serde_json::json!(sha256(&bytes));
+        let captured: Capture = serde_json::from_value(row).unwrap();
+        validate_capture(&captured, &rom, entry).unwrap();
+        for offset in [0, 8] {
+            assert_eq!(
+                captured
+                    .mapped_slice(0x60001000 + offset, 0x2000 + offset, 8)
+                    .unwrap(),
+                bytes[..8]
+            );
+        }
+        for (linked, physical, size) in [
+            (0x60001000, 0x2008, 8),
+            (0x60001008, 0x2000, 8),
+            (0x60000ffc, 0x1ffc, 4),
+            (0x6000100c, 0x200c, 8),
+            (0x60001000, 0x2000, 0),
+            (0x60001001, 0x2001, 4),
+            (u32::MAX - 3, 0x2000, 8),
+        ] {
+            assert!(captured.mapped_slice(linked, physical, size).is_err());
+        }
+        let mut fixed = captured.clone();
+        fixed.physical_start = None;
+        assert!(fixed.mapped_slice(0x60001000, 0x2000, 8).is_err());
+        MEMO.get_or_init(Default::default)
+            .lock()
+            .unwrap()
+            .insert((rom.identity.sha256.clone(), entry), captured);
+        let mut spec = LoadImage {
+            base_offset: RomOffset(64),
+            base: GuestRange {
+                start: GuestAddr(0x80001000),
+                size: 8,
+            },
+            loads: [0, 8]
+                .into_iter()
+                .enumerate()
+                .map(|(i, offset)| DeclaredLoad {
+                    destination: GuestRange {
+                        start: GuestAddr(0x80800000 + i as u32 * 0x10000),
+                        size: 8,
+                    },
+                    source: RomOffset(0),
+                    encoding: LoadEncoding::AresTlb {
+                        entry: GuestAddr(entry),
+                        physical: 0x2000 + offset,
+                        text_size: 8,
+                    },
+                    evidence: EvidenceRefs::new(),
+                    relocatable: true,
+                    linked: Some(GuestAddr(0x60001000 + offset)),
+                })
+                .collect(),
+        };
+        let (_, image) = compose(rom.bytes(), &spec).unwrap();
+        assert!(verify_slots(&image, Some(&spec)));
+        assert_eq!(
+            image.instruction_word(GuestAddr(0x80800000)),
+            Some(0x03e00008)
+        );
+        assert_eq!(
+            image.instruction_word(GuestAddr(0x80810000)),
+            Some(0x03e00008)
+        );
+        spec.loads[1].encoding = LoadEncoding::AresTlb {
+            entry: GuestAddr(entry),
+            physical: 0x2000,
+            text_size: 8,
+        };
+        assert!(compose(rom.bytes(), &spec).is_err());
+    }
 
     #[test]
     fn mapped_data_slices_require_the_replayed_physical_extent() {

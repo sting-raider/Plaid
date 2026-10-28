@@ -24,6 +24,7 @@ Saves go to <out>/<name>.sra (SRAM) or <name>.fla (FlashRAM); EEPROM to
 <name>.eep. The executables take the ROM again at run time with --rom.
 """
 import argparse
+from fragment_mapped import partition_mapped
 import hashlib
 import json
 import os
@@ -196,6 +197,8 @@ def main():
         (out / 'id.json').write_text(memo_plaid('identify', *window, SIGNATURES, *with_loads), newline='')
         discover = ['discover', *window, entry, m, out / 'id.json', *with_loads, '--address-taken', '--fr0']
         overlay_support = discover_map(discover, overlay_support, m)
+        if attempt < 63 and partition_mapped(loads, m):
+            continue
         verdict = json.loads(memo_plaid('solve', rom, m, '--address-taken'))
         if verdict['status'] == 'closed' or a.loads or attempt == 63:
             break
