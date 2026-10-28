@@ -215,7 +215,16 @@ pub fn branch_never_taken(word: u32) -> bool {
 /// the scan limit keep the identity for ordinary discovery. Rejected identities
 /// must be reported by the solver and refused by native slot dispatch.
 pub(crate) fn slot_entry_decodable(image: &CodeImage, pc: GuestAddr) -> bool {
+    let remaining = image.slots.iter().find_map(|(placed, _, _)| {
+        placed
+            .contains(pc)
+            .then(|| placed.size - (pc.0 - placed.start.0))
+    });
     for n in 0..64 {
+        if remaining.is_some_and(|bytes| 4 * n >= bytes) {
+            // Another source is ordinary discovery's obligation, not this prefix.
+            return true;
+        }
         let at = GuestAddr(pc.0.wrapping_add(4 * n));
         let Some(word) = image.instruction_word(at) else {
             return false;
@@ -519,4 +528,37 @@ pub fn direct_cfg_bounded(
     }
     map.validate()?;
     Ok(Discovery { map, words })
+}
+
+#[cfg(test)]
+mod prefix_tests {
+    use super::*;
+
+    #[test]
+    fn identity_link_prefix_still_stops_at_its_source_end() {
+        let base = GuestAddr(0x8000_0000);
+        let mut image = CodeImage {
+            base: CodeAddress {
+                pc: base,
+                image: "00".repeat(32),
+                generation: 0,
+            },
+            words: vec![0, 0, 0x7000_0000],
+            rom_offset: None,
+            physical_start: None,
+            holes: vec![],
+            slots: vec![(
+                GuestRange {
+                    start: base,
+                    size: 8,
+                },
+                base.0,
+                8,
+            )],
+        };
+        assert!(!decode(image.words[2], GuestAddr(base.0 + 8)).is_valid());
+        assert!(slot_entry_decodable(&image, GuestAddr(base.0 + 4)));
+        image.words[1] = 0x7000_0000;
+        assert!(!slot_entry_decodable(&image, GuestAddr(base.0 + 4)));
+    }
 }

@@ -1,5 +1,19 @@
 # Next
 
+## GoldenEye after source-bounded call admission (ADR-0286)
+
+Preserve separate source identity when checking a call-entry prefix. The fixed
+222-page frontier improves109->85; its direct/unmapped buckets are12/10.
+Separate production refill/table convergence expands to227 verified engine pages
+and49305 blocks with59 blockers:43 independent delay-slot fetches,8 decoded
+host-runtime entries,7 callbacks and1 TLBWR. No direct/unmapped/table/indirect
+blockers remain in that expanded map. Expansion is not part of109->85.
+
+Guard mapped callback sources and stop rooting declared host entries as guest
+bodies through general native contracts. Independent delay-slot source guards
+and dataflow, plus Random/Wired/refill/exception semantics, remain prerequisites
+for an accepted executable. Evidence:research/ge-entry-prefix.md.
+
 ## GoldenEye after source-aware return closure (ADR-0285)
 
 Keep caller source identity and architectural PC+8 distinct from analysis

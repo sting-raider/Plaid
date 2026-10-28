@@ -1,5 +1,19 @@
 # Status
 
+## Call-entry prefix scans stop at their source boundary (ADR-0286)
+
+The admission heuristic for a call into a mapped source no longer scans into
+the next analysis allocation after the candidate fragment ends. Discovery still
+has to resolve the architectural continuation through its independent source;
+reserved encodings inside the real prefix still reject the candidate.
+
+On the unchanged222-page/ten-snapshot source set, residual blockers fall109->85
+and blocks rise47161->47211. Direct-target blockers fall37->12, while unmapped
+targets rise9->10 as the admitted code exposes another obligation. Slots42,
+indirect5, runtime-body8, callbacks7 and TLBWR1 remain. No executable or native
+VI/logo/title claim. A baseline-red synthetic test and its reserved-inside-prefix
+negative verify the boundary. Evidence:research/ge-entry-prefix.md.
+
 ## Return certificates across fragment boundaries (ADR-0285)
 
 Return closure now derives a caller's continuation with the same architectural
