@@ -8540,3 +8540,30 @@ unmapped9/runtime-body8/callbacks7/TLBWR1. This does not emit a native executabl
 or establish VI/logo/title/completeness. Separate source expansion and prefix
 admission experiments must not be included in this fixed-source reduction.
 Evidence:research/ge-return-continuations.md. No reference code is copied.
+
+## ADR-0286: Stop call-entry prefix scans at the authenticated source boundary
+
+Status: accepted
+
+Context: slot_entry_decodable scanned up to64 consecutive analysis words. When
+a candidate began near its fragment end, the scan could reject valid code after
+reading a reserved word in a completely different neighboring source allocation.
+
+Decision: bound the prefix by its declared source extent, including when link
+and storage addresses coincide. Leave admission of the next source to discovery
+and solver obligations. Preserve every existing prefix check within the source.
+This neither supplies bytes nor establishes a target's reachability or closure.
+
+Verification: a synthetic call near a source end is admitted despite an unrelated
+neighbor's reserved70000000 encoding. The old implementation fails this test;
+moving that same reserved encoding inside the actual prefix still rejects it.
+An identity-link regression fails when the source-extent check is disabled.
+Newly reached cross-source targets remain explicit unresolved obligations.
+Full exact-tree local gates and all silent visible native controls must pass.
+
+Fixed222-page GoldenEye sources improve109->85 residual blockers,47161->47211
+blocks, direct37->12 and unmapped9->10. Slots42/indirect5/runtime-body8/callback7/
+TLBWR1 remain. Separate existing production refill and table replay reaches227
+verified engine pages/49305 blocks/59 residual blockers. No native executable,
+VI/logo/title or completeness claim follows. No upstream code is copied.
+Evidence:research/ge-entry-prefix.md.

@@ -49,6 +49,52 @@ fn fixture() -> (Vec<u8>, LoadImage) {
 }
 
 #[test]
+fn slot_call_prefix_stops_at_its_source_boundary() {
+    let (mut bytes, mut spec) = fixture();
+    bytes[0x40..0x44].copy_from_slice(&0x0c08_0002u32.to_be_bytes());
+    bytes[0x80..0x90].fill(0);
+    bytes.extend(0x7000_0000u32.to_be_bytes().repeat(4));
+    let mut neighbor = spec.loads[1].clone();
+    neighbor.destination.start = GuestAddr(0x8001_0050);
+    neighbor.source = RomOffset(0x90);
+    neighbor.linked = Some(GuestAddr(0x6000_0000));
+    spec.loads.push(neighbor);
+    let (_, image) = compose(&bytes, &spec).unwrap();
+    let discover = |image: &plaid_core::discovery::CodeImage| {
+        plaid_core::pipeline::discover_image(
+            RomIdentity {
+                sha256: "0".repeat(64),
+                size: bytes.len() as u64,
+            },
+            image,
+            &[GuestAddr(0x8001_0000)],
+            100,
+        )
+        .unwrap()
+    };
+    let d = discover(&image);
+    assert!(
+        d.map
+            .blocks
+            .iter()
+            .any(|b| b.start.pc == GuestAddr(0x8001_0048))
+    );
+    assert!(d.map.unresolved.iter().any(|u| u.kind == "unmapped_target"));
+    // A reserved encoding inside the actual candidate prefix still rejects it.
+    let mut image = image;
+    let index = ((0x8001_004c - image.base.pc.0) / 4) as usize;
+    image.words[index] = 0x7000_0000;
+    assert!(!plaid_core::discovery::decode(image.words[index], GuestAddr(0x8001_004c)).is_valid());
+    let d = discover(&image);
+    assert!(
+        !d.map
+            .blocks
+            .iter()
+            .any(|b| b.start.pc == GuestAddr(0x8001_0048))
+    );
+}
+
+#[test]
 fn return_certificates_follow_the_callers_source_boundary() {
     let (mut bytes, mut spec) = fixture();
     bytes[0x40..0x80].fill(0);
