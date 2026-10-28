@@ -43,6 +43,9 @@ typedef struct plaid_state_s {
   u32 fr_mode;
   u32 cp0_known, cp0_index, cp0_wired, cp0_taglo, cp0_taghi, cp0_watchlo;
   u64 cp0_entryhi, cp0_epc, cp0_error_epc, cp0_context; plaid_tlb_entry cp0_tlb;
+  /* Context/XContext writes know only PTEBase; exceptions establish BadVPN. */
+  u32 cp0_readonly_known, cp0_cause;
+  u64 cp0_badvaddr, cp0_xcontext;
   u8 ram[PLAID_RAM_SIZE];
   /* The VR4300 D-cache as pinned ares models it (ADR-0183): 512 direct-mapped
      16-byte lines indexed by virtual address bits 4-12; dtag holds a resident

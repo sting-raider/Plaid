@@ -8797,3 +8797,26 @@ ABI set once per pass. Native dispatch still requires verified source bindings
 and accepts only lowered entries; strict closure is not relaxed. Four full-state
 oracle comparisons and identity/alternate/source/mapping refusal contracts
 verify the capability. See research/ge-mapped-abi-callbacks.md.
+
+
+## ADR-0299: Verify guest TLB address-exception state before native vector execution
+
+Represent Context/XContext PTEBase knowledge separately from their read-only
+BadVPN/region fields. A bounded kernel32 transition models TLB miss, invalid-page
+and modification exception state: BadVAddr, VPN/region with retained ASID, both
+Context registers, Cause, EPC/BD, EXL and BEV/refill/general vector selection.
+Nested EXL preserves EPC/BD. Unknown prerequisite state, malformed inputs and
+unsupported addressing refuse before mutation. Register writes alone still
+cannot establish read-only fields. The helper does not deliver exceptions or
+execute vectors; existing native refusal behavior remains intact.
+
+Sixty full-state native comparisons execute actual faulting instructions on the
+exact pinned ares interpreter. They cover fetch/load/store, miss/invalid/clean
+page, both address signs, BD, EXL and BEV, with GPR/FPR/HI/LO/PC/RAM/LL preservation.
+Four mutations and atomic metadata/privilege/input refusals verify the boundary.
+Natural GoldenEye tracing establishes two distinct exceptions: fast refill
+installs an invalid PTE pair, then the general vector invokes demand paging;
+only a later refill maps engine code. Do not substitute a preloaded mapping.
+Random clock equivalence, SDK CP0 preservation and native vector/resume execution
+remain separate obligations. See research/ge-native-refill.md. No upstream body,
+game asset, runtime decoder, interpreter or JIT is introduced.
