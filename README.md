@@ -14,17 +14,17 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 ## Where it stands
 
-*As of ADR-0285, 2026-10-28. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
+*As of ADR-0295, 2026-10-28. Every claim traces to [`docs/STATUS.md`](docs/STATUS.md) or an ADR in [`docs/DECISIONS.md`](docs/DECISIONS.md). These are finite test runs, not full playthroughs.*
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
 | Super Mario 64 (USA) | code segment, 2 load files, a local symbol map for 3 names | ✅ | full-speed gameplay with input, EEPROM saves and audio, no stop in 90 s | infer its loads from the ROM |
-| Majora's Mask (USA) | **none** | ??? | intro and Clock Town attract scene, 90 s, fault 0, audio (ADR-0187, ADR-0189); current main: 60 s, VI 3563, fault 0 after the frame-pin fix (ADR-0239) | longer play |
+| Majora's Mask (USA) | **none** | ??? | intro and Clock Town attract scene, 90 s, fault 0, audio (ADR-0187, ADR-0189); current main: 60 s, VI 3563, fault 0 after the frame-pin fix (ADR-0239); a native Windows 30 s control reaches 1798 VIs, fault 0 (ADR-0295) | longer play |
 | F-Zero X (USA) | **none** | ✅ | 65 s races with compiled graphics microcode and audio, fault 0 (ADR-0186); current main: 20 s with `--rsp-gfx`, fault 0, now built through residual dispatch (1 open blocker) | longer play |
 | Banjo-Kazooie (USA) (Rev 1) | **none** | 🟨 residual dispatch, 2 sites | 60 s: Nintendo opening and title, audio, fault 0; puzzle transitions in 75 s runs (ADR-0200, ADR-0201); current main: 60 s, VI 3568, fault 0 (ADR-0240) | re-prove the 2 table jumps lost in 94a4d7cb |
 | Paper Mario (USA) | **none** | 🟨 builds by default with residual dispatch (ADR-0233) | 60 s: storybook intro, VI 3590, audio, fault 0 (ADR-0230); a fresh default build runs 30 s with fault 0 again (ADR-0263); earlier 60 s runs stopped at VI 2908 on an undiscovered shared-slot occupant | find that code; prove 8 indirect jumps for `native_complete` |
 | Ocarina of Time (USA 1.2) | **none** | ✅ ROM-only, 0 blockers | 60 s with scripted save load: VI 3596, fault 0; opening Link/Kokiri scene after NJPEG (ADR-0265) | longer play |
-| GoldenEye 007 (USA) | **none** | refused | not reached: source-aware return certificates reduce fixed-source residual blockers 124 -> 109 across 222 engine pages (ADR-0285) | cross-page delay slots, direct targets, callbacks and refill execution |
+| GoldenEye 007 (USA) «A1» 🟨 builds with residual dispatch, 5 sites | not reached: the first executable links but stops at VI 0, fault 3, PC 800004b4 (no graphics, logo or title); the startup ROM copy now verifies (ADR-0289 to ADR-0293); a later change clears 1678 source-protection overlaps and stops on a decompression write to 800411c0 (ADR-0294) | source binding at the boot mapped tail; Random/Context/refill exceptions; the 5 residual sites |
 | Mario Kart 64 (USA) | **none** | 🟨 residual dispatch, 2 sites | 60 s with compiled graphics microcode and audio: VI 2762, 1270 graphics / 2635 audio tasks, fault 0 (ADR-0246) | prove the 2 residual sites; longer play |
 | Star Fox 64 (USA) (Rev 1) | **none** | 🟨 residual dispatch, 8 sites | 30 s from the ROM alone: VI 1798, 945 graphics / 1730 audio tasks, fault 0 (ADR-0256, ADR-0257); borders clean since ADR-0266 | prove the 8 residual sites; longer play |
 | Rogue Squadron (USA) | **none** | 🟨 builds with residual dispatch, 16 sites (ADR-0280) | full speed (1798 VIs in 30 s); menus, name entry and the first mission fly natively: an X-wing over Tatooine with the HUD at VI 12284, fault 0 (press list in `research/rs-name-entry.md`) | combat and mission completion; the 16 residual sites |
@@ -41,6 +41,16 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0295 | `94303570` | Reference oracles for CPU, boot, RSP and Mupen tests now run natively on Windows, byte-for-byte equal to Linux; idle runtime suite 542 s -> 460 s |
+| 0294 | `9502565c` | Fixed/mapped source ownership survives native aliases; GoldenEye clears 1678 protection overlaps and now stops on a decompression write |
+| 0293 | `131f0565` | Startup ROM copy (IPL3's 1 MiB) is authenticated independently of analysis; GoldenEye's first mapped fragment passes all 288 source ranges |
+| 0292 | `b62d74b5` | Mapped JR tails bind native entries and local labels; unprovided host ABIs stay as native guest bodies |
+| 0291 | `b62d74b5` | Fixed load tags support 251 sources; rediscovery finds 49,250 blocks with five residual sites |
+| 0290 | `b62d74b5` | Bounded TLBWR (Wired=31) removes the last static GoldenEye blocker |
+| 0289 | `b62d74b5` | First residual-dispatch GoldenEye executable emits and links; it stops at VI 0, fault 3 before any graphics |
+| 0288 | `4862d9b0` | Independent mapped delay instructions run behind native source guards; GoldenEye blockers fall from 44 to 1 |
+| 0287 | `972da9a4` | Mapped native callbacks keep their virtual values and select targets independently, with host-runtime source lifetimes guarded |
+| 0286 | `6e71618d` | Call-entry scans stop at authenticated source boundaries; targets rise 9 -> 10 as more code is admitted |
 | 0285 | `20c17306` | Return certificates follow the caller source; GoldenEye blockers fall from 124 to 109 |
 | 0284 | `f66cb468` | First-use table snapshots repair aligned missing targets; GoldenEye blockers fall from 196 to 124 |
 | 0283 | `83540201` | Sequential flow between mapped fragments uses guarded native continuations; GoldenEye blockers fall from 432 to 202 |
