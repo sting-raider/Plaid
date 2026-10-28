@@ -410,9 +410,9 @@ pub fn is_cop0_move(word: u32) -> bool {
     word >> 26 == 16 && matches!((word >> 21) & 31, 0 | 1 | 4 | 5) && word & 0x7ff == 0
 }
 
-/// TLBWI/TLBR/TLBP; Random-dependent TLBWR remains outside the native subset.
+/// TLBWI/TLBR/TLBP and TLBWR with a runtime-checked singleton Random domain.
 pub fn is_cop0_tlb(word: u32) -> bool {
-    matches!(word, 0x4200_0001 | 0x4200_0002 | 0x4200_0008)
+    matches!(word, 0x4200_0001 | 0x4200_0002 | 0x4200_0006 | 0x4200_0008)
 }
 
 /// ERET has a runtime-checked state transition, but no static return-target proof.
@@ -740,7 +740,8 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             );
         }
     }
-    let (mut uses_cop0, mut uses_cop1, mut uses_compare) = (false, false, false);
+    let (mut uses_cop0, mut uses_cop1, mut uses_compare, mut uses_tlbwr) =
+        (false, false, false, false);
     for b in &map.blocks {
         if b.delay_slot_entry {
             add(
@@ -775,6 +776,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 continue;
             };
             uses_cop0 |= is_cop0_move(word) || is_cop0_tlb(word) || is_eret(word);
+            uses_tlbwr |= word == 0x4200_0006;
             uses_compare |= is_cop1_compare(word) || is_cop1_arith(word);
             uses_cop1 |= is_cop1_move(word)
                 || is_cop1_compare(word)
@@ -822,6 +824,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     for delay in external_delays.values() {
         let word = delay.word;
         uses_cop0 |= is_cop0_move(word) || is_cop0_tlb(word) || is_eret(word);
+        uses_tlbwr |= word == 0x4200_0006;
         uses_cop1 |= is_cop1_move(word)
             || is_cop1_compare(word)
             || is_cop1_branch(word)
@@ -1414,6 +1417,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         if uses_cop0 {
             assumptions.push(
                 "COP0 operations use known kernel Status and staging registers, normalized global 32-bit TLB entries, and no unmodeled timer, exception, interrupt-delivery or SDK-thread Status effects; a native artifact faults 12 on unsupported state, invalidates staging knowledge across runtime boundaries, and never falls back to guest execution (ADR-0235)."
+                    .into(),
+            );
+        }
+        if uses_tlbwr {
+            assumptions.push(
+                "TLBWR requires known Wired=31, whose singleton Random domain selects entry 31 independently of unmodeled instruction timing. Unknown Wired, other Random domains and unsupported staging state fault 12 before mutation; Random/Context/exception delivery outside that bounded contract remain unsupported."
                     .into(),
             );
         }

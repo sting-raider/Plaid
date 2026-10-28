@@ -64,11 +64,9 @@ static inline int plaid_cp0_write(plaid_state *s, u32 reg, u64 v, u32 pc) {
   s->cp0_known |= 1u << reg;
   return 0;
 }
-static inline int plaid_cp0_tlbwi(plaid_state *s, u32 pc) {
+/* Both architectural writes share staging normalization and source guards. */
+static inline int plaid_cp0_tlbwrite(plaid_state *s, u32 index, u32 pc) {
   u32 pm, m; plaid_tlb_entry e;
-  if (plaid_cp0_kernel(s, pc)) return 1;
-  if (!(s->cp0_known & 1u)) return plaid_fault(s, pc, 12);
-  if ((s->cp0_index & 63u) >= 32) return 0;
   if ((s->cp0_known & 0x42cu) != 0x42cu) return plaid_fault(s, pc, 12);
   /* The existing native model supports global 32-bit mappings only. Preserve
      full staging register values, but refuse unsupported committed mappings. */
@@ -79,7 +77,20 @@ static inline int plaid_cp0_tlbwi(plaid_state *s, u32 pc) {
   e = s->cp0_tlb; e.mask = pm; e.hi = (u32)s->cp0_entryhi & ~m;
   e.hi |= (u32)s->cp0_entryhi & 255u;
   e.lo[0] &= 0x03ffffffu; e.lo[1] &= 0x03ffffffu;
-  return plaid_tlb_write(s, s->cp0_index, e, pc);
+  return plaid_tlb_write(s, index, e, pc);
+}
+static inline int plaid_cp0_tlbwi(plaid_state *s, u32 pc) {
+  if (plaid_cp0_kernel(s, pc)) return 1;
+  if (!(s->cp0_known & 1u)) return plaid_fault(s, pc, 12);
+  if ((s->cp0_index & 63u) >= 32) return 0;
+  return plaid_cp0_tlbwrite(s, s->cp0_index, pc);
+}
+static inline int plaid_cp0_tlbwr(plaid_state *s, u32 pc) {
+  if (plaid_cp0_kernel(s, pc)) return 1;
+  /* The singleton [Wired,31] domain needs no unmodeled Random clock. */
+  if (!(s->cp0_known & (1u << 6)) || s->cp0_wired != 31u)
+    return plaid_fault(s, pc, 12);
+  return plaid_cp0_tlbwrite(s, 31u, pc);
 }
 /* Host boundaries can also populate the shared table. Refuse a raw entry
    that cannot represent a normalized VR4300 mapping before observing it. */

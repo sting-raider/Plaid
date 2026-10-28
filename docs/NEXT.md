@@ -1,5 +1,18 @@
 # Next
 
+## GoldenEye after first native emission (ADRs-0289–0292)
+
+Preserve the residual manifest and guarded TLBWR scope. The first executable
+stops at VI0/fault3/PC800004b4 entering virtual70000510, with no initialized VI
+or framebuffer. Diagnose mapping, source-byte verification and protected-source
+ownership at that transfer using stop-state and RDRAM evidence. Do not suppress
+the refusal, preload a permanent mapping or substitute a counterfactual state.
+
+Then continue toward verified native VI/graphics. Five residual sites remain;
+Wired=2 Random timing, Context/EPC/exception delivery and RSP source discovery
+remain separate obligations. Keep all control CPU/runtime objects fresh after
+the fixed-load state-layout expansion. Receipt: research/ge-first-native.md.
+
 ## GoldenEye after independent native delay slots (ADR-0288)
 
 Preserve separate slot source identities, mapping/content/generation checks,

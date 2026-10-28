@@ -1,7 +1,7 @@
 {
   "decoded": 209,
   "format": "plaid-isa-coverage-v0",
-  "lowered": 204,
+  "lowered": 206,
   "mnemonics": {
     "abs.d": true,
     "abs.s": true,
@@ -66,7 +66,7 @@
     "c.ult.s": true,
     "c.un.d": true,
     "c.un.s": true,
-    "cache": false,
+    "cache": true,
     "ceil.l.d": true,
     "ceil.l.s": true,
     "ceil.w.d": true,
@@ -199,7 +199,7 @@
     "tlbp": true,
     "tlbr": true,
     "tlbwi": true,
-    "tlbwr": false,
+    "tlbwr": true,
     "tlt": true,
     "tlti": true,
     "tltiu": true,

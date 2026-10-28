@@ -259,6 +259,30 @@ pub fn function_bodies_partitioned<'a>(
                 .extend(site.candidates.keys().chain(site.observed.keys()).cloned());
         }
     }
+    // Native labels use supplied source addresses, including virtual targets
+    // inside the same fragment. This does not change return certificates.
+    for targets in succ.values_mut() {
+        *targets = targets
+            .iter()
+            .flat_map(|target| {
+                if target.image == image.base.image
+                    && target.generation == image.base.generation
+                    && image.instruction_word(target.pc).is_none()
+                {
+                    image
+                        .slot_copies(target.pc.0)
+                        .into_iter()
+                        .map(|pc| CodeAddress {
+                            pc: GuestAddr(pc),
+                            ..target.clone()
+                        })
+                        .collect()
+                } else {
+                    vec![target.clone()]
+                }
+            })
+            .collect();
+    }
     entries
         .into_iter()
         .map(|entry| {

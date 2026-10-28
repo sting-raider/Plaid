@@ -8637,3 +8637,47 @@ native VI/logo/title or completeness claim. Random/Wired/refill/exception semant
 remain separate; no arbitrary index or permanent mapping is added. No reference
 body, ROM asset, runtime decoder/interpreter/JIT or RT64 change is introduced.
 Evidence: research/ge-independent-delay.md.
+
+
+## ADR-0289: Native TLBWR for a verified singleton Random domain
+
+Accept TLBWR only with known Wired=31. Its replacement index is31 regardless
+of Random timing; preserve Index and reuse TLBWI staging/mapping/source guards.
+Unknown/wider domains and unsupported state fault12 before mutation. The solver
+records this bounded scope. General Random/Context/exception delivery remains
+unsupported; this does not model GoldenEye's Wired=2 refill. Full-state pinned
+ARES comparisons, mapping effects, every other six-bit Wired value, atomic
+refusals and a removed-domain-guard mutation verify the contract. Static
+GoldenEye blockers fall1->0 with five residual sites and native_complete=false.
+See research/ge-first-native.md. NEC VR4300 manual and pinned ares were read;
+no reference implementation body was copied.
+
+## ADR-0290: Use the full nonreserved fixed-load tag domain
+
+Support251 fixed loads with tags2..252 instead of an arbitrary64-element
+witness array. Keep253..255 reserved and reject252 loads before collision.
+The state layout changes, so rebuild control CPU/runtime objects. Complete
+synthetic65/251-load oracle comparisons verify highest-tag execution, source
+revocation and atomic corruption refusal;252 loads reject. No game exception.
+See research/ge-first-native.md.
+
+## ADR-0291: Bind proven mapped register tails and source-local labels
+
+Expand proven non-linking cross-source target sets to real native source
+entries, preserving the entering RA and independent source binding. Resolve
+same-image/generation virtual body successors to supplied analysis labels in
+the native partitioner only; return certificates retain their existing rules.
+Preserve local cases and legacy tail-cell promotion. Fixed/mapped/local-tail
+full-state oracle comparisons, corrupt-source refusals and baseline-red
+emission tests verify the change. See research/ge-first-native.md.
+
+## ADR-0292: Advertise only provided native ABI symbols
+
+Remove osDpSetNextBuffer, osPiReadIo, osSetCount and osSetTLBASID from the
+default host ABI registry because the actual runtime supplies no symbols for
+them. Their guest bodies remain native code. Link all101 remaining default
+names against the actual runtime in the retained suite; the old105-name list
+fails the same check. Add no synthetic host stubs and retain prior signature
+reuse attribution. This completes GoldenEye's first residual-dispatch link;
+its first runtime stop is VI0/fault3/PC800004b4, not a logo/title acceptance.
+See research/ge-first-native.md.

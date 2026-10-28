@@ -1,5 +1,21 @@
 # Status
 
+## First residual-dispatch GoldenEye executable (ADRs-0289–0292)
+
+The 227-engine-page frontier now emits and links: bounded Wired=31 TLBWR
+removes the last static blocker (1 -> 0), fixed load tags support251 sources,
+proven mapped JR tails bind native entries/local labels, and four advertised
+but unprovided host ABIs stay as native guest bodies. The corrected default
+registry has101 real native symbols; rediscovery has49,250 blocks and five
+residual sites. The manifest remains native_complete=false.
+
+First silent visible execution stops at VI0, fault3, PC800004b4. No VI registers,
+framebuffer, graphics or audio tasks initialized; there is no logo/title claim.
+Source binding at the boot mapped tail is next. General Random/Context/refill
+exception semantics are still unsupported. Full-state oracle comparisons,
+boundary/source refusals, mutations and real native linker tests cover these
+general contracts. Evidence: research/ge-first-native.md.
+
 ## Independently guarded native delay slots (ADR-0288)
 
 Transfers at a mapped source boundary now execute a separately authenticated

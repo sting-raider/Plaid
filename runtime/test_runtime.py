@@ -17,6 +17,7 @@ runs (ADR-0165). A fourth runs an RSP task through lowered IMEM snapshots
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -657,12 +658,33 @@ def save_file(exe, cc):
     print('EEPROM save: kept across runs, replaced through a temporary file, a malformed save refused')
 
 
+def default_abi_registry(exe, cc):
+    source = (ROOT / 'crates/plaid-core/src/signatures.rs').read_text()
+    registry = source.split('pub const RUNTIME_FUNCTIONS:', 1)[1].split('];', 1)[0]
+    names = re.findall(r'"([A-Za-z_][A-Za-z0-9_]*)"', registry)
+    assert names and len(names) == len(set(names))
+    program = list(A.DONE)
+    refs = OUT / 'default-abi-refs.c'
+    refs.write_text('struct plaid_state_s;\n' +
+                   ''.join(f'extern int plaid_rt_{name}(struct plaid_state_s *);\n' for name in names) +
+                   'int (*const plaid_default_abis[])(struct plaid_state_s *) = {' +
+                   ','.join('plaid_rt_' + name for name in names) + '};\n')
+    native = build(exe, cc, 'default-abis', program, [], [str(refs)])
+    result = subprocess.run([str(native), '--seconds', '1'], capture_output=True, text=True, timeout=30,
+                            env={**os.environ, 'SDL_AUDIODRIVER': 'dummy'})
+    stop = next(json.loads(line) for line in result.stdout.splitlines() if line.startswith('{"stop"'))
+    assert result.returncode == stop['fault'] == 0, (result.stdout, result.stderr)
+    (OUT / 'default-abi-registry.json').write_text(json.dumps(dict(names=names, stop=stop), indent=2))
+    print(f'PASS default ABI registry: all {len(names)} declared host names link against the actual runtime')
+
+
 def main():
     exe = ROOT / 'target/debug/plaid.exe'
     if not exe.exists():
         exe = ROOT / 'target/debug/plaid'
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
     OUT.mkdir(parents=True, exist_ok=True)
+    default_abi_registry(exe, cc)
     native = build(exe, cc, 'sched', PROGRAM, RUNTIME)
     run = subprocess.run([str(native), '--seconds', '5', '--dump', hex(LOG), str(len(EXPECTED) + 1)],
                          capture_output=True, text=True, timeout=30)
@@ -761,6 +783,10 @@ def main():
     mapped_continuation_contracts()
     from test_external_delay import main as external_delay_contracts
     external_delay_contracts()
+    from test_load_capacity import main as load_capacity_contracts
+    load_capacity_contracts()
+    from test_mapped_tails import main as mapped_tail_contracts
+    mapped_tail_contracts()
     from test_mapped_callbacks import main as mapped_callback_contracts
     mapped_callback_contracts()
     from test_mapped_runtime import main as mapped_runtime_contracts
