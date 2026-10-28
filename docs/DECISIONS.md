@@ -8567,3 +8567,39 @@ TLBWR1 remain. Separate existing production refill and table replay reaches227
 verified engine pages/49305 blocks/59 residual blockers. No native executable,
 VI/logo/title or completeness claim follows. No upstream code is copied.
 Evidence:research/ge-entry-prefix.md.
+
+
+## ADR-0287: Guard both directions of mapped runtime dispatch
+
+Status: accepted after the exact-tree local gate.
+
+Context: a proven virtual callback pointer is not its analysis allocation.
+Mapped SDK entries also need their guest source authenticated before host ABI
+substitution; rooting their bytes as ordinary address-taken code conflicts with
+that substitution and leaves the host source unprotected.
+
+Decision: expand callback roots into supplied source entries and require every
+declared callback identity decoded. Keep the virtual pointer unchanged at runtime;
+the existing native binder verifies mapping, content and generation. Carry an
+optional source_size on RuntimeFunction, populated from the existing declaration
+size. Old fixed declarations remain readable. Mapped host boundaries require a
+nonempty aligned extent wholly inside their supplied text, compare that range,
+and pin it across host effects. Cross-source calls must bind before host entry.
+Address-taken discovery stops at declared runtime entries. The existing explicit
+host ABI assumption remains; no new source or exhaustive target proof is inferred.
+
+Verification: single/multiple callback and direct/indirect host-call fixtures
+compare complete CPU/FPR/PC/HI/LO/FCSR and output RAM with pinned ares. Invalid
+extents, wrong image/generation, missing bytes, entry/interior corruption, missing
+mapping and non-entry callbacks refuse. Active source writes/remaps refuse before
+host effects. Removed-source-check and removed-host-pin mutations defeat their
+respective negative checks. Deleting one callback alternate is red against the
+prepared any-entry policy and green with all-source closure. The complete local
+gate and silent visible game controls precede integration.
+
+On the same 227 GoldenEye engine pages, blocks fall 49,305 -> 49,241 and residual
+blockers 59 -> 44, removing seven callback and eight decoded-host-body blockers.
+The remaining 43 independent slots and one TLBWR still refuse emission. No native
+VI/logo/title or completeness claim. No reference code, RT64 change, runtime guest
+decoder/interpreter/JIT, ROM-offset formula or game-specific exception is added.
+Evidence: research/ge-mapped-runtime.md.

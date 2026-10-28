@@ -848,7 +848,7 @@ fn run() -> Result<(), String> {
             output,
             runtime @ ..,
         ] if command == "discover" && runtime.len() <= 1 => {
-            let (runtime, evidence, reference_named, status_globals, eeprom_timers) =
+            let (runtime, evidence, reference_named, status_globals, eeprom_timers, source_sizes) =
                 runtime_declarations(runtime.first())?;
             let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
             let range = GuestRange {
@@ -982,6 +982,7 @@ fn run() -> Result<(), String> {
                         })
                         .filter(|&t| {
                             !starts.contains(&t)
+                                && !runtime.iter().any(|(entry, _, _)| entry.0 == t)
                                 && plaid_core::data_roots::plausible_at(
                                     &image,
                                     GuestAddr(t),
@@ -1047,6 +1048,9 @@ fn run() -> Result<(), String> {
             }
             bind_status_globals(&mut d.map, &status_globals)?;
             bind_eeprom_timers(&mut d.map, &eeprom_timers);
+            for (entry, function) in &mut d.map.runtime_functions {
+                function.source_size = source_sizes.get(&entry.pc).copied();
+            }
             // names only a reference map gives carry their own evidence, so the
             // solver can list them (ADR-0171)
             if let Some((id, evidence)) = &evidence
@@ -1217,7 +1221,7 @@ fn run() -> Result<(), String> {
         [command, image_path, base, entry, exit, output, runtime @ ..]
             if command == "lower-c" && runtime.len() <= 1 =>
         {
-            let (runtime, evidence, _, status_globals, eeprom_timers) =
+            let (runtime, evidence, _, status_globals, eeprom_timers, source_sizes) =
                 runtime_declarations(runtime.first())?;
             // Synthetic-only native slice (ADR-0126): raw big-endian words at `base`.
             let bytes = fs::read(image_path).map_err(|e| e.to_string())?;
@@ -1283,6 +1287,9 @@ fn run() -> Result<(), String> {
             }
             bind_status_globals(&mut d.map, &status_globals)?;
             bind_eeprom_timers(&mut d.map, &eeprom_timers);
+            for (entry, function) in &mut d.map.runtime_functions {
+                function.source_size = source_sizes.get(&entry.pc).copied();
+            }
             d.map.cop1_fr0 = fr0;
             let c = plaid_lower::lower_c_with_preload(
                 &d.map,
@@ -1669,6 +1676,7 @@ type RuntimeDeclarations = (
     BTreeSet<String>,
     BTreeMap<GuestAddr, GuestAddr>,
     BTreeMap<GuestAddr, (GuestAddr, GuestAddr)>,
+    BTreeMap<GuestAddr, u32>,
 );
 
 /// Read a `plaid-runtime-functions-v0` declaration (ADR-0129): host-provided
@@ -1914,6 +1922,7 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
             BTreeSet::new(),
             BTreeMap::new(),
             BTreeMap::new(),
+            BTreeMap::new(),
         ));
     };
     let bytes = fs::read(path).map_err(|e| e.to_string())?;
@@ -1928,6 +1937,7 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
     let mut reference_named = BTreeSet::new();
     let mut status_globals = BTreeMap::new();
     let mut eeprom_timers = BTreeMap::new();
+    let mut source_sizes = BTreeMap::new();
     for f in doc["functions"]
         .as_array()
         .ok_or("runtime declarations need a functions array")?
@@ -1936,6 +1946,17 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
             return Err("each runtime function needs entry and name strings".into());
         };
         let mut callbacks = Vec::new();
+        if let Some(size) = f.get("size").filter(|size| !size.is_null()) {
+            let size = size
+                .as_u64()
+                .and_then(|n| u32::try_from(n).ok())
+                .ok_or("runtime size must be a u32 integer")?;
+            let entry = GuestAddr(number32(entry)?);
+            if size == 0 || size % 4 != 0 || entry.0.checked_add(size).is_none() {
+                return Err("invalid runtime source extent".into());
+            }
+            source_sizes.insert(entry, size);
+        }
         if let Some(global) = f.get("status_global") {
             if !matches!(name, "osCreateThread" | "osSetIntMask" | "osInitialize") {
                 return Err("Status global binding on an unsupported runtime ABI".into());
@@ -2001,6 +2022,7 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
         reference_named,
         status_globals,
         eeprom_timers,
+        source_sizes,
     ))
 }
 

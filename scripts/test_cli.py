@@ -332,6 +332,7 @@ def main():
         mixed=json.loads(run('identify',rom,"64","0x80000000","44",sig,"--reference-map",symbol_ref))
         assert [(f['entry'],f['name'],f['evidence']) for f in mixed['functions']]==[
             ('0x80000008','osInitialize','reference map'),('0x80000020','osGetCount','signature')],mixed
+        assert mixed['functions'][0]['size'] is None  # Unknown reference-map extent remains optional.
         declared.write_text(json.dumps(mixed),encoding='utf-8')
         mixed_map=directory/'mixed-map.json'
         run("discover",rom,"64","0x80000000","40","0x80000000",mixed_map,declared)

@@ -1390,6 +1390,9 @@ impl Lowerer<'_> {
             ));
         }
         if let Some(name) = self.runtime.get(&target) {
+            if !bound && self.ovl_of(target).is_some_and(|k| Some(k) != self.ovl) {
+                return Ok(format!("return plaid_fault(s, 0x{pc:08x}u, 3);"));
+            }
             return Ok(format!(
                 "{} {}",
                 self.pin(
@@ -1434,6 +1437,9 @@ impl Lowerer<'_> {
             return self.goto(target);
         }
         if let Some(name) = self.runtime.get(&target) {
+            if self.ovl_of(target).is_some_and(|k| Some(k) != self.ovl) {
+                return Ok(format!("return plaid_fault(s, 0x{pc:08x}u, 3);"));
+            }
             return Ok(format!(
                 "{{ s->cp0_known &= 1u << 10; int r = plaid_rt_{name}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;"
             ));
@@ -1606,10 +1612,9 @@ impl Lowerer<'_> {
                 })
             }
             // A tail call into the runtime returns to $ra, which must be ours.
-            (2, _, _) if self.runtime.contains_key(&jump) => Ok(format!(
-                "{slot} {{ s->cp0_known &= 1u << 10; int r = plaid_rt_{}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;",
-                self.runtime[&jump]
-            )),
+            (2, _, _) if self.runtime.contains_key(&jump) => {
+                Ok(format!("{slot} {}", self.tail(jump, pc)?))
+            }
             (2, _, _) if self.targets.contains_key(&pc) => {
                 let k = self.dispatch[proven()?];
                 Ok(format!(
@@ -1852,6 +1857,12 @@ pub fn lower_c_parts(
             bound_names.insert(name.clone());
             name
         } else { f.name.clone() };
+        let name = if let Some(k) = ovl_of(a.pc.0) {
+            let wrapper = format!("mapped_{:08x}", a.pc.0);
+            status_wrappers += &format!("int plaid_rt_{name}(plaid_state *s);\nstatic inline int plaid_rt_{wrapper}(plaid_state *s) {{ int r; plaid_native_frame frame = {{0,0,0,0,0,0,{k}}}; if (!s->ovl_ok[{k}]) return plaid_fault(s, 0x{:08x}u, 8); plaid_text_pin(s, &frame); r = plaid_rt_{name}(s); plaid_text_unpin(s, &frame); return r; }}\n", a.pc.0);
+            bound_names.insert(wrapper.clone());
+            wrapper
+        } else { name };
         (a.pc.0, name)
     }).collect();
     let mut targets = BTreeMap::new();
@@ -1923,7 +1934,7 @@ pub fn lower_c_parts(
     }) {
         let slot: BTreeSet<u32> = plaid_core::declared_loads::slot_targets(declared, e.target.pc.0)
             .into_iter()
-            .filter(|t| blocks.contains(t))
+            .filter(|t| blocks.contains(t) || runtime.contains_key(t))
             .collect();
         if blocks.contains(&e.target.pc.0) || slot.is_empty() {
             callees.push(e.target.clone());
@@ -1975,7 +1986,7 @@ pub fn lower_c_parts(
                     } else {
                         plaid_core::declared_loads::slot_targets(declared, t)
                             .into_iter()
-                            .filter(|a| blocks.contains(a))
+                            .filter(|a| blocks.contains(a) || runtime.contains_key(a))
                             .collect()
                     }
                 })
@@ -2078,6 +2089,16 @@ pub fn lower_c_parts(
             physical(end - 1)? + 1,
             load_of(start).map_or(-1, |l| l as i64)
         ));
+    }
+    for (entry, function) in &map.runtime_functions {
+        if let Some(k) = ovl_of(entry.pc.0) {
+            let range = plaid_core::declared_loads::runtime_source_range(image, entry, function)
+                .ok_or("mapped runtime source extent absent")?;
+            guarded[k].text.push((
+                range.start.0 - overlays[k].0,
+                range.start.0 + range.size - overlays[k].0,
+            ));
+        }
     }
     for (k, guards) in guarded.iter_mut().enumerate() {
         if relocatable[k].linked.is_none() {
@@ -2208,7 +2229,7 @@ pub fn lower_c_parts(
         &layouts,
         &compared,
         &guarded,
-        &functions,
+        &functions.iter().chain(runtime.keys()).copied().collect(),
         image,
     )?;
     // A JALR with several proven targets calls one dispatcher per target set

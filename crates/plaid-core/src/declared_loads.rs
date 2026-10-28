@@ -706,6 +706,37 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
     Ok((base, out))
 }
 
+/// A mapped host boundary's complete supplied guest implementation. The
+/// declaration supplies its ABI and extent; normal slot validation supplies
+/// provenance. The native binder must compare this range before entering HLE.
+pub fn runtime_source_range(
+    image: &crate::discovery::CodeImage,
+    entry: &crate::program::CodeAddress,
+    function: &crate::program::RuntimeFunction,
+) -> Option<crate::program::GuestRange> {
+    if entry.image != image.base.image || entry.generation != image.base.generation {
+        return None;
+    }
+    let size = function.source_size?;
+    if size == 0 || size % 4 != 0 {
+        return None;
+    }
+    image.slots.iter().find_map(|(placed, _, text)| {
+        let offset = entry.pc.0.checked_sub(placed.start.0)?;
+        let end = offset.checked_add(size)?;
+        (end <= *text
+            && (0..size).step_by(4).all(|n| {
+                image
+                    .instruction_word(crate::GuestAddr(entry.pc.0 + n))
+                    .is_some()
+            }))
+        .then_some(crate::program::GuestRange {
+            start: entry.pc,
+            size,
+        })
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1139,5 +1170,65 @@ mod tests {
             .is_err()
         );
         assert!(compose(&rom, &spec(vec![])).is_err());
+    }
+}
+
+#[cfg(test)]
+mod runtime_source_tests {
+    use super::*;
+
+    #[test]
+    fn mapped_runtime_extent_retains_identity_text_and_supplied_bytes() {
+        let start = GuestAddr(0x8001_0000);
+        let image = CodeImage {
+            base: crate::program::CodeAddress {
+                pc: start,
+                image: "01".repeat(32),
+                generation: 7,
+            },
+            words: vec![0; 8],
+            rom_offset: None,
+            physical_start: None,
+            holes: vec![],
+            slots: vec![(GuestRange { start, size: 32 }, 0xe000_0000, 16)],
+        };
+        let entry = image.address(start);
+        let mut function = crate::program::RuntimeFunction {
+            name: "synthetic".into(),
+            evidence: Default::default(),
+            source_size: Some(16),
+            callbacks: vec![],
+            status_global: None,
+            eeprom_timer: None,
+        };
+        assert_eq!(
+            runtime_source_range(&image, &entry, &function),
+            Some(GuestRange { start, size: 16 })
+        );
+        for size in [None, Some(0), Some(2), Some(20), Some(u32::MAX - 3)] {
+            function.source_size = size;
+            assert!(runtime_source_range(&image, &entry, &function).is_none());
+        }
+        function.source_size = Some(16);
+        for altered in [
+            crate::program::CodeAddress {
+                image: "02".repeat(32),
+                ..entry.clone()
+            },
+            crate::program::CodeAddress {
+                generation: 8,
+                ..entry.clone()
+            },
+            image.address(GuestAddr(start.0 + 4)),
+            image.address(GuestAddr(start.0 - 4)),
+        ] {
+            assert!(runtime_source_range(&image, &altered, &function).is_none());
+        }
+        let mut missing = image;
+        missing.holes.push(GuestRange {
+            start: GuestAddr(start.0 + 4),
+            size: 4,
+        });
+        assert!(runtime_source_range(&missing, &entry, &function).is_none());
     }
 }

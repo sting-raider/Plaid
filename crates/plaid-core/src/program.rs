@@ -632,6 +632,9 @@ pub struct RuntimeFunction {
     /// C identifier suffix of the host implementation `plaid_rt_<name>`.
     pub name: String,
     pub evidence: EvidenceRefs,
+    /// Declared guest implementation extent, verified before mapped host dispatch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_size: Option<u32>,
     /// Argument registers (a0-a3) carrying guest code the runtime enters
     /// (ADR-0130).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -927,6 +930,11 @@ impl ProgramMap {
         for (a, f) in &self.runtime_functions {
             address(a)?;
             refs(&f.evidence)?;
+            if f.source_size
+                .is_some_and(|n| n == 0 || n % 4 != 0 || a.pc.0.checked_add(n).is_none())
+            {
+                return Err("invalid runtime source extent".into());
+            }
             if let Some(global) = f.status_global
                 && (!matches!(
                     f.name.as_str(),

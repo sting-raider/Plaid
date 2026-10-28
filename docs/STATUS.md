@@ -1,5 +1,19 @@
 # Status
 
+## Guarded mapped runtime boundaries (ADR-0287)
+
+Proven callback pointers keep their virtual values and select independently
+guarded native source entries. Every declared callback identity must be decoded.
+Mapped host implementations require a complete declared source extent, verified
+and pinned before host effects; address-taken discovery stops at host entries.
+
+On unchanged 227-page GoldenEye sources, blocks fall 49,305 -> 49,241 and residual
+blockers 59 -> 44: all seven callback and eight decoded-host-body blockers are
+removed. The remaining 43 delay slots and one TLBWR still refuse emission. Full
+state ares comparisons, source/identity negatives and source-check/pin mutations
+verify the boundaries. There is no GoldenEye executable, VI, logo or title claim.
+Receipt and exact-tree validation: research/ge-mapped-runtime.md.
+
 ## Call-entry prefix scans stop at their source boundary (ADR-0286)
 
 The admission heuristic for a call into a mapped source no longer scans into
