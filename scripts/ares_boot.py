@@ -30,9 +30,7 @@ def lock_exclusive(lock):
 
 
 def build_oracle():
-    spec = importlib.util.spec_from_file_location('ares_builder', ROOT / 'spikes/003-ares-oracle/run.py')
-    builder = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(builder)
+    import ares_oracle as builder
     directory = ROOT / 'target/ares-boot/oracle'
     directory.mkdir(parents=True, exist_ok=True)
     with (directory / 'build.lock').open('w') as lock:
@@ -44,7 +42,7 @@ def build_oracle():
 
 
 # Everything that builds the oracle or shapes its output (spikes/003 build inputs).
-ORACLE_SOURCES = ('scripts/ares_boot.py', 'scripts/ares_boot.cpp', 'spikes/003-ares-oracle/run.py',
+ORACLE_SOURCES = ('scripts/ares_boot.py', 'scripts/ares_oracle.py', 'scripts/ares_boot.cpp', 'spikes/003-ares-oracle/run.py',
                   'spikes/003-ares-oracle/driver.cpp', 'spikes/044-ares-cpu-copy-dataflow/prepare.py')
 
 
@@ -190,22 +188,6 @@ def replay(rom, data, entries, exact, covered, sites, bindings, budget):
     if crc not in cics:
         raise ValueError(f'unsupported IPL3 CRC32 {crc:08x}; no guessed CIC')
     boot = int.from_bytes(data[8:12], 'big') - {0x0b050ee0: 0x100000, 0xacc8580a: 0x200000}.get(crc, 0)
-    # PLAID_ARES_WSL=1 keeps the old WSL route; Windows builds the oracle with MinGW.
-    if os.name == 'nt' and os.environ.get('PLAID_ARES_WSL'):
-        def linux(p):
-            return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(p)], text=True).strip()
-        command = ['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(Path(__file__).resolve()),
-                   linux(rom), ','.join(hex(e) for e in entries), '--many']
-        if exact:
-            command.append('--exact-many')
-        if covered is not None:
-            command.extend(['--covered', json.dumps(covered)])
-        if sites is not None:
-            command.extend(['--sites', json.dumps(sites)])
-        if bindings is not None:
-            command.extend(['--bindings', json.dumps(bindings)])
-        # Includes a cold reference build; the actual replay below stays bounded.
-        return json.loads(subprocess.check_output(command, text=True, timeout=1200))
     # DrvFS index preloading is much slower than a serial source check.
     os.environ['GIT_CONFIG_COUNT'] = '1'
     os.environ['GIT_CONFIG_KEY_0'] = 'core.preloadindex'

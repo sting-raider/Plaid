@@ -1,13 +1,15 @@
 """ADR-0276: native FR data flow and canonical FPR bits versus pinned ares."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import ares_oracle
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
-import sys
 
-from test_cop0 import A, linux
+from test_cop0 import A
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'target/dynamic-fr-contract'
@@ -104,7 +106,7 @@ def unproven_join(exe, compile_run):
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     if '--oracle-build' in sys.argv:
-        A.builder().build(OUT / 'driver.cpp', OUT / 'oracle')
+        ares_oracle.build(OUT / 'driver.cpp', OUT / 'oracle')
         return
     exe = ROOT / 'target/debug' / ('plaid.exe' if os.name == 'nt' else 'plaid')
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
@@ -114,11 +116,7 @@ def main():
     source = source.replace('cpu.context.setMode();', 'cpu.setControlRegister(12, 0x24000000); cpu.context.setMode();')
     source = source.replace('  std::printf("]}\\n");', '  std::printf("],\\"status\\":%u}\\n", (unsigned)cpu.getControlRegister(12));')
     (OUT / 'driver.cpp').write_text(source)
-    if os.name == 'nt':
-        subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(Path(__file__)), '--oracle-build'], check=True)
-        command = ['wsl', '-d', 'Ubuntu', '--exec', linux(OUT / 'oracle/oracle')]
-    else:
-        command = [str(A.builder().build(OUT / 'driver.cpp', OUT / 'oracle'))]
+    command = [str(ares_oracle.build(OUT / 'driver.cpp', OUT / 'oracle'))]
     native = (ROOT / 'spikes/096-native-slice/harness.c').read_text().replace('#include "runtime.c"', '#include <assert.h>')
     native = native.replace('  plaid_load_images(&s);',
         '  plaid_load_images(&s);\n  for (unsigned i = 0; i < 32; i++) s.f[i] = 0x1234567800000000ull + i;')
@@ -136,7 +134,7 @@ def main():
     for branch, taken in ((False, False), (True, False), (True, True)):
         raw = OUT / 'program.bin'
         raw.write_bytes(fixture(branch, taken))
-        expected = json.loads(subprocess.check_output([*command, linux(raw) if os.name == 'nt' else str(raw), hex(A.EXIT)], text=True, timeout=120))
+        expected = json.loads(subprocess.check_output([*command, str(raw), hex(A.EXIT)], text=True, timeout=120))
         for fr0 in (False, True):
             subprocess.run([str(exe), 'lower-c', str(raw), hex(A.BASE), hex(A.BASE), hex(A.EXIT),
                 str(OUT / 'native.c'), *(['--fr0'] if fr0 else [])], check=True, capture_output=True)

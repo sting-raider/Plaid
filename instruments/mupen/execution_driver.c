@@ -6,6 +6,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
 #include "device/device.h"
 #include "device/r4300/new_dynarec/new_dynarec.h"
 #include "device/r4300/pure_interp.h"
@@ -39,6 +43,9 @@ uint32_t *mem_base_u32(void *base, uint32_t address) {
 unsigned int add_random_interrupt_time(struct r4300_core *core) { (void)core; return 0; }
 
 int main(int argc, char **argv) {
+#ifdef _WIN32
+    _setmode(_fileno(stdout), _O_BINARY);
+#endif
     struct r4300_core *core = &g_dev.r4300;
     struct new_dynarec_hot_state *state = &core->new_dynarec_hot_state;
     struct interrupt_handler handlers[CP0_INTERRUPT_HANDLERS_COUNT] = {{0}};

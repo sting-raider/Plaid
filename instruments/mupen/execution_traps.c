@@ -25,3 +25,19 @@ TRAP(invalidate_cached_code_hacktarux)
 TRAP(translate_event_queue)
 TRAP(remove_event)
 TRAP(add_interrupt_event_count)
+
+/* PE/COFF retains references from discarded CPU service tables. These remain
+ * outside the declared fixture coverage and must abort if actually reached. */
+#ifdef _WIN32
+int g_rom_pause;
+TRAP(init_interrupt)
+TRAP(init_blocks)
+TRAP(free_blocks)
+TRAP(run_cached_interpreter)
+TRAP(cached_interp_recompile_block)
+TRAP(cached_interp_free_block)
+TRAP(cached_interp_init_block)
+TRAP(cached_interp_NOTCOMPILED2)
+TRAP(cached_interp_NOTCOMPILED)
+TRAP(cached_interp_FIN_BLOCK)
+#endif

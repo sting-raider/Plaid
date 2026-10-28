@@ -312,7 +312,7 @@ OVERLAYS = {'overlay': overlay_program(),
     'ovl_tamper': overlay_program(tamper=True, revoke=False),
     # overlay code writing its own text: fault 2
     'ovl_self': overlay_program(extra=[('hi', I(15, t3, 0, 0), 'ovh'), ('lo', I(43, zero, t3, 0), 'ovh')], revoke=False),
-    # a callee revokes the binding; returning into the overlay: fault 8
+    # a callee writing active overlay text is refused at the store: fault 2
     'ovl_callback': overlay_program(extra=[(jalr(ra, a0),), (nop,)], revoke=False)}
 
 def tlb_program(body, odd_valid=True, dirty=True, even0=0x2000):
@@ -654,33 +654,32 @@ def windows():
         subprocess.run([str(exe), 'lower-c', str(OUT / f'{name}.bin'), hex(BASE), hex(BASE), hex(EXIT), str(OUT / f'{name}.c'), *extra], check=True)
         subprocess.run([cc, '-O2', '-std=c99', '-Wall', '-Werror', '-Wno-unused-label', '-DPLAID_SAFEPOINTS', f'-DPLAID_LOWERED="{name}.c"', f'-DPLAID_EXIT=0x{EXIT:x}u',
             '-I', str(OUT), str(HERE / 'harness.c'), '-o', str(OUT / f'{name}-native.exe')], check=True)
-    script = subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(HERE / 'run.py')], text=True).strip()
-    subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', script, '--oracle', *sys.argv[1:]], check=True)
+    oracle()
     results = {}
     for name in PROGRAMS:
         native = subprocess.run([str(OUT / f'{name}-native.exe')], capture_output=True, text=True)
         assert native.returncode == 0, (name, native.stdout)
-        oracle = json.loads((OUT / f'{name}-oracle.json').read_text())
-        assert json.loads(native.stdout) == oracle, (name, native.stdout, oracle)
-        results[name] = hashlib.sha256(json.dumps(oracle, sort_keys=True).encode()).hexdigest()
-    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('fpu_enabled', 7), ('fpu_range', 7), ('fpu_round_range', 7), ('load_early', 8), ('load_patch', 8), ('load_self', 2), ('break_reached', 9), ('trap_taken', 10), ('host_bad_return', 5), ('at_bad', 3), ('tlb_invalid', 1), ('tlb_clean', 1), ('tlb_alias', 4), ('ovl_tamper', 3), ('ovl_self', 2), ('ovl_callback', 8)):
+        reference = json.loads((OUT / f'{name}-oracle.json').read_text())
+        assert json.loads(native.stdout) == reference, (name, native.stdout, reference)
+        results[name] = hashlib.sha256(json.dumps(reference, sort_keys=True).encode()).hexdigest()
+    for name, fault in (('self_modifying', 2), ('cache_alias', 4), ('bad_return', 5), ('overflow', 6), ('table_write', 2), ('fpu_nan', 7), ('fpu_enabled', 7), ('fpu_range', 7), ('fpu_round_range', 7), ('load_early', 8), ('load_patch', 8), ('load_self', 2), ('break_reached', 9), ('trap_taken', 10), ('host_bad_return', 5), ('at_bad', 3), ('tlb_invalid', 1), ('tlb_clean', 1), ('tlb_alias', 4), ('ovl_tamper', 3), ('ovl_self', 2), ('ovl_callback', 2)):
         bad = subprocess.run([str(OUT / f'{name}-native.exe')], capture_output=True, text=True)
         assert bad.returncode == 6 and json.loads(bad.stdout)['fault'] == fault, (name, bad.stdout)
+        if name == 'ovl_callback':
+            assert json.loads(bad.stdout)['fault_pc'] == BASE + 0x70, 'active-text write must refuse before return'
     receipt = dict(format='plaid-native-slice-receipt-v0', ares_revision=builder().REV, compiler=Path(cc).name,
-        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, fpu_enabled=7, fpu_range=7, fpu_round_range=7, load_early=8, load_patch=8, load_self=2, break_reached=9, trap_taken=10, host_bad_return=5, at_bad=3, tlb_invalid=1, tlb_clean=1, tlb_alias=4, ovl_tamper=3, ovl_self=2, ovl_callback=8), interpreter_linked=False, native_complete=False)
+        programs=results, fail_closed_faults=dict(self_modifying=2, cache_alias=4, bad_return=5, overflow=6, table_write=2, fpu_nan=7, fpu_enabled=7, fpu_range=7, fpu_round_range=7, load_early=8, load_patch=8, load_self=2, break_reached=9, trap_taken=10, host_bad_return=5, at_bad=3, tlb_invalid=1, tlb_clean=1, tlb_alias=4, ovl_tamper=3, ovl_self=2, ovl_callback=2), interpreter_linked=False, native_complete=False)
     (OUT / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True, indent=2) + '\n')
     print('PASS native lowering matches pinned ares on', ', '.join(PROGRAMS), '; self-modifying, cache-alias, bad-return, overflow, table-write, NaN-compare, enabled-FPU-exception, out-of-range-conversion, out-of-range-rounding, early-load, patched-load re-entry, load self-write, BREAK, trap, host-return, unknown-target, invalid-page, clean-page, cache-index-alias, tampered-overlay, overlay self-write and revoked-overlay-return programs fail closed')
     print(json.dumps(receipt, sort_keys=True))
 
 def builder():
-    spec = importlib.util.spec_from_file_location('builder', ROOT / 'spikes/003-ares-oracle/run.py')
+    spec = importlib.util.spec_from_file_location('builder', ROOT / 'scripts/ares_oracle.py')
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
     return module
 
 def oracle():
-    oracle_exe = OUT / 'oracle/oracle'
-    if '--rebuild' in sys.argv or not oracle_exe.exists():
-        oracle_exe = builder().build(HERE / 'driver.cpp', OUT / 'oracle')
+    oracle_exe = builder().default()
     if '--build-only' in sys.argv:
         return
     for name in PROGRAMS:

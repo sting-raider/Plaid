@@ -1,5 +1,8 @@
 """Fixed CPU text can be revoked by CPU/device writes, never executed stale."""
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import ares_oracle
 import importlib.util
 import json
 import os
@@ -90,15 +93,10 @@ int main(void) {
                     '-I', str(ROOT/'crates/plaid-lower/src'), str(harness), '-lm', '-o', str(native)], check=True)
     run = subprocess.run([str(native)], capture_output=True, text=True, timeout=30)
     assert run.returncode == 0, (run.returncode, run.stdout, run.stderr)
-    oracle = ROOT / 'target/native-slice/oracle/oracle'
+    oracle = ares_oracle.default()
     built = json.loads((oracle.parent/'build.json').read_text())
     assert built['revision'] == a.builder().REV
-    if os.name == 'nt':
-        def linux(path):
-            return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(path)], text=True).strip()
-        reference = ['wsl', '-d', 'Ubuntu', '--exec', linux(oracle), linux(source), hex(a.EXIT)]
-    else:
-        reference = [str(oracle), str(source), hex(a.EXIT)]
+    reference = [str(oracle), str(source), hex(a.EXIT)]
     ref = subprocess.run(reference, capture_output=True, text=True, timeout=120)
     assert ref.returncode == 0 and json.loads(run.stdout) == json.loads(ref.stdout), (run.stdout, ref.stdout, ref.stderr)
     print('PASS text writes: CPU/RSP inactive revocation, data DMA, stale-entry refusal, restored entry, active/suspended frame faults, proof-data protection; CPU state matches pinned ares')

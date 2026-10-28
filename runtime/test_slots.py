@@ -1,5 +1,8 @@
 """Two ROM files loaded into one executable slot, through the public CLI."""
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import ares_oracle
 import importlib.util
 import json
 import os
@@ -132,17 +135,8 @@ def main():
             assert state['regs'][19:22] == ([7, 11, 7] if case in ('switch', 'overlap') else [7, 0, 0]), (mode, state)
             raw_path = OUT / 'switch.bin'
             raw_path.write_bytes(raw)
-            oracle = ROOT / 'target/native-slice/oracle/oracle'
-            if os.name == 'nt':
-                def linux(path):
-                    return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(path)], text=True).strip()
-                if not oracle.exists():
-                    subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(SLICE / 'run.py'), '--oracle', '--build-only'], check=True)
-                reference = ['wsl', '-d', 'Ubuntu', '--exec', linux(oracle), linux(raw_path), hex(a.EXIT)]
-            else:
-                if not oracle.exists():
-                    a.builder().build(SLICE / 'driver.cpp', oracle.parent)
-                reference = [str(oracle), str(raw_path), hex(a.EXIT)]
+            oracle = ares_oracle.default()
+            reference = [str(oracle), str(raw_path), hex(a.EXIT)]
             built = json.loads((oracle.parent / 'build.json').read_text())
             assert built['revision'] == a.builder().REV
             ref = subprocess.run(reference, capture_output=True, text=True, timeout=120)

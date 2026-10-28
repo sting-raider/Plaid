@@ -2,7 +2,7 @@
 
 Synthetic microcode is assembled at IMEM 0x080, lowered with `plaid lower-rsp`
 and compiled with harness.c; the same IMEM/DMEM images run on ares
-(driver.cpp, built in WSL like spike096). Final scalar registers, PC, the
+(driver.cpp, built natively like spike096). Final scalar registers, PC, the
 broken flag, all of DMEM and RDRAM 0..0x2000 must match. Negative programs
 must fail closed natively with their fault code.
 """
@@ -283,20 +283,18 @@ def windows():
                        check=True)
         native[name] = subprocess.run([str(out), str(OUT / f'{name}.imem'), str(OUT / 'dmem.bin'), hex(IMEM)],
                                       capture_output=True, text=True)
-    script = subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(HERE / 'run.py')],
-                                     text=True).strip()
-    subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', script, '--oracle', *sys.argv[1:]], check=True)
+    oracle()
     results = {}
     for name in PROGRAMS:
         run = native[name]
         assert run.returncode == 0, (name, run.stdout)
-        oracle = json.loads((OUT / f'{name}-oracle.json').read_text())
+        reference = json.loads((OUT / f'{name}-oracle.json').read_text())
         mine = json.loads(run.stdout)
-        for key in oracle:
-            if mine[key] != oracle[key]:
-                at = next(i for i, (x, y) in enumerate(zip(mine[key], oracle[key])) if x != y)
-                raise AssertionError((name, key, at, mine[key][at:at + 32], oracle[key][at:at + 32]))
-        results[name] = hashlib.sha256(json.dumps(oracle, sort_keys=True).encode()).hexdigest()
+        for key in reference:
+            if mine[key] != reference[key]:
+                at = next(i for i, (x, y) in enumerate(zip(mine[key], reference[key])) if x != y)
+                raise AssertionError((name, key, at, mine[key][at:at + 32], reference[key][at:at + 32]))
+        results[name] = hashlib.sha256(json.dumps(reference, sort_keys=True).encode()).hexdigest()
     for name, (_, fault) in NEGATIVE.items():
         run = native[name]
         assert run.returncode == 6 and json.loads(run.stdout)['fault'] == fault, (name, run.stdout)
@@ -309,16 +307,14 @@ def windows():
 
 
 def builder():
-    s = importlib.util.spec_from_file_location('builder', ROOT / 'spikes/003-ares-oracle/run.py')
+    s = importlib.util.spec_from_file_location('builder', ROOT / 'scripts/ares_oracle.py')
     module = importlib.util.module_from_spec(s)
     s.loader.exec_module(module)
     return module
 
 
 def oracle():
-    oracle_exe = OUT / 'oracle/oracle'
-    if '--rebuild' in sys.argv or not oracle_exe.exists():
-        oracle_exe = builder().build(HERE / 'driver.cpp', OUT / 'oracle')
+    oracle_exe = builder().build(HERE / 'driver.cpp', OUT / 'oracle')
     for name in PROGRAMS:
         out = subprocess.run([str(oracle_exe), str(OUT / f'{name}.imem'), str(OUT / 'dmem.bin'), hex(IMEM)],
                              capture_output=True, text=True, timeout=120)

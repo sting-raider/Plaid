@@ -1,5 +1,8 @@
 """ROM-only CPU-generated text: replay, native identity guard, pinned ares."""
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import ares_oracle
 import json
 import os
 import shutil
@@ -89,19 +92,12 @@ int main(int argc, char **argv) {
     tamper = OUT / ('tamper.exe' if os.name == 'nt' else 'tamper')
     subprocess.run([cc, '-O2', '-std=c11', '-w', '-DBOOT_TAMPER', str(harness), '-lm', '-o', str(tamper)], check=True)
     subprocess.run([str(tamper), str(raw_path), 'tamper'], check=True, timeout=30)
-    oracle = ROOT / 'target/native-slice/oracle/oracle'
-    if os.name == 'nt':
-        def linux(path):
-            return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(path)], text=True).strip()
-        if not oracle.exists():
-            subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(ROOT / 'spikes/096-native-slice/run.py'), '--oracle', '--build-only'], check=True)
-        command = ['wsl', '-d', 'Ubuntu', '--exec', linux(oracle), linux(raw_path), '0x80003000']
-    else:
-        if not oracle.exists():
-            raise RuntimeError('build pinned oracle with spikes/096-native-slice/run.py --oracle')
-        command = [str(oracle), str(raw_path), '0x80003000']
+    oracle = ares_oracle.default()
+    command = [str(oracle), str(raw_path), '0x80003000']
     assert json.loads((oracle.parent / 'build.json').read_text())['revision'] == '9408cb43d4948fc3ea6e152a307a34348df3fe04'
-    reference = json.loads(subprocess.check_output(command, text=True, timeout=120))
+    raw_reference = subprocess.check_output(command, timeout=120)
+    assert raw_reference.endswith(b'\n') and b'\r' not in raw_reference, 'oracle byte output must use LF on every host'
+    reference = json.loads(raw_reference)
     assert state == {k: reference[k] for k in state}, (state, reference)
     print('PASS boot-generated text: deterministic replay, CLOSED scope, native state/RAM match pinned ares; tampered text faults 8')
 

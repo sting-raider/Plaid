@@ -1,5 +1,8 @@
 """Synthetic native execution of TLB-bound code, checked against pinned ares."""
+import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import ares_oracle
 import importlib.util
 import json
 import os
@@ -269,22 +272,7 @@ int main(void) {{
 
 
 def _ares_run(raw_path):
-    oracle = Path(os.environ.get('PLAID_ARES_ORACLE', ROOT / 'target/native-slice/oracle/oracle'))
-    build = oracle.parent / 'build.json'
-    if not oracle.exists() or not build.exists():
-        raise RuntimeError('pinned ares oracle is missing; build it with spikes/096-native-slice/run.py --oracle')
-    spec = importlib.util.spec_from_file_location('ares_builder', ROOT / 'spikes/003-ares-oracle/run.py')
-    builder = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(builder)
-    if json.loads(build.read_text())['revision'] != builder.REV:
-        raise AssertionError(f'ares oracle is not pinned revision {builder.REV}')
-    if os.name == 'nt':
-        def linux(path):
-            return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(path)], text=True).strip()
-        cmd = ['wsl', '-d', 'Ubuntu', '--exec', linux(oracle), linux(raw_path), hex(EXIT)]
-    else:
-        cmd = [str(oracle), str(raw_path), hex(EXIT)]
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    return ares_oracle.run(raw_path, EXIT, capture_output=True, text=True, timeout=120)
 
 
 def main():

@@ -104,7 +104,9 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
         shutil.copy2(shared / ORACLE, exe)
         shutil.copyfile(shared / "build.json", manifest)
     if not built(output):
-        flags = ["-O2","-std=c++20","-msse4.1","-DSLJIT_HAVE_CONFIG_PRE=1","-DSLJIT_HAVE_CONFIG_POST=1"]
+        # Required by the pinned core's cmake/common/compiler_common.cmake.
+        # Vector union/lane accesses and signed shifts rely on these semantics.
+        flags = ["-O2","-std=c++20","-msse4.1","-fwrapv","-fno-strict-aliasing","-DSLJIT_HAVE_CONFIG_PRE=1","-DSLJIT_HAVE_CONFIG_POST=1"]
         includes = [REF / p for p in ("ares","nall",".","thirdparty","thirdparty/xxhash","ares/n64/system")]
         queue_header = output/"include/nall/priority-queue.hpp"
         if queue_access:
@@ -357,7 +359,16 @@ struct PlaidQueueDispatchScope {
                 obj = output / f"{name}.o"
                 subprocess.run(["gcc","-O1",*include_flags,"-DSLJIT_HAVE_CONFIG_PRE=1","-DSLJIT_HAVE_CONFIG_POST=1","-c",str(source),"-o",str(obj)],check=True,stdout=log,stderr=subprocess.STDOUT)
                 objects.append(obj)
-            sources = [driver,output / "core.cpp",output / "n64.cpp",REF / "ares/component/processor/sm5k/sm5k.cpp",
+            compiled_driver = driver
+            if os.name == "nt":
+                compiled_driver = output / "native-driver.cpp"
+                compiled_driver.write_text("#include <cstdio>\n#include <fcntl.h>\n#include <io.h>\n"
+                    "namespace { struct PlaidBinaryOutput { PlaidBinaryOutput() {\n"
+                    "  _setmode(_fileno(stdout), _O_BINARY); _setmode(_fileno(stderr), _O_BINARY);\n"
+                    "} } plaidBinaryOutput; }\n" + '#include "' + driver.resolve().as_posix() + '"\n' +
+                    "\n#include <nall/terminal.hpp>\nnamespace { const bool plaidAnsiOutput = [] {\n"
+                    "  nall::terminal::setEscapable(true); return true; }(); }\n")
+            sources = [compiled_driver,output / "core.cpp",output / "n64.cpp",REF / "ares/component/processor/sm5k/sm5k.cpp",
                 REF / "ares/ares/memory/fixed-allocator.cpp",REF / "nall/nall/nall.cpp",REF / "thirdparty/sljitAllocator.cpp"]
             try:
                 # Adapter edits must not rebuild the unchanged pinned core.
@@ -366,7 +377,7 @@ struct PlaidQueueDispatchScope {
                 headers = b''.join(p.read_bytes() for p in sorted((output / 'include').rglob('*')) if p.is_file())
                 for source in sources:
                     dependencies = dict(inputs)
-                    if source != driver:
+                    if source != compiled_driver:
                         dependencies.pop('driver')
                     digest = hashlib.sha256(json.dumps([dependencies, flags, include_flags, recipe], sort_keys=True).encode()
                                             + headers + source.read_bytes()).hexdigest()
@@ -448,10 +459,7 @@ def worker():
 
 
 def main():
-    if os.name == "nt":
-        script = subprocess.check_output(["wsl","-d","Ubuntu","--exec","wslpath","-a",Path(__file__).resolve().as_posix()],text=True).strip()
-        subprocess.run(["wsl","-d","Ubuntu","--exec","python3",script],check=True)
-    else: worker()
+    worker()
 
 
 if __name__ == "__main__": main()

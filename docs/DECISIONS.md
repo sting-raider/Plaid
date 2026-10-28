@@ -8699,3 +8699,30 @@ The remaining VI0/fault3/PC800004b4 is a separate fixed/mapped protection overla
 (first physical0xb6ac/tag2), not a source mismatch. Preserve that refusal until
 alias ownership has a verifier. No runtime decoder or game-specific exception.
 See research/ge-boot-rom-copy.md; pinned ares was read/instrumented, not copied.
+
+
+## ADR-0295: Run supported reference oracles directly on Windows
+
+Use the ADR-0254 MinGW build for every live ares differential caller and boot
+contract. `scripts/ares_oracle.py` shares the original pinned source checks,
+instrumentation, license notice and content/object cache; the supported CPU/RSP
+entry points use it too. Remove live WSL launchers, path conversion and the old
+boot fallback. Historical non-gate spikes/experiments retain their old recipes.
+
+The reference compiler uses upstream -fwrapv/-fno-strict-aliasing; a retained
+full-vector-state/raw-byte fixture gates the MinGW behavior.
+The Windows adapter uses binary stdout/stderr and Linux-equivalent ANSI output,
+without changing guest semantics. Generated wrappers include the original driver
+by absolute path so relative source includes retain their meaning. All 166 raw
+legacy invocations across 19 test modules and five drivers compare byte-for-byte,
+including boot result files and refused inputs.
+
+Supported Mupen commands also use native Win64 builds and dependencies. Their
+trace environment is established before process creation; additional retained
+PE/COFF references to uncovered services abort. CPU/device contracts pass, and
+mutation state and traces match Linux byte-for-byte. No reference core is linked
+into native game artifacts. Existing ISC/GPL reference notices remain intact.
+
+See `research/windows-oracles.md` for baseline, equivalence and validation receipts.
+The final exact-tree runtime timing is recorded in the landing commit message
+and local gate receipt; no WSL distribution may start during that gate.

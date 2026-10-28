@@ -17,7 +17,7 @@ Spike096 is the synthetic native slice (milestone 1). `plaid lower-c
 <words.bin> <base> <entry> <exit> <out.c>` discovers, solves under
 `DeclaredStaticImagesGuardedRam` and emits C via `crates/plaid-lower`. Run
 `python spikes/096-native-slice/run.py` (add `--rebuild` after driver changes);
-it needs a C compiler on PATH (`gcc`, `clang` or `CC`) and WSL for the ares oracle.
+it needs a C compiler on PATH (`gcc`, `clang` or `CC`) and native MinGW GCC/G++ on Windows for the ares oracle.
 `run.py --oracle --build-only` builds the oracle and stops before replaying the 096
 programs, whose `.bin` inputs exist only after a full spike run. The runtime tests
 `test_interrupts`, `test_slots`, `test_status` and `test_boot_execution` use it to build a
@@ -26,7 +26,7 @@ missing oracle, so they also work in a fresh checkout.
 Spike097 is the same check for RSP microcode, scalar and vector (ADR-0167/0168). `plaid lower-rsp
 <rom> <offset> <size> <imem> <name> <out.c> [--raw]` lowers a microcode text.
 Run `python spikes/097-rsp-slice/run.py` (add `--rebuild` after its
-`driver.cpp` changes); it needs the same compiler and WSL.
+`driver.cpp` changes); it needs the same native compiler.
 
 Spike098 checks one real RSP task (ADR-0169). Build the runtime with
 `-DPLAID_RSP`, run the game with `--rsp-capture <n> <dir>`, then run
@@ -107,7 +107,8 @@ Core development requires:
 - Rust toolchain from `rust-toolchain.toml`
 - a C compiler for the pinned Rabbitizer dependency
 - Python 3.11+
-- additional Linux/WSL build tools for reference experiments
+- MinGW GCC/G++ 15.2 on Windows; GCC/G++ on Linux
+- make, NASM and SDL2/zlib/libpng development libraries for the optional Mupen reference commands
 
 Some pinned Mupen/ares experiments require GCC/G++, make, NASM, SDL2/zlib/libpng development packages, or other dependencies described by the relevant `spikes/` README.
 
@@ -193,10 +194,33 @@ target directory.
 
 A pinned ares oracle is fully determined by its recorded build inputs. A build
 also stores the oracle under `~/.cache/plaid/ares-oracle/<sha256 of the inputs>`
-(inside WSL on Windows); `PLAID_ORACLE_CACHE` overrides that directory. A checkout
+(in the Windows user profile on Windows); `PLAID_ORACLE_CACHE` overrides that directory. A checkout
 whose own copy is missing or stale takes the matching cached one instead of
-rebuilding, which otherwise took about 3.5 minutes per oracle in WSL for the
-native-slice and boot oracles.
+rebuilding the pinned core. `scripts/ares_oracle.py` is the shared native build/run
+helper for runtime differential tests and analysis. It authenticates the pinned
+revision, driver and instrumentation and delegates compilation and content caching
+to the retained ares builder. Driver-only edits reuse unchanged core objects.
+Windows oracle output uses binary streams and the same ANSI diagnostics as Linux,
+so the differential receipts compare raw bytes without newline/color normalization.
+
+### Windows reference tools
+
+No supported build or gate requires WSL. Install native GCC/G++ and Python on PATH.
+For the optional Mupen commands, MSYS2 packages `mingw-w64-x86_64-SDL2`,
+`mingw-w64-x86_64-zlib`, `mingw-w64-x86_64-libpng` and `nasm` provide native
+libraries and build tools. Their default prefix is `C:/msys64/mingw64`;
+`PLAID_REF_DEPS` and `PLAID_NASM` override it and the assembler path.
+The upstream Mupen make recipe uses native MSYS shell utilities, without a VM.
+The Windows DLL uses the Win64 ABI; every reference session runs in a fresh
+process with its trace environment established before C runtime startup.
+
+Older `spikes/` and `experiments/` scripts which still mention WSL are historical,
+opt-in research reproductions, outside every gate. Their original commands are
+retained as historical evidence, including spike095's Linux sensor replay.
+Shared builder/instrumentation modules imported by gates execute natively;
+the supported spike003/096/097/098 entry points also execute natively.
+To verify isolation locally, run `wsl --shutdown`, run the gates, then check
+`wsl -l --running`; no distribution should be running.
 
 ## Main CLI
 

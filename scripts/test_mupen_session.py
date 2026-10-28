@@ -3,7 +3,7 @@
 The reference core uses bundled dummy plugins. This checks CPU/device integration,
 not graphics, RSP execution or commercial boot compatibility. Generated ROMs and
 logs remain under ignored target/. Linux requires build_mupen_core.py dependencies;
-Windows dispatches through WSL Ubuntu. Each engine runs in a fresh process.
+Windows uses native MinGW dependencies. Each engine runs in a fresh process.
 """
 from pathlib import Path
 import ctypes as c
@@ -89,18 +89,27 @@ def fixture(scenario="pi"):
     return data
 
 
+def session_environment(directory, mode):
+    rom = directory / "synthetic.z64"
+    return dict(os.environ, SDL_AUDIODRIVER="dummy",
+        PLAID_ROM_SHA256=hashlib.sha256(rom.read_bytes()).hexdigest(),
+        PLAID_ROM_SIZE=str(rom.stat().st_size), PLAID_TRACE_PATH=str(directory / f"{mode}.ndjson"),
+        PLAID_TRACE_EXECUTION="1" if mode in ("traced", "repeat") else "0",
+        PLAID_TRACE_WRITES="1" if mode in ("traced", "repeat") else "0")
+
+
 def worker(directory, mode):
     directory = Path(directory)
     config = directory / mode
     config.mkdir(exist_ok=True)
     rom = directory / "synthetic.z64"
-    trace = directory / f"{mode}.ndjson"
-    os.environ.update(SDL_VIDEODRIVER="dummy", SDL_AUDIODRIVER="dummy",
-        PLAID_ROM_SHA256=hashlib.sha256(rom.read_bytes()).hexdigest(),
-        PLAID_ROM_SIZE=str(rom.stat().st_size), PLAID_TRACE_PATH=str(trace),
-        PLAID_TRACE_EXECUTION="1" if mode in ("traced", "repeat") else "0")
-    os.environ["PLAID_TRACE_WRITES"] = "1" if mode in ("traced", "repeat") else "0"
-    core = c.CDLL(str(OUTPUT / "libmupen64plus.so"))
+    os.environ.update(session_environment(directory, mode))
+    dll_directories = []
+    if os.name == "nt":
+        deps = Path(os.environ.get("PLAID_REF_DEPS", "C:/msys64/mingw64"))
+        for dll_directory in (deps / "bin", Path(shutil.which("gcc")).parent, OUTPUT):
+            dll_directories.append(os.add_dll_directory(str(dll_directory)))
+    core = c.CDLL(str(OUTPUT / ("mupen64plus.dll" if os.name == "nt" else "libmupen64plus.so")))
     debug_type = c.CFUNCTYPE(None, c.c_void_p, c.c_int, c.c_char_p)
     state_type = c.CFUNCTYPE(None, c.c_void_p, c.c_int, c.c_int)
     core.CoreStartup.argtypes = [c.c_int, c.c_char_p, c.c_char_p, c.c_void_p, debug_type, c.c_void_p, state_type]
@@ -162,7 +171,7 @@ def worker(directory, mode):
 
         result = {"regs":read_cpu(2, c.c_int64*32), "hi":read_cpu(3, c.c_int64*1)[0],
                   "lo":read_cpu(4, c.c_int64*1)[0], "pc":read_cpu(1, c.c_uint32*1)[0]}
-        (directory / f"{mode}-state.json").write_text(json.dumps(result, indent=2) + "\n")
+        (directory / f"{mode}-state.json").write_bytes((json.dumps(result, indent=2) + "\n").encode())
         check(core.CoreDoCommand(2, 0, None))
         check(core.CoreShutdown())
     finally:
@@ -253,7 +262,9 @@ def verify(directory, scenario, cargo):
         assert min(load["generation"] for load in later) > max(load["generation"] for load in earlier)
         assert imported["overlays"] and all(o["candidate"] for o in imported["overlays"].values())
     if scenario == "mutation":
-        assert any(u["kind"] == "executable_load_bytes_mismatch" for u in imported["unresolved"])
+        # Successful stores revoke DMA provenance before byte matching.
+        # The retained Linux trace is byte-identical on Windows.
+        assert any(u["kind"] == "intervening_executable_store" for u in imported["unresolved"])
         assert any(u["kind"] == "unknown_executable_source" for u in imported["unresolved"])
         assert any(w["kind"] == "unknown" and w["range"] is not None for w in imported["executable_writes"])
         first_generation = min(load["generation"] for load in imported["loads"])
@@ -273,11 +284,7 @@ def main():
         (directory / "synthetic.z64").write_bytes(fixture(scenario))
         for mode in MODES:
             command = [sys.executable, str(Path(__file__).resolve()), "--worker", str(directory), mode]
-            if os.name == "nt":
-                def linux_path(path):
-                    return subprocess.check_output(["wsl", "-d", "Ubuntu", "--exec", "wslpath", "-a", path.as_posix()], text=True).strip()
-                command = ["wsl", "-d", "Ubuntu", "--exec", "python3", linux_path(Path(__file__).resolve()), "--worker", linux_path(directory), mode]
-            subprocess.run(command, check=True, timeout=30)
+            subprocess.run(command, check=True, timeout=30, env=session_environment(directory, mode))
         verify(directory, scenario, cargo)
 
 

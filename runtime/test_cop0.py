@@ -1,11 +1,13 @@
 """ADR-0235: lowered COP0/TLB effects versus the exact pinned ares interpreter."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import ares_oracle
 import importlib.util
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
-import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'target/cop0-contract'
@@ -75,12 +77,8 @@ DUMP_ARES = r'''  std::printf(",\"cp0\":[");
 '''
 
 
-def linux(path):
-    return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(path)], text=True).strip()
-
-
 def oracle_build():
-    return A.builder().build(OUT / 'driver.cpp', OUT / 'oracle')
+    return ares_oracle.build(OUT / 'driver.cpp', OUT / 'oracle')
 
 
 def boundary_contract(exe, cc):
@@ -211,12 +209,8 @@ def main():
     subprocess.run([cc, '-O2', '-std=c11', '-Wall', '-Werror', '-Wno-unused-label',
                     '-DPLAID_LOWERED="native.c"', f'-DPLAID_EXIT={A.EXIT}u', '-I', str(OUT),
                     str(OUT / 'harness.c'), '-lm', '-o', str(binary)], check=True)
-    if os.name == 'nt':
-        subprocess.run(['wsl', '-d', 'Ubuntu', '--exec', 'python3', linux(Path(__file__)), '--oracle-build'], check=True)
-        command = ['wsl', '-d', 'Ubuntu', '--exec', linux(OUT / 'oracle/oracle'), linux(raw), hex(A.EXIT)]
-    else:
-        oracle = oracle_build()
-        command = [str(oracle), str(raw), hex(A.EXIT)]
+    oracle = oracle_build()
+    command = [str(oracle), str(raw), hex(A.EXIT)]
     expected = subprocess.run(command, capture_output=True, text=True, check=True, timeout=120)
     actual = subprocess.run([str(binary)], capture_output=True, text=True, check=True, timeout=30)
     a, e = json.loads(actual.stdout), json.loads(expected.stdout)

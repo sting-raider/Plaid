@@ -1,4 +1,8 @@
 """Lowered CACHE and TagLo against pinned ares (ADR-0259)."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import ares_oracle
 import json
 import hashlib
 import os
@@ -299,16 +303,11 @@ def _run(exe, cc, T, label, body, expect_lost=False, values=None, reference_valu
     binary = T.build(exe, cc, label, _program(T, body), [],
                      ['-DPLAID_BOOT_STATUS=0x34000000u', '-DPLAID_BOOT_ENTRYHI=0ull'])
     run = subprocess.run([str(binary), '--dump', hex(LOG), '8'], capture_output=True, text=True, timeout=30)
-    oracle = T.ROOT / 'target/native-slice/oracle/oracle'
+    oracle = ares_oracle.default()
     built = json.loads((oracle.parent / 'build.json').read_text())
     assert built['revision'] == T.A.builder().REV
     assert built['driver'] == hashlib.sha256((T.ROOT / 'spikes/096-native-slice/driver.cpp').read_bytes()).hexdigest()
     args = [str(oracle), str(out / f'{label}.bin'), hex(A.EXIT)]
-    if os.name == 'nt':
-        def linux(path):
-            return subprocess.check_output(['wsl', '-d', 'Ubuntu', '--exec', 'wslpath', '-a', str(path)],
-                                           text=True).strip()
-        args = ['wsl', '-d', 'Ubuntu', '--exec', linux(oracle), linux(out / f'{label}.bin'), hex(A.EXIT)]
     reference = subprocess.run(args, capture_output=True, text=True, timeout=120)
     rows = [json.loads(line) for line in run.stdout.splitlines() if line.startswith('{')]
     stop = next(row for row in rows if 'stop' in row)
