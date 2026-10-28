@@ -87,7 +87,7 @@ def missing_tables(program):
 
 
 def repair_table_data(rom, loads, program, base, size, receipt_path):
-    """A malformed early table snapshot is not executable-source evidence.
+    """A stale or malformed early table snapshot is not executable-source evidence.
 
     Replay to its first use and supply only the table's data bytes. Composition
     repeats that fetch; native table checks still guard any accepted certificate.
@@ -97,6 +97,21 @@ def repair_table_data(rom, loads, program, base, size, receipt_path):
         if item['kind'] == 'invalid_pointer_table_entry':
             table = json.loads(program['evidence'][item['evidence'][0]]['detail'])
             tables.add((item['site']['pc'], table['table_start'], table['count'] * 4))
+    # Aligned fallback words can still be a stale table snapshot. Missing
+    # candidate blocks request fresh data, never authorize executable targets.
+    key = lambda a: (a['pc'], a.get('image'), a.get('generation'))
+    available = {key(b['start']) for b in program.get('blocks', []) if not b.get('delay_slot_entry')}
+    available.update(key(a) for a, _ in program.get('runtime_functions', []))
+    for site in program.get('indirect_sites', []):
+        if not any(key(target) not in available for target, _ in site['candidates']):
+            continue
+        for ref in {ref for _, refs in site['candidates'] for ref in refs}:
+            evidence = program['evidence'][ref]
+            if evidence['producer'] != 'plaid-pointer-table-candidates/v0':
+                continue
+            table = json.loads(evidence['detail'])
+            if table['site'] == site['site']:
+                tables.add((site['site']['pc'], table['table_start'], table['count'] * 4))
     if not tables:
         return False
     bindings = replay_bindings(program, base, size)

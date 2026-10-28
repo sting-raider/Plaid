@@ -243,6 +243,44 @@ def table_data_contract():
             return [captured]
         harvest_boot.capture_many = replay
         try:
+            # Aligned words can still name code that the source map cannot supply.
+            aligned = json.loads(json.dumps(program))
+            aligned['unresolved'] = []
+            site = dict(pc=0x80800020, image='synthetic', generation=0)
+            target = dict(pc=0x61000040, image='synthetic', generation=0)
+            aligned['evidence']['table'] = dict(producer='plaid-pointer-table-candidates/v0',
+                detail=json.dumps(dict(table, site=site)))
+            aligned['indirect_sites'] = [dict(site=site, candidates=[[target, ['table']]])]
+            loads = json.loads(json.dumps(initial))
+            assert harvest_boot.repair_table_data('unused.z64', loads, aligned, 0x80000400, 0x100, receipt)
+            assert calls == [[0x60000020]]
+            assert [l['encoding'] for l in loads['loads']] == ['raw', 'ares_data', 'raw']
+            assert not harvest_boot.repair_table_data('unused.z64', loads, aligned, 0x80000400, 0x100, receipt)
+            for change in ('known-block', 'known-runtime', 'foreign-evidence', 'foreign-site', 'no-candidates'):
+                candidate = json.loads(json.dumps(aligned))
+                if change == 'known-block':
+                    candidate['blocks'] = [dict(start=target)]
+                elif change == 'known-runtime':
+                    candidate['runtime_functions'] = [[target, dict(name='synthetic')]]
+                elif change == 'foreign-evidence':
+                    candidate['evidence']['table']['producer'] = 'plaid-return-closure/v0'
+                elif change == 'foreign-site':
+                    candidate['evidence']['table']['detail'] = json.dumps(dict(table, site=dict(site, pc=0x80800024)))
+                else:
+                    candidate['indirect_sites'][0]['candidates'] = []
+                calls.clear()
+                untouched = json.loads(json.dumps(initial))
+                assert not harvest_boot.repair_table_data('unused.z64', untouched, candidate, 0x80000400, 0x100, receipt)
+                assert untouched == initial and not calls
+            # Equal PCs in a different image/generation do not supply this target.
+            for changed in (dict(target, image='other'), dict(target, generation=1)):
+                candidate = dict(aligned, blocks=[dict(start=changed)])
+                assert harvest_boot.repair_table_data('unused.z64', json.loads(json.dumps(initial)),
+                                                      candidate, 0x80000400, 0x100, receipt)
+            candidate = dict(aligned, blocks=[dict(start=target, delay_slot_entry=True)])
+            assert harvest_boot.repair_table_data('unused.z64', json.loads(json.dumps(initial)),
+                                                  candidate, 0x80000400, 0x100, receipt)
+            calls.clear()
             loads = json.loads(json.dumps(initial))
             assert harvest_boot.repair_table_data('unused.z64', loads, program, 0x80000400, 0x100, receipt)
             assert calls == [[0x60000020]]
@@ -274,7 +312,7 @@ def table_data_contract():
             assert json.dumps(loads) == before
         finally:
             harvest_boot.capture_many = saved
-    print('PASS first-use table data: unique replay address, physical slice, source-preserving splits and invalid/conflicting refusal')
+    print('PASS first-use table data: aligned missing-target and identity/evidence checks, unique replay address, physical slice, source-preserving splits and invalid/conflicting refusal')
 
 
 def main():

@@ -8477,3 +8477,34 @@ ISC/SLJIT ares notices are retained; no reference body/assets or runtime guest
 interpreter/decoder/JIT is introduced. Default GCC15.2, runtime and RT64 are
 unchanged; no shared rebuild. Measurements, controls and remaining gaps:
 research/ge-continuations.md. README follows in the worker-owned commit.
+
+## ADR-0284: Repair aligned table snapshots with missing candidate bodies
+
+Status: accepted
+
+Decision: extend existing neutral first-use table data repair beyond unaligned
+snapshot values. Same-site pointer-table evidence with a candidate absent from
+normal blocks/runtime entries requests replay. Compare complete PC/image/generation
+identities; foreign producers/sites and already supplied targets add no request.
+This is search policy, not executable-source authority or closed-target evidence.
+Keep unique replay-address projection, full physical slice, alignment, duplicate,
+source-preserving split and conflicting-source refusals. Emit only ares_data;
+composition repeats neutral reset replay and native data/table guards remain.
+
+With identical222-page executable sources, the old malformed-only policy repairs
+2 data ranges and yields46950 blocks/196 residual blockers. The new policy repairs
+10 and yields47161/124; indirect-target obligations92->20. Other buckets remain
+slots42, direct37, unmapped9, runtime-body8, callbacks7 and TLBWR1. Emission is still
+refused. No runtime decoder/interpreter/JIT, game constant, source-offset formula,
+new exception/timing semantics, native VI/logo/title or completeness claim.
+
+Synthetic baseline-red aligned candidates, image/generation distinctions, known
+block/runtime and foreign evidence exclusions, duplicate/partial/physical/alignment/
+conflicting-source cases and an inverted-selector mutation verify the policy.
+Retained replay-data native/ares full-state and guard mutations remain in the gate.
+Pinned ares9408cb43 ISC/SLJIT oracle/adapter and notices are unchanged; no reference
+implementation body or assets are copied. Default GCC15.2 and RT64 are unchanged.
+Before/after timings are concurrent work receipts, not a speedup measurement.
+Full evidence and local gates:research/ge-table-snapshots.md. The README follows
+in the worker-owned fast-forward commit. Return proofs and later refill pages
+are separate candidates, not counted in this fixed-source reduction.
