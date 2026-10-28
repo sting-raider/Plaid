@@ -104,8 +104,8 @@ fn impossible_branch_link_and_delay_effects_lower_without_the_target() {
 
 #[test]
 fn instructions_outside_the_model_are_rejected() {
-    // TLBWR needs a modeled Random timeline; never emulated.
-    let words = [[0x4200_0006, 0, 0, 0].as_slice(), &HALT].concat();
+    // Exception delivery remains outside the native execution model.
+    let words = [[0x0000_000c, 0, 0, 0].as_slice(), &HALT].concat();
     let err = lower(&words, 0x8000_0010).unwrap_err();
     assert!(err.contains("not CLOSED"), "{err}");
 }

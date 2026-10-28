@@ -31,6 +31,11 @@ def fixture():
         items += [0x42000001, 0x42000002]  # equal rewrite advances native generation
         for reg in (0, 2, 3, 5, 10):
             items += [cp(1, A.t1, reg), A.sd(A.t1, 0, A.gp), A.addiu(A.gp, A.gp, 8)]
+    # Wired=31 makes Random independent of the reference's sampling/timing model.
+    items += write(6, 31) + write(5, 0) + write(10, 0x60000000)
+    items += write(2, 0x1001f) + write(3, 0x1005f) + [0x42000006, 0x42000006]
+    items += [cp(0, A.s6, 0), *li(A.t3, 0x60000000), *li(A.t0, 0x89abcdef),
+              A.sw(A.t0, 0x40, A.t3), A.lw(A.s7, 0x40, A.t3)]
     # The committed even/odd pages must drive real memory transactions too.
     items += [*li(A.t3, 0x70000000), *li(A.t0, 0x13579bdf), A.sw(A.t0, 0x40, A.t3),
               A.sw(A.t0, 0x1040, A.t3), A.lw(A.t1, 0x40, A.t3), A.sw(A.t1, 0, A.gp),
@@ -130,7 +135,16 @@ def main():
     # Faults refuse before touching architectural state or RAM.
     checks = r'''  { static plaid_state before;
       u64 v; u32 fault_pc = 0x80000004;
-      for (unsigned i = 0; i < 32; i++) assert(s.tlb_generation[i] == (i < 5 ? 3u : 1u));
+      for (unsigned i = 0; i < 32; i++) assert(s.tlb_generation[i] == (i < 5 || i == 31 ? 3u : 1u));
+      assert(s.r[22] == 4 && s.r[23] == SX32(0x89abcdefu));
+      assert(s.ram[0x400040] == 0x89 && s.ram[0x400041] == 0xab && s.ram[0x400042] == 0xcd && s.ram[0x400043] == 0xef);
+      { u32 known = s.cp0_known;
+        s.cp0_wired = 31; s.cp0_known &= ~1u; before = s;
+        assert(!plaid_cp0_tlbwr(&s, fault_pc));
+        assert(s.cp0_index == 63 && !(s.cp0_known & 1u) && s.tlb_generation[31] == before.tlb_generation[31] + 1);
+        s.tlb[31] = before.tlb[31]; s.tlb_generation[31] = before.tlb_generation[31];
+        assert(!memcmp(&before, &s, sizeof s)); s.cp0_known = known;
+      }
       assert(!plaid_cp0_write(&s, 12, 0x20000000, fault_pc));
       assert(s.fr_mode == 1 && s.cp0_status == 0x20000000);
       assert(!plaid_cp0_write(&s, 12, 0x24000000, fault_pc));
@@ -144,6 +158,18 @@ def main():
       s.fault = before.fault; s.fault_pc = before.fault_pc;
       assert(!memcmp(&before, &s, sizeof s));
       #define REFUSE(expr) do { before = s; assert(expr); assert(s.fault == 12 && s.fault_pc == fault_pc); s.fault = before.fault; s.fault_pc = before.fault_pc; assert(!memcmp(&before, &s, sizeof s)); } while (0)
+      for (unsigned wired = 0; wired < 64; wired++) {
+        if (wired == 31) continue;
+        s.cp0_wired = wired; s.cp0_known |= 1u << 6;
+        REFUSE(plaid_cp0_tlbwr(&s, fault_pc));
+      }
+      s.cp0_wired = 31; s.cp0_known &= ~(1u << 6);
+      REFUSE(plaid_cp0_tlbwr(&s, fault_pc));
+      s.cp0_known |= 1u << 6;
+      for (unsigned bit = 0; bit < 32; bit++) if ((1u << bit) & 0x42cu) {
+        u32 known = s.cp0_known; s.cp0_known &= ~(1u << bit);
+        REFUSE(plaid_cp0_tlbwr(&s, fault_pc)); s.cp0_known = known;
+      }
       REFUSE(plaid_cp0_write(&s, 11, 0, fault_pc));
       REFUSE(plaid_cp0_write(&s, 12, 0x24000001, fault_pc));
       REFUSE(plaid_cp0_write(&s, 12, 0x25000000, fault_pc));
@@ -151,9 +177,11 @@ def main():
       s.cp0_index = 0;
       s.cp0_entryhi = 0x100000000ull;
       REFUSE(plaid_cp0_tlbwi(&s, fault_pc));
+      REFUSE(plaid_cp0_tlbwr(&s, fault_pc));
       s.cp0_entryhi = 0x70000000;
       s.cp0_tlb.lo[0] &= ~1u;
       REFUSE(plaid_cp0_tlbwi(&s, fault_pc));
+      REFUSE(plaid_cp0_tlbwr(&s, fault_pc));
       s.cp0_tlb.lo[0] |= 1u;
       s.cp0_known = 0;
       REFUSE(plaid_cp0_tlbwi(&s, fault_pc));
@@ -167,6 +195,7 @@ def main():
       REFUSE(plaid_cp0_tlbp(&s, fault_pc));
       s.status_known = 0;
       REFUSE(plaid_cp0_write(&s, 12, 0x24000000, fault_pc));
+      REFUSE(plaid_cp0_tlbwr(&s, fault_pc));
       s.status_known = 1; s.cp0_status |= 0x10;
       REFUSE(plaid_cp0_read(&s, 12, &v, fault_pc));
       s.cp0_status &= ~0x18u;
@@ -192,9 +221,23 @@ def main():
     actual = subprocess.run([str(binary)], capture_output=True, text=True, check=True, timeout=30)
     a, e = json.loads(actual.stdout), json.loads(expected.stdout)
     assert a == e, {k: (a[k], e[k]) for k in a if a[k] != e[k]}
+    generated = (OUT / 'native.c').read_text()
+    guard = 's->cp0_wired != 31u'
+    assert generated.count(guard) == 1
+    try:
+        (OUT / 'native.c').write_text(generated.replace(guard, '0'))
+        mutant = OUT / ('check-unguarded.exe' if os.name == 'nt' else 'check-unguarded')
+        subprocess.run([cc, '-O2', '-std=c11', '-Wall', '-Werror', '-Wno-unused-label',
+                        '-DPLAID_LOWERED="native.c"', f'-DPLAID_EXIT={A.EXIT}u', '-I', str(OUT),
+                        str(OUT / 'harness.c'), '-lm', '-o', str(mutant)], check=True)
+        changed = subprocess.run([str(mutant)], capture_output=True, text=True, timeout=30)
+        assert changed.returncode != 0, 'removed Random-domain guard escaped the refusal contract'
+        (OUT / 'removed-domain-guard.stderr').write_text(changed.stderr)
+    finally:
+        (OUT / 'native.c').write_text(generated)
     boundary_contract(exe, cc)
-    (OUT / 'receipt.json').write_text(json.dumps(dict(format='plaid-cop0-contract-v0', ares=A.builder().REV, matched=list(a), forms=7), indent=2))
-    print('PASS seven lowered COP0/TLB forms: GPR/FPR, PC, HI/LO, RAM, staging registers, all 32 TLB entries; unknown/event state refuses atomically')
+    (OUT / 'receipt.json').write_text(json.dumps(dict(format='plaid-cop0-contract-v0', ares=A.builder().REV, matched=list(a), forms=8), indent=2))
+    print('PASS eight lowered COP0/TLB forms: GPR/FPR, PC, HI/LO, RAM, staging registers, all 32 TLB entries; Wired=31 TLBWR preserves Index; unknown/event/wider-domain state refuses atomically')
 
 
 if __name__ == '__main__':

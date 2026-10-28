@@ -53,7 +53,7 @@ typedef struct plaid_state_s {
      no cache witness, and line_lost a byte mask for RAM without a witness. */
   u32 dtag[512]; u8 ddirty[512]; u16 dstale[512], dunknown[512]; u8 dold[512][16];
   u16 line_lost[PLAID_RAM_SIZE / 16];
-  u8 load_ok[64]; /* declared load verified in RAM (ADR-0136) */
+  u8 load_ok[251]; /* tags 2..252; 253..255 are reserved (ADR-0290) */
   /* Per RAM word: 0 data, 1 fixed text, 2+n declared load n,
      253 immutable proof data, 254 revoked fixed text, 255 bound overlay. */
   u8 prot[PLAID_RAM_SIZE / 4]; u8 prot_ready, text_dirty;
@@ -1067,6 +1067,7 @@ fn simple_lo(word: u32, pc: u32, fr0: bool, lo: Option<&str>) -> Result<String, 
             let operation = match word & 63 {
                 1 => "tlbr",
                 2 => "tlbwi",
+                6 => "tlbwr",
                 _ => "tlbp",
             };
             format!("if (plaid_cp0_{operation}(s, 0x{pc:08x}u)) return 1;")
@@ -1750,8 +1751,8 @@ pub fn lower_c_parts(
         .filter(|l| !l.relocatable)
         .map(range)
         .collect();
-    if loads.len() > 64 {
-        return Err("at most 64 declared loads are supported".into());
+    if loads.len() > 251 {
+        return Err("at most 251 declared loads are supported".into());
     }
     let load_of = |start: u32| loads.iter().position(|(s, e)| *s <= start && start < *e);
     let data_loads: BTreeSet<usize> = declared
@@ -1967,11 +1968,28 @@ pub fn lower_c_parts(
             sequential.insert(pc, slots);
         }
     }
-    // A proven register-call constant can name the linked slot too. Its
-    // native dispatcher must contain the placed alternatives, not a phantom
-    // function at the shared address.
+    let mapped_tail_sites: BTreeSet<_> = map
+        .indirect_sites
+        .iter()
+        .filter(|site| {
+            site.link_register.is_none()
+                && site.closed_proof.is_some()
+                && targets.get(&site.site.pc.0).is_some_and(|set| {
+                    set.iter().any(|&target| {
+                        let copies = plaid_core::declared_loads::slot_targets(declared, target);
+                        !copies.is_empty()
+                            || ((blocks.contains(&target) || runtime.contains_key(&target))
+                                && ovl_of(site.site.pc.0) != ovl_of(target))
+                    })
+                })
+        })
+        .map(|site| site.site.pc.0)
+        .collect();
+    // Proven register calls and cross-source tails must bind real native
+    // entries, retaining local table cases inside their existing function.
     for site in map.indirect_sites.iter().filter(|s| {
         s.link_register.is_some()
+            || mapped_tail_sites.contains(&s.site.pc.0)
             || s.closed_proof
                 .as_ref()
                 .and_then(|id| map.evidence.get(id))
@@ -1994,7 +2012,17 @@ pub fn lower_c_parts(
             *set = expanded;
             callees.extend(
                 set.iter()
-                    .filter(|t| blocks.contains(t))
+                    .filter(|t| {
+                        blocks.contains(t)
+                            && (!mapped_tail_sites.contains(&site.site.pc.0)
+                                || site.link_register.is_some()
+                                || site
+                                    .closed_proof
+                                    .as_ref()
+                                    .and_then(|id| map.evidence.get(id))
+                                    .is_some_and(|e| e.producer == "plaid-tail-cell-jr/v0")
+                                || ovl_of(site.site.pc.0) != ovl_of(**t))
+                    })
                     .map(|&t| image.address(GuestAddr(t))),
             );
         }

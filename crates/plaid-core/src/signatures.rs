@@ -21,7 +21,7 @@ mod sdk;
 mod status;
 pub use status::verify as verify_status_abi;
 
-/// Functions N64Recomp's runtime reimplements (`reimplemented_funcs` in
+/// Plaid-provided subset of functions N64Recomp's runtime reimplements (`reimplemented_funcs` in
 /// N64Recomp `src/symbol_lists.cpp`, MIT, Copyright (c) 2024 Wiseguy), plus
 /// its ignored TLB functions.
 #[rustfmt::skip]
@@ -30,7 +30,7 @@ pub const RUNTIME_FUNCTIONS: &[&str] = &[
     "osAiGetLength", "osAiGetStatus", "osAiSetFrequency", "osAiSetNextBuffer",
     // N64Recomp's osVi* and osCreateViManager are left out: the VI registers
     // are modelled and libultra's VI manager runs as guest code (ADR-0199)
-    "osDpSetNextBuffer",
+    // Unprovided interfaces, including osDpSetNextBuffer, remain guest code.
     "osSpTaskLoad", "osSpTaskStartGo", "osSpTaskYield", "osSpTaskYielded", "__osSpSetPc",
     "osContInit", "osContStartReadData", "osContGetReadData", "osContStartQuery",
     "osContGetQuery", "osContSetCh",
@@ -38,7 +38,7 @@ pub const RUNTIME_FUNCTIONS: &[&str] = &[
     "__osMotorAccess", "osMotorInit", "osMotorStart", "osMotorStop",
     "osPfsInitPak", "osPfsFreeBlocks", "osPfsAllocateFile", "osPfsDeleteFile",
     "osPfsFileState", "osPfsFindFile", "osPfsReadWriteFile", "__osPfsGetStatus",
-    "osCartRomInit", "osCreatePiManager", "osPiReadIo", "osPiStartDma", "osEPiStartDma",
+    "osCartRomInit", "osCreatePiManager", "osPiStartDma", "osEPiStartDma",
     "osPiGetStatus", "osPiRawStartDma", "osEPiRawStartDma", "osEPiReadIo",
     // N64Recomp's osFlash* are left out: the FlashRAM is modelled on the PI
     // bus and libultra's flash code runs as guest code (ADR-0183)
@@ -59,7 +59,7 @@ pub const RUNTIME_FUNCTIONS: &[&str] = &[
     // driver (ADR-0183)
     "osGetIntMask",
     "osVirtualToPhysical",
-    "osGetCount", "osSetCount", "__osSetFpcCsr",
+    "osGetCount", "__osSetFpcCsr",
     // not in N64Recomp's list: COP0 Compare, which libultra's VI manager
     // reaches through its timer interrupt once it runs as guest code (ADR-0199)
     "__osSetCompare",
@@ -69,7 +69,7 @@ pub const RUNTIME_FUNCTIONS: &[&str] = &[
     "__ull_div", "__ll_div", "__ll_mul", "__ull_rem", "__ull_to_d", "__ull_to_f",
     // TLB functions N64Recomp ignores instead (`ignored_funcs`); the host
     // runtime owns the TLB (ADR-0155)
-    "osMapTLB", "osUnmapTLB", "osUnmapTLBAll", "osSetTLBASID",
+    "osMapTLB", "osUnmapTLB", "osUnmapTLBAll",
 ];
 
 /// Evidence producer of runtime functions that only a reference symbol map

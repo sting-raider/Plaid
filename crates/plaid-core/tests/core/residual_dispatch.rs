@@ -113,8 +113,8 @@ fn only_the_residual_scope_accepts_an_unproven_indirect_site() {
 #[test]
 fn every_other_blocker_still_refuses_under_the_residual_scope() {
     let mut image = image();
-    // An unsupported instruction (TLBWR) in the jump's delay slot.
-    image.words[4] = 0x4200_0006;
+    // SYSCALL remains unsupported; TLBWR now has an explicit bounded contract.
+    image.words[4] = 0x0000_000c;
     let map = map(&image);
     let plain = kinds(
         &map,
