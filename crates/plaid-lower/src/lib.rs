@@ -170,20 +170,23 @@ static inline int plaid_text_active(plaid_state *s, u32 p, u32 size) {
       if (p < f->ranges[i].end && p + size > f->ranges[i].start) return 1;
   return 0;
 }
-/* Only revoked words need comparing; changed text is never executed. */
+u8 plaid_base_prot(u32 p);
+/* Revoked or aliased fixed words must match their own compiled source. */
 static inline int plaid_text_enter(plaid_state *s, u32 p, const u32 *words, u32 count, u32 pc) {
   u32 i, j;
   if (!s->text_dirty) return 0;
-  for (i = 0; i < count; i++) if (s->prot[(p >> 2) + i] == 254) {
+  for (i = 0; i < count; i++) if (s->prot[(p >> 2) + i] == 254 ||
+      (s->prot[(p >> 2) + i] == 255 && plaid_base_prot(p + 4 * i) == 1)) {
     for (j = 0; j < 4; j++)
       if (s->ram[p + 4 * i + j] != (u8)(words[i] >> (24 - 8 * j))) return plaid_fault(s, pc, 8);
-    s->prot[(p >> 2) + i] = 1;
+    if (s->prot[(p >> 2) + i] != 255) s->prot[(p >> 2) + i] = 1;
   }
   return 0;
 }
 /* Proof-bearing data and active native text refuse writes. Inactive text
    revokes its byte verification; the next entry checks it again (ADR-0219). */
 int plaid_ovl_write(plaid_state *s, u32 p, u32 pc);
+int plaid_ovl_can_write(plaid_state *s, u32 p, u32 pc);
 u32 plaid_link(plaid_state *s, u32 t);
 int plaid_tlb_write(plaid_state *s, u32 index, plaid_tlb_entry entry, u32 pc);
 int plaid_tlb_clear(plaid_state *s, u32 pc);
@@ -191,21 +194,31 @@ static inline int plaid_protected(plaid_state *s, u32 p, u32 size, u32 pc) {
   u32 w, q = pc & 0x1fffffffu;
   u8 own = 0, k;
   if (!s->prot_ready) plaid_build_prot(s);
-  if (pc >= 0x80000000u && pc < 0xc0000000u && q < PLAID_RAM_SIZE) own = s->prot[q >> 2];
+  if (pc >= 0x80000000u && pc < 0xc0000000u && q < PLAID_RAM_SIZE) {
+    own = s->prot[q >> 2];
+    if (own == 255) own = plaid_base_prot(q);
+  }
+  /* Preflight the complete transaction before revoking any source witness. */
   for (w = p >> 2; w <= (p + size - 1) >> 2; w++) {
     k = s->prot[w];
-    if (k == 253) return 1; /* proof-bearing base data */
-    if (k == 1 || k == 254) {
-      if (plaid_text_active(s, w << 2, 4)) return 1;
-      s->prot[w] = 254; s->text_dirty = 1;
+    if (k == 255) {
+      if (plaid_ovl_can_write(s, w << 2, pc)) return 1;
       continue;
     }
+    if (k == 253) return 1; /* proof-bearing base data */
+    if ((k == 1 || k == 254) && plaid_text_active(s, w << 2, 4)) return 1;
+    if (k > 1 && k < 253 && s->load_ok[k - 2] &&
+        (k == own || plaid_text_active(s, w << 2, 4))) return 1;
+  }
+  for (w = p >> 2; w <= (p + size - 1) >> 2; w++) {
+    k = s->prot[w];
     if (k == 255) {
       if (plaid_ovl_write(s, w << 2, pc)) return 1;
-      continue;
+      k = s->prot[w];
     }
-    if (k > 1 && s->load_ok[k - 2]) {
-      if (k == own || plaid_text_active(s, w << 2, 4)) return 1;
+    if (k == 1 || k == 254) {
+      s->prot[w] = 254; s->text_dirty = 1;
+    } else if (k > 1 && k < 253) {
       s->load_ok[k - 2] = 0;
     }
   }
@@ -610,7 +623,7 @@ fn overlay_runtime(
 ) -> Result<String, String> {
     if overlays.is_empty() {
         return Ok(format!(
-            "int plaid_ovl_write(plaid_state *s, u32 p, u32 pc) {{ (void)s; (void)p; (void)pc; return 1; }}\nstatic int plaid_tlb_change(plaid_state *s, u32 index, const plaid_tlb_entry *entry, int clear, u32 pc) {{ (void)s; (void)index; (void)entry; (void)clear; (void)pc; return 0; }}\n{TLB_WRITES}"
+            "int plaid_ovl_can_write(plaid_state *s, u32 p, u32 pc) {{ (void)s; (void)p; (void)pc; return 1; }}\nint plaid_ovl_write(plaid_state *s, u32 p, u32 pc) {{ return plaid_ovl_can_write(s, p, pc); }}\nstatic int plaid_tlb_change(plaid_state *s, u32 index, const plaid_tlb_entry *entry, int clear, u32 pc) {{ (void)s; (void)index; (void)entry; (void)clear; (void)pc; return 0; }}\n{TLB_WRITES}"
         ));
     }
     let mut out = String::from(
@@ -759,7 +772,16 @@ static void plaid_ovl_protect(plaid_state *s, u32 k, u32 a, u8 value) {
   u32 r, w;
   for (r = 0; r < plaid_ovls[k].guards; r++)
     for (w = (a + plaid_ovls[k].ranges[r].start) >> 2; w < (a + plaid_ovls[k].ranges[r].end) >> 2; w++)
-      s->prot[w] = value;
+      if (value) {
+        if (plaid_base_prot(w << 2) == 1) s->text_dirty = 1;
+        s->prot[w] = value;
+      }
+      else if (s->prot[w] == 255) {
+        u8 previous = plaid_base_prot(w << 2);
+        if (previous == 1) { previous = 254; s->text_dirty = 1; }
+        else if (previous > 1 && previous < 253) s->load_ok[previous - 2] = 0;
+        s->prot[w] = previous;
+      }
 }
 static void plaid_ovl_revoke(plaid_state *s, u32 k) {
   u32 a = plaid_ovls[k].link + s->ovl_backing[k];
@@ -784,16 +806,26 @@ static int plaid_tlb_change(plaid_state *s, u32 index, const plaid_tlb_entry *en
 }
 /* Physical aliases of active mapped text cannot invalidate native frames.
    Preflight all bindings before revoking any overlapping inactive copy. */
-int plaid_ovl_write(plaid_state *s, u32 p, u32 pc) {
+int plaid_ovl_can_write(plaid_state *s, u32 p, u32 pc) {
   u32 k, a;
   for (k = 0; k < PLAID_OVLS; k++) {
     if (!s->ovl_ok[k]) continue;
     a = plaid_ovls[k].link + s->ovl_backing[k];
     if (!plaid_ovl_contains(k, p - a)) continue;
+    u8 previous = plaid_base_prot(p);
+    u32 q = pc & 0x1fffffffu;
+    u8 own = pc >= 0x80000000u && pc < 0xc0000000u && q < PLAID_RAM_SIZE ? plaid_base_prot(q) : 0;
+    if (previous == 253 || (previous && plaid_text_active(s, p, 4)) ||
+        (previous > 1 && previous < 253 && s->load_ok[previous - 2] && previous == own)) return 1;
     /* Proof data, like text, may change only after every frame has left.
        Revoke the binding below; reentry verifies all proof inputs again. */
     if (s->ovl_active[k] || pc - plaid_ovls[k].link < plaid_ovls[k].text) return 1;
   }
+  return 0;
+}
+int plaid_ovl_write(plaid_state *s, u32 p, u32 pc) {
+  u32 k;
+  if (plaid_ovl_can_write(s, p, pc)) return 1;
   for (k = 0; k < PLAID_OVLS; k++)
     if (s->ovl_ok[k] && plaid_ovl_contains(k, p - (plaid_ovls[k].link + s->ovl_backing[k])))
       plaid_ovl_revoke(s, k);
@@ -847,11 +879,17 @@ u32 plaid_link(plaid_state *s, u32 t) {
   }
   if (hit && !s->ovl_active[hk]) {
     a = hb & 0x1fffffffu;
-    /* First reject overlap, allowing only this candidate's previous copy. */
-    for (w = a >> 2; w < (a + plaid_ovls[hk].span) >> 2; w++)
-      if (plaid_ovl_contains(hk, (w << 2) - a) && s->prot[w] &&
-          !(s->ovl_ok[hk] && s->prot[w] == 255 &&
-          plaid_ovl_contains(hk, (w << 2) - (plaid_ovls[hk].link + s->ovl_backing[hk])))) return 1;
+    /* Only mapped sources may borrow compiler-declared fixed protection.
+       Heap copies and unknown protection metadata retain their overlap refusal. */
+    for (w = a >> 2; w < (a + plaid_ovls[hk].span) >> 2; w++) {
+      u8 previous = s->prot[w], base = plaid_base_prot(w << 2);
+      if (!plaid_ovl_contains(hk, (w << 2) - a) || !previous) continue;
+      if (previous == 255) {
+        if (!(s->ovl_ok[hk] &&
+              plaid_ovl_contains(hk, (w << 2) - (plaid_ovls[hk].link + s->ovl_backing[hk])))) return 1;
+      } else if (!plaid_ovls[hk].mapped ||
+                 (previous != base && !(previous == 254 && base == 1))) return 1;
+    }
     if (s->ovl_ok[hk]) plaid_ovl_revoke(s, hk);
     plaid_ovl_protect(s, hk, a, 255);
     s->ovl_delta[hk] = (hi ? plaid_ovls[hk].virtual_base : hb) - plaid_ovls[hk].link;
@@ -2124,11 +2162,10 @@ pub fn lower_c_parts(
                 .push((start - overlays[k].0, end - overlays[k].0));
             continue;
         }
-        code.push(format!(
-            "{{{}, {}, {}}}",
+        code.push((
             physical(start)?,
             physical(end - 1)? + 1,
-            load_of(start).map_or(-1, |l| l as i64)
+            load_of(start).map_or(-1, |l| l as i64),
         ));
     }
     for &entry in &delay_entries {
@@ -2187,11 +2224,10 @@ pub fn lower_c_parts(
                     .push((start.0 - overlays[k].0, end - overlays[k].0));
                 continue;
             }
-            code.push(format!(
-                "{{{}, {}, {}}}",
+            code.push((
                 physical(start.0)?,
                 physical(start.0 + count * 4 - 1)? + 1,
-                load_of(start.0).map_or(-2, |l| l as i64)
+                load_of(start.0).map_or(-2, |l| l as i64),
             ));
             if let Some(l) = load_of(start.0).filter(|l| data_loads.contains(l)) {
                 // Data-only loads have no executable entry to trigger validation.
@@ -2201,9 +2237,52 @@ pub fn lower_c_parts(
         }
     }
     let mut out = String::from(PRELUDE);
+    // Preserve the underlying fixed source when a separately verified alias
+    // borrows its physical words. Match BUILD_PROT's priority, then compress
+    // the immutable tag map for logarithmic lookup without more state memory.
+    let mut base_tags = vec![0u8; 0x800000 / 4];
+    for &(start, end, load) in &code {
+        let tag = if load == -2 {
+            253
+        } else if load < 0 {
+            1
+        } else {
+            (load + 2) as u8
+        };
+        let size = base_tags.len();
+        for previous in
+            &mut base_tags[(start as usize / 4).min(size)..(end as usize).div_ceil(4).min(size)]
+        {
+            if *previous != 253 && (*previous != 1 || load == -2) {
+                *previous = tag;
+            }
+        }
+    }
+    let mut tag_runs = Vec::new();
+    let mut start = 0;
+    while start < base_tags.len() {
+        let tag = base_tags[start];
+        let mut end = start + 1;
+        while end < base_tags.len() && base_tags[end] == tag {
+            end += 1;
+        }
+        if tag != 0 {
+            tag_runs.push(format!("{{{}u,{}u,{tag}u}}", start * 4, end * 4));
+        }
+        start = end;
+    }
     out += &format!(
-        "static const plaid_range plaid_code[] = {{{}}};\n{}{HELPERS}{COP0}{RUNTIME_WRITE}{HELPERS_TAIL}",
-        code.join(", "),
+        "static const plaid_range plaid_code[] = {{{}}};\nstatic const struct {{ u32 start, end; u8 tag; }} plaid_base_tags[] = {{{}}};\n{link}u8 plaid_base_prot(u32 p) {{\n  u32 lo = 0, hi = {}u;\n  while (lo < hi) {{\n    u32 mid = lo + (hi - lo) / 2;\n    if (p < plaid_base_tags[mid].start) hi = mid;\n    else if (p >= plaid_base_tags[mid].end) lo = mid + 1;\n    else return plaid_base_tags[mid].tag;\n  }}\n  return 0;\n}}\n{}{HELPERS}{COP0}{RUNTIME_WRITE}{HELPERS_TAIL}",
+        code.iter()
+            .map(|(start, end, load)| format!("{{{start}, {end}, {load}}}"))
+            .collect::<Vec<_>>()
+            .join(", "),
+        if tag_runs.is_empty() {
+            "{0,0,0}".into()
+        } else {
+            tag_runs.join(",")
+        },
+        tag_runs.len(),
         BUILD_PROT.replacen("static ", link, 1)
     );
     // What every other unit sees of the main unit's definitions.

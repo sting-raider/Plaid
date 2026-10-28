@@ -8701,6 +8701,28 @@ alias ownership has a verifier. No runtime decoder or game-specific exception.
 See research/ge-boot-rom-copy.md; pinned ares was read/instrumented, not copied.
 
 
+## ADR-0294: Preserve fixed ownership under authenticated mapped aliases
+
+Allow a fully verified mapped source to borrow fixed native text/load/proof
+words. Preserve the underlying protection class in a compressed immutable
+lookup generated with the existing tag priority. No new state array is needed.
+Heap copies and undeclared protection tags retain their overlap refusal. An
+aliased fixed-text entry compares its own compiled words independently and
+keeps the mapped ownership tag after a successful comparison.
+Revocation restores immutable proof protection, revokes fixed text and clears
+fixed-load witnesses. Both native frame owners pin writes; independently bound
+overlapping overlays remain refused. Preflight the complete write before any
+source metadata changes, including mixed-owner proof refusals.
+
+A synthetic program executes identical bytes through mapped and fixed calls
+and matches full pinned-ares state. Exhaustive tag lookup, each frame owner,
+inactive revocation, both-entry corruption refusal, baseline-red execution,
+explicit metadata protocol units and removed-preflight/source-guard mutations
+verify the contract. Existing TLB generation/source/clear checks remain.
+GoldenEye discharges1678 initial fixed protection conflicts, advancing from
+VI0/fault3/PC800004b4 to VI0-1/fault2/PC80920a04 at a decompression store800411c0.
+The large source's lifetime guard is retained; no logo/title is claimed. See
+research/ge-source-aliases.md. No upstream implementation body was copied.
 ## ADR-0295: Run supported reference oracles directly on Windows
 
 Use the ADR-0254 MinGW build for every live ares differential caller and boot

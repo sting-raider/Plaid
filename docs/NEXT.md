@@ -1,12 +1,22 @@
 # Next
 
+## GoldenEye after native alias ownership (ADR-0294)
+
+Preserve both fixed and mapped source owners, immutable proof data, native frame
+pins, complete-write preflight and source verification. Keep independent
+fixed-text comparisons and heap-copy overlap refusal. The first binding now
+passes; the next stop is VI0-1/fault2/PC80920a04, byte store800411c0 during
+decompression. The whole large raw mapped fragment pins code candidates that
+the live continuation need not execute. Investigate independently authenticated
+page sources with general cross-page verifiers instead of suppressing stores
+or treating copied/decompressed bytes as permanently executable.
+
+Zero ordinary blockers/five residual sites remain unchanged; general refill
+Random/Context/exception and RSP source obligations still apply. Evidence:
+research/ge-source-aliases.md.
 ## GoldenEye after native Windows oracles (ADR-0295)
 
-Reconcile the retained ADR-0294 alias-ownership candidate e787a696 onto main and
-finish its exact-tree gate and controls. Its native startup passes all 288 source
-guards and reaches VI0-1/fault2/PC80920a04 at a decompression store, replacing the
-canonical VI0/fault3/PC800004b4 source-protection overlap. It remains unlanded.
-Then recover the separately committed fragment candidate a8bd4513, renumber its
+Recover the separately committed fragment candidate a8bd4513, renumber its
 ADR-0295 to ADR-0296, and validate it on the new base. That experiment reached
 VI1/fault12/PC80801bbc at MTC0 Context; general Context/refill/exception semantics
 remain the next runtime bucket. Keep native-game runs silent and visible and

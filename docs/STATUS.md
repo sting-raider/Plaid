@@ -17,9 +17,21 @@ MP2 reaches Rules Land at 2697 VIs/45s and OoT save-load reaches its opening sce
 at 3596 VIs/60s. Every fault is 0. MM alone recovers 1798 VIs, so its earlier 1612
 observation is not reproduced. Framebuffer readbacks were inspected.
 
-GoldenEye ADR-0294 remains committed separately as e787a696 on
-`t3/ge-closure-r4`; it was retained while this migration took priority.
+## Fixed/mapped source ownership survives native aliases (ADR-0294)
 
+Authenticated mapped entries may borrow fixed source protections while keeping
+both owners. A compressed base-tag map restores proof protection and revokes
+fixed byte witnesses on unbinding; both frame kinds pin writes. Complete-write
+preflight preserves atomic refusal. Full-state ares, exhaustive tag lookup,
+ownership metadata units, baseline-red execution and mutations verify it.
+Heap-copy overlap refusals remain; aliased fixed text verifies its own words
+without erasing the mapped owner. Unknown protection metadata refuses.
+
+GoldenEye keeps49,250 blocks/zero ordinary blockers/five residual sites and
+native_complete=false. Its1678 initial protection overlaps are discharged;
+execution advances to VI0-1/fault2/PC80920a04 on a decompression byte write to
+800411c0. No VI/graphics/audio initialization or logo/title is claimed. The
+large source's lifetime guard remains enforced. Research: ge-source-aliases.md.
 
 ## Complete authenticated startup ROM data (ADR-0293)
 
