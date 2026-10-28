@@ -1,5 +1,16 @@
 # Status
 
+## Complete authenticated startup ROM data (ADR-0293)
+
+Native initialization now distinguishes the BSS-bounded analysis window from
+IPL3's1MiB ROM copy. The pinned adapter verifies all copied bytes at the natural
+entry fetch; malformed/missing/mismatched receipts and short ROMs refuse.
+GoldenEye's first mapped fragment improves from six failed source ranges to
+all288 passing, with source/mapping guards intact. It still stops at
+VI0/fault3/PC800004b4:1678 guarded words overlap fixed source protections, first
+physical0xb6ac/tag2. Alias ownership is next; no VI/logo/title claim.
+Evidence: research/ge-boot-rom-copy.md.
+
 ## First residual-dispatch GoldenEye executable (ADRs-0289–0292)
 
 The 227-engine-page frontier now emits and links: bounded Wired=31 TLBWR

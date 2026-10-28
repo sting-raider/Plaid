@@ -1890,6 +1890,18 @@ int main(int argc, char **argv) {
 #endif
   S->io = rt_io;
   if (rom) io_boot();
+#ifdef PLAID_BOOT_ROM_COPY_SIZE
+  /* Authenticated at the entry fetch by the pinned startup adapter. This is
+     startup data, independent of the BSS-bounded executable analysis window. */
+  _Static_assert(PLAID_BOOT_ROM_COPY_SIZE == 0x100000u &&
+                 PLAID_BOOT_ROM_COPY_BASE >= 0x400u &&
+                 PLAID_BOOT_ROM_COPY_BASE <= PLAID_RAM_SIZE - PLAID_BOOT_ROM_COPY_SIZE,
+                 "post-IPL ROM copy outside RDRAM");
+  if (!rom || rom_size < 0x1000u + PLAID_BOOT_ROM_COPY_SIZE) {
+    fprintf(stderr, "ROM is shorter than the authenticated post-IPL copy\n"); return 2;
+  }
+  memcpy(S->ram + PLAID_BOOT_ROM_COPY_BASE, rom + 0x1000u, PLAID_BOOT_ROM_COPY_SIZE);
+#endif
 #ifdef PLAID_RT64
   if (!rom || plaid_gfx_open(rom)) { fprintf(stderr, "the renderer needs --rom and a working GPU\n"); return 2; }
 #endif

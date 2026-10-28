@@ -1,5 +1,16 @@
 # Next
 
+## GoldenEye after authenticated startup data (ADR-0293)
+
+Preserve the full entry-time ROM-copy verification independently of discovery's
+BSS bound. The startup fragment now verifies all288 ranges, but binding still
+refuses existing fixed-source protection at physical0xb6ac/tag2 (1678 overlapping
+words total). Design a general alias-ownership contract that preserves both
+source witnesses, immutable proof data, fixed/mapped native frame pins, atomic
+refusal and revocation. Do not erase an existing protection tag to admit a
+mapped alias. Recheck VI/fault/PC and RDRAM after that contract is verified.
+Receipt: research/ge-boot-rom-copy.md.
+
 ## GoldenEye after first native emission (ADRs-0289–0292)
 
 Preserve the residual manifest and guarded TLBWR scope. The first executable

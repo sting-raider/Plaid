@@ -16,6 +16,7 @@ static bool startupIdentity = true;
 static bool entered = false;
 static u32 boot, bootStatus;
 static u64 bootEntryHi;
+static bool bootRomCopy = false;
 static std::set<u32> targets;
 static u64 steps = 0;
 static FILE* result;
@@ -195,6 +196,13 @@ static void observe(u64 address, u32 word) {
     if(pc == boot && !entered) {
       bootStatus = (u32)cpu.getControlRegister(12);
       bootEntryHi = cpu.getControlRegister(10);
+      // Authenticate startup data independently of the smaller executable
+      // analysis window. Debugger reads do not issue guest transactions.
+      u32 base = boot & 0x1fffffffu;
+      bootRomCopy = base <= 0x700000u && sourceRom.size() >= 0x101000u;
+      for(u32 a = 0; bootRomCopy && a < 0x100000u; a++)
+        if(rdram.ram.read<Byte>(base + a, RBusDevice::ARES_DEBUGGER) != sourceRom[0x1000u + a])
+          bootRomCopy = false;
       entered = true; std::fill(written.begin(), written.end(), 0);
       for(u32 a = 0; a < 0x400; a++)
         ram_prefix.push_back(rdram.ram.read<Byte>(a, RBusDevice::ARES_DEBUGGER));
@@ -468,7 +476,8 @@ int main(int argc, char** argv) {
   std::fprintf(result, "],\"boot_status\":%u,\"boot_entryhi\":%llu", bootStatus, (unsigned long long)bootEntryHi);
   std::fprintf(result, ",\"boot_entry\":%u,\"ram_prefix\":[", boot);
   for(size_t i = 0; i < ram_prefix.size(); i++) std::fprintf(result, "%s%u", i ? "," : "", (u32)ram_prefix[i]);
-  std::fprintf(result, "]}\n");
+  std::fprintf(result, "],\"boot_rom_copy\":{\"destination\":%u,\"rom\":4096,\"size\":1048576,\"verified\":%s}}\n",
+    boot & 0x1fffffffu, bootRomCopy ? "true" : "false");
   bool error = std::ferror(result); if(std::fclose(result)) error = true;
   ares::Nintendo64::system.unload();
   return error ? 5 : 0;
