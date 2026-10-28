@@ -1,5 +1,23 @@
 # Next
 
+## GoldenEye after source-aware return closure (ADR-0285)
+
+Keep caller source identity and architectural PC+8 distinct from analysis
+allocation. Fixed-source residual blockers improve124->109 without changing
+47161 decoded blocks or the222 engine-page declarations. Five remaining
+indirect-target blockers at one table still name stale aligned snapshot words.
+Cross-fragment slots42, direct37, unmapped9, runtime-body8, callbacks7 and TLBWR1
+remain. No accepted executable or native VI/logo/title.
+
+The direct-target bucket includes a call-entry heuristic that scans neighboring
+analysis storage after its own fragment ends. An isolated candidate has a
+baseline-red synthetic proof and preserves rejection of a reserved word within
+the real prefix; it is separate from this landing. Three additional verified
+refill sources likewise remain a separate frontier measurement. Continue
+independent slot-fetch representation/guards and refill/Random/Wired/exception
+semantics without admitting counterfactual reachability or guest execution.
+Evidence:research/ge-return-continuations.md.
+
 ## GoldenEye after aligned first-use table repair (ADR-0284)
 
 Preserve neutral data-only replay, complete PC/image/generation selection and
