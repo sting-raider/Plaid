@@ -1,5 +1,6 @@
 mod infer_calls;
 mod rsp_rom;
+mod runtime_bindings;
 use plaid_core::{
     EvidenceKind, GuestAddr,
     cop1_lineage::{
@@ -809,6 +810,18 @@ fn run() -> Result<(), String> {
                 serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
             );
         }
+        [command, rom_path, map_path, declarations, output]
+            if command == "bind-runtime-globals" =>
+        {
+            let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
+            let mut map =
+                ProgramMap::from_json(&fs::read_to_string(map_path).map_err(|e| e.to_string())?)?;
+            if map.rom != rom.identity {
+                return Err("map does not match canonical ROM".into());
+            }
+            runtime_bindings::bind(&mut map, declarations)?;
+            fs::write(output, map.to_json()?).map_err(|e| e.to_string())?;
+        }
         [command, path] if command == "solve" => {
             let map = ProgramMap::from_json(&fs::read_to_string(path).map_err(|e| e.to_string())?)?;
             let report = solve(&map, &[], Scope::WholeRom)?;
@@ -848,8 +861,15 @@ fn run() -> Result<(), String> {
             output,
             runtime @ ..,
         ] if command == "discover" && runtime.len() <= 1 => {
-            let (runtime, evidence, reference_named, status_globals, eeprom_timers, source_sizes) =
-                runtime_declarations(runtime.first())?;
+            let (
+                runtime,
+                evidence,
+                reference_named,
+                status_globals,
+                eeprom_timers,
+                source_sizes,
+                running_thread_globals,
+            ) = runtime_declarations(runtime.first())?;
             let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
             let range = GuestRange {
                 start: GuestAddr(number32(start)?),
@@ -1067,6 +1087,9 @@ fn run() -> Result<(), String> {
             bind_eeprom_timers(&mut d.map, &eeprom_timers);
             for (entry, function) in &mut d.map.runtime_functions {
                 function.source_size = source_sizes.get(&entry.pc).copied();
+                if let Some(global) = running_thread_globals.get(&entry.pc) {
+                    d.map.runtime_running_thread.insert(entry.clone(), *global);
+                }
             }
             // names only a reference map gives carry their own evidence, so the
             // solver can list them (ADR-0171)
@@ -1268,8 +1291,15 @@ fn run() -> Result<(), String> {
         [command, image_path, base, entry, exit, output, runtime @ ..]
             if command == "lower-c" && runtime.len() <= 1 =>
         {
-            let (runtime, evidence, _, status_globals, eeprom_timers, source_sizes) =
-                runtime_declarations(runtime.first())?;
+            let (
+                runtime,
+                evidence,
+                _,
+                status_globals,
+                eeprom_timers,
+                source_sizes,
+                running_thread_globals,
+            ) = runtime_declarations(runtime.first())?;
             // Synthetic-only native slice (ADR-0126): raw big-endian words at `base`.
             let bytes = fs::read(image_path).map_err(|e| e.to_string())?;
             let image = CodeImage {
@@ -1336,6 +1366,9 @@ fn run() -> Result<(), String> {
             bind_eeprom_timers(&mut d.map, &eeprom_timers);
             for (entry, function) in &mut d.map.runtime_functions {
                 function.source_size = source_sizes.get(&entry.pc).copied();
+                if let Some(global) = running_thread_globals.get(&entry.pc) {
+                    d.map.runtime_running_thread.insert(entry.clone(), *global);
+                }
             }
             d.map.cop1_fr0 = fr0;
             let c = plaid_lower::lower_c_with_preload(
@@ -1685,7 +1718,7 @@ fn run() -> Result<(), String> {
         }
         _ => {
             return Err(
-                "usage: plaid inspect-sp-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-pi-fetch-lineage <same-inputs> | inspect-dcache-store64 <history-v2.json> <expected-source-sha256> <report.json> | verify-dcache-store64 <same-inputs> | compose-cop1-mutations <history.json> <expected-source-sha256> <contexts.json> <expected-contexts-sha256> <report.json> | verify-cop1-mutations <same-inputs> | inspect-dcache-resident-reads <history-v1.json> <expected-source-sha256> <report.json> | verify-dcache-resident-reads <same-inputs> | inspect-rsp-cpu-imem <history.json> <expected-source-sha256> <report.json> | verify-rsp-cpu-imem <same-inputs> | inspect-sp-writer-fetch <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-writer-fetch <same-inputs> | create-trace-expectations <new-expected.json> <trace.ndjson>... | solve-traces <rom> <map.json> <expected.json> <trace.ndjson>... | inspect-cpu-definitions <history.json> <external-source-sha256> <report.json> | verify-cpu-definitions <history.json> <external-source-sha256> <report.json> | inspect-cpu-copy-history <history.json> <external-source-sha256> <report.json> | verify-cpu-copy-history <history.json> <external-source-sha256> <report.json> | isa-coverage | rsp-coverage | identify <rom> <rom-offset> <guest-start> <size> <signatures.sig | reference.map --symbols> | rom-info <rom> | infer-loads <rom> <loads.json> | infer-call-loads <rom> <map.json> <loads.json> | recall <map.json> <reference.map> [start end] | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> [--guarded-ram | --address-taken] | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> [runtime.json] [--data-roots | --address-taken] [--fr0] | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | verify-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | inspect-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | verify-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | merge <left.json> <right.json> <output.json> | lower-c <words.bin> <base> <entry> <exit> <out.c> [runtime.json] [--address-taken] [--fr0] | lower-map <rom> <map.json> <entry> <exit> <out.c> [--parts N] [--runtime-unit] | rsp-from-rom <rom> <map.json> <output-dir> | lower-rsp <rom> <offset> <size> <imem> <name> <out.c> [--raw] (discover, lower-c and identify also take --loads <loads.json>)"
+                "usage: plaid inspect-sp-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-pi-fetch-lineage <same-inputs> | inspect-dcache-store64 <history-v2.json> <expected-source-sha256> <report.json> | verify-dcache-store64 <same-inputs> | compose-cop1-mutations <history.json> <expected-source-sha256> <contexts.json> <expected-contexts-sha256> <report.json> | verify-cop1-mutations <same-inputs> | inspect-dcache-resident-reads <history-v1.json> <expected-source-sha256> <report.json> | verify-dcache-resident-reads <same-inputs> | inspect-rsp-cpu-imem <history.json> <expected-source-sha256> <report.json> | verify-rsp-cpu-imem <same-inputs> | inspect-sp-writer-fetch <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <expected-history-sha256> <expected-fetch-sha256> <report.json> | verify-sp-writer-fetch <same-inputs> | create-trace-expectations <new-expected.json> <trace.ndjson>... | solve-traces <rom> <map.json> <expected.json> <trace.ndjson>... | inspect-cpu-definitions <history.json> <external-source-sha256> <report.json> | verify-cpu-definitions <history.json> <external-source-sha256> <report.json> | inspect-cpu-copy-history <history.json> <external-source-sha256> <report.json> | verify-cpu-copy-history <history.json> <external-source-sha256> <report.json> | isa-coverage | rsp-coverage | identify <rom> <rom-offset> <guest-start> <size> <signatures.sig | reference.map --symbols> | rom-info <rom> | infer-loads <rom> <loads.json> | infer-call-loads <rom> <map.json> <loads.json> | recall <map.json> <reference.map> [start end] | check-trace <trace.ndjson> | check-map <map.json> | solve [rom] <map.json> [--guarded-ram | --address-taken] | bind-runtime-globals <rom> <map.json> <original-runtime.json> <out.json> | discover <rom> <rom-offset> <guest-start> <size> <entry> <output.json> [runtime.json] [--data-roots | --address-taken] [--fr0] | import-trace <rom> <trace.ndjson> <output.json> | import-fetch <rom> <fetch.ndjson> <output.json> | verify-fetch <rom> <fetch.ndjson> <map.json> | import-boot-fetch <rom> <firmware> <fetch.ndjson> <output.json> | verify-boot-fetch <rom> <firmware> <fetch.ndjson> <map.json> | inspect-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | verify-boot-history <rom> <firmware> <fetch.ndjson> <history.ndjson> <report.json> | inspect-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | verify-pi-boot-history <rom> <firmware> <fetch.ndjson> <history-v1.ndjson> <report.json> | inspect-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-queue-boot-history <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | verify-pi-fetch-lineage <rom> <firmware> <fetch.ndjson> <history-v2.ndjson> <report.json> | inspect-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | verify-sp-boot-history <rom> <firmware> <fetch.ndjson> <history-v3.ndjson> <report.json> | inspect-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | verify-pif-boot-history <rom> <firmware> <fetch.ndjson> <history-v4.ndjson> <report.json> | merge <left.json> <right.json> <output.json> | lower-c <words.bin> <base> <entry> <exit> <out.c> [runtime.json] [--address-taken] [--fr0] | lower-map <rom> <map.json> <entry> <exit> <out.c> [--parts N] [--runtime-unit] | rsp-from-rom <rom> <map.json> <output-dir> | lower-rsp <rom> <offset> <size> <imem> <name> <out.c> [--raw] (discover, lower-c and identify also take --loads <loads.json>)"
                     .into(),
             );
         }
@@ -1724,6 +1757,7 @@ type RuntimeDeclarations = (
     BTreeMap<GuestAddr, GuestAddr>,
     BTreeMap<GuestAddr, (GuestAddr, GuestAddr)>,
     BTreeMap<GuestAddr, u32>,
+    BTreeMap<GuestAddr, GuestAddr>,
 );
 
 /// Read a `plaid-runtime-functions-v0` declaration (ADR-0129): host-provided
@@ -1970,6 +2004,7 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
             BTreeMap::new(),
             BTreeMap::new(),
             BTreeMap::new(),
+            BTreeMap::new(),
         ));
     };
     let bytes = fs::read(path).map_err(|e| e.to_string())?;
@@ -1985,6 +2020,7 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
     let mut status_globals = BTreeMap::new();
     let mut eeprom_timers = BTreeMap::new();
     let mut source_sizes = BTreeMap::new();
+    let mut running_thread_globals = BTreeMap::new();
     for f in doc["functions"]
         .as_array()
         .ok_or("runtime declarations need a functions array")?
@@ -2033,6 +2069,20 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
                 (GuestAddr(number32(queue)?), GuestAddr(number32(message)?)),
             );
         }
+        if let Some(global) = f
+            .get("data_bindings")
+            .and_then(|data| data.get("__osRunningThread"))
+        {
+            let global = global
+                .as_str()
+                .ok_or("SDK current-thread binding must be an address string")?;
+            if running_thread_globals
+                .insert(GuestAddr(number32(entry)?), GuestAddr(number32(global)?))
+                .is_some()
+            {
+                return Err("duplicate SDK current-thread binding".into());
+            }
+        }
         for r in f["callbacks"].as_array().into_iter().flatten() {
             let register = match r.as_str() {
                 Some("a0") => 4,
@@ -2070,6 +2120,7 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
         status_globals,
         eeprom_timers,
         source_sizes,
+        running_thread_globals,
     ))
 }
 

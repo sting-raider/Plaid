@@ -615,6 +615,9 @@ pub struct ProgramMap {
     /// provided by the host runtime, never decoded.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty", with = "pairs")]
     pub runtime_functions: BTreeMap<CodeAddress, RuntimeFunction>,
+    /// Source-bound SDK current-thread cells, published by host scheduling.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", with = "pairs")]
+    pub runtime_running_thread: BTreeMap<CodeAddress, GuestAddr>,
     /// Composite images built from declared loads (ADR-0136), by image identity.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub load_images: BTreeMap<String, crate::declared_loads::LoadImage>,
@@ -815,6 +818,7 @@ impl ProgramMap {
             rsp_microcodes: BTreeSet::new(),
             unresolved: BTreeSet::new(),
             runtime_functions: BTreeMap::new(),
+            runtime_running_thread: BTreeMap::new(),
             load_images: BTreeMap::new(),
             address_taken: BTreeMap::new(),
             cop1_fr0: false,
@@ -949,6 +953,31 @@ impl ProgramMap {
         // one host function may stand for several identical copies (ADR-0171),
         // so a repeated name must declare the same callbacks
         let mut names = BTreeMap::new();
+        for (entry, global) in &self.runtime_running_thread {
+            address(entry)?;
+            if !self.runtime_functions.get(entry).is_some_and(|f| {
+                f.source_size.is_some()
+                    && matches!(
+                        f.name.as_str(),
+                        "osStartThread"
+                            | "osStopThread"
+                            | "osDestroyThread"
+                            | "osSetThreadPri"
+                            | "osGetThreadPri"
+                            | "osGetThreadId"
+                            | "osYieldThread"
+                            | "osRecvMesg"
+                            | "osSendMesg"
+                            | "osJamMesg"
+                            | "__osDisableInt"
+                    )
+            }) || global.0 & 3 != 0
+                || global.0 & 0x1fff_ffff >= 0x800000
+                || !matches!(global.0 >> 29, 4 | 5)
+            {
+                return Err("invalid SDK current-thread binding".into());
+            }
+        }
         for (a, f) in &self.runtime_functions {
             address(a)?;
             refs(&f.evidence)?;

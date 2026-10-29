@@ -33,6 +33,8 @@ def main():
         native_discovery_contract()
         from test_native import rsp_dependency_contract
         rsp_dependency_contract()
+        from test_running_thread_bindings import run_contract as runtime_bindings_contract
+        runtime_bindings_contract(run, directory)
         # Independently named raw section descriptors supply exact slot text.
         section_rom = bytearray(0x2200)
         section_rom[:4] = bytes.fromhex('80371240')

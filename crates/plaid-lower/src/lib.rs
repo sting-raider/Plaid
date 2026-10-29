@@ -2005,6 +2005,20 @@ fn lower_c_units(
         }
     }
     runtime_effects.extend(alias_effects);
+    let mut kernel_sources = BTreeMap::new();
+    for entry in map.runtime_running_thread.keys() {
+        let size = map.runtime_functions[entry]
+            .source_size
+            .ok_or("SDK binding needs source extent")?;
+        if size > 16384 {
+            return Err("SDK binding source extent exceeds bound".into());
+        }
+        let words = (entry.pc.0..entry.pc.0 + size)
+            .step_by(4)
+            .map(|pc| word(pc).map(|value| (pc, value)))
+            .collect::<Result<Vec<_>, _>>()?;
+        kernel_sources.insert(entry.pc.0, words);
+    }
     let runtime: BTreeMap<u32, String> = map.runtime_functions.iter().map(|(a, f)| {
         let name = if let Some(global) = f.status_global {
             let name = format!("status_{:08x}", a.pc.0);
@@ -2017,6 +2031,22 @@ fn lower_c_units(
             bound_names.insert(name.clone());
             name
         } else { f.name.clone() };
+        let name = if let Some(global) = map.runtime_running_thread.get(a) {
+            let wrapper = format!("kernel_{:08x}", a.pc.0);
+            let mut checks=String::new();
+            let (pin,unpin) = if ovl_of(a.pc.0).is_none() {
+                let words=kernel_sources[&a.pc.0].iter().map(|&(pc,value)| {
+                    let p=physical(pc).expect("fixed SDK binding source");
+                    format!("{{{p}u,0x{value:08x}u}}")
+                }).collect::<Vec<_>>();
+                checks+=&format!("static const u32 kernel_words[][2] = {{{}}}; if (plaid_cp0_host_source(s,kernel_words,{}u,0u,0u,0x{:08x}u)) return 1;",words.join(","),words.len(),a.pc.0);
+                let p=physical(a.pc.0).expect("fixed SDK binding source");
+                (format!("static const plaid_text_range ranges[] = {{{{{p}u,{}u}}}}; plaid_native_frame frame = {{0,0,ranges,1u,0,0,-1}}; plaid_text_pin(s,&frame);",p+f.source_size.unwrap()),"plaid_text_unpin(s,&frame);")
+            } else { (String::new(),"") };
+            status_wrappers+=&format!("int plaid_rt_bind_running_thread(plaid_state *s,u32 global);\nint plaid_rt_{name}(plaid_state *s);\nstatic inline int plaid_rt_{wrapper}(plaid_state *s) {{ int r; {checks} {pin} r=plaid_rt_bind_running_thread(s,0x{:08x}u); if (!r) r=plaid_rt_{name}(s); {unpin} return r; }}\n",global.0);
+            bound_names.insert(wrapper.clone());
+            wrapper
+        } else { name };
         let name = if let Some(k) = ovl_of(a.pc.0) {
             let wrapper = format!("mapped_{:08x}", a.pc.0);
             status_wrappers += &format!("int plaid_rt_{name}(plaid_state *s);\nstatic inline int plaid_rt_{wrapper}(plaid_state *s) {{ int r; plaid_native_frame frame = {{0,0,0,0,0,0,{k}}}; if (!s->ovl_ok[{k}]) return plaid_fault(s, 0x{:08x}u, 8); plaid_text_pin(s, &frame); r = plaid_rt_{name}(s); plaid_text_unpin(s, &frame); return r; }}\n", a.pc.0);
@@ -2305,6 +2335,15 @@ fn lower_c_units(
         .flat_map(|d| d.sources.iter().map(|a| a.pc.0))
         .collect();
     let mut code = Vec::new();
+    for (&entry, words) in &kernel_sources {
+        if ovl_of(entry).is_none() {
+            code.push((
+                physical(entry)?,
+                physical(entry + words.len() as u32 * 4 - 1)? + 1,
+                load_of(entry).map_or(-1, |l| l as i64),
+            ));
+        }
+    }
     for proof in runtime_effects.values() {
         for &pc in proof.words.keys() {
             if ovl_of(pc).is_some() {
