@@ -91,7 +91,9 @@ static void retire_context(rt_context *c) {
    The old stacks may only unpin/exit, never return to their suspended code. */
 static void destroy_thread(rt_thread *t) {
   rt_context *c, *self = host_context;
+  int was_blocked = t->state == T_BLOCKED;
   t->state = T_DEAD;
+  if (was_blocked) publish_waiters(t->wait_queue, t->wait_full);
   t->wait_queue = 0; t->wait_full = 0;
   jump_thread_forget(t);
   if (t->contexts) {

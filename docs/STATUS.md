@@ -1,5 +1,16 @@
 # Status
 
+## Guest SDK waiters and yield contexts (ADR-0305)
+
+Source-bound native queue waiters now publish priority/FIFO links across block,
+wake, reprioritize, stop and destruction. Verified FR0 SDK contexts publish
+callee-saved GPR/EPC and optional FP state with complete write preflight.
+Synthetic full-buffer pinned-ares comparisons, real host handoffs, negative
+contracts and seven mutations verify the bounded interface. GoldenEye advances
+from VI1/fault12/PC80810950 to VI1/fault12/PC80810a7c: the lowered dispatcher
+selects the real pager, then the foreign ERET remains refused. No logo/title.
+Evidence: research/ge-sdk-waiters.md; native_complete remains false.
+
 ## Verified guest TLB address-exception state (ADR-0299)
 
 Sixty full-state pinned-ares comparisons and four mutations verify bounded

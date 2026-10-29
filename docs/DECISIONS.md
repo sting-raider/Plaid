@@ -8903,3 +8903,27 @@ source, metadata, lifetime and conflict refusals verify the interface. GoldenEye
 now queues its fault message, but guest waiter/run-queue and native exception
 continuation interoperability remain unresolved (VI1/fault12/PC80810950).
 No game address is embedded. See research/ge-sdk-event-state.md.
+
+
+## ADR-0305: Publish native SDK waiters and callee-saved yield contexts
+
+**Status:** Accepted. **Date:** 2026-10-29.
+
+Source-bound SDK queue tails enable guest priority/FIFO waiter lists and state transitions across
+host block, wake, blocked reprioritization, stop and destruction. Verified FR0
+SDK Status contexts publish callee-saved GPRs/EPC and optional FCSR/f20-f30
+pairs. Preserve caller-saved fields. Preflight every affected range before RAM
+writes or source-witness revocation; actual writes retain existing guards.
+
+The native ABI continuation differs from the SDK's private receive frame.
+Publishing it does not authorize a foreign ERET, importing guest list edits,
+or bypassing an unfinished host call. Context ownership/generation and refill
+suspension/resumption remain separate work. Unknown layouts retain their old
+scope; FR/CU1 and protected-write failures refuse.
+
+Independent synthetic stores on pinned ares compare entire TCB buffers with
+and without FP. Real host blocking/wakeup, queue ordering/transitions, atomic
+negative cases and seven mutations cover the interface. No SDK code is reused.
+GoldenEye advances VI1/fault12/80810950 -> VI1/fault12/80810a7c, where its lowered
+dispatcher has selected the actual pager but checked foreign ERET refuses.
+No logo/title claim. Full evidence/limits: research/ge-sdk-waiters.md.
