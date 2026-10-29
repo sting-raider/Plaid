@@ -49,6 +49,10 @@ CHECKS = r'''
     s.cp0_status = 0x24000002; s.cp0_epc = 0x80000000ull; REFUSE();
     s.cp0_epc = SX32(0x80000001u); REFUSE();
     s.cp0_epc = SX32(0x80000000u);
+    s.native_refill_active = 1; s.native_refill_epc = SX32(0x80000020u); REFUSE();
+    s.native_refill_epc = s.cp0_epc; s.cp0_status = 0x24000006;
+    s.cp0_known |= 1u << 30; s.cp0_error_epc = s.cp0_epc; REFUSE();
+    s.native_refill_active = 0; s.cp0_status = 0x24000002;
     assert(!plaid_cp0_eret(&s, &target, 4));
     assert(target == SX32(0x80000000u) && s.pc == 0x80000000 && !s.llbit && s.cp0_status == 0x24000000);
     s.cp0_known = 1u << 30; s.cp0_error_epc = SX32(0x80000020u);

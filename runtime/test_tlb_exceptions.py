@@ -64,7 +64,7 @@ def main():
     source = source[:start] + '  for(unsigned i=0;i<(p[3] && p[2]?2u:1u);i++) cpu.instruction();\n' + source[end:]
     dump = '  std::printf("],\\"cp0\\":[");\n'
     dump += '  { unsigned regs[]={4,8,10,12,13,14,20}; for(unsigned i=0;i<7;i++) std::printf("%s%llu",i?",":"",(unsigned long long)cpu.getControlRegister(regs[i])); }\n'
-    dump += '  std::printf("],\\"llbit\\":%u,\\"written_xcontext\\":%llu}\\n",(unsigned)cpu.scc.llbit,(unsigned long long)written_xcontext);'
+    dump += '  std::printf("],\\"llbit\\":%u,\\"written_xcontext\\":%llu,\\"raised_cause\\":%u}\\n",(unsigned)cpu.scc.llbit,(unsigned long long)written_xcontext,(unsigned)cpu.getControlRegister(13));'
     source = source.replace('  std::printf("]}\\n");', dump)
     (OUT / 'driver.cpp').write_text(source)
     oracle = ares_oracle.build(OUT / 'driver.cpp', OUT / 'oracle')
@@ -75,7 +75,7 @@ def main():
                     str(OUT / 'native.c')], check=True)
     native = (ROOT / 'spikes/096-native-slice/harness.c').read_text()
     native = native.replace('#include "runtime.c"', '#include <assert.h>\n#include <stdlib.h>')
-    native = native.replace('int main(void) {', params + 'int main(int argc, char **argv) {\n  assert(argc==2); const unsigned *p=params[strtoul(argv[1],0,0)]; u32 vector;')
+    native = native.replace('int main(void) {', 'static u32 pending(plaid_state *s) { (void)s; return 0xa500u; }\n'+params + 'int main(int argc, char **argv) {\n  assert(argc==2 || argc==3); const unsigned *p=params[strtoul(argv[1],0,0)]; u32 vector;')
     native = native.replace('  plaid_load_images(&s);', f'''  s.status_known=1; s.cp0_status=p[1];
   s.cp0_context=0x{CONTEXT:x}ull & 0xffffffffff800000ull;
   s.cp0_xcontext=0x10abcdef0ull;
@@ -84,11 +84,13 @@ def main():
   s.cp0_entryhi=0xc00000ff123440a5ull; s.cp0_epc=0x{EPC:x}ull; s.cp0_cause=0x{CAUSE:x}u;
   s.cp0_known=(1u<<4)|(1u<<10)|(1u<<13)|(1u<<14)|(1u<<20);
   s.llbit=1; s.r[9]=SX32(p[0]);
+  if(argc==3) {{ s.cp0_interrupt_pending=pending; s.cp0_cause&=~0xff00u; if(!(p[1]&2u)) s.cp0_known&=~(1u<<13); }}
 ''')
     native = native.replace('if (plaid_run(&s))', 'if (plaid_cp0_tlb_exception(&s,SX32(p[0]),p[3]?(0x80000000u+4u*p[2]):p[0],p[3]?p[2]:0,p[3]==4?1:p[3]==2?3:2,p[3]<3,&vector))')
     ndump = '  printf("],\\"cp0\\":[");\n'
     ndump += '  { u32 regs[]={4,8,10,12,13,14,20}; u64 v; for(unsigned i=0;i<7;i++) { assert(!plaid_cp0_read(&s,regs[i],&v,0)); printf("%s%llu",i?",":"",(unsigned long long)v); }}\n'
-    ndump += '  printf("],\\"llbit\\":%u,\\"written_xcontext\\":%llu}\\n",s.llbit,(unsigned long long)written_xcontext);'
+    ndump += '  printf("],\\"llbit\\":%u,\\"written_xcontext\\":%llu,\\"raised_cause\\":%u}\\n",s.llbit,(unsigned long long)written_xcontext,raised_cause);'
+    native = native.replace('  printf("{\\"pc\\"', '  u32 raised_cause=s.cp0_cause;\n  printf("{\\"pc\\"')
     native = native.replace('  printf("]}\\n");', ndump)
     native = native.replace('  return 0;\n}', REFUSALS + '  return 0;\n}')
     (OUT / 'harness.c').write_text(native)
@@ -106,12 +108,15 @@ def main():
             capture_output=True, text=True, check=True, timeout=30).stdout)
         actual = json.loads(subprocess.check_output([str(binary), str(index)], text=True, timeout=30))
         assert actual == expected, (index, {k: (actual[k], expected[k]) for k in expected if actual[k] != expected[k]})
+        callback = json.loads(subprocess.check_output([str(binary), str(index), 'pending'], text=True, timeout=30))
+        assert callback == expected, (index, 'pending callback', {k: (callback[k], expected[k]) for k in expected if callback[k] != expected[k]})
         expected_cases.append(expected)
     generated = (OUT / 'native.c').read_text()
     mutations = [('BD', 'pc - (delay ? 4u : 0u)', 'pc'),
                  ('refill vector', 'miss && !(status & 2u) ? 0 : 0x180u', '0x180u'),
                  ('Context', '((va >> 9) & 0x7ffff0ull)', '0'),
-                 ('nested EPC', 'if (!(status & 2u)) {', 'if (1) {')]
+                 ('nested EPC', 'if (!(status & 2u)) {', 'if (1) {'),
+                 ('pending Cause', 'cause = (cause & ~0xff00u) | (s->cp0_interrupt_pending(s) & 0xff00u);', 'cause &= ~0xff00u;')]
     try:
         for name, needle, changed in mutations:
             assert generated.count(needle) == 1, (name, generated.count(needle))
@@ -119,7 +124,7 @@ def main():
             subprocess.run(command, check=True)
             killed = False
             for index in range(len(variants)):
-                result = subprocess.run([str(binary), str(index)], capture_output=True, text=True, timeout=30)
+                result = subprocess.run([str(binary), str(index), *(['pending'] if name == 'pending Cause' else [])], capture_output=True, text=True, timeout=30)
                 if result.returncode or json.loads(result.stdout) != expected_cases[index]:
                     killed = True
                     break
@@ -128,7 +133,7 @@ def main():
         (OUT / 'native.c').write_text(generated)
     (OUT / 'receipt.json').write_text(json.dumps(dict(ares=ares_oracle.REV, cases=len(variants),
         matched=list(actual), mutations=[m[0] for m in mutations]), indent=2))
-    print(f'PASS {len(variants)} TLB exception state oracle comparisons; miss/invalid/modification, BEV/EXL/BD, Context/XContext/ASID, GPR/FPR/RAM/LL; four mutations killed')
+    print(f'PASS {len(variants)*2} TLB exception state oracle comparisons; miss/invalid/modification, BEV/EXL/BD, Context/XContext/ASID, GPR/FPR/RAM/LL, live pending Cause; five mutations killed')
 
 
 REFUSALS = r'''  { static plaid_state before; u32 v=123;

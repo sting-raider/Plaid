@@ -97,6 +97,45 @@ def main():
               'headers, flags, source changes and failed compilation invalidate it')
 
 
+def rsp_dependency_contract():
+    cc = os.environ.get('CC') or shutil.which('gcc')
+    compiler = subprocess.check_output([cc, '--version'])
+    saved = native.ROOT
+    with tempfile.TemporaryDirectory(prefix='plaid rsp deps ') as temporary:
+        root = Path(temporary)
+        headers = root / 'crates/plaid-lower/src'
+        headers.mkdir(parents=True)
+        abi, cpu = headers / 'rsp_state.h', headers / 'cop0.h'
+        abi.write_text('#define VALUE 7\n')
+        cpu.write_text('cpu v1\n')
+        source = root / 'rsp.c'
+        source.write_text('#include "rsp_state.h"\nint value(void) { return VALUE; }\n')
+        flags = [cc, '-O2', '-I', str(headers)]
+        native.ROOT = root
+        try:
+            legacy = lambda: b''.join(p.read_bytes() for p in sorted(headers.glob('*.h')))
+            compile_source(source, flags, legacy(), compiler)
+            cpu.write_text('cpu v2\n')
+            start = time.perf_counter()
+            obj = compile_source(source, flags, legacy(), compiler)
+            before = time.perf_counter() - start
+            original = obj.read_bytes()
+            compile_source(source, flags, native.rsp_dependencies(), compiler)
+            stamp = obj.stat().st_mtime_ns
+            cpu.write_text('cpu v3\n')
+            start = time.perf_counter()
+            compile_source(source, flags, native.rsp_dependencies(), compiler)
+            after = time.perf_counter() - start
+            assert obj.stat().st_mtime_ns == stamp and obj.read_bytes() == original
+            abi.write_text('#define VALUE 11\n')
+            compile_source(source, flags, native.rsp_dependencies(), compiler)
+            assert obj.read_bytes() != original
+        finally:
+            native.ROOT = saved
+    print(f'PASS RSP dependencies: CPU-header edit {before:.4f}s -> {after:.4f}s, identical object retained; RSP ABI edit rebuilds')
+
+
 if __name__ == '__main__':
     memo_contract()
     main()
+    rsp_dependency_contract()

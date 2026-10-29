@@ -75,6 +75,7 @@ mod tables;
 mod tables_dispatch_extensions;
 mod tables_guarded;
 mod timer_interrupt;
+mod tlb_exception_vectors;
 mod tlb_fetch;
 mod tlb_fetch_scope;
 mod tlb_geometry;

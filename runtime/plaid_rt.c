@@ -300,7 +300,9 @@ static void restore(const rt_thread *t) {
   memcpy(S->r, t->r, sizeof t->r); memcpy(S->f, t->f, sizeof t->f);
   S->hi = t->hi; S->lo = t->lo; S->fcc = t->fcc; S->fcsr = t->fcsr; S->llbit = t->llbit;
   S->status_known = (u32)t->status_known;
-  S->cp0_known &= 1u << 10; /* SDK context switches certify no staging register but EntryHi (ADR-0242). */
+  /* Context, Wired and XContext are global CPU state, not thread context.
+     The source-guarded host boundary has already killed any unproved facts. */
+  S->cp0_known &= (1u << 10) | (1u << 4) | (1u << 6) | (1u << 20);
   S->fr_mode = t->fr_mode ? t->fr_mode : 1; /* new SDK threads start FR=0 */
   S->status_thread = t->status_known ? t->guest : 0;
   ints_enabled = t->ie;
@@ -375,6 +377,7 @@ static void deliver_pending(void);
 /* After making threads runnable: run a strictly higher-priority one now. */
 static void maybe_preempt(int api_disabled) {
   rt_thread *b;
+  if (S->native_refill_active) return; /* bounded synchronous native exception scope */
   deliver_pending();
   b = best_runnable();
   if (running && b && b->pri > running->pri) {
@@ -407,12 +410,23 @@ static int block_on(u32 mq, int full) {
   return 0;
 }
 /* jam: put the message at the front. Returns -1 when full and not blocking. */
+static u32 mq_capacity(u32 mq) {
+  u32 count = rd32(mq + 0x10);
+  if (!count || count > 0x7fffffffu) {
+    plaid_fault(S, (u32)S->r[31] - 8, 12);
+    finish(1, "unsupported SDK queue capacity");
+  }
+  return count;
+}
 static int mq_send(u32 mq, u32 msg, int block, int jam) {
   u32 count, valid, first;
   /* PLAID_TRACE_MQ set: every send on stderr, to find a stalled handshake */
   { static long t = -1; if (t < 0) t = getenv("PLAID_TRACE_MQ") ? 1 : 0; if (t) fprintf(stderr, "send %08x %08x vi=%lu ra=%08x\n", mq, msg, vi_count, (u32)S->r[31]); }
   for (;;) {
     valid = rd32(mq + 8); count = rd32(mq + 0x10);
+    if (count > 0x7fffffffu) count = mq_capacity(mq);
+    /* A zero-capacity queue is full. Nonblocking probes return before the
+       SDK's division path; a blocking send waits for the queue to change. */
     if (valid < count) break;
     if (!block) return -1;
     block_on(mq, 1);
@@ -430,16 +444,17 @@ static int mq_send(u32 mq, u32 msg, int block, int jam) {
   return 0;
 }
 static int mq_recv(u32 mq, u32 msgp, int block) {
-  u32 valid, first;
+  u32 valid, first, count;
   for (;;) {
     valid = rd32(mq + 8);
     if (valid) break;
     if (!block) return -1;
     block_on(mq, 0);
   }
+  count = mq_capacity(mq);
   first = rd32(mq + 0xc);
   if (msgp) wr32(msgp, rd32(rd32(mq + 0x14) + 4 * first));
-  wr32(mq + 0xc, (first + 1) % rd32(mq + 0x10));
+  wr32(mq + 0xc, (first + 1) % count);
   wr32(mq + 8, valid - 1);
   wake_waiter(mq, 1);
   return 0;
@@ -692,14 +707,20 @@ RT(osGetIntMask) { return ret(0x003fff01u); } /* the same unmasked OS_IM_ALL */
 /* Cause's interrupt-pending bits from undelivered events (ADR-0260): RCP
    events raise IP2, the counter IP7, pre-NMI IP4; no exception is in progress.
    shortcut: events, not raw MI_INTR state; upgrade when MI_INTR is modelled raw. */
-RT(__osGetCause) {
+static u32 pending_cause(void) {
   u32 cause = 0;
   int ev;
   for (ev = EV_SP; ev <= EV_DP; ev++) if (pending[ev]) cause |= 0x400u;
   if (pending[3]) cause |= 0x8000u;
   if (pending[14]) cause |= 0x1000u;
-  return ret(cause);
+  return cause;
 }
+static u32 cp0_interrupt_pending(plaid_state *s) {
+  u32 cause; (void)s;
+  pthread_mutex_lock(&big); cause = pending_cause(); pthread_mutex_unlock(&big);
+  return cause;
+}
+RT(__osGetCause) { return ret(pending_cause()); }
 RT(__osGetSR) {
   if (!S->status_known) return plaid_fault(S, (u32)S->r[31] - 8, 11);
   return ret(S->cp0_status);
@@ -1885,10 +1906,18 @@ int main(int argc, char **argv) {
 #ifdef PLAID_BOOT_STATUS
   S->cp0_status = PLAID_BOOT_STATUS; S->status_known = 1;
   S->cp0_entryhi = PLAID_BOOT_ENTRYHI & 0xc00000ffffffe0ffull; S->cp0_known = 1u << 10;
+#ifdef PLAID_BOOT_CONTEXT
+  S->cp0_context = PLAID_BOOT_CONTEXT; S->cp0_xcontext = PLAID_BOOT_XCONTEXT;
+  S->cp0_wired = PLAID_BOOT_WIRED; S->cp0_cause = PLAID_BOOT_CAUSE;
+  S->cp0_known |= (1u << 4) | (1u << 6) | (1u << 13) | (1u << 20);
+  S->cp0_readonly_known = (1u << 4) | (1u << 20);
+#endif
   ints_enabled = S->cp0_status & 1u;
   S->fr_mode = (S->cp0_status & 0x04000000u) ? 2 : 1;
 #endif
   S->io = rt_io;
+  S->cp0_interrupt_pending = cp0_interrupt_pending;
+  plaid_cp0_random_seed(S, 0, 0);
   if (rom) io_boot();
 #ifdef PLAID_BOOT_ROM_COPY_SIZE
   /* Authenticated at the entry fetch by the pinned startup adapter. This is

@@ -16,6 +16,8 @@ static bool startupIdentity = true;
 static bool entered = false;
 static u32 boot, bootStatus;
 static u64 bootEntryHi;
+static u64 bootContext, bootXContext;
+static u32 bootWired, bootCause;
 static bool bootRomCopy = false;
 static std::set<u32> targets;
 static u64 steps = 0;
@@ -196,6 +198,10 @@ static void observe(u64 address, u32 word) {
     if(pc == boot && !entered) {
       bootStatus = (u32)cpu.getControlRegister(12);
       bootEntryHi = cpu.getControlRegister(10);
+      bootContext = cpu.getControlRegister(4);
+      bootXContext = cpu.getControlRegister(20);
+      bootWired = (u32)cpu.getControlRegister(6);
+      bootCause = (u32)cpu.getControlRegister(13);
       // Authenticate startup data independently of the smaller executable
       // analysis window. Debugger reads do not issue guest transactions.
       u32 base = boot & 0x1fffffffu;
@@ -474,6 +480,8 @@ int main(int argc, char** argv) {
   std::fprintf(result, "\"stop_pc\":%u,\"steps\":%llu,\"vi\":%u,\"entered\":%s,\"remaining\":%zu,\"sp\":[", (u32)cpu.ipu.pc, (unsigned long long)steps, vis, entered ? "true" : "false", targets.size());
   for(size_t i = 0; i < sp.size(); i++) std::fprintf(result, "%s%u", i ? "," : "", (u32)sp[i]);
   std::fprintf(result, "],\"boot_status\":%u,\"boot_entryhi\":%llu", bootStatus, (unsigned long long)bootEntryHi);
+  std::fprintf(result, ",\"boot_cp0\":{\"context\":%llu,\"xcontext\":%llu,\"wired\":%u,\"cause\":%u}",
+    (unsigned long long)bootContext, (unsigned long long)bootXContext, bootWired, bootCause);
   std::fprintf(result, ",\"boot_entry\":%u,\"ram_prefix\":[", boot);
   for(size_t i = 0; i < ram_prefix.size(); i++) std::fprintf(result, "%s%u", i ? "," : "", (u32)ram_prefix[i]);
   std::fprintf(result, "],\"boot_rom_copy\":{\"destination\":%u,\"rom\":4096,\"size\":1048576,\"verified\":%s}}\n",

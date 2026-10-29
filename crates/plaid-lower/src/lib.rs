@@ -14,6 +14,7 @@ use plaid_core::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
+mod cop0_effects;
 pub mod coverage;
 mod fr;
 mod jumps;
@@ -46,6 +47,11 @@ typedef struct plaid_state_s {
   /* Context/XContext writes know only PTEBase; exceptions establish BadVPN. */
   u32 cp0_readonly_known, cp0_cause;
   u64 cp0_badvaddr, cp0_xcontext;
+  u32 native_refill_active, native_refill_resumed, native_refill_status;
+  u64 native_refill_epc;
+  u64 cp0_random_state, cp0_random_increment;
+  u32 cp0_random_known;
+  u32 (*cp0_interrupt_pending)(struct plaid_state_s *);
   u8 ram[PLAID_RAM_SIZE];
   /* The VR4300 D-cache as pinned ares models it (ADR-0183): 512 direct-mapped
      16-byte lines indexed by virtual address bits 4-12; dtag holds a resident
@@ -191,6 +197,8 @@ static inline int plaid_text_enter(plaid_state *s, u32 p, const u32 *words, u32 
 int plaid_ovl_write(plaid_state *s, u32 p, u32 pc);
 int plaid_ovl_can_write(plaid_state *s, u32 p, u32 pc);
 u32 plaid_link(plaid_state *s, u32 t);
+u32 plaid_fetch_link(plaid_state *s, u32 t);
+int plaid_native_refill(plaid_state *s, u32 target);
 int plaid_tlb_write(plaid_state *s, u32 index, plaid_tlb_entry entry, u32 pc);
 int plaid_tlb_clear(plaid_state *s, u32 pc);
 static inline int plaid_protected(plaid_state *s, u32 p, u32 size, u32 pc) {
@@ -598,7 +606,7 @@ fn set(d: u32, expr: String) -> String {
 /// in bound overlay code to its link address (ADR-0181).
 fn relink(overlay: bool) -> &'static str {
     if overlay {
-        "if (t == SX32((u32)t)) { t = SX32(plaid_link(s, (u32)t)); } "
+        "if (t == SX32((u32)t)) { t = SX32(plaid_fetch_link(s, (u32)t)); if (s->fault) return 1; } "
     } else {
         ""
     }
@@ -1439,7 +1447,7 @@ impl Lowerer<'_> {
                 "{} {}",
                 self.pin(
                     link,
-                    format!("{{ s->cp0_known &= 1u << 10; int r = plaid_rt_{name}(s); if (r) return r; }}")
+                    format!("{{ s->cp0_known &= (1u << 10) | (1u << 4) | (1u << 6) | (1u << 20); int r = plaid_rt_{name}(s); if (r) return r; }}")
                 ),
                 self.fallthrough(link, pc)
             ));
@@ -1483,7 +1491,7 @@ impl Lowerer<'_> {
                 return Ok(format!("return plaid_fault(s, 0x{pc:08x}u, 3);"));
             }
             return Ok(format!(
-                "{{ s->cp0_known &= 1u << 10; int r = plaid_rt_{name}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;"
+                "{{ s->cp0_known &= (1u << 10) | (1u << 4) | (1u << 6) | (1u << 20); int r = plaid_rt_{name}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;"
             ));
         }
         if self.functions.contains(&target) {
@@ -1555,7 +1563,7 @@ impl Lowerer<'_> {
                 }
             }
             return Ok(format!(
-                "{{ u64 t; if (plaid_cp0_eret(s, &t, 0x{pc:08x}u)) return 1; {}switch (t) {{{cases} }} return plaid_fault(s, 0x{pc:08x}u, 3); }}",
+                "{{ u64 t; if (plaid_cp0_eret(s, &t, 0x{pc:08x}u)) return 1; if (s->native_refill_active && t == s->native_refill_epc) {{ s->native_refill_resumed = 1; return 0; }} {}switch (t) {{{cases} }} return plaid_fault(s, 0x{pc:08x}u, 3); }}",
                 self.relink(proven()?)
             ));
         }
@@ -1886,7 +1894,65 @@ pub fn lower_c_parts(
     };
     let exits: BTreeSet<u32> = exits.iter().map(|e| e.0).collect();
     let mut status_wrappers = String::new();
+    let mut runtime_prototypes = String::new();
     let mut bound_names = BTreeSet::new();
+    // Preserve global facts only when emitted code can consume them. Legacy
+    // host ABI calls otherwise keep their conservative staging invalidation.
+    let needs_global_cp0 = !map.tlb_exception_vectors.is_empty()
+        || map.blocks.iter().any(|block| {
+            (block.start.pc.0..block.start.pc.0 + block.size)
+                .step_by(4)
+                .any(|pc| {
+                    image.instruction_word(GuestAddr(pc)).is_some_and(|word| {
+                        word == 0x42000006
+                            || (word >> 26 == 16
+                                && matches!(word >> 21 & 31, 0 | 1)
+                                && matches!(word >> 11 & 31, 1 | 4 | 6 | 20))
+                    })
+                })
+        });
+    let mut runtime_effects: BTreeMap<_, _> = map
+        .runtime_functions
+        .iter()
+        .filter(|_| needs_global_cp0)
+        .filter_map(|(entry, function)| {
+            let normal_division = cop0_effects::domain(&function.name).is_some();
+            cop0_effects::preserved(image, entry.pc.0, function.source_size, normal_division)
+                .filter(|proof| proof.mask != 0)
+                .map(|proof| (entry.pc.0, proof))
+        })
+        .collect();
+    let mut alias_effects = BTreeMap::new();
+    for (entry, function) in &map.runtime_functions {
+        if !ovl_of(entry.pc.0).is_some_and(|k| mapped_bases[k].0.is_some()) {
+            continue;
+        }
+        if runtime_effects.contains_key(&entry.pc.0) {
+            continue;
+        }
+        let Some(size) = function.source_size else {
+            continue;
+        };
+        let candidates: Vec<_> = map
+            .runtime_functions
+            .iter()
+            .filter_map(|(fixed, f)| {
+                (f.name == function.name
+                    && f.source_size == Some(size)
+                    && ovl_of(fixed.pc.0).is_none())
+                .then(|| {
+                    runtime_effects.get(&fixed.pc.0).and_then(|proof| {
+                        cop0_effects::physical_alias(image, proof, fixed.pc.0, entry.pc.0, size)
+                    })
+                })
+                .flatten()
+            })
+            .collect();
+        if candidates.len() == 1 {
+            alias_effects.insert(entry.pc.0, candidates[0].clone());
+        }
+    }
+    runtime_effects.extend(alias_effects);
     let runtime: BTreeMap<u32, String> = map.runtime_functions.iter().map(|(a, f)| {
         let name = if let Some(global) = f.status_global {
             let name = format!("status_{:08x}", a.pc.0);
@@ -1905,11 +1971,51 @@ pub fn lower_c_parts(
             bound_names.insert(wrapper.clone());
             wrapper
         } else { name };
-        (a.pc.0, name)
+        let wrapper = format!("cp0_{:08x}", a.pc.0);
+        let mut checks = String::new();
+        let mut ranges = Vec::new();
+        let mut witnesses = Vec::new();
+        let mask = if let Some(proof) = runtime_effects.get(&a.pc.0) {
+            if proof.normal_traps {
+                checks += &cop0_effects::domain(&f.name).expect("division-trap proof requires its ABI domain").guard(a.pc.0);
+            }
+            for (&pc, &word) in &proof.words {
+                // A mapped leaf's complete source extent is already checked
+                // and pinned by its ADR-0298 host wrapper.
+                if ovl_of(pc).is_some() { continue; }
+                let p = physical(pc).expect("CP0 effect proof is bounded fixed RAM");
+                witnesses.push(format!("{{{p}u,0x{word:08x}u}}"));
+                ranges.push(format!("{{{p}u,{}u}}",p+4));
+            }
+            if !witnesses.is_empty() {
+                let (delta,index) = if let Some(delta)=proof.alias_delta {
+                    let k=ovl_of(a.pc.0).expect("physical alias requires mapped host entry");
+                    checks += &format!("if (!s->ovl_tlb[{k}]) return plaid_fault(s,0x{:08x}u,12);",a.pc.0);
+                    (delta,format!("s->ovl_tlb[{k}]"))
+                } else { (0,"0u".into()) };
+                checks += &format!("static const u32 witnesses[][2] = {{{}}}; if (plaid_cp0_host_source(s,witnesses,{}u,0x{delta:08x}u,{index},0x{:08x}u)) return 1;",witnesses.join(","),witnesses.len(),a.pc.0);
+            }
+            proof.mask
+        } else { 0 };
+        let (pin, unpin) = if ranges.is_empty() { (String::new(),String::new()) } else {
+            (format!("static const plaid_text_range ranges[] = {{{}}}; plaid_native_frame frame = {{0,0,ranges,{}u,0,0,-1}}; plaid_text_pin(s,&frame);",ranges.join(","),ranges.len()),"plaid_text_unpin(s,&frame);".into())
+        };
+        status_wrappers += &format!("int plaid_rt_{name}(plaid_state *s);\nint plaid_rt_{wrapper}(plaid_state *s) {{ int r; if (s->native_refill_active) return plaid_fault(s,0x{:08x}u,12); {checks} s->cp0_known &= 0x{:x}u; {pin} r=plaid_rt_{name}(s); {unpin} return r; }}\n",a.pc.0,mask | (1<<10));
+        runtime_prototypes += &format!("int plaid_rt_{wrapper}(plaid_state *s);\n");
+        bound_names.insert(wrapper.clone());
+        (a.pc.0, wrapper)
     }).collect();
     let mut targets = BTreeMap::new();
     let mut returns = BTreeSet::new();
     let mut callees = vec![host.clone()];
+    for vector in &map.tlb_exception_vectors {
+        if image.address(vector.pc) != *vector {
+            return Err(
+                "TLB exception vector source identity differs from the supplied image".into(),
+            );
+        }
+        callees.push(vector.clone());
+    }
     let mut residual = BTreeMap::new();
     for site in &map.indirect_sites {
         if report.residual_sites.contains(&site.site) {
@@ -2147,6 +2253,18 @@ pub fn lower_c_parts(
         .flat_map(|d| d.sources.iter().map(|a| a.pc.0))
         .collect();
     let mut code = Vec::new();
+    for proof in runtime_effects.values() {
+        for &pc in proof.words.keys() {
+            if ovl_of(pc).is_some() {
+                continue;
+            }
+            code.push((
+                physical(pc)?,
+                physical(pc + 3)? + 1,
+                load_of(pc).map_or(-1, |l| l as i64),
+            ));
+        }
+    }
     let mut guarded = vec![OverlayGuards::default(); overlays.len()];
     for block in &map.blocks {
         if block.delay_slot_entry {
@@ -2346,11 +2464,12 @@ pub fn lower_c_parts(
             declarations += &format!("int plaid_rt_{name}(plaid_state *s);\n");
         }
     }
-    declarations += &status_wrappers;
+    declarations += &runtime_prototypes;
     for f in &functions {
         declarations += &format!("{link}int F_{f:08x}(plaid_state *s, u64 ret);\n");
     }
     out += &declarations;
+    out += &status_wrappers;
     shared += &declarations;
     out += &overlay_runtime(
         &overlays,
@@ -2366,6 +2485,32 @@ pub fn lower_c_parts(
             .collect(),
         image,
     )?;
+    out += "static inline int plaid_native_vector(plaid_state *s, u32 vector, u64 ret) { (void)s; (void)ret; switch(vector) {\n";
+    let vectors: BTreeSet<_> = map
+        .tlb_exception_vectors
+        .iter()
+        .map(|vector| vector.pc.0)
+        .collect();
+    for vector in &vectors {
+        if !functions.contains(vector) {
+            return Err("TLB exception vector has no lowered native function".into());
+        }
+        out += &format!("case 0x{vector:08x}u: return F_{vector:08x}(s, ret);\n");
+    }
+    out += "} return plaid_fault(s, vector, 3); }\n";
+    out += if vectors.is_empty() {
+        "int plaid_native_refill(plaid_state *s, u32 target) { (void)s; (void)target; return 0; }\n"
+    } else {
+        include_str!("refill.h")
+    };
+    let bind = if overlays.is_empty() {
+        "t"
+    } else {
+        "plaid_link(s, t)"
+    };
+    out += &format!(
+        "u32 plaid_fetch_link(plaid_state *s, u32 t) {{ if (plaid_native_refill(s, t)) return 1; return {bind}; }}\n"
+    );
     // A JALR with several proven targets calls one dispatcher per target set
     // instead of inlining a call per target at every site (ADR-0174).
     let mut dispatch = BTreeMap::new();
@@ -2391,7 +2536,7 @@ pub fn lower_c_parts(
                 format!(" case {}: return plaid_fault(s, pc, 13);", sx(t))
             } else if let Some(name) = runtime.get(&t) {
                 format!(
-                    " case {}: s->cp0_known &= 1u << 10; return plaid_rt_{name}(s);",
+                    " case {}: s->cp0_known &= (1u << 10) | (1u << 4) | (1u << 6) | (1u << 20); return plaid_rt_{name}(s);",
                     sx(t)
                 )
             } else if functions.contains(&t) {
@@ -2409,7 +2554,7 @@ pub fn lower_c_parts(
     }
     // Runtime entries are proven callbacks, or emitted native functions when
     // an explicitly listed residual SDK thread callback needs dispatch.
-    out += "int plaid_coroutine_enter(plaid_state *, u32, u64);\nint plaid_enter(plaid_state *s, u32 entry, u64 ret) {\n";
+    out += "int plaid_coroutine_enter(plaid_state *, u32, u64);\nint plaid_enter(plaid_state *s, u32 entry, u64 ret) {\n  if (plaid_native_refill(s, entry)) return 1;\n";
     if residual_thread_entries {
         // Share the already emitted native lookup instead of compiling a
         // second full function table. Recognized jump helpers are fixed text.
@@ -2438,7 +2583,7 @@ pub fn lower_c_parts(
             out += &format!("case 0x{t:08x}u: return F_{t:08x};\n");
         }
     }
-    out += "} return 0; }\nint plaid_coroutine_enter(plaid_state *s, u32 entry, u64 ret) { plaid_coroutine_fn f = plaid_coroutine_target(s, entry); return f ? f(s, ret) : plaid_fault(s, entry, 3); }\n";
+    out += "} return 0; }\nint plaid_coroutine_enter(plaid_state *s, u32 entry, u64 ret) { if (plaid_native_refill(s, entry)) return 1; plaid_coroutine_fn f = plaid_coroutine_target(s, entry); return f ? f(s, ret) : plaid_fault(s, entry, 3); }\n";
     // Loop headers: targets of a backward direct transfer or table case.
     // Every other transfer inside a function moves forward, so a path that
     // never returns passes a header again and again (ADR-0159).
