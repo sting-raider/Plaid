@@ -737,6 +737,8 @@ def main():
     test_mi.run(exe, cc, sys.modules[__name__])
     import test_status
     test_status.run(exe, cc, sys.modules[__name__])
+    import test_kernel_globals
+    test_kernel_globals.run(exe, cc, sys.modules[__name__])
     import test_running_thread
     test_running_thread.run(exe, cc, sys.modules[__name__])
     import test_sdk_dispatch

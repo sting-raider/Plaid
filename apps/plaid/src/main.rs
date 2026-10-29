@@ -869,6 +869,7 @@ fn run() -> Result<(), String> {
                 eeprom_timers,
                 source_sizes,
                 running_thread_globals,
+                kernel_globals,
             ) = runtime_declarations(runtime.first())?;
             let rom = CanonicalRom::from_bytes(&fs::read(rom_path).map_err(|e| e.to_string())?)?;
             let range = GuestRange {
@@ -1090,6 +1091,9 @@ fn run() -> Result<(), String> {
                 if let Some(global) = running_thread_globals.get(&entry.pc) {
                     d.map.runtime_running_thread.insert(entry.clone(), *global);
                 }
+                if let Some(binding) = kernel_globals.get(&entry.pc) {
+                    d.map.runtime_kernel_global.insert(entry.clone(), *binding);
+                }
             }
             // names only a reference map gives carry their own evidence, so the
             // solver can list them (ADR-0171)
@@ -1299,6 +1303,7 @@ fn run() -> Result<(), String> {
                 eeprom_timers,
                 source_sizes,
                 running_thread_globals,
+                kernel_globals,
             ) = runtime_declarations(runtime.first())?;
             // Synthetic-only native slice (ADR-0126): raw big-endian words at `base`.
             let bytes = fs::read(image_path).map_err(|e| e.to_string())?;
@@ -1368,6 +1373,9 @@ fn run() -> Result<(), String> {
                 function.source_size = source_sizes.get(&entry.pc).copied();
                 if let Some(global) = running_thread_globals.get(&entry.pc) {
                     d.map.runtime_running_thread.insert(entry.clone(), *global);
+                }
+                if let Some(binding) = kernel_globals.get(&entry.pc) {
+                    d.map.runtime_kernel_global.insert(entry.clone(), *binding);
                 }
             }
             d.map.cop1_fr0 = fr0;
@@ -1758,6 +1766,7 @@ type RuntimeDeclarations = (
     BTreeMap<GuestAddr, (GuestAddr, GuestAddr)>,
     BTreeMap<GuestAddr, u32>,
     BTreeMap<GuestAddr, GuestAddr>,
+    BTreeMap<GuestAddr, plaid_core::program::SdkGlobalBinding>,
 );
 
 /// Read a `plaid-runtime-functions-v0` declaration (ADR-0129): host-provided
@@ -2005,6 +2014,7 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
             BTreeMap::new(),
             BTreeMap::new(),
             BTreeMap::new(),
+            BTreeMap::new(),
         ));
     };
     let bytes = fs::read(path).map_err(|e| e.to_string())?;
@@ -2021,6 +2031,7 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
     let mut eeprom_timers = BTreeMap::new();
     let mut source_sizes = BTreeMap::new();
     let mut running_thread_globals = BTreeMap::new();
+    let mut kernel_globals = BTreeMap::new();
     for f in doc["functions"]
         .as_array()
         .ok_or("runtime declarations need a functions array")?
@@ -2083,6 +2094,31 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
                 return Err("duplicate SDK current-thread binding".into());
             }
         }
+        for symbol in ["__osEventStateTab", "__osThreadTail"] {
+            if let Some(global) = f.get("data_bindings").and_then(|data| data.get(symbol)) {
+                let global = GuestAddr(number32(
+                    global
+                        .as_str()
+                        .ok_or("SDK kernel global must be an address string")?,
+                )?);
+                let binding = match (name, symbol) {
+                    ("osSetEventMesg", "__osEventStateTab") => {
+                        plaid_core::program::SdkGlobalBinding::EventStateTable(global)
+                    }
+                    ("osCreateMesgQueue", "__osThreadTail") => {
+                        plaid_core::program::SdkGlobalBinding::ThreadTail(global)
+                    }
+                    // Other SDK sources reference these globals without exposing this interface.
+                    _ => continue,
+                };
+                if kernel_globals
+                    .insert(GuestAddr(number32(entry)?), binding)
+                    .is_some()
+                {
+                    return Err("duplicate SDK kernel global binding".into());
+                }
+            }
+        }
         for r in f["callbacks"].as_array().into_iter().flatten() {
             let register = match r.as_str() {
                 Some("a0") => 4,
@@ -2121,6 +2157,7 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
         eeprom_timers,
         source_sizes,
         running_thread_globals,
+        kernel_globals,
     ))
 }
 

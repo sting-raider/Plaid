@@ -89,3 +89,5 @@ mod trace_event_identity;
 mod trace_projection;
 mod traps;
 mod watch_roots;
+
+mod runtime_kernel_global;

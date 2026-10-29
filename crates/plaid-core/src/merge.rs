@@ -76,6 +76,16 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
         }
         out.runtime_running_thread.insert(entry.clone(), *global);
     }
+    for (entry, binding) in &right.runtime_kernel_global {
+        if out
+            .runtime_kernel_global
+            .get(entry)
+            .is_some_and(|old| old != binding)
+        {
+            return Err("conflicting SDK kernel global binding".into());
+        }
+        out.runtime_kernel_global.insert(entry.clone(), *binding);
+    }
     out.direct_edges = union(&left.direct_edges, &right.direct_edges);
     out.loads = union(&left.loads, &right.loads);
     out.dma_observations = union(&left.dma_observations, &right.dma_observations);
