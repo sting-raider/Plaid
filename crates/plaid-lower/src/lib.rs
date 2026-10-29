@@ -1755,6 +1755,58 @@ pub fn lower_c_parts(
     parts: usize,
     residual_dispatch: bool,
 ) -> Result<Vec<String>, String> {
+    Ok(lower_c_units(
+        map,
+        images,
+        preload,
+        entry,
+        exits,
+        (parts, false),
+        residual_dispatch,
+    )?
+    .units)
+}
+
+/// Separately link the program definitions and a small host-runtime adapter.
+/// Guest function units are byte identical to ordinary multipart output.
+pub struct LoweredCUnits {
+    pub units: Vec<String>,
+    pub runtime_header: String,
+}
+
+pub fn lower_c_runtime_units(
+    map: &ProgramMap,
+    images: &[CodeImage],
+    preload: &CodeImage,
+    entry: GuestAddr,
+    exits: &[GuestAddr],
+    parts: usize,
+    residual_dispatch: bool,
+) -> Result<LoweredCUnits, String> {
+    if parts < 2 {
+        return Err("separate runtime requires multipart output".into());
+    }
+    lower_c_units(
+        map,
+        images,
+        preload,
+        entry,
+        exits,
+        (parts, true),
+        residual_dispatch,
+    )
+}
+
+fn lower_c_units(
+    map: &ProgramMap,
+    images: &[CodeImage],
+    preload: &CodeImage,
+    entry: GuestAddr,
+    exits: &[GuestAddr],
+    partition: (usize, bool),
+    residual_dispatch: bool,
+) -> Result<LoweredCUnits, String> {
+    let (parts, separate_runtime) = partition;
     let link = if parts > 1 { "" } else { "static " };
     // Address-taken dispatch is its own scope (ADR-0153); residual dispatch is
     // the validation-only relaxation of it (ADR-0218).
@@ -2433,7 +2485,12 @@ pub fn lower_c_parts(
         .map(|w| format!("0x{w:08x}u"))
         .collect();
     out += &format!(
-        "static inline void plaid_load_images(plaid_state *s) {{\n  static const u32 w[] = {{{}}};\n  u32 i;\n  for (i = 0; i < {}; i++) {{ s->ram[0x{base:x} + 4 * i] = (u8)(w[i] >> 24); s->ram[0x{base:x} + 4 * i + 1] = (u8)(w[i] >> 16); s->ram[0x{base:x} + 4 * i + 2] = (u8)(w[i] >> 8); s->ram[0x{base:x} + 4 * i + 3] = (u8)w[i]; }}\n}}\n",
+        "{}void plaid_load_images(plaid_state *s) {{\n  static const u32 w[] = {{{}}};\n  u32 i;\n  for (i = 0; i < {}; i++) {{ s->ram[0x{base:x} + 4 * i] = (u8)(w[i] >> 24); s->ram[0x{base:x} + 4 * i + 1] = (u8)(w[i] >> 16); s->ram[0x{base:x} + 4 * i + 2] = (u8)(w[i] >> 8); s->ram[0x{base:x} + 4 * i + 3] = (u8)w[i]; }}\n}}\n",
+        if separate_runtime {
+            ""
+        } else {
+            "static inline "
+        },
         words.join(", "),
         words.len(),
     );
@@ -2844,11 +2901,21 @@ pub fn lower_c_parts(
     let mut out = units.remove(0);
     // 2: an exit was reached; 0: the host entry returned through its checked $ra.
     out += &format!(
-        "static int plaid_run(plaid_state *s) {{\n  u64 host = s->r[31];\n  int r = F_{:08x}(s, host);\n  if (r == 2) return 0;\n  /* a checked return to the host's $ra hands control back (ADR-0146) */\n  if (r == 0) {{ s->pc = (u32)host; return 0; }}\n  return r;\n}}\n",
+        "{}int plaid_run(plaid_state *s) {{\n  u64 host = s->r[31];\n  int r = F_{:08x}(s, host);\n  if (r == 2) return 0;\n  /* a checked return to the host's $ra hands control back (ADR-0146) */\n  if (r == 0) {{ s->pc = (u32)host; return 0; }}\n  return r;\n}}\n",
+        if separate_runtime { "" } else { "static " },
         entry.0
     );
     units.insert(0, out);
-    Ok(units)
+    Ok(LoweredCUnits {
+        units,
+        runtime_header: if separate_runtime {
+            format!(
+                "{shared}\nvoid plaid_load_images(plaid_state *s);\nint plaid_run(plaid_state *s);\nint plaid_runtime_write(plaid_state *s,u32 p,u32 size,u32 pc);\nint plaid_enter(plaid_state *s,u32 entry,u64 ret);\ntypedef int (*plaid_coroutine_fn)(plaid_state *,u64);\nplaid_coroutine_fn plaid_coroutine_target(plaid_state *s,u32 entry);\nint plaid_coroutine_enter(plaid_state *s,u32 entry,u64 ret);\n"
+            )
+        } else {
+            String::new()
+        },
+    })
 }
 
 #[cfg(test)]

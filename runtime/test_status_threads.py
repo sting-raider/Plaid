@@ -68,6 +68,15 @@ def run(exe, cc, T):
     subprocess.run([cc,'-O2','-std=gnu11','-DPLAID_SAFEPOINTS','-DPLAID_LOWERED="status-threads.parts.c"','-I',str(out),
                     str(T.ROOT/'runtime/plaid_rt.c'),*map(str,objects),'-pthread','-o',str(split_native)],check=True)
     check(split_native)
+    previous={p:p.read_bytes() for p in out.glob('status-threads.parts.part*.c')}
+    subprocess.run([str(exe),'lower-map',str(path),str(mapped),hex(A.BASE),hex(A.EXIT),str(source),'--parts','3','--runtime-unit'],check=True,capture_output=True)
+    assert all(p.read_bytes()==content for p,content in previous.items())
+    program=out/'status-threads.program.o'
+    subprocess.run([cc,'-O2','-std=gnu11','-Wall','-Wextra','-Werror','-Wno-unused-function','-DPLAID_SAFEPOINTS','-c',str(source),'-o',str(program)],check=True)
+    separate=out/'status-threads.separate.exe'
+    subprocess.run([cc,'-O2','-std=gnu11','-DPLAID_SAFEPOINTS','-DPLAID_LOWERED="status-threads.parts.runtime.h"','-I',str(out),
+                    str(T.ROOT/'runtime/plaid_rt.c'),str(program),*map(str,objects),'-pthread','-o',str(separate)],check=True)
+    check(separate)
     print('Status threads: single/multipart native handoffs, disabled creator, saved IE, resume/restore, lazy COP1 and PI/motor exports')
 
 if __name__ == '__main__':

@@ -244,7 +244,7 @@ def main():
     c = out / f'{name}.c'
     # RAM address zero is executable when the guest owns its refill vector.
     exit_pc = '0xbfc00000' if program.get('tlb_exception_vectors') else '0x80000000'
-    plaid('lower-map', rom, m, entry, exit_pc, c, '--parts', '16', *(['--residual-dispatch'] if residual else []), stdout=subprocess.DEVNULL)
+    plaid('lower-map', rom, m, entry, exit_pc, c, '--parts', '16', '--runtime-unit', *(['--residual-dispatch'] if residual else []), stdout=subprocess.DEVNULL)
     cc = ['gcc', '-O1', '-std=gnu11', '-w', '-DPLAID_SAFEPOINTS']
     # CPU helpers and RSP arithmetic are embedded in their generated sources.
     # Only the shared RSP ABI headers remain external include dependencies.
@@ -254,15 +254,16 @@ def main():
     def compile_cached(source, flags, dependencies=b''):
         return compile_source(source, flags, dependencies, compiler)
 
-    parts = sorted(out.glob(f'{name}.part*.c'))
+    parts = [c, *sorted(out.glob(f'{name}.part*.c'))]
     # Large CPU units can exceed RAM when every logical CPU launches GCC.
     with ThreadPoolExecutor(min(4, os.cpu_count() or 1)) as pool:
         part_objs = list(pool.map(lambda p: compile_cached(p, cc), parts))
-    rt = [*cc, '-DPLAID_RSP', '-DPLAID_RSP_ROM', '-I', ROOT / 'crates/plaid-lower/src', f'-DPLAID_LOWERED="{c.name}"', f'-DPLAID_SP_BOOT="{sp_boot.name}"', f'-DPLAID_RAM_BOOT="{ram_boot.name}"', '-I', out]
+    runtime_header=out/f'{name}.runtime.h'
+    rt = [*cc, '-DPLAID_RSP', '-DPLAID_RSP_ROM', '-I', ROOT / 'crates/plaid-lower/src', f'-DPLAID_LOWERED="{runtime_header.name}"', f'-DPLAID_SP_BOOT="{sp_boot.name}"', f'-DPLAID_RAM_BOOT="{ram_boot.name}"', '-I', out]
     # Keep runtime objects in the build directory, alongside the generated C.
     runtime_source = out / 'runtime.c'
     runtime_source.write_text(f'#include "{(ROOT / "runtime/plaid_rt.c").as_posix()}"\n')
-    runtime_deps = c.read_bytes() + sp_boot.read_bytes() + ram_boot.read_bytes() + (ROOT / 'runtime/plaid_rt.c').read_bytes() + b''.join(p.read_bytes() for p in sorted((ROOT / 'runtime').glob('*.h'))) + rsp_headers
+    runtime_deps = runtime_header.read_bytes() + sp_boot.read_bytes() + ram_boot.read_bytes() + (ROOT / 'runtime/plaid_rt.c').read_bytes() + b''.join(p.read_bytes() for p in sorted((ROOT / 'runtime').glob('*.h'))) + rsp_headers
     main_obj = compile_cached(runtime_source, rt, runtime_deps)
     window_exe = RT64 / f'{name}{"-rsp" if a.rsp_gfx else ""}-rt64.exe'
     if a.rt64:

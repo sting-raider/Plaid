@@ -1561,3 +1561,12 @@ SDK kernel-global bindings and synchronize the host scheduler current-thread
 state so the general pager can continue beyond PC 808101e4 toward logos/title.
 Mapped data misses, delay-slot fetch retries, handler host calls and
 redirecting/nested execution remain explicit refusals in the prepared scope.
+
+
+### GoldenEye guest kernel interoperability
+
+Continue verified SDK current-thread publication, raw MI interrupt-mask
+access, and guest fault-event/dispatch interoperability. The guest general
+handler must wake and run the pager through checked native context handoffs;
+its final engine mapping must result from guest paging. Preserve exact
+source and continuation guards when suspending an exception scope.
