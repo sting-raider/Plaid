@@ -1232,3 +1232,13 @@ Mask knowledge is independent of CP0 Status. GoldenEye passes the MI read and
 reaches VI1/fault12/PC80810950 in the guest dispatcher. The guest fault-event
 queue and native host scheduler still require a checked bridge; logos/title
 remain outstanding. Evidence: research/ge-mi-mask.md.
+
+### Guest SDK event and empty-queue state (ADR-0304)
+
+Source-bound SDK declarations publish event registration and queue sentinels
+to guest RAM. Host event delivery observes writes to the bound guest table.
+Synthetic pinned-ares ABI memory comparison, mutation and refusal contracts
+verify the interface. GoldenEye now queues its guest fault message (count1),
+but the host pager waiter is absent from the guest queue. It remains at
+VI1/fault12/PC80810950; logos/title remain outstanding. Evidence:
+research/ge-sdk-event-state.md.

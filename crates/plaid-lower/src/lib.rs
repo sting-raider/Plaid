@@ -2006,7 +2006,11 @@ fn lower_c_units(
     }
     runtime_effects.extend(alias_effects);
     let mut kernel_sources = BTreeMap::new();
-    for entry in map.runtime_running_thread.keys() {
+    for entry in map
+        .runtime_running_thread
+        .keys()
+        .chain(map.runtime_kernel_global.keys())
+    {
         let size = map.runtime_functions[entry]
             .source_size
             .ok_or("SDK binding needs source extent")?;
@@ -2031,7 +2035,16 @@ fn lower_c_units(
             bound_names.insert(name.clone());
             name
         } else { f.name.clone() };
-        let name = if let Some(global) = map.runtime_running_thread.get(a) {
+        let mut kernel_bindings = Vec::new();
+        if let Some(global) = map.runtime_running_thread.get(a) { kernel_bindings.push(("running_thread", global.0)); }
+        if let Some(binding) = map.runtime_kernel_global.get(a) {
+            use plaid_core::program::SdkGlobalBinding;
+            kernel_bindings.push(match binding {
+                SdkGlobalBinding::EventStateTable(global) => ("event_table", global.0),
+                SdkGlobalBinding::ThreadTail(global) => ("queue_tail", global.0),
+            });
+        }
+        let name = if !kernel_bindings.is_empty() {
             let wrapper = format!("kernel_{:08x}", a.pc.0);
             let mut checks=String::new();
             let (pin,unpin) = if ovl_of(a.pc.0).is_none() {
@@ -2043,7 +2056,12 @@ fn lower_c_units(
                 let p=physical(a.pc.0).expect("fixed SDK binding source");
                 (format!("static const plaid_text_range ranges[] = {{{{{p}u,{}u}}}}; plaid_native_frame frame = {{0,0,ranges,1u,0,0,-1}}; plaid_text_pin(s,&frame);",p+f.source_size.unwrap()),"plaid_text_unpin(s,&frame);")
             } else { (String::new(),"") };
-            status_wrappers+=&format!("int plaid_rt_bind_running_thread(plaid_state *s,u32 global);\nint plaid_rt_{name}(plaid_state *s);\nstatic inline int plaid_rt_{wrapper}(plaid_state *s) {{ int r; {checks} {pin} r=plaid_rt_bind_running_thread(s,0x{:08x}u); if (!r) r=plaid_rt_{name}(s); {unpin} return r; }}\n",global.0);
+            let mut bind_calls = String::new();
+            for (service, global) in kernel_bindings {
+                status_wrappers += &format!("int plaid_rt_bind_{service}(plaid_state *s,u32 global);\n");
+                bind_calls += &format!("if (!r) r=plaid_rt_bind_{service}(s,0x{global:08x}u); ");
+            }
+            status_wrappers+=&format!("int plaid_rt_{name}(plaid_state *s);\nstatic inline int plaid_rt_{wrapper}(plaid_state *s) {{ int r=0; {checks} {pin} {bind_calls} if (!r) r=plaid_rt_{name}(s); {unpin} return r; }}\n");
             bound_names.insert(wrapper.clone());
             wrapper
         } else { name };

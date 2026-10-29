@@ -6,6 +6,14 @@ use std::collections::{BTreeMap, BTreeSet};
 pub type EvidenceRefs = BTreeSet<String>;
 pub const SCHEMA_VERSION: u32 = 0;
 
+/// One source-bound SDK data interface, consumed by its matching host service.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SdkGlobalBinding {
+    EventStateTable(GuestAddr),
+    ThreadTail(GuestAddr),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct RomOffset(pub u64);
@@ -618,6 +626,8 @@ pub struct ProgramMap {
     /// Source-bound SDK current-thread cells, published by host scheduling.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty", with = "pairs")]
     pub runtime_running_thread: BTreeMap<CodeAddress, GuestAddr>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", with = "pairs")]
+    pub runtime_kernel_global: BTreeMap<CodeAddress, SdkGlobalBinding>,
     /// Composite images built from declared loads (ADR-0136), by image identity.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub load_images: BTreeMap<String, crate::declared_loads::LoadImage>,
@@ -819,6 +829,7 @@ impl ProgramMap {
             unresolved: BTreeSet::new(),
             runtime_functions: BTreeMap::new(),
             runtime_running_thread: BTreeMap::new(),
+            runtime_kernel_global: BTreeMap::new(),
             load_images: BTreeMap::new(),
             address_taken: BTreeMap::new(),
             cop1_fr0: false,
@@ -953,6 +964,23 @@ impl ProgramMap {
         // one host function may stand for several identical copies (ADR-0171),
         // so a repeated name must declare the same callbacks
         let mut names = BTreeMap::new();
+        for (entry, binding) in &self.runtime_kernel_global {
+            address(entry)?;
+            let (global, service, size) = match binding {
+                SdkGlobalBinding::EventStateTable(global) => (global, "osSetEventMesg", 15 * 8),
+                SdkGlobalBinding::ThreadTail(global) => (global, "osCreateMesgQueue", 8),
+            };
+            if !self
+                .runtime_functions
+                .get(entry)
+                .is_some_and(|f| f.source_size.is_some() && f.name == service)
+                || global.0 & 3 != 0
+                || global.0 & 0x1fff_ffff > 0x800000 - size
+                || !matches!(global.0 >> 29, 4 | 5)
+            {
+                return Err("invalid SDK kernel global binding".into());
+            }
+        }
         for (entry, global) in &self.runtime_running_thread {
             address(entry)?;
             if !self.runtime_functions.get(entry).is_some_and(|f| {

@@ -1,5 +1,15 @@
 # Next
 
+## After guest SDK event publication (ADR-0304)
+
+Publish blocked waiter and run-queue state under verified SDK bindings, then
+bridge guest dispatch to owned native contexts. GoldenEye's lowered fault
+sender now queues the real message, but host thread5 remains blocked because
+its guest waiter link is absent. Preserve exception/context generation and
+native-frame ownership while the pager runs and the original fault resumes.
+The current stop is VI1/fault12/PC80810950. See ge-sdk-event-state.md and
+ge-native-fault-event-bridge.md; no logo/title is verified.
+
 ## After native MI mask access (ADR-0303)
 
 Bridge source-verified SDK event registration, fault queues and dispatch to

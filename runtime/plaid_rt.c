@@ -110,6 +110,8 @@ static int ints_enabled = 1;
 static u32 mi_mask_known; /* independently known MI mask bits */
 static u32 status_kernel_global; /* the SDK copy whose exception vectors are installed */
 static rt_event events[EV_COUNT];
+static u32 event_table_global, queue_tail_global;
+static rt_event read_event(unsigned ev);
 static int pending[EV_COUNT]; /* undelivered event counts */
 static struct { u32 mq, msg; } pi_completions[64];
 static unsigned pi_completion_count;
@@ -350,6 +352,42 @@ int plaid_rt_bind_running_thread(plaid_state *s, u32 global) {
   pthread_mutex_unlock(&big);
   return result;
 }
+/* The caller's complete SDK source is checked and pinned by the lowered wrapper. */
+static int bind_kernel_global(u32 registered, u32 global, u32 size) {
+  u32 p;
+  if ((global & 3u) || phys(global, size, &p)
+      || (registered && ((registered ^ global) & 0x1fffffffu)))
+    return plaid_fault(S, (u32)S->r[31] - 8, 12);
+  return 0;
+}
+int plaid_rt_bind_event_table(plaid_state *s, u32 global) {
+  int result; unsigned ev;
+  pthread_mutex_lock(&big);
+  result = bind_kernel_global(event_table_global, global, EV_COUNT * 8u);
+  if (!result && !event_table_global) {
+    /* Preflight the complete backfill before registering or changing any cell. */
+    u32 p = global & 0x1fffffffu;
+    result = plaid_runtime_write(s, p, EV_COUNT * 8u, (u32)s->r[31] - 8);
+    if (!result) {
+      event_table_global = global;
+      for (ev = 0; ev < EV_COUNT; ev++) if (events[ev].set) {
+        wr32(global + ev * 8, events[ev].mq); wr32(global + ev * 8 + 4, events[ev].msg);
+      }
+    }
+  }
+  pthread_mutex_unlock(&big);
+  return result;
+}
+int plaid_rt_bind_queue_tail(plaid_state *s, u32 global) {
+  int result; (void)s;
+  pthread_mutex_lock(&big);
+  result = bind_kernel_global(queue_tail_global, global, 8);
+  if (!result && (rd32(global) || rd32(global + 4) != 0xffffffffu))
+    result = plaid_fault(S, (u32)S->r[31] - 8, 12);
+  if (!result) queue_tail_global = global;
+  pthread_mutex_unlock(&big);
+  return result;
+}
 static void hand_to(rt_thread *next) {
   running = next;
   if (running_thread_global) wr32(running_thread_global, next && next != &boot ? next->guest : 0);
@@ -511,8 +549,9 @@ static void deliver_pending(void) {
       pending[ev]--;
       if (ev == EV_PI) pi_status &= ~8u;
       if (ev == EV_SI) si_status &= ~0x1000u;
-      if (events[ev].set) {
-        mq_send(events[ev].mq, events[ev].msg, 0, 0);
+      rt_event event = read_event((unsigned)ev);
+      if (event.set) {
+        mq_send(event.mq, event.msg, 0, 0);
       }
     }
   if (event_eligible(EV_PI)) {
@@ -532,7 +571,8 @@ static void deliver_pending(void) {
   }
   if (compare_armed && c >= compare_due) { /* the timer interrupt: libultra sends OS_EVENT_COUNTER */
     compare_armed = 0;
-    if (events[3].set) mq_send(events[3].mq, events[3].msg, 0, 0);
+    rt_event event = read_event(3);
+    if (event.set) mq_send(event.mq, event.msg, 0, 0);
   }
 }
 /* Host thread: VI retrace at 60 Hz, timers, and delivery while all block. */
@@ -704,17 +744,33 @@ RT(osStopThread) {
 RT(osGetThreadPri) { rt_thread *t = thread_of(arg(0)); return ret(t ? (u32)t->pri : 0); }
 RT(osCreateMesgQueue) {
   u32 mq = arg(0);
-  wr32(mq, 0); wr32(mq + 4, 0); wr32(mq + 8, 0); wr32(mq + 0xc, 0);
+  wr32(mq, queue_tail_global); wr32(mq + 4, queue_tail_global); wr32(mq + 8, 0); wr32(mq + 0xc, 0);
   wr32(mq + 0x10, arg(2)); wr32(mq + 0x14, arg(1));
   return 0;
 }
 RT(osSendMesg) { int r = mq_send(arg(0), arg(1), arg(2) & 1, 0); maybe_preempt(1); return ret((u32)r); }
 RT(osJamMesg) { int r = mq_send(arg(0), arg(1), arg(2) & 1, 1); maybe_preempt(1); return ret((u32)r); }
 RT(osRecvMesg) { int r = mq_recv(arg(0), arg(1), arg(2) & 1); maybe_preempt(1); return ret((u32)r); }
+static rt_event read_event(unsigned ev) {
+  rt_event result;
+  if (!event_table_global) return events[ev];
+  result.mq = rd32(event_table_global + ev * 8);
+  result.msg = rd32(event_table_global + ev * 8 + 4);
+  result.set = result.mq != 0;
+  return result;
+}
 RT(osSetEventMesg) {
   u32 ev = arg(0);
   if (getenv("PLAID_TRACE_MQ")) fprintf(stderr, "event %u %08x %08x\n", ev, arg(1), arg(2));
-  if (ev < EV_COUNT) { events[ev].mq = arg(1); events[ev].msg = arg(2); events[ev].set = 1; }
+  if (ev < EV_COUNT) {
+    if (event_table_global) {
+      u32 mq = arg(1), msg = arg(2);
+      u8 data[8] = {(u8)(mq >> 24), (u8)(mq >> 16), (u8)(mq >> 8), (u8)mq,
+                    (u8)(msg >> 24), (u8)(msg >> 16), (u8)(msg >> 8), (u8)msg};
+      wr(event_table_global + ev * 8, data, 8);
+    }
+    events[ev].mq = arg(1); events[ev].msg = arg(2); events[ev].set = 1;
+  }
   return 0;
 }
 /* Interrupt masking: while disabled, events stay pending. */

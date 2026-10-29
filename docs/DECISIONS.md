@@ -8886,3 +8886,20 @@ four mutations verify this general device capability. GoldenEye advances from
 808102bc/fault1 to 80810950/fault12 (VI1 in the retained diagnostic). Guest
 fault-event and pager scheduling interoperability remains unresolved; no
 observed mapping is installed. See research/ge-mi-mask.md.
+
+
+## ADR-0304: source-bound SDK event and queue data interfaces
+
+Carry typed event-table and thread-tail bindings by exact source identity.
+Require the matching SDK ABI, complete source extent and bounded direct RDRAM.
+Reuse complete-source guards and native pins before registration. The runtime
+publishes event pairs and empty queue sentinels; host event delivery reads the
+bound guest table. Conflicting bindings, malformed sentinels and failed
+backfills refuse before publication. Original declaration restoration retains
+its exact-hash/evidence/entry/ABI/extent checks, and legacy maps omit the field.
+
+Synthetic SDK ABI memory results agree with pinned ares; three mutations plus
+source, metadata, lifetime and conflict refusals verify the interface. GoldenEye
+now queues its fault message, but guest waiter/run-queue and native exception
+continuation interoperability remain unresolved (VI1/fault12/PC80810950).
+No game address is embedded. See research/ge-sdk-event-state.md.
