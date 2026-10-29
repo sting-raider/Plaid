@@ -733,6 +733,8 @@ def main():
           'of a spinning thread match libultra order', json.dumps(dump))
     import test_interrupts
     test_interrupts.run(exe, cc, sys.modules[__name__])
+    import test_mi
+    test_mi.run(exe, cc, sys.modules[__name__])
     import test_status
     test_status.run(exe, cc, sys.modules[__name__])
     import test_running_thread

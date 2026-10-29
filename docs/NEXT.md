@@ -1,5 +1,14 @@
 # Next
 
+## After native MI mask access (ADR-0303)
+
+Bridge source-verified SDK event registration, fault queues and dispatch to
+the native host scheduler. Preserve exception ownership and suspended native
+frames while another thread runs the pager, then resume through checked guest
+state and mapping/source guards. GoldenEye currently stops at
+VI1/fault12/PC80810950. The natural pinned-ares fault path and pager selection
+are recorded in ge-native-fault-event-bridge.md; no logo/title is verified.
+
 ## After verified guest TLB address-exception state (ADR-0299)
 
 Connect authenticated lowered vectors and checked ERET retries to real native
