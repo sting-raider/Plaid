@@ -1570,3 +1570,13 @@ access, and guest fault-event/dispatch interoperability. The guest general
 handler must wake and run the pager through checked native context handoffs;
 its final engine mapping must result from guest paging. Preserve exact
 source and continuation guards when suspending an exception scope.
+
+
+### Native guest pager continuation after ADR-0302
+
+Expose the modeled MI interrupt mask through a verified raw register interface,
+then bridge source-verified SDK fault-event delivery and dispatch. A native
+exception scope must suspend with its owning context while the pager runs,
+restore checked Status/EPC and register state, then reapply mapped-source
+guards. Test ownership/retirement, source mutations and refusal paths against
+the pinned reference before another integration.

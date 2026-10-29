@@ -66,6 +66,16 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
     out.blocks = union(&left.blocks, &right.blocks);
     out.tlb_exception_vectors
         .extend(right.tlb_exception_vectors.iter().cloned());
+    for (entry, global) in &right.runtime_running_thread {
+        if out
+            .runtime_running_thread
+            .get(entry)
+            .is_some_and(|old| old != global)
+        {
+            return Err("conflicting SDK current-thread binding".into());
+        }
+        out.runtime_running_thread.insert(entry.clone(), *global);
+    }
     out.direct_edges = union(&left.direct_edges, &right.direct_edges);
     out.loads = union(&left.loads, &right.loads);
     out.dma_observations = union(&left.dma_observations, &right.dma_observations);

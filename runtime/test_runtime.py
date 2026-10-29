@@ -628,13 +628,15 @@ def tlb_unmap(exe, cc):
     subprocess.run([str(effects)], check=True, timeout=30)
 
 
-def build(exe, cc, name, program, runtime, extra=(), status_globals=None, fr0=False, data_bindings=None, address_taken=False, residual_dispatch=False):
+def build(exe, cc, name, program, runtime, extra=(), status_globals=None, fr0=False, data_bindings=None, address_taken=False, residual_dispatch=False, source_sizes=None):
     (OUT / f'{name}.bin').write_bytes(A.assemble(program))
     labels = A.label_pcs(program)
     decl = dict(format='plaid-runtime-functions-v0', source='runtime test declaration',
                 functions=[dict(entry=hex(labels[n]), name=n, callbacks=['a2'] if n == 'osCreateThread' else [])
                            for n in runtime])
     for function in decl['functions']:
+        if source_sizes and function['name'] in source_sizes:
+            function['size'] = source_sizes[function['name']]
         if status_globals and function['name'] in status_globals:
             function['status_global'] = hex(status_globals[function['name']])
         if data_bindings and function['name'] in data_bindings:
@@ -733,6 +735,8 @@ def main():
     test_interrupts.run(exe, cc, sys.modules[__name__])
     import test_status
     test_status.run(exe, cc, sys.modules[__name__])
+    import test_running_thread
+    test_running_thread.run(exe, cc, sys.modules[__name__])
     import test_sdk_dispatch
     test_sdk_dispatch.run(exe, cc, sys.modules[__name__])
     import test_cache_writeback

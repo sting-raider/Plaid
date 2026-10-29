@@ -8852,3 +8852,21 @@ The refill comparison checks complete pinned-ares CPU/CP0/TLB/RAM state in
 bare and SDK modes, retaining refusal and mutation contracts. Large-map
 compile measurements and scope are in research/native-runtime-units.md.
 Exact-tree validation receipts are under target/receipts/runtime-units-exact/.
+
+
+## ADR-0302: source-bound SDK current-thread publication
+
+Retain __osRunningThread bindings from original runtime declarations by exact
+CodeAddress. Require supported SDK service names, complete source extents and
+aligned direct-mapped RDRAM. Fixed host boundaries check and pin their full
+source; mapped boundaries retain existing mapping/source guards and pins.
+The host scheduler publishes each handoff to the registered guest cell and
+refuses conflicting physical bindings. No observed game address is hardcoded.
+
+The bind-runtime-globals command restores optional metadata only from the
+original declaration hash/evidence, source entry and ABI; it adds no targets
+and still requires ordinary source replay, solving and native guards.
+Synthetic handoff, source mutation, map merge and CLI refusal contracts cover
+the interface. See research/ge-sdk-current-thread.md and the retained natural
+reference continuation in research/ge-native-fault-event-bridge.md. Exact-tree
+validation is under target/receipts/sdk-running-exact/.

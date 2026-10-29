@@ -1212,3 +1212,14 @@ after a 226.4-second program-unit build, versus 259.8/242.1 seconds for the
 previous combined runtime builds under build load. This measures iteration
 cost; it does not establish a runtime-speed change. Synthetic handoff/refill
 contracts cover the separate linkage. See research/native-runtime-units.md.
+
+
+### Guest SDK current-thread state (ADR-0302)
+
+Verified runtime declarations now retain their SDK current-thread cell. Host
+scheduler handoffs publish the guest thread pointer under source guards.
+GoldenEye advances from the null current-thread store at 808101e4 to the raw
+MI interrupt-mask read at 808102bc (VI 1, fault 1 in the retained trial).
+Logos/title remain outstanding. The pinned reference then wakes the pager
+through a fault event and dispatches it; guest/host event and scheduling
+interoperability is the next obligation, not a preloaded engine mapping.

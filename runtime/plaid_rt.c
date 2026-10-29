@@ -333,8 +333,24 @@ static void make_runnable(rt_thread *t) { t->state = T_RUNNABLE; t->seq = ++seq_
 static void *thread_main(void *p);
 
 /* Hand the baton (and S) to `next`, or to nobody. S must already be saved. */
+static u32 running_thread_global;
+int plaid_rt_bind_running_thread(plaid_state *s, u32 global) {
+  int result = 0;
+  pthread_mutex_lock(&big);
+  if ((global & 3u) || !((global >= 0x80000000u && global < 0x80800000u)
+      || (global >= 0xa0000000u && global < 0xa0800000u))
+      || (running_thread_global && ((running_thread_global ^ global) & 0x1fffffffu)))
+    result = plaid_fault(s, (u32)s->r[31] - 8, 12);
+  else {
+    running_thread_global = global;
+    wr32(global, running && running != &boot ? running->guest : 0);
+  }
+  pthread_mutex_unlock(&big);
+  return result;
+}
 static void hand_to(rt_thread *next) {
   running = next;
+  if (running_thread_global) wr32(running_thread_global, next && next != &boot ? next->guest : 0);
   if (!next) return;
   next->state = T_RUNNING;
   restore(next);
