@@ -581,6 +581,10 @@ pub struct ProgramMap {
     pub blocks: BTreeSet<BasicBlock>,
     #[serde(with = "pairs")]
     pub entries: BTreeMap<CodeAddress, EvidenceRefs>,
+    /// Authenticated lowered guest entries selected by TLB exception vectors.
+    /// Absent declarations retain the native exception refusal contract.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub tlb_exception_vectors: BTreeSet<CodeAddress>,
     /// Entries decoded because they were candidates of non-link indirect sites.
     /// Missing metadata leaves entry origin unknown/external.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty", with = "pairs")]
@@ -793,6 +797,7 @@ impl ProgramMap {
             regions: BTreeSet::new(),
             blocks: BTreeSet::new(),
             entries: BTreeMap::new(),
+            tlb_exception_vectors: BTreeSet::new(),
             derived_entries: BTreeMap::new(),
             direct_edges: BTreeSet::new(),
             indirect_sites: BTreeSet::new(),
@@ -894,6 +899,23 @@ impl ProgramMap {
         for (a, e) in &self.entries {
             address(a)?;
             refs(e)?;
+        }
+        let mut vector_pcs = BTreeSet::new();
+        for vector in &self.tlb_exception_vectors {
+            address(vector)?;
+            if !matches!(
+                vector.pc.0,
+                0x8000_0000 | 0x8000_0080 | 0x8000_0180 | 0xbfc0_0200 | 0xbfc0_0280 | 0xbfc0_0380
+            ) || !vector_pcs.insert(vector.pc)
+                || !self.entries.contains_key(vector)
+                || self.runtime_functions.contains_key(vector)
+                || !self
+                    .blocks
+                    .iter()
+                    .any(|b| b.start == *vector && b.size >= 4 && !b.delay_slot_entry)
+            {
+                return Err("TLB exception vector requires a unique lowered guest entry".into());
+            }
         }
         for (target, sources) in &self.derived_entries {
             address(target)?;

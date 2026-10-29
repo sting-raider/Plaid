@@ -1552,3 +1552,12 @@ the guarded address-taken solver when replay evidence is present and
 `executed_start` succeeds. The synthetic regressions and mutation checks pass.
 The landed-tree visible rerun passes the former target; continue with the
 relocated-call and silent-audio frontiers documented above and in research.
+
+
+### GoldenEye native refill continuation
+
+After the ADR-0300 exact-tree gate and controls, establish verified guest
+SDK kernel-global bindings and synchronize the host scheduler current-thread
+state so the general pager can continue beyond PC 808101e4 toward logos/title.
+Mapped data misses, delay-slot fetch retries, handler host calls and
+redirecting/nested execution remain explicit refusals in the prepared scope.

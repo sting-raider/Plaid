@@ -64,6 +64,8 @@ pub fn merge_maps(left: &ProgramMap, right: &ProgramMap) -> Result<ProgramMap, S
     }
     out.regions = union(&left.regions, &right.regions);
     out.blocks = union(&left.blocks, &right.blocks);
+    out.tlb_exception_vectors
+        .extend(right.tlb_exception_vectors.iter().cloned());
     out.direct_edges = union(&left.direct_edges, &right.direct_edges);
     out.loads = union(&left.loads, &right.loads);
     out.dma_observations = union(&left.dma_observations, &right.dma_observations);

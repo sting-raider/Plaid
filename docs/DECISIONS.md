@@ -8820,3 +8820,19 @@ only a later refill maps engine code. Do not substitute a preloaded mapping.
 Random clock equivalence, SDK CP0 preservation and native vector/resume execution
 remain separate obligations. See research/ge-native-refill.md. No upstream body,
 game asset, runtime decoder, interpreter or JIT is introduced.
+
+
+## ADR-0300: bounded native mapped-fetch refill execution
+
+Declare exception vectors by exact lowered source identity. Execute guest refill
+and general handlers as native functions, then retry only the checked interrupted
+fetch with the existing mapping/content/generation guards. Preserve CP0 global
+facts across a host boundary only with checked, pinned guest source witnesses;
+capture startup provenance rather than inventing Context/XContext state. Model
+Random/Wired using pinned-ares sampling, with complete ISC attribution for the
+adapted PCG sampler in emitted cop0.h. No guest decoder or JIT is reused.
+
+See research/ge-native-refill-execution.md for contracts, measurements, limits
+and the current GoldenEye scheduler-state refusal. Exact-tree validation receipts
+are under target/receipts/native-refill-exact/. This ADR does not claim logos,
+title, or native completeness.

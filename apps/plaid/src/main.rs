@@ -934,6 +934,23 @@ fn run() -> Result<(), String> {
                 discovery_load_context(declared.as_ref(), overlay_evidence.as_ref());
             let observed = observed_roots(loads_path.as_ref())?;
             let mut entries = vec![GuestAddr(number32(entry)?)];
+            // Replayed RAM vectors are explicit guest entry sources. Seed them
+            // before discovery so a vector reached only by hardware exceptions
+            // retains its handler CFG and exact executable source identity.
+            let vector_roots: BTreeSet<_> = declared
+                .iter()
+                .flat_map(|(spec, _)| &spec.loads)
+                .filter_map(|load| match load.encoding {
+                    plaid_core::declared_loads::LoadEncoding::AresBoot { entry }
+                        if matches!(entry.0, 0x8000_0000 | 0x8000_0180)
+                            && load.destination.contains(entry) =>
+                    {
+                        Some(entry)
+                    }
+                    _ => None,
+                })
+                .collect();
+            entries.extend(vector_roots.iter().copied());
             let roots = if data_roots {
                 plaid_core::data_roots::scan(rom.bytes(), &image)
             } else {
@@ -1092,6 +1109,8 @@ fn run() -> Result<(), String> {
                 }
             }
             d.map.cop1_fr0 = fr0;
+            d.map.tlb_exception_vectors =
+                vector_roots.iter().map(|pc| image.address(*pc)).collect();
             fs::write(output, d.map.to_json()?).map_err(|e| e.to_string())?;
             println!(
                 "discovered {} blocks, {} indirect sites, {} unresolved items",

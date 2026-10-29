@@ -35,7 +35,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from native_audio import audio_peak
-from harvest_boot import harvest, harvest_refills
+from harvest_boot import harvest, harvest_refills, harvest_vectors
 from ares_boot import ORACLE_SOURCES, capture_many
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -122,6 +122,10 @@ def compile_source(source, flags, dependencies, compiler):
     return obj
 
 
+def rsp_dependencies():
+    return b''.join(p.read_bytes() for p in sorted((ROOT / 'crates/plaid-lower/src').glob('rsp*.h')))
+
+
 def write_boot_state(capture, out, entry):
     """Keep the bounded startup payload and its analysis provenance together."""
     if (capture.get('boot_entry') != entry or not 0x80000000 <= entry < 0xc0000000 or
@@ -138,6 +142,12 @@ def write_boot_state(capture, out, entry):
     entryhi = capture.get('boot_entryhi')
     if type(entryhi) is not int or not 0 <= entryhi < 1 << 64:
         raise ValueError('pinned ares supplied no valid post-IPL EntryHi')
+    cp0 = capture.get('boot_cp0')
+    if (not isinstance(cp0, dict) or set(cp0) != {'context', 'xcontext', 'wired', 'cause'} or
+            any(type(cp0[key]) is not int or not 0 <= cp0[key] < 1 << bits
+                for key, bits in [('context', 64), ('xcontext', 64), ('wired', 6), ('cause', 32)]) or
+            cp0['context'] & 15 or cp0['xcontext'] & 15):
+        raise ValueError('pinned ares supplied no valid post-IPL global CP0 state')
     copy = capture.get('boot_rom_copy')
     if (not isinstance(copy, dict) or set(copy) != {'destination', 'rom', 'size', 'verified'} or
             any(type(copy.get(k)) is not int for k in ('destination', 'rom', 'size')) or
@@ -147,6 +157,7 @@ def write_boot_state(capture, out, entry):
     sp_boot, ram_boot = out / 'sp_boot.h', out / 'ram_boot.h'
     sp_boot.write_text('static const u8 plaid_sp_boot[0x2000] = {' + ','.join(map(str, capture['sp'])) + '};\n')
     ram_boot.write_text(f'#define PLAID_BOOT_STATUS {status}u\n#define PLAID_BOOT_ENTRYHI {entryhi}ull\n'
+                        + ''.join(f'#define PLAID_BOOT_{key.upper()} {value}ull\n' for key, value in cp0.items()) +
                         f'#define PLAID_BOOT_ROM_COPY_BASE {copy["destination"]}u\n#define PLAID_BOOT_ROM_COPY_SIZE {copy["size"]}u\n' +
                         'static const u8 plaid_ram_boot[] = {' + ','.join(map(str, capture['ram_prefix'])) + '};\n')
     receipt = {k: v for k, v in capture.items() if k not in ('sp', 'ram_prefix')}
@@ -192,11 +203,13 @@ def main():
     m = out / 'map.json'
     overlay_support = None
     for attempt in range(64):
+        harvest_vectors(rom, loads, out / 'vector-harvest.json')
         # A ROM with no file table and no reset stub has no loads to declare.
         with_loads = ['--loads', loads] if json.loads(loads.read_text())['loads'] else []
         (out / 'id.json').write_text(memo_plaid('identify', *window, SIGNATURES, *with_loads), newline='')
         discover = ['discover', *window, entry, m, out / 'id.json', *with_loads, '--address-taken', '--fr0']
         overlay_support = discover_map(discover, overlay_support, m)
+        program = json.loads(m.read_text())
         if attempt < 63 and partition_mapped(loads, m):
             continue
         verdict = json.loads(memo_plaid('solve', rom, m, '--address-taken'))
@@ -229,13 +242,17 @@ def main():
     plaid('rsp-from-rom', rom, m, texts, '--loads', loads)
     rsp_manifest = json.loads((texts / 'rsp-files.json').read_text())
     c = out / f'{name}.c'
-    plaid('lower-map', rom, m, entry, '0x80000000', c, '--parts', '16', *(['--residual-dispatch'] if residual else []), stdout=subprocess.DEVNULL)
+    # RAM address zero is executable when the guest owns its refill vector.
+    exit_pc = '0xbfc00000' if program.get('tlb_exception_vectors') else '0x80000000'
+    plaid('lower-map', rom, m, entry, exit_pc, c, '--parts', '16', *(['--residual-dispatch'] if residual else []), stdout=subprocess.DEVNULL)
     cc = ['gcc', '-O1', '-std=gnu11', '-w', '-DPLAID_SAFEPOINTS']
-    headers = b''.join(p.read_bytes() for p in sorted((ROOT / 'crates/plaid-lower/src').glob('*.h')))
+    # CPU helpers and RSP arithmetic are embedded in their generated sources.
+    # Only the shared RSP ABI headers remain external include dependencies.
+    rsp_headers = rsp_dependencies()
     compiler = subprocess.check_output(['gcc', '--version'])
 
     def compile_cached(source, flags, dependencies=b''):
-        return compile_source(source, flags, headers + dependencies, compiler)
+        return compile_source(source, flags, dependencies, compiler)
 
     parts = sorted(out.glob(f'{name}.part*.c'))
     # Large CPU units can exceed RAM when every logical CPU launches GCC.
@@ -245,7 +262,7 @@ def main():
     # Keep runtime objects in the build directory, alongside the generated C.
     runtime_source = out / 'runtime.c'
     runtime_source.write_text(f'#include "{(ROOT / "runtime/plaid_rt.c").as_posix()}"\n')
-    runtime_deps = c.read_bytes() + sp_boot.read_bytes() + ram_boot.read_bytes() + (ROOT / 'runtime/plaid_rt.c').read_bytes() + b''.join(p.read_bytes() for p in sorted((ROOT / 'runtime').glob('*.h')))
+    runtime_deps = c.read_bytes() + sp_boot.read_bytes() + ram_boot.read_bytes() + (ROOT / 'runtime/plaid_rt.c').read_bytes() + b''.join(p.read_bytes() for p in sorted((ROOT / 'runtime').glob('*.h'))) + rsp_headers
     main_obj = compile_cached(runtime_source, rt, runtime_deps)
     window_exe = RT64 / f'{name}{"-rsp" if a.rsp_gfx else ""}-rt64.exe'
     if a.rt64:
@@ -257,8 +274,8 @@ def main():
 
     texts_c = [texts / (t['name'] + '.c') for t in rsp_manifest['texts']] + [texts / 'rsp_registry.c']
     flags = ['gcc', '-O2', '-I', ROOT / 'crates/plaid-lower/src']
-    with ThreadPoolExecutor(os.cpu_count()) as pool:
-        objects = list(pool.map(lambda p: compile_cached(p, flags), texts_c))
+    with ThreadPoolExecutor(min(4, os.cpu_count() or 1)) as pool:
+        objects = list(pool.map(lambda p: compile_cached(p, flags, rsp_headers), texts_c))
     run('gcc', main_obj, *part_objs, '-pthread', *objects, '-o', exe)
     if a.rt64:
         run('gcc', window_obj, *part_objs, RT64 / 'plaid_rt64.dll', '-pthread', *objects, '-o', window_exe)

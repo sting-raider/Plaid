@@ -108,8 +108,12 @@ def run_contract():
                     payload = {}
                 return CompletedProcess([], 0, json.dumps(payload), '')
             argv = ['native.py', 'synthetic.z64', '--name', 'manifest', '--loads', str(loads), *(['--strict'] if strict else [])]
+            def discover(arguments, overlays, output):
+                Path(output).write_text(json.dumps({'tlb_exception_vectors': []}))
+                return False
             with patch.object(native, 'ROOT', root), patch.object(native, 'plaid', side_effect=plaid), \
-                    patch.object(native, 'memo_plaid', side_effect=lambda *a, writes=(): plaid(*a).stdout),                     patch.object(native, 'run'), patch.object(native, 'discover_map'), \
+                    patch.object(native, 'memo_plaid', side_effect=lambda *a, writes=(): plaid(*a).stdout), \
+                    patch.object(native, 'run'), patch.object(native, 'discover_map', side_effect=discover), \
                     patch.object(native, 'capture_many', side_effect=ValueError('test stop after manifest')), \
                     patch('sys.argv', argv):
                 try:

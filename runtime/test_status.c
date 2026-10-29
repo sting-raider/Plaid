@@ -186,6 +186,22 @@ static void dynamic_fr_contexts(void) {
   S->status_known = S->status_thread = S->fr_mode = 0;
 }
 
+static void global_cp0_contexts(void) {
+  rt_thread one = {0}, two = {0};
+  const u32 globals = (1u<<4)|(1u<<6)|(1u<<20), entryhi = 1u<<10;
+  S->cp0_known = globals | entryhi | 0x2du;
+  S->cp0_context = 0x123456789abcde00ull; S->cp0_xcontext = 0xfedcba9876543210ull; S->cp0_wired = 7;
+  restore(&one);
+  assert(S->cp0_known == (globals | entryhi));
+  assert(S->cp0_context == 0x123456789abcde00ull && S->cp0_xcontext == 0xfedcba9876543210ull && S->cp0_wired == 7);
+  S->status_known = 1; S->cp0_status = 0x24000000u; S->status_thread = 0;
+  assert(!plaid_cp0_write(S,6,11,0x80000400u));
+  restore(&two);
+  assert(S->cp0_wired == 11 && (S->cp0_known & globals) == globals);
+  S->cp0_known = 0; restore(&one);
+  assert(S->cp0_known == 0); /* restore must never resurrect an unproved fact */
+}
+
 int main(int argc, char **argv) {
   unsigned batch = argc == 2 ? (unsigned)strtoul(argv[1], NULL, 0) : 0, i;
   assert(batch < sizeof status_cases / sizeof status_cases[0] / 16);
@@ -194,6 +210,7 @@ int main(int argc, char **argv) {
   fr_outside_sdk_context();
   control_registers_in_both_fr_modes();
   dynamic_fr_contexts();
+  global_cp0_contexts();
   memset(timers, 0, sizeof timers); memset(pending, 0, sizeof pending);
   for (i = 16; i < 24; i++) S->r[i] = 0x1234567800000000ull + i;
   S->hi = 0x123456789abcdef0ull; S->lo = 0xfedcba9876543210ull;

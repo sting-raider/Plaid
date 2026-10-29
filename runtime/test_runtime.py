@@ -806,6 +806,16 @@ def main():
     context_contracts()
     from test_tlb_exceptions import main as tlb_exception_contracts
     tlb_exception_contracts()
+    from test_native_refill import main as native_refill_contracts
+    native_refill_contracts()
+    from test_random import main as random_contracts
+    random_contracts()
+    from test_cp0_boundaries import main as cp0_boundary_contracts
+    cp0_boundary_contracts()
+    from test_cp0_aliases import main as cp0_alias_contracts
+    cp0_alias_contracts()
+    import test_queue_capacity
+    test_queue_capacity.run(exe, cc, sys.modules[__name__])
     from test_eret import main as eret_contracts
     eret_contracts()
     from test_fr import main as fr_contracts

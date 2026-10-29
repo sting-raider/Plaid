@@ -6,6 +6,52 @@ from pathlib import Path
 from ares_boot import capture_many, capture_refill
 
 
+def harvest_vectors(rom, loads_path, receipt_path):
+    """Declare naturally fetched RAM vectors for mapped executable sources.
+
+    Composition replays these first-fetch sources; native entry still checks
+    their bytes. A captured mapping or runtime RAM snapshot is never installed.
+    """
+    loads_path = Path(loads_path)
+    loads = json.loads(loads_path.read_text())
+    if not any(load['encoding'] in ('ares_tlb', 'tlb_raw') for load in loads['loads']):
+        return False
+    existing = {int(load['entry'], 0) for load in loads['loads']
+                if load['encoding'] == 'ares_boot' and 'entry' in load}
+    requested = [pc for pc in (0x80000000, 0x80000180) if pc not in existing]
+    if not requested:
+        return False
+    captures = capture_many(rom, requested, exact=True)
+    receipt = {'vectors': [], 'refusals': [],
+               'captures': [{k: v for k, v in row.items() if k != 'bytes'} for row in captures]}
+    for row in captures:
+        pc = row.get('entry')
+        if pc not in requested or 'bytes' not in row:
+            continue
+        start, data = row.get('destination'), row['bytes']
+        limit = 0x80000180 if pc == 0x80000000 else 0x80000400
+        if (type(start) is not int or start % 4 or not isinstance(data, list) or
+                any(type(value) is not int or not 0 <= value <= 255 for value in data) or
+                not 0x80000000 <= start <= pc < start + len(data) <= 0x80800000 or
+                len(data) % 4 or 'counterfactual' in row or 'physical_start' in row):
+            receipt['refusals'].append({'pc': pc, 'reason': 'invalid natural RAM vector source'})
+            continue
+        end = min(start + len(data), limit)
+        if any(not load.get('slot') and int(load['destination'], 0) < end and
+               pc < int(load['destination'], 0) + int(load['size'], 0) for load in loads['loads']):
+            receipt['refusals'].append({'pc': pc, 'reason': 'vector overlaps an existing fixed declaration'})
+            continue
+        load = dict(destination=hex(pc), size=hex(end - pc), rom='0x0', encoding='ares_boot', entry=hex(pc))
+        loads['loads'].append(load)
+        receipt['vectors'].append(load)
+    Path(receipt_path).write_text(json.dumps(receipt, indent=2) + '\n')
+    if not receipt['vectors']:
+        return False
+    loads['source'] += '; natural first-fetch RAM exception vectors, replayed on composition and byte-guarded natively'
+    loads_path.write_text(json.dumps(loads, indent=2) + '\n')
+    return True
+
+
 def harvest_refills(rom, loads_path, map_path, info, receipt_path):
     """Recover missing mapped sources through explicit counterfactual roots.
 

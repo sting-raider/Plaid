@@ -1190,3 +1190,14 @@ extraction has not found (CPU fault 0).
 ADR-0226 validates replay-observed call entries without a return-layout clue
 only when they pass `executed_start`; solver dispatch requires that replay
 evidence, and observations remain open-site evidence rather than certificates.
+
+
+### Native refill execution (ADR-0300)
+
+ADR-0299 landed as aacb2887. ADR-0300 executes declared native refill
+vectors and verifies Random/Wired, source-guarded CP0 global preservation and
+startup provenance. GoldenEye executes the fast and general vectors, reaching
+VI 1, fault 1, PC 808101e4: guest current-thread state is still absent.
+Logos/title remain outstanding. Exact-tree gate receipts are retained under
+target/receipts/native-refill-exact/. See
+research/ge-native-refill-execution.md.

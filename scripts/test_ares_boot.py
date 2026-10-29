@@ -13,6 +13,7 @@ from native import write_boot_state
 
 def boot_header_contract():
     capture = dict(boot_status=0x34000000, boot_entryhi=0xff, entered=True, boot_entry=0x80000400,
+                   boot_cp0=dict(context=0x123456789abcde00, xcontext=0xfedcba9876543210, wired=7, cause=0x8000),
                    boot_rom_copy=dict(destination=0x400, rom=0x1000, size=0x100000, verified=True),
                    sp=[i % 256 for i in range(0x2000)], ram_prefix=[(i * 7 + 3) % 256 for i in range(0x400)],
                    rom_sha256='synthetic', revision='synthetic')
@@ -21,6 +22,8 @@ def boot_header_contract():
         sp, ram = write_boot_state(capture, directory, 0x80000400)
         assert '#define PLAID_BOOT_STATUS 872415232u' in ram.read_text()
         assert '#define PLAID_BOOT_ENTRYHI 255ull' in ram.read_text()
+        for key, value in capture['boot_cp0'].items():
+            assert f'#define PLAID_BOOT_{key.upper()} {value}ull' in ram.read_text()
         assert '#define PLAID_BOOT_ROM_COPY_BASE 1024u' in ram.read_text()
         assert '#define PLAID_BOOT_ROM_COPY_SIZE 1048576u' in ram.read_text()
         assert ','.join(map(str, capture['ram_prefix'])) in ram.read_text()
@@ -32,12 +35,20 @@ def boot_header_contract():
         assert 'ram_prefix' not in receipt and 'sp' not in receipt
         write_boot_state(dict(capture, boot_entry=0xa0000400), directory, 0xa0000400)
         for change in [dict(boot_status=None), dict(boot_status=True), dict(boot_status=-1), dict(boot_entryhi=None), dict(boot_entryhi=1 << 64),
+                       dict(boot_cp0=None), dict(boot_cp0={}),
                        dict(boot_status=0x100000000), dict(entered=False), dict(boot_entry=0x80001000), dict(ram_prefix=None),
                        dict(ram_prefix=capture['ram_prefix'][:-1]), dict(sp=capture['sp'][:-1]),
                        dict(ram_prefix=[256] * 0x400), dict(ram_prefix=[True] * 0x400)]:
             try:
                 write_boot_state(dict(capture, **change), directory, 0x80000400)
                 raise AssertionError(f'invalid boot state accepted: {change.keys()}')
+            except ValueError:
+                pass
+        for key, bad in [('context', True), ('context', 1 << 64), ('context', 1),
+                         ('xcontext', -1), ('xcontext', 1), ('wired', 64), ('cause', 1 << 32)]:
+            try:
+                write_boot_state(dict(capture, boot_cp0=dict(capture['boot_cp0'], **{key: bad})), directory, 0x80000400)
+                raise AssertionError('invalid CP0 startup value accepted')
             except ValueError:
                 pass
         for proof in [None, {}, dict(capture['boot_rom_copy'], verified=False),
@@ -329,6 +340,8 @@ def table_data_contract():
 
 def main():
     boot_header_contract()
+    from test_tlb_vectors import main as vector_contracts
+    vector_contracts()
     from test_refill_sources import main as refill_contract
     refill_contract()
     replay_cache_contract()
