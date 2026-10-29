@@ -201,7 +201,7 @@ u32 plaid_fetch_link(plaid_state *s, u32 t);
 int plaid_native_refill(plaid_state *s, u32 target);
 int plaid_tlb_write(plaid_state *s, u32 index, plaid_tlb_entry entry, u32 pc);
 int plaid_tlb_clear(plaid_state *s, u32 pc);
-static inline int plaid_protected(plaid_state *s, u32 p, u32 size, u32 pc) {
+static inline int plaid_write_check(plaid_state *s, u32 p, u32 size, u32 pc) {
   u32 w, q = pc & 0x1fffffffu;
   u8 own = 0, k;
   if (!s->prot_ready) plaid_build_prot(s);
@@ -221,6 +221,11 @@ static inline int plaid_protected(plaid_state *s, u32 p, u32 size, u32 pc) {
     if (k > 1 && k < 253 && s->load_ok[k - 2] &&
         (k == own || plaid_text_active(s, w << 2, 4))) return 1;
   }
+  return 0;
+}
+static inline int plaid_protected(plaid_state *s, u32 p, u32 size, u32 pc) {
+  u32 w; u8 k;
+  if (plaid_write_check(s, p, size, pc)) return 1;
   for (w = p >> 2; w <= (p + size - 1) >> 2; w++) {
     k = s->prot[w];
     if (k == 255) {
@@ -509,6 +514,11 @@ static inline int plaid_ctc1(plaid_state *s, u32 v, u32 pc) {
 "#;
 
 const RUNTIME_WRITE: &str = r#"/* Host runtime functions call this before writing guest RAM at physical p. */
+int plaid_runtime_check_write(plaid_state *s, u32 p, u32 size, u32 pc) {
+  if (p > PLAID_RAM_SIZE || size > PLAID_RAM_SIZE - p) return plaid_fault(s, pc, 1);
+  if (size && plaid_write_check(s, p, size, 0)) return plaid_fault(s, pc, 2);
+  return 0;
+}
 int plaid_runtime_write(plaid_state *s, u32 p, u32 size, u32 pc) {
   if (p > PLAID_RAM_SIZE || size > PLAID_RAM_SIZE - p) return plaid_fault(s, pc, 1);
   if (size && plaid_protected(s, p, size, 0)) return plaid_fault(s, pc, 2);
@@ -2967,7 +2977,7 @@ fn lower_c_units(
         units,
         runtime_header: if separate_runtime {
             format!(
-                "{shared}\nvoid plaid_load_images(plaid_state *s);\nint plaid_run(plaid_state *s);\nint plaid_runtime_write(plaid_state *s,u32 p,u32 size,u32 pc);\nint plaid_enter(plaid_state *s,u32 entry,u64 ret);\ntypedef int (*plaid_coroutine_fn)(plaid_state *,u64);\nplaid_coroutine_fn plaid_coroutine_target(plaid_state *s,u32 entry);\nint plaid_coroutine_enter(plaid_state *s,u32 entry,u64 ret);\n"
+                "{shared}\nvoid plaid_load_images(plaid_state *s);\nint plaid_run(plaid_state *s);\nint plaid_runtime_write(plaid_state *s,u32 p,u32 size,u32 pc);\nint plaid_runtime_check_write(plaid_state *s,u32 p,u32 size,u32 pc);\nint plaid_enter(plaid_state *s,u32 entry,u64 ret);\ntypedef int (*plaid_coroutine_fn)(plaid_state *,u64);\nplaid_coroutine_fn plaid_coroutine_target(plaid_state *s,u32 entry);\nint plaid_coroutine_enter(plaid_state *s,u32 entry,u64 ret);\n"
             )
         } else {
             String::new()

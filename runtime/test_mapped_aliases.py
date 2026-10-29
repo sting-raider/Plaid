@@ -81,11 +81,10 @@ def ownership_units(cc, prefix, source, one):
         subprocess.run(flags, check=True)
         subprocess.run([str(binary)], check=True, capture_output=True, timeout=30)
         if owner == 'mixed':
-            at = changed.index('/* Preflight the complete transaction')
-            first = changed.index('  for (w = p >> 2;', at)
-            second = changed.index('  for (w = p >> 2;', first + 1)
+            preflight = '  if (plaid_write_check(s, p, size, pc)) return 1;'
+            assert changed.count(preflight) == 1
             try:
-                (OUT / filename).write_text(changed[:first] + changed[second:])
+                (OUT / filename).write_text(changed.replace(preflight, ''))
                 subprocess.run(flags, check=True)
                 mutant = subprocess.run([str(binary)], capture_output=True, timeout=30)
                 assert mutant.returncode != 0, 'removed transaction preflight escaped mixed-owner refusal'

@@ -288,6 +288,40 @@ static u64 count_now(void) { return now_ns() * 46875ull / 1000000ull + time_base
 
 /* ---- scheduling (caller holds `big`) ------------------------------------ */
 
+/* Check every range in a kernel update before any guest bytes are changed. */
+static void kernel_write_check(u32 va, u32 size) {
+  u32 p, pc = (u32)S->r[31] - 8;
+  if (phys(va, size, &p)) { plaid_fault(S, pc, 1); finish(1, "SDK data outside RAM"); }
+  if (plaid_runtime_check_write(S, p, size, pc)) finish(1, "SDK data write refused");
+}
+static void wr64(u32 va, u64 value) {
+  u8 bytes[8]; unsigned i;
+  for (i = 0; i < 8; i++) bytes[i] = (u8)(value >> (56 - i * 8));
+  wr(va, bytes, 8);
+}
+/* SDK wait queues are priority ordered; equal priorities retain enqueue order. */
+static void publish_waiters(u32 mq, int full) {
+  rt_thread *list[MAX_THREADS]; unsigned count = 0, i, j; u32 head;
+  if (!queue_tail_global) return;
+  if (mq > 0xffffffe7u) { plaid_fault(S, (u32)S->r[31] - 8, 1); finish(1, "SDK queue overflow"); }
+  head = mq + (full ? 4u : 0u);
+  for (i = 0; i < MAX_THREADS; i++) {
+    rt_thread *t = &threads[i];
+    if (t->state != T_BLOCKED || t->wait_queue != mq || t->wait_full != full) continue;
+    j = count;
+    while (j && (t->pri > list[j - 1]->pri || (t->pri == list[j - 1]->pri && t->seq < list[j - 1]->seq))) {
+      list[j] = list[j - 1]; j--;
+    }
+    list[j] = t; count++;
+  }
+  kernel_write_check(head, 4);
+  for (i = 0; i < count; i++) kernel_write_check(list[i]->guest, 0x14);
+  wr32(head, count ? list[0]->guest : queue_tail_global);
+  for (i = 0; i < count; i++) {
+    wr32(list[i]->guest, i + 1 < count ? list[i + 1]->guest : queue_tail_global);
+    wr32(list[i]->guest + 8, head); wr16(list[i]->guest + 0x10, 8);
+  }
+}
 static void save(rt_thread *t) {
   memcpy(t->r, S->r, sizeof t->r); memcpy(t->f, S->f, sizeof t->f);
   t->hi = S->hi; t->lo = S->lo; t->fcc = S->fcc; t->fcsr = S->fcsr; t->llbit = S->llbit;
@@ -295,8 +329,38 @@ static void save(rt_thread *t) {
   t->ie = ints_enabled;
   if (t->status_known) {
     u32 global = rd32(status_kernel_global ? status_kernel_global : t->status_global);
+    u32 fp = 0;
+    if (queue_tail_global) {
+      u32 p;
+      if (phys(t->guest, 0x1b0, &p) || t->fr_mode != 1) {
+        plaid_fault(S, (u32)S->r[31] - 8, 12); finish(1, "unsupported SDK saved context");
+      }
+      fp = rd32(t->guest + 0x18);
+      if (fp && !(S->cp0_status & 0x20000000u)) {
+        plaid_fault(S, (u32)S->r[31] - 8, 12); finish(1, "SDK FP context without CU1");
+      }
+      kernel_write_check(t->guest + 0x98, 0x40);
+      kernel_write_check(t->guest + 0xe8, 0x20);
+      kernel_write_check(t->guest + 0x11c, 4);
+      if (fp) {
+        kernel_write_check(t->guest + 0x12c, 4);
+        kernel_write_check(t->guest + 0x180, 0x30);
+      }
+    }
+    kernel_write_check(t->guest + 0x118, 4);
+    kernel_write_check(t->guest + 0x128, 4);
     wr32(t->guest + 0x118, status_saved(S->cp0_status, global));
     wr32(t->guest + 0x128, status_saved_mi(S->mi_mask, global, rd32(t->guest + 0x128)));
+    if (queue_tail_global) {
+      unsigned i;
+      for (i = 16; i <= 23; i++) wr64(t->guest + 0x98 + (i - 16) * 8, t->r[i]);
+      for (i = 28; i <= 31; i++) wr64(t->guest + 0xe8 + (i - 28) * 8, t->r[i]);
+      wr32(t->guest + 0x11c, (u32)t->r[31]);
+      if (fp) {
+        wr32(t->guest + 0x12c, t->fcsr | t->fcc << 23);
+        for (i = 20; i <= 30; i += 2) wr64(t->guest + 0x180 + (i - 20) * 4, t->f[i]);
+      }
+    }
   }
 }
 static void restore(const rt_thread *t) {
@@ -333,7 +397,13 @@ static rt_thread *best_runnable(void) {
   }
   return b;
 }
-static void make_runnable(rt_thread *t) { t->state = T_RUNNABLE; t->seq = ++seq_counter; }
+static void make_runnable(rt_thread *t) {
+  int was_blocked = t->state == T_BLOCKED;
+  if (queue_tail_global && t->guest) kernel_write_check(t->guest + 0x10, 2);
+  t->state = T_RUNNABLE; t->seq = ++seq_counter;
+  if (was_blocked) publish_waiters(t->wait_queue, t->wait_full);
+  if (queue_tail_global && t->guest) wr16(t->guest + 0x10, 2);
+}
 static void *thread_main(void *p);
 
 /* Hand the baton (and S) to `next`, or to nobody. S must already be saved. */
@@ -389,10 +459,12 @@ int plaid_rt_bind_queue_tail(plaid_state *s, u32 global) {
   return result;
 }
 static void hand_to(rt_thread *next) {
+  if (queue_tail_global && next && next != &boot) kernel_write_check(next->guest + 0x10, 2);
   running = next;
   if (running_thread_global) wr32(running_thread_global, next && next != &boot ? next->guest : 0);
   if (!next) return;
   next->state = T_RUNNING;
+  if (queue_tail_global && next != &boot) wr16(next->guest + 0x10, 4);
   restore(next);
   if (!next->context) next->context = new_context(next, 1, next->entry);
   S->native_context = next->context;
@@ -462,6 +534,7 @@ static int block_on(u32 mq, int full) {
   if (!self || self == &boot) finish(1, "boot context blocked on a message queue");
   self->state = T_BLOCKED; self->wait_queue = mq; self->wait_full = full;
   self->seq = ++seq_counter;
+  publish_waiters(mq, full);
   yield_from(self, 1);
   return 0;
 }
@@ -712,8 +785,12 @@ RT(osDestroyThread) {
 RT(osSetThreadPri) {
   rt_thread *t = thread_of(arg(0));
   if (!t) return 0;
+  if (t->pri == (s32)arg(1)) return 0;
   t->pri = (s32)arg(1);
   if (t->guest) wr32(t->guest + 4, (u32)t->pri);
+  if (t->state == T_BLOCKED) {
+    t->seq = ++seq_counter; publish_waiters(t->wait_queue, t->wait_full);
+  }
   if (t == running) {
     rt_thread *b = best_runnable();
     if (b && b->pri > t->pri) { make_runnable(t); yield_from(t, 1); }
@@ -735,10 +812,19 @@ RT(osStopThread) {
   rt_thread *t = thread_of(arg(0));
   if (!t) return 0;
   if (t->guest) wr16(t->guest + 0x10, 1); /* OS_STATE_STOPPED */
-  if (t == running) { t->state = T_STOPPED; yield_from(t, 1); }
+  if (t == running) {
+    if (queue_tail_global) wr16(t->guest + 0x10, 1);
+    t->state = T_STOPPED; yield_from(t, 1);
+  }
   /* Queue waiters are selected by T_BLOCKED; stopping removes that eligibility
      while retaining the parked receive/send continuation for osStartThread. */
-  else if (t->state == T_RUNNABLE || t->state == T_BLOCKED) t->state = T_STOPPED;
+  else if (t->state == T_RUNNABLE || t->state == T_BLOCKED) {
+    int was_blocked = t->state == T_BLOCKED;
+    if (queue_tail_global) kernel_write_check(t->guest + 0x10, 2);
+    t->state = T_STOPPED;
+    if (was_blocked) publish_waiters(t->wait_queue, t->wait_full);
+    if (queue_tail_global) wr16(t->guest + 0x10, 1);
+  }
   return 0;
 }
 RT(osGetThreadPri) { rt_thread *t = thread_of(arg(0)); return ret(t ? (u32)t->pri : 0); }

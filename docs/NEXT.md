@@ -1,5 +1,15 @@
 # Next
 
+## After SDK waiter/context publication (ADR-0305)
+
+Bridge the lowered dispatcher's foreign ERET to an owned suspended native
+queue continuation, then resume the original refill owner after paging.
+GoldenEye reaches VI1/fault12/PC80810a7c. The ABI return PC is not permission
+to skip the pending host receive. Preserve exception scope, context generation,
+retirement and source/frame guards. Run-queue synchronization and authenticated
+restore entry discovery remain necessary; no title/logo has been verified.
+See research/ge-sdk-waiters.md and ge-native-fault-event-bridge.md.
+
 ## After guest SDK event publication (ADR-0304)
 
 Publish blocked waiter and run-queue state under verified SDK bindings, then
