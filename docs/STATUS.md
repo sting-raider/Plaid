@@ -1201,3 +1201,14 @@ VI 1, fault 1, PC 808101e4: guest current-thread state is still absent.
 Logos/title remain outstanding. Exact-tree gate receipts are retained under
 target/receipts/native-refill-exact/. See
 research/ge-native-refill-execution.md.
+
+
+### Native program/runtime compilation (ADR-0301)
+
+The native build compiles the program dispatcher and source witnesses once,
+then links small runtime adapters. A retained 215126-block MM map produces
+byte-identical guest C units. Its adapters compile in about 1.2 seconds each
+after a 226.4-second program-unit build, versus 259.8/242.1 seconds for the
+previous combined runtime builds under build load. This measures iteration
+cost; it does not establish a runtime-speed change. Synthetic handoff/refill
+contracts cover the separate linkage. See research/native-runtime-units.md.

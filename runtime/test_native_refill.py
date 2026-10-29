@@ -123,6 +123,18 @@ int main(int argc,char **argv) { (void)argv;''')
     expected_sdk=json.loads(ares_oracle.execute(oracle,OUT/'input.bin',hex(A.EXIT),'sdk',capture_output=True,text=True,check=True,timeout=30).stdout)
     actual_sdk=json.loads(subprocess.check_output([str(binary),'sdk'],text=True,timeout=30))
     assert actual_sdk==expected_sdk,{k:(actual_sdk[k],expected_sdk[k]) for k in expected_sdk if expected_sdk[k]!=actual_sdk[k]}
+    subprocess.run([str(exe),'lower-map',str(image),str(mapping),hex(labels['entry']),hex(A.EXIT),
+                    str(OUT/'separate.c'),'--parts','3','--runtime-unit','--residual-dispatch'],check=True)
+    separate_harness=native.replace('#include <assert.h>','#include <assert.h>\nint plaid_native_refill(plaid_state *,u32);')
+    (OUT/'separate-harness.c').write_text(separate_harness)
+    objects=[]
+    for c in [OUT/'separate.c',*sorted(OUT.glob('separate.part*.c'))]:
+        obj=c.with_suffix('.o');subprocess.run([cc,'-O2','-std=c11','-Wall','-Werror','-Wno-unused-label','-Wno-unused-function','-c',str(c),'-o',str(obj)],check=True);objects.append(obj)
+    separate=OUT/'separate.exe'
+    subprocess.run([cc,'-O2','-std=c11','-Wall','-Werror','-Wno-unused-label','-Wno-unused-function','-DPLAID_LOWERED="separate.runtime.h"',f'-DPLAID_EXIT={A.EXIT}u','-I',str(OUT),str(OUT/'separate-harness.c'),*map(str,objects),'-lm','-o',str(separate)],check=True)
+    for args,wanted in [([],expected),(['sdk'],expected_sdk)]:
+        split=json.loads(subprocess.check_output([str(separate),*args],text=True,timeout=30))
+        assert split==wanted,{k:(split[k],wanted[k]) for k in wanted if split[k]!=wanted[k]}
     generated=(OUT/'native.c').read_text()
     vector='case 0x80000000u: return F_80000000(s, ret);'
     assert generated.count(vector)==1

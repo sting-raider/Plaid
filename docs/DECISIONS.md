@@ -8836,3 +8836,19 @@ See research/ge-native-refill-execution.md for contracts, measurements, limits
 and the current GoldenEye scheduler-state refusal. Exact-tree validation receipts
 are under target/receipts/native-refill-exact/. This ADR does not claim logos,
 title, or native completeness.
+
+
+## ADR-0301: compile the native program once across runtime adapters
+
+Multipart lower-map may emit --runtime-unit: one program-definition object and
+a runtime declaration header. Only preload and host-entry linkage changes;
+guest function units retain identical bytes. The native builder links that
+program object into both headless and visible-window runtimes. Adapter cache
+keys cover its declaration header, boot payloads, runtime source/headers and
+RSP ABI; program definitions have their own source/compiler cache key.
+
+Synthetic Status handoffs and two-stage refill execute through this seam.
+The refill comparison checks complete pinned-ares CPU/CP0/TLB/RAM state in
+bare and SDK modes, retaining refusal and mutation contracts. Large-map
+compile measurements and scope are in research/native-runtime-units.md.
+Exact-tree validation receipts are under target/receipts/runtime-units-exact/.
