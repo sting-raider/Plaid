@@ -8870,3 +8870,19 @@ Synthetic handoff, source mutation, map merge and CLI refusal contracts cover
 the interface. See research/ge-sdk-current-thread.md and the retained natural
 reference continuation in research/ge-native-fault-event-bridge.md. Exact-tree
 validation is under target/receipts/sdk-running-exact/.
+
+
+## ADR-0303: native MI interrupt-mask I/O with independent knowledge
+
+Expose the six MI_INTR_MASK bits and the mirrored clear/set command register
+through the existing uncached runtime I/O callback. Set commands dominate
+simultaneous clears, as pinned ares does. Share the value with source-verified
+SDK mask operations and context restoration, but track known mask bits
+independently of CP0 Status. Raw writes establish touched bits; incomplete
+reads refuse. Keep unsupported widths and other MI registers explicit refusals.
+
+1024 pinned-ares load/store comparisons, knowledge/SDK/pending-state checks and
+four mutations verify this general device capability. GoldenEye advances from
+808102bc/fault1 to 80810950/fault12 (VI1 in the retained diagnostic). Guest
+fault-event and pager scheduling interoperability remains unresolved; no
+observed mapping is installed. See research/ge-mi-mask.md.

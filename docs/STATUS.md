@@ -1223,3 +1223,12 @@ MI interrupt-mask read at 808102bc (VI 1, fault 1 in the retained trial).
 Logos/title remain outstanding. The pinned reference then wakes the pager
 through a fault event and dispatches it; guest/host event and scheduling
 interoperability is the next obligation, not a preloaded engine mapping.
+
+### Native MI mask register (ADR-0303)
+
+Lowered uncached accesses now read/write the six MI mask bits with mirrored
+command semantics, verified by 1024 pinned-ares comparisons and four mutations.
+Mask knowledge is independent of CP0 Status. GoldenEye passes the MI read and
+reaches VI1/fault12/PC80810950 in the guest dispatcher. The guest fault-event
+queue and native host scheduler still require a checked bridge; logos/title
+remain outstanding. Evidence: research/ge-mi-mask.md.

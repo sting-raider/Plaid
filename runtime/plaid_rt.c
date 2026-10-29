@@ -107,6 +107,7 @@ static rt_thread *running; /* NULL when every guest thread is blocked */
 static rt_thread boot;     /* the pre-thread boot context (main_func) */
 static u64 seq_counter, thread_generation;
 static int ints_enabled = 1;
+static u32 mi_mask_known; /* independently known MI mask bits */
 static u32 status_kernel_global; /* the SDK copy whose exception vectors are installed */
 static rt_event events[EV_COUNT];
 static int pending[EV_COUNT]; /* undelivered event counts */
@@ -312,6 +313,7 @@ static void restore(const rt_thread *t) {
     S->cp0_status = (saved & ~0xff02u) | (saved & global & 0xff00u);
     S->fr_mode = (S->cp0_status & 0x04000000u) ? 2 : 1;
     S->mi_mask = rd32(t->guest + 0x128) & (global >> 16) & 0x3fu;
+    mi_mask_known = 63u;
     ints_enabled = S->cp0_status & 1;
     if (pi_status & 8u) { pending[EV_PI] = 1; plaid_preempt = 1; }
   }
@@ -767,6 +769,7 @@ int plaid_rt_osSetIntMask_global(plaid_state *s, u32 global_address) {
     global = rd32(global_address);
     old = status_old_mask(S->cp0_status, S->mi_mask, global);
     status_set_mask(&S->cp0_status, &S->mi_mask, arg(0), global);
+    mi_mask_known = 63u;
     result = ret(old);
     maybe_preempt(0);
   }
@@ -1126,8 +1129,24 @@ static void flash_write_half(u16 d) {
 }
 
 static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
-  (void)s;
   if (size != 4) return 1;
+  if (p >= 0x04300000u && p < 0x04400000u && (p & 15u) == 12u) {
+    /* MI_INTR_MASK clear/set commands, including set-over-clear priority. */
+    if (!write) {
+      if (mi_mask_known != 63u) return 1;
+      *v = s->mi_mask;
+    } else {
+      unsigned i;
+      u32 word = (u32)*v;
+      for (i = 0; i < 6; i++) {
+        if (word & (1u << (2 * i))) s->mi_mask &= ~(1u << i);
+        if (word & (2u << (2 * i))) s->mi_mask |= 1u << i;
+        if (word & (3u << (2 * i))) mi_mask_known |= 1u << i;
+      }
+      plaid_preempt = 1;
+    }
+    return 0;
+  }
   if (!write && p >= 0x05000000u && p < 0x1fc00000u) {
     u32 value;
     u64 due = pi_bus.due;
