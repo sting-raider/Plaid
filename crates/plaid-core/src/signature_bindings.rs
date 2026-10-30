@@ -49,7 +49,7 @@ fn variant(image: &CodeImage, entry: u32, signature: &Signature) -> BTreeMap<Str
 fn reference(image: &CodeImage, entry: u32, size: u32, high: u32, low: u32) -> Option<GuestAddr> {
     // shortcut: only straight-line scalar references; extend when a verified
     // consumer needs indexed materializations.
-    if low <= high || low - high > 32 {
+    if low <= high || low - high > 32 || low >= size || (high | low) & 3 != 0 {
         return None;
     }
     let word = |offset: u32| image.instruction_word(GuestAddr(entry.checked_add(offset)?));
@@ -64,23 +64,32 @@ fn reference(image: &CodeImage, entry: u32, size: u32, high: u32, low: u32) -> O
     {
         return None;
     }
+    // JAL writes only ra before its delay slot. A scalar argument completed
+    // there reaches the callee before it can clobber caller-saved registers.
+    // This does not permit a pair spanning the call's return or a JALR target.
+    let call_delay = low >= 8
+        && word(low - 4)? >> 26 == 3
+        && register != 31
+        && matches!(low_word >> 26, 9 | 13)
+        && matches!(low_word >> 16 & 31, 4..=7);
     // A pair split by other instructions (osContInit's __osEepromTimerQ) holds
-    // only when its LUI is not in a delay slot, nothing between writes the
-    // register or transfers control, and no transfer in the function enters it.
+    // only when its LUI is not in a delay slot, no intervening instruction
+    // clobbers the value or diverts control before low, and no transfer enters it.
     if split {
         if high >= 4 && transfer(word(high - 4)?, start.wrapping_sub(4)).is_some() {
             return None;
         }
-        if !(high + 4..low)
-            .step_by(4)
-            .all(|o| word(o).is_some_and(|w| keeps(w, register)))
-        {
+        if !(high + 4..low).step_by(4).all(|o| {
+            word(o)
+                .is_some_and(|w| keeps(w, register) || (call_delay && o + 4 == low && w >> 26 == 3))
+        }) {
             return None;
         }
         for o in (0..size).step_by(4) {
             let w = word(o)?;
             match transfer(w, entry.wrapping_add(o)) {
                 Some(Some(t)) if start < t && t <= end => return None,
+                Some(None) if call_delay && w != 0x03e0_0008 => return None,
                 Some(None) if w & 63 == 8 && w >> 21 & 31 != 31 => return None,
                 _ => {}
             }
@@ -236,6 +245,81 @@ mod tests {
             collect(&image, 0x80000400, &[&first, &second])["global"],
             GuestAddr(0x80009000)
         );
+    }
+
+    #[test]
+    fn jal_delay_arguments_are_complete_before_the_callee_runs() {
+        for argument in 4..=7 {
+            for base in [argument, 8] {
+                for opcode in [9, 13] {
+                    for low in [0, 0x7fff, 0x8000, 0xffff] {
+                        let words = [
+                            0x3c00_8001 | base << 16,
+                            0x0c10_0000,
+                            opcode << 26 | base << 21 | argument << 16 | low,
+                            0x03e0_0008,
+                            0,
+                        ];
+                        let (image, signature) = fixture(&words, vec![0], vec![8]);
+                        let address = if opcode == 9 {
+                            0x8001_0000u32.wrapping_add(low as u16 as i16 as i32 as u32)
+                        } else {
+                            0x8001_0000 | low
+                        };
+                        assert_eq!(
+                            collect(&image, 0x80000400, &[&signature])["global"],
+                            GuestAddr(address)
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn delay_argument_proofs_refuse_clobbers_other_transfers_and_entries() {
+        let original = [0x3c08_8001, 0x0c10_0000, 0x2504_8000, 0x03e0_0008, 0];
+        for (index, replacement) in [
+            (0, 0x3c1f_8001), // ra is overwritten by JAL
+            (1, 0x0100_f809), // JALR, even with its normal link register
+            (1, 0x1000_0001), // branch delay slot
+            (1, 0x0c00_0102), // call enters the low instruction
+            (2, 0x27e4_8000), // a different source register
+            (2, 0x2509_8000), // not an argument register
+            (3, 0x0120_f809), // another indirect transfer can enter the pair
+            (4, 0x1000_fffd), // a later branch enters the low instruction
+        ] {
+            let mut words = original;
+            words[index] = replacement;
+            let (image, signature) = fixture(&words, vec![0], vec![8]);
+            assert!(collect(&image, 0x80000400, &[&signature]).is_empty());
+        }
+        // LUI in a call's slot, and low after the return: neither is a
+        // caller-owned value reaching the next callee argument boundary.
+        for (words, high, low) in [
+            (
+                vec![0x3c1f_8001, 0x0c10_0000, 0x27e4_8000, 0x03e0_0008, 0],
+                0,
+                8,
+            ),
+            (
+                vec![0x0c10_0000, 0x3c08_8001, 0x0c10_0000, 0x2504_8000, 0],
+                4,
+                12,
+            ),
+            (vec![0x3c08_8001, 0x0c10_0000, 0, 0x2504_8000, 0], 0, 12),
+            (
+                vec![0x3c08_8001, 0x2508_0001, 0x0c10_0000, 0x2504_8000, 0],
+                0,
+                12,
+            ),
+        ] {
+            let (image, signature) = fixture(&words, vec![high], vec![low]);
+            assert!(collect(&image, 0x80000400, &[&signature]).is_empty());
+        }
+        let (image, mut signature) = fixture(&original, vec![0], vec![8]);
+        signature.size = 8;
+        assert!(collect(&image, 0x80000400, &[&signature]).is_empty());
     }
 
     #[test]

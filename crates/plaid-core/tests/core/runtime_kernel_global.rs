@@ -15,6 +15,14 @@ fn kernel_globals_require_matching_source_abi_extent_and_ram() {
             "osCreateMesgQueue",
             SdkGlobalBinding::ThreadTail(GuestAddr(0xa0003000)),
         ),
+        (
+            "osStartThread",
+            SdkGlobalBinding::RunQueue(GuestAddr(0x80003000)),
+        ),
+        (
+            "osYieldThread",
+            SdkGlobalBinding::RunQueue(GuestAddr(0xa0003000)),
+        ),
     ] {
         let mut map = ProgramMap::new(RomIdentity {
             sha256: "a".repeat(64),
@@ -35,6 +43,20 @@ fn kernel_globals_require_matching_source_abi_extent_and_ram() {
         );
         map.runtime_kernel_global.insert(entry.clone(), binding);
         map.validate().unwrap();
+        let (size, at): (u32, fn(GuestAddr) -> SdkGlobalBinding) = match binding {
+            SdkGlobalBinding::EventStateTable(_) => (120, SdkGlobalBinding::EventStateTable),
+            SdkGlobalBinding::ThreadTail(_) => (8, SdkGlobalBinding::ThreadTail),
+            SdkGlobalBinding::RunQueue(_) => (4, SdkGlobalBinding::RunQueue),
+        };
+        for base in [0x80000000, 0xa0000000] {
+            let mut edge = map.clone();
+            edge.runtime_kernel_global
+                .insert(entry.clone(), at(GuestAddr(base + 0x800000 - size)));
+            edge.validate().unwrap();
+            edge.runtime_kernel_global
+                .insert(entry.clone(), at(GuestAddr(base + 0x800000 - size + 4)));
+            assert!(edge.validate().is_err());
+        }
         assert_eq!(ProgramMap::from_json(&map.to_json().unwrap()).unwrap(), map);
         assert_eq!(merge_maps(&map, &map).unwrap(), map);
         let mut bad = map.clone();
@@ -43,7 +65,7 @@ fn kernel_globals_require_matching_source_abi_extent_and_ram() {
         bad = map.clone();
         bad.runtime_functions.get_mut(&entry).unwrap().name = "osGetCount".into();
         assert!(bad.validate().is_err());
-        for address in [0x80003001, 0x3000, 0x807ffffc, 0xa0800000] {
+        for address in [0x80003001, 0x3000, 0x80800000, 0xa0800000] {
             bad = map.clone();
             bad.runtime_kernel_global.insert(
                 entry.clone(),
@@ -54,6 +76,7 @@ fn kernel_globals_require_matching_source_abi_extent_and_ram() {
                     SdkGlobalBinding::ThreadTail(_) => {
                         SdkGlobalBinding::ThreadTail(GuestAddr(address))
                     }
+                    SdkGlobalBinding::RunQueue(_) => SdkGlobalBinding::RunQueue(GuestAddr(address)),
                 },
             );
             assert!(bad.validate().is_err());
@@ -68,6 +91,7 @@ fn kernel_globals_require_matching_source_abi_extent_and_ram() {
                 SdkGlobalBinding::ThreadTail(_) => {
                     SdkGlobalBinding::ThreadTail(GuestAddr(0xa0003004))
                 }
+                SdkGlobalBinding::RunQueue(_) => SdkGlobalBinding::RunQueue(GuestAddr(0x80003004)),
             },
         );
         assert!(merge_maps(&map, &bad).is_err());

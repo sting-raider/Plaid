@@ -12,6 +12,7 @@ pub const SCHEMA_VERSION: u32 = 0;
 pub enum SdkGlobalBinding {
     EventStateTable(GuestAddr),
     ThreadTail(GuestAddr),
+    RunQueue(GuestAddr),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -966,14 +967,28 @@ impl ProgramMap {
         let mut names = BTreeMap::new();
         for (entry, binding) in &self.runtime_kernel_global {
             address(entry)?;
-            let (global, service, size) = match binding {
-                SdkGlobalBinding::EventStateTable(global) => (global, "osSetEventMesg", 15 * 8),
-                SdkGlobalBinding::ThreadTail(global) => (global, "osCreateMesgQueue", 8),
+            let (global, services, size): (&GuestAddr, &[&str], u32) = match binding {
+                SdkGlobalBinding::EventStateTable(global) => (global, &["osSetEventMesg"], 15 * 8),
+                SdkGlobalBinding::ThreadTail(global) => (global, &["osCreateMesgQueue"], 8),
+                SdkGlobalBinding::RunQueue(global) => (
+                    global,
+                    &[
+                        "osStartThread",
+                        "osStopThread",
+                        "osDestroyThread",
+                        "osSetThreadPri",
+                        "osYieldThread",
+                        "osRecvMesg",
+                        "osSendMesg",
+                        "osJamMesg",
+                    ],
+                    4,
+                ),
             };
             if !self
                 .runtime_functions
                 .get(entry)
-                .is_some_and(|f| f.source_size.is_some() && f.name == service)
+                .is_some_and(|f| f.source_size.is_some() && services.contains(&f.name.as_str()))
                 || global.0 & 3 != 0
                 || global.0 & 0x1fff_ffff > 0x800000 - size
                 || !matches!(global.0 >> 29, 4 | 5)

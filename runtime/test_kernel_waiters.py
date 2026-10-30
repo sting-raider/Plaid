@@ -114,9 +114,9 @@ def run(exe, cc, T):
         expected_contexts.append(expected)
 
     mutations = [
-        ('priority', 't->pri > list[j - 1]->pri', 't->pri < list[j - 1]->pri', ()),
-        ('removal', 'if (was_blocked) publish_waiters(t->wait_queue, t->wait_full);', '(void)was_blocked;', ()),
-        ('preflight', 'for (i = 0; i < count; i++) kernel_write_check(list[i]->guest, 0x14);', '', ('refuse',)),
+        ('priority', 't->pri > update->list[j - 1]->pri', 't->pri < update->list[j - 1]->pri', ()),
+        ('removal', 'publish_queues(was_blocked ? t->wait_queue : 0, t->wait_full);', '(void)was_blocked;', ()),
+        ('preflight', 'for (i = 0; i < update->count; i++)\n    if (kernel_can_write(update->list[i]->guest, 0x14)) return 1;', '(void)i;', ('refuse',)),
         ('epc', 'wr32(t->guest + 0x11c, (u32)t->r[31]);', '', ('context',)),
         ('fp-condition', 't->fcsr | t->fcc << 23', 't->fcsr', ('context', 'fp')),
         ('same-priority', 'if (t->pri == (s32)arg(1)) return 0;', '', ()),

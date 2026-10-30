@@ -2094,7 +2094,7 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
                 return Err("duplicate SDK current-thread binding".into());
             }
         }
-        for symbol in ["__osEventStateTab", "__osThreadTail"] {
+        for symbol in ["__osEventStateTab", "__osThreadTail", "__osRunQueue"] {
             if let Some(global) = f.get("data_bindings").and_then(|data| data.get(symbol)) {
                 let global = GuestAddr(number32(
                     global
@@ -2108,6 +2108,11 @@ fn runtime_declarations(path: Option<&String>) -> Result<RuntimeDeclarations, St
                     ("osCreateMesgQueue", "__osThreadTail") => {
                         plaid_core::program::SdkGlobalBinding::ThreadTail(global)
                     }
+                    (
+                        "osStartThread" | "osStopThread" | "osDestroyThread" | "osSetThreadPri"
+                        | "osYieldThread" | "osRecvMesg" | "osSendMesg" | "osJamMesg",
+                        "__osRunQueue",
+                    ) => plaid_core::program::SdkGlobalBinding::RunQueue(global),
                     // Other SDK sources reference these globals without exposing this interface.
                     _ => continue,
                 };

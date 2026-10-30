@@ -110,7 +110,7 @@ static int ints_enabled = 1;
 static u32 mi_mask_known; /* independently known MI mask bits */
 static u32 status_kernel_global; /* the SDK copy whose exception vectors are installed */
 static rt_event events[EV_COUNT];
-static u32 event_table_global, queue_tail_global;
+static u32 event_table_global, queue_tail_global, run_queue_global;
 static rt_event read_event(unsigned ev);
 static int pending[EV_COUNT]; /* undelivered event counts */
 static struct { u32 mq, msg; } pi_completions[64];
@@ -289,39 +289,68 @@ static u64 count_now(void) { return now_ns() * 46875ull / 1000000ull + time_base
 /* ---- scheduling (caller holds `big`) ------------------------------------ */
 
 /* Check every range in a kernel update before any guest bytes are changed. */
-static void kernel_write_check(u32 va, u32 size) {
+static int kernel_can_write(u32 va, u32 size) {
   u32 p, pc = (u32)S->r[31] - 8;
-  if (phys(va, size, &p)) { plaid_fault(S, pc, 1); finish(1, "SDK data outside RAM"); }
-  if (plaid_runtime_check_write(S, p, size, pc)) finish(1, "SDK data write refused");
+  if (phys(va, size, &p)) return plaid_fault(S, pc, 1);
+  return plaid_runtime_check_write(S, p, size, pc);
+}
+static void kernel_write_check(u32 va, u32 size) {
+  if (kernel_can_write(va, size)) finish(1, "SDK data write refused");
 }
 static void wr64(u32 va, u64 value) {
   u8 bytes[8]; unsigned i;
   for (i = 0; i < 8; i++) bytes[i] = (u8)(value >> (56 - i * 8));
   wr(va, bytes, 8);
 }
-/* SDK wait queues are priority ordered; equal priorities retain enqueue order. */
-static void publish_waiters(u32 mq, int full) {
-  rt_thread *list[MAX_THREADS]; unsigned count = 0, i, j; u32 head;
-  if (!queue_tail_global) return;
-  if (mq > 0xffffffe7u) { plaid_fault(S, (u32)S->r[31] - 8, 1); finish(1, "SDK queue overflow"); }
-  head = mq + (full ? 4u : 0u);
+typedef struct {
+  rt_thread *list[MAX_THREADS]; unsigned count; u32 head, tail, state;
+} rt_queue_update;
+/* SDK queues are priority ordered; equal priorities retain enqueue order. */
+static void collect_queue(rt_queue_update *update, u32 head, u32 tail, u32 mq, int full) {
+  unsigned i, j;
+  update->count = 0; update->head = head; update->tail = tail;
+  update->state = mq ? 8u : 2u;
   for (i = 0; i < MAX_THREADS; i++) {
     rt_thread *t = &threads[i];
-    if (t->state != T_BLOCKED || t->wait_queue != mq || t->wait_full != full) continue;
-    j = count;
-    while (j && (t->pri > list[j - 1]->pri || (t->pri == list[j - 1]->pri && t->seq < list[j - 1]->seq))) {
-      list[j] = list[j - 1]; j--;
+    if (mq ? (t->state != T_BLOCKED || t->wait_queue != mq || t->wait_full != full)
+           : t->state != T_RUNNABLE) continue;
+    j = update->count;
+    while (j && (t->pri > update->list[j - 1]->pri ||
+        (t->pri == update->list[j - 1]->pri && t->seq < update->list[j - 1]->seq))) {
+      update->list[j] = update->list[j - 1]; j--;
     }
-    list[j] = t; count++;
-  }
-  kernel_write_check(head, 4);
-  for (i = 0; i < count; i++) kernel_write_check(list[i]->guest, 0x14);
-  wr32(head, count ? list[0]->guest : queue_tail_global);
-  for (i = 0; i < count; i++) {
-    wr32(list[i]->guest, i + 1 < count ? list[i + 1]->guest : queue_tail_global);
-    wr32(list[i]->guest + 8, head); wr16(list[i]->guest + 0x10, 8);
+    update->list[j] = t; update->count++;
   }
 }
+static int check_queue(const rt_queue_update *update) {
+  unsigned i;
+  if (kernel_can_write(update->head, 4)) return 1;
+  for (i = 0; i < update->count; i++)
+    if (kernel_can_write(update->list[i]->guest, 0x14)) return 1;
+  return 0;
+}
+static void write_queue(const rt_queue_update *update) {
+  unsigned i;
+  wr32(update->head, update->count ? update->list[0]->guest : update->tail);
+  for (i = 0; i < update->count; i++) {
+    rt_thread *t = update->list[i];
+    wr32(t->guest, i + 1 < update->count ? update->list[i + 1]->guest : update->tail);
+    wr32(t->guest + 8, update->head); wr16(t->guest + 0x10, update->state);
+  }
+}
+/* A wake changes two lists. Preflight both before publishing either head. */
+static void publish_queues(u32 mq, int full) {
+  rt_queue_update waiting, ready;
+  if (!queue_tail_global) return;
+  if (mq > 0xffffffe7u) { plaid_fault(S, (u32)S->r[31] - 8, 1); finish(1, "SDK queue overflow"); }
+  if (mq) collect_queue(&waiting, mq + (full ? 4u : 0u), queue_tail_global, mq, full);
+  if (run_queue_global) collect_queue(&ready, run_queue_global, queue_tail_global, 0, 0);
+  if ((mq && check_queue(&waiting)) || (run_queue_global && check_queue(&ready)))
+    finish(1, "SDK queue update refused");
+  if (mq) write_queue(&waiting);
+  if (run_queue_global) write_queue(&ready);
+}
+static void publish_waiters(u32 mq, int full) { publish_queues(mq, full); }
 static void save(rt_thread *t) {
   memcpy(t->r, S->r, sizeof t->r); memcpy(t->f, S->f, sizeof t->f);
   t->hi = S->hi; t->lo = S->lo; t->fcc = S->fcc; t->fcsr = S->fcsr; t->llbit = S->llbit;
@@ -401,7 +430,7 @@ static void make_runnable(rt_thread *t) {
   int was_blocked = t->state == T_BLOCKED;
   if (queue_tail_global && t->guest) kernel_write_check(t->guest + 0x10, 2);
   t->state = T_RUNNABLE; t->seq = ++seq_counter;
-  if (was_blocked) publish_waiters(t->wait_queue, t->wait_full);
+  publish_queues(was_blocked ? t->wait_queue : 0, t->wait_full);
   if (queue_tail_global && t->guest) wr16(t->guest + 0x10, 2);
 }
 static void *thread_main(void *p);
@@ -448,22 +477,49 @@ int plaid_rt_bind_event_table(plaid_state *s, u32 global) {
   pthread_mutex_unlock(&big);
   return result;
 }
+static int bind_scheduler_globals(u32 queue, u32 tail) {
+  rt_queue_update ready;
+  int have_running = tail && running && running != &boot;
+  if (queue && tail && (queue & 0x1fffffffu) < (tail & 0x1fffffffu) + 8u &&
+      (queue & 0x1fffffffu) + 4u > (tail & 0x1fffffffu))
+    return plaid_fault(S, (u32)S->r[31] - 8, 12);
+  if (queue && kernel_can_write(queue, 4)) return 1;
+  if (queue && tail) {
+    collect_queue(&ready, queue, tail, 0, 0);
+    if (check_queue(&ready)) return 1;
+  }
+  if (have_running && kernel_can_write(running->guest + 0x10, 2)) return 1;
+  run_queue_global = queue; queue_tail_global = tail;
+  if (queue && tail) write_queue(&ready);
+  if (have_running) wr16(running->guest + 0x10, 4);
+  return 0;
+}
+int plaid_rt_bind_run_queue(plaid_state *s, u32 global) {
+  int result; (void)s;
+  pthread_mutex_lock(&big);
+  result = bind_kernel_global(run_queue_global, global, 4);
+  if (!result) result = bind_scheduler_globals(global, queue_tail_global);
+  pthread_mutex_unlock(&big);
+  return result;
+}
 int plaid_rt_bind_queue_tail(plaid_state *s, u32 global) {
   int result; (void)s;
   pthread_mutex_lock(&big);
   result = bind_kernel_global(queue_tail_global, global, 8);
   if (!result && (rd32(global) || rd32(global + 4) != 0xffffffffu))
     result = plaid_fault(S, (u32)S->r[31] - 8, 12);
-  if (!result) queue_tail_global = global;
+  if (!result) result = bind_scheduler_globals(run_queue_global, global);
   pthread_mutex_unlock(&big);
   return result;
 }
 static void hand_to(rt_thread *next) {
   if (queue_tail_global && next && next != &boot) kernel_write_check(next->guest + 0x10, 2);
+  if (running_thread_global) kernel_write_check(running_thread_global, 4);
+  if (next) next->state = T_RUNNING;
+  publish_queues(0, 0);
   running = next;
   if (running_thread_global) wr32(running_thread_global, next && next != &boot ? next->guest : 0);
   if (!next) return;
-  next->state = T_RUNNING;
   if (queue_tail_global && next != &boot) wr16(next->guest + 0x10, 4);
   restore(next);
   if (!next->context) next->context = new_context(next, 1, next->entry);
@@ -790,6 +846,8 @@ RT(osSetThreadPri) {
   if (t->guest) wr32(t->guest + 4, (u32)t->pri);
   if (t->state == T_BLOCKED) {
     t->seq = ++seq_counter; publish_waiters(t->wait_queue, t->wait_full);
+  } else if (t->state == T_RUNNABLE) {
+    t->seq = ++seq_counter; publish_queues(0, 0);
   }
   if (t == running) {
     rt_thread *b = best_runnable();
@@ -822,7 +880,7 @@ RT(osStopThread) {
     int was_blocked = t->state == T_BLOCKED;
     if (queue_tail_global) kernel_write_check(t->guest + 0x10, 2);
     t->state = T_STOPPED;
-    if (was_blocked) publish_waiters(t->wait_queue, t->wait_full);
+    publish_queues(was_blocked ? t->wait_queue : 0, t->wait_full);
     if (queue_tail_global) wr16(t->guest + 0x10, 1);
   }
   return 0;

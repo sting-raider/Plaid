@@ -7,6 +7,7 @@ def run_contract(run, directory):
         ('osGetThreadPri', '__osRunningThread', 'runtime_running_thread'),
         ('osSetEventMesg', '__osEventStateTab', 'runtime_kernel_global'),
         ('osCreateMesgQueue', '__osThreadTail', 'runtime_kernel_global'),
+        ('osYieldThread', '__osRunQueue', 'runtime_kernel_global'),
     ]:
         _contract(run, directory, service, symbol, field)
 

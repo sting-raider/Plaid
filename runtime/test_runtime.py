@@ -741,6 +741,10 @@ def main():
     test_kernel_globals.run(exe, cc, sys.modules[__name__])
     import test_kernel_waiters
     test_kernel_waiters.run(exe, cc, sys.modules[__name__])
+    import test_run_queue
+    test_run_queue.run(exe, cc, sys.modules[__name__])
+    import test_argument_delay
+    test_argument_delay.run(exe, cc, sys.modules[__name__])
     import test_running_thread
     test_running_thread.run(exe, cc, sys.modules[__name__])
     import test_sdk_dispatch

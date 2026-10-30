@@ -8927,3 +8927,26 @@ negative cases and seven mutations cover the interface. No SDK code is reused.
 GoldenEye advances VI1/fault12/80810950 -> VI1/fault12/80810a7c, where its lowered
 dispatcher has selected the actual pager but checked foreign ERET refuses.
 No logo/title claim. Full evidence/limits: research/ge-sdk-waiters.md.
+
+
+## ADR-0306: Publish source-bound SDK runnable queues
+
+**Status:** Accepted. **Date:** 2026-10-30.
+
+Recover scalar ADDIU/ORI arguments completed in a direct JAL delay slot only
+with bounded source extent, surviving non-ra LUI value and no alternate
+interior entry. JALR, branch slots and values spanning call return remain
+unsupported. 64 Rust combinations and 32 independent pinned-ares callee
+GPR/PC/RAM checks verify the supported materializations.
+
+Carry typed RunQueue metadata through existing full-source guards/pins and
+matching SDK ABI validation. Publish host-owned runnable priority/FIFO chains
+across scheduling and lifecycle transitions. Preflight both lists before a
+wake changes either head; check complete late bindings before committing them.
+Physical aliases are accepted; conflicting/tail-overlapping heads refuse.
+Six mutations and retained waiter/context reference tests cover the interface.
+No arbitrary guest list imports or foreign ERET permission is introduced.
+
+Fresh GoldenEye remains VI1/fault12/PC80810a7c with six authenticated RunQueue
+consumers. The checked cross-thread exception continuation is still required;
+no logos/title or native_complete claim. See research/ge-sdk-run-queue.md.
