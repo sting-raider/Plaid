@@ -92,8 +92,10 @@ static void retire_context(rt_context *c) {
 static void destroy_thread(rt_thread *t) {
   rt_context *c, *self = host_context;
   int was_blocked = t->state == T_BLOCKED;
+  int was_runnable = t->state == T_RUNNABLE;
   t->state = T_DEAD;
   if (was_blocked) publish_waiters(t->wait_queue, t->wait_full);
+  else if (was_runnable) publish_queues(0, 0);
   t->wait_queue = 0; t->wait_full = 0;
   jump_thread_forget(t);
   if (t->contexts) {

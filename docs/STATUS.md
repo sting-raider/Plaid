@@ -1,5 +1,15 @@
 # Status
 
+## Guest SDK runnable queues (ADR-0306)
+
+Source-bound RunQueue metadata now publishes host-owned priority/FIFO runnable
+chains through handoffs and lifecycle changes. Both queue sides preflight
+before wake publication; late registration and conflicts refuse atomically.
+Conservative direct-JAL argument recovery is checked against pinned ares in
+32 synthetic cases; host-thread/failure tests detect six mutations. Fresh
+GoldenEye remains VI1/fault12/PC80810a7c. The foreign ERET handoff is still
+refused; no logo/title is verified. Evidence: research/ge-sdk-run-queue.md.
+
 ## Guest SDK waiters and yield contexts (ADR-0305)
 
 Source-bound native queue waiters now publish priority/FIFO links across block,

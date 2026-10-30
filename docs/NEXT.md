@@ -1,5 +1,15 @@
 # Next
 
+## After SDK runnable queue publication (ADR-0306)
+
+Authenticate the lowered dispatcher restore continuation, then implement the
+checked foreign ERET handoff to the owned blocked host receive. Preserve the
+refill owner's suspended frames, exception scope and thread/context generation,
+then restore it through authenticated lowered code after paging. GoldenEye
+remains VI1/fault12/PC80810a7c; no logo/title is verified. Runnable-list
+publication now exists, but guest list edits are not host scheduling authority.
+See research/ge-sdk-run-queue.md and ge-native-fault-event-bridge.md.
+
 ## After SDK waiter/context publication (ADR-0305)
 
 Bridge the lowered dispatcher's foreign ERET to an owned suspended native

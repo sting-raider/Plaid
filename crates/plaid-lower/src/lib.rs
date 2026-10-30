@@ -2052,6 +2052,7 @@ fn lower_c_units(
             kernel_bindings.push(match binding {
                 SdkGlobalBinding::EventStateTable(global) => ("event_table", global.0),
                 SdkGlobalBinding::ThreadTail(global) => ("queue_tail", global.0),
+                SdkGlobalBinding::RunQueue(global) => ("run_queue", global.0),
             });
         }
         let name = if !kernel_bindings.is_empty() {
