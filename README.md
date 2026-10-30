@@ -24,7 +24,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 | Banjo-Kazooie (USA) (Rev 1) | **none** | 🟨 residual dispatch, 2 sites | 60 s: Nintendo opening and title, audio, fault 0; puzzle transitions in 75 s runs (ADR-0200, ADR-0201); current main: 60 s, VI 3568, fault 0 (ADR-0240) | re-prove the 2 table jumps lost in 94a4d7cb |
 | Paper Mario (USA) | **none** | 🟨 builds by default with residual dispatch (ADR-0233) | 60 s: storybook intro, VI 3590, audio, fault 0 (ADR-0230); a fresh default build runs 30 s with fault 0 again (ADR-0263); earlier 60 s runs stopped at VI 2908 on an undiscovered shared-slot occupant | find that code; prove 8 indirect jumps for `native_complete` |
 | Ocarina of Time (USA 1.2) | **none** | ✅ ROM-only, 0 blockers | 60 s with scripted save load: VI 3596, fault 0; opening Link/Kokiri scene after NJPEG (ADR-0265) | longer play |
-| GoldenEye 007 (USA) «A1» 🟨 builds with residual dispatch, 5 sites | not reached: the first executable links but stops at VI 0, fault 3, PC 800004b4 (no graphics, logo or title); the startup ROM copy now verifies (ADR-0289 to ADR-0293); a later change clears 1678 source-protection overlaps and stops on a decompression write to 800411c0 (ADR-0294) | source binding at the boot mapped tail; Random/Context/refill exceptions; the 5 residual sites |
+| GoldenEye 007 (USA) «A1» 🟨 builds with residual dispatch, 5 sites | not reached: the executable links but stops at VI 1, fault 12, PC 80810a7c (no graphics, logo or title); the startup ROM copy verifies (ADR-0289 to ADR-0293), the decompression write, Context writes, TLB refill vectors, MI mask and SDK thread/event/waiter/queue state now pass (ADR-0294 to ADR-0306); 49,374 blocks, 5 residual sites; the real pager is selected but a foreign ERET handoff is still refused | the foreign ERET handoff and host pager waiter; VI/graphics/audio bring-up; the 5 residual sites |
 | Mario Kart 64 (USA) | **none** | 🟨 residual dispatch, 2 sites | 60 s with compiled graphics microcode and audio: VI 2762, 1270 graphics / 2635 audio tasks, fault 0 (ADR-0246) | prove the 2 residual sites; longer play |
 | Star Fox 64 (USA) (Rev 1) | **none** | 🟨 residual dispatch, 8 sites | 30 s from the ROM alone: VI 1798, 945 graphics / 1730 audio tasks, fault 0 (ADR-0256, ADR-0257); borders clean since ADR-0266 | prove the 8 residual sites; longer play |
 | Rogue Squadron (USA) | **none** | 🟨 builds with residual dispatch, 16 sites (ADR-0280) | full speed (1798 VIs in 30 s); menus, name entry and the first mission fly natively: an X-wing over Tatooine with the HUD at VI 12284, fault 0 (press list in `research/rs-name-entry.md`) | combat and mission completion; the 16 residual sites |
@@ -41,6 +41,17 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0306 | `99344a20` | Source-bound SDK run queues publish priority/FIFO runnable chains through handoffs; GoldenEye still stops at VI 1, fault 12, PC 80810a7c (foreign ERET refused) |
+| 0305 | `a4829b4b` | Native SDK waiters and callee-saved yield contexts are published to guest memory (checked against ares); GoldenEye advances to the real pager at PC 80810a7c |
+| 0304 | `f81e2a4c` | SDK event registration and empty-queue state published to guest RAM; GoldenEye queues its fault message but the host pager waiter is still absent |
+| 0303 | `eee27042` | Bounded MI mask register reads/writes with mirrored command semantics (1024 ares comparisons); GoldenEye passes it and reaches the guest dispatcher, VI 1, fault 12 |
+| 0302 | `4bc06230` | Source-bound SDK current-thread state survives native scheduling; GoldenEye gets past the missing-thread stop |
+| 0301 | `2180a029` | Native program definitions are compiled once and shared across runtime adapters |
+| 0300 | `ab2b904f` | Guarded native TLB refill vectors execute (Random/Wired, CP0 preservation); GoldenEye runs the fast and general vectors and reaches VI 1, fault 1 |
+| 0299 | `aacb2887` | Bounded guest TLB address-exception state verified by 60 full-state ares comparisons; GoldenEye paging traced, vectors not yet connected |
+| 0298 | `f1284ab8` | Mapped host ABI callbacks carry their argument obligations; GoldenEye callback dispatch grows from 1 to 7 entries (49,374 blocks, 5 residual sites) |
+| 0297 | `f1284ab8` | Bounded Context writes (PTEBase) preserve read-only bits; GoldenEye passes the Context write and reaches its first SDK thread entry |
+| 0296 | `b5c382bc` | Replayed mapped fragments bind with independent lifetimes; GoldenEye clears the decompression write and stops at a Context MTC0 (VI 1, fault 12) |
 | 0295 | `94303570` | Reference oracles for CPU, boot, RSP and Mupen tests now run natively on Windows, byte-for-byte equal to Linux; idle runtime suite 542 s -> 460 s |
 | 0294 | `9502565c` | Fixed/mapped source ownership survives native aliases; GoldenEye clears 1678 protection overlaps and now stops on a decompression write |
 | 0293 | `131f0565` | Startup ROM copy (IPL3's 1 MiB) is authenticated independently of analysis; GoldenEye's first mapped fragment passes all 288 source ranges |
