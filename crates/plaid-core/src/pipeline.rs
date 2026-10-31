@@ -163,7 +163,13 @@ fn discover_bounded(
     }
     let mut history = previous.cloned();
     let mut last = None;
+    let rounds = std::time::Instant::now();
+    let mut cfg_time = std::time::Duration::ZERO;
+    let mut indirect_time = std::time::Duration::ZERO;
+    let mut iterations = 0usize;
     for _ in 0..budget.clamp(1, 512) {
+        iterations += 1;
+        let cfg_started = std::time::Instant::now();
         let mut discovery = direct_cfg_bounded(
             rom.clone(),
             image,
@@ -171,6 +177,7 @@ fn discover_bounded(
             budget,
             boundary,
         )?;
+        cfg_time += cfg_started.elapsed();
         if let Some((id, evidence, functions)) = declared {
             discovery.map.evidence.insert(id.clone(), evidence.clone());
             discovery.map.runtime_functions = functions.clone();
@@ -224,7 +231,9 @@ fn discover_bounded(
         for (entry, sources) in map.derived_entries.clone() {
             map.record_derived_entry(entry, sources)?;
         }
+        let indirect_started = std::time::Instant::now();
         map = analyze_indirect(&map, image)?;
+        indirect_time += indirect_started.elapsed();
         let old_count = (roots.len(), external.len());
         // Linked calls discover decodable CPU entries in content-bound slots.
         // Missing identities remain solver obligations; residual dispatch may
@@ -278,8 +287,11 @@ fn discover_bounded(
         if (roots.len(), external.len()) == old_count {
             // Return certificates only label the fixed point; they add no roots.
             if label {
+                let annotate_started = std::time::Instant::now();
                 discovery.map = crate::returns::annotate(&discovery.map, image)?;
+                crate::timing::note("discover.returns", annotate_started.elapsed());
             }
+            report_discovery_rounds(iterations, cfg_time, indirect_time, rounds.elapsed());
             return Ok(discovery);
         }
         history = Some(map);
@@ -294,5 +306,19 @@ fn discover_bounded(
         evidence,
     });
     discovery.map.validate()?;
+    report_discovery_rounds(iterations, cfg_time, indirect_time, rounds.elapsed());
     Ok(discovery)
+}
+
+/// Report the direct-discovery fixed point on stderr when timings are enabled.
+fn report_discovery_rounds(
+    iterations: usize,
+    cfg: std::time::Duration,
+    indirect: std::time::Duration,
+    total: std::time::Duration,
+) {
+    crate::timing::count("discover.rounds", iterations);
+    crate::timing::note("discover.cfg", cfg);
+    crate::timing::note("discover.indirect", indirect);
+    crate::timing::note("discover.fixed-point", total);
 }

@@ -54,10 +54,8 @@ fn canonical_32(value: u64) -> Option<u32> {
     (value == u64::from(low) || value == signed_word(low)).then_some(low)
 }
 
-fn mapped_target(map: &ProgramMap, target: &CodeAddress) -> bool {
-    map.blocks
-        .iter()
-        .any(|block| block.start == *target && !block.delay_slot_entry)
+fn mapped_target(index: &MapIndex, target: &CodeAddress) -> bool {
+    index.starts_block(target)
 }
 
 fn certificate(
@@ -222,7 +220,7 @@ pub(crate) fn verified_certificate_in(
         && certificate
             .targets
             .iter()
-            .all(|target| mapped_target(map, target));
+            .all(|target| mapped_target(index, target));
     valid.then_some(certificate)
 }
 
@@ -330,7 +328,7 @@ pub fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap, String
                         && certificate
                             .targets
                             .iter()
-                            .all(|target| mapped_target(&out, target))
+                            .all(|target| mapped_target(&index, target))
                 });
             if exact_candidates {
                 site.closed_proof = Some(id.clone());

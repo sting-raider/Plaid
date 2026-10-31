@@ -94,6 +94,7 @@ pub mod store_mutation;
 pub mod tables;
 pub mod tail_cells;
 pub mod timer_interrupt;
+pub mod timing;
 pub mod tlb_catalogs;
 pub mod tlb_fetch;
 pub mod tlb_geometry;

@@ -199,6 +199,47 @@ impl<'a> MapIndex<'a> {
             .collect()
     }
 
+    /// Whether any decoded block of one image and generation overlaps
+    /// `[start, start + count * 4)`. Blocks are kept sorted by start with the
+    /// largest size held beside them, so this is a bounded scan from the last
+    /// block that can still reach the range instead of a whole-map walk.
+    pub(crate) fn decoded_overlaps(
+        &self,
+        image: &str,
+        generation: u64,
+        start: u32,
+        end: u32,
+    ) -> bool {
+        let Some((list, max)) = self.blocks.get(&(image, generation)) else {
+            return false;
+        };
+        if *max == 0 {
+            // Degenerate zero-length blocks never overlap a positive range.
+            return list
+                .iter()
+                .any(|b| start < b.start.pc.0 && b.start.pc.0 <= start);
+        }
+        // The first block whose start could reach `start`; later ones start past it.
+        let first = list.partition_point(|b| b.start.pc.0.saturating_add(*max) <= start);
+        list[first..]
+            .iter()
+            .any(|b| b.start.pc.0 < end && start < b.start.pc.0.saturating_add(b.size))
+    }
+
+    /// Whether `target` starts a non-delay-slot block of this image and
+    /// generation. The per-image list is sorted by start, so this is a binary
+    /// search rather than a walk over every block in the map.
+    pub(crate) fn starts_block(&self, target: &CodeAddress) -> bool {
+        let Some((list, _)) = self.blocks.get(&(target.image.as_str(), target.generation)) else {
+            return false;
+        };
+        let at = list.partition_point(|b| b.start.pc.0 < target.pc.0);
+        list[at..]
+            .iter()
+            .take_while(|b| b.start.pc.0 == target.pc.0)
+            .any(|b| !b.delay_slot_entry)
+    }
+
     /// Whether an entry or indirect candidate or observation is `at`.
     pub(crate) fn jumped_to(&self, at: &CodeAddress) -> bool {
         self.jumped.contains(&key(at))
@@ -371,10 +412,15 @@ pub(crate) fn par_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync)
 
 pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap, String> {
     map.validate()?;
+    let clone_started = std::time::Instant::now();
     let mut out = map.clone();
+    crate::timing::note("indirect.clone", clone_started.elapsed());
     out.indirect_sites.clear();
+    let index_started = std::time::Instant::now();
     let index = MapIndex::new(map);
+    crate::timing::note("indirect.index", index_started.elapsed());
     let sites: Vec<_> = map.indirect_sites.iter().collect();
+    let proofs_started = std::time::Instant::now();
     let proofs = par_map(&sites, |old| {
         if let Some(proof) = certificate_in(&index, image, &old.site) {
             Some((
@@ -398,6 +444,7 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
             })
         }
     });
+    crate::timing::note("indirect.proofs", proofs_started.elapsed());
     for (old, proof) in sites.into_iter().zip(proofs) {
         let mut site = old.clone();
         if let Some((producer, target, detail)) = proof {
@@ -427,12 +474,18 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
         }
         out.indirect_sites.insert(site);
     }
+    let tail_started = std::time::Instant::now();
     out = crate::tail_cells::analyze(&out, image)?;
+    crate::timing::note("indirect.tail-cells", tail_started.elapsed());
     out = crate::tables::analyze(&out, image)?;
+    crate::timing::note("indirect.tables", tail_started.elapsed());
     // New candidate edges may themselves enter a prefix and break dominance.
     let index = MapIndex::new(&out);
+    crate::timing::note("indirect.index2", tail_started.elapsed());
+    let verify_started = std::time::Instant::now();
     let sites: Vec<_> = out.indirect_sites.iter().collect();
     let verified = par_map(&sites, |old| verify_static_in(&index, &out, image, old));
+    crate::timing::note("indirect.verify", verify_started.elapsed());
     let sites = sites
         .into_iter()
         .zip(verified)
@@ -540,4 +593,158 @@ pub fn verify_constant_in(
     site.candidates.len() == 1
         && site.candidates.contains_key(&target)
         && site.observed.keys().all(|a| *a == target)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A decoded block overlapping a data range, built the ordinary way.
+    fn map_with_blocks(blocks: &[(u32, u32)], generation: u64) -> ProgramMap {
+        let mut map = ProgramMap::new(RomIdentity {
+            sha256: "i".repeat(64),
+            size: 0,
+        });
+        for &(start, size) in blocks {
+            map.blocks.insert(BasicBlock {
+                start: CodeAddress {
+                    pc: GuestAddr(start),
+                    image: "m".into(),
+                    generation,
+                },
+                size,
+                delay_slot_entry: false,
+                evidence: ["e".to_string()].into_iter().collect(),
+            });
+        }
+        map
+    }
+
+    #[test]
+    fn indexed_overlap_matches_a_linear_reference() {
+        // Gaps, touching ranges and a zero-sized block, over a generation.
+        let blocks = [
+            (0x100, 0x10),
+            (0x120, 0x20),
+            (0x150, 0x0),
+            (0x180, 0x40),
+            (0x1c0, 0x8),
+        ];
+        let map = map_with_blocks(&blocks, 0);
+        let index = MapIndex::new(&map);
+        // Table ranges are measured in words, so each case is 4-byte aligned.
+        for start in (0..0x220).step_by(4) {
+            for count in [1u32, 2, 3, 5, 8, 33] {
+                let end = start + count * 4;
+                let indexed = index.decoded_overlaps("m", 0, start, end);
+                let linear = map.blocks.iter().any(|b| {
+                    b.start.image == "m"
+                        && b.start.generation == 0
+                        && b.start.pc.0 < end
+                        && start < b.start.pc.0.saturating_add(b.size)
+                });
+                assert_eq!(
+                    indexed, linear,
+                    "overlap disagrees at {start:#x}..{end:#x} (count {count})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn indexed_overlap_rejects_other_generations_and_missing_images() {
+        let map = map_with_blocks(&[(0x100, 0x40)], 3);
+        let index = MapIndex::new(&map);
+        assert!(!index.decoded_overlaps("m", 0, 0x100, 0x140));
+        assert!(!index.decoded_overlaps("other", 3, 0x100, 0x140));
+        assert!(index.decoded_overlaps("m", 3, 0x100, 0x104));
+    }
+
+    #[test]
+    fn indexed_overlap_handles_a_wrapped_or_extreme_range_like_the_linear_form() {
+        let map = map_with_blocks(&[(0x100, 0x40), (0xffff_fffc, 0x8)], 0);
+        let index = MapIndex::new(&map);
+        // `end` wrapping to zero lowers nothing: the comparison is a plain
+        // ordering one, matching the linear form this replaced.
+        assert!(!index.decoded_overlaps("m", 0, 0x120, 0x0));
+        // A range ending beyond the last block still reports that block.
+        assert!(index.decoded_overlaps("m", 0, 0x120, 0xffff_ffff));
+        // Zero-length and saturating ranges report no overlap, matching the
+        // plain-ordering comparison this replaced.
+        assert!(!index.decoded_overlaps("m", 0, 0x100, 0x100));
+        assert!(!index.decoded_overlaps("m", 0, 0xffff_fffc, 0x0));
+    }
+
+    /// A block start, with and without its delay-slot entry sibling.
+    fn blocks_with_and_without_delay_slots(map: &mut ProgramMap) {
+        for &(pc, delay) in &[
+            (0x100u32, false),
+            (0x104, true),
+            (0x108, false),
+            (0x10c, false),
+        ] {
+            map.blocks.insert(BasicBlock {
+                start: CodeAddress {
+                    pc: GuestAddr(pc),
+                    image: "m".into(),
+                    generation: 0,
+                },
+                size: 4,
+                delay_slot_entry: delay,
+                evidence: ["e".to_string()].into_iter().collect(),
+            });
+        }
+    }
+
+    fn address(pc: u32, generation: u64) -> CodeAddress {
+        CodeAddress {
+            pc: GuestAddr(pc),
+            image: "m".into(),
+            generation,
+        }
+    }
+
+    #[test]
+    fn indexed_block_start_membership_matches_a_linear_reference() {
+        let mut map = map_with_blocks(&[(0x100, 0x10)], 0);
+        blocks_with_and_without_delay_slots(&mut map);
+        let index = MapIndex::new(&map);
+        for pc in (0..0x200).step_by(4) {
+            for generation in [0u64, 1] {
+                let target = address(pc, generation);
+                let indexed = index.starts_block(&target);
+                let linear = map
+                    .blocks
+                    .iter()
+                    .any(|b| b.start == target && !b.delay_slot_entry);
+                assert_eq!(
+                    indexed, linear,
+                    "block-start membership disagrees at {pc:#x} generation {generation}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn indexed_block_start_ignores_delay_slot_entries_and_other_images() {
+        let mut map = map_with_blocks(&[], 0);
+        map.blocks.insert(BasicBlock {
+            start: CodeAddress {
+                pc: GuestAddr(0x100),
+                image: "m".into(),
+                generation: 0,
+            },
+            size: 4,
+            delay_slot_entry: true,
+            evidence: ["e".to_string()].into_iter().collect(),
+        });
+        let index = MapIndex::new(&map);
+        assert!(!index.starts_block(&address(0x100, 0)));
+        assert!(!index.starts_block(&CodeAddress {
+            pc: GuestAddr(0x100),
+            image: "other".into(),
+            generation: 0,
+        }));
+        assert!(!index.starts_block(&address(0x100, 7)));
+    }
 }

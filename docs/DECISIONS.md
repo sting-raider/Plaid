@@ -4993,7 +4993,7 @@ Context: ADR-0172 catalogs a ROM's relocatable overlays from its own file
 and overlay tables. Their code was still outside every discovered image.
 
 Decision:
-- `plaid discover … --overlays` builds the image with declared loads as
+- `plaid discover ï¿½ --overlays` builds the image with declared loads as
   before, then catalogs overlay tables in that image with
   `overlays::discover`, without title, table address or file index inputs.
 - `overlays::loads` turns each executable overlay into a `DeclaredLoad` at
@@ -8950,3 +8950,36 @@ No arbitrary guest list imports or foreign ERET permission is introduced.
 Fresh GoldenEye remains VI1/fault12/PC80810a7c with six authenticated RunQueue
 consumers. The checked cross-thread exception continuation is still required;
 no logos/title or native_complete claim. See research/ge-sdk-run-queue.md.
+
+## ADR-0307: indexed map lookups in the indirect table proofs
+
+**Status:** Accepted. **Date:** 2026-10-31.
+
+Two whole-map walks priced every indirect-site proof pass. ``tables::analyze``
+asked, for each site without a fresh table certificate, whether any decoded
+block overlapped the candidate table's byte range by iterating all blocks;
+``tables::evidence`` asked the same question about a recognized table. The
+tail-cell recheck separately asked, per certificate target, whether any
+decoded block started at that address, also over all blocks. On Mario Party 2
+these are 157061 blocks per relevant site or target, repeated for every site
+in every fixed-point round.
+
+``MapIndex`` already keeps each image's blocks sorted by start with the
+largest size beside them, so the same answers are a bounded scan from the
+first block that can still reach the range (``decoded_overlaps``) and a binary
+search (``starts_block``). Both ``tables`` sites now share the overlap index
+and the tail-cell mapped-target test uses the block-start index. Predicates,
+inputs and results are unchanged; only the lookups are indexed. Indexed forms
+that agree with the linear ones over every aligned start/count pair and every
+block-start address, plus generation, image and empty-range refusals, cover it.
+
+The analysis artifacts stay byte-identical (MP2 ``map.json``
+4e4709eaf5ee5476b92c61825acf9abd7c363187f017a0b67065f9ec15339751 and the
+generated C 099b63edf3d67beed846a2ff4edc238ab38364ac87d0de1a4cec22ff2a8005a9
+are unchanged), the retained controls stay at VI 1795-1798/fault 0, and MP2
+still reaches its destination/rules prompt with the required press list. Total
+discover CPU work for MP2 falls 79.8 s to 57.8 s (median of five, measured as
+process TotalProcessorTime so host noise does not dominate), with the
+returns-labelling pass itself falling 2.56 s to 1.17 s. See
+research/mp2-analysis-speed.md for the per-phase table, the harness and the
+limits of these host-dependent measurements.

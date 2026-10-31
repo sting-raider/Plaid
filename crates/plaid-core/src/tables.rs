@@ -1223,12 +1223,12 @@ fn evidence(
         .table_start
         .0
         .checked_add(table.count.checked_mul(4)?)?;
-    if index.source().blocks.iter().any(|block| {
-        block.start.image == site.site.image
-            && block.start.generation == site.site.generation
-            && block.start.pc.0 < table_end
-            && table.table_start.0 < block.start.pc.0.saturating_add(block.size)
-    }) {
+    if index.decoded_overlaps(
+        &site.site.image,
+        site.site.generation,
+        table.table_start.0,
+        table_end,
+    ) {
         return None;
     }
     let words: Option<Vec<_>> = (0..table.count)
@@ -1337,12 +1337,7 @@ fn overlaps_decoded_code(index: &MapIndex, site: &IndirectSite, evidence_id: &st
     else {
         return false;
     };
-    index.source().blocks.iter().any(|block| {
-        block.start.image == site.site.image
-            && block.start.generation == site.site.generation
-            && block.start.pc.0 < end
-            && start < block.start.pc.0.saturating_add(block.size)
-    })
+    index.decoded_overlaps(&site.site.image, site.site.generation, start, end)
 }
 
 pub(crate) fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap, String> {

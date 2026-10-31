@@ -888,8 +888,10 @@ fn run() -> Result<(), String> {
             // overlay tables are found in the image as composed so far
             let mut overlay_evidence = None;
             if overlays {
+                let table_started = std::time::Instant::now();
                 let table: Vec<u8> = image.words.iter().flat_map(|w| w.to_be_bytes()).collect();
                 let catalog = plaid_core::overlays::discover(rom.bytes(), &table)?;
+                plaid_core::timing::note("discover.overlay-catalog", table_started.elapsed());
                 let detail = serde_json::to_vec(&catalog).map_err(|e| e.to_string())?;
                 let id = format!("overlays:{}", plaid_core::rom::sha256(&detail));
                 // a validated catalog file supersedes an inferred raw slot view
@@ -948,7 +950,9 @@ fn run() -> Result<(), String> {
                 spec.loads.extend(loads);
                 plaid_core::declared_loads::exclude_replayed_catalog_text(spec);
                 spec.loads.sort();
+                let compose_started = std::time::Instant::now();
                 image = plaid_core::declared_loads::compose(rom.bytes(), spec)?.1;
+                plaid_core::timing::note("discover.compose", compose_started.elapsed());
                 overlay_evidence = Some((id, overlay_evidence_of(&catalog)));
             }
             let source_context =
@@ -1004,7 +1008,10 @@ fn run() -> Result<(), String> {
             };
             // calls into a slot root each alternate's code there (ADR-0185)
             if declared.is_some() {
+                let slot_started = std::time::Instant::now();
+                let mut slot_rounds = 0usize;
                 loop {
+                    slot_rounds += 1;
                     let starts: BTreeSet<u32> = d.map.blocks.iter().map(|b| b.start.pc.0).collect();
                     let more: BTreeSet<GuestAddr> = d
                         .map
@@ -1033,6 +1040,7 @@ fn run() -> Result<(), String> {
                         break;
                     }
                     entries.extend(more);
+                    let slot_round_started = std::time::Instant::now();
                     d = if address_taken {
                         plaid_core::data_roots::discover_address_taken_with_loads(
                             rom.identity.clone(),
@@ -1057,7 +1065,10 @@ fn run() -> Result<(), String> {
                             1_000_000,
                         )?
                     };
+                    plaid_core::timing::note("discover.slot-round", slot_round_started.elapsed());
                 }
+                plaid_core::timing::count("discover.slot-root-rounds", slot_rounds);
+                plaid_core::timing::note("discover.slot-roots", slot_started.elapsed());
             }
             // a second pass adds functions found only by layout (ADR-0152)
             let mut roots = roots;
@@ -1138,7 +1149,10 @@ fn run() -> Result<(), String> {
             d.map.cop1_fr0 = fr0;
             d.map.tlb_exception_vectors =
                 vector_roots.iter().map(|pc| image.address(*pc)).collect();
-            fs::write(output, d.map.to_json()?).map_err(|e| e.to_string())?;
+            let serialize_started = std::time::Instant::now();
+            let json = d.map.to_json()?;
+            plaid_core::timing::note("discover.serialize", serialize_started.elapsed());
+            fs::write(output, json).map_err(|e| e.to_string())?;
             println!(
                 "discovered {} blocks, {} indirect sites, {} unresolved items",
                 d.map.blocks.len(),
