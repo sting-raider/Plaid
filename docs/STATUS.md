@@ -1,5 +1,18 @@
 # Status
 
+## Indexed map lookups in the indirect table proofs (ADR-0307)
+
+Two per-site map walks priced Mario Party 2's discovery. A decoded-block
+overlap test for a table's byte range and a block-start membership test for a
+tail-cell target each iterated every block in the map; MapIndex now answers
+both from its sorted per-image block lists. MP2's analysis artifacts are
+byte-identical (map 4e4709ea, generated C 099b63ed) and the retained controls
+stay VI 1777-1798/fault 0, including MP2 reaching its destination/rules prompt
+under the required press list. Measured as process TotalProcessorTime over
+five runs, MP2's discover phase falls 79.8 s to 57.8 s; the returns pass alone
+falls 2.56 s to 1.17 s. Full per-phase table and host-noise caveats:
+research/mp2-analysis-speed.md.
+
 ## Guest SDK runnable queues (ADR-0306)
 
 Source-bound RunQueue metadata now publishes host-owned priority/FIFO runnable

@@ -24,6 +24,7 @@ Saves go to <out>/<name>.sra (SRAM) or <name>.fla (FlashRAM); EEPROM to
 <name>.eep. The executables take the ROM again at run time with --rom.
 """
 import argparse
+import contextlib
 from fragment_mapped import partition_mapped
 import hashlib
 import json
@@ -31,6 +32,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -41,6 +43,38 @@ from ares_boot import ORACLE_SOURCES, capture_many
 ROOT = Path(__file__).resolve().parents[1]
 SIGNATURES = ROOT / '.refs/n64sym/src/builtin_signatures.sig'
 RT64 = ROOT / 'target/rt64-shim/Release'
+
+# Per-phase wall times, so a slow ROM is attributable without re-running the
+# whole pipeline under a profiler. Each entry is (name, seconds, cached).
+TIMINGS = []
+_PHASES = []
+
+
+@contextlib.contextmanager
+def phase(name):
+    """Time one named pipeline phase.
+
+    `memo_plaid` marks the innermost phase as cached when it restores a
+    recorded analysis result, so a receipt never hides a skipped phase."""
+    frame = {'name': name, 'calls': 0, 'cached': 0}
+    started = time.perf_counter()
+    _PHASES.append(frame)
+    try:
+        yield
+    finally:
+        _PHASES.pop()
+        TIMINGS.append((name, time.perf_counter() - started,
+                        bool(frame['calls']) and frame['cached'] == frame['calls']))
+
+
+def print_timings():
+    """One aligned line per phase, in pipeline order, with cached phases marked."""
+    if not TIMINGS:
+        return
+    width = max(len(name) for name, _, _ in TIMINGS)
+    print(f'timings: total {sum(t for _, t, _ in TIMINGS):.3f} s', flush=True)
+    for name, elapsed, cached in TIMINGS:
+        print(f'timings:   {name:<{width}} {elapsed:9.3f} s{"  (cached)" if cached else ""}', flush=True)
 
 
 def run(*args, **kw):
@@ -67,6 +101,8 @@ def memo_plaid(*args, writes=()):
         path = Path(str(a))
         inputs.append([str(a), digest(path)] if a not in writes and path.is_file() else str(a))
     store = ROOT / 'target/native-cache' / hashlib.sha256(json.dumps(inputs).encode()).hexdigest()
+    if _PHASES:
+        _PHASES[-1]['calls'] += 1
     if not (store / 'stdout').exists():
         try:
             result = plaid(*args, capture_output=True, text=True)
@@ -84,6 +120,8 @@ def memo_plaid(*args, writes=()):
         except OSError:  # an identical concurrent invocation recorded it first
             shutil.rmtree(partial)
     else:
+        if _PHASES:
+            _PHASES[-1]['cached'] += 1
         print('+ (cached)', *args, flush=True)
     for n, path in enumerate(writes):
         Path(path).write_bytes((store / str(n)).read_bytes())
@@ -192,41 +230,55 @@ def main():
 
     build_env = os.environ.copy()
     build_env.setdefault('CARGO_PROFILE_RELEASE_INCREMENTAL', 'true')
-    run('cargo', 'build', '-q', '--release', '-p', 'plaid', env=build_env)
-    info = json.loads(plaid('rom-info', rom, capture_output=True, text=True).stdout)
+    with phase('build'):
+        run('cargo', 'build', '-q', '--release', '-p', 'plaid', env=build_env)
+    with phase('rom-info'):
+        info = json.loads(plaid('rom-info', rom, capture_output=True, text=True).stdout)
     entry = info['header']['boot_address']  # the header entry, less a CIC-6103/6106 offset
     loads = a.loads.resolve() if a.loads else out / 'loads.json'
     if not a.loads:
-        plaid('infer-loads', rom, loads)
+        with phase('infer-loads'):
+            plaid('infer-loads', rom, loads)
     # the main image ends where the entry stub's BSS clear begins; else IPL3's 1 MiB
     window = [rom, '0x1000', entry, hex(info.get('boot_image_size') or 0x100000)]
     m = out / 'map.json'
     overlay_support = None
     for attempt in range(64):
-        harvest_vectors(rom, loads, out / 'vector-harvest.json')
+        with phase('harvest-vectors'):
+            harvest_vectors(rom, loads, out / 'vector-harvest.json')
         # A ROM with no file table and no reset stub has no loads to declare.
         with_loads = ['--loads', loads] if json.loads(loads.read_text())['loads'] else []
-        (out / 'id.json').write_text(memo_plaid('identify', *window, SIGNATURES, *with_loads), newline='')
+        with phase('identify'):
+            (out / 'id.json').write_text(memo_plaid('identify', *window, SIGNATURES, *with_loads), newline='')
         discover = ['discover', *window, entry, m, out / 'id.json', *with_loads, '--address-taken', '--fr0']
-        overlay_support = discover_map(discover, overlay_support, m)
+        with phase('discover'):
+            overlay_support = discover_map(discover, overlay_support, m)
         program = json.loads(m.read_text())
-        if attempt < 63 and partition_mapped(loads, m):
+        with phase('partition'):
+            partitioned = attempt < 63 and partition_mapped(loads, m)
+        if partitioned:
             continue
-        verdict = json.loads(memo_plaid('solve', rom, m, '--address-taken'))
+        with phase('solve'):
+            verdict = json.loads(memo_plaid('solve', rom, m, '--address-taken'))
         if verdict['status'] == 'closed' or a.loads or attempt == 63:
             break
         previous_loads = loads.read_bytes()
-        plaid('infer-call-loads', rom, m, loads)
+        with phase('infer-call-loads'):
+            plaid('infer-call-loads', rom, m, loads)
         if loads.read_bytes() != previous_loads:
             continue
         print('solve', verdict['status'], len(verdict['blockers']), 'blockers; analysis-time boot harvest', flush=True)
-        if not harvest(rom, loads, m, info, out / f'boot-harvest-{attempt}.json') and not harvest_refills(
-                rom, loads, m, info, out / f'refill-harvest-{attempt}.json'):
+        with phase('harvest'):
+            harvested = harvest(rom, loads, m, info, out / f'boot-harvest-{attempt}.json')
+            if not harvested:
+                harvested = harvest_refills(rom, loads, m, info, out / f'refill-harvest-{attempt}.json')
+        if not harvested:
             break
     print('solve', verdict['status'], len(verdict['blockers']), 'blockers')
     residual = verdict['status'] != 'closed' and not a.strict
     if residual:
-        verdict = json.loads(memo_plaid('solve', rom, m, '--residual-dispatch'))
+        with phase('residual-solve'):
+            verdict = json.loads(memo_plaid('solve', rom, m, '--residual-dispatch'))
         print('residual-dispatch solve', verdict['status'], len(verdict['blockers']), 'blockers,', len(verdict.get('residual_sites', [])), 'residual sites')
     if verdict['status'] != 'closed':
         sys.exit('not CLOSED under the address-taken scope' + ('' if a.strict else ', even with residual dispatch') + ': nothing is built')
@@ -235,16 +287,19 @@ def main():
 
     # The native run starts SP memory as the ROM's own IPL3 leaves it (ADR-0195).
     try:
-        sp_boot, ram_boot = write_boot_state(capture_many(rom, [entry])[-1], out, entry)
+        with phase('boot-state'):
+            sp_boot, ram_boot = write_boot_state(capture_many(rom, [entry])[-1], out, entry)
     except ValueError as error:
         sys.exit(str(error) + ': nothing is built')
 
-    plaid('rsp-from-rom', rom, m, texts, '--loads', loads)
+    with phase('rsp-from-rom'):
+        plaid('rsp-from-rom', rom, m, texts, '--loads', loads)
     rsp_manifest = json.loads((texts / 'rsp-files.json').read_text())
     c = out / f'{name}.c'
     # RAM address zero is executable when the guest owns its refill vector.
     exit_pc = '0xbfc00000' if program.get('tlb_exception_vectors') else '0x80000000'
-    plaid('lower-map', rom, m, entry, exit_pc, c, '--parts', '16', '--runtime-unit', *(['--residual-dispatch'] if residual else []), stdout=subprocess.DEVNULL)
+    with phase('lower'):
+        plaid('lower-map', rom, m, entry, exit_pc, c, '--parts', '16', '--runtime-unit', *(['--residual-dispatch'] if residual else []), stdout=subprocess.DEVNULL)
     cc = ['gcc', '-O1', '-std=gnu11', '-w', '-DPLAID_SAFEPOINTS']
     # CPU helpers and RSP arithmetic are embedded in their generated sources.
     # Only the shared RSP ABI headers remain external include dependencies.
@@ -256,7 +311,7 @@ def main():
 
     parts = [c, *sorted(out.glob(f'{name}.part*.c'))]
     # Large CPU units can exceed RAM when every logical CPU launches GCC.
-    with ThreadPoolExecutor(min(4, os.cpu_count() or 1)) as pool:
+    with phase('gcc'), ThreadPoolExecutor(min(4, os.cpu_count() or 1)) as pool:
         part_objs = list(pool.map(lambda p: compile_cached(p, cc), parts))
     runtime_header=out/f'{name}.runtime.h'
     rt = [*cc, '-DPLAID_RSP', '-DPLAID_RSP_ROM', '-I', ROOT / 'crates/plaid-lower/src', f'-DPLAID_LOWERED="{runtime_header.name}"', f'-DPLAID_SP_BOOT="{sp_boot.name}"', f'-DPLAID_RAM_BOOT="{ram_boot.name}"', '-I', out]
@@ -264,22 +319,26 @@ def main():
     runtime_source = out / 'runtime.c'
     runtime_source.write_text(f'#include "{(ROOT / "runtime/plaid_rt.c").as_posix()}"\n')
     runtime_deps = runtime_header.read_bytes() + sp_boot.read_bytes() + ram_boot.read_bytes() + (ROOT / 'runtime/plaid_rt.c').read_bytes() + b''.join(p.read_bytes() for p in sorted((ROOT / 'runtime').glob('*.h'))) + rsp_headers
-    main_obj = compile_cached(runtime_source, rt, runtime_deps)
+    with phase('gcc-runtime'):
+        main_obj = compile_cached(runtime_source, rt, runtime_deps)
     window_exe = RT64 / f'{name}{"-rsp" if a.rsp_gfx else ""}-rt64.exe'
     if a.rt64:
         window_source = out / 'runtime-window.c'
         window_source.write_bytes(runtime_source.read_bytes())
-        window_obj = compile_cached(window_source, [*rt, '-DPLAID_RT64'], runtime_deps)
+        with phase('gcc-window'):
+            window_obj = compile_cached(window_source, [*rt, '-DPLAID_RT64'], runtime_deps)
     exe = out / f'{name}.exe'
     saves = ['--sram', out / f'{name}.sra', '--flash', out / f'{name}.fla', '--save', out / f'{name}.eep']
 
     texts_c = [texts / (t['name'] + '.c') for t in rsp_manifest['texts']] + [texts / 'rsp_registry.c']
     flags = ['gcc', '-O2', '-I', ROOT / 'crates/plaid-lower/src']
-    with ThreadPoolExecutor(min(4, os.cpu_count() or 1)) as pool:
+    with phase('gcc-rsp'), ThreadPoolExecutor(min(4, os.cpu_count() or 1)) as pool:
         objects = list(pool.map(lambda p: compile_cached(p, flags, rsp_headers), texts_c))
-    run('gcc', main_obj, *part_objs, '-pthread', *objects, '-o', exe)
+    with phase('link'):
+        run('gcc', main_obj, *part_objs, '-pthread', *objects, '-o', exe)
     if a.rt64:
-        run('gcc', window_obj, *part_objs, RT64 / 'plaid_rt64.dll', '-pthread', *objects, '-o', window_exe)
+        with phase('link-window'):
+            run('gcc', window_obj, *part_objs, RT64 / 'plaid_rt64.dll', '-pthread', *objects, '-o', window_exe)
     command = [str(window_exe if a.rt64 else exe), '--rom', str(rom), *map(str, saves),
                '--stop-at', 'none', '--seconds', str(a.seconds)]
     if a.rsp_gfx:
@@ -293,7 +352,8 @@ def main():
         command.extend(['--wav', str(out / 'validation.wav')])
     # Validation runs are silent (SDL's dummy driver); --wav still records the audio.
     env = {**os.environ, 'SDL_AUDIODRIVER': 'dummy'}
-    r = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, errors='replace', timeout=a.seconds + 60, env=env)
+    with phase('validation'):
+        r = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, errors='replace', timeout=a.seconds + 60, env=env)
     stops = [line for line in r.stdout.splitlines() if line.startswith('{"stop"')]
     print(stops[-1][:400] if stops else r.stderr[-400:])
     if r.returncode:
@@ -316,4 +376,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    finally:
+        print_timings()

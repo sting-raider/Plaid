@@ -434,20 +434,28 @@ pub fn discover_address_taken_with_loads(
     // A runtime function whose address is taken joins the dispatch set, so a
     // call through the pointer reaches the host runtime; its body is never a
     // discovery root (ADR-0185).
-    let (mut runtime_taken, mut taken): (BTreeSet<GuestAddr>, BTreeSet<GuestAddr>) =
-        rom_words(bytes, image, starts)
-            .into_iter()
-            .chain(rom_words(&words, image, starts))
-            .chain(
-                observed
-                    .iter()
-                    .copied()
-                    .filter(|&a| executed_start(image, a)),
-            )
-            .partition(|a| runtime_entries.contains(a));
+    let rom_words_started = std::time::Instant::now();
+    let rom_roots = rom_words(bytes, image, starts);
+    crate::timing::note("address-taken.rom-words", rom_words_started.elapsed());
+    let image_words_started = std::time::Instant::now();
+    let image_roots = rom_words(&words, image, starts);
+    crate::timing::note("address-taken.image-words", image_words_started.elapsed());
+    let (mut runtime_taken, mut taken): (BTreeSet<GuestAddr>, BTreeSet<GuestAddr>) = rom_roots
+        .into_iter()
+        .chain(image_roots)
+        .chain(
+            observed
+                .iter()
+                .copied()
+                .filter(|&a| executed_start(image, a)),
+        )
+        .partition(|a| runtime_entries.contains(a));
     // Decoder seeds keep their incoming candidate edges across outer rounds.
     let mut history = None;
+    let rounds = std::time::Instant::now();
+    let mut rounds_count = 0usize;
     loop {
+        rounds_count += 1;
         let roots: Vec<_> = entries
             .iter()
             .chain(&taken)
@@ -468,10 +476,13 @@ pub fn discover_address_taken_with_loads(
             loads,
         )?;
         let before = taken.len();
-        for a in block_constants(image, &d.map, starts)
-            .into_keys()
-            .chain(crate::rom_pointer_roots::scan(bytes, image, &d.map, starts).into_keys())
-        {
+        let constants_started = std::time::Instant::now();
+        let constants = block_constants(image, &d.map, starts);
+        crate::timing::note("address-taken.block-constants", constants_started.elapsed());
+        let pointers_started = std::time::Instant::now();
+        let pointers = crate::rom_pointer_roots::scan(bytes, image, &d.map, starts);
+        crate::timing::note("address-taken.pointer-roots", pointers_started.elapsed());
+        for a in constants.into_keys().chain(pointers.into_keys()) {
             if runtime_entries.contains(&a) {
                 runtime_taken.insert(a);
             } else {
@@ -479,9 +490,11 @@ pub fn discover_address_taken_with_loads(
             }
         }
         if taken.len() == before {
+            let annotate_started = std::time::Instant::now();
             if !d.map.unresolved.iter().any(|u| u.kind == "resource_limit") {
                 d.map = crate::returns::annotate(&d.map, image)?;
             }
+            crate::timing::note("address-taken.returns", annotate_started.elapsed());
             let id = format!("address-taken:{}", rom.sha256);
             d.map.evidence.insert(
                 id.clone(),
@@ -515,6 +528,8 @@ pub fn discover_address_taken_with_loads(
                     refs.insert(id.clone());
                 }
             }
+            crate::timing::count("address-taken.rounds", rounds_count);
+            crate::timing::note("address-taken.total", rounds.elapsed());
             return Ok(d);
         }
         history = Some(d.map);
