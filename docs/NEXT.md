@@ -1,5 +1,19 @@
 # Next
 
+## Build speed: cold builds for small machines
+
+A cold `scripts/native.py` build is far too slow for the target audience (weak,
+retro-grade PCs). Measured on Banjo-Kazooie with the CPU shared: gcc -O1 on the
+16 generated parts costs about 37 s each (~10 CPU-minutes); clang -O0 compiles
+the same part in about 2 s, and the -O0 build ran as well or better on a starved
+core (6 copies on one core: ~1040 vs ~760 VIs in 20 s). Next cost is `plaid
+discover`: ~17 s per call, run 4-5 times per build, each repeating the whole
+fixed point (CFG ~3 s and indirect analysis ~7 s over 5 rounds). Then the
+analysis-time ares boot harvest (seconds for Banjo, ~7 min for F-Zero X) and
+the RSP microcode compile at gcc -O2 (~23 s). Order of work: -O0 game parts,
+then incremental discovery, then a bounded or static replacement for the
+harvest. Every change keeps the per-game gate controls identical.
+
 ## After SDK runnable queue publication (ADR-0306)
 
 Authenticate the lowered dispatcher restore continuation, then implement the
