@@ -1,5 +1,11 @@
 # Status
 
+## Bounded fault records (ADR-0313)
+
+Opt-in native runs can retain hashed, versioned fault-3 and fault-15 RAM
+windows locally. Ingestion, generation-aware dispatch and content guards remain
+unimplemented; these records do not establish native completeness.
+
 ## Residual local blocker traps (ADR-0311)
 
 Residual builds can retain locally unlowerable blocks as native fail-closed

@@ -34,6 +34,8 @@ def main():
         from test_native import rsp_dependency_contract, split_contract
         split_contract()
         rsp_dependency_contract()
+        from test_repair_record import main as repair_record_contract
+        repair_record_contract()
         from test_running_thread_bindings import run_contract as runtime_bindings_contract
         runtime_bindings_contract(run, directory)
         # Independently named raw section descriptors supply exact slot text.

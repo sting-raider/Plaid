@@ -791,3 +791,11 @@ resolution and overrides aspect and resolution scale.
 Controller hardware, hotplug, and player numbering still require testing with a
 real controller. Visual aspect modes and fullscreen toggle keys also require
 interactive verification.
+
+
+## Opt-in fault capture
+
+`python scripts/native.py <rom> --rt64 --repair-capture` writes a numbered
+`target/native/<name>/repair/<n>.json` for a fault 3 or 15. The record contains
+raw game RAM and must stay local. Its SHA-256 binds the captured bytes; PI DMA
+history is currently unavailable. Records cannot yet be ingested into builds.
