@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, CompileEvent, Config, coverFor, Game, PHASES, Progress } from "./api";
 import { Boot } from "./Boot";
 import { PlaySheet, Saves, SettingsPanel, SettingsTab } from "./settings";
@@ -113,6 +114,19 @@ function BuildPanel({ build, onCancel }: { build: Build; onCancel: () => void })
 
 type GameTab = "overview" | SettingsTab | "saves";
 
+function About({ id }: { id: string }) {
+  const [info, setInfo] = useState<Awaited<ReturnType<typeof api.info>> | null>(null);
+  useEffect(() => { setInfo(null); api.info(id).then(setInfo).catch(() => {}); }, [id]);
+  if (!info?.extract) return null;
+  return (
+    <div className="game-about">
+      <div className="label">About{info.description ? ` · ${info.description}` : ""}</div>
+      <p>{info.extract}</p>
+      {info.url && <button className="link" onClick={() => openUrl(info.url)}>Read more on Wikipedia</button>}
+    </div>
+  );
+}
+
 function GamePage({ game, build, onBack, onCompile, onCancel, onPlay }: {
   game: Game; build?: Build; onBack: () => void; onCompile: () => void; onCancel: () => void; onPlay: () => void;
 }) {
@@ -141,6 +155,7 @@ function GamePage({ game, build, onBack, onCompile, onCancel, onPlay }: {
               {game.compiled && !running && <button className="btn lg" onClick={() => { setTab("overview"); onCompile(); }}><Refresh size={15} />Recompile</button>}
             </div>
           </div>
+          <About id={game.id} />
         </div>
         <div className="tabs">{tabs.map(([t, name]) => <button key={t} className={`tab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)}>{name}</button>)}</div>
         <div className="page">

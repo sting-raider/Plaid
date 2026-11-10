@@ -10,6 +10,7 @@ pub const PHASES: &[(&str, &str, u32)] = &[
     ("identify", "Identifying libultra functions", 3),
     ("discover", "Discovering code", 18),
     ("solve", "Proving control flow", 12),
+    ("harvest", "Tracing the boot in a reference emulator", 8),
     ("lower", "Translating MIPS to C", 10),
     ("rsp", "Recompiling RSP microcode", 5),
     ("gcc", "Compiling native code", 33),
@@ -75,7 +76,12 @@ impl Tracker {
             self.built += 1;
             return Some(self.progress());
         }
-        let phase = phase_of(line)?;
+        // native.py then runs pinned ares for analysis, silently, for a minute or more
+        let phase = if line.contains("boot harvest") || line.contains("refill harvest") {
+            PHASES.iter().position(|p| p.0 == "harvest")?
+        } else {
+            phase_of(line)?
+        };
         let gcc = PHASES.iter().position(|p| p.0 == "gcc").unwrap();
         if phase == gcc {
             self.compiled += 1;
@@ -142,6 +148,16 @@ mod tests {
                 .unwrap()
                 .label,
             "Proving control flow"
+        );
+        let harvest = t
+            .line("solve open 1 blockers; analysis-time boot harvest")
+            .unwrap();
+        assert_eq!(harvest.label, "Tracing the boot in a reference emulator");
+        // the re-solve after the harvest does not move progress backwards
+        assert_eq!(
+            t.line(r"+ X:\P\target\release\plaid solve rom map")
+                .unwrap(),
+            harvest
         );
         t.expected = 4;
         let a = t.line("+ gcc -O1 -c part0.c").unwrap();

@@ -241,6 +241,55 @@ async fn get_cover(app: AppHandle, id: String) -> Result<String, String> {
     .map_err(err)?
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct GameInfo {
+    title: String,
+    description: Option<String>,
+    extract: String,
+    url: String,
+}
+
+/// A short "about" for the game page: the Wikipedia summary of the best search hit, cached.
+#[tauri::command]
+async fn game_info(app: AppHandle, id: String) -> Result<GameInfo, String> {
+    let (_, game) = find(&app, &id)?;
+    let dir = config_dir(&app)?.join("info");
+    let file = dir.join(format!("{id}.json"));
+    if let Some(info) = std::fs::read(&file)
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+    {
+        return Ok(info);
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let json = |url: &str| -> Result<serde_json::Value, String> {
+            serde_json::from_str(&covers::get(url)?.into_string().map_err(err)?).map_err(err)
+        };
+        let query = format!("{} Nintendo 64 video game", game.title.replace(" - ", " "));
+        let search = json(&format!(
+            "https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=1&srsearch={}",
+            covers::encode(&query)
+        ))?;
+        let title = search["query"]["search"][0]["title"].as_str().ok_or("no article found")?.to_string();
+        let page = json(&format!(
+            "https://en.wikipedia.org/api/rest_v1/page/summary/{}",
+            covers::encode(&title.replace(' ', "_"))
+        ))?;
+        let info = GameInfo {
+            title,
+            description: page["description"].as_str().map(str::to_string),
+            extract: page["extract"].as_str().unwrap_or_default().to_string(),
+            url: page["content_urls"]["desktop"]["page"].as_str().unwrap_or_default().to_string(),
+        };
+        std::fs::create_dir_all(&dir).map_err(err)?;
+        std::fs::write(&file, serde_json::to_vec(&info).map_err(err)?).map_err(err)?;
+        Ok(info)
+    })
+    .await
+    .map_err(err)?
+}
+
 /// The ROM in big-endian order: the file itself, or a converted copy in app data.
 fn z64_path(app: &AppHandle, game: &Game) -> Result<PathBuf, String> {
     let path = PathBuf::from(&game.path);
@@ -578,6 +627,7 @@ pub fn run() {
             set_config,
             scan_library,
             get_cover,
+            game_info,
             compile_game,
             cancel_compile,
             play_game,
