@@ -2,7 +2,7 @@
 
 usage: python release.py NOTES.md
 NOTES.md is the GitHub release body (Markdown: "## What's new", "## Known limitations",
-one "- " bullet per item). The app's update panel shows its bullets as plain lines.
+one "- **Name.** sentence" bullet per item). The app's update panel shows the same bullets.
 List only what works in this build. Bump "version" in src-tauri/tauri.conf.json first. Needs gh (logged in) and the
 signing key at ~/.tauri/plaid-launcher.key (TAURI_SIGNING_PRIVATE_KEY_PATH overrides).
 """
@@ -13,14 +13,14 @@ HERE = Path(__file__).resolve().parent
 REPO = 'sting-raider/Plaid'
 
 notes_md = Path(sys.argv[1]).read_text(encoding='utf-8')
-# the in-app panel: bullets only, Markdown emphasis removed; a limitation keeps its label
+# the in-app panel: the bullets, whose leading **Name.** it renders in bold; a limitation is labelled
 lines, section = [], ''
 for line in notes_md.splitlines():
     if line.startswith('## '):
         section = line[3:].strip()
     elif line.lstrip().startswith('- '):
-        text = line.lstrip()[2:].replace('**', '').strip()
-        lines.append(f'Known limitation: {text}' if 'limitation' in section.lower() else text)
+        text = line.lstrip()[2:].strip()
+        lines.append(f"**Known limitation.** {text.replace('**', '')}" if 'limitation' in section.lower() else text)
 notes = '\n'.join(lines)
 version = json.loads((HERE / 'src-tauri/tauri.conf.json').read_text(encoding='utf-8'))['version']
 tag = f'launcher-v{version}'

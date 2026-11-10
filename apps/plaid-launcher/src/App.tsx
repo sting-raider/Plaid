@@ -231,6 +231,9 @@ export default function App() {
   const [update, setUpdate] = useState("");
   const [plaid, setPlaid] = useState<UpdateInfo | null>(null);
   const [checking, setChecking] = useState(false);
+  /** Download progress 0..100 while an app update downloads, else null. */
+  const [downloading, setDownloading] = useState<number | null>(null);
+  const [failed, setFailed] = useState(false);
   const [appUpdate, setAppUpdate] = useState<Update | null>(null);
   const [view, setView] = useState<View>("all");
   const [query, setQuery] = useState("");
@@ -262,20 +265,22 @@ export default function App() {
   };
 
   const applyUpdate = async () => {
+    setFailed(false);
     try {
       if (plaid?.behind) { setUpdate("Updating the recompiler…"); await api.updatePlaid(); setPlaid({ ...plaid, behind: 0, changes: [] }); setUpdate("Up to date"); }
       if (appUpdate) {
         let total = 0, got = 0;
         setUpdate("Downloading the update…");
+        setDownloading(0);
         await appUpdate.downloadAndInstall((e) => {
           if (e.event === "Started") total = e.data.contentLength ?? 0;
-          if (e.event === "Progress") { got += e.data.chunkLength; if (total) setUpdate(`Downloading the update… ${Math.round((got / total) * 100)}%`); }
+          if (e.event === "Progress") { got += e.data.chunkLength; if (total) { const pct = Math.round((got / total) * 100); setDownloading(pct); setUpdate(`Downloading the update… ${pct}%`); } }
           if (e.event === "Finished") setUpdate("Installing, Plaid restarts in a moment…");
         });
         await relaunch();
       }
       else setToast("Recompiler updated; it rebuilds on the next compile.");
-    } catch (e) { setToast(String(e)); setUpdate("Update failed"); }
+    } catch (e) { setDownloading(null); setFailed(true); setToast(`Could not update: ${String(e)}`); setUpdate("Update failed · click to retry"); }
   };
 
   const startup = async (status: (s: string) => void) => {
@@ -339,8 +344,10 @@ export default function App() {
             <span className="side-foot-text">{update}</span>
             <div className="update-wrap">
               {(plaid?.behind || appUpdate) && <UpdatePanel plaid={plaid} app={appUpdate} />}
-              {plaid?.behind || appUpdate
-                ? <button className="icon-btn update-ready" aria-label="Update" onClick={applyUpdate}><ArrowUp size={16} /><span className="badge" /></button>
+              {downloading !== null
+                ? <button className="icon-btn update-ready" aria-label={`Downloading the update, ${downloading}%`} aria-disabled="true"><ProgressRing pct={downloading} /></button>
+                : plaid?.behind || appUpdate
+                ? <button className="icon-btn update-ready" aria-label={failed ? "Retry the update" : "Update"} onClick={applyUpdate}><ArrowUp size={16} /><span className={`badge ${failed ? "error" : ""}`} /></button>
                 : <button className={`icon-btn ${checking ? "spin" : ""}`} aria-label="Check for updates" title="Check for updates"
                     onClick={async () => { setChecking(true); await Promise.all([checkAll(), new Promise((r) => setTimeout(r, 600))]); setChecking(false); }}><Refresh size={16} /></button>}
             </div>
@@ -413,7 +420,7 @@ function UpdatePanel({ plaid, app }: { plaid: UpdateInfo | null; app: Update | n
       <div className="update-body">
         {app && <section>
           <div className="update-sub">Plaid app {app.version}{app.date ? ` · ${app.date.slice(0, 10)}` : ""}</div>
-          <ul>{notes.length ? notes.map((n, i) => <li key={i}>{n}</li>) : <li>New version of the app.</li>}</ul>
+          <ul>{notes.length ? notes.map((n, i) => { const m = /^\*\*([^*]+)\*\*\s*(.*)$/.exec(n); return <li key={i}>{m ? <><strong>{m[1]}</strong> {m[2]}</> : n}</li>; }) : <li>New version of the app.</li>}</ul>
         </section>}
         {!!plaid?.behind && <section>
           <div className="update-sub">Recompiler · {plaid.behind} change{plaid.behind > 1 ? "s" : ""} on main</div>
@@ -423,5 +430,17 @@ function UpdatePanel({ plaid, app }: { plaid: UpdateInfo | null; app: Update | n
       </div>
       <div className="update-meta">Click the button to update{app ? " and restart" : ""}.</div>
     </div></div>
+  );
+}
+
+/** Circular download progress, like T3 Code's update button. */
+function ProgressRing({ pct }: { pct: number }) {
+  const c = 2 * Math.PI * 7;
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" className="ring">
+      <circle cx="9" cy="9" r="7" fill="none" stroke="var(--border-strong)" strokeWidth="2" />
+      <circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+        strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} transform="rotate(-90 9 9)" />
+    </svg>
   );
 }

@@ -254,7 +254,16 @@ li.now .step-mark { border-color: var(--n-yellow); animation: blink 0.8s steps(2
 .update-panel { position: absolute; right: -8px; bottom: 100%; padding-bottom: 8px; width: 340px; z-index: 20;
   opacity: 0; visibility: hidden; transform: translateY(6px) scale(0.98); transform-origin: bottom right; pointer-events: none;
   transition: opacity 0.16s var(--ease), transform 0.16s var(--ease), visibility 0s linear 0.16s; }
-.update-wrap:hover .update-panel { opacity: 1; visibility: visible; transform: none; pointer-events: auto; transition-delay: 0.08s, 0.08s, 0s; }
+.update-panel { transition-delay: 0.15s, 0.15s, 0.31s; }
+.update-wrap:hover .update-panel, .update-wrap:focus-within .update-panel { opacity: 1; visibility: visible; transform: none; pointer-events: auto; transition-delay: 0.08s, 0.08s, 0s; }
+.update-ready .badge.error { background: var(--n-red); }
+.ring circle:last-child { transition: stroke-dashoffset 0.3s ease-out; }
+.icon-btn:focus-visible, .btn:focus-visible, .link:focus-visible { outline: 2px solid var(--border-strong); outline-offset: 2px; }
+.update-card { box-shadow: 0 16px 40px -18px rgb(0 0 0 / 55%); }
+@media (prefers-reduced-motion: reduce) {
+  .update-panel, .ring circle:last-child { transition: none; }
+  .icon-btn.spin svg { animation: none; }
+}
 .update-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; max-height: 70vh; background: var(--raised); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); }
 .update-head { font-size: 14px; color: var(--text); }
 .update-body { overflow-y: auto; display: flex; flex-direction: column; gap: 14px; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
