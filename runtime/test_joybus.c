@@ -38,6 +38,14 @@ static void controllers(void) {
   bus.ram[at] = 0xfe; bus.ram[63] = 1;
   assert(plaid_joy_parse(&bus) == 0 && plaid_joy_run(&bus, NULL, 0, 0x12345678u) == 0);
   assert(bus.ram[4] == 0x12 && bus.ram[5] == 0x34 && bus.ram[6] == 0x56 && bus.ram[7] == 0x78);
+  {
+    const u32 inputs[4] = {0x01020304u, 0x11223344u, 0, 0xaabbccddu};
+    assert(plaid_joy_run_multi(&bus, NULL, 0, inputs, 0xbu) == 0);
+    assert(bus.ram[4] == 1 && bus.ram[7] == 4);
+    assert(bus.ram[12] == 0x11 && bus.ram[15] == 0x44);
+    assert(bus.ram[18] == 0x84);
+    assert(bus.ram[28] == 0xaa && bus.ram[31] == 0xdd);
+  }
   /* run again without a new parse: the same packets answer again */
   assert(plaid_joy_run(&bus, NULL, 0, 0x0000ffffu) == 0 && bus.ram[4] == 0 && bus.ram[7] == 0xff);
   /* a header with 0x80 or 0x40 set is skipped */

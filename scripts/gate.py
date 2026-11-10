@@ -59,6 +59,10 @@ assert stop_fields('x\n{"stop":"seconds","vi":1798,"gfx_tasks":9,"fault":0,"faul
     {'stop': 'seconds', 'vi': 1798, 'fault': 0, 'fault_pc': '00000000'}
 
 
+def retry_control(returncode, stop, threshold):
+    return returncode == 0 and stop is not None and stop["fault"] == 0 and 0 <= stop["vi"] < threshold
+
+
 def doctor():
     ok = True
     for name, args in (('git', ['--version']), ('cargo', ['--version']), ('rustc', ['--version']),
@@ -105,7 +109,8 @@ def main():
              ('clippy', [cargo, 'clippy', '--locked', '--workspace', '--all-targets', '--', '-D', 'warnings']),
              ('cargo test', [cargo, 'test', '--locked', '--workspace'])]
     if not a.quick:
-        steps += [('test_cli', [py, 'scripts/test_cli.py']), ('progress', [py, 'tools/progress.py', '--check'])]
+        steps += [('test_cli', [py, 'scripts/test_cli.py']), ('test_gate', [py, 'scripts/test_gate.py']),
+                  ('progress', [py, 'tools/progress.py', '--check'])]
         if a.runtime or (a.runtime is None and touches_runtime()):
             steps.append(('test_runtime', [py, 'runtime/test_runtime.py']))
 
@@ -135,6 +140,7 @@ def main():
         t = time.time()
         return job, subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True, errors='replace'), time.time() - t
 
+    retries = []
     with ThreadPoolExecutor(max(1, len(jobs))) as pool:
         for (label, cmd, env, rom), r, seconds in pool.map(run, jobs):
             print(f'\n== {label}: {rom or " ".join(map(str, cmd))}', flush=True)
@@ -145,7 +151,20 @@ def main():
             print(r.stdout[-1500:], r.stderr[-1500:], sep='\n')
             s = stop_fields(r.stdout)
             good = r.returncode == 0 and s is not None and s['fault'] == 0 and s['vi'] >= MIN_VI * a.seconds / 30
-            results.append((label, good, f"vi {s['vi']} fault {s['fault']} pc {s['fault_pc']}, {seconds:.0f} s" if s else 'no stop line'))
+            note = f"vi {s['vi']} fault {s['fault']} pc {s['fault_pc']}, {seconds:.0f} s" if s else 'no stop line'
+            if retry_control(r.returncode, s, MIN_VI * a.seconds / 30):
+                retries.append((len(results), (label, cmd, env, rom), note))
+            results.append((label, good, note))
+
+    for index, job, first_note in retries:
+        label = job[0]
+        print(f'\n== {label}: solo retry (VI threshold under load)', flush=True)
+        _, r, seconds = run(job)
+        print(r.stdout[-1500:], r.stderr[-1500:], sep='\n')
+        s = stop_fields(r.stdout)
+        good = r.returncode == 0 and s is not None and s['fault'] == 0 and s['vi'] >= MIN_VI * a.seconds / 30
+        note = f"vi {s['vi']} fault {s['fault']} pc {s['fault_pc']}, {seconds:.0f} s" if s else 'no stop line'
+        results[index] = (label, good, f'{note}; timing-sensitive under load ({first_note})' if good else f'{note}; solo retry failed (parallel: {first_note})')
 
     print('\n== summary')
     for label, good, note in results:

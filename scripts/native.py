@@ -398,7 +398,9 @@ def main():
         run('gcc', main_obj, *part_objs, '-pthread', *objects, '-o', exe)
     if a.rt64:
         with phase('link-window'):
-            run('gcc', window_obj, *part_objs, RT64 / 'plaid_rt64.dll', '-pthread', *objects, '-o', window_exe)
+            resource = out / 'plaid-icon.o'
+            run('windres', 'runtime/rt64/icon.rc', '-I', 'runtime/rt64', '-o', resource)
+            run('gcc', window_obj, *part_objs, RT64 / 'plaid_rt64.dll', '-pthread', *objects, resource, '-o', window_exe)
     command = [str(window_exe if a.rt64 else exe), '--rom', str(rom), *map(str, saves),
                '--stop-at', 'none', '--seconds', str(a.seconds)]
     if a.rsp_gfx:
