@@ -31,7 +31,7 @@ def main(plaid, snapshots, out):
                         + ''.join(f'extern const plaid_rsp_text plaid_rsp_text_{n};\n' for n in names)
                         + 'const plaid_rsp_text *const plaid_rsp_texts[] = {'
                         + ''.join(f'&plaid_rsp_text_{n}, ' for n in names) + '0};\n')
-    print(' '.join(str(f) for f in files + [registry]))
+    print('\n'.join(str(f) for f in files + [registry]))
 
 
 if __name__ == '__main__':

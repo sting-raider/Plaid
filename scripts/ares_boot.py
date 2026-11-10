@@ -140,7 +140,9 @@ def capture_many(rom, entries, exact=False, covered=None, sites=None, bindings=N
                 (b[3] is not None and (type(b[3]) is not int or b[3] < -1 or b[3] % 4 and b[3] != -1))
                 for b in bindings)):
         raise ValueError('invalid replay bindings')
-    budget = SITE_BUDGET if sites else BUDGET
+    # PLAID_SITE_BUDGET shortens site observation for fast builds; a shorter
+    # replay only observes less, so unseen targets stay unresolved, never closed.
+    budget = int(os.environ.get('PLAID_SITE_BUDGET', SITE_BUDGET)) if sites else BUDGET
     if sites is not None and (covered is None or not isinstance(sites, (list, tuple)) or
                               any(type(s) is not int or not 0 <= s <= 0xffffffff or s % 4 for s in sites)):
         raise ValueError('indirect-target observation requires aligned site addresses and coverage ranges')
@@ -157,7 +159,7 @@ def capture_many(rom, entries, exact=False, covered=None, sites=None, bindings=N
     # A replay is deterministic in its sources and arguments, so an identical
     # request reuses the recorded results instead of launching ares (and WSL).
     key = hashlib.sha256(json.dumps([REV, [hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in ORACLE_SOURCES],
-                                     hashlib.sha256(data).hexdigest(), entries, exact, covered, sites, bindings]).encode()).hexdigest()
+                                     hashlib.sha256(data).hexdigest(), entries, exact, covered, sites, bindings, budget]).encode()).hexdigest()
     cached = Path(os.environ.get('PLAID_REPLAY_CACHE', Path.home() / '.cache/plaid/ares-replay')) / f'{key}.json'
     if cached.exists():
         return json.loads(cached.read_text())
