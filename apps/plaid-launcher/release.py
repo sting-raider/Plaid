@@ -1,7 +1,9 @@
 """Build, sign and publish the launcher as a GitHub release the in-app updater finds.
 
-usage: python release.py "what changed"
-Bump "version" in src-tauri/tauri.conf.json first. Needs gh (logged in) and the
+usage: python release.py NOTES.md
+NOTES.md is the GitHub release body (Markdown: "## What's new", "## Known limitations",
+one "- " bullet per item). The app's update panel shows its bullets as plain lines.
+List only what works in this build. Bump "version" in src-tauri/tauri.conf.json first. Needs gh (logged in) and the
 signing key at ~/.tauri/plaid-launcher.key (TAURI_SIGNING_PRIVATE_KEY_PATH overrides).
 """
 import datetime, json, os, subprocess, sys
@@ -10,7 +12,16 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = 'sting-raider/Plaid'
 
-notes = sys.argv[1] if len(sys.argv) > 1 else 'Launcher update'
+notes_md = Path(sys.argv[1]).read_text(encoding='utf-8')
+# the in-app panel: bullets only, Markdown emphasis removed; a limitation keeps its label
+lines, section = [], ''
+for line in notes_md.splitlines():
+    if line.startswith('## '):
+        section = line[3:].strip()
+    elif line.lstrip().startswith('- '):
+        text = line.lstrip()[2:].replace('**', '').strip()
+        lines.append(f'Known limitation: {text}' if 'limitation' in section.lower() else text)
+notes = '\n'.join(lines)
 version = json.loads((HERE / 'src-tauri/tauri.conf.json').read_text(encoding='utf-8'))['version']
 tag = f'launcher-v{version}'
 key = Path(os.environ.get('TAURI_SIGNING_PRIVATE_KEY_PATH', Path.home() / '.tauri/plaid-launcher.key'))
@@ -31,5 +42,5 @@ latest.write_text(json.dumps({
 }, indent=2))
 commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=HERE, text=True).strip()
 subprocess.run(['gh', 'release', 'create', tag, str(setup), str(latest), '-R', REPO, '--target', commit,
-                '--title', f'Plaid launcher {version}', '--notes', notes, '--latest'], check=True)
+                '--title', f'Plaid launcher {version}', '--notes', notes_md, '--latest'], check=True)
 print('published', tag)
