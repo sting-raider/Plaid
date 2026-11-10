@@ -32,6 +32,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -40,6 +41,7 @@ from pathlib import Path
 from native_audio import audio_peak
 from harvest_boot import harvest, harvest_refills, harvest_vectors
 from ares_boot import ORACLE_SOURCES, capture_many
+from repair_record import write_record
 
 ROOT = Path(__file__).resolve().parents[1]
 # Unproven sites are watched this long by default; --deep watches up to
@@ -268,6 +270,7 @@ def main():
     ap.add_argument('--strict', action='store_true', help='build only a CLOSED map; refuse residual run-time dispatch (ADR-0233)')
     ap.add_argument('--rsp-gfx', action='store_true', help='run lowered graphics microcode; requires --rt64')
     ap.add_argument('--rsp-dump', type=Path, help='capture IMEM for oracle comparison only; never a build input')
+    ap.add_argument('--repair-capture', action='store_true', help='save a versioned fault capture in the build repair directory')
     ap.add_argument('--press', action='append', default=[], help='runtime button press, e.g. 0x1000@300:4')
     ap.add_argument('--require-audio', action='store_true', help='reject a validation run with empty or silent PCM')
     ap.add_argument('--deep', action='store_true', help='watch unproven indirect sites for the full analysis-time replay budget')
@@ -414,8 +417,14 @@ def main():
         command.extend(['--wav', str(out / 'validation.wav')])
     # Validation runs are silent (SDL's dummy driver); --wav still records the audio.
     env = {**os.environ, 'SDL_AUDIODRIVER': 'dummy'}
-    with phase('validation'):
-        r = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, errors='replace', timeout=a.seconds + 60, env=env)
+    with tempfile.TemporaryDirectory(dir=out, prefix='repair-raw-') as temporary:
+        raw_capture = Path(temporary) / 'capture.json'
+        if a.repair_capture:
+            command.extend(['--repair-capture', str(raw_capture)])
+        with phase('validation'):
+            r = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, errors='replace', timeout=a.seconds + 60, env=env)
+        if raw_capture.exists():
+            print('repair record:', write_record(raw_capture, out / 'repair'), flush=True)
     stops = [line for line in r.stdout.splitlines() if line.startswith('{"stop"')]
     print(stops[-1][:400] if stops else r.stderr[-400:])
     if stops and json.loads(stops[-1])['fault'] == 3 and os.environ.get('PLAID_SITE_BUDGET') == str(FAST_SITE_BUDGET):

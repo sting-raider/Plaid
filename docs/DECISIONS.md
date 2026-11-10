@@ -9154,3 +9154,15 @@ invalid files leave defaults intact.
 Scripted window and keyboard checks are recorded in the handoff. Controller
 hardware, hotplug, player numbering, visual aspect modes and toggle keys remain
 unverified.
+
+
+## ADR-0313: Opt-in bounded fault records
+
+A native validation run may opt in to capturing the RDRAM window around a
+fault-3 target or fault-15 site. `native.py` converts the temporary raw snapshot
+to `plaid-repair-v1`, binding the bytes with SHA-256 and recording the stop,
+addresses, VI and physical window. Records are numbered in ignored build output.
+PI DMA history is currently unavailable and explicitly null. These records are
+observations, not executable evidence: no ingestion, generation dispatch, or
+runtime content guard is implemented by this decision. They may contain game
+assets and must not be committed.
