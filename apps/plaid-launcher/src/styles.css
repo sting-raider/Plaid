@@ -217,23 +217,22 @@ li.now .step-mark { border-color: var(--n-yellow); animation: blink 0.8s steps(2
 .boot-screen { display: flex; flex-direction: column; align-items: center; gap: 26px; animation: crt-on 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 @keyframes crt-on { 0% { transform: scale(1, 0.004); filter: brightness(6); } 45% { transform: scale(1, 0.004); filter: brightness(6); } 100% { transform: none; filter: none; } }
 @keyframes crt-off { 0% { transform: none; filter: none; } 60% { transform: scale(1, 0.004); filter: brightness(5); opacity: 1; } 100% { transform: scale(0, 0.004); opacity: 0; } }
-.mark3d { width: 132px; height: 132px; position: relative; transform-style: preserve-3d; animation: spin 1.6s cubic-bezier(0.3, 0.1, 0.2, 1) 0.5s both; }
-@keyframes spin { from { transform: rotateX(18deg) rotateY(-300deg) scale(0.6); } to { transform: rotateX(0) rotateY(0) scale(1); } }
-.bar3d { position: absolute; border-radius: 5px; box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.25), inset 0 3px 0 rgba(255, 255, 255, 0.25); }
-.bar3d.v { width: 24px; height: 132px; top: 0; }
-.bar3d.h { height: 24px; width: 132px; left: 0; }
-.bar3d.v1 { left: 30px; background: var(--n-red); animation: in-top 0.7s var(--ease) 0.55s both; }
-.bar3d.v2 { left: 78px; background: var(--n-blue); animation: in-bottom 0.7s var(--ease) 0.65s both; }
-.bar3d.h1 { top: 30px; background: var(--n-green); animation: in-left 0.7s var(--ease) 0.75s both; opacity: 0.92; }
-.bar3d.h2 { top: 78px; background: var(--n-yellow); animation: in-right 0.7s var(--ease) 0.85s both; opacity: 0.92; }
-@keyframes in-top { from { transform: translate3d(0, -260px, 120px); opacity: 0; } }
-@keyframes in-bottom { from { transform: translate3d(0, 260px, 120px); opacity: 0; } }
-@keyframes in-left { from { transform: translate3d(-300px, 0, 120px); opacity: 0; } }
-@keyframes in-right { from { transform: translate3d(300px, 0, 120px); opacity: 0; } }
+.mark3d { width: 150px; height: 150px; transform-style: preserve-3d; animation: orbit 2.6s cubic-bezier(0.25, 0.1, 0.2, 1) 0.45s both; }
+@keyframes orbit { from { transform: rotateX(14deg) rotateY(-55deg) scale(0.86); } to { transform: none; } }
+.logo-anim { width: 100%; height: 100%; overflow: visible; }
+.facet {
+  fill: var(--c); fill-opacity: 0; stroke: #fff; stroke-width: 0.6; stroke-opacity: 0.95; stroke-linejoin: round;
+  transform-box: fill-box; transform-origin: center;
+  animation: facet-in 0.75s cubic-bezier(0.2, 0.9, 0.25, 1.05) var(--d) both, facet-shade 0.32s ease-out var(--s) forwards;
+}
+@keyframes facet-in { from { transform: translate(var(--dx), var(--dy)) rotate(var(--r)) scale(0.25); opacity: 0; } 40% { opacity: 1; } to { transform: none; opacity: 1; } }
+@keyframes facet-shade { 0% { fill-opacity: 0; stroke-opacity: 0.95; } 40% { fill-opacity: 1; fill: #fff; } 100% { fill-opacity: 1; fill: var(--c); stroke-opacity: 0; } }
+.glint { animation: glint 0.7s ease-in-out both; }
+@keyframes glint { from { transform: skewX(-20deg) translateX(0); } to { transform: skewX(-20deg) translateX(110px); } }
 .wordmark { display: flex; gap: 6px; font-family: var(--pixel); font-weight: 700; font-size: 34px; letter-spacing: 0.06em; }
 .wordmark span { display: inline-block; animation: drop 0.4s steps(4) both; }
 @keyframes drop { from { transform: translateY(-14px); opacity: 0; } }
-.boot-status { display: flex; flex-direction: column; align-items: center; gap: 10px; min-height: 44px; animation: appear 0.3s ease 1.9s both; }
+.boot-status { display: flex; flex-direction: column; align-items: center; gap: 10px; min-height: 44px; animation: appear 0.3s ease 2.5s both; }
 .boot-status .pixel { font-size: 11px; color: var(--muted); }
 .boot-blocks { display: grid; grid-template-columns: repeat(16, 9px); gap: 3px; }
 .boot-blocks i { height: 9px; background: rgba(255, 255, 255, 0.08); }

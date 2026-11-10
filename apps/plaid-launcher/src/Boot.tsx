@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
+import { AnimatedLogo } from "./logo";
 
 /**
- * Start-up sequence: CRT power-on, the plaid bars fly in and lock with a polygon
- * spin, the wordmark drops in, then the update check fills a cartridge-style
+ * Start-up sequence: CRT power-on, the low-poly P assembles from wireframe facets and
+ * shades in, the wordmark drops in, then the update check fills a cartridge-style
  * loading bar. `work` resolves with the status line to show when it finishes.
  */
 export function Boot({ work, onDone }: { work: (status: (s: string) => void) => Promise<string>; onDone: () => void }) {
@@ -13,10 +14,10 @@ export function Boot({ work, onDone }: { work: (status: (s: string) => void) => 
 
   useEffect(() => {
     let live = true;
-    const minimum = new Promise((r) => setTimeout(r, 2600));
+    const minimum = new Promise((r) => setTimeout(r, 3300));
     // the bar creeps while the work runs; it never claims more than 13 of 16 blocks early
     const creep = setInterval(() => setBlocks((b) => (b < 13 ? b + 1 : b)), 220);
-    const start = setTimeout(() => setStatus("Checking for updates"), 1900);
+    const start = setTimeout(() => setStatus("Checking for updates"), 2500);
     Promise.all([work((s) => live && setStatus(s)), minimum]).then(([final]) => {
       if (!live) return;
       clearInterval(creep);
@@ -39,14 +40,9 @@ export function Boot({ work, onDone }: { work: (status: (s: string) => void) => 
   return (
     <div className={`boot ${off ? "off" : ""}`} data-tauri-drag-region>
       <div className="boot-screen">
-        <div className="mark3d">
-          <div className="bar3d v v1" />
-          <div className="bar3d v v2" />
-          <div className="bar3d h h1" />
-          <div className="bar3d h h2" />
-        </div>
+        <div className="mark3d"><AnimatedLogo /></div>
         <div className="wordmark">
-          {"PLAID".split("").map((c, i) => <span key={i} style={{ animationDelay: `${1.45 + i * 0.07}s` }}>{c}</span>)}
+          {"PLAID".split("").map((c, i) => <span key={i} style={{ animationDelay: `${2.3 + i * 0.07}s` }}>{c}</span>)}
         </div>
         <div className="boot-status">
           <div className="boot-blocks">{Array.from({ length: 16 }, (_, i) => <i key={i} className={i < blocks ? "on" : ""} />)}</div>
