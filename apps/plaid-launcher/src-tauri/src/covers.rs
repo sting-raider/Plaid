@@ -7,9 +7,9 @@ use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
 const REPO: &str = "libretro-thumbnails/Nintendo_-_Nintendo_64";
-const AGENT: &str = "plaid-launcher";
+pub const AGENT: &str = "n64-library-launcher/0.1";
 
-fn get(url: &str) -> Result<ureq::Response, String> {
+pub fn get(url: &str) -> Result<ureq::Response, String> {
     ureq::get(url)
         .set("User-Agent", AGENT)
         .timeout(Duration::from_secs(20))
@@ -82,7 +82,7 @@ pub fn best_match<'a>(
         })
 }
 
-fn encode(name: &str) -> String {
+pub fn encode(name: &str) -> String {
     name.bytes()
         .map(|b| {
             if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {

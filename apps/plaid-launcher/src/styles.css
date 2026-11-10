@@ -131,6 +131,10 @@ input[type="range"] { width: 100%; accent-color: var(--text); height: 18px; }
 .game-cover { width: 230px; flex: none; aspect-ratio: 1.38 / 1; border-radius: var(--radius); overflow: hidden; box-shadow: 0 0 0 1px var(--border); background: var(--raised); }
 .game-cover img { width: 100%; height: 100%; object-fit: cover; }
 .game-info { display: flex; flex-direction: column; gap: 10px; min-width: 0; justify-content: flex-end; }
+.game-about { margin-left: auto; align-self: flex-end; max-width: 520px; min-width: 260px; flex: 1; display: flex; flex-direction: column; gap: 8px; padding-left: 24px; border-left: 1px solid var(--border); }
+.game-about p { margin: 0; color: var(--muted); line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; user-select: text; }
+.link { align-self: flex-start; color: var(--muted); font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
+.link:hover { color: var(--text); }
 .game-info h1 { font-size: 26px; line-height: 1.15; }
 .meta-line { display: flex; align-items: center; gap: 8px; color: var(--muted); flex-wrap: wrap; }
 .meta-line .sep { color: var(--faint); }
