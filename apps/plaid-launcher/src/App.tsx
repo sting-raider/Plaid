@@ -1,3 +1,5 @@
+import { check as checkApp, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -226,6 +228,7 @@ export default function App() {
   const [config, setConfig] = useState<Config | null>(null);
   const [games, setGames] = useState<Game[]>([]);
   const [update, setUpdate] = useState("");
+  const [appUpdate, setAppUpdate] = useState<Update | null>(null);
   const [view, setView] = useState<View>("all");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
@@ -242,6 +245,7 @@ export default function App() {
     const u = await Promise.race([api.checkUpdates().catch(() => null), timeout]);
     const line = u ? (u.behind ? `${u.behind} update${u.behind > 1 ? "s" : ""} available` : `Up to date · ${u.current}`) : "Offline";
     setUpdate(line);
+    checkApp().then(setAppUpdate).catch(() => {});
     if (c.romDir) { status("Reading cartridges"); await api.scan().then(setGames).catch(() => {}); }
     return u?.behind ? `${u.behind} update${u.behind > 1 ? "s" : ""} available` : u ? "Up to date" : "Offline · skipped update check";
   };
@@ -294,7 +298,19 @@ export default function App() {
           <div className="side-list">
             {games.map((g) => <SideGame key={g.id} game={g} active={selected === g.id} busy={builds[g.id]?.status === "running"} onClick={() => setSelected(g.id)} />)}
           </div>
-          <div className="side-foot"><span className={`dot ${update.includes("available") ? "yellow" : update === "Offline" ? "" : "green"}`} />{update}</div>
+          {appUpdate && <div className="side-foot"><span className="dot yellow" />Plaid app {appUpdate.version}
+            <button className="link" onClick={async () => {
+              setToast("Downloading the app update…");
+              try { await appUpdate.downloadAndInstall(); await relaunch(); } catch (e) { setToast(String(e)); }
+            }}>Restart to update</button>
+          </div>}
+          <div className="side-foot"><span className={`dot ${update.includes("available") ? "yellow" : update === "Offline" ? "" : "green"}`} />{update}
+            {update.includes("available") && <button className="link" onClick={async () => {
+              setUpdate("Updating the recompiler…");
+              try { await api.updatePlaid(); setUpdate("Up to date"); setToast("Recompiler updated; it rebuilds on the next compile."); }
+              catch (e) { setToast(String(e)); setUpdate("Update failed"); }
+            }}>Update</button>}
+          </div>
         </aside>
 
         <main className="main">
