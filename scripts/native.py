@@ -12,7 +12,7 @@ Steps, each a plain `plaid` command whose output stays in target/native/<name>:
                  indirect sites remain, they become fail-closed run-time
                  dispatch over the lowered entries (ADR-0233; the manifest
                  records native_complete: false). --strict refuses instead
-  lower-map      16 parts, compiled in parallel with gcc
+  lower-map      size-based parts, compiled in parallel with gcc
   rsp-from-rom   derive and lower candidate microcode from ROM image pointers
   snapshots      oracle-only; never loaded by the default build
   sp-boot        SP DMEM/IMEM as the ROM's IPL3 leaves them in pinned ares
@@ -160,8 +160,38 @@ def compile_source(source, flags, dependencies, compiler):
     return obj
 
 
+def compile_workers():
+    """All logical CPUs, fewer if free RAM could not hold that many gcc processes."""
+    workers = os.cpu_count() or 1
+    try:
+        import psutil
+        return max(1, min(workers, int(psutil.virtual_memory().available / (1 << 30) / 0.5)))
+    except ImportError:  # shortcut: no memory cap without psutil; add one if a host swaps
+        return workers
+
+
+def compile_all(jobs, compiler):
+    """Compile (source, flags, dependencies) jobs on one pool, largest first so
+    the longest unit starts at once and the tail stays short; results keep job order."""
+    order = sorted(range(len(jobs)), key=lambda i: -jobs[i][0].stat().st_size)
+    objs = [None] * len(jobs)
+    with ThreadPoolExecutor(compile_workers()) as pool:
+        for i, obj in zip(order, pool.map(lambda i: compile_source(*jobs[i], compiler), order)):
+            objs[i] = obj
+    return objs
+
+
 def rsp_dependencies():
     return b''.join(p.read_bytes() for p in sorted((ROOT / 'crates/plaid-lower/src').glob('rsp*.h')))
+
+
+def lower_parts(rom, mapping, entry, exit_pc, output, block_count, residual):
+    # Remove stale sources when a smaller split replaces an earlier build.
+    for old_part in output.parent.glob(f'{output.stem}.part*.c'):
+        old_part.unlink()
+    part_count = min(64, max(16, (block_count + 2499) // 2500))
+    plaid('lower-map', rom, mapping, entry, exit_pc, output, '--parts', str(part_count),
+          '--runtime-unit', *(['--residual-dispatch'] if residual else []), stdout=subprocess.DEVNULL)
 
 
 def write_boot_state(capture, out, entry):
@@ -299,41 +329,39 @@ def main():
     # RAM address zero is executable when the guest owns its refill vector.
     exit_pc = '0xbfc00000' if program.get('tlb_exception_vectors') else '0x80000000'
     with phase('lower'):
-        plaid('lower-map', rom, m, entry, exit_pc, c, '--parts', '16', '--runtime-unit', *(['--residual-dispatch'] if residual else []), stdout=subprocess.DEVNULL)
+        lower_parts(rom, m, entry, exit_pc, c, len(program['blocks']), residual)
     cc = ['gcc', '-O1', '-std=gnu11', '-w', '-DPLAID_SAFEPOINTS']
     # CPU helpers and RSP arithmetic are embedded in their generated sources.
     # Only the shared RSP ABI headers remain external include dependencies.
     rsp_headers = rsp_dependencies()
     compiler = subprocess.check_output(['gcc', '--version'])
 
-    def compile_cached(source, flags, dependencies=b''):
-        return compile_source(source, flags, dependencies, compiler)
-
     parts = [c, *sorted(out.glob(f'{name}.part*.c'))]
-    # Large CPU units can exceed RAM when every logical CPU launches GCC.
-    with phase('gcc'), ThreadPoolExecutor(min(4, os.cpu_count() or 1)) as pool:
-        part_objs = list(pool.map(lambda p: compile_cached(p, cc), parts))
     runtime_header=out/f'{name}.runtime.h'
     rt = [*cc, '-DPLAID_RSP', '-DPLAID_RSP_ROM', '-I', ROOT / 'crates/plaid-lower/src', f'-DPLAID_LOWERED="{runtime_header.name}"', f'-DPLAID_SP_BOOT="{sp_boot.name}"', f'-DPLAID_RAM_BOOT="{ram_boot.name}"', '-I', out]
     # Keep runtime objects in the build directory, alongside the generated C.
     runtime_source = out / 'runtime.c'
     runtime_source.write_text(f'#include "{(ROOT / "runtime/plaid_rt.c").as_posix()}"\n')
     runtime_deps = runtime_header.read_bytes() + sp_boot.read_bytes() + ram_boot.read_bytes() + (ROOT / 'runtime/plaid_rt.c').read_bytes() + b''.join(p.read_bytes() for p in sorted((ROOT / 'runtime').glob('*.h'))) + rsp_headers
-    with phase('gcc-runtime'):
-        main_obj = compile_cached(runtime_source, rt, runtime_deps)
     window_exe = RT64 / f'{name}{"-rsp" if a.rsp_gfx else ""}-rt64.exe'
     if a.rt64:
         window_source = out / 'runtime-window.c'
         window_source.write_bytes(runtime_source.read_bytes())
-        with phase('gcc-window'):
-            window_obj = compile_cached(window_source, [*rt, '-DPLAID_RT64'], runtime_deps)
     exe = out / f'{name}.exe'
     saves = ['--sram', out / f'{name}.sra', '--flash', out / f'{name}.fla', '--save', out / f'{name}.eep']
 
     texts_c = [texts / (t['name'] + '.c') for t in rsp_manifest['texts']] + [texts / 'rsp_registry.c']
     flags = ['gcc', '-O2', '-I', ROOT / 'crates/plaid-lower/src']
-    with phase('gcc-rsp'), ThreadPoolExecutor(min(4, os.cpu_count() or 1)) as pool:
-        objects = list(pool.map(lambda p: compile_cached(p, flags, rsp_headers), texts_c))
+    # One pool for every C unit: the RSP texts and runtime fill the CPU while the last CPU parts finish.
+    jobs = [(p, cc, b'') for p in parts] + [(p, flags, rsp_headers) for p in texts_c] + [(runtime_source, rt, runtime_deps)]
+    if a.rt64:
+        jobs.append((window_source, [*rt, '-DPLAID_RT64'], runtime_deps))
+    with phase('gcc'):
+        objs = compile_all(jobs, compiler)
+    part_objs, objects = objs[:len(parts)], objs[len(parts):len(parts) + len(texts_c)]
+    main_obj = objs[len(parts) + len(texts_c)]
+    if a.rt64:
+        window_obj = objs[-1]
     with phase('link'):
         run('gcc', main_obj, *part_objs, '-pthread', *objects, '-o', exe)
     if a.rt64:
