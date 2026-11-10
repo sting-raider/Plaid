@@ -1,5 +1,12 @@
 # Status
 
+## Residual local blocker traps (ADR-0311)
+
+Residual builds can retain locally unlowerable blocks as native fail-closed
+traps while reporting OPEN closure and listing trap sites in the manifest.
+Fault 3 also reports its attempted target. RE2 (USA Rev 1) reaches VI 17 and
+stops at fault 15, PC 8004d348, target 00000000; it is not native-complete.
+
 ## Short ares replay by default, deep rebuild on fault 3 (ADR-0310)
 
 A cold F-Zero X build fell from 486 s to 94 s: the analysis-time ares replay
