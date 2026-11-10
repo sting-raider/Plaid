@@ -58,3 +58,12 @@ plaid_rt64_patch(render/rt64_framebuffer_renderer
                     if (clearRect.rect.isEmpty()) {
                         instanceDrawCall.type = InstanceDrawCall::Type::Unknown;
                     }]=])
+
+# Stretch the VI image while retaining the game's original projection.
+plaid_rt64_patch(render/rt64_vi_renderer
+    [=[    inline hlslpp::float2 fromHDtoWindow(hlslpp::float2 coordinate, hlslpp::float2 hdSize, hlslpp::float2 windowSize) {
+        const hlslpp::float2 hdCenter = hdSize / 2;]=]
+    [=[    extern bool plaidStretchPresentation;
+    inline hlslpp::float2 fromHDtoWindow(hlslpp::float2 coordinate, hlslpp::float2 hdSize, hlslpp::float2 windowSize) {
+        if (plaidStretchPresentation) return coordinate * windowSize / hdSize;
+        const hlslpp::float2 hdCenter = hdSize / 2;]=])

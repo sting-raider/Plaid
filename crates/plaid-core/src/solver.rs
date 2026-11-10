@@ -91,6 +91,16 @@ pub struct SolveReport {
     /// dispatch over every lowered entry instead of a closed-target proof.
     #[serde(skip_serializing_if = "BTreeSet::is_empty")]
     pub residual_sites: BTreeSet<CodeAddress>,
+    /// Local unsupported operations replaced by fail-closed native traps.
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub trapped_sites: BTreeSet<Blocker>,
+}
+
+impl SolveReport {
+    /// Residual builds may trap only local operations with a decoded block.
+    pub fn residual_buildable(&self) -> bool {
+        self.blockers.iter().all(|b| self.trapped_sites.contains(b))
+    }
 }
 
 /// Closure admission with independently preserved discovery-source expectations.
@@ -1525,6 +1535,29 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             );
         }
     }
+    let trapped_sites = if scope == Scope::DeclaredStaticImagesGuardedRamResidualDispatch {
+        blockers
+            .iter()
+            .filter(|b| {
+                matches!(
+                    b.kind.as_str(),
+                    "unsupported_scope_effect"
+                        | "exception_or_unsupported_instruction"
+                        | "unsupported_delay_slot"
+                ) && b.site.as_ref().is_some_and(|site| {
+                    map.blocks.iter().any(|block| {
+                        block.start.image == site.image
+                            && block.start.generation == site.generation
+                            && block.start.pc.0 <= site.pc.0
+                            && site.pc.0 < block.start.pc.0.saturating_add(block.size)
+                    })
+                })
+            })
+            .cloned()
+            .collect()
+    } else {
+        BTreeSet::new()
+    };
     Ok(SolveReport {
         schema_version: 0,
         scope,
@@ -1538,5 +1571,6 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         blockers,
         discharged,
         residual_sites,
+        trapped_sites,
     })
 }

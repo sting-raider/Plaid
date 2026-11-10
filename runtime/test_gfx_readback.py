@@ -47,6 +47,9 @@ int plaid_gfx_rdp(const uint8_t *ram, const uint8_t *commands, uint32_t size, co
 }
 void plaid_gfx_screen(const uint32_t *regs) { (void)regs; }
 int plaid_gfx_closed(void) { return 0; }
+void plaid_gfx_window_options(const char *title, int fullscreen, const char *config) { (void)title; (void)fullscreen; (void)config; }
+uint32_t plaid_gfx_connected(void) { return 1; }
+uint32_t plaid_gfx_input_player(int player) { (void)player; return 0; }
 uint32_t plaid_gfx_input(void) { return 0; }
 void plaid_audio_play(const uint8_t *samples, uint32_t bytes, uint32_t rate) {
   (void)samples; (void)bytes; (void)rate;

@@ -1,5 +1,17 @@
 # Status
 
+## Residual local blocker traps (ADR-0311)
+
+Residual builds can retain locally unlowerable blocks as native fail-closed
+traps while reporting OPEN closure and listing trap sites in the manifest.
+Fault 3 also reports its attempted target. RE2 (USA Rev 1) reaches VI 17 and
+stops at fault 15, PC 8004d348, target 00000000; it is not native-complete.
+## RT64 launcher settings
+
+The settings bridge supports launcher presentation and input settings. Scripted
+window, icon and keyboard binding checks pass; controller hardware and hotplug
+remain unverified.
+
 ## Short ares replay by default, deep rebuild on fault 3 (ADR-0310)
 
 A cold F-Zero X build fell from 486 s to 94 s: the analysis-time ares replay
@@ -1308,3 +1320,5 @@ verify the interface. GoldenEye now queues its guest fault message (count1),
 but the host pager waiter is absent from the guest queue. It remains at
 VI1/fault12/PC80810950; logos/title remain outstanding. Evidence:
 research/ge-sdk-event-state.md.
+
+Controller hardware and hotplug for the RT64 launcher settings bridge remain unverified; real-controller testing is needed.

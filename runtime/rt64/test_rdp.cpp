@@ -1,5 +1,6 @@
 // Synthetic RT64 regression; no GPU, ROM, microcode or game command capture.
 #define SDL_MAIN_HANDLED
+namespace RT64 { bool plaidStretchPresentation = false; }
 #include "hle/rt64_rdp.h"
 #include "hle/rt64_interpreter.h"
 #include "readback.h"
