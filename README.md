@@ -28,7 +28,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 | Mario Kart 64 (USA) | **none** | 🟨 residual dispatch, 2 sites | 60 s with compiled graphics microcode and audio: VI 2762, 1270 graphics / 2635 audio tasks, fault 0 (ADR-0246) | prove the 2 residual sites; longer play |
 | Star Fox 64 (USA) (Rev 1) | **none** | 🟨 residual dispatch, 8 sites | 30 s from the ROM alone: VI 1798, 945 graphics / 1730 audio tasks, fault 0 (ADR-0256, ADR-0257); borders clean since ADR-0266 | prove the 8 residual sites; longer play |
 | Rogue Squadron (USA) | **none** | 🟨 builds with residual dispatch, 16 sites (ADR-0280) | full speed (1798 VIs in 30 s); menus, name entry and the first mission fly natively: an X-wing over Tatooine with the HUD at VI 12284, fault 0 (press list in `research/rs-name-entry.md`) | combat and mission completion; the 16 residual sites |
-| Mario Party 2 (USA) | **none** | 🟨 builds with residual dispatch, 8 sites | 30 s from the ROM alone with scripted Start/A: HUDSON logo to destination selection, VI 1798, fault 0 (ADR-0268, ADR-0269) | prove the 8 residual sites; board gameplay; the 476 s analysis |
+| Mario Party 2 (USA) | **none** | 🟨 builds with residual dispatch, 8 sites | 30 s from the ROM alone with scripted Start/A: HUDSON logo to destination selection, VI 1798, fault 0 (ADR-0268, ADR-0269) | prove the 8 residual sites; board gameplay; the analysis (discover 79.8 s to 57.8 s, ADR-0307; CPU build 126 s, ADR-0308) |
 
 "Native build ✅" means analysis is `CLOSED` under a declared scope (usually `--address-taken`) and `native.py` emits the executable. Since ADR-0233, `native.py` also builds by default when the only open items are indirect jumps it cannot prove: they go through a fail-closed run-time lookup over the translated code (still no emulation), and `native-manifest.json` records `native_complete: false`. `--strict` builds only proven maps.
 
@@ -41,6 +41,10 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0310 | `d2390b16` | Analysis replay watches unproven sites for 100M instructions instead of 2e9, with one deep rebuild on fault 3; cold F-Zero X build 486 s to 94 s |
+| 0309 | `d2c2d84d` | Game code builds at -O0 (clang when present), discovery stops copying the map, the runtime suite and gate run in parallel; full gate with ROMs 293 s |
+| 0308 | `38db07e8` | Native gcc builds use every core over byte-balanced units; Mario Party 2 CPU parts 304.9 s to 126.0 s, identical function bodies |
+| 0307 | `ab2aea58` | Indexed map lookups in the indirect table proofs; Mario Party 2 discover 79.8 s to 57.8 s, byte-identical artifacts |
 | 0306 | `99344a20` | Source-bound SDK run queues publish priority/FIFO runnable chains through handoffs; GoldenEye still stops at VI 1, fault 12, PC 80810a7c (foreign ERET refused) |
 | 0305 | `a4829b4b` | Native SDK waiters and callee-saved yield contexts are published to guest memory (checked against ares); GoldenEye advances to the real pager at PC 80810a7c |
 | 0304 | `f81e2a4c` | SDK event registration and empty-queue state published to guest RAM; GoldenEye queues its fault message but the host pager waiter is still absent |
