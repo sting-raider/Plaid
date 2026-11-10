@@ -9,7 +9,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, CompileEvent, Config, coverFor, Game, PHASES, Progress } from "./api";
 import { Boot } from "./Boot";
 import { PlaySheet, Saves, SettingsPanel, SettingsTab } from "./settings";
-import { Back, Check, Close, Folder, Gear, Grid, Hammer, Logo, Maximize, Minimize, Play, Refresh, Search } from "./icons";
+import { Back, Check, Close, Folder, Gear, Grid, Hammer, Logo, Maximize, Minimize, Play, Refresh, ArrowUp, Search } from "./icons";
 import "./styles.css";
 
 interface Build { id: string; progress: Progress; logs: string[]; status: "running" | "done" | "failed" | "cancelled"; message?: string; started: number; lastOutput: number }
@@ -230,7 +230,7 @@ export default function App() {
   const [games, setGames] = useState<Game[]>([]);
   const [update, setUpdate] = useState("");
   const [plaid, setPlaid] = useState<UpdateInfo | null>(null);
-  const [whatsNew, setWhatsNew] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [appUpdate, setAppUpdate] = useState<Update | null>(null);
   const [view, setView] = useState<View>("all");
   const [query, setQuery] = useState("");
@@ -241,15 +241,32 @@ export default function App() {
 
   const rescan = () => api.scan().then(setGames).catch((e) => setToast(String(e)));
 
+  /** Checks main for recompiler changes and GitHub releases for a new app. */
+  const checkAll = async () => {
+    const timeout = new Promise<null>((r) => setTimeout(() => r(null), 6000));
+    const [u, a] = await Promise.all([
+      Promise.race([api.checkUpdates().catch(() => null), timeout]),
+      checkApp().catch(() => null),
+    ]);
+    const pending = (u?.behind ?? 0) + (a ? 1 : 0);
+    setUpdate(u ? (pending ? `${pending} update${pending > 1 ? "s" : ""} available` : `Up to date · ${u.current}`) : "Offline");
+    setPlaid(u);
+    setAppUpdate(a);
+    return u;
+  };
+
+  const applyUpdate = async () => {
+    try {
+      if (plaid?.behind) { setUpdate("Updating the recompiler…"); await api.updatePlaid(); setPlaid({ ...plaid, behind: 0, changes: [] }); setUpdate("Up to date"); }
+      if (appUpdate) { setUpdate("Downloading the app update…"); await appUpdate.downloadAndInstall(); await relaunch(); }
+      else setToast("Recompiler updated; it rebuilds on the next compile.");
+    } catch (e) { setToast(String(e)); setUpdate("Update failed"); }
+  };
+
   const startup = async (status: (s: string) => void) => {
     const c = await api.getConfig();
     setConfig(c);
-    const timeout = new Promise<null>((r) => setTimeout(() => r(null), 6000));
-    const u = await Promise.race([api.checkUpdates().catch(() => null), timeout]);
-    const line = u ? (u.behind ? `${u.behind} update${u.behind > 1 ? "s" : ""} available` : `Up to date · ${u.current}`) : "Offline";
-    setUpdate(line);
-    setPlaid(u);
-    checkApp().then(setAppUpdate).catch(() => {});
+    const u = await checkAll();
     if (c.romDir) { status("Reading cartridges"); await api.scan().then(setGames).catch(() => {}); }
     return u?.behind ? `${u.behind} update${u.behind > 1 ? "s" : ""} available` : u ? "Up to date" : "Offline · skipped update check";
   };
@@ -302,18 +319,16 @@ export default function App() {
           <div className="side-list">
             {games.map((g) => <SideGame key={g.id} game={g} active={selected === g.id} busy={builds[g.id]?.status === "running"} onClick={() => setSelected(g.id)} />)}
           </div>
-          {whatsNew && (plaid?.behind || appUpdate) && <UpdatePanel plaid={plaid} app={appUpdate} onClose={() => setWhatsNew(false)} onUpdate={async () => {
-            setWhatsNew(false);
-            try {
-              if (plaid?.behind) { setUpdate("Updating the recompiler…"); await api.updatePlaid(); setPlaid({ ...plaid, behind: 0, changes: [] }); setUpdate("Up to date"); }
-              if (appUpdate) { setToast("Downloading the app update…"); await appUpdate.downloadAndInstall(); await relaunch(); }
-              else setToast("Recompiler updated; it rebuilds on the next compile.");
-            } catch (e) { setToast(String(e)); setUpdate("Update failed"); }
-          }} />}
           <div className="side-foot">
-            {plaid?.behind || appUpdate
-              ? <button className="btn update-btn" onClick={() => setWhatsNew((v) => !v)}><span className="dot yellow" />Update</button>
-              : <><span className={`dot ${update === "Offline" ? "" : "green"}`} />{update}</>}
+            <span className={`dot ${plaid?.behind || appUpdate ? "yellow" : update === "Offline" ? "" : "green"}`} />
+            <span className="side-foot-text">{update}</span>
+            <div className="update-wrap">
+              {(plaid?.behind || appUpdate) && <UpdatePanel plaid={plaid} app={appUpdate} />}
+              {plaid?.behind || appUpdate
+                ? <button className="round-btn ready" aria-label="Update" onClick={applyUpdate}><ArrowUp size={16} /></button>
+                : <button className={`round-btn ${checking ? "spin" : ""}`} aria-label="Check for updates" title="Check for updates"
+                    onClick={async () => { setChecking(true); await checkAll(); setChecking(false); }}><Refresh size={15} /></button>}
+            </div>
           </div>
         </aside>
 
@@ -374,12 +389,12 @@ function SideGame({ game, active, busy, onClick }: { game: Game; active: boolean
 }
 
 /** What an update brings in, like an app's release notes: app notes, then recompiler changes on main. */
-function UpdatePanel({ plaid, app, onClose, onUpdate }: { plaid: UpdateInfo | null; app: Update | null; onClose: () => void; onUpdate: () => void }) {
+function UpdatePanel({ plaid, app }: { plaid: UpdateInfo | null; app: Update | null }) {
   const parts = [app && "this app", plaid?.behind && "the recompiler"].filter(Boolean).join(" and ");
   const notes = (app?.body ?? "").split(/\r?\n/).map((l) => l.replace(/^\s*[-*]\s*/, "").trim()).filter(Boolean);
   return (
-    <div className="update-panel" role="dialog" aria-label="What's new">
-      <div className="update-head"><strong>Update {parts}</strong><button className="link" onClick={onClose}>Close</button></div>
+    <div className="update-panel" role="tooltip"><div className="update-card">
+      <strong className="update-head">Update {parts}</strong>
       <div className="update-body">
         {app && <section>
           <div className="update-sub">Plaid app {app.version}{app.date ? ` · ${app.date.slice(0, 10)}` : ""}</div>
@@ -391,7 +406,7 @@ function UpdatePanel({ plaid, app, onClose, onUpdate }: { plaid: UpdateInfo | nu
           {plaid.changes.length < plaid.behind && <div className="update-meta">plus {plaid.behind - plaid.changes.length} merge and docs commits</div>}
         </section>}
       </div>
-      <button className="btn update-go" onClick={onUpdate}>{app ? "Update and restart" : "Update"}</button>
-    </div>
+      <div className="update-meta">Click the button to update{app ? " and restart" : ""}.</div>
+    </div></div>
   );
 }
