@@ -34,13 +34,14 @@ export function Pending() {
 function Graphics({ s, set }: { s: Settings; set: (p: Partial<Settings>) => void }) {
   return (
     <div className="box">
-      <div className="set-row">
+      <div className="set-row"><div className="txt"><b>N64 mode</b><span>The original look: 4:3 at the console's own resolution, no upscaling.</span></div><Switch on={s.n64Mode} onChange={(n64Mode) => set({ n64Mode })} /></div>
+      <div className={`set-row ${s.n64Mode ? "disabled" : ""}`}>
         <div className="txt"><b>Aspect ratio</b><span>How the picture fills the window.</span></div>
         <select className="input" value={s.aspect} onChange={(e) => set({ aspect: e.target.value as Settings["aspect"] })}>
           {ASPECTS.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
         </select>
       </div>
-      <div className="set-row">
+      <div className={`set-row ${s.n64Mode ? "disabled" : ""}`}>
         <div className="txt"><b>Internal resolution</b><span>{s.resolutionScale}× native ({240 * s.resolutionScale}p)</span></div>
         <input type="range" min={1} max={8} value={s.resolutionScale} onChange={(e) => set({ resolutionScale: +e.target.value })} style={{ width: 200 }} />
       </div>
@@ -141,7 +142,7 @@ export function PlaySheet({ game, onClose, onPlay, onSettings }: { game: Game; o
               </div>
             ))}
           </div>
-          <div className="faint">{ASPECTS.find((a) => a[0] === s?.aspect)?.[1]} · {s?.resolutionScale}× resolution · {s?.fullscreen ? "fullscreen" : "windowed"}</div>
+          <div className="faint">{s?.n64Mode ? "N64 mode" : <>{ASPECTS.find((a) => a[0] === s?.aspect)?.[1]} · {s?.resolutionScale}× resolution</>} · {s?.fullscreen ? "fullscreen" : "windowed"}</div>
         </div>
         <div className="dialog-foot">
           <button className="btn ghost" onClick={onSettings}>Settings</button>
