@@ -1,5 +1,37 @@
 # Status
 
+## Short ares replay by default, deep rebuild on fault 3 (ADR-0310)
+
+A cold F-Zero X build fell from 486 s to 94 s: the analysis-time ares replay
+now watches unproven sites for 100M instructions instead of 2e9 (361 s to
+11 s). A build whose validation run stops on an unknown transfer target
+(fault 3) rebuilds once with the full replay; Paper Mario takes that path.
+Fixed a `missing provenance` failure when the replay observed only a runtime
+function. Compiled objects are shared machine-wide by content.
+
+## -O0 game code, copy-free discovery and a parallel gate (ADR-0309)
+
+Generated game code now compiles at -O0 with clang when installed (one Banjo
+part: 37 s at GCC -O1, 2 s at clang -O0) and runs no slower on a starved CPU.
+Parts that set jump buffers use GCC, matching the runtime's longjmp. Discovery
+rounds no longer copy the program map (Banjo discover 17.1 s to 14.0 s,
+identical map). The runtime suite runs its 80 steps in parallel (15-20 min to
+110 s) and the gate runs suites and game controls side by side: the full gate
+with ROMs passes in 293 s. Without the ares boot harvest, F-Zero X builds and
+plays in 102 s, but Paper Mario and Banjo-Kazooie need it; see ADR-0309.
+
+## Parallel native gcc over balanced units (ADR-0308)
+
+The generated-C gcc phase now uses every core and a balanced split. Mario Party
+2's 21 MB main unit was mostly straight-line overlay verifiers, which gcc spent
+64 s on alone; they now compile in the byte-balanced parts, so the main unit is
+8 MB (6 s). `native.py` picks 16-64 parts from the block count, compiles every
+C unit (CPU parts, RSP texts, runtime) in one pool, largest first, with workers
+capped by available RAM. Function bodies are hash-identical to the old split
+(MP2 8,005, OoT 12,935). Same-host back-to-back, cold, CPU parts: MP2 304.9 s
+to 126.0 s, OoT 264.3 s to 152.2 s; cold OoT pipeline 434.9 s to 294.3 s.
+Details: ADR-0308, research/gcc-parallel-tu-split.md.
+
 ## Indexed map lookups in the indirect table proofs (ADR-0307)
 
 Two per-site map walks priced Mario Party 2's discovery. A decoded-block

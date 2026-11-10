@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -108,13 +109,17 @@ def main():
         if a.runtime or (a.runtime is None and touches_runtime()):
             steps.append(('test_runtime', [py, 'runtime/test_runtime.py']))
 
+    # Cargo steps share a build lock, so they run in order; everything after them
+    # (Python suites and game controls) runs side by side and reports in order.
+    cargo_steps, rest = steps[:3], steps[3:]
     results = []
-    for label, cmd in steps:
+    for label, cmd in cargo_steps:
         print(f'\n== {label}: {" ".join(map(str, cmd))}', flush=True)
         t = time.time()
         rc = subprocess.run(cmd, cwd=ROOT).returncode
         results.append((label, rc == 0, f'{time.time() - t:.0f} s'))
 
+    jobs = [(label, cmd, None, None) for label, cmd in rest]
     if a.roms and not a.quick:
         env = dict(os.environ, SDL_AUDIODRIVER='dummy')
         for label, pattern, extra in CONTROLS:
@@ -123,12 +128,24 @@ def main():
                 results.append((label, None, f'not run: no {pattern} in {a.roms}'))
                 continue
             cmd = [py, 'scripts/native.py', str(roms[0]), '--rt64', '--seconds', str(a.seconds), *extra]
-            print(f'\n== {label}: {roms[0].name}', flush=True)
-            r = subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True)
+            jobs.append((label, cmd, env, roms[0].name))
+
+    def run(job):
+        label, cmd, env, rom = job
+        t = time.time()
+        return job, subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True, errors='replace'), time.time() - t
+
+    with ThreadPoolExecutor(max(1, len(jobs))) as pool:
+        for (label, cmd, env, rom), r, seconds in pool.map(run, jobs):
+            print(f'\n== {label}: {rom or " ".join(map(str, cmd))}', flush=True)
+            if rom is None:
+                print(r.stdout, r.stderr, sep='\n')
+                results.append((label, r.returncode == 0, f'{seconds:.0f} s'))
+                continue
             print(r.stdout[-1500:], r.stderr[-1500:], sep='\n')
             s = stop_fields(r.stdout)
             good = r.returncode == 0 and s is not None and s['fault'] == 0 and s['vi'] >= MIN_VI * a.seconds / 30
-            results.append((label, good, f"vi {s['vi']} fault {s['fault']} pc {s['fault_pc']}" if s else 'no stop line'))
+            results.append((label, good, f"vi {s['vi']} fault {s['fault']} pc {s['fault_pc']}, {seconds:.0f} s" if s else 'no stop line'))
 
     print('\n== summary')
     for label, good, note in results:

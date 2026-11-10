@@ -633,6 +633,7 @@ struct OverlayGuards {
     data: Vec<(u32, u32)>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn overlay_runtime(
     overlays: &[(u32, u32)],
     mapped_bases: &[(Option<u32>, Option<u32>)],
@@ -641,7 +642,10 @@ fn overlay_runtime(
     guarded: &[OverlayGuards],
     functions: &BTreeSet<u32>,
     image: &CodeImage,
+    mut split_verifiers: Option<&mut Vec<String>>,
 ) -> Result<String, String> {
+    // Verifiers are straight-line code that dominates gcc time in the main
+    // unit; they only need a prototype, so a split build compiles them in parts.
     if overlays.is_empty() {
         return Ok(format!(
             "int plaid_ovl_can_write(plaid_state *s, u32 p, u32 pc) {{ (void)s; (void)p; (void)pc; return 1; }}\nint plaid_ovl_write(plaid_state *s, u32 p, u32 pc) {{ return plaid_ovl_can_write(s, p, pc); }}\nstatic int plaid_tlb_change(plaid_state *s, u32 index, const plaid_tlb_entry *entry, int clear, u32 pc) {{ (void)s; (void)index; (void)entry; (void)clear; (void)pc; return 0; }}\n{TLB_WRITES}"
@@ -653,7 +657,7 @@ fn overlay_runtime(
     let mut table = Vec::new();
     for (k, (&(link, _), (bytes, layout))) in overlays.iter().zip(layouts).enumerate() {
         // Slot text bounds are candidate extents, not a section certificate.
-        out += &overlay::verifier_text_ranges(
+        let verifier = overlay::verifier_text_ranges(
             bytes,
             layout,
             compared[k],
@@ -662,6 +666,14 @@ fn overlay_runtime(
             &guarded[k].text,
             &guarded[k].data,
         )?;
+        if let Some(verifiers) = split_verifiers.as_deref_mut() {
+            out += &format!(
+                "int plaid_overlay_verify_{k}(const uint8_t *ram, size_t ram_size, uint32_t base);\n"
+            );
+            verifiers.push(verifier);
+        } else {
+            out += &verifier;
+        }
         let mut boundaries = BTreeSet::new();
         for &(start, end) in guarded[k].text.iter().chain(&guarded[k].data) {
             boundaries.extend([start, end]);
@@ -2596,7 +2608,8 @@ fn lower_c_units(
     out += &declarations;
     out += &status_wrappers;
     shared += &declarations;
-    out += &overlay_runtime(
+    let mut verifiers = Vec::new();
+    let runtime_text = overlay_runtime(
         &overlays,
         &mapped_bases,
         &layouts,
@@ -2609,7 +2622,9 @@ fn lower_c_units(
             .copied()
             .collect(),
         image,
+        (parts > 1).then_some(&mut verifiers),
     )?;
+    out += &runtime_text;
     out += "static inline int plaid_native_vector(plaid_state *s, u32 vector, u64 ret) { (void)s; (void)ret; switch(vector) {\n";
     let vectors: BTreeSet<_> = map
         .tlb_exception_vectors
@@ -2748,7 +2763,7 @@ fn lower_c_units(
             .or_default()
             .push(e.target.pc.0);
     }
-    let mut lowered = Vec::new();
+    let mut lowered = verifiers;
     let relocated = relocations.keys().copied().collect();
     for f in callees.iter().filter(|f| seen.insert(f.pc.0)) {
         let mut out = String::new();

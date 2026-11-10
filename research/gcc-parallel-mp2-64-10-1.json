@@ -1,0 +1,449 @@
+{
+  "label": "mp2-64-10-1",
+  "workers": 10,
+  "wall": 145.6493172000046,
+  "sampled_cpu": 1349.1875,
+  "parts": [
+    {
+      "name": "marioparty2usa.c",
+      "bytes": 21327946,
+      "wall": 74.23787850000372,
+      "sampled_cpu": 72.859375,
+      "peak_rss": 625573888
+    },
+    {
+      "name": "marioparty2usa.part1.c",
+      "bytes": 2434040,
+      "wall": 20.68461440000101,
+      "sampled_cpu": 19.96875,
+      "peak_rss": 399306752
+    },
+    {
+      "name": "marioparty2usa.part10.c",
+      "bytes": 2480875,
+      "wall": 26.99795649999578,
+      "sampled_cpu": 25.90625,
+      "peak_rss": 444977152
+    },
+    {
+      "name": "marioparty2usa.part11.c",
+      "bytes": 2436498,
+      "wall": 30.70255659999384,
+      "sampled_cpu": 29.59375,
+      "peak_rss": 458383360
+    },
+    {
+      "name": "marioparty2usa.part12.c",
+      "bytes": 2475891,
+      "wall": 27.213065200005076,
+      "sampled_cpu": 26.375,
+      "peak_rss": 434298880
+    },
+    {
+      "name": "marioparty2usa.part13.c",
+      "bytes": 2523208,
+      "wall": 30.33078530000057,
+      "sampled_cpu": 29.40625,
+      "peak_rss": 454602752
+    },
+    {
+      "name": "marioparty2usa.part14.c",
+      "bytes": 2430709,
+      "wall": 28.701759300005506,
+      "sampled_cpu": 27.78125,
+      "peak_rss": 470777856
+    },
+    {
+      "name": "marioparty2usa.part15.c",
+      "bytes": 2401954,
+      "wall": 26.39150489999156,
+      "sampled_cpu": 25.578125,
+      "peak_rss": 433414144
+    },
+    {
+      "name": "marioparty2usa.part16.c",
+      "bytes": 2456602,
+      "wall": 31.93294149999565,
+      "sampled_cpu": 31.140625,
+      "peak_rss": 497508352
+    },
+    {
+      "name": "marioparty2usa.part17.c",
+      "bytes": 2405662,
+      "wall": 25.764903999996022,
+      "sampled_cpu": 24.875,
+      "peak_rss": 440406016
+    },
+    {
+      "name": "marioparty2usa.part18.c",
+      "bytes": 2467317,
+      "wall": 22.556176400001277,
+      "sampled_cpu": 22.09375,
+      "peak_rss": 432123904
+    },
+    {
+      "name": "marioparty2usa.part19.c",
+      "bytes": 2409915,
+      "wall": 20.91389799999888,
+      "sampled_cpu": 20.5625,
+      "peak_rss": 451289088
+    },
+    {
+      "name": "marioparty2usa.part2.c",
+      "bytes": 2414775,
+      "wall": 14.14216880001186,
+      "sampled_cpu": 13.8125,
+      "peak_rss": 461979648
+    },
+    {
+      "name": "marioparty2usa.part20.c",
+      "bytes": 2408642,
+      "wall": 20.337717000002158,
+      "sampled_cpu": 19.796875,
+      "peak_rss": 436064256
+    },
+    {
+      "name": "marioparty2usa.part21.c",
+      "bytes": 2411797,
+      "wall": 19.296473000009428,
+      "sampled_cpu": 19.078125,
+      "peak_rss": 433242112
+    },
+    {
+      "name": "marioparty2usa.part22.c",
+      "bytes": 2421314,
+      "wall": 19.660960299996077,
+      "sampled_cpu": 19.234375,
+      "peak_rss": 436105216
+    },
+    {
+      "name": "marioparty2usa.part23.c",
+      "bytes": 2444098,
+      "wall": 19.448128099989844,
+      "sampled_cpu": 19.140625,
+      "peak_rss": 441360384
+    },
+    {
+      "name": "marioparty2usa.part24.c",
+      "bytes": 2410106,
+      "wall": 17.876829299988458,
+      "sampled_cpu": 17.5625,
+      "peak_rss": 514768896
+    },
+    {
+      "name": "marioparty2usa.part25.c",
+      "bytes": 2403040,
+      "wall": 16.577130199992098,
+      "sampled_cpu": 16.203125,
+      "peak_rss": 420614144
+    },
+    {
+      "name": "marioparty2usa.part26.c",
+      "bytes": 2415985,
+      "wall": 17.39859450000222,
+      "sampled_cpu": 16.921875,
+      "peak_rss": 414801920
+    },
+    {
+      "name": "marioparty2usa.part27.c",
+      "bytes": 2413031,
+      "wall": 19.56849279999733,
+      "sampled_cpu": 18.828125,
+      "peak_rss": 425533440
+    },
+    {
+      "name": "marioparty2usa.part28.c",
+      "bytes": 2425288,
+      "wall": 19.286504099989543,
+      "sampled_cpu": 18.765625,
+      "peak_rss": 437288960
+    },
+    {
+      "name": "marioparty2usa.part29.c",
+      "bytes": 2427578,
+      "wall": 22.184234599990305,
+      "sampled_cpu": 21.546875,
+      "peak_rss": 445886464
+    },
+    {
+      "name": "marioparty2usa.part3.c",
+      "bytes": 3315032,
+      "wall": 5.9192110000003595,
+      "sampled_cpu": 5.71875,
+      "peak_rss": 234065920
+    },
+    {
+      "name": "marioparty2usa.part30.c",
+      "bytes": 2407823,
+      "wall": 22.47194550000131,
+      "sampled_cpu": 22.046875,
+      "peak_rss": 436862976
+    },
+    {
+      "name": "marioparty2usa.part31.c",
+      "bytes": 2405843,
+      "wall": 23.44821430000593,
+      "sampled_cpu": 22.9375,
+      "peak_rss": 443932672
+    },
+    {
+      "name": "marioparty2usa.part32.c",
+      "bytes": 2412452,
+      "wall": 23.23580349999247,
+      "sampled_cpu": 22.640625,
+      "peak_rss": 433819648
+    },
+    {
+      "name": "marioparty2usa.part33.c",
+      "bytes": 2408292,
+      "wall": 23.64865699999791,
+      "sampled_cpu": 23.109375,
+      "peak_rss": 432951296
+    },
+    {
+      "name": "marioparty2usa.part34.c",
+      "bytes": 2430735,
+      "wall": 19.299045799998567,
+      "sampled_cpu": 18.890625,
+      "peak_rss": 395612160
+    },
+    {
+      "name": "marioparty2usa.part35.c",
+      "bytes": 2423203,
+      "wall": 19.584227300001658,
+      "sampled_cpu": 19.046875,
+      "peak_rss": 437051392
+    },
+    {
+      "name": "marioparty2usa.part36.c",
+      "bytes": 2408350,
+      "wall": 21.595966499997303,
+      "sampled_cpu": 21.09375,
+      "peak_rss": 391086080
+    },
+    {
+      "name": "marioparty2usa.part37.c",
+      "bytes": 2411070,
+      "wall": 18.1122641999973,
+      "sampled_cpu": 17.84375,
+      "peak_rss": 391258112
+    },
+    {
+      "name": "marioparty2usa.part38.c",
+      "bytes": 2420319,
+      "wall": 20.592569599990384,
+      "sampled_cpu": 20.171875,
+      "peak_rss": 433807360
+    },
+    {
+      "name": "marioparty2usa.part39.c",
+      "bytes": 2406926,
+      "wall": 19.326450299995486,
+      "sampled_cpu": 19.03125,
+      "peak_rss": 431505408
+    },
+    {
+      "name": "marioparty2usa.part4.c",
+      "bytes": 3105209,
+      "wall": 28.193190899997717,
+      "sampled_cpu": 27.8125,
+      "peak_rss": 572018688
+    },
+    {
+      "name": "marioparty2usa.part40.c",
+      "bytes": 2441010,
+      "wall": 22.427296199995908,
+      "sampled_cpu": 22.0625,
+      "peak_rss": 634593280
+    },
+    {
+      "name": "marioparty2usa.part41.c",
+      "bytes": 2405892,
+      "wall": 15.736927899997681,
+      "sampled_cpu": 15.4375,
+      "peak_rss": 381657088
+    },
+    {
+      "name": "marioparty2usa.part42.c",
+      "bytes": 2433289,
+      "wall": 18.597417700002552,
+      "sampled_cpu": 17.984375,
+      "peak_rss": 410013696
+    },
+    {
+      "name": "marioparty2usa.part43.c",
+      "bytes": 2401993,
+      "wall": 19.41414179999265,
+      "sampled_cpu": 19.046875,
+      "peak_rss": 415059968
+    },
+    {
+      "name": "marioparty2usa.part44.c",
+      "bytes": 2409440,
+      "wall": 18.628626500008977,
+      "sampled_cpu": 18.265625,
+      "peak_rss": 395194368
+    },
+    {
+      "name": "marioparty2usa.part45.c",
+      "bytes": 2417393,
+      "wall": 22.48790029999509,
+      "sampled_cpu": 22.125,
+      "peak_rss": 416452608
+    },
+    {
+      "name": "marioparty2usa.part46.c",
+      "bytes": 2418100,
+      "wall": 24.493522099990514,
+      "sampled_cpu": 24.109375,
+      "peak_rss": 433926144
+    },
+    {
+      "name": "marioparty2usa.part47.c",
+      "bytes": 2403060,
+      "wall": 22.909259699998074,
+      "sampled_cpu": 22.59375,
+      "peak_rss": 434143232
+    },
+    {
+      "name": "marioparty2usa.part48.c",
+      "bytes": 2410398,
+      "wall": 23.03709009999875,
+      "sampled_cpu": 22.546875,
+      "peak_rss": 443092992
+    },
+    {
+      "name": "marioparty2usa.part49.c",
+      "bytes": 2419011,
+      "wall": 23.549457199987955,
+      "sampled_cpu": 23.09375,
+      "peak_rss": 433909760
+    },
+    {
+      "name": "marioparty2usa.part5.c",
+      "bytes": 2402732,
+      "wall": 22.705170500004897,
+      "sampled_cpu": 22.34375,
+      "peak_rss": 434458624
+    },
+    {
+      "name": "marioparty2usa.part50.c",
+      "bytes": 2442022,
+      "wall": 23.23819440000807,
+      "sampled_cpu": 22.921875,
+      "peak_rss": 464404480
+    },
+    {
+      "name": "marioparty2usa.part51.c",
+      "bytes": 2423149,
+      "wall": 23.19802979999804,
+      "sampled_cpu": 22.890625,
+      "peak_rss": 432578560
+    },
+    {
+      "name": "marioparty2usa.part52.c",
+      "bytes": 2406533,
+      "wall": 21.966481700001168,
+      "sampled_cpu": 21.34375,
+      "peak_rss": 436858880
+    },
+    {
+      "name": "marioparty2usa.part53.c",
+      "bytes": 2412736,
+      "wall": 21.70578819999355,
+      "sampled_cpu": 21.3125,
+      "peak_rss": 444350464
+    },
+    {
+      "name": "marioparty2usa.part54.c",
+      "bytes": 2422369,
+      "wall": 21.642369299996062,
+      "sampled_cpu": 21.328125,
+      "peak_rss": 433537024
+    },
+    {
+      "name": "marioparty2usa.part55.c",
+      "bytes": 2403108,
+      "wall": 20.66637570000603,
+      "sampled_cpu": 20.109375,
+      "peak_rss": 432619520
+    },
+    {
+      "name": "marioparty2usa.part56.c",
+      "bytes": 2402025,
+      "wall": 20.38354569999501,
+      "sampled_cpu": 20.015625,
+      "peak_rss": 428912640
+    },
+    {
+      "name": "marioparty2usa.part57.c",
+      "bytes": 2467780,
+      "wall": 19.815585499993176,
+      "sampled_cpu": 19.453125,
+      "peak_rss": 443068416
+    },
+    {
+      "name": "marioparty2usa.part58.c",
+      "bytes": 2415386,
+      "wall": 18.05081249999057,
+      "sampled_cpu": 17.71875,
+      "peak_rss": 420782080
+    },
+    {
+      "name": "marioparty2usa.part59.c",
+      "bytes": 2439242,
+      "wall": 20.262202400001115,
+      "sampled_cpu": 19.859375,
+      "peak_rss": 439058432
+    },
+    {
+      "name": "marioparty2usa.part6.c",
+      "bytes": 2404666,
+      "wall": 20.394453800006886,
+      "sampled_cpu": 20.15625,
+      "peak_rss": 440434688
+    },
+    {
+      "name": "marioparty2usa.part60.c",
+      "bytes": 2999416,
+      "wall": 24.10940539999865,
+      "sampled_cpu": 23.6875,
+      "peak_rss": 570814464
+    },
+    {
+      "name": "marioparty2usa.part61.c",
+      "bytes": 2447420,
+      "wall": 17.76399949999177,
+      "sampled_cpu": 17.4375,
+      "peak_rss": 403259392
+    },
+    {
+      "name": "marioparty2usa.part62.c",
+      "bytes": 917254,
+      "wall": 5.264581600000383,
+      "sampled_cpu": 5.015625,
+      "peak_rss": 216264704
+    },
+    {
+      "name": "marioparty2usa.part7.c",
+      "bytes": 2449330,
+      "wall": 18.637505799997598,
+      "sampled_cpu": 18.40625,
+      "peak_rss": 512966656
+    },
+    {
+      "name": "marioparty2usa.part8.c",
+      "bytes": 2439948,
+      "wall": 15.66560350000509,
+      "sampled_cpu": 15.421875,
+      "peak_rss": 459096064
+    },
+    {
+      "name": "marioparty2usa.part9.c",
+      "bytes": 2415099,
+      "wall": 15.414000199991278,
+      "sampled_cpu": 15.125,
+      "peak_rss": 443080704
+    }
+  ]
+}

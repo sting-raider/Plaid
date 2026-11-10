@@ -8983,3 +8983,143 @@ process TotalProcessorTime so host noise does not dominate), with the
 returns-labelling pass itself falling 2.56 s to 1.17 s. See
 research/mp2-analysis-speed.md for the per-phase table, the harness and the
 limits of these host-dependent measurements.
+
+## ADR-0308: parallel native gcc over balanced units
+
+The generated-C compile was the largest native-build phase after analysis: MP2
+spent 213 s and OoT 247 s in `gcc`, four workers at a time
+(`min(4, cpu_count)`), over a fixed 16 byte-balanced parts plus a main unit
+of 21-26 MB that no `--parts` value shrank. The main unit alone took 64 s
+alone-on-host (136-152 s under a loaded pool): 116 (MP2) straight-line
+`plaid_overlay_verify_N` functions of 100-330 KB each, which gcc -O1 spends
+quadratic alias-walking time on (`-ftime-report`: alias stmt walking 32 %),
+plus roughly 6 MB of load-image tables. Measured per-part cost is not
+proportional to bytes (a 4 MB part with one 2.3 MB function cost 13 s; a
+3.5 MB part with a 1 MB function cost 44 s), so the lever was the critical
+path and the pool, not a finer cost model.
+
+Four changes, none touching emitted function bodies or runtime behavior:
+
+1. With `--parts > 1`, `lower_c_units` emits each overlay verifier as its own
+   chunk and distributes the chunks with the guest functions into the byte
+   balanced parts; the main unit keeps a prototype. The verifier text is
+   unchanged and self-contained (own includes, `static inline` get/put,
+   external `plaid_overlay_verify_N`), so a single-part build is unchanged.
+   MP2's main unit falls 21.3 MB to 8.0 MB (64 s to 6 s of gcc); OoT's
+   26.3 MB to 8.6 MB.
+2. `native.py` sizes the part count by program size: `min(64, max(16,
+   ceil(blocks / 2500)))` (MP2 63, OoT 63), removing stale `.part*.c` files
+   when the split changes (the content-keyed object cache is untouched).
+3. All C units (CPU parts, RSP texts, runtime, window runtime) go through one
+   `ThreadPoolExecutor`, largest source first, so the RSP texts fill CPUs while
+   the last CPU parts finish. Workers are `os.cpu_count()`, capped by
+   available RAM / 0.5 GiB when `psutil` is importable (a gcc part peaks at
+   0.4-1.3 GiB).
+4. The separate `gcc-runtime`, `gcc-window` and `gcc-rsp` phases collapse into
+   the one `gcc` phase in the timing receipt.
+
+Equivalence: every emitted function definition is hash-identical to the
+16-part layout (MP2 8,005 functions, aggregate `31f449d0...c7be`; OoT 12,935,
+`601058b0...5746`), and MP2's 116 overlay verifiers are byte-identical to the
+pre-split main unit's. `runtime/test_mapped_runtime.py` asserts the split
+places the verifiers in parts only. Controls: see STATUS.
+
+Measured back to back on the same shared 14-core/20-thread, 16 GiB host
+(other workers' gcc running; wall, cold object cache, CPU parts only):
+MP2 304.9 s (16 parts, 4 workers) to 126.0 s (61 units, 15 workers); OoT
+264.3 s to 152.2 s (62 units, 11 workers; RAM-capped). Total gcc CPU work is
+unchanged at about 1000-1500 sampled CPU-seconds, so the floor is that over
+the core count; further gains need less generated code or cheaper per-function
+compilation, not more parallelism. A full cold OoT pipeline fell from
+434.9 s to 294.3 s (gcc 266 s incl. RSP to 143 s). Measurements and the
+earlier 64-way experiments: research/gcc-parallel-tu-split.md and the adjacent
+JSON receipts.
+
+
+## ADR-0309: -O0 game code, copy-free discovery rounds and a parallel gate
+
+A cold build and the landing gate were too slow for small machines and for the
+team: a cold F-Zero X build took 486 s, and the gate ran its runtime suite and
+seven game controls one after another (the suite alone 15-20 min, mostly
+waiting on real-time runs). Measured on Banjo-Kazooie with `-ftime-report`,
+`samply` and the native runs, four changes, none changing analysis output or
+a game control result:
+
+1. Generated game code (`cc` in `native.py`) builds at `-O0`, with clang when
+   installed (`--target=x86_64-w64-windows-gnu` on Windows, so MinGW links
+   it), else GCC. One 5.8 MB Banjo part takes 37 s at GCC -O1, 10 s at GCC -O0
+   and 2 s at clang -O0. The -O0 build was no slower at run time: with six
+   copies sharing one core for 20 s, -O0 kept 1032-1050 VIs against 737-799
+   for -O1, in both run orders; each guest operation is guest-state memory
+   traffic the optimiser cannot remove. The runtime stays GCC -O1 and the RSP
+   texts GCC -O2. Two compiler differences are handled: clang rejects the
+   `intptr_t *` setjmp buffer GCC only warns about
+   (`-Wno-incompatible-pointer-types`), and `__builtin_setjmp` buffers are
+   compiler-specific while `runtime/jumps.h` longjmps from GCC code, so a part
+   that sets a jump buffer compiles with GCC (MP2 crashed with 0xC0000005
+   otherwise). Each object's cache key now carries the version of the compiler
+   that built it.
+2. `discover_bounded` no longer copies the whole `ProgramMap` twice per round:
+   the previous round's discovery is the next round's history, and the map
+   moves in and out of the discovery. `validate_trace_event_identities`
+   borrows from the map instead of cloning a `String` key and tuple per
+   evidence id. Profiled cost of map clones, drops and validation was ~56 % of
+   a discover call; Banjo's discover falls 17.1 s to 14.0 s with a
+   byte-identical `map.json`.
+3. `runtime/test_runtime.py` runs its 80 steps as separate processes, each with
+   its own `PLAID_RUNTIME_TEST_OUT` directory, as many at once as there are
+   CPUs; `--serial` keeps the old in-process order and `--step NAME` runs one.
+   Two hidden order dependencies became explicit fixture writers (the stub and
+   I/O cartridges). A step that fails under load is rerun once alone and
+   reported as timing-sensitive if it then passes (the VI/DP contract reads
+   real-time VI state). 80/80 in 110 s alone on the host.
+4. `scripts/gate.py` keeps the cargo steps in order (they share a lock) and runs
+   the Python suites and the seven game controls side by side, printing each
+   result in order. The full gate with ROMs passes in 293 s.
+
+Experiment, not adopted: with the analysis-time ares boot harvest disabled,
+F-Zero X builds and runs 30 s at fault 0 in 102 s (the harvest was 361 s of its
+486 s), and so do MM, SF64, OoT and RS; Paper Mario and Banjo-Kazooie stay OPEN
+(direct targets into run-time loaded code). Capping the site replay at 100M
+instructions passes six of seven controls (Paper Mario faults at 650 VIs at
+code the short replay never reached) but exposes a `missing provenance`
+import failure on F-Zero X. The harvest stays as it is until static load
+discovery and a fault-driven rebuild replace its long replay.
+
+## ADR-0310: Short site replay by default, fault-driven deep rebuild
+
+The analysis-time ares replay that watches unproven indirect sites ran up to
+2e9 instructions from power-on, two attempts per cold build: 361 s of F-Zero
+X's 486 s. Most games learn nothing from the long tail.
+
+Decision:
+
+1. `native.py` watches unproven sites for 100M instructions by default
+   (`PLAID_SITE_BUDGET`, read by `ares_boot.capture_many`). A shorter replay
+   observes less; it never closes a site it did not see, which stays a
+   residual-dispatch site (ADR-0233). The budget is now part of the replay
+   cache key: before, a replay run under a temporarily lowered budget was
+   cached under the full-budget key, and every later deep Paper Mario build
+   reused the short result (fault 3 at VI 650; a clean deep build reaches
+   VI 1757, fault 0).
+2. If the validation run stops with fault 3 (a transfer to a target no build
+   lowered), `native.py` rebuilds once with `--deep`, the full 2e9 budget.
+   `--deep` asks for it directly.
+3. The `observed-call` evidence is recorded whenever any observed root is
+   address-taken, including a declared runtime function. Before, a replay
+   that observed only a runtime function's address (F-Zero X under the short
+   budget) cited evidence the map never held: `missing provenance`.
+4. Compiled objects are also stored content-addressed in
+   `~/.cache/plaid/objects` (`PLAID_OBJECT_CACHE`), keyed as before on source,
+   compiler version, flags and dependencies, so an identical C unit compiles
+   once per machine.
+
+Measured: cold F-Zero X 486 s to 94 s end to end (harvest 361 s to 11 s; 18 s
+of that run was a cargo rebuild and 21 s the 20 s validation run), fault 0.
+With the short budget, six of seven gate controls pass directly; Paper Mario
+stops with fault 3 at 0x80b3e154 after 650 VIs and rebuilds deep (a clean
+deep build: 496 s, two long replays of 66 s and 139 s).
+
+Limit: the validation run is the only fault probe, so code a game first reaches
+after the run still needs a deep build (as code past the long replay always
+did). Static load discovery should replace the replay for that.

@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -58,6 +59,13 @@ def main(direct=False):
     plaid('discover', source, '0x1000', hex(T.BASE), hex(len(raw)), hex(T.BASE), mapping, runtime,
           '--loads', loads, '--address-taken')
     plaid('lower-map', source, mapping, hex(T.BASE), hex(T.EXIT), native)
+    # A split build compiles the straight-line overlay verifiers in the parts, not the main unit.
+    split = directory / 'split.c'
+    plaid('lower-map', source, mapping, hex(T.BASE), hex(T.EXIT), split, '--parts', '3')
+    verifier = re.compile(r'^int plaid_overlay_verify_\d+\(.*\{$', re.M)
+    assert not verifier.search(split.read_text()) and 'int plaid_overlay_verify_0(' in split.read_text()
+    assert len([v for u in sorted(directory.glob('split.part*.c')) for v in verifier.findall(u.read_text())]) == 2
+    assert len(verifier.findall(native.read_text())) == 2
     doc = json.loads(mapping.read_text())
     assert not any(b['start']['pc'] == 0x80800000 for b in doc['blocks'])
     original_map = mapping.read_text()
