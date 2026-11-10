@@ -151,7 +151,7 @@ export const api = {
   play: (id: string) => invoke<void>("play_game", { id }),
   saves: (id: string) => invoke<SaveFile[]>("list_saves", { id }),
   openFolder: (path: string) => invoke<void>("open_folder", { path }),
-  checkUpdates: () => invoke<{ current: string; behind: number }>("check_updates"),
+  checkUpdates: () => invoke<UpdateInfo>("check_updates"),
   updatePlaid: () => invoke<void>("update_plaid"),
   async settings(id: string): Promise<Settings> {
     const stored = await invoke<Partial<Settings> | null>("get_settings", { id });
@@ -172,3 +172,6 @@ export function coverFor(id: string): Promise<string | null> {
   }
   return covers.get(id)!;
 }
+
+export type Change = { sha: string; subject: string; when: string };
+export type UpdateInfo = { current: string; behind: number; changes: Change[] };

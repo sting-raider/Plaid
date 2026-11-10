@@ -589,6 +589,16 @@ fn open_folder(path: String) -> Result<(), String> {
 struct UpdateInfo {
     current: String,
     behind: u32,
+    /// What an update would bring in, newest first (merge and README-only commits left out).
+    changes: Vec<Change>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Change {
+    sha: String,
+    subject: String,
+    when: String,
 }
 
 #[tauri::command]
@@ -610,6 +620,18 @@ async fn check_updates(app: AppHandle) -> Result<UpdateInfo, String> {
             behind: git(&["rev-list", "--count", "HEAD..origin/main"])?
                 .parse()
                 .unwrap_or(0),
+            changes: git(&["log", "--no-merges", "--format=%h%x1f%s%x1f%cr", "HEAD..origin/main"])?
+                .lines()
+                .filter_map(|l| {
+                    let mut f = l.split('\u{1f}');
+                    Some(Change {
+                        sha: f.next()?.into(),
+                        subject: f.next()?.into(),
+                        when: f.next()?.into(),
+                    })
+                })
+                .filter(|c| !c.subject.starts_with("Update README") && !c.subject.starts_with("Add ADR-"))
+                .collect(),
         })
     })
     .await
