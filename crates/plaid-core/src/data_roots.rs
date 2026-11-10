@@ -506,7 +506,11 @@ pub fn discover_address_taken_with_loads(
                 },
             );
             let called = format!("observed-call:{}", rom.sha256);
-            if taken.iter().any(|a| observed.contains(a)) {
+            if taken
+                .iter()
+                .chain(&runtime_taken)
+                .any(|a| observed.contains(a))
+            {
                 d.map.evidence.insert(
                     called.clone(),
                     crate::program::Evidence {

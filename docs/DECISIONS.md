@@ -9085,3 +9085,41 @@ instructions passes six of seven controls (Paper Mario faults at 650 VIs at
 code the short replay never reached) but exposes a `missing provenance`
 import failure on F-Zero X. The harvest stays as it is until static load
 discovery and a fault-driven rebuild replace its long replay.
+
+## ADR-0310: Short site replay by default, fault-driven deep rebuild
+
+The analysis-time ares replay that watches unproven indirect sites ran up to
+2e9 instructions from power-on, two attempts per cold build: 361 s of F-Zero
+X's 486 s. Most games learn nothing from the long tail.
+
+Decision:
+
+1. `native.py` watches unproven sites for 100M instructions by default
+   (`PLAID_SITE_BUDGET`, read by `ares_boot.capture_many`). A shorter replay
+   observes less; it never closes a site it did not see, which stays a
+   residual-dispatch site (ADR-0233). The budget is now part of the replay
+   cache key: before, a replay run under a temporarily lowered budget was
+   cached under the full-budget key, and every later deep Paper Mario build
+   reused the short result (fault 3 at VI 650; a clean deep build reaches
+   VI 1757, fault 0).
+2. If the validation run stops with fault 3 (a transfer to a target no build
+   lowered), `native.py` rebuilds once with `--deep`, the full 2e9 budget.
+   `--deep` asks for it directly.
+3. The `observed-call` evidence is recorded whenever any observed root is
+   address-taken, including a declared runtime function. Before, a replay
+   that observed only a runtime function's address (F-Zero X under the short
+   budget) cited evidence the map never held: `missing provenance`.
+4. Compiled objects are also stored content-addressed in
+   `~/.cache/plaid/objects` (`PLAID_OBJECT_CACHE`), keyed as before on source,
+   compiler version, flags and dependencies, so an identical C unit compiles
+   once per machine.
+
+Measured: cold F-Zero X 486 s to 94 s end to end (harvest 361 s to 11 s; 18 s
+of that run was a cargo rebuild and 21 s the 20 s validation run), fault 0.
+With the short budget, six of seven gate controls pass directly; Paper Mario
+stops with fault 3 at 0x80b3e154 after 650 VIs and rebuilds deep (a clean
+deep build: 496 s, two long replays of 66 s and 139 s).
+
+Limit: the validation run is the only fault probe, so code a game first reaches
+after the run still needs a deep build (as code past the long replay always
+did). Static load discovery should replace the replay for that.

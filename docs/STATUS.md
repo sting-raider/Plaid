@@ -1,5 +1,14 @@
 # Status
 
+## Short ares replay by default, deep rebuild on fault 3 (ADR-0310)
+
+A cold F-Zero X build fell from 486 s to 94 s: the analysis-time ares replay
+now watches unproven sites for 100M instructions instead of 2e9 (361 s to
+11 s). A build whose validation run stops on an unknown transfer target
+(fault 3) rebuilds once with the full replay; Paper Mario takes that path.
+Fixed a `missing provenance` failure when the replay observed only a runtime
+function. Compiled objects are shared machine-wide by content.
+
 ## -O0 game code, copy-free discovery and a parallel gate (ADR-0309)
 
 Generated game code now compiles at -O0 with clang when installed (one Banjo

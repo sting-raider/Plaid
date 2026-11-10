@@ -32,6 +32,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -41,6 +42,10 @@ from harvest_boot import harvest, harvest_refills, harvest_vectors
 from ares_boot import ORACLE_SOURCES, capture_many
 
 ROOT = Path(__file__).resolve().parents[1]
+# Unproven sites are watched this long by default; --deep watches up to
+# ares_boot.SITE_BUDGET, and a fault-3 stop rebuilds deep once (ADR-0310).
+FAST_SITE_BUDGET = 100_000_000
+OBJECT_CACHE = Path(os.environ.get('PLAID_OBJECT_CACHE', Path.home() / '.cache/plaid/objects'))
 SIGNATURES = ROOT / '.refs/n64sym/src/builtin_signatures.sig'
 RT64 = ROOT / 'target/rt64-shim/Release'
 
@@ -156,10 +161,20 @@ def compile_source(source, flags, dependencies, compiler):
     digest = hashlib.sha256(source.read_bytes() + compiler + dependencies +
                             json.dumps(list(map(str, flags))).encode()).hexdigest()
     if not obj.exists() or not stamp.exists() or stamp.read_text() != digest:
+        # Objects are content-addressed machine-wide, so a unit another build
+        # already compiled (shared RSP microcode, a renamed game) is copied.
+        shared = OBJECT_CACHE / f'{digest}.o'
         temporary = Path(f'{obj}.tmp')
         stamp.unlink(missing_ok=True)
         try:
-            run(*flags, '-c', source, '-o', temporary)
+            if shared.exists():
+                shutil.copyfile(shared, temporary)
+            else:
+                run(*flags, '-c', source, '-o', temporary)
+                OBJECT_CACHE.mkdir(parents=True, exist_ok=True)
+                partial = shared.with_name(f'{digest}.{os.getpid()}.{threading.get_ident()}.tmp')
+                shutil.copyfile(temporary, partial)
+                partial.replace(shared)
             temporary.replace(obj)
             stamp.write_text(digest)
         finally:
@@ -255,10 +270,13 @@ def main():
     ap.add_argument('--rsp-dump', type=Path, help='capture IMEM for oracle comparison only; never a build input')
     ap.add_argument('--press', action='append', default=[], help='runtime button press, e.g. 0x1000@300:4')
     ap.add_argument('--require-audio', action='store_true', help='reject a validation run with empty or silent PCM')
+    ap.add_argument('--deep', action='store_true', help='watch unproven indirect sites for the full analysis-time replay budget')
     ap.add_argument('--seconds', type=float, default=60, help='length of the native validation run')
     a = ap.parse_args()
     if a.rsp_gfx and not a.rt64:
         ap.error('--rsp-gfx requires --rt64')
+    if not a.deep:
+        os.environ.setdefault('PLAID_SITE_BUDGET', str(FAST_SITE_BUDGET))
     rom = a.rom.resolve()
     # 32 characters keep both Zelda titles (and similar series) apart
     name = a.name or ''.join(c for c in rom.stem.lower() if c.isalnum())[:32]
@@ -398,6 +416,11 @@ def main():
         r = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, errors='replace', timeout=a.seconds + 60, env=env)
     stops = [line for line in r.stdout.splitlines() if line.startswith('{"stop"')]
     print(stops[-1][:400] if stops else r.stderr[-400:])
+    if stops and json.loads(stops[-1])['fault'] == 3 and os.environ.get('PLAID_SITE_BUDGET') == str(FAST_SITE_BUDGET):
+        # An unknown transfer target the short replay never reached: watch longer.
+        print('fault 3: rebuilding with the full analysis-time replay (--deep)', flush=True)
+        os.environ.pop('PLAID_SITE_BUDGET')
+        sys.exit(subprocess.run([sys.executable, *sys.argv, '--deep'], cwd=Path.cwd()).returncode)
     if r.returncode:
         sys.exit(r.stderr[-2000:] + '\nnative validation failed; executable is not accepted')
     if a.require_audio:
