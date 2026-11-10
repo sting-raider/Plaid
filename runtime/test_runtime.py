@@ -266,7 +266,7 @@ def rsp_tasks(exe, cc):
     rsp_c = ['-DPLAID_RSP', '-I', str(ROOT / 'crates/plaid-lower/src')]
     for step, pc in enumerate((0x000, 0x080, None)):
         files = subprocess.check_output([sys.executable, str(ROOT / 'runtime/rsp_texts.py'), str(exe), str(snaps),
-                                         str(texts)], text=True).split()
+                                         str(texts)], text=True).splitlines()
         native = build(exe, cc, 'rsp', RSP_PROGRAM, RSP_RUNTIME, [*rsp_c, *files])
         run = subprocess.run([str(native), '--rsp-dump', str(snaps), '--dump', hex(OUTB), '9'],
                              capture_output=True, text=True, timeout=30)

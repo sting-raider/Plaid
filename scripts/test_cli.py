@@ -31,7 +31,8 @@ def main():
         run_contract(run, directory)
         from test_native_discovery import run_contract as native_discovery_contract
         native_discovery_contract()
-        from test_native import rsp_dependency_contract
+        from test_native import rsp_dependency_contract, split_contract
+        split_contract()
         rsp_dependency_contract()
         from test_running_thread_bindings import run_contract as runtime_bindings_contract
         runtime_bindings_contract(run, directory)

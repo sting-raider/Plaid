@@ -5,9 +5,30 @@ import shutil
 import subprocess
 import tempfile
 import time
+from unittest.mock import patch
 
 import native
 from native import compile_source
+
+
+def split_contract():
+    with tempfile.TemporaryDirectory(prefix='plaid split ') as directory:
+        root = Path(directory)
+        output = root / 'game.c'
+        stale = root / 'game.part64.c'
+        stamp = root / 'game.part64.c.o.sha256'
+        unrelated = root / 'other.part64.c'
+        for path in (stale, stamp, unrelated):
+            path.write_text('old')
+        with patch.object(native, 'plaid') as lower:
+            native.lower_parts('rom', 'map', 1, 2, output, 1000, False)
+            assert lower.call_args.args[-3:] == ('--parts', '16', '--runtime-unit')
+            assert not stale.exists() and stamp.exists() and unrelated.exists()
+            native.lower_parts('rom', 'map', 1, 2, output, 157061, True)
+            assert lower.call_args.args[-4:] == ('--parts', '63', '--runtime-unit', '--residual-dispatch')
+            native.lower_parts('rom', 'map', 1, 2, output, 1_000_000, False)
+            assert lower.call_args.args[-3:] == ('--parts', '64', '--runtime-unit')
+    print('PASS native split: size limits, residual flag, and stale source cleanup')
 
 
 def memo_contract():
@@ -136,6 +157,7 @@ def rsp_dependency_contract():
 
 
 if __name__ == '__main__':
+    split_contract()
     memo_contract()
     main()
     rsp_dependency_contract()

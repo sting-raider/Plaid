@@ -8983,3 +8983,54 @@ process TotalProcessorTime so host noise does not dominate), with the
 returns-labelling pass itself falling 2.56 s to 1.17 s. See
 research/mp2-analysis-speed.md for the per-phase table, the harness and the
 limits of these host-dependent measurements.
+
+## ADR-0308: parallel native gcc over balanced units
+
+The generated-C compile was the largest native-build phase after analysis: MP2
+spent 213 s and OoT 247 s in `gcc`, four workers at a time
+(`min(4, cpu_count)`), over a fixed 16 byte-balanced parts plus a main unit
+of 21-26 MB that no `--parts` value shrank. The main unit alone took 64 s
+alone-on-host (136-152 s under a loaded pool): 116 (MP2) straight-line
+`plaid_overlay_verify_N` functions of 100-330 KB each, which gcc -O1 spends
+quadratic alias-walking time on (`-ftime-report`: alias stmt walking 32 %),
+plus roughly 6 MB of load-image tables. Measured per-part cost is not
+proportional to bytes (a 4 MB part with one 2.3 MB function cost 13 s; a
+3.5 MB part with a 1 MB function cost 44 s), so the lever was the critical
+path and the pool, not a finer cost model.
+
+Four changes, none touching emitted function bodies or runtime behavior:
+
+1. With `--parts > 1`, `lower_c_units` emits each overlay verifier as its own
+   chunk and distributes the chunks with the guest functions into the byte
+   balanced parts; the main unit keeps a prototype. The verifier text is
+   unchanged and self-contained (own includes, `static inline` get/put,
+   external `plaid_overlay_verify_N`), so a single-part build is unchanged.
+   MP2's main unit falls 21.3 MB to 8.0 MB (64 s to 6 s of gcc); OoT's
+   26.3 MB to 8.6 MB.
+2. `native.py` sizes the part count by program size: `min(64, max(16,
+   ceil(blocks / 2500)))` (MP2 63, OoT 63), removing stale `.part*.c` files
+   when the split changes (the content-keyed object cache is untouched).
+3. All C units (CPU parts, RSP texts, runtime, window runtime) go through one
+   `ThreadPoolExecutor`, largest source first, so the RSP texts fill CPUs while
+   the last CPU parts finish. Workers are `os.cpu_count()`, capped by
+   available RAM / 0.5 GiB when `psutil` is importable (a gcc part peaks at
+   0.4-1.3 GiB).
+4. The separate `gcc-runtime`, `gcc-window` and `gcc-rsp` phases collapse into
+   the one `gcc` phase in the timing receipt.
+
+Equivalence: every emitted function definition is hash-identical to the
+16-part layout (MP2 8,005 functions, aggregate `31f449d0...c7be`; OoT 12,935,
+`601058b0...5746`), and MP2's 116 overlay verifiers are byte-identical to the
+pre-split main unit's. `runtime/test_mapped_runtime.py` asserts the split
+places the verifiers in parts only. Controls: see STATUS.
+
+Measured back to back on the same shared 14-core/20-thread, 16 GiB host
+(other workers' gcc running; wall, cold object cache, CPU parts only):
+MP2 304.9 s (16 parts, 4 workers) to 126.0 s (61 units, 15 workers); OoT
+264.3 s to 152.2 s (62 units, 11 workers; RAM-capped). Total gcc CPU work is
+unchanged at about 1000-1500 sampled CPU-seconds, so the floor is that over
+the core count; further gains need less generated code or cheaper per-function
+compilation, not more parallelism. A full cold OoT pipeline fell from
+434.9 s to 294.3 s (gcc 266 s incl. RSP to 143 s). Measurements and the
+earlier 64-way experiments: research/gcc-parallel-tu-split.md and the adjacent
+JSON receipts.

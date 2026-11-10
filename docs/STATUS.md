@@ -1,5 +1,17 @@
 # Status
 
+## Parallel native gcc over balanced units (ADR-0308)
+
+The generated-C gcc phase now uses every core and a balanced split. Mario Party
+2's 21 MB main unit was mostly straight-line overlay verifiers, which gcc spent
+64 s on alone; they now compile in the byte-balanced parts, so the main unit is
+8 MB (6 s). `native.py` picks 16-64 parts from the block count, compiles every
+C unit (CPU parts, RSP texts, runtime) in one pool, largest first, with workers
+capped by available RAM. Function bodies are hash-identical to the old split
+(MP2 8,005, OoT 12,935). Same-host back-to-back, cold, CPU parts: MP2 304.9 s
+to 126.0 s, OoT 264.3 s to 152.2 s; cold OoT pipeline 434.9 s to 294.3 s.
+Details: ADR-0308, research/gcc-parallel-tu-split.md.
+
 ## Indexed map lookups in the indirect table proofs (ADR-0307)
 
 Two per-site map walks priced Mario Party 2's discovery. A decoded-block
