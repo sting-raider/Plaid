@@ -74,6 +74,8 @@ export interface Settings {
   resolutionScale: number;
   vsync: boolean;
   fullscreen: boolean;
+  /** Original console look: 4:3 at native resolution; overrides aspect and resolution. */
+  n64Mode: boolean;
   experimental: Record<string, boolean>;
 }
 
@@ -136,7 +138,8 @@ export const DEFAULT_SETTINGS: Settings = {
   aspect: "4:3",
   resolutionScale: 2,
   vsync: true,
-  fullscreen: false,
+  fullscreen: true,
+  n64Mode: false,
   experimental: {},
 };
 

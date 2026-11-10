@@ -239,7 +239,13 @@ export default function App() {
   const [playing, setPlaying] = useState<Game | null>(null);
   const [toast, setToast] = useState("");
 
-  const rescan = () => api.scan().then(setGames).catch((e) => setToast(String(e)));
+  const [scanning, setScanning] = useState(false);
+  const rescan = () => {
+    setScanning(true);
+    // spin at least one turn so a fast scan still reads as a refresh
+    return Promise.all([api.scan().then(setGames).catch((e) => setToast(String(e))), new Promise((r) => setTimeout(r, 600))])
+      .finally(() => setScanning(false));
+  };
 
   /** Checks main for recompiler changes and GitHub releases for a new app. */
   const checkAll = async () => {
@@ -258,7 +264,16 @@ export default function App() {
   const applyUpdate = async () => {
     try {
       if (plaid?.behind) { setUpdate("Updating the recompiler…"); await api.updatePlaid(); setPlaid({ ...plaid, behind: 0, changes: [] }); setUpdate("Up to date"); }
-      if (appUpdate) { setUpdate("Downloading the app update…"); await appUpdate.downloadAndInstall(); await relaunch(); }
+      if (appUpdate) {
+        let total = 0, got = 0;
+        setUpdate("Downloading the update…");
+        await appUpdate.downloadAndInstall((e) => {
+          if (e.event === "Started") total = e.data.contentLength ?? 0;
+          if (e.event === "Progress") { got += e.data.chunkLength; if (total) setUpdate(`Downloading the update… ${Math.round((got / total) * 100)}%`); }
+          if (e.event === "Finished") setUpdate("Installing, Plaid restarts in a moment…");
+        });
+        await relaunch();
+      }
       else setToast("Recompiler updated; it rebuilds on the next compile.");
     } catch (e) { setToast(String(e)); setUpdate("Update failed"); }
   };
@@ -325,9 +340,9 @@ export default function App() {
             <div className="update-wrap">
               {(plaid?.behind || appUpdate) && <UpdatePanel plaid={plaid} app={appUpdate} />}
               {plaid?.behind || appUpdate
-                ? <button className="round-btn ready" aria-label="Update" onClick={applyUpdate}><ArrowUp size={16} /></button>
-                : <button className={`round-btn ${checking ? "spin" : ""}`} aria-label="Check for updates" title="Check for updates"
-                    onClick={async () => { setChecking(true); await checkAll(); setChecking(false); }}><Refresh size={15} /></button>}
+                ? <button className="icon-btn update-ready" aria-label="Update" onClick={applyUpdate}><ArrowUp size={16} /><span className="badge" /></button>
+                : <button className={`icon-btn ${checking ? "spin" : ""}`} aria-label="Check for updates" title="Check for updates"
+                    onClick={async () => { setChecking(true); await Promise.all([checkAll(), new Promise((r) => setTimeout(r, 600))]); setChecking(false); }}><Refresh size={16} /></button>}
             </div>
           </div>
         </aside>
@@ -344,7 +359,7 @@ export default function App() {
                 <h2>{{ all: "All games", ready: "Ready to play", todo: "Not compiled" }[view]}</h2>
                 <span className="spacer" />
                 <div className="search"><Search size={14} /><input className="input" placeholder="Search" value={query} onChange={(e) => setQuery(e.target.value)} /></div>
-                <button className="icon-btn" title="Rescan ROM folder" onClick={rescan}><Refresh size={16} /></button>
+                <button className={`icon-btn ${scanning ? "spin" : ""}`} title="Rescan ROM folder" onClick={rescan}><Refresh size={16} /></button>
               </div>
               <div className="content">
                 {shown.length === 0 ? (

@@ -2,6 +2,7 @@
 //! `scripts/native.py`, launching builds and per-game settings.
 
 mod covers;
+mod discord;
 mod progress;
 mod rom;
 
@@ -498,20 +499,69 @@ fn play_game(app: AppHandle, id: String) -> Result<(), String> {
     }
     let rom = z64_path(&app, &game)?;
     let out = PathBuf::from(&game.save_dir);
-    // shortcut: launcher settings are stored but not yet read by the runtime (keyboard map, 4:3); pass them once it accepts a config
-    Command::new(exe)
-        .arg("--rom")
-        .arg(rom)
-        .arg("--sram")
-        .arg(out.join(format!("{id}.sra")))
-        .arg("--flash")
-        .arg(out.join(format!("{id}.fla")))
-        .arg("--save")
-        .arg(out.join(format!("{id}.eep")))
-        .args(["--stop-at", "none"])
-        .current_dir(&root)
-        .spawn()
-        .map_err(err)?;
+    // The game's own settings, or the global defaults when it uses them; the runtime reads this file.
+    let read = |id: &str| -> Option<serde_json::Value> {
+        serde_json::from_slice(&std::fs::read(settings_file(&app, id).ok()?).ok()?).ok()
+    };
+    let settings = read(&id)
+        .filter(|s| s["useDefaults"] == false)
+        .or_else(|| read("defaults"))
+        .unwrap_or(serde_json::Value::Null);
+    let settings_path = out.join("launcher-settings.json");
+    std::fs::create_dir_all(&out).map_err(err)?;
+    std::fs::write(&settings_path, settings.to_string()).map_err(err)?;
+    let base: Vec<std::ffi::OsString> = vec![
+        "--rom".into(),
+        rom.into(),
+        "--sram".into(),
+        out.join(format!("{id}.sra")).into(),
+        "--flash".into(),
+        out.join(format!("{id}.fla")).into(),
+        "--save".into(),
+        out.join(format!("{id}.eep")).into(),
+        "--stop-at".into(),
+        "none".into(),
+    ];
+    let mut extra: Vec<std::ffi::OsString> = vec![
+        "--title".into(),
+        game.title.clone().into(),
+        "--config".into(),
+        settings_path.into(),
+    ];
+    // fullscreen unless the player turned it off
+    if settings["fullscreen"] != false {
+        extra.push("--fullscreen".into());
+    }
+    // no console window behind the game
+    let spawn = move |args: &[std::ffi::OsString]| {
+        hidden(Command::new(&exe).args(args).current_dir(&root))
+            .spawn()
+            .map_err(err)
+    };
+    let mut child = spawn(&[base.clone(), extra].concat())?;
+    let title = game.title.clone();
+    std::thread::spawn(move || {
+        // shortcut: a game compiled before the runtime knew --title/--config/--fullscreen
+        // exits 2 at once on them; rerun it without them. Drop once every build is newer.
+        let started = std::time::Instant::now();
+        let mut fell_back = false;
+        while started.elapsed() < std::time::Duration::from_secs(2) {
+            match child.try_wait() {
+                Ok(Some(s)) if s.code() == Some(2) && !fell_back => match spawn(&base) {
+                    Ok(c) => {
+                        child = c;
+                        fell_back = true;
+                    }
+                    Err(_) => return,
+                },
+                Ok(None) => std::thread::sleep(std::time::Duration::from_millis(50)),
+                _ => break,
+            }
+        }
+        let presence = discord::playing(&title);
+        let _ = child.wait();
+        drop(presence);
+    });
     Ok(())
 }
 
