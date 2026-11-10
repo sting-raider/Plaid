@@ -40,7 +40,7 @@ static int plaid_joy_parse(plaid_joybus *bus) {
   return 0;
 }
 
-static int plaid_joy_run(plaid_joybus *bus, u8 *eeprom_bytes, u64 ticks, u32 controller) {
+static int plaid_joy_run_multi(plaid_joybus *bus, u8 *eeprom_bytes, u64 ticks, const u32 controllers[4], u32 connected) {
   int channel;
   for (channel = 4; channel >= 0; channel--) {
     const plaid_joy_packet *p = &bus->packet[channel];
@@ -49,23 +49,23 @@ static int plaid_joy_run(plaid_joybus *bus, u8 *eeprom_bytes, u64 ticks, u32 con
     unsigned command;
     if (p->action != 1 || (bus->ram[p->header] & 0xc0)) continue;
     bus->ram[p->header + 1] = p->receive;
-    if (channel > 0 && channel < 4) {
+    if (channel < 4 && !(connected & (1u << channel))) {
       bus->ram[p->header + 1] |= 0x80;
       continue;
     }
     command = request[0];
     if ((command == 0 || command == 0xff) && p->send == 1 && p->receive == 3) {
-      reply[0] = channel == 0 ? 5 : 0;
-      reply[1] = channel == 0 ? 0 : 0x80;
-      reply[2] = channel == 0 ? 2 : ticks < bus->eeprom_busy_until ? 0x80 : 0;
-    } else if (channel == 0 && command == 1 && p->send == 1 && p->receive == 4) {
+      reply[0] = channel < 4 ? 5 : 0;
+      reply[1] = channel < 4 ? 0 : 0x80;
+      reply[2] = channel < 4 ? 2 : ticks < bus->eeprom_busy_until ? 0x80 : 0;
+    } else if (channel < 4 && command == 1 && p->send == 1 && p->receive == 4) {
       unsigned byte;
-      for (byte = 0; byte < 4; byte++) reply[byte] = (u8)(controller >> (24 - 8 * byte));
-    } else if (channel == 0 && command == 2 && p->send >= 3 && p->receive >= 1) {
+      for (byte = 0; byte < 4; byte++) reply[byte] = (u8)(controllers[channel] >> (24 - 8 * byte));
+    } else if (channel < 4 && command == 2 && p->send >= 3 && p->receive >= 1) {
       /* No Pak: zero data and the inverted CRC of 32 zero bytes (ares gamepad). */
       memset(reply, 0, p->receive < 33 ? p->receive : 33);
       if (p->receive >= 33) reply[32] = 0xff;
-    } else if (channel == 0 && command == 3 && p->send >= 4 && p->receive >= 1) {
+    } else if (channel < 4 && command == 3 && p->send >= 4 && p->receive >= 1) {
       unsigned byte, bit;
       u8 crc = 0;
       /* A full write returns CRC-8/0x85 with eight appended zero bits,
@@ -94,5 +94,9 @@ static int plaid_joy_run(plaid_joybus *bus, u8 *eeprom_bytes, u64 ticks, u32 con
     }
   }
   return 0;
+}
+static inline int plaid_joy_run(plaid_joybus *bus, u8 *eeprom_bytes, u64 ticks, u32 controller) {
+  const u32 controllers[4] = {controller, 0, 0, 0};
+  return plaid_joy_run_multi(bus, eeprom_bytes, ticks, controllers, 1);
 }
 #endif

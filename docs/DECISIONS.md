@@ -9075,7 +9075,10 @@ a game control result:
    real-time VI state). 80/80 in 110 s alone on the host.
 4. `scripts/gate.py` keeps the cargo steps in order (they share a lock) and runs
    the Python suites and the seven game controls side by side, printing each
-   result in order. The full gate with ROMs passes in 293 s.
+   result in order. A control with exit 0, fault 0, and only a short VI count
+   is rerun once alone after the parallel phase; a passing retry is marked
+   timing-sensitive under load. Missing stop lines and faults are not retried.
+   The original full gate with ROMs passed in 293 s.
 
 Experiment, not adopted: with the analysis-time ares boot harvest disabled,
 F-Zero X builds and runs 30 s at fault 0 in 102 s (the harvest was 361 s of its
@@ -9139,3 +9142,15 @@ The traps contain no guest instruction interpreter or JIT.
 Fault 3 also records the attempted virtual target independently of the source
 PC, before overlay address translation. This permits the next analysis pass to
 identify the missing native destination.
+## ADR-0312: Consume launcher settings in the RT64 bridge
+
+The executable passes optional title, fullscreen, and settings-file values to
+the RT64 bridge. The bridge translates launcher gamepad indices to SDL's
+standard controller mapping and keeps the legacy keyboard mapping when no
+settings file is provided. Both libultra controller calls and raw Joybus use
+the same four player slots. Settings are parsed before the renderer starts;
+invalid files leave defaults intact.
+
+Scripted window and keyboard checks are recorded in the handoff. Controller
+hardware, hotplug, player numbering, visual aspect modes and toggle keys remain
+unverified.
