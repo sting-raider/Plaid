@@ -34,6 +34,8 @@ pub struct Tracker {
     built: u32,
     /// Crates the recompiler build may compile (packages in Cargo.lock).
     pub crates: u32,
+    /// native.py hit an unknown jump target in its test run and rebuilds with the long trace.
+    repair: bool,
 }
 
 fn phase_of(line: &str) -> Option<usize> {
@@ -45,7 +47,7 @@ fn phase_of(line: &str) -> Option<usize> {
     let id = match tool {
         "cargo" => "build",
         "gcc" if cmd.contains("rt64.exe") => "validation",
-        "gcc" => "gcc",
+        "gcc" | "clang" => "gcc",
         "plaid" => match words.next()? {
             "rom-info" => "rom-info",
             "infer-loads" | "infer-call-loads" => "infer-loads",
@@ -76,6 +78,13 @@ impl Tracker {
             self.built += 1;
             return Some(self.progress());
         }
+        if line.contains("rebuilding with the full analysis-time replay") {
+            // the one deliberate step back: the build restarts with a longer trace
+            self.repair = true;
+            self.phase = PHASES.iter().position(|p| p.0 == "harvest").unwrap();
+            self.compiled = 0;
+            return Some(self.progress());
+        }
         // native.py then runs pinned ares for analysis, silently, for a minute or more
         let phase = if line.contains("boot harvest") || line.contains("refill harvest") {
             PHASES.iter().position(|p| p.0 == "harvest")?
@@ -102,7 +111,11 @@ impl Tracker {
         let percent = (done as f32 + PHASES[self.phase].2 as f32 * within) / total as f32 * 100.0;
         Progress {
             phase: self.phase,
-            label: PHASES[self.phase].1,
+            label: if self.repair && self.phase < PHASES.len() - 1 {
+                "Repairing: tracing the game longer"
+            } else {
+                PHASES[self.phase].1
+            },
             percent,
         }
     }
@@ -115,6 +128,18 @@ impl Tracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_fault_three_rebuild_shows_as_repair() {
+        let mut t = Tracker::default();
+        t.line("+ clang --target=x86_64-w64-windows-gnu -O0 -c a.part0.c").unwrap();
+        assert!(t.in_gcc());
+        let p = t
+            .line("fault 3: rebuilding with the full analysis-time replay (--deep)")
+            .unwrap();
+        assert_eq!(p.label, "Repairing: tracing the game longer");
+        assert!(!t.in_gcc());
+    }
 
     #[test]
     fn follows_native_py_output() {
