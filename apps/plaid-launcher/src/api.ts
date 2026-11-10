@@ -152,6 +152,7 @@ export const api = {
   saves: (id: string) => invoke<SaveFile[]>("list_saves", { id }),
   openFolder: (path: string) => invoke<void>("open_folder", { path }),
   checkUpdates: () => invoke<{ current: string; behind: number }>("check_updates"),
+  updatePlaid: () => invoke<void>("update_plaid"),
   async settings(id: string): Promise<Settings> {
     const stored = await invoke<Partial<Settings> | null>("get_settings", { id });
     const s = { ...DEFAULT_SETTINGS, ...(stored ?? {}) };

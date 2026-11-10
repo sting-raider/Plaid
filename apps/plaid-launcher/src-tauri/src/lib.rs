@@ -616,11 +616,45 @@ async fn check_updates(app: AppHandle) -> Result<UpdateInfo, String> {
     .map_err(err)?
 }
 
+/// Merges the latest Plaid main into the compiler checkout; the recompiler
+/// rebuilds itself on the next compile. (The app updates itself from releases.)
+#[tauri::command]
+async fn update_plaid(app: AppHandle, running: State<'_, Shared>) -> Result<(), String> {
+    if let Some(busy) = &running.lock().unwrap().id {
+        return Err(format!("{busy} is compiling; update after it finishes"));
+    }
+    let root = get_config(app)?.plaid_root;
+    tauri::async_runtime::spawn_blocking(move || {
+        let git = |args: &[&str]| -> Result<String, String> {
+            let out = hidden(Command::new("git").arg("-C").arg(&root).args(args))
+                .output()
+                .map_err(err)?;
+            if !out.status.success() {
+                return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+            }
+            Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+        };
+        if !git(&["status", "--porcelain", "--untracked-files=no"])?.is_empty() {
+            return Err(format!("{root} has uncommitted changes; update it by hand"));
+        }
+        git(&["fetch", "--quiet", "origin", "main"])?;
+        if let Err(e) = git(&["merge", "--no-edit", "origin/main"]) {
+            let _ = git(&["merge", "--abort"]);
+            return Err(format!("the update does not merge cleanly: {e}"));
+        }
+        Ok(())
+    })
+    .await
+    .map_err(err)?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(Shared::default())
         .invoke_handler(tauri::generate_handler![
             get_config,
@@ -635,7 +669,8 @@ pub fn run() {
             set_settings,
             list_saves,
             open_folder,
-            check_updates
+            check_updates,
+            update_plaid
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
