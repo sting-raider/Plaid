@@ -33,7 +33,7 @@ impl Default for Config {
         Config {
             rom_dir: None,
             plaid_root: root.display().to_string(),
-            validation_seconds: 10,
+            validation_seconds: 30,
         }
     }
 }
