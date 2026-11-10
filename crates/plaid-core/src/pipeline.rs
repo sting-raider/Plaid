@@ -161,8 +161,9 @@ fn discover_bounded(
             }
         }
     }
-    let mut history = previous.cloned();
-    let mut last = None;
+    // The previous round's discovery doubles as the history for the next one,
+    // so no round copies the whole map (copies cost about a third of discovery).
+    let mut last: Option<Discovery> = None;
     let rounds = std::time::Instant::now();
     let mut cfg_time = std::time::Duration::ZERO;
     let mut indirect_time = std::time::Duration::ZERO;
@@ -189,8 +190,8 @@ fn discover_bounded(
                 .load_images
                 .insert(image.base.image.clone(), spec.clone());
         }
-        let mut map = discovery.map.clone();
-        if let Some(previous) = &history {
+        let mut map = std::mem::replace(&mut discovery.map, ProgramMap::new(rom.clone()));
+        if let Some(previous) = last.as_ref().map(|d| &d.map).or(previous) {
             // Repartitioning replaces block shapes, but inferred possible targets
             // and their original evidence survive even if a proof is revoked.
             map.evidence.extend(previous.evidence.clone());
@@ -283,7 +284,7 @@ fn discover_bounded(
         map.derived_entries
             .retain(|entry, _| !external.contains(&entry.pc));
         map.validate()?;
-        discovery.map = map.clone();
+        discovery.map = map;
         if (roots.len(), external.len()) == old_count {
             // Return certificates only label the fixed point; they add no roots.
             if label {
@@ -294,7 +295,6 @@ fn discover_bounded(
             report_discovery_rounds(iterations, cfg_time, indirect_time, rounds.elapsed());
             return Ok(discovery);
         }
-        history = Some(map);
         last = Some(discovery);
     }
     let mut discovery = last.expect("at least one bounded discovery pass");

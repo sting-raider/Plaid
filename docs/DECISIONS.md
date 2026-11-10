@@ -9034,3 +9034,54 @@ compilation, not more parallelism. A full cold OoT pipeline fell from
 434.9 s to 294.3 s (gcc 266 s incl. RSP to 143 s). Measurements and the
 earlier 64-way experiments: research/gcc-parallel-tu-split.md and the adjacent
 JSON receipts.
+
+
+## ADR-0309: -O0 game code, copy-free discovery rounds and a parallel gate
+
+A cold build and the landing gate were too slow for small machines and for the
+team: a cold F-Zero X build took 486 s, and the gate ran its runtime suite and
+seven game controls one after another (the suite alone 15-20 min, mostly
+waiting on real-time runs). Measured on Banjo-Kazooie with `-ftime-report`,
+`samply` and the native runs, four changes, none changing analysis output or
+a game control result:
+
+1. Generated game code (`cc` in `native.py`) builds at `-O0`, with clang when
+   installed (`--target=x86_64-w64-windows-gnu` on Windows, so MinGW links
+   it), else GCC. One 5.8 MB Banjo part takes 37 s at GCC -O1, 10 s at GCC -O0
+   and 2 s at clang -O0. The -O0 build was no slower at run time: with six
+   copies sharing one core for 20 s, -O0 kept 1032-1050 VIs against 737-799
+   for -O1, in both run orders; each guest operation is guest-state memory
+   traffic the optimiser cannot remove. The runtime stays GCC -O1 and the RSP
+   texts GCC -O2. Two compiler differences are handled: clang rejects the
+   `intptr_t *` setjmp buffer GCC only warns about
+   (`-Wno-incompatible-pointer-types`), and `__builtin_setjmp` buffers are
+   compiler-specific while `runtime/jumps.h` longjmps from GCC code, so a part
+   that sets a jump buffer compiles with GCC (MP2 crashed with 0xC0000005
+   otherwise). Each object's cache key now carries the version of the compiler
+   that built it.
+2. `discover_bounded` no longer copies the whole `ProgramMap` twice per round:
+   the previous round's discovery is the next round's history, and the map
+   moves in and out of the discovery. `validate_trace_event_identities`
+   borrows from the map instead of cloning a `String` key and tuple per
+   evidence id. Profiled cost of map clones, drops and validation was ~56 % of
+   a discover call; Banjo's discover falls 17.1 s to 14.0 s with a
+   byte-identical `map.json`.
+3. `runtime/test_runtime.py` runs its 80 steps as separate processes, each with
+   its own `PLAID_RUNTIME_TEST_OUT` directory, as many at once as there are
+   CPUs; `--serial` keeps the old in-process order and `--step NAME` runs one.
+   Two hidden order dependencies became explicit fixture writers (the stub and
+   I/O cartridges). A step that fails under load is rerun once alone and
+   reported as timing-sensitive if it then passes (the VI/DP contract reads
+   real-time VI state). 80/80 in 110 s alone on the host.
+4. `scripts/gate.py` keeps the cargo steps in order (they share a lock) and runs
+   the Python suites and the seven game controls side by side, printing each
+   result in order. The full gate with ROMs passes in 293 s.
+
+Experiment, not adopted: with the analysis-time ares boot harvest disabled,
+F-Zero X builds and runs 30 s at fault 0 in 102 s (the harvest was 361 s of its
+486 s), and so do MM, SF64, OoT and RS; Paper Mario and Banjo-Kazooie stay OPEN
+(direct targets into run-time loaded code). Capping the site replay at 100M
+instructions passes six of seven controls (Paper Mario faults at 650 VIs at
+code the short replay never reached) but exposes a `missing provenance`
+import failure on F-Zero X. The harvest stays as it is until static load
+discovery and a fault-driven rebuild replace its long replay.

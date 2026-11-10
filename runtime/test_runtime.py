@@ -501,8 +501,7 @@ CACHED_IO_PROGRAM = [*li(A.sp, 0x80007F00), *log_word(0x84000040), *A.DONE]
 def rcp_io(exe, cc):
     """Uncached CPU words reach SP memory and the PI as pinned ares answers
     them (ADR-0177); unmodelled devices and cached access fail closed."""
-    rom = OUT / 'io.z64'
-    rom.write_bytes(bytes([0x80, 0x37, 0x12, 0x40]) + bytes(0x3C) + bytes([0xCA, 0xFE, 0xF0, 0x0D]) + bytes(0xFBC))
+    rom = write_io_rom()
     for name, program, words in (('io', IO_PROGRAM, [0xCAFEF00D, 0, 0x40, 0xF, 0x12345678, 0x480, 0x2000, 0x87,
                                                 0x10101010, 0xCAFEF00D, 0]),
                                  ('io_cached', CACHED_IO_PROGRAM, [0])):
@@ -712,14 +711,7 @@ def default_abi_registry(exe, cc):
     print(f'PASS default ABI registry: all {len(names)} declared host names link against the actual runtime')
 
 
-def main():
-    exe = ROOT / 'target/debug/plaid.exe'
-    if not exe.exists():
-        exe = ROOT / 'target/debug/plaid'
-    cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
-    OUT.mkdir(parents=True, exist_ok=True)
-    default_abi_registry(exe, cc)
-    boot_rom_copy(exe, cc)
+def scheduling(exe, cc):
     native = build(exe, cc, 'sched', PROGRAM, RUNTIME)
     run = subprocess.run([str(native), '--seconds', '5', '--dump', hex(LOG), str(len(EXPECTED) + 1)],
                          capture_output=True, text=True, timeout=30)
@@ -731,151 +723,164 @@ def main():
     assert stop['vi'] >= 1
     print('runtime scheduling: start/send preemption, blocking receive, priority drop, yield and VI preemption '
           'of a spinning thread match libultra order', json.dumps(dump))
-    import test_interrupts
-    test_interrupts.run(exe, cc, sys.modules[__name__])
-    import test_mi
-    test_mi.run(exe, cc, sys.modules[__name__])
-    import test_status
-    test_status.run(exe, cc, sys.modules[__name__])
-    import test_kernel_globals
-    test_kernel_globals.run(exe, cc, sys.modules[__name__])
-    import test_kernel_waiters
-    test_kernel_waiters.run(exe, cc, sys.modules[__name__])
-    import test_run_queue
-    test_run_queue.run(exe, cc, sys.modules[__name__])
-    import test_argument_delay
-    test_argument_delay.run(exe, cc, sys.modules[__name__])
-    import test_running_thread
-    test_running_thread.run(exe, cc, sys.modules[__name__])
-    import test_sdk_dispatch
-    test_sdk_dispatch.run(exe, cc, sys.modules[__name__])
-    import test_cache_writeback
-    test_cache_writeback.run(exe, cc, sys.modules[__name__])
-    import test_cache_ranges
-    test_cache_ranges.run(exe, cc, sys.modules[__name__])
-    import test_coroutines
-    test_coroutines.run(exe, cc, sys.modules[__name__])
-    import test_thread_lifecycle
-    test_thread_lifecycle.run(exe, cc, sys.modules[__name__])
-    import test_cache_ops
-    test_cache_ops.run(exe, cc, sys.modules[__name__])
-    import test_controller_policy
-    test_controller_policy.run(exe, cc, sys.modules[__name__])
-    import test_vi_dp
-    test_vi_dp.run(exe, cc, sys.modules[__name__])
-    import test_joybus
-    test_joybus.run(exe, cc, sys.modules[__name__])
-    import test_si_order
-    test_si_order.run(exe, cc, sys.modules[__name__])
-    graphics_bridge(exe, cc)
-    import test_gfx_readback
-    test_gfx_readback.run(exe, cc, sys.modules[__name__])
-    save_file(exe, cc)
-    rsp_tasks(exe, cc)
-    import test_rsp_dpc
-    test_rsp_dpc.run(exe, cc, sys.modules[__name__])
-    import test_rsp_rom
-    test_rsp_rom.run(exe, cc, sys.modules[__name__])
-    rsp_state_abi(exe, cc)
-    from test_rsp_oracle import main as rsp_oracle_contract
-    rsp_oracle_contract()
-    rsp_completion(exe, cc)
-    rsp_graphics(exe, cc)
-    import test_rsp_dirty
-    test_rsp_dirty.run(exe, cc, sys.modules[__name__])
-    import test_rsp_vi
-    test_rsp_vi.run(exe, cc, sys.modules[__name__])
-    audio_dma(exe, cc)
-    rcp_io(exe, cc)
-    sp_boot(exe, cc)
-    import test_boot_ram
-    test_boot_ram.run(exe, cc, sys.modules[__name__])
-    import test_boot_entryhi
-    test_boot_entryhi.run(exe, cc, sys.modules[__name__])
-    raw_pi_dma(exe, cc)
-    import test_pi_manager
-    test_pi_manager.run(exe, cc, sys.modules[__name__])
-    import test_pi_bus
-    test_pi_bus.run(exe, cc, sys.modules[__name__])
-    import test_raw_pi
-    test_raw_pi.run(exe, cc, sys.modules[__name__])
-    from test_overlays import main as overlay_verifiers
-    overlay_verifiers()
-    from test_text_writes import main as text_write_contracts
-    text_write_contracts()
-    from test_heap_overlays import main as heap_contracts
-    heap_contracts()
-    from test_slots import main as slot_contracts
-    slot_contracts()
-    from test_slot_data import main as slot_data_contracts
-    slot_data_contracts()
-    from test_table_base import main as table_base_contracts
-    table_base_contracts()
-    from test_branch_paths import main as branch_path_contracts
-    branch_path_contracts()
-    tlb_unmap(exe, cc)
-    from test_cop0 import main as cop0_contracts
-    cop0_contracts()
-    from test_context import main as context_contracts
-    context_contracts()
-    from test_tlb_exceptions import main as tlb_exception_contracts
-    tlb_exception_contracts()
-    from test_native_refill import main as native_refill_contracts
-    native_refill_contracts()
-    from test_random import main as random_contracts
-    random_contracts()
-    from test_cp0_boundaries import main as cp0_boundary_contracts
-    cp0_boundary_contracts()
-    from test_cp0_aliases import main as cp0_alias_contracts
-    cp0_alias_contracts()
-    import test_queue_capacity
-    test_queue_capacity.run(exe, cc, sys.modules[__name__])
-    from test_eret import main as eret_contracts
-    eret_contracts()
-    from test_fr import main as fr_contracts
-    fr_contracts()
-    from test_dynamic_fr import main as dynamic_fr_contracts
-    dynamic_fr_contracts()
-    from test_call_fr import main as call_fr_contracts
-    call_fr_contracts()
-    from test_tlb_execution import main as tlb_execution_contracts
-    tlb_execution_contracts()
-    from test_mapped_branches import main as mapped_branch_contracts
-    mapped_branch_contracts()
-    from test_mapped_continuations import main as mapped_continuation_contracts
-    mapped_continuation_contracts()
-    from test_external_delay import main as external_delay_contracts
-    external_delay_contracts()
-    from test_load_capacity import main as load_capacity_contracts
-    load_capacity_contracts()
-    from test_mapped_tails import main as mapped_tail_contracts
-    mapped_tail_contracts()
-    from test_mapped_aliases import main as mapped_alias_contracts
-    mapped_alias_contracts()
-    from test_mapped_callbacks import main as mapped_callback_contracts
-    mapped_callback_contracts()
-    from test_mapped_runtime import main as mapped_runtime_contracts
-    mapped_runtime_contracts()
-    from test_indexed_dispatch import main as indexed_dispatch_contracts
-    indexed_dispatch_contracts()
-    from test_residual_dispatch import main as residual_dispatch_contracts
-    residual_dispatch_contracts()
-    from test_rom_pointer_roots import main as rom_pointer_root_contracts
-    rom_pointer_root_contracts()
-    from test_pc_link_roots import main as pc_link_root_contracts
-    pc_link_root_contracts()
-    from test_indexed_slot_calls import main as indexed_slot_call_contracts
-    indexed_slot_call_contracts()
-    from test_boot_execution import main as boot_execution_contracts
-    boot_execution_contracts()
-    from test_replayed_data import main as replayed_data_contracts
-    replayed_data_contracts()
-    subprocess.run([sys.executable, str(ROOT / 'scripts/test_ares_boot.py')], check=True)
+
+
+def dpc_contract(exe, cc):
     dpc = OUT / 'dpc-contract.exe'
     subprocess.run([cc, '-O2', '-std=c11', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function',
                     '-I', str(ROOT / 'crates/plaid-lower/src'), str(ROOT / 'runtime/test_dpc.c'), '-o', str(dpc)], check=True)
     subprocess.run([str(dpc)], check=True, timeout=30)
+    
 
+
+def write_stub_rom():
+    """The 4 KiB stub cartridge the graphics, RSP and audio cases boot."""
+    (OUT / 'stub.z64').write_bytes(bytes([0x80, 0x37, 0x12, 0x40]) + bytes(0x1000))
+
+
+def write_io_rom():
+    """The I/O cartridge (word 0xCAFEF00D at 0x40) the RCP I/O, raw PI and SP boot cases read."""
+    rom = OUT / 'io.z64'
+    rom.write_bytes(bytes([0x80, 0x37, 0x12, 0x40]) + bytes(0x3C) + bytes([0xCA, 0xFE, 0xF0, 0x0D]) + bytes(0xFBC))
+    return rom
+
+
+def steps(exe, cc):
+    """Every runtime contract in suite order, as (name, run) pairs."""
+    return [
+        ('default_abi_registry', lambda: default_abi_registry(exe, cc)),
+        ('boot_rom_copy', lambda: boot_rom_copy(exe, cc)),
+        ('scheduling', lambda: scheduling(exe, cc)),
+        ('test_interrupts', lambda: importlib.import_module('test_interrupts').run(exe, cc, sys.modules[__name__])),
+        ('test_mi', lambda: importlib.import_module('test_mi').run(exe, cc, sys.modules[__name__])),
+        ('test_status', lambda: importlib.import_module('test_status').run(exe, cc, sys.modules[__name__])),
+        ('test_kernel_globals', lambda: importlib.import_module('test_kernel_globals').run(exe, cc, sys.modules[__name__])),
+        ('test_kernel_waiters', lambda: importlib.import_module('test_kernel_waiters').run(exe, cc, sys.modules[__name__])),
+        ('test_run_queue', lambda: importlib.import_module('test_run_queue').run(exe, cc, sys.modules[__name__])),
+        ('test_argument_delay', lambda: importlib.import_module('test_argument_delay').run(exe, cc, sys.modules[__name__])),
+        ('test_running_thread', lambda: importlib.import_module('test_running_thread').run(exe, cc, sys.modules[__name__])),
+        ('test_sdk_dispatch', lambda: importlib.import_module('test_sdk_dispatch').run(exe, cc, sys.modules[__name__])),
+        ('test_cache_writeback', lambda: importlib.import_module('test_cache_writeback').run(exe, cc, sys.modules[__name__])),
+        ('test_cache_ranges', lambda: importlib.import_module('test_cache_ranges').run(exe, cc, sys.modules[__name__])),
+        ('test_coroutines', lambda: importlib.import_module('test_coroutines').run(exe, cc, sys.modules[__name__])),
+        ('test_thread_lifecycle', lambda: importlib.import_module('test_thread_lifecycle').run(exe, cc, sys.modules[__name__])),
+        ('test_cache_ops', lambda: importlib.import_module('test_cache_ops').run(exe, cc, sys.modules[__name__])),
+        ('test_controller_policy', lambda: importlib.import_module('test_controller_policy').run(exe, cc, sys.modules[__name__])),
+        ('test_vi_dp', lambda: importlib.import_module('test_vi_dp').run(exe, cc, sys.modules[__name__])),
+        ('test_joybus', lambda: importlib.import_module('test_joybus').run(exe, cc, sys.modules[__name__])),
+        ('test_si_order', lambda: importlib.import_module('test_si_order').run(exe, cc, sys.modules[__name__])),
+        ('graphics_bridge', lambda: graphics_bridge(exe, cc)),
+        ('test_gfx_readback', lambda: importlib.import_module('test_gfx_readback').run(exe, cc, sys.modules[__name__])),
+        ('save_file', lambda: save_file(exe, cc)),
+        ('rsp_tasks', lambda: rsp_tasks(exe, cc)),
+        ('test_rsp_dpc', lambda: importlib.import_module('test_rsp_dpc').run(exe, cc, sys.modules[__name__])),
+        ('test_rsp_rom', lambda: importlib.import_module('test_rsp_rom').run(exe, cc, sys.modules[__name__])),
+        ('rsp_state_abi', lambda: rsp_state_abi(exe, cc)),
+        ('test_rsp_oracle', lambda: importlib.import_module('test_rsp_oracle').main()),
+        ('rsp_completion', lambda: rsp_completion(exe, cc)),
+        ('rsp_graphics', lambda: rsp_graphics(exe, cc)),
+        ('test_rsp_dirty', lambda: importlib.import_module('test_rsp_dirty').run(exe, cc, sys.modules[__name__])),
+        ('test_rsp_vi', lambda: importlib.import_module('test_rsp_vi').run(exe, cc, sys.modules[__name__])),
+        ('audio_dma', lambda: audio_dma(exe, cc)),
+        ('rcp_io', lambda: rcp_io(exe, cc)),
+        ('sp_boot', lambda: sp_boot(exe, cc)),
+        ('test_boot_ram', lambda: importlib.import_module('test_boot_ram').run(exe, cc, sys.modules[__name__])),
+        ('test_boot_entryhi', lambda: importlib.import_module('test_boot_entryhi').run(exe, cc, sys.modules[__name__])),
+        ('raw_pi_dma', lambda: raw_pi_dma(exe, cc)),
+        ('test_pi_manager', lambda: importlib.import_module('test_pi_manager').run(exe, cc, sys.modules[__name__])),
+        ('test_pi_bus', lambda: importlib.import_module('test_pi_bus').run(exe, cc, sys.modules[__name__])),
+        ('test_raw_pi', lambda: importlib.import_module('test_raw_pi').run(exe, cc, sys.modules[__name__])),
+        ('test_overlays', lambda: importlib.import_module('test_overlays').main()),
+        ('test_text_writes', lambda: importlib.import_module('test_text_writes').main()),
+        ('test_heap_overlays', lambda: importlib.import_module('test_heap_overlays').main()),
+        ('test_slots', lambda: importlib.import_module('test_slots').main()),
+        ('test_slot_data', lambda: importlib.import_module('test_slot_data').main()),
+        ('test_table_base', lambda: importlib.import_module('test_table_base').main()),
+        ('test_branch_paths', lambda: importlib.import_module('test_branch_paths').main()),
+        ('tlb_unmap', lambda: tlb_unmap(exe, cc)),
+        ('test_cop0', lambda: importlib.import_module('test_cop0').main()),
+        ('test_context', lambda: importlib.import_module('test_context').main()),
+        ('test_tlb_exceptions', lambda: importlib.import_module('test_tlb_exceptions').main()),
+        ('test_native_refill', lambda: importlib.import_module('test_native_refill').main()),
+        ('test_random', lambda: importlib.import_module('test_random').main()),
+        ('test_cp0_boundaries', lambda: importlib.import_module('test_cp0_boundaries').main()),
+        ('test_cp0_aliases', lambda: importlib.import_module('test_cp0_aliases').main()),
+        ('test_queue_capacity', lambda: importlib.import_module('test_queue_capacity').run(exe, cc, sys.modules[__name__])),
+        ('test_eret', lambda: importlib.import_module('test_eret').main()),
+        ('test_fr', lambda: importlib.import_module('test_fr').main()),
+        ('test_dynamic_fr', lambda: importlib.import_module('test_dynamic_fr').main()),
+        ('test_call_fr', lambda: importlib.import_module('test_call_fr').main()),
+        ('test_tlb_execution', lambda: importlib.import_module('test_tlb_execution').main()),
+        ('test_mapped_branches', lambda: importlib.import_module('test_mapped_branches').main()),
+        ('test_mapped_continuations', lambda: importlib.import_module('test_mapped_continuations').main()),
+        ('test_external_delay', lambda: importlib.import_module('test_external_delay').main()),
+        ('test_load_capacity', lambda: importlib.import_module('test_load_capacity').main()),
+        ('test_mapped_tails', lambda: importlib.import_module('test_mapped_tails').main()),
+        ('test_mapped_aliases', lambda: importlib.import_module('test_mapped_aliases').main()),
+        ('test_mapped_callbacks', lambda: importlib.import_module('test_mapped_callbacks').main()),
+        ('test_mapped_runtime', lambda: importlib.import_module('test_mapped_runtime').main()),
+        ('test_indexed_dispatch', lambda: importlib.import_module('test_indexed_dispatch').main()),
+        ('test_residual_dispatch', lambda: importlib.import_module('test_residual_dispatch').main()),
+        ('test_rom_pointer_roots', lambda: importlib.import_module('test_rom_pointer_roots').main()),
+        ('test_pc_link_roots', lambda: importlib.import_module('test_pc_link_roots').main()),
+        ('test_indexed_slot_calls', lambda: importlib.import_module('test_indexed_slot_calls').main()),
+        ('test_boot_execution', lambda: importlib.import_module('test_boot_execution').main()),
+        ('test_replayed_data', lambda: importlib.import_module('test_replayed_data').main()),
+        ('test_ares_boot', lambda: subprocess.run([sys.executable, str(ROOT / 'scripts/test_ares_boot.py')], check=True)),
+        ('dpc', lambda: dpc_contract(exe, cc)),
+    ]
+
+
+def main():
+    """Run every step, in parallel processes by default (one output directory each,
+    so no step sees another's files); --serial runs them in this process, in order,
+    and --step NAME runs one."""
+    exe = ROOT / 'target/debug/plaid.exe'
+    if not exe.exists():
+        exe = ROOT / 'target/debug/plaid'
+    cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
+    OUT.mkdir(parents=True, exist_ok=True)
+    if '--step' in sys.argv:
+        name = sys.argv[sys.argv.index('--step') + 1]
+        write_stub_rom()
+        write_io_rom()
+        dict(steps(exe, cc))[name]()
+        return 0
+    if '--serial' in sys.argv:
+        for _, run in steps(exe, cc):
+            run()
+        return 0
+    return run_parallel([name for name, _ in steps(exe, cc)])
+
+
+def run_parallel(names):
+    """Each step in its own process and directory; results print in suite order."""
+    from concurrent.futures import ThreadPoolExecutor
+    started = __import__('time').perf_counter()
+
+    def one(name):
+        env = {**os.environ, 'PLAID_RUNTIME_TEST_OUT': str(OUT / 'steps' / name)}
+        t0 = __import__('time').perf_counter()
+        r = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--step', name],
+                           capture_output=True, text=True, errors='replace', env=env, cwd=ROOT)
+        return name, r, __import__('time').perf_counter() - t0
+
+    failed = []
+    with ThreadPoolExecutor(os.cpu_count() or 1) as pool:
+        for name, r, seconds in pool.map(one, names):
+            sys.stdout.write(r.stdout)
+            if r.returncode:
+                failed.append(name)
+                sys.stdout.write(f'FAIL runtime step {name} (exit {r.returncode}, {seconds:.1f} s)' + chr(10) + r.stderr[-4000:] + chr(10))
+            sys.stdout.flush()
+    # Some contracts read real-time VI/Count state; rerun a failure once, alone, and report it.
+    for name in list(failed):
+        name, r, seconds = one(name)
+        if not r.returncode:
+            failed.remove(name)
+            print(f'timing-sensitive under load: runtime step {name} passed when rerun alone ({seconds:.1f} s)')
+    print(f'runtime steps: {len(names) - len(failed)}/{len(names)} passed in {__import__("time").perf_counter() - started:.1f} s')
+    return 1 if failed else 0
 
 if __name__ == '__main__':
     sys.exit(main())
