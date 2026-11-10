@@ -95,7 +95,7 @@ input[type="range"] { width: 100%; accent-color: var(--text); height: 18px; }
 .app { height: 100%; display: flex; flex-direction: column; animation: appear 0.35s ease both; }
 @keyframes appear { from { opacity: 0; } to { opacity: 1; } }
 .shell { flex: 1; min-height: 0; display: grid; grid-template-columns: 244px 1fr; }
-.sidebar { border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; padding: 10px 8px; gap: 2px; }
+.sidebar { position: relative; border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; padding: 10px 8px; gap: 2px; }
 .side-row { width: 100%; height: 30px; display: flex; align-items: center; gap: 9px; padding: 0 9px; border-radius: 6px; color: var(--muted); text-align: left; transition: background 0.1s, color 0.1s; }
 .side-row:hover { background: var(--hover); color: var(--text); }
 .side-row.active { background: var(--active); color: var(--text); }
@@ -243,3 +243,14 @@ li.now .step-mark { border-color: var(--n-yellow); animation: blink 0.8s steps(2
 .boot-blocks i.on { background: var(--text); }
 .boot-skip { position: absolute; bottom: 18px; right: 22px; z-index: 3; color: var(--faint); animation: appear 0.3s ease 1s both; }
 .cursor::after { content: "_"; animation: blink 0.9s steps(2) infinite; }
+
+.update-panel { position: absolute; left: 8px; bottom: 44px; width: 340px; max-height: 70vh; display: flex; flex-direction: column; gap: 10px; padding: 14px; background: var(--raised); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); z-index: 20; }
+.update-head { display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
+.update-head .link { align-self: auto; }
+.update-body { overflow-y: auto; display: flex; flex-direction: column; gap: 14px; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.update-body ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.update-body li { color: var(--text); }
+.update-sub { color: var(--faint); font-family: var(--mono); font-size: 11.5px; }
+.update-meta { color: var(--faint); font-family: var(--mono); font-size: 11px; }
+.update-go { justify-content: center; }
+.update-btn { width: 100%; justify-content: center; gap: 8px; font-weight: 600; }
