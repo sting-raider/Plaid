@@ -143,6 +143,13 @@ def discover_map(arguments, overlay_support, output):
     return True
 
 
+def part_compiler():
+    """Clang when installed (targeting MinGW on Windows, so GCC links it), else GCC."""
+    if not shutil.which('clang'):
+        return ['gcc']
+    return ['clang', '--target=x86_64-w64-windows-gnu'] if os.name == 'nt' else ['clang']
+
+
 def compile_source(source, flags, dependencies, compiler):
     obj = Path(f'{source}.o')
     stamp = Path(f'{obj}.sha256')
@@ -170,13 +177,15 @@ def compile_workers():
         return workers
 
 
-def compile_all(jobs, compiler):
+def compile_all(jobs):
     """Compile (source, flags, dependencies) jobs on one pool, largest first so
-    the longest unit starts at once and the tail stays short; results keep job order."""
+    the longest unit starts at once and the tail stays short; results keep job order.
+    Each object is keyed on the version of the compiler that builds it."""
+    versions = {flags[0]: subprocess.check_output([flags[0], '--version']) for _, flags, _ in jobs}
     order = sorted(range(len(jobs)), key=lambda i: -jobs[i][0].stat().st_size)
     objs = [None] * len(jobs)
     with ThreadPoolExecutor(compile_workers()) as pool:
-        for i, obj in zip(order, pool.map(lambda i: compile_source(*jobs[i], compiler), order)):
+        for i, obj in zip(order, pool.map(lambda i: compile_source(*jobs[i], versions[jobs[i][1][0]]), order)):
             objs[i] = obj
     return objs
 
@@ -330,15 +339,18 @@ def main():
     exit_pc = '0xbfc00000' if program.get('tlb_exception_vectors') else '0x80000000'
     with phase('lower'):
         lower_parts(rom, m, entry, exit_pc, c, len(program['blocks']), residual)
-    cc = ['gcc', '-O1', '-std=gnu11', '-w', '-DPLAID_SAFEPOINTS']
+    # Generated game code builds at -O0: optimising it cost ~18x the compile
+    # time and ran no faster, since each guest op is guest-state memory traffic.
+    # Clang -O0 is ~4x faster again than GCC -O0; GCC stays the fallback.
+    # Clang errors by default on the setjmp buffer pointer type that GCC only warns about.
+    part_flags = ['-O0', '-std=gnu11', '-w', '-Wno-incompatible-pointer-types', '-DPLAID_SAFEPOINTS']
+    cc = [*part_compiler(), *part_flags]
     # CPU helpers and RSP arithmetic are embedded in their generated sources.
     # Only the shared RSP ABI headers remain external include dependencies.
     rsp_headers = rsp_dependencies()
-    compiler = subprocess.check_output(['gcc', '--version'])
-
     parts = [c, *sorted(out.glob(f'{name}.part*.c'))]
     runtime_header=out/f'{name}.runtime.h'
-    rt = [*cc, '-DPLAID_RSP', '-DPLAID_RSP_ROM', '-I', ROOT / 'crates/plaid-lower/src', f'-DPLAID_LOWERED="{runtime_header.name}"', f'-DPLAID_SP_BOOT="{sp_boot.name}"', f'-DPLAID_RAM_BOOT="{ram_boot.name}"', '-I', out]
+    rt = ['gcc', '-O1', '-std=gnu11', '-w', '-DPLAID_SAFEPOINTS', '-DPLAID_RSP', '-DPLAID_RSP_ROM', '-I', ROOT / 'crates/plaid-lower/src', f'-DPLAID_LOWERED="{runtime_header.name}"', f'-DPLAID_SP_BOOT="{sp_boot.name}"', f'-DPLAID_RAM_BOOT="{ram_boot.name}"', '-I', out]
     # Keep runtime objects in the build directory, alongside the generated C.
     runtime_source = out / 'runtime.c'
     runtime_source.write_text(f'#include "{(ROOT / "runtime/plaid_rt.c").as_posix()}"\n')
@@ -353,11 +365,13 @@ def main():
     texts_c = [texts / (t['name'] + '.c') for t in rsp_manifest['texts']] + [texts / 'rsp_registry.c']
     flags = ['gcc', '-O2', '-I', ROOT / 'crates/plaid-lower/src']
     # One pool for every C unit: the RSP texts and runtime fill the CPU while the last CPU parts finish.
-    jobs = [(p, cc, b'') for p in parts] + [(p, flags, rsp_headers) for p in texts_c] + [(runtime_source, rt, runtime_deps)]
+    # __builtin_setjmp buffers are compiler-specific and runtime/jumps.h longjmps
+    # from GCC code, so a part that sets a jump buffer compiles with GCC too.
+    jobs = [(p, ['gcc', *part_flags] if b'__builtin_setjmp' in p.read_bytes() else cc, b'') for p in parts] + [(p, flags, rsp_headers) for p in texts_c] + [(runtime_source, rt, runtime_deps)]
     if a.rt64:
         jobs.append((window_source, [*rt, '-DPLAID_RT64'], runtime_deps))
     with phase('gcc'):
-        objs = compile_all(jobs, compiler)
+        objs = compile_all(jobs)
     part_objs, objects = objs[:len(parts)], objs[len(parts):len(parts) + len(texts_c)]
     main_obj = objs[len(parts) + len(texts_c)]
     if a.rt64:

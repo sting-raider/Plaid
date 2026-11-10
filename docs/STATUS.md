@@ -1,5 +1,16 @@
 # Status
 
+## -O0 game code, copy-free discovery and a parallel gate (ADR-0309)
+
+Generated game code now compiles at -O0 with clang when installed (one Banjo
+part: 37 s at GCC -O1, 2 s at clang -O0) and runs no slower on a starved CPU.
+Parts that set jump buffers use GCC, matching the runtime's longjmp. Discovery
+rounds no longer copy the program map (Banjo discover 17.1 s to 14.0 s,
+identical map). The runtime suite runs its 80 steps in parallel (15-20 min to
+110 s) and the gate runs suites and game controls side by side: the full gate
+with ROMs passes in 293 s. Without the ares boot harvest, F-Zero X builds and
+plays in 102 s, but Paper Mario and Banjo-Kazooie need it; see ADR-0309.
+
 ## Parallel native gcc over balanced units (ADR-0308)
 
 The generated-C gcc phase now uses every core and a balanced split. Mario Party

@@ -228,25 +228,22 @@ enum PrimitiveTraceRole {
     SourceUnit,
 }
 
-fn validate_trace_event_identities(map: &ProgramMap) -> Result<(), String> {
+// Every map borrows here instead of cloning: validate runs each discovery round.
+fn validate_trace_event_identities<'m>(map: &'m ProgramMap) -> Result<(), String> {
     let is_trace = |id: &str| {
         map.evidence
             .get(id)
             .is_some_and(|e| e.kind == EvidenceKind::Trace)
     };
-    let mut roles = BTreeMap::<String, PrimitiveTraceRole>::new();
-    let mut claim_role = |id: &str, role: PrimitiveTraceRole| -> Result<(), String> {
-        if is_trace(id)
-            && roles
-                .insert(id.to_string(), role)
-                .is_some_and(|old| old != role)
-        {
+    let mut roles = BTreeMap::<&'m str, PrimitiveTraceRole>::new();
+    let mut claim_role = |id: &'m str, role: PrimitiveTraceRole| -> Result<(), String> {
+        if is_trace(id) && roles.insert(id, role).is_some_and(|old| old != role) {
             return Err("trace evidence reused across incompatible primitive roles".into());
         }
         Ok(())
     };
 
-    let mut dma_events = BTreeMap::<String, (RomOffset, PhysicalAddr, u32)>::new();
+    let mut dma_events = BTreeMap::<&'m str, (RomOffset, PhysicalAddr, u32)>::new();
     for load in &map.loads {
         let Some(copy) = &load.copy_event else {
             continue;
@@ -259,7 +256,7 @@ fn validate_trace_event_identities(map: &ProgramMap) -> Result<(), String> {
         {
             let semantics = (dma.rom_offset, dma.physical_destination, dma.size);
             if dma_events
-                .insert(copy.clone(), semantics)
+                .insert(copy, semantics)
                 .is_some_and(|old| old != semantics)
             {
                 return Err("load copy event has conflicting observed DMA identity".into());
@@ -267,13 +264,13 @@ fn validate_trace_event_identities(map: &ProgramMap) -> Result<(), String> {
         }
     }
 
-    let mut dispatch_events = BTreeMap::<String, (GuestAddr, u64, TargetDispatchKind)>::new();
+    let mut dispatch_events = BTreeMap::<&'m str, (GuestAddr, u64, TargetDispatchKind)>::new();
     for dispatch in &map.target_dispatch_observations {
         let semantics = (dispatch.target, dispatch.generation, dispatch.kind);
         for id in &dispatch.evidence {
             claim_role(id, PrimitiveTraceRole::TargetDispatchEvent)?;
             if dispatch_events
-                .insert(id.clone(), semantics)
+                .insert(id, semantics)
                 .is_some_and(|old| old != semantics)
             {
                 return Err("target dispatch trace event has conflicting semantics".into());
@@ -281,7 +278,7 @@ fn validate_trace_event_identities(map: &ProgramMap) -> Result<(), String> {
         }
     }
 
-    let mut store_events = BTreeMap::<String, (GuestAddr, GuestAddr, u32, u64)>::new();
+    let mut store_events = BTreeMap::<&'m str, (GuestAddr, GuestAddr, u32, u64)>::new();
     for store in &map.word_store_observations {
         let semantics = (store.site, store.destination, store.value, store.generation);
         for id in &store.evidence {
@@ -290,7 +287,7 @@ fn validate_trace_event_identities(map: &ProgramMap) -> Result<(), String> {
             }
             claim_role(id, PrimitiveTraceRole::WordStoreEvent)?;
             if store_events
-                .insert(id.clone(), semantics)
+                .insert(id, semantics)
                 .is_some_and(|old| old != semantics)
             {
                 return Err("word store trace event has conflicting semantics".into());
@@ -298,8 +295,16 @@ fn validate_trace_event_identities(map: &ProgramMap) -> Result<(), String> {
         }
     }
 
-    let mut indirect_events =
-        BTreeMap::<String, (GuestAddr, GuestAddr, Option<GuestAddr>, u64, Option<String>)>::new();
+    let mut indirect_events = BTreeMap::<
+        &'m str,
+        (
+            GuestAddr,
+            GuestAddr,
+            Option<GuestAddr>,
+            u64,
+            Option<&'m str>,
+        ),
+    >::new();
     for observation in &map.indirect_observations {
         if let Some(unit) = &observation.source_unit {
             claim_role(unit, PrimitiveTraceRole::SourceUnit)?;
@@ -309,7 +314,7 @@ fn validate_trace_event_identities(map: &ProgramMap) -> Result<(), String> {
             observation.target,
             observation.delay_slot_pc,
             observation.generation,
-            observation.source_unit.clone(),
+            observation.source_unit.as_deref(),
         );
         for id in &observation.evidence {
             if observation.source_unit.as_ref() == Some(id) || !is_trace(id) {
@@ -317,7 +322,7 @@ fn validate_trace_event_identities(map: &ProgramMap) -> Result<(), String> {
             }
             claim_role(id, PrimitiveTraceRole::IndirectEvent)?;
             if indirect_events
-                .insert(id.clone(), semantics.clone())
+                .insert(id, semantics)
                 .is_some_and(|old| old != semantics)
             {
                 return Err("indirect trace event has conflicting semantics".into());
@@ -325,13 +330,13 @@ fn validate_trace_event_identities(map: &ProgramMap) -> Result<(), String> {
         }
     }
 
-    let mut verification_events = BTreeMap::<String, (CodeAddress, u32, String, u64)>::new();
+    let mut verification_events = BTreeMap::<&'m str, (&'m CodeAddress, u32, &'m str, u64)>::new();
     for verification in &map.entry_verifications {
         claim_role(&verification.source_unit, PrimitiveTraceRole::SourceUnit)?;
         let semantics = (
-            verification.entry.clone(),
+            &verification.entry,
             verification.register_mask,
-            verification.source_unit.clone(),
+            verification.source_unit.as_str(),
             verification.generation,
         );
         for id in &verification.evidence {
@@ -340,7 +345,7 @@ fn validate_trace_event_identities(map: &ProgramMap) -> Result<(), String> {
             }
             claim_role(id, PrimitiveTraceRole::EntryVerificationEvent)?;
             if verification_events
-                .insert(id.clone(), semantics.clone())
+                .insert(id, semantics)
                 .is_some_and(|old| old != semantics)
             {
                 return Err("entry verification trace event has conflicting semantics".into());
