@@ -1,15 +1,7 @@
 const s = { fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round" } as const;
 type P = { size?: number };
 
-/** The plaid mark: two vertical and two horizontal bars in the four controller colours. */
-export const Logo = ({ size = 18 }: P) => (
-  <svg width={size} height={size} viewBox="0 0 22 22" aria-hidden>
-    <rect x="5" y="0" width="4" height="22" rx="1" fill="#e5484d" />
-    <rect x="13" y="0" width="4" height="22" rx="1" fill="#3e7bfa" />
-    <rect x="0" y="5" width="22" height="4" rx="1" fill="#30a46c" opacity="0.92" />
-    <rect x="0" y="13" width="22" height="4" rx="1" fill="#f5c542" opacity="0.92" />
-  </svg>
-);
+export { Logo } from "./logo";
 
 export const Minimize = () => (<svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor" /></svg>);
 export const Maximize = () => (<svg width="10" height="10" viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" /></svg>);
