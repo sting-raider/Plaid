@@ -765,3 +765,14 @@ bump the version in `src-tauri/tauri.conf.json` and `package.json`, then run
 `python apps/plaid-launcher/release.py "notes, one per line"`. The recompiler
 updates by merging `origin/main` into the checkout the app compiles from; the
 sidebar's Update button lists both before applying them.
+
+
+### Residual trap faults
+
+A residual build may stop before an affected block executes. Its stop record
+retains `fault_pc` and adds `fault_target` (the attempted virtual destination
+for fault 3, zero unless a transfer fault set it). Local traps are fault 14 for
+an unsupported scope effect, 15 for an unsupported instruction or exception,
+and 16 for an unsupported delay slot. `fault_pc` is the reported blocker
+site, which can lie after the start of the block that was stopped. The manifest
+records each site's kind; none of these traps executes guest instructions.

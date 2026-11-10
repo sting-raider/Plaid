@@ -230,8 +230,8 @@ static void finish(int code, const char *why) {
     printf("]}\n");
   }
   printf("{\"stop\":\"%s\",\"vi\":%lu,\"gfx_tasks\":%lu,\"audio_tasks\":%lu,\"pi_dma\":%lu,"
-         "\"framebuffer\":\"%08x\",\"fault\":%u,\"fault_pc\":\"%08x\",\"ra\":\"%08x\",\"a0\":\"%08x\",\"a1\":\"%08x\",\"a2\":\"%08x\",\"t9\":\"%08x\",\"fcsr\":\"%08x\"",
-         why, vi_count, gfx_tasks, audio_tasks, dma_count, vi_regs[1], S->fault, S->fault_pc,
+         "\"framebuffer\":\"%08x\",\"fault\":%u,\"fault_pc\":\"%08x\",\"fault_target\":\"%08x\",\"ra\":\"%08x\",\"a0\":\"%08x\",\"a1\":\"%08x\",\"a2\":\"%08x\",\"t9\":\"%08x\",\"fcsr\":\"%08x\"",
+         why, vi_count, gfx_tasks, audio_tasks, dma_count, vi_regs[1], S->fault, S->fault_pc, S->fault_target,
          (u32)S->r[31], (u32)S->r[4], (u32)S->r[5], (u32)S->r[6], (u32)S->r[25], S->fcsr | S->fcc << 23);
   if (S->fault == 7) /* a COP1 fault: the operands are in the FPRs */
     for (i = 0; i < 32; i++) printf("%s%016llx\"", i ? ",\"" : ",\"fpr\":[\"", (unsigned long long)S->f[i]);

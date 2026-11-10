@@ -337,10 +337,10 @@ def main():
         with phase('residual-solve'):
             verdict = json.loads(memo_plaid('solve', rom, m, '--residual-dispatch'))
         print('residual-dispatch solve', verdict['status'], len(verdict['blockers']), 'blockers,', len(verdict.get('residual_sites', [])), 'residual sites')
-    if verdict['status'] != 'closed':
+    if verdict['status'] != 'closed' and not (residual and verdict.get('trapped_sites') and all(b in verdict['trapped_sites'] for b in verdict['blockers'])):
         sys.exit('not CLOSED under the address-taken scope' + ('' if a.strict else ', even with residual dispatch') + ': nothing is built')
     # Always rewritten: a stale manifest must never describe a later build.
-    (out / 'native-manifest.json').write_text(json.dumps({'mode': 'residual-dispatch' if residual else 'closed', 'native_complete': not residual, 'residual_sites': [f"{s['pc']:08x}" for s in verdict.get('residual_sites', [])]}, indent=2) + '\n')
+    (out / 'native-manifest.json').write_text(json.dumps({'mode': 'residual-dispatch' if residual else 'closed', 'native_complete': not residual, 'residual_sites': [f"{s['pc']:08x}" for s in verdict.get('residual_sites', [])], 'trapped_sites': [{'pc': f"{b['site']['pc']:08x}", 'kind': b['kind']} for b in verdict.get('trapped_sites', [])]}, indent=2) + '\n')
 
     # The native run starts SP memory as the ROM's own IPL3 leaves it (ADR-0195).
     try:

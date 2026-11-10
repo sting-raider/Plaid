@@ -4,7 +4,7 @@ import subprocess
 
 
 def refused_entry(result, stop):
-    assert result.returncode != 0 and stop['fault'] == 3 and stop['fault_pc'] == '8000f000', stop
+    assert result.returncode != 0 and stop['fault'] == 3 and stop['fault_pc'] == '8000f000' and stop['fault_target'] == '8000f000', stop
 
 
 def run(exe, cc, T):
@@ -100,7 +100,7 @@ def residual_entries(exe, cc, T):
             assert words == [0, 0], rows
             source = T.OUT / f'{name}.c'
             original = source.read_text()
-            guard = 'plaid_fault(s, entry, 3)'
+            guard = 'plaid_transfer_fault(s, entry, entry)'
             assert original.count(guard) == 1
             mutant = T.OUT / 'sdk-residual-mutant.exe'
             try:

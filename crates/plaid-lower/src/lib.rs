@@ -36,7 +36,7 @@ typedef struct plaid_native_frame_s {
   void *owner, *jumps; int overlay;
 } plaid_native_frame;
 typedef struct plaid_state_s {
-  u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 fcsr; u32 llbit; u32 pc; u32 fault; u32 fault_pc;
+  u64 r[32]; u64 hi, lo; u64 f[32]; u32 fcc; u32 fcsr; u32 llbit; u32 pc; u32 fault; u32 fault_pc; u32 fault_target;
   /* Live Status comes from a post-IPL receipt or verified SDK context. */
   u32 cp0_status, status_known, status_thread, mi_mask;
   /* Known Status.FR: 2 = FR 1, 1 = FR 0, 0 = unchecked bare harness.
@@ -115,6 +115,9 @@ typedef struct { u32 start, end; int load; } plaid_range;
    13: unsupported nonlocal jump or expired/cross-thread host continuation. */
 static inline int plaid_fault(plaid_state *s, u32 pc, u32 code) {
   s->fault = code; s->fault_pc = pc; return 1;
+}
+static inline int plaid_transfer_fault(plaid_state *s, u32 pc, u64 target) {
+  s->fault_target = (u32)target; return plaid_fault(s, pc, 3);
 }
 /* The declared SDK ABI handles lazy COP1 acquisition before resuming an
    instruction. Track its visible CU1 effect; an incompatible FR mode faults. */
@@ -1434,8 +1437,9 @@ impl Lowerer<'_> {
             let k = self.dispatch[set];
             return format!("return plaid_call_{k}(s, {}, ret, 0x{pc:08x}u);", sx(next));
         }
-        self.goto(next)
-            .unwrap_or_else(|_| format!("return plaid_fault(s, 0x{pc:08x}u, 3);"))
+        self.goto(next).unwrap_or_else(|_| {
+            format!("return plaid_transfer_fault(s, 0x{pc:08x}u, 0x{next:08x}u);")
+        })
     }
     /// A guest call: the callee returns 0 only after a checked return to `link`.
     fn call(&self, target: u32, link: u32, pc: u32, bound: bool) -> Result<String, String> {
@@ -1463,7 +1467,9 @@ impl Lowerer<'_> {
         }
         if let Some(name) = self.runtime.get(&target) {
             if !bound && self.ovl_of(target).is_some_and(|k| Some(k) != self.ovl) {
-                return Ok(format!("return plaid_fault(s, 0x{pc:08x}u, 3);"));
+                return Ok(format!(
+                    "return plaid_transfer_fault(s, 0x{pc:08x}u, 0x{target:08x}u);"
+                ));
             }
             return Ok(format!(
                 "{} {}",
@@ -1481,7 +1487,9 @@ impl Lowerer<'_> {
         }
         // Another overlay's link address names whatever RAM holds there.
         if !bound && self.ovl_of(target).is_some_and(|k| Some(k) != self.ovl) {
-            return Ok(format!("return plaid_fault(s, 0x{pc:08x}u, 3);"));
+            return Ok(format!(
+                "return plaid_transfer_fault(s, 0x{pc:08x}u, 0x{target:08x}u);"
+            ));
         }
         Ok(format!(
             "{} {}",
@@ -1510,7 +1518,9 @@ impl Lowerer<'_> {
         }
         if let Some(name) = self.runtime.get(&target) {
             if self.ovl_of(target).is_some_and(|k| Some(k) != self.ovl) {
-                return Ok(format!("return plaid_fault(s, 0x{pc:08x}u, 3);"));
+                return Ok(format!(
+                    "return plaid_transfer_fault(s, 0x{pc:08x}u, 0x{target:08x}u);"
+                ));
             }
             return Ok(format!(
                 "{{ s->cp0_known &= (1u << 10) | (1u << 4) | (1u << 6) | (1u << 20); int r = plaid_rt_{name}(s); if (r) return r; }} if (s->r[31] != ret) return plaid_fault(s, 0x{pc:08x}u, 5); return 0;"
@@ -1585,7 +1595,7 @@ impl Lowerer<'_> {
                 }
             }
             return Ok(format!(
-                "{{ u64 t; if (plaid_cp0_eret(s, &t, 0x{pc:08x}u)) return 1; if (s->native_refill_active && t == s->native_refill_epc) {{ s->native_refill_resumed = 1; return 0; }} {}switch (t) {{{cases} }} return plaid_fault(s, 0x{pc:08x}u, 3); }}",
+                "{{ u64 t; if (plaid_cp0_eret(s, &t, 0x{pc:08x}u)) return 1; u64 original_target = t; if (s->native_refill_active && t == s->native_refill_epc) {{ s->native_refill_resumed = 1; return 0; }} {}switch (t) {{{cases} }} return plaid_transfer_fault(s, 0x{pc:08x}u, original_target); }}",
                 self.relink(proven()?)
             ));
         }
@@ -1603,7 +1613,7 @@ impl Lowerer<'_> {
                     }
                 }
                 Ok(format!(
-                    "{{ u64 t = {a}; {slot} {}switch (t) {{{cases} }} return plaid_fault(s, 0x{pc:08x}u, 3); }}",
+                    "{{ u64 t = {a}, original_target = t; {slot} {}switch (t) {{{cases} }} return plaid_transfer_fault(s, 0x{pc:08x}u, original_target); }}",
                     self.relink(proven()?)
                 ))
             }
@@ -1635,7 +1645,7 @@ impl Lowerer<'_> {
                     cases += &format!(" case {}: {}", sx(t), self.call(t, after, pc, true)?);
                 }
                 Ok(format!(
-                    "{{ u64 t = {a}; {} {slot} {}switch (t) {{{cases} }} return plaid_fault(s, 0x{pc:08x}u, 3); }}",
+                    "{{ u64 t = {a}, original_target = t; {} {slot} {}switch (t) {{{cases} }} return plaid_transfer_fault(s, 0x{pc:08x}u, original_target); }}",
                     set(rd, self.link(after)),
                     self.relink(proven()?)
                 ))
@@ -1694,9 +1704,9 @@ impl Lowerer<'_> {
                     sx(jump)
                 ))
             }
-            (2, _, _) if self.ovl_of(jump).is_some_and(|k| Some(k) != self.ovl) => {
-                Ok(format!("{slot} return plaid_fault(s, 0x{pc:08x}u, 3);"))
-            }
+            (2, _, _) if self.ovl_of(jump).is_some_and(|k| Some(k) != self.ovl) => Ok(format!(
+                "{slot} return plaid_transfer_fault(s, 0x{pc:08x}u, 0x{jump:08x}u);"
+            )),
             (2, _, _) => Ok(format!("{slot} {}", self.tail(jump, pc)?)),
             (3, _, _) if self.jumps.contains_key(&jump) => Ok(format!(
                 "s->r[31] = {}; {slot} {}",
@@ -1840,7 +1850,8 @@ fn lower_c_units(
         Scope::DeclaredStaticImagesGuardedRamAddressTaken
     };
     let report = solve(map, images, scope)?;
-    if report.status != ClosureStatus::Closed {
+    if report.status != ClosureStatus::Closed && !(residual_dispatch && report.residual_buildable())
+    {
         let kinds: BTreeSet<_> = report.blockers.iter().map(|b| b.kind.as_str()).collect();
         let first: Vec<_> = report
             .blockers
@@ -2637,7 +2648,7 @@ fn lower_c_units(
         }
         out += &format!("case 0x{vector:08x}u: return F_{vector:08x}(s, ret);\n");
     }
-    out += "} return plaid_fault(s, vector, 3); }\n";
+    out += "} return plaid_transfer_fault(s, vector, vector); }\n";
     out += if vectors.is_empty() {
         "int plaid_native_refill(plaid_state *s, u32 target) { (void)s; (void)target; return 0; }\n"
     } else {
@@ -2687,7 +2698,7 @@ fn lower_c_units(
         }
         cases += "\n";
         out += &format!(
-            "{link}int plaid_call_{k}(plaid_state *s, u64 t, u64 ret, u32 pc) {{\n  (void)ret;\n  {cases}  }}\n  return plaid_fault(s, pc, 3);\n}}\n"
+            "{link}int plaid_call_{k}(plaid_state *s, u64 t, u64 ret, u32 pc) {{\n  (void)ret; u64 original_target = t;\n  {cases}  }}\n  return plaid_transfer_fault(s, pc, original_target);\n}}\n"
         );
         shared += &format!("int plaid_call_{k}(plaid_state *s, u64 t, u64 ret, u32 pc);\n");
         dispatch.insert(ts, k);
@@ -2710,7 +2721,7 @@ fn lower_c_units(
         for t in &entered {
             out += &format!("  case 0x{0:08x}u: return F_{0:08x}(s, ret);\n", t.pc.0);
         }
-        out += "  }\n  return plaid_fault(s, entry, 3);\n}\n";
+        out += "  }\n  return plaid_transfer_fault(s, entry, entry);\n}\n";
     }
     out += "typedef int (*plaid_coroutine_fn)(plaid_state *, u64);\nplaid_coroutine_fn plaid_coroutine_target(plaid_state *s, u32 entry) {\n";
     out += "  (void)s;\n";
@@ -2723,7 +2734,7 @@ fn lower_c_units(
             out += &format!("case 0x{t:08x}u: return F_{t:08x};\n");
         }
     }
-    out += "} return 0; }\nint plaid_coroutine_enter(plaid_state *s, u32 entry, u64 ret) { if (plaid_native_refill(s, entry)) return 1; plaid_coroutine_fn f = plaid_coroutine_target(s, entry); return f ? f(s, ret) : plaid_fault(s, entry, 3); }\n";
+    out += "} return 0; }\nint plaid_coroutine_enter(plaid_state *s, u32 entry, u64 ret) { if (plaid_native_refill(s, entry)) return 1; plaid_coroutine_fn f = plaid_coroutine_target(s, entry); return f ? f(s, ret) : plaid_transfer_fault(s, entry, entry); }\n";
     // Loop headers: targets of a backward direct transfer or table case.
     // Every other transfer inside a function moves forward, so a path that
     // never returns passes a header again and again (ADR-0159).
@@ -2852,7 +2863,7 @@ fn lower_c_units(
                 .collect::<Vec<_>>()
                 .join(" ");
             out += &format!(
-                "static int I_{0:08x}_{pc:08x}(plaid_state *s) {{ {native} return 0; }}\nstatic int D_{0:08x}_{pc:08x}(plaid_state *s) {{ u32 t = plaid_link(s, 0x{1:08x}u); int k, r; switch (t) {{ {cases} default: return plaid_fault(s, 0x{1:08x}u, 3); }} plaid_native_frame frame = {{0,0,0,0,0,0,k}}; plaid_text_pin(s, &frame); r = I_{0:08x}_{pc:08x}(s); plaid_text_unpin(s, &frame); return r; }}\n",
+                "static int I_{0:08x}_{pc:08x}(plaid_state *s) {{ {native} return 0; }}\nstatic int D_{0:08x}_{pc:08x}(plaid_state *s) {{ u32 t = plaid_link(s, 0x{1:08x}u); int k, r; switch (t) {{ {cases} default: return plaid_transfer_fault(s, 0x{1:08x}u, 0x{1:08x}u); }} plaid_native_frame frame = {{0,0,0,0,0,0,k}}; plaid_text_pin(s, &frame); r = I_{0:08x}_{pc:08x}(s); plaid_text_unpin(s, &frame); return r; }}\n",
                 f.pc.0, delay.virtual_pc.0
             );
         }
@@ -2884,6 +2895,37 @@ fn lower_c_units(
             let (start, end) = (block.start.pc.0, block.start.pc.0.wrapping_add(block.size));
             if exits.contains(&start) {
                 out += &format!("L_{start:08x}: s->pc = 0x{start:08x}u; return 2;\n");
+                continue;
+            }
+            if let Some(trap) = report
+                .trapped_sites
+                .iter()
+                .filter(|trap| {
+                    trap.site.as_ref().is_some_and(|site| {
+                        site.image == block.start.image
+                            && site.generation == block.start.generation
+                            && start <= site.pc.0
+                            && site.pc.0 < end
+                    })
+                })
+                .min_by_key(|trap| {
+                    (
+                        trap.site.as_ref().unwrap().pc.0,
+                        match trap.kind.as_str() {
+                            "unsupported_delay_slot" => 0,
+                            "exception_or_unsupported_instruction" => 1,
+                            _ => 2,
+                        },
+                    )
+                })
+            {
+                let pc = trap.site.as_ref().unwrap().pc.0;
+                let code = match trap.kind.as_str() {
+                    "unsupported_delay_slot" => 16,
+                    "exception_or_unsupported_instruction" => 15,
+                    _ => 14,
+                };
+                out += &format!("L_{start:08x}: return plaid_fault(s, 0x{pc:08x}u, {code});\n");
                 continue;
             }
             out += &format!("L_{start:08x}:\n");

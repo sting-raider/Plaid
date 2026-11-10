@@ -9123,3 +9123,19 @@ deep build: 496 s, two long replays of 66 s and 139 s).
 Limit: the validation run is the only fault probe, so code a game first reaches
 after the run still needs a deep build (as code past the long replay always
 did). Static load discovery should replace the replay for that.
+
+
+## ADR-0311: Fail-closed local blocker traps in residual builds
+
+Residual dispatch may compile a map that remains OPEN when every remaining
+blocker identifies an instruction inside a decoded block and is an unsupported
+scope effect, unsupported instruction/exception, or unsupported delay slot.
+The entire affected block faults before executing any of its instructions;
+the reported PC is the blocker site. Other unresolved obligations still refuse
+the build, and strict mode is unchanged. The manifest records each trapped
+site and kind alongside residual dispatch sites and is never native-complete.
+The traps contain no guest instruction interpreter or JIT.
+
+Fault 3 also records the attempted virtual target independently of the source
+PC, before overlay address translation. This permits the next analysis pass to
+identify the missing native destination.
