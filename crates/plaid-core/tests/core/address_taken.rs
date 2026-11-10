@@ -296,3 +296,39 @@ fn a_constant_hoisted_into_a_far_branch_slot_is_address_taken() {
     .map;
     assert!(map.address_taken.keys().any(|a| a.pc == GuestAddr(f)));
 }
+
+#[test]
+fn an_observed_runtime_function_keeps_its_trace_evidence() {
+    // the replay saw a call reach f, which is a declared runtime function: the
+    // map cites the observed-call evidence for it, so that evidence must exist
+    let rom = RomIdentity {
+        sha256: "f".repeat(64),
+        size: 4096,
+    };
+    let evidence = plaid_core::program::Evidence {
+        kind: plaid_core::EvidenceKind::Static,
+        producer: "test".into(),
+        revision: "0".into(),
+        detail: "f is a runtime function".into(),
+    };
+    let map = plaid_core::data_roots::discover_address_taken_with_loads(
+        rom,
+        &[],
+        &image(),
+        &[GuestAddr(BASE)],
+        &[(GuestAddr(F), "osTest".into(), Vec::new())],
+        Some(("runtime".into(), evidence)),
+        &Default::default(),
+        None,
+        &[GuestAddr(F)].into(),
+        100,
+    )
+    .unwrap()
+    .map;
+    map.validate().unwrap();
+    assert!(
+        map.evidence
+            .keys()
+            .any(|id| id.starts_with("observed-call:"))
+    );
+}
