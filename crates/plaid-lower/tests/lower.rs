@@ -44,7 +44,7 @@ fn computed_jump_dispatches_only_over_its_proven_targets() {
     let words = [[0x3c08_8000, 0x3508_0010, 0x0100_0008, 0].as_slice(), &HALT].concat();
     let c = lower(&words, 0x8000_0010).unwrap();
     assert!(c.contains("switch (t) { case 0xffffffff80000010ull: goto L_80000010; }"));
-    assert!(c.contains("return plaid_fault(s, 0x80000008u, 3);"));
+    assert!(c.contains("return plaid_transfer_fault(s, 0x80000008u, original_target);"));
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn a_residual_jump_also_dispatches_over_its_own_candidates() {
         c.contains("case 0xffffffff80000010ull: goto L_80000010;"),
         "{c}"
     );
-    assert!(c.contains("return plaid_fault(s, 0x80000008u, 3);"));
+    assert!(c.contains("return plaid_transfer_fault(s, 0x80000008u, original_target);"));
 }
 
 #[test]
@@ -481,7 +481,7 @@ fn eret_requires_residual_scope_and_has_no_delay_slot() {
     let c = lower_c_with_preload(&map, images, &image, GuestAddr(BASE), &[], true).unwrap();
     assert!(c.contains("plaid_cp0_eret(s, &t, 0x80000000u)"));
     assert!(c.contains("switch (t)"));
-    assert!(c.contains("return plaid_fault(s, 0x80000000u, 3)"));
+    assert!(c.contains("return plaid_transfer_fault(s, 0x80000000u, original_target)"));
     let report = plaid_core::solver::solve(
         &map,
         images,

@@ -152,9 +152,12 @@ static int dp_held; /* a graphics task's DP interrupt, held while the RDP is fro
 #include "gfx.h"
 static int gfx_writeback(void *context, u32 p, u32 n, const u8 *bytes);
 int plaid_gfx_open(const u8 *rom_header);
+void plaid_gfx_window_options(const char *title, int fullscreen, const char *config);
 void plaid_gfx_screen(const u32 *regs);
 int plaid_gfx_closed(void);
-u32 plaid_gfx_input(void); /* buttons << 16 | stick x << 8 | stick y */
+u32 plaid_gfx_input(void);
+u32 plaid_gfx_input_player(int player);
+u32 plaid_gfx_connected(void); /* buttons << 16 | stick x << 8 | stick y */
 void plaid_audio_play(const u8 *samples, u32 bytes, u32 rate); /* big-endian s16 stereo */
 #endif
 #ifdef PLAID_RSP
@@ -230,8 +233,8 @@ static void finish(int code, const char *why) {
     printf("]}\n");
   }
   printf("{\"stop\":\"%s\",\"vi\":%lu,\"gfx_tasks\":%lu,\"audio_tasks\":%lu,\"pi_dma\":%lu,"
-         "\"framebuffer\":\"%08x\",\"fault\":%u,\"fault_pc\":\"%08x\",\"ra\":\"%08x\",\"a0\":\"%08x\",\"a1\":\"%08x\",\"a2\":\"%08x\",\"t9\":\"%08x\",\"fcsr\":\"%08x\"",
-         why, vi_count, gfx_tasks, audio_tasks, dma_count, vi_regs[1], S->fault, S->fault_pc,
+         "\"framebuffer\":\"%08x\",\"fault\":%u,\"fault_pc\":\"%08x\",\"fault_target\":\"%08x\",\"ra\":\"%08x\",\"a0\":\"%08x\",\"a1\":\"%08x\",\"a2\":\"%08x\",\"t9\":\"%08x\",\"fcsr\":\"%08x\"",
+         why, vi_count, gfx_tasks, audio_tasks, dma_count, vi_regs[1], S->fault, S->fault_pc, S->fault_target,
          (u32)S->r[31], (u32)S->r[4], (u32)S->r[5], (u32)S->r[6], (u32)S->r[25], S->fcsr | S->fcc << 23);
   if (S->fault == 7) /* a COP1 fault: the operands are in the FPRs */
     for (i = 0; i < 32; i++) printf("%s%016llx\"", i ? ",\"" : ",\"fpr\":[\"", (unsigned long long)S->f[i]);
@@ -1872,16 +1875,25 @@ static void ai_submit(u32 p, u32 n) {
 
 /* ---- SI: controllers and EEPROM ------------------------------------------ */
 
-/* osContInit(mq, &bitpattern, status[4]): one standard controller */
+static u32 controller_connected(void) {
+#ifdef PLAID_RT64
+  return plaid_gfx_connected();
+#else
+  return 1;
+#endif
+}
+/* osContInit(mq, &bitpattern, status[4]). */
 static void cont_status(u32 status) {
   int i;
+  u32 mask = controller_connected();
   for (i = 0; i < 4; i++) {
-    u8 st[4] = {0, i == 0 ? 5 : 0, i == 0 ? 2 : 0, i == 0 ? 0 : 8};
+    int connected = (mask & (1u << i)) != 0;
+    u8 st[4] = {0, connected ? 5 : 0, connected ? 2 : 0, connected ? 0 : 8};
     wr(status + 4 * i, st, 4);
   }
 }
 RT(osContInit) {
-  u8 bits = 1;
+  u8 bits = (u8)controller_connected();
   wr(arg(1), &bits, 1);
   cont_status(arg(2));
   return ret(0);
@@ -1936,11 +1948,15 @@ static u32 controller_input(void) {
   return (b << 16) | (stick & 0xffffu);
 }
 RT(osContGetReadData) {
-  u32 input = controller_input(), b = input >> 16, stick = input;
   int i;
+  u32 mask = controller_connected();
   for (i = 0; i < 4; i++) { /* OSContPad: button, stick_x, stick_y, errno */
-    u8 pad[6] = {0, 0, 0, 0, i == 0 ? 0 : 8, 0};
-    if (i == 0) { pad[0] = (u8)(b >> 8); pad[1] = (u8)b; pad[2] = (u8)(stick >> 8); pad[3] = (u8)stick; }
+    u32 input = i == 0 ? controller_input() : 0;
+#ifdef PLAID_RT64
+    if (i != 0) input = plaid_gfx_input_player(i);
+#endif
+    u8 pad[6] = {(u8)(input >> 24), (u8)(input >> 16), (u8)(input >> 8), (u8)input,
+                 mask & (1u << i) ? 0 : 8, 0};
     wr(arg(0) + 6 * i, pad, 6);
   }
   return 0;
@@ -2012,7 +2028,14 @@ static int si_finish(void) {
     memcpy(joybus.ram, S->ram + si_dram, 64);
     if (plaid_joy_parse(&joybus)) return 1;
   } else {
-    if (plaid_joy_run(&joybus, eeprom, count_now(), controller_input())) return 1;
+    {
+      u32 inputs[4] = {controller_input(), 0, 0, 0};
+#ifdef PLAID_RT64
+      int i;
+      for (i = 1; i < 4; i++) inputs[i] = plaid_gfx_input_player(i);
+#endif
+      if (plaid_joy_run_multi(&joybus, eeprom, count_now(), inputs, controller_connected())) return 1;
+    }
     dma_wr(0xa0000000u | si_dram, joybus.ram, 64);
     if (joybus.changed) { save_eeprom(); joybus.changed = 0; }
   }
@@ -2088,8 +2111,17 @@ int main(int argc, char **argv) {
   pthread_t pump;
   int i, r;
   const char *rom_path = NULL;
+#ifdef PLAID_RT64
+  const char *window_title = NULL, *config_path = NULL;
+  int fullscreen = 0;
+#endif
   for (i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom_path = argv[++i];
+#ifdef PLAID_RT64
+    else if (!strcmp(argv[i], "--title") && i + 1 < argc) window_title = argv[++i];
+    else if (!strcmp(argv[i], "--fullscreen")) fullscreen = 1;
+    else if (!strcmp(argv[i], "--config") && i + 1 < argc) config_path = argv[++i];
+#endif
     else if (!strcmp(argv[i], "--dump") && i + 2 < argc) {
       dump_at = (u32)strtoul(argv[i + 1], NULL, 0);
       dump_words = (u32)strtoul(argv[i + 2], NULL, 0);
@@ -2167,6 +2199,7 @@ int main(int argc, char **argv) {
   memcpy(S->ram + PLAID_BOOT_ROM_COPY_BASE, rom + 0x1000u, PLAID_BOOT_ROM_COPY_SIZE);
 #endif
 #ifdef PLAID_RT64
+  plaid_gfx_window_options(window_title, fullscreen, config_path);
   if (!rom || plaid_gfx_open(rom)) { fprintf(stderr, "the renderer needs --rom and a working GPU\n"); return 2; }
 #endif
   clock_gettime(CLOCK_MONOTONIC, &t0);

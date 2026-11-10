@@ -169,6 +169,9 @@ void plaid_gfx_screen(const uint32_t *r) {
   printf("]}\n");
 }
 int plaid_gfx_closed(void) { return 0; }
+void plaid_gfx_window_options(const char *title, int fullscreen, const char *config) { (void)title; (void)fullscreen; (void)config; }
+uint32_t plaid_gfx_connected(void) { return 1; }
+uint32_t plaid_gfx_input_player(int player) { (void)player; return 0; }
 uint32_t plaid_gfx_input(void) { return 0x10F0; } /* stick 16, -16 */
 void plaid_audio_play(const uint8_t *s, uint32_t bytes, uint32_t rate) {
   printf("{\"stub_audio\":[%u,%u,%u]}\n", bytes, rate, (uint32_t)s[0] << 24 | s[1] << 16 | s[2] << 8 | s[3]);

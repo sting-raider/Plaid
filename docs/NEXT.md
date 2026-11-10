@@ -1,5 +1,9 @@
 # Next
 
+Residual local traps identify work still needed for unfamiliar ROMs: classify
+the observed RE2 fault at 8004d348 and distinguish executable instructions from
+data before expanding native execution (ADR-0311).
+
 ## Build speed: cold builds for small machines
 
 A cold `scripts/native.py` build is far too slow for the target audience (weak,

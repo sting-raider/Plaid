@@ -13,6 +13,8 @@
 #define PLAID_GFX_API __declspec(dllexport)
 #include "readback.h"
 #include "ram.h"
+#include "settings.h"
+#include "input.h"
 
 #include <SDL.h>
 
@@ -22,8 +24,11 @@
 #include <cstring>
 #include <functional>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <vector>
+
+namespace RT64 { bool plaidStretchPresentation = false; }
 
 namespace {
 
@@ -38,11 +43,14 @@ std::mutex lock;
 std::condition_variable wake;
 std::function<void()> job;
 bool idle = true, ready = false, opened = false, closed = false;
-std::atomic<uint32_t> input{0};  // buttons << 16 | stick x << 8 | stick y
+std::atomic<uint32_t> input[4]{};  // buttons << 16 | stick x << 8 | stick y
 thread_local bool on_renderer = false;
 SDL_AudioDeviceID audio = 0;
 uint32_t audio_rate = 0;
 std::vector<int16_t> pcm;
+std::string window_title;
+bool start_fullscreen = false, settings_loaded = false;
+plaid_settings::Settings settings;
 
 // Runs f on the renderer thread and waits for it.
 void run(std::function<void()> f) {
@@ -85,7 +93,41 @@ void renderer() {
     // Framebuffer storage can have non-square pixels; present on the 4:3 TV
     // surface instead of fitting its storage dimensions to the window.
     app->enhancementConfig.presentation.removeBlackBorders = false;
+    if (settings_loaded) {
+        using Config = RT64::UserConfiguration;
+        app->userConfig.resolution = settings.n64Mode ? Config::Resolution::Original : Config::Resolution::Manual;
+        app->userConfig.resolutionMultiplier = settings.resolutionScale;
+        if (settings.n64Mode) {
+            app->userConfig.filtering = Config::Filtering::Nearest;
+            app->userConfig.upscale2D = Config::Upscale2D::Original;
+        } else if (settings.aspect == "stretch") {
+            RT64::plaidStretchPresentation = true;
+        } else if (settings.aspect != "4:3") {
+            app->userConfig.aspectRatio = settings.aspect == "stretch" ? Config::AspectRatio::Expand : Config::AspectRatio::Manual;
+            app->userConfig.extAspectRatio = app->userConfig.aspectRatio;
+            app->userConfig.aspectTarget = app->userConfig.extAspectTarget = settings.aspect == "21:9" ? 21.0 / 9 : 16.0 / 9;
+        }
+    }
     bool ok = app->setup(0) == RT64::Application::SetupResult::Success;
+    ok = ok && app->appWindow && app->swapChain;
+    if (ok) {
+#ifdef _WIN32
+        HRSRC icon_resource = FindResourceW(nullptr, MAKEINTRESOURCEW(2), MAKEINTRESOURCEW(10));
+        if (icon_resource) {
+            HGLOBAL icon_data = LoadResource(nullptr, icon_resource);
+            auto bytes = LockResource(icon_data);
+            auto size = SizeofResource(nullptr, icon_resource);
+            if (bytes && size) {
+                SDL_RWops *rw = SDL_RWFromConstMem(bytes, int(size));
+                SDL_Surface *icon = rw ? SDL_LoadBMP_RW(rw, 1) : nullptr;
+                if (icon) { SDL_SetWindowIcon(app->appWindow->sdlWindow, icon); SDL_FreeSurface(icon); }
+            }
+        }
+#endif
+        if (settings_loaded) app->swapChain->setVsyncEnabled(settings.vsync);
+        if (!window_title.empty()) SDL_SetWindowTitle(app->appWindow->sdlWindow, window_title.c_str());
+        if (start_fullscreen) app->setFullScreen(true);
+    }
     {
         std::lock_guard<std::mutex> l(lock);
         opened = ok;
@@ -94,6 +136,10 @@ void renderer() {
     wake.notify_all();
     if (!ok) return;
 
+    if (settings_loaded) SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
+    std::array<SDL_GameController *, 4> controllers{};
+    std::array<SDL_JoystickID, 4> controller_ids{};
+    controller_ids.fill(-1);
     for (;;) {
         std::function<void()> f;
         {
@@ -109,6 +155,11 @@ void renderer() {
         }
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_KEYDOWN && !e.key.repeat &&
+                (e.key.keysym.sym == SDLK_F11 ||
+                 (e.key.keysym.sym == SDLK_RETURN && (e.key.keysym.mod & KMOD_ALT)))) {
+                app->setFullScreen(!app->appWindow->fullScreen);
+            }
             if (e.type == SDL_QUIT) {
                 std::lock_guard<std::mutex> l(lock);
                 closed = true;
@@ -126,7 +177,26 @@ void renderer() {
         uint32_t b = 0;
         for (const auto &m : map) b |= k[m.key] ? m.bit : 0;
         int x = (k[SDL_SCANCODE_RIGHT] - k[SDL_SCANCODE_LEFT]) * 80, y = (k[SDL_SCANCODE_UP] - k[SDL_SCANCODE_DOWN]) * 80;
-        input = b << 16 | uint32_t(uint8_t(x)) << 8 | uint8_t(y);
+        input[0] = b << 16 | uint32_t(uint8_t(x)) << 8 | uint8_t(y);
+        if (settings_loaded) {
+            // Enumerate the current connected controllers in SDL device order.
+            std::array<SDL_GameController *, 4> current{};
+            std::array<SDL_JoystickID, 4> ids{};
+            ids.fill(-1);
+            int slot = 0;
+            for (int device = 0; device < SDL_NumJoysticks() && slot < 4; ++device) {
+                if (!SDL_IsGameController(device)) continue;
+                SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(device);
+                for (int old = 0; old < 4; ++old) if (controller_ids[old] == id) {
+                    current[slot] = controllers[old]; controllers[old] = nullptr; break;
+                }
+                if (!current[slot]) current[slot] = SDL_GameControllerOpen(device);
+                if (current[slot]) ids[slot++] = id;
+            }
+            for (auto *old : controllers) if (old) SDL_GameControllerClose(old);
+            controllers = current; controller_ids = ids;
+            for (int i = 0; i < 4; ++i) input[i] = plaid_input::sample(settings.players[i], k, controllers[i]);
+        }
     }
 }
 
@@ -136,6 +206,16 @@ void renderer() {
 void plaidReadback(uint32_t physical, uint32_t size) { readback.record(physical, size); }
 
 extern "C" {
+
+// Configure the window before opening the renderer.
+__declspec(dllexport) void plaid_gfx_window_options(const char *title, int fullscreen, const char *config) {
+    if (config) {
+        settings_loaded = plaid_settings::load(config, settings);
+        if (!settings_loaded) fprintf(stderr, "warning: cannot read launcher settings; using defaults\n");
+    }
+    window_title = title ? title : "";
+    start_fullscreen = fullscreen != 0 || (settings_loaded && settings.fullscreen);
+}
 
 // Opens the window and renderer; 0 on success. rom_header: the first 0x40
 // ROM bytes, which RT64 uses to identify the game.
@@ -207,7 +287,14 @@ __declspec(dllexport) void plaid_gfx_screen(const uint32_t *regs) {
 }
 
 // Controller 1 from the window's keyboard: buttons << 16 | stick x << 8 | stick y.
-__declspec(dllexport) uint32_t plaid_gfx_input(void) { return input; }
+__declspec(dllexport) uint32_t plaid_gfx_input(void) { return input[0]; }
+__declspec(dllexport) uint32_t plaid_gfx_input_player(int player) { return player >= 0 && player < 4 ? input[player].load() : 0; }
+__declspec(dllexport) uint32_t plaid_gfx_connected(void) {
+    if (!settings_loaded) return 1;
+    uint32_t mask = 0;
+    for (int i = 0; i < 4; ++i) if (settings.players[i].connected) mask |= 1u << i;
+    return mask;
+}
 
 // Plays one AI buffer (ADR-0170): big-endian 16-bit stereo samples at rate Hz.
 // Without an audio device the game runs silent.

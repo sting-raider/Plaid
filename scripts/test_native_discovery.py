@@ -91,19 +91,20 @@ def run_contract():
     print('PASS native discovery: immutable negative overlay probe and fatal-error propagation')
     # The manifest records whether the build is closed or dispatches residual
     # sites at run time; --strict refuses anything but a CLOSED map (ADR-0233).
-    def build(ordinary, strict):
+    def build(ordinary, strict, trap=False):
         with tempfile.TemporaryDirectory(prefix='plaid-manifest-') as temporary:
             root = Path(temporary)
             loads = root / 'loads.json'
             loads.write_text(json.dumps({'loads': []}))
             solves = []
+            blocker = {'kind': 'exception_or_unsupported_instruction', 'site': {'pc': 0x80000420}}
             def plaid(command, *args, **kwargs):
                 if command == 'rom-info':
                     payload = {'header': {'boot_address': 0x80000400}, 'boot_image_size': 0x100}
                 elif command == 'solve':
                     solves.append(args[-1])
                     payload = ({'status': ordinary, 'blockers': [{}] * (ordinary != 'closed')} if args[-1] == '--address-taken'
-                               else {'status': 'closed', 'blockers': [], 'residual_sites': [{'pc': 0x80000420}]})
+                               else ({'status': 'open', 'blockers': [blocker], 'trapped_sites': [blocker]} if trap else {'status': 'closed', 'blockers': [], 'residual_sites': [{'pc': 0x80000420}]}))
                 else:
                     payload = {}
                 return CompletedProcess([], 0, json.dumps(payload), '')
@@ -127,10 +128,13 @@ def run_contract():
 
     stop, solves, manifest = build('closed', False)
     assert 'test stop after manifest' in stop and solves == ['--address-taken'], (stop, solves)
-    assert manifest == {'mode': 'closed', 'native_complete': True, 'residual_sites': []}, manifest
+    assert manifest == {'mode': 'closed', 'native_complete': True, 'residual_sites': [], 'trapped_sites': []}, manifest
     stop, solves, manifest = build('open', False)
     assert 'test stop after manifest' in stop and solves == ['--address-taken', '--residual-dispatch'], (stop, solves)
-    assert manifest == {'mode': 'residual-dispatch', 'native_complete': False, 'residual_sites': ['80000420']}, manifest
+    assert manifest == {'mode': 'residual-dispatch', 'native_complete': False, 'residual_sites': ['80000420'], 'trapped_sites': []}, manifest
+    stop, solves, manifest = build('open', False, trap=True)
+    assert 'test stop after manifest' in stop and manifest['native_complete'] is False, (stop, manifest)
+    assert manifest['trapped_sites'] == [{'pc': '80000420', 'kind': 'exception_or_unsupported_instruction'}], manifest
     stop, solves, manifest = build('open', True)
     assert 'nothing is built' in stop and solves == ['--address-taken'] and manifest is None, (stop, solves, manifest)
     print('PASS native manifest: closed builds are complete, residual dispatch is the recorded default, --strict refuses OPEN')

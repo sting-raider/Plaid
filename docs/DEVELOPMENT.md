@@ -765,3 +765,29 @@ bump the version in `src-tauri/tauri.conf.json` and `package.json`, then run
 `python apps/plaid-launcher/release.py "notes, one per line"`. The recompiler
 updates by merging `origin/main` into the checkout the app compiles from; the
 sidebar's Update button lists both before applying them.
+
+
+### Residual trap faults
+
+A residual build may stop before an affected block executes. Its stop record
+retains `fault_pc` and adds `fault_target` (the attempted virtual destination
+for fault 3, zero unless a transfer fault set it). Local traps are fault 14 for
+an unsupported scope effect, 15 for an unsupported instruction or exception,
+and 16 for an unsupported delay slot. `fault_pc` is the reported blocker
+site, which can lie after the start of the block that was stopped. The manifest
+records each site's kind; none of these traps executes guest instructions.
+### RT64 window settings
+
+The RT64 executable accepts `--title <text>`, `--fullscreen`, and
+`--config <path.json>`. F11 and Alt+Enter toggle fullscreen. The JSON
+settings read are `players` (up to four objects with `connected`, `type`,
+`bindings`, `deadzone`, and `range`), `aspect`, `resolutionScale`, `vsync`,
+`fullscreen`, and `n64Mode`. Binding names use the launcher N64 input names
+and its keyboard labels or browser-standard `Button N` / `Axis N+` and
+`Axis N-` labels. Unknown fields are ignored. Malformed or missing files
+produce a warning and use the existing defaults. `n64Mode` requests native
+resolution and overrides aspect and resolution scale.
+
+Controller hardware, hotplug, and player numbering still require testing with a
+real controller. Visual aspect modes and fullscreen toggle keys also require
+interactive verification.
