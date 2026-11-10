@@ -150,6 +150,7 @@ Historical direct-integration results marked `BLOCKED` only because a fresh sess
 ## Canonical local validation
 
 GitHub Actions is manual-only. Integrations should be validated locally.
+`python scripts/gate.py` runs the commands below (and, with `--roms <dir>`, the 30 s game controls) and prints a pass/fail summary; `--doctor` checks the toolchain.
 
 Run at minimum:
 

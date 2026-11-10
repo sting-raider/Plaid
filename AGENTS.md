@@ -1,5 +1,7 @@
 # AGENTS.md
 
+New here? Start with [`CONTRIBUTIONS.md`](CONTRIBUTIONS.md) for setup, finding work and opening a pull request; `python scripts/gate.py` runs the local validation below in one command.
+
 ## Mission
 
 Build an automatic N64 ROM-to-native recompilation system. The final native gameplay path must execute host-native x86-64 or ARM64 code and must not depend on a runtime MIPS interpreter or runtime MIPS JIT.
