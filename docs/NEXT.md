@@ -1,9 +1,9 @@
 # Next
 
-Step 2b now supplies four bounded build/validation rounds over observed-image
-admission (ADR-0315). Measure Paper Mario cold loop versus explicit `--deep` and
-the RE2 stop sequence when user-local ROM paths are configured; neither ROM was
-available for this landing. Retain content guards, deterministic generations,
+The opt-in repair loop supplies four bounded build/validation rounds over
+observed-image admission (ADR-0315/0317). Cold measurements show Paper Mario
+and RE2 fail in the second solve; investigate these admissions and compare with
+the full-budget default before considering automatic repair again. Retain content guards, deterministic generations,
 hash-repeat/cap stops and the closed-world gate. Broad mutable capture windows
 can still refuse with fault 17; RE2 gameplay after admission remains unverified.
 Captured data is not an executable-lifetime proof.
