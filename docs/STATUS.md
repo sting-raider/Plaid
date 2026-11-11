@@ -1,5 +1,14 @@
 # Status
 
+## Offline engine bundle (ADR-0316)
+
+`python scripts/package_engine.py` builds `dist/engine/` (Windows x64, gitignored): Python, GCC+Clang,
+the oracle, RT64 shim and `plaid.exe` with no checkout, Rust, Python, compiler or git needed. Entry
+point `python/python.exe -B -u scripts/native.py <rom> --rt64 ...` from the bundle root with
+`PLAID_WORK_DIR` set. The analysis oracle no longer reads the PIF boot ROM: it starts at IPL3 in a
+state measured per CIC (`scripts/ares_hle_boot*.hpp`, `spikes/099-pif-hle-boot`); the real ROM is
+verification-only via `PLAID_PIF_ROM`. RT64's utf8conv headers are verified upstream-MIT.
+
 ## Automatic bounded repair (ADR-0315)
 
 Default native builds now attempt at most four build/validation rounds. Faults

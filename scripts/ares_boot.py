@@ -44,11 +44,27 @@ def build_oracle():
         return builder.build(ROOT / 'scripts/ares_boot.cpp', directory,
                              raw_fetch_access=True, physical_fetch_access=True,
                              rdram_burst_access=True, rdram_scalar_access=True, pi_dma_access=True,
-                             cpu_instruction_access=True)
+                             cpu_instruction_access=True,
+                             extra_sources=[ROOT / 'scripts/ares_hle_boot.hpp', ROOT / 'scripts/ares_hle_boot_tables.hpp'])
+
+
+def pif_rom():
+    """The pinned PIF ROM only when PLAID_PIF_ROM names it, to verify the HLE boot.
+
+    Without it the oracle starts at the first IPL3 instruction in the state the
+    firmware would leave (ADR-0316), so no console firmware is read or shipped.
+    """
+    path = os.environ.get('PLAID_PIF_ROM')
+    return Path(path).resolve() if path else None
+
+
+def pif_identity(firmware):
+    return hashlib.sha256(firmware.read_bytes()).hexdigest() if firmware else None
 
 
 # Everything that builds the oracle or shapes its output (spikes/003 build inputs).
-ORACLE_SOURCES = ('scripts/ares_boot.py', 'scripts/ares_oracle.py', 'scripts/ares_boot.cpp', 'spikes/003-ares-oracle/run.py',
+ORACLE_SOURCES = ('scripts/ares_boot.py', 'scripts/ares_oracle.py', 'scripts/ares_boot.cpp', 'scripts/ares_hle_boot.hpp',
+                  'scripts/ares_hle_boot_tables.hpp', 'spikes/003-ares-oracle/run.py',
                   'spikes/003-ares-oracle/driver.cpp', 'spikes/044-ares-cpu-copy-dataflow/prepare.py')
 
 
@@ -110,18 +126,18 @@ def capture_refill(rom, anchor, target):
         raise ValueError('neutral reset did not authenticate the refill anchor')
     key = hashlib.sha256(json.dumps(['refill-v1', REV,
         [hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in ORACLE_SOURCES],
-        hashlib.sha256(data).hexdigest(), anchor, target]).encode()).hexdigest()
+        hashlib.sha256(data).hexdigest(), anchor, target, pif_identity(pif_rom())]).encode()).hexdigest()
     cached = Path(os.environ.get('PLAID_REPLAY_CACHE', Path.home() / '.cache/plaid/ares-replay')) / f'{key}.json'
     if cached.exists():
         rows = json.loads(cached.read_text())
     else:
         exe = build_oracle()
-        firmware = ROOT / '.refs/ares/ares/System/Nintendo 64/pif.ntsc.rom'
-        if hashlib.sha256(firmware.read_bytes()).hexdigest() != natural['firmware_sha256']:
+        firmware = pif_rom()
+        if pif_identity(firmware) != natural['firmware_sha256']:
             raise ValueError('refill firmware differs from authenticated reset')
         with tempfile.TemporaryDirectory(prefix='plaid-refill-') as temporary:
             output = Path(temporary) / 'source.jsonl'
-            command = [str(exe), str(rom), str(firmware), hex(natural_rows[-1]['boot_entry']), hex(target),
+            command = [str(exe), str(rom), str(firmware or '-'), hex(natural_rows[-1]['boot_entry']), hex(target),
                        str(BUDGET), 'CIC-NUS-' + natural['cic'], str(output), 'refill-v1', hex(anchor)]
             subprocess.run(command, check=True, timeout=300)
             rows = [json.loads(line) for line in output.read_text().splitlines()]
@@ -165,7 +181,8 @@ def capture_many(rom, entries, exact=False, covered=None, sites=None, bindings=N
     # A replay is deterministic in its sources and arguments, so an identical
     # request reuses the recorded results instead of launching ares (and WSL).
     key = hashlib.sha256(json.dumps([REV, [hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in ORACLE_SOURCES],
-                                     hashlib.sha256(data).hexdigest(), entries, exact, covered, sites, bindings, budget]).encode()).hexdigest()
+                                     hashlib.sha256(data).hexdigest(), entries, exact, covered, sites, bindings, budget,
+                                     pif_identity(pif_rom())]).encode()).hexdigest()
     cached = Path(os.environ.get('PLAID_REPLAY_CACHE', Path.home() / '.cache/plaid/ares-replay')) / f'{key}.json'
     if cached.exists():
         return json.loads(cached.read_text())
@@ -201,11 +218,11 @@ def replay(rom, data, entries, exact, covered, sites, bindings, budget):
     os.environ['GIT_CONFIG_KEY_0'] = 'core.preloadindex'
     os.environ['GIT_CONFIG_VALUE_0'] = 'false'
     exe = build_oracle()
-    firmware = ROOT / '.refs/ares/ares/System/Nintendo 64/pif.ntsc.rom'
-    assert hashlib.sha256(firmware.read_bytes()).hexdigest() == 'fa7b09795ef1e54461e59f6f2d902368133e3f1cd980e34383e6a780d74beffd'
+    firmware = pif_rom()
+    assert firmware is None or pif_identity(firmware) == 'fa7b09795ef1e54461e59f6f2d902368133e3f1cd980e34383e6a780d74beffd'
     with tempfile.TemporaryDirectory(prefix='plaid-ares-') as temporary:
         output = Path(temporary) / 'capture.json'
-        command = [str(exe), str(rom), str(firmware), hex(boot), ','.join(hex(e) for e in entries), str(budget),
+        command = [str(exe), str(rom), str(firmware or '-'), hex(boot), ','.join(hex(e) for e in entries), str(budget),
                    'CIC-NUS-' + cics[crc], str(output)]
         if exact:
             command.append('exact-many')
@@ -227,8 +244,9 @@ def replay(rom, data, entries, exact, covered, sites, bindings, budget):
         results = [json.loads(line) for line in output.read_text().splitlines()]
     for result in results:
         result.update(format='plaid-ares-boot-harvest-v1', revision=REV, budget=budget, vi_budget=3600, replay_seconds=replay_seconds, rom_sha256=hashlib.sha256(data).hexdigest(),
-                  firmware_sha256=hashlib.sha256(firmware.read_bytes()).hexdigest(), cic=cics[crc],
-                  initial_state='cpu_power_pif_entry', controller='gamepad1_neutral')
+                  firmware_sha256=pif_identity(firmware), cic=cics[crc],
+                  pif_boot='firmware' if firmware else 'hle-ipl2-v1',
+                  initial_state='cpu_power_pif_entry' if firmware else 'ipl3_entry_hle', controller='gamepad1_neutral')
         if 'bytes' in result:
             result['output_sha256'] = hashlib.sha256(bytes(result['bytes'])).hexdigest()
             result['consumed_rom'] = sorted({(p - 0x10000000, p - 0x10000000 + n)

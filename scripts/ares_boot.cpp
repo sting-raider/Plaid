@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <vector>
 #include <set>
+#include "ares_hle_boot.hpp"
 
 static std::vector<u8> written(8 * 1024 * 1024);
 static std::vector<u8> startupWritten(8 * 1024 * 1024);
@@ -385,7 +386,10 @@ int main(int argc, char** argv) {
     bool valid = fields == EOF; std::fclose(f); if(!valid) return 2;
   }
   auto bytes = nall::file::read(argv[1]);
-  auto firmware = nall::file::read(argv[2]);
+  // "-" boots through the firmware-free IPL1/IPL2 state (ADR-0316). A path to the
+  // pinned PIF ROM runs the real firmware instead, for verification only.
+  bool hleBoot = !std::strcmp(argv[2], "-");
+  std::vector<u8> firmware = hleBoot ? std::vector<u8>(1984) : nall::file::read(argv[2]);
   boot = std::strtoul(argv[3], nullptr, 0);
   std::string targetList = argv[4];
   for(size_t at = 0; at < targetList.size();) {
@@ -436,11 +440,15 @@ int main(int argc, char** argv) {
     cpu.scc.status.errorLevel = cpu.scc.status.exceptionLevel = 0;
     cpu.context.setMode(); cpu.pipeline.setPc(0xffffffff00000000ull | boot);
   }
+  u32 vis = 0;
+  if(hleBoot && std::strcmp(argv[6], "fixture") && !refill) {
+    steps = plaidHleBoot(bytes.data(), bytes.size(), argv[6], vis);
+    if(steps == ~0ull) return 4;
+  }
   plaidRdramBurstObserver = [](bool w, u32 a, u32 n, u32 d, const u32*) { mark(w,a,n,d); };
   plaidRdramScalarObserver = [](bool w, u32 a, u32 n, u32 d, u64) { mark(w,a,n,d); };
   plaidPiDmaObserver = observeDma;
   plaidCpuInstructionObserver = [](bool before, u64 pc, u32 word) { if(before) observe(pc, word); };
-  u32 vis = 0;
   for(; steps < budget && vis < 3600 && (!targets.empty() || seekUncovered) && !uncoveredEntry && !foundOccupant; steps++) {
     if(refill && anchorReady && !rootApplied) {
       // The authenticated anchor instruction has completed. Only PC/pipeline
