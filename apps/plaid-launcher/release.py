@@ -75,9 +75,13 @@ if subprocess.run(['gh', 'release', 'view', engine_tag, '-R', REPO], capture_out
     upload = engine_zip.with_name(engine_asset)
     shutil.copyfile(engine_zip, upload)
     subprocess.run(['gh', 'release', 'create', engine_tag, f'{upload}', '-R', REPO, '--target', commit,
-                    '--title', f'Plaid engine {engine_sha[:12]}', '--latest=false',
+                    '--title', f'Plaid engine {engine_sha[:12]}', '--latest=false', '--prerelease',
                     '--notes', f'Recompiler engine the launcher downloads on first run. SHA-256 `{engine_sha}`.'], check=True)
     upload.unlink()
+# PLAID_CANDIDATE=1 stops here: the engine is up, the installer is for testing; publish
+# that same file after testing with PLAID_BUILT=1 PLAID_ENGINE_READY=1.
+if os.environ.get('PLAID_CANDIDATE') == '1':
+    sys.exit(f'release candidate ready to test: {setup}')
 subprocess.run(['gh', 'release', 'create', tag, str(setup), str(latest), '-R', REPO, '--target', commit,
                 '--title', f'Plaid launcher {version}', '--notes', notes_md, '--latest'], check=True)
 print('published', tag)
