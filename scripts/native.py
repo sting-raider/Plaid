@@ -26,6 +26,7 @@ Saves go to <out>/<name>.sra (SRAM) or <name>.fla (FlashRAM); EEPROM to
 """
 import argparse
 import contextlib
+from engine_paths import BUNDLED, work_root, tool, prepare_runtime
 from fragment_mapped import partition_mapped
 import hashlib
 import json
@@ -51,7 +52,7 @@ FAST_SITE_BUDGET = 100_000_000
 REPAIR_ROUND_CAP = 4
 OBJECT_CACHE = Path(os.environ.get('PLAID_OBJECT_CACHE', Path.home() / '.cache/plaid/objects'))
 SIGNATURES = ROOT / '.refs/n64sym/src/builtin_signatures.sig'
-RT64 = ROOT / 'target/rt64-shim/Release'
+RT64 = work_root(ROOT) / 'target/rt64-shim/Release'
 
 # Per-phase wall times, so a slow ROM is attributable without re-running the
 # whole pipeline under a profiler. Each entry is (name, seconds, cached).
@@ -109,7 +110,7 @@ def memo_plaid(*args, writes=()):
     for a in args:
         path = Path(str(a))
         inputs.append([str(a), digest(path)] if a not in writes and path.is_file() else str(a))
-    store = ROOT / 'target/native-cache' / hashlib.sha256(json.dumps(inputs).encode()).hexdigest()
+    store = work_root(ROOT) / 'target/native-cache' / hashlib.sha256(json.dumps(inputs).encode()).hexdigest()
     if _PHASES:
         _PHASES[-1]['calls'] += 1
     if not (store / 'stdout').exists():
@@ -154,6 +155,9 @@ def discover_map(arguments, overlay_support, output):
 
 def part_compiler():
     """Clang when installed (targeting MinGW on Windows, so GCC links it), else GCC."""
+    if BUNDLED:
+        return [tool('clang'), '--target=x86_64-w64-windows-gnu',
+                '--sysroot=' + str(ROOT / 'toolchain/mingw/x86_64-w64-mingw32')]
     if not shutil.which('clang'):
         return ['gcc']
     return ['clang', '--target=x86_64-w64-windows-gnu'] if os.name == 'nt' else ['clang']
@@ -351,7 +355,7 @@ def build_once(a):
     rom = a.rom.resolve()
     # 32 characters keep both Zelda titles (and similar series) apart
     name = a.name or ''.join(c for c in rom.stem.lower() if c.isalnum())[:32]
-    out = ROOT / 'target/native' / name
+    out = work_root(ROOT) / 'target/native' / name
     texts = out / 'rsp-rom'
     for d in (out, texts):
         d.mkdir(parents=True, exist_ok=True)
@@ -359,7 +363,8 @@ def build_once(a):
     build_env = os.environ.copy()
     build_env.setdefault('CARGO_PROFILE_RELEASE_INCREMENTAL', 'true')
     with phase('build'):
-        run('cargo', 'build', '-q', '--release', '-p', 'plaid', env=build_env)
+        if not BUNDLED:
+            run('cargo', 'build', '-q', '--release', '-p', 'plaid', env=build_env)
     with phase('rom-info'):
         info = json.loads(plaid('rom-info', rom, capture_output=True, text=True).stdout)
     entry = info['header']['boot_address']  # the header entry, less a CIC-6103/6106 offset
@@ -445,7 +450,7 @@ def build_once(a):
     rsp_headers = rsp_dependencies()
     parts = [c, *sorted(out.glob(f'{name}.part*.c'))]
     runtime_header=out/f'{name}.runtime.h'
-    rt = ['gcc', '-O1', '-std=gnu11', '-w', '-DPLAID_SAFEPOINTS', '-DPLAID_RSP', '-DPLAID_RSP_ROM', '-I', ROOT / 'crates/plaid-lower/src', f'-DPLAID_LOWERED="{runtime_header.name}"', f'-DPLAID_SP_BOOT="{sp_boot.name}"', f'-DPLAID_RAM_BOOT="{ram_boot.name}"', '-I', out]
+    rt = [tool('gcc'), '-O1', '-std=gnu11', '-w', '-DPLAID_SAFEPOINTS', '-DPLAID_RSP', '-DPLAID_RSP_ROM', '-I', ROOT / 'crates/plaid-lower/src', f'-DPLAID_LOWERED="{runtime_header.name}"', f'-DPLAID_SP_BOOT="{sp_boot.name}"', f'-DPLAID_RAM_BOOT="{ram_boot.name}"', '-I', out]
     # Keep runtime objects in the build directory, alongside the generated C.
     runtime_source = out / 'runtime.c'
     runtime_source.write_text(f'#include "{(ROOT / "runtime/plaid_rt.c").as_posix()}"\n')
@@ -458,11 +463,11 @@ def build_once(a):
     saves = ['--sram', out / f'{name}.sra', '--flash', out / f'{name}.fla', '--save', out / f'{name}.eep']
 
     texts_c = [texts / (t['name'] + '.c') for t in rsp_manifest['texts']] + [texts / 'rsp_registry.c']
-    flags = ['gcc', '-O2', '-I', ROOT / 'crates/plaid-lower/src']
+    flags = [tool('gcc'), '-O2', '-I', ROOT / 'crates/plaid-lower/src']
     # One pool for every C unit: the RSP texts and runtime fill the CPU while the last CPU parts finish.
     # __builtin_setjmp buffers are compiler-specific and runtime/jumps.h longjmps
     # from GCC code, so a part that sets a jump buffer compiles with GCC too.
-    jobs = [(p, ['gcc', *part_flags] if b'__builtin_setjmp' in p.read_bytes() else cc, b'') for p in parts] + [(p, flags, rsp_headers) for p in texts_c] + [(runtime_source, rt, runtime_deps)]
+    jobs = [(p, [tool('gcc'), *part_flags] if b'__builtin_setjmp' in p.read_bytes() else cc, b'') for p in parts] + [(p, flags, rsp_headers) for p in texts_c] + [(runtime_source, rt, runtime_deps)]
     if a.rt64:
         jobs.append((window_source, [*rt, '-DPLAID_RT64'], runtime_deps))
     with phase('gcc'):
@@ -472,12 +477,14 @@ def build_once(a):
     if a.rt64:
         window_obj = objs[-1]
     with phase('link'):
-        run('gcc', main_obj, *part_objs, '-pthread', *objects, '-o', exe)
+        run(tool('gcc'), main_obj, *part_objs, '-pthread', *objects, '-o', exe)
+        prepare_runtime(out)
     if a.rt64:
         with phase('link-window'):
             resource = out / 'plaid-icon.o'
-            run('windres', 'runtime/rt64/icon.rc', '-I', 'runtime/rt64', '-o', resource)
-            run('gcc', window_obj, *part_objs, RT64 / 'plaid_rt64.dll', '-pthread', *objects, resource, '-o', window_exe)
+            prepare_runtime(RT64)
+            run(tool('windres'), 'runtime/rt64/icon.rc', '-I', 'runtime/rt64', '-o', resource)
+            run(tool('gcc'), window_obj, *part_objs, RT64 / 'plaid_rt64.dll', '-pthread', *objects, resource, '-o', window_exe)
     command = [str(window_exe if a.rt64 else exe), '--rom', str(rom), *map(str, saves),
                '--stop-at', 'none', '--seconds', str(a.seconds)]
     if a.rsp_gfx:

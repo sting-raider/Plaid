@@ -9226,3 +9226,99 @@ exceptions or completeness claim. Synthetic policy/CLI contracts and an actual
 discover/lower/compile/capture/admit/rebuild fixture cover convergence and stop
 conditions. Paper Mario and RE2 measurements remain unavailable because no local
 ROM paths were configured; see `research/bounded-repair-loop.md`.
+
+## ADR-0316: Relocatable offline engine bundle without console firmware
+
+Status: accepted. The launcher installer ships `dist/engine/` (built by
+`python scripts/package_engine.py`) so a user with no checkout, Rust, Python,
+compiler or git can compile ROMs: `python/python.exe -B -u scripts/native.py <rom>
+--rt64 ...` from the bundle root, with every writable output under
+`PLAID_WORK_DIR` (keeping `target/native/<id>` and
+`target/rt64-shim/Release/<id>-rt64.exe`). A directory containing `engine.json`
+selects bundle mode; checkout builds are unchanged. The bundle holds an allowlist
+only: no ROM, game output, save, cache, `.refs` tree or PIF ROM.
+
+### PIF boot ROM
+
+The analysis oracle (pinned ares) booted every ROM through `pif.ntsc.rom`, a
+1984-byte dump of Nintendo's PIF boot ROM, which is copyrighted console firmware
+that the ares repository carries without a grant (AGENTS.md invariant 4 forbids
+redistributing it). Only `scripts/ares_boot.py` passed it to the oracle; nothing
+else in the native pipeline reads it. The ROM is the *CPU-side* IPL1/IPL2: ares
+HLEs the PIF microcontroller itself. IPL2 inits CP0/RI/MI/SP/PI/SI/VI/AI, copies
+the cartridge's 4 KiB IPL3 into SP DMEM, runs the CIC checksum handshake with the
+PIF and jumps to `0xA4000040`.
+
+Decision: the oracle skips IPL1/IPL2 and starts at the first IPL3 instruction in the
+machine state they leave (`scripts/ares_hle_boot.hpp`, default; the oracle argument
+`-`). The state is *measured, not copied*: `spikes/099-pif-hle-boot/gen_tables.py`
+runs the real firmware locally to IPL3 entry for each CIC (6101/6102/6103/6105/6106),
+diffs pinned-ares serialized component state (CPU, MI, VI, AI, PI, PIF RAM/state, CIC,
+SI, RSP, RDP, event queue) against power-on and emits the delta bytes
+(`scripts/ares_hle_boot_tables.hpp`, about 250 bytes per CIC), plus the instruction
+count (about 410,000) and VI frames (12) the skipped phase spans so budgets and
+`steps`/`vi` stay comparable. No firmware code is in the table. The DMEM IPL3 copy
+comes from the user's cartridge at run time. The IPL2 code the real boot leaves
+in RSP IMEM (1,388 non-zero bytes) is deliberately not reproduced.
+`PLAID_PIF_ROM=<path to the pinned ROM>` still runs the real firmware for
+verification only; cache keys include the boot model, and capture rows record
+`pif_boot` (`hle-ipl2-v1` or `firmware`) with `firmware_sha256` null under HLE.
+
+Evidence (local, 14 user ROMs covering all five CICs; none committed):
+- Per-CIC state is cartridge-independent (generation asserts every ROM of a CIC gives
+  one delta).
+- HLE-start serialized state equals the firmware's IPL3-entry state byte for byte
+  across all components (118 MB compared) except the IMEM residue.
+- Oracle boot capture at each game's entry (bytes, DMA, consumed ROM ranges, SP
+  snapshot, CP0 state, `vi`) is identical to the firmware run for all 14 ROMs, with
+  one benign exception: the three CIC-6105 ROMs report `steps` 56 lower, because
+  IPL3-6105's first loop iterates over IMEM words IPL2 left behind and stops sooner
+  on zeroed IMEM. The SP snapshot and entry code are identical.
+- Known loss: ADR-0103's BEV=1 PIF-ROM fetch provenance needs the real ROM, so those
+  analyses remain opt-in and require a user-supplied firmware path; the native pipeline
+  does not use them. A guest reading PIF ROM addresses sees zeros (no game does).
+- A packaging audit hashes every bundled file and refuses the pinned NTSC/PAL PIF ROMs
+  or any `pif*.rom/.bin` name.
+
+### RT64 utf8conv
+
+RT64 vendors `src/contrib/utf8conv/utf8conv.h` and `utf8except.h` with only
+"Copyright (C) by Giovanni Dicanio" headers and no license file. The upstream project
+(`GiovanniDicanio/UnicodeConversions`, commit `6a7d4612`) is MIT licensed ("Copyright (c)
+2016 by Giovanni Dicanio"; LICENSE SHA-256 `76e8b356...27f2`), and the two vendored headers
+are byte-identical to upstream (modulo CRLF; SHA-256 `15e9bfa5...449f` and
+`bd0ea604...1b19`). They are compiled into the Windows RT64 shim. The packager verifies
+the digests and ships the upstream MIT text in `THIRD_PARTY_NOTICES/rt64/utf8conv/`.
+
+### Licenses of bundled components
+
+| Component | License | Notice text |
+|---|---|---|
+| Plaid (plaid.exe, scripts, runtime C, headers) | MIT OR Apache-2.0 | `plaid/` |
+| Rust crates linked into plaid.exe | per crate (engine.json rust_components) | `rust/` |
+| ares reference core (analysis oracle) | ISC | `ares/LICENSE` |
+| sljit (inside the oracle) | BSD-2-Clause | `ares/sljit-LICENSE` |
+| xxHash (inside the oracle) | BSD-2-Clause | `ares/xxhash-LICENSE.txt` |
+| PIF boot ROM | not distributed (HLE IPL2 state table instead) | `-` |
+| RT64 renderer | MIT | `rt64/` |
+| RT64 utf8conv headers | MIT (upstream Giovanni Dicanio) | `rt64/utf8conv/LICENSE.MIT` |
+| RT64 miniz, nlohmann/json, plainargs | MIT, MIT, Unlicense | `rt64/` |
+| SDL2 | zlib | `rt64/` |
+| DirectX-Headers (compiled in) | MIT | `directx-headers/` |
+| DirectXShaderCompiler dxcompiler.dll | LLVM/UIUC + MIT | `dxc/` |
+| DXIL validator dxil.dll | Microsoft redistribution terms | `dxc/LICENSE-MS.txt` |
+| Visual C++ runtime DLLs | Microsoft redistributable terms | `msvc/` |
+| Python 3.12.10 (embeddable) and its libraries | PSF-2.0 and bundled-library licenses | `python-dependencies/` |
+| psutil 7.0.0 | BSD-3-Clause | `python/site-packages/psutil-7.0.0.dist-info` |
+| MinGW-Builds GCC 15.2.0, binutils 2.45 | GPL-3.0-or-later with GCC Runtime Library Exception | `mingw/, mingw-sources/` |
+| mingw-w64 v13 runtime, headers, winpthreads | ZPL-2.1 / MIT-style / public domain | `mingw/` |
+| LLVM/Clang (tested commit) and builtin headers | Apache-2.0 WITH LLVM-exception | `llvm/LICENSE.txt` |
+
+GPL components (GCC, binutils and their runtime DLLs) are unmodified MinGW-Builds
+binaries; their sources, vendor patches and configure recipes ship in
+`THIRD_PARTY_NOTICES/mingw-sources/`, and generated games link them only under the GCC
+Runtime Library Exception. RT64 contributes nested notices for components that its
+Windows build does not link (e.g. mupen64plus API headers); they are preserved
+conservatively. Rust crate licenses are listed per crate in `engine.json`. The
+launcher must show `THIRD_PARTY_NOTICES/INDEX.txt` in its About/licenses view.
+Bundle size: SIZES.
