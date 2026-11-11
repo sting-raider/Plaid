@@ -103,13 +103,17 @@ struct Engine {
     bundled: bool,
 }
 
-/// An installed app runs the engine it shipped with (ADR-0316 bundle) and keeps builds in
-/// its own data folder; without one (dev builds) it runs the configured checkout in place.
+/// The engine bundle (ADR-0316) a release build runs, pinned by release.py at build time.
+/// Dev builds have none and run the configured checkout in place.
+const ENGINE_URL: Option<&str> = option_env!("PLAID_ENGINE_URL");
+const ENGINE_SHA256: Option<&str> = option_env!("PLAID_ENGINE_SHA256");
+
+/// A release app runs its pinned engine from its data folder, downloaded on first run, and
+/// keeps builds beside it; it is "bundled" from install on, even before the download.
 fn engine(app: &AppHandle, config: &Config) -> Engine {
-    let bundle = app.path().resource_dir().ok().map(|d| d.join("engine"));
-    match (bundle, app.path().app_local_data_dir()) {
-        (Some(root), Ok(data)) if root.join("engine.json").exists() => Engine {
-            root,
+    match (ENGINE_SHA256, app.path().app_local_data_dir()) {
+        (Some(sha), Ok(data)) => Engine {
+            root: data.join("engine").join(&sha[..12]),
             work: data.join("work"),
             bundled: true,
         },
@@ -124,6 +128,98 @@ fn engine(app: &AppHandle, config: &Config) -> Engine {
 #[tauri::command]
 fn engine_bundled(app: AppHandle) -> Result<bool, String> {
     Ok(engine(&app, &get_config(app.clone())?).bundled)
+}
+
+/// True once the engine can run: always for a checkout, after the download for a release.
+#[tauri::command]
+fn engine_ready(app: AppHandle) -> Result<bool, String> {
+    let e = engine(&app, &get_config(app.clone())?);
+    Ok(!e.bundled || e.root.join("engine.json").exists())
+}
+
+#[derive(Serialize, Clone)]
+struct EngineProgress {
+    done: u64,
+    total: u64,
+}
+
+static ENGINE_INSTALL: Mutex<()> = Mutex::new(());
+
+/// Downloads the pinned engine zip, checks its SHA-256, unpacks it and drops older engines.
+/// Emits `engine` progress events while downloading.
+#[tauri::command]
+async fn install_engine(app: AppHandle) -> Result<(), String> {
+    let (Some(url), Some(sha)) = (ENGINE_URL, ENGINE_SHA256) else {
+        return Ok(());
+    };
+    let root = engine(&app, &get_config(app.clone())?).root;
+    tauri::async_runtime::spawn_blocking(move || {
+        use sha2::Digest as _;
+        use std::io::{Read as _, Write as _};
+        // a second caller waits for the first download instead of starting its own
+        let _one = ENGINE_INSTALL.lock().unwrap_or_else(|e| e.into_inner());
+        if root.join("engine.json").exists() {
+            return Ok(());
+        }
+        let dir = root.parent().ok_or("bad engine folder")?.to_path_buf();
+        std::fs::create_dir_all(&dir).map_err(err)?;
+        let part = dir.join(format!("{}.zip.part", &sha[..12]));
+        let response = ureq::AgentBuilder::new()
+            .timeout_read(std::time::Duration::from_secs(60))
+            .build()
+            .get(url)
+            .call()
+            .map_err(|e| format!("could not download the recompiler: {e}"))?;
+        let total = response
+            .header("Content-Length")
+            .and_then(|l| l.parse().ok())
+            .unwrap_or(0);
+        let mut reader = response.into_reader();
+        let mut file = std::fs::File::create(&part).map_err(err)?;
+        let mut hash = sha2::Sha256::new();
+        let (mut done, mut shown, mut buf) = (0u64, 0u64, vec![0u8; 1 << 16]);
+        loop {
+            let n = reader
+                .read(&mut buf)
+                .map_err(|e| format!("the download stopped: {e}"))?;
+            if n == 0 {
+                break;
+            }
+            hash.update(&buf[..n]);
+            file.write_all(&buf[..n]).map_err(err)?;
+            done += n as u64;
+            if done - shown >= 1 << 20 {
+                shown = done;
+                let _ = app.emit("engine", EngineProgress { done, total });
+            }
+        }
+        drop(file);
+        let got: String = hash.finalize().iter().map(|b| format!("{b:02x}")).collect();
+        if !got.eq_ignore_ascii_case(sha) {
+            let _ = std::fs::remove_file(&part);
+            return Err("the downloaded recompiler is damaged (checksum mismatch); try again".into());
+        }
+        let _ = app.emit("engine", EngineProgress { done, total: done });
+        // unpack beside the final folder, then rename, so a half-unpacked engine never counts as ready
+        let tmp = dir.join(format!("{}.tmp", &sha[..12]));
+        let _ = std::fs::remove_dir_all(&tmp);
+        zip::ZipArchive::new(std::fs::File::open(&part).map_err(err)?)
+            .and_then(|mut z| z.extract(&tmp))
+            .map_err(|e| format!("could not unpack the recompiler: {e}"))?;
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::rename(tmp.join("engine"), &root).map_err(err)?;
+        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = std::fs::remove_file(&part);
+        // older engines; one still in use stays until the next start
+        for old in std::fs::read_dir(&dir).map_err(err)?.flatten() {
+            if old.path() != root {
+                let _ = std::fs::remove_dir_all(old.path()).or_else(|_| std::fs::remove_file(old.path()));
+            }
+        }
+        Ok(())
+    })
+    .await
+    .map_err(err)?
 }
 
 fn config_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -429,6 +525,9 @@ fn compile_game(app: AppHandle, running: State<'_, Shared>, id: String) -> Resul
         work,
         bundled,
     } = engine(&app, &config);
+    if bundled && !root.join("engine.json").exists() {
+        return Err("the recompiler is still downloading; compile when it finishes".into());
+    }
     {
         let mut r = running.lock().unwrap();
         if let Some(busy) = &r.id {
@@ -801,6 +900,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             engine_bundled,
+            engine_ready,
+            install_engine,
             set_config,
             scan_library,
             get_cover,
