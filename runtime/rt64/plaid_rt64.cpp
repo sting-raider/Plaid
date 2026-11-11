@@ -324,9 +324,16 @@ __declspec(dllexport) void plaid_audio_play(const uint8_t *samples, uint32_t byt
     if (!audio) return;
     pcm.resize(bytes / 2);
     for (uint32_t i = 0; i < bytes / 2; i++) pcm[i] = int16_t(samples[2 * i] << 8 | samples[2 * i + 1]);
-    // shortcut: the AI model and the device run on different clocks; past
-    // 200 ms of queued audio drop it rather than resample.
-    if (SDL_GetQueuedAudioSize(audio) > rate * 4 / 5) SDL_ClearQueuedAudio(audio);
+    // shortcut: the AI model and the device run on different clocks; drop the
+    // newest buffer past 150 ms queued rather than resample (clearing the whole
+    // queue was an audible jump). After the queue ran dry (a hitch), lead with
+    // 40 ms of silence so the next small hitch is absorbed instead of tearing.
+    Uint32 queued = SDL_GetQueuedAudioSize(audio), second = rate * 4;
+    if (queued > second * 3 / 20) return;
+    if (queued == 0) {
+        std::vector<int16_t> cushion(second / 25 / 2 & ~1u);
+        SDL_QueueAudio(audio, cushion.data(), Uint32(cushion.size() * 2));
+    }
     SDL_QueueAudio(audio, pcm.data(), bytes);
 }
 
