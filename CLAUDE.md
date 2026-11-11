@@ -10,7 +10,7 @@ a short orientation; where they disagree, `AGENTS.md` wins.
 
 ## Orientation in five minutes
 
-1. What Plaid is and how far each game gets: `README.md`, then `docs/STATUS.md`.
+1. What Plaid is and how far each game gets: `README.md`, `docs/REPORT.md`, then `docs/STATUS.md`.
 2. What to do next: the newest section at the top of `docs/NEXT.md`.
 3. Why things are the way they are: `docs/DECISIONS.md` (ADRs, newest at the bottom;
    grep for `ADR-NNNN`).
@@ -30,5 +30,5 @@ a short orientation; where they disagree, `AGENTS.md` wins.
   `git worktree remove --force` a worktree that has them.
 - Land with a plain fast-forward push after a full gate on the exact tree; never
   `--force` or `--force-with-lease` (see `AGENTS.md`, "exact-head CAS").
-- Do not edit `README.md`'s progress tables; the maintainer updates them after landings.
+- Do not edit `docs/REPORT.md`'s progress tables; the maintainer updates them after landings.
 - No game-specific hacks: a fix must be a general capability with a deterministic test.
