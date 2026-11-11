@@ -263,7 +263,10 @@ def replay_bindings(program, base, size):
     return sorted(set(tuple(b) for b in bindings), key=lambda b: (*b[:3], -2 if b[3] is None else b[3]))
 
 
-def replay_sites(program, bindings):
+def replay_sites(program, bindings, skipped=None):
+    """Runtime PCs of the open calls. A call without exactly one supported
+    binding refuses the projection, or with `skipped` is left unobserved and
+    listed there: observing fewer calls only resolves less (ADR-0320)."""
     sites = set()
     for site in program['indirect_sites']:
         if site.get('closed_proof') is not None or site.get('link_register') is None:
@@ -272,7 +275,10 @@ def replay_sites(program, bindings):
         matches = {runtime + pc - mapped for mapped, runtime, size, source in bindings
                    if mapped <= pc < mapped + size and source != -1}
         if len(matches) != 1:
-            raise ValueError(f'open call {pc:08x} has no unique supported replay binding')
+            if skipped is None:
+                raise ValueError(f'open call {pc:08x} has no unique supported replay binding')
+            skipped.append(pc)
+            continue
         runtime = matches.pop()
         sites.add(runtime)
         if 0x80000000 <= runtime < 0xc0000000:
@@ -302,19 +308,16 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
         # Calls only: a computed jr is often a return or an in-function jump,
         # whose target is no function start (ADR-0222).
         bindings = replay_bindings(program, base, size)
-        try:
-            sites = replay_sites(program, bindings)
-        except ValueError as error:
-            # Unsupported call projection cannot invalidate an independent
-            # first-fetch source replay. Keep those calls unobserved.
-            if not entries:
-                raise
-            sites = []
-            projection_refusal = str(error)
-        else:
-            projection_refusal = None
+        # A call without a unique supported binding stays unobserved; the others
+        # are still watched (one shared-slot copy must not blind the whole replay).
+        skipped = []
+        sites = replay_sites(program, bindings, skipped)
+        projection_refusal = (f'{len(skipped)} open call(s) have no unique supported replay binding, '
+                              f'first {skipped[0]:08x}') if skipped else None
+        if not sites and skipped and not entries:
+            raise ValueError(projection_refusal)
         captures = (capture_many(rom, entries, covered=coverage(loads, base, size, slots=True), sites=sites, bindings=bindings)
-                    if unknown_indirect and projection_refusal is None else capture_many(rom, entries))
+                    if unknown_indirect and (sites or not skipped) else capture_many(rom, entries))
     except ValueError as error:
         Path(receipt_path).write_text(json.dumps({'targets': targets, 'refusal': str(error)}, indent=2) + '\n')
         return False

@@ -84,7 +84,12 @@ def projection_contract():
             pass
         else:
             raise AssertionError('missing/ambiguous/unsupported binding accepted')
-    print('PASS relocated replay site projection: runtime PCs, aliases, ambiguous and unsupported refusal')
+    # with a skip list, an unprojectable call is left out and the others are still watched
+    unbound = {'site': {'pc': 0x8090042c}, 'closed_proof': None, 'link_register': 31}
+    skipped = []
+    assert harvest_boot.replay_sites(dict(program, indirect_sites=[site, unbound]), bindings, skipped) == [0x8000042c, 0xa000042c]
+    assert skipped == [0x8090042c]
+    print('PASS relocated replay site projection: runtime PCs, aliases, ambiguous and unsupported refusal, partial projection')
 
 
 

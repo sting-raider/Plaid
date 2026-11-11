@@ -1004,29 +1004,38 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 })
         });
     let mut uses_address_taken = false;
-    for site in &map.indirect_sites {
+    let sites: Vec<&IndirectSite> = map.indirect_sites.iter().collect();
+    if scope.guarded() {
+        for site in &sites {
+            if let Some(image) = source(images, &site.site) {
+                closures
+                    .entry(image.base.image.clone())
+                    .or_insert_with(|| crate::returns::Closure::new(map, image));
+            }
+        }
+    }
+    // Each site's proofs are pure functions of the map and its image.
+    let verdicts = crate::indirect::par_map(&sites, |site| {
+        let image = source(images, &site.site);
         // Return certificates hold only under the guarded scope's checked
         // call/return assumption; every other scope keeps such sites OPEN.
         let returns = scope.guarded()
-            && source(images, &site.site).is_some_and(|image| {
-                closures
-                    .entry(image.base.image.clone())
-                    .or_insert_with(|| crate::returns::Closure::new(map, image))
-                    .verify(map, image, site)
-            });
-        return_closure |= returns;
+            && image.is_some_and(|image| closures[&image.base.image].verify(map, image, site));
         // A verified jump table closes only under the guarded scope, whose
         // native artifact store-protects table bytes (ADR-0132).
         let table = scope.guarded()
-            && source(images, &site.site).is_some_and(|image| {
+            && image.is_some_and(|image| {
                 crate::tables::verify_in(&index, map, image, site)
                     || crate::tail_cells::verify_in(&index, map, image, site)
             });
+        let constant = image.is_some_and(|image| verify_constant_in(&index, map, image, site));
+        (returns, table, constant)
+    });
+    for (site, (returns, table, constant)) in sites.into_iter().zip(verdicts) {
+        return_closure |= returns;
         if table {
             tables.insert(site.site.clone());
         }
-        let constant = source(images, &site.site)
-            .is_some_and(|image| verify_constant_in(&index, map, image, site));
         let dispatched =
             !returns && !table && !constant && address_taken_ok && site.link_register.is_some();
         uses_address_taken |= dispatched;

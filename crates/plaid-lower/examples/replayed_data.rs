@@ -59,7 +59,7 @@ fn main() {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
-            slots: vec![(data.clone(), data.start.0, 0)],
+            slots: vec![(data.clone(), data.start.0, 0)].into(),
         };
         image.base.image = image.content_identity();
         let id = "authored-data".to_string();

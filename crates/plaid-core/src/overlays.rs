@@ -253,7 +253,10 @@ impl Layout {
             let at = r.offset as usize;
             let w = word(&out, at)?;
             let changed = match r.kind {
-                2 if w & 0x0f000000 != 0 => w, // Segmented data pointer: loader leaves it alone.
+                // Segmented data pointer: loader leaves it alone. A word into the
+                // overlay's own link range is never one, even when an analysis
+                // placement links it above 0x81000000.
+                2 if segmented(w, link, end) => w,
                 2 => target(w)?,
                 4 => {
                     if !matches!(w >> 26, 2 | 3) {
@@ -274,7 +277,7 @@ impl Layout {
                         .ok_or("LO16 lacks register-matched HI16")?;
                     let current = word(&out, hi)?;
                     let low = w as u16 as i16 as i32 as u32;
-                    if current.wrapping_shl(16).wrapping_add(low) & 0x0f000000 != 0 {
+                    if segmented(current.wrapping_shl(16).wrapping_add(low), link, end) {
                         continue;
                     }
                     let value = target(original.wrapping_shl(16).wrapping_add(low))?;
@@ -289,6 +292,13 @@ impl Layout {
         out.resize(span as usize, 0);
         Ok(out)
     }
+}
+
+/// The loader's segmented-pointer test (bits 24..27 set), except for an
+/// address in the overlay's own `link..=end` range: a slot alternate placed
+/// for analysis above 0x81000000 sets those bits in its own pointers.
+pub fn segmented(address: u32, link: u32, end: u32) -> bool {
+    address & 0x0f00_0000 != 0 && !(link..=end).contains(&address)
 }
 
 /// The text of a fixed-address file that shares a slot with others
@@ -565,6 +575,111 @@ fn segment_table(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String>
     Ok(found.into_values().collect())
 }
 
+/// Shared-slot tables in a static image: rows that begin with ROM start, ROM end
+/// and RAM destination (Paper Mario's map configs, for one). A destination counts
+/// as an overlay slot only when at least two distinct ROM files name it from rows
+/// at most 0x100 bytes apart (a table, not scattered coincidences); each file must
+/// open with code and lie past the ROM header and boot code. Like every catalog entry these are byte-source
+/// candidates: lowered code still runs only while RAM matches its image.
+fn shared_slot_table(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> {
+    let mut slots: BTreeMap<u32, BTreeMap<(u32, u32), Vec<u32>>> = BTreeMap::new();
+    for at in (0..table_image.len().saturating_sub(11)).step_by(4) {
+        let (rom_start, rom_end, ram) = (
+            word(table_image, at)?,
+            word(table_image, at + 4)?,
+            word(table_image, at + 8)?,
+        );
+        if !(0x8000_0000..0x8080_0000).contains(&ram)
+            || !ram.is_multiple_of(4)
+            || !rom_start.is_multiple_of(4)
+            || !rom_end.is_multiple_of(4)
+            || rom_start < 0x1000
+            || rom_end <= rom_start
+            || rom_end as usize > rom.len()
+            || rom_end - rom_start > MAX_IMAGE as u32
+            || ram
+                .checked_add(rom_end - rom_start)
+                .is_none_or(|end| end > 0x8080_0000)
+        {
+            continue;
+        }
+        slots
+            .entry(ram)
+            .or_default()
+            .entry((rom_start, rom_end))
+            .or_default()
+            .push(at as u32);
+    }
+    let mut found = Vec::new();
+    let tabular = |files: &BTreeMap<(u32, u32), Vec<u32>>| {
+        let offsets: BTreeSet<u32> = files.values().flatten().copied().collect();
+        files.len() >= 2
+            && offsets
+                .iter()
+                .zip(offsets.iter().skip(1))
+                .any(|(a, b)| b - a <= 0x100)
+    };
+    for (ram, files) in slots.into_iter().filter(|(_, files)| tabular(files)) {
+        for ((rom_start, rom_end), table_offsets) in files {
+            let bytes = &rom[rom_start as usize..rom_end as usize];
+            if slot_text(bytes, 0).is_none() {
+                continue;
+            }
+            let layout = slot_layout(bytes, ram);
+            let text_size = layout.text;
+            if !standalone(bytes, ram, text_size) {
+                continue;
+            }
+            found.push(Overlay {
+                file: RomFile {
+                    virtual_start: rom_start,
+                    virtual_end: rom_end,
+                    rom_start,
+                    rom_end,
+                },
+                link: ram,
+                source_sha256: sha256(bytes),
+                layout,
+                table_offsets,
+                encoding: LoadEncoding::CatalogOverlay {
+                    encoding: OverlayCompression::Raw,
+                    encoded_size: rom_end - rom_start,
+                    text_size,
+                    bss_size: 0,
+                },
+            });
+        }
+    }
+    Ok(found)
+}
+
+/// Whether a shared-slot file's text is whole: every J, JAL and branch lands in
+/// its own text, or outside its load neighbourhood (from the 64 KiB block of
+/// `ram` to the file's end), as calls into fixed code and other regions do. A
+/// transfer just before the file or into its data means the row names one part
+/// of a larger load, whose missing code no alternate can supply.
+fn standalone(bytes: &[u8], ram: u32, text: u32) -> bool {
+    let near = (ram & !0xffff)..ram.saturating_add(bytes.len() as u32);
+    let own = ram..ram + text;
+    (0..text / 4).all(|k| {
+        let (at, Ok(w)) = (4 * k, word(bytes, 4 * k as usize)) else {
+            return false;
+        };
+        let pc = ram + at;
+        let target = match w >> 26 {
+            2 | 3 => (pc.wrapping_add(4) & 0xf000_0000) | ((w & 0x03ff_ffff) << 2),
+            1 if matches!((w >> 16) & 31, 0..=3 | 16..=19) => pc
+                .wrapping_add(4)
+                .wrapping_add_signed(i32::from(w as i16) * 4),
+            4..=7 | 20..=23 => pc
+                .wrapping_add(4)
+                .wrapping_add_signed(i32::from(w as i16) * 4),
+            _ => return true,
+        };
+        own.contains(&target) || !near.contains(&target)
+    })
+}
+
 fn descriptor_catalog(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> {
     let mut found = Vec::new();
     for d in crate::descriptor_loads::infer(rom, table_image) {
@@ -606,6 +721,14 @@ pub fn discover(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> 
             Err(e) => {
                 let mut found = segment_table(rom, table_image)?;
                 found.extend(descriptor_catalog(rom, table_image)?);
+                for slot in shared_slot_table(rom, table_image)? {
+                    if !found
+                        .iter()
+                        .any(|o| (o.file.rom_start, o.link) == (slot.file.rom_start, slot.link))
+                    {
+                        found.push(slot);
+                    }
+                }
                 return if found.is_empty() { Err(e) } else { Ok(found) };
             }
         },
@@ -1210,6 +1333,102 @@ mod tests {
             .map(|(v, _)| v)
             .collect();
         assert_eq!(found, [0x2f20, 0x8009_6d50].into());
+    }
+
+    #[test]
+    fn a_slot_file_must_hold_its_own_code() {
+        let ram = 0x802b_60b4;
+        let file = |w: [u32; 4]| -> Vec<u8> { w.iter().flat_map(|w| w.to_be_bytes()).collect() };
+        let j = |t: u32| 0x0800_0000 | ((t & 0x0fff_ffff) >> 2);
+        let jal = |t: u32| 0x0c00_0000 | ((t & 0x0fff_ffff) >> 2);
+        // a jump into its own text, a call into fixed code: whole
+        assert!(standalone(
+            &file([j(ram + 8), 0, jal(0x8000_1000), 0]),
+            ram,
+            16
+        ));
+        // a jump just before the file: one part of a larger load
+        assert!(!standalone(
+            &file([j(0x802b_608c), 0, 0x03e0_0008, 0]),
+            ram,
+            16
+        ));
+        // a branch into its own data
+        assert!(!standalone(&file([0x1000_0002, 0, 0, 0]), ram, 8));
+    }
+
+    #[test]
+    fn copies_placed_above_16_mib_still_relocate_their_own_pointers() {
+        let placed: u32 = 0x8190_0000;
+        let words = [
+            0x3c05_8190, // lui a1, %hi(placed + 8)
+            0x24a5_0008, // addiu a1, a1, %lo
+            0x03e0_0008,
+            0,
+            placed + 4,  // data pointer into the text
+            0x0b00_0010, // a real segmented pointer stays
+        ];
+        let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_be_bytes()).collect();
+        let layout = slot_layout_bounded(&bytes, placed, 16).unwrap();
+        let out = layout.apply(&bytes, placed, 0x8024_0000).unwrap();
+        let got: Vec<u32> = out
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|w| u32::from_be_bytes(*w))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                0x3c05_8024,
+                0x24a5_0008,
+                0x03e0_0008,
+                0,
+                0x8024_0004,
+                0x0b00_0010
+            ]
+        );
+        assert!(segmented(0x0b00_0010, placed, placed + 24));
+        assert!(!segmented(placed + 4, placed, placed + 24));
+    }
+
+    #[test]
+    fn shared_slot_tables_name_every_file_of_a_slot() {
+        let link = 0x8024_0000;
+        // three code files (jr ra; nop), one data file, and code inside the header
+        let mut rom = vec![0; 0x1300];
+        for file in [0x40, 0x1100, 0x1180, 0x1200] {
+            put(&mut rom, file, 0x03e0_0008);
+        }
+        put(&mut rom, 0x1280, 0xfc00_0000); // not an instruction
+        let mut table = vec![0; 0x60];
+        // rows of a 0x10-byte config: start, end, destination, then a name pointer
+        for (row, (start, end, ram)) in [
+            (0x1100, 0x1140, link),
+            (0x1180, 0x11c0, link),
+            (0x1280, 0x12c0, link),        // data, not code: skipped
+            (0x40, 0x80, link),            // header and boot code: never a file
+            (0x1200, 0x1240, 0x8030_0000), // the only file for its slot: not a slot
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            for (k, value) in [start, end, ram, 0x8009_0000].into_iter().enumerate() {
+                put(&mut table, row * 16 + k * 4, value);
+            }
+        }
+        let slots = shared_slot_table(&rom, &table).unwrap();
+        let named: Vec<_> = slots.iter().map(|o| (o.file.rom_start, o.link)).collect();
+        assert_eq!(named, [(0x1100, link), (0x1180, link)]);
+        assert_eq!(slots[0].table_offsets, [0]);
+        // the same two rows far apart are coincidences, not a table
+        let mut scattered = vec![0; 0x400];
+        for (at, start) in [(0, 0x1100u32), (0x300, 0x1180)] {
+            for (k, value) in [start, start + 0x40, link].into_iter().enumerate() {
+                put(&mut scattered, at + k * 4, value);
+            }
+        }
+        assert!(shared_slot_table(&rom, &scattered).unwrap().is_empty());
     }
 
     #[test]

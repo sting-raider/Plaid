@@ -20,7 +20,7 @@ fn image() -> CodeImage {
         rom_offset: Some(RomOffset(64)),
         physical_start: Some(PhysicalAddr(0)),
         holes: Vec::new(),
-        slots: Vec::new(),
+        slots: Default::default(),
     }
 }
 fn rom() -> RomIdentity {
@@ -48,7 +48,8 @@ fn virtual_slot_tables_discover_their_own_placed_case_blocks() {
         },
         linked,
         0x100,
-    )];
+    )]
+    .into();
     let d = discover_image(rom(), &i, &[i.base.pc], 1000).unwrap();
     let s = d
         .map
@@ -526,7 +527,8 @@ fn incomplete_table_paths_retain_only_candidate_evidence() {
         },
         0x80000000,
         0x100,
-    )];
+    )]
+    .into();
     let placed_roots = [placed.base.pc, GuestAddr(0x80020070)];
     let d = discover_image(rom(), &placed, &placed_roots, 1000).unwrap();
     let site = d

@@ -411,11 +411,16 @@ pub(crate) fn par_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync)
 }
 
 pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap, String> {
-    map.validate()?;
-    let clone_started = std::time::Instant::now();
-    let mut out = map.clone();
-    crate::timing::note("indirect.clone", clone_started.elapsed());
-    out.indirect_sites.clear();
+    analyze_indirect_owned(map.clone(), image)
+}
+
+/// [`analyze_indirect`] on a map the caller hands over, so no copy is made.
+pub fn analyze_indirect_owned(
+    mut out: ProgramMap,
+    image: &CodeImage,
+) -> Result<ProgramMap, String> {
+    out.validate()?;
+    let map = &out;
     let index_started = std::time::Instant::now();
     let index = MapIndex::new(map);
     crate::timing::note("indirect.index", index_started.elapsed());
@@ -445,8 +450,11 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
         }
     });
     crate::timing::note("indirect.proofs", proofs_started.elapsed());
+    drop(index);
+    // proofs read the input map only; now rebuild its sites in place
+    let sites = std::mem::take(&mut out.indirect_sites);
     for (old, proof) in sites.into_iter().zip(proofs) {
-        let mut site = old.clone();
+        let mut site = old;
         if let Some((producer, target, detail)) = proof {
             let detail = detail.map_err(|e| e.to_string())?;
             let id = format!("constant:{}", sha256(detail.as_bytes()));
@@ -475,9 +483,9 @@ pub fn analyze_indirect(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMa
         out.indirect_sites.insert(site);
     }
     let tail_started = std::time::Instant::now();
-    out = crate::tail_cells::analyze(&out, image)?;
+    out = crate::tail_cells::analyze_owned(out, image)?;
     crate::timing::note("indirect.tail-cells", tail_started.elapsed());
-    out = crate::tables::analyze(&out, image)?;
+    out = crate::tables::analyze(out, image)?;
     crate::timing::note("indirect.tables", tail_started.elapsed());
     // New candidate edges may themselves enter a prefix and break dominance.
     let index = MapIndex::new(&out);

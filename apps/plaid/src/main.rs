@@ -1354,7 +1354,7 @@ fn run() -> Result<(), String> {
                 rom_offset: None,
                 physical_start: None,
                 holes: Vec::new(),
-                slots: Vec::new(),
+                slots: Default::default(),
             };
             let rom = plaid_core::program::RomIdentity {
                 sha256: image.base.image.clone(),

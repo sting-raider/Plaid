@@ -2,7 +2,7 @@
 use crate::{
     GuestAddr,
     discovery::{CodeImage, Discovery, direct_cfg_bounded},
-    indirect::analyze_indirect,
+    indirect::analyze_indirect_owned,
     program::*,
 };
 use std::collections::{BTreeMap, BTreeSet};
@@ -233,7 +233,7 @@ fn discover_bounded(
             map.record_derived_entry(entry, sources)?;
         }
         let indirect_started = std::time::Instant::now();
-        map = analyze_indirect(&map, image)?;
+        map = analyze_indirect_owned(map, image)?;
         indirect_time += indirect_started.elapsed();
         let old_count = (roots.len(), external.len());
         // Observed occupants do not erase decodable ROM code at the same link.

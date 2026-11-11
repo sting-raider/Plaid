@@ -840,7 +840,7 @@ mod tests {
             rom_offset: Some(RomOffset(0)),
             physical_start: None,
             holes: Vec::new(),
-            slots: Vec::new(),
+            slots: Default::default(),
         };
         let identity = RomIdentity {
             sha256: "0".repeat(64),
@@ -944,7 +944,7 @@ mod tests {
             rom_offset: Some(RomOffset(0)),
             physical_start: None,
             holes: Vec::new(),
-            slots: Vec::new(),
+            slots: Default::default(),
         };
         let identity = RomIdentity {
             sha256: "0".repeat(64),

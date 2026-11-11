@@ -442,7 +442,7 @@ mod tests {
             rom_offset: Some(RomOffset(0)),
             physical_start: None,
             holes: Vec::new(),
-            slots: Vec::new(),
+            slots: Default::default(),
         };
         let rom = vec![0; 0x400];
         let mut map = ProgramMap::new(RomIdentity {

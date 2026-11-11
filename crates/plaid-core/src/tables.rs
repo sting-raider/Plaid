@@ -1340,53 +1340,61 @@ fn overlaps_decoded_code(index: &MapIndex, site: &IndirectSite, evidence_id: &st
     index.decoded_overlaps(&site.site.image, site.site.generation, start, end)
 }
 
-pub(crate) fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap, String> {
-    let mut out = map.clone();
-    let index = MapIndex::new(map);
-    let sites: Vec<_> = map.indirect_sites.iter().collect();
-    let found = crate::indirect::par_map(&sites, |old| evidence(&index, image, old));
-    for (old, found) in sites.into_iter().zip(found) {
-        let Some((table, words, detail)) = found else {
-            // Candidate history survives ordinary proof revocation, but an
-            // independently decoded instruction overlap disproves the old
-            // interpretation of these bytes as pointer-table entries. Keep
-            // its evidence record for audit while withdrawing those edges.
-            let stale: BTreeSet<_> = old
-                .candidates
-                .values()
-                .flatten()
-                .filter(|id| overlaps_decoded_code(&index, old, id))
-                .cloned()
-                .collect();
-            if stale.is_empty() {
+pub(crate) fn analyze(mut out: ProgramMap, image: &CodeImage) -> Result<ProgramMap, String> {
+    // Everything read from the input map is computed before `out` changes.
+    let found = {
+        let index = MapIndex::new(&out);
+        let sites: Vec<_> = out.indirect_sites.iter().collect();
+        crate::indirect::par_map(&sites, |old| {
+            evidence(&index, image, old).ok_or_else(|| {
+                // Candidate history survives ordinary proof revocation, but an
+                // independently decoded instruction overlap disproves the old
+                // interpretation of these bytes as pointer-table entries. Keep
+                // its evidence record for audit while withdrawing those edges.
+                old.candidates
+                    .values()
+                    .flatten()
+                    .filter(|id| overlaps_decoded_code(&index, old, id))
+                    .cloned()
+                    .collect::<BTreeSet<_>>()
+            })
+        })
+    };
+    let sites: Vec<IndirectSite> = out.indirect_sites.iter().cloned().collect();
+    for (old, found) in sites.iter().zip(found) {
+        let (table, words, detail) = match found {
+            Ok(found) => found,
+            Err(stale) => {
+                if stale.is_empty() {
+                    continue;
+                }
+                let mut site = old.clone();
+                site.candidates.retain(|_, refs| {
+                    refs.retain(|id| !stale.contains(id));
+                    !refs.is_empty()
+                });
+                if site
+                    .closed_proof
+                    .as_ref()
+                    .is_some_and(|id| stale.contains(id))
+                {
+                    site.closed_proof = None;
+                }
+                out.indirect_sites.remove(old);
+                out.indirect_sites.insert(site);
+                out.unresolved.retain(|item| {
+                    item.site.as_ref() != Some(&old.site)
+                        || !item.evidence.iter().any(|id| stale.contains(id))
+                        || !matches!(
+                            item.kind.as_str(),
+                            "invalid_pointer_table_entry"
+                                | "pointer_table_immutability_unproven"
+                                | "pointer_table_target_identity_unproven"
+                                | "pointer_table_source_missing"
+                        )
+                });
                 continue;
             }
-            let mut site = old.clone();
-            site.candidates.retain(|_, refs| {
-                refs.retain(|id| !stale.contains(id));
-                !refs.is_empty()
-            });
-            if site
-                .closed_proof
-                .as_ref()
-                .is_some_and(|id| stale.contains(id))
-            {
-                site.closed_proof = None;
-            }
-            out.indirect_sites.remove(old);
-            out.indirect_sites.insert(site);
-            out.unresolved.retain(|item| {
-                item.site.as_ref() != Some(&old.site)
-                    || !item.evidence.iter().any(|id| stale.contains(id))
-                    || !matches!(
-                        item.kind.as_str(),
-                        "invalid_pointer_table_entry"
-                            | "pointer_table_immutability_unproven"
-                            | "pointer_table_target_identity_unproven"
-                            | "pointer_table_source_missing"
-                    )
-            });
-            continue;
         };
         let id = format!("table-candidates:{}", sha256(detail.as_bytes()));
         out.evidence.insert(
