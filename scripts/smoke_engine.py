@@ -69,6 +69,8 @@ def main():
     parser.add_argument('--seconds', default='5')
     parser.add_argument('--checkout', type=Path, help='also build normally here and compare first-graphics-task stops')
     parser.add_argument('--receipt', type=Path)
+    parser.add_argument('--baseline-pif-rom', type=Path,
+                        help='checkout baseline analyses through the real PIF ROM (verifies the bundle HLE boot)')
     args = parser.parse_args()
     original = args.bundle.resolve()
     # Unzip/copy outside the checkout, under a different root containing spaces.
@@ -101,6 +103,8 @@ def main():
                 checkout_work = base / 'checkout work'
                 checkout_env = {k: v for k, v in os.environ.items() if not k.startswith('PLAID_')}
                 checkout_env.update(PLAID_WORK_DIR=str(checkout_work), SDL_AUDIODRIVER='dummy')
+                if args.baseline_pif_rom:
+                    checkout_env['PLAID_PIF_ROM'] = str(args.baseline_pif_rom.resolve())
                 assets = checkout_work / 'target/rt64-shim/Release'
                 assets.mkdir(parents=True)
                 # Same freshly built shim; baseline still uses the host tools.
@@ -110,13 +114,21 @@ def main():
                 baseline = run(checkout, checkout_env, sys.executable, '-u', 'scripts/native.py', args.rom.resolve(),
                                '--name', 'smoke', '--rt64', '--seconds', args.seconds)
                 compared = []
-                for cwd, run_env, program in [(bundle, env, work / 'target/rt64-shim/Release/smoke-rt64.exe'),
-                        (checkout, checkout_env, assets / 'smoke-rt64.exe')]:
+                # The windowed RT64 program is wall-clock paced, so its first-task stop varies run to
+                # run; the headless program of the same build is deterministic and is what is compared.
+                for cwd, run_env, program in [(bundle, env, work / 'target/native/smoke/smoke.exe'),
+                        (checkout, checkout_env, checkout_work / 'target/native/smoke/smoke.exe')]:
                     first = run(cwd, run_env, program, '--rom', args.rom.resolve(), '--stop-at', 'gfx', '--gfx-tasks', '1', '--seconds', '30')
-                    compared.append(next(line for line in first.stdout.splitlines() if line.startswith('{"stop"')))
+                    stop = json.loads(next(line for line in first.stdout.splitlines() if line.startswith('{"stop"')))
+                    # The OS scheduler snapshot (thread states/PCs) depends on host pacing; the
+                    # CPU/GPR state, PC, VI, DMA and framebuffer are the deterministic comparison.
+                    stop.pop('threads', None)
+                    compared.append(stop)
                 assert compared[0] == compared[1], compared
-                receipt['checkout_comparison'] = dict(result='PASS', stop_line=compared[0])
+                receipt['checkout_comparison'] = dict(result='PASS', stop_line=compared[0],
+                                                      baseline_boot='real PIF ROM' if args.baseline_pif_rom else 'HLE')
         assert not (bundle / 'target/native').exists(), 'bundle resource directory was written'
+        assert not any(bundle.rglob('pif*.rom')), 'bundle contains console firmware'
         receipt['seconds'] = round(time.perf_counter() - started, 3)
         if args.receipt:
             args.receipt.parent.mkdir(parents=True, exist_ok=True)

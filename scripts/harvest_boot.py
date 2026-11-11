@@ -422,7 +422,7 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
             loads['loads'].append({'destination': hex(start), 'size': hex(end - start), 'rom': '0x0',
                                    'encoding': 'ares_boot', 'entry': hex(capture['entry'])})
             loads['source'] += (f"; ROM-only boot execution/ares-v1: ROM sha256 {capture['rom_sha256']}; "
-                                f"ares {capture['revision']}; reset/PIF, NTSC, CIC {capture['cic']}, neutral controller 1; "
+                                f"ares {capture['revision']}; {'reset/PIF' if capture.get('pif_boot', 'firmware') == 'firmware' else 'IPL3 entry/PIF IPL2 state (ADR-0316)'}, NTSC, CIC {capture['cic']}, neutral controller 1; "
                                 f"entry {capture['entry']:08x}; {capture['steps']} instructions; "
                                 f"budget {capture['budget']} instruction calls/3600 VI; consumed ROM ranges (PI requests only) {capture['consumed_rom']}; "
                                 f"PI DMA ranges {capture['pi_dma']}; "

@@ -1,10 +1,12 @@
 """Assemble the Windows x64 offline engine (maintainer build tools required).
 
-    python scripts/package_engine.py --local-test
+    python scripts/package_engine.py
 
-The pinned ares PIF firmware has no separately verified redistribution grant.
-Until that is resolved, --local-test builds a private validation bundle only.
-No ROM, game build, save, replay cache or entire checkout is copied.
+Output: dist/engine/ and dist/engine-windows-x64.zip. Licenses and the
+redistribution decision are in ADR-0316 and THIRD_PARTY_NOTICES/INDEX.txt.
+No ROM, game build, save, replay cache, console firmware or entire checkout is
+copied; the analysis oracle boots without the PIF ROM (ADR-0316) and the final
+audit refuses any file that is a known PIF boot ROM.
 """
 import argparse
 import hashlib
@@ -28,6 +30,44 @@ LLVM_REV = '4434dabb69916856b824f68a64b029c67175e532'
 MINGW_BUILD_REV = '076c9de644c2f373858d2c4e34ba95a0887423cb'
 SCRIPTS = ('native.py', 'engine_paths.py', 'ares_boot.py', 'ares_oracle.py',
            'harvest_boot.py', 'native_audio.py', 'fragment_mapped.py', 'repair_record.py')
+# Console firmware must never ship (AGENTS.md invariant 4): the pinned ares NTSC and PAL PIF ROMs.
+FIRMWARE_SHA256 = {
+    'fa7b09795ef1e54461e59f6f2d902368133e3f1cd980e34383e6a780d74beffd': 'PIF NTSC boot ROM',
+    '79c81fffae934b6df251da6c3a394f52c6a0eaa07115a3b9677743e3c1335f4a': 'PIF PAL boot ROM',
+}
+# RT64 vendors these two headers without a license file; upstream is MIT (ADR-0316).
+UTF8CONV_SHA256 = {
+    'utf8conv.h': '15e9bfa5d7361c38715e11bc334aca97098ca2eb91458419d0e4da5b71ca449f',
+    'utf8except.h': 'bd0ea604b7356725fff93c94cda260893dff0657f21b2b84757899fd337b1b19',
+}
+UTF8CONV_COMMIT = '6a7d4612cf18c62456504b2bf60b3802a1b95552'
+UTF8CONV_LICENSE_SHA256 = '76e8b35698653c646cac547272b6c1b2173e3bc92c6f19d1ad1e9825d18427f2'
+# (component, shipped license, where its text is in THIRD_PARTY_NOTICES). Mirrors the ADR-0316 table.
+LICENSES = [
+    ('Plaid (plaid.exe, scripts, runtime C, headers)', 'MIT OR Apache-2.0', 'plaid/'),
+    ('Rust crates linked into plaid.exe', 'per crate (engine.json rust_components)', 'rust/'),
+    ('ares reference core (analysis oracle)', 'ISC', 'ares/LICENSE'),
+    ('sljit (inside the oracle)', 'BSD-2-Clause', 'ares/sljit-LICENSE'),
+    ('xxHash (inside the oracle)', 'BSD-2-Clause', 'ares/xxhash-LICENSE.txt'),
+    ('PIF boot ROM', 'not distributed (HLE IPL2 state table instead)', '-'),
+    ('RT64 renderer', 'MIT', 'rt64/'),
+    ('RT64 utf8conv headers', 'MIT (upstream Giovanni Dicanio)', 'rt64/utf8conv/LICENSE.MIT'),
+    ('RT64 miniz, nlohmann/json, plainargs', 'MIT, MIT, Unlicense', 'rt64/'),
+    ('SDL2', 'zlib', 'rt64/'),
+    ('DirectX-Headers (compiled in)', 'MIT', 'directx-headers/'),
+    ('DirectXShaderCompiler dxcompiler.dll', 'LLVM/UIUC + MIT', 'dxc/'),
+    ('DXIL validator dxil.dll', 'Microsoft redistribution terms', 'dxc/LICENSE-MS.txt'),
+    ('Visual C++ runtime DLLs', 'Microsoft redistributable terms', 'msvc/'),
+    ('Python 3.12.10 (embeddable) and its libraries', 'PSF-2.0 and bundled-library licenses', 'python-dependencies/'),
+    ('psutil 7.0.0', 'BSD-3-Clause', 'python/site-packages/psutil-7.0.0.dist-info'),
+    ('MinGW-Builds GCC 15.2.0, binutils 2.45', 'GPL-3.0-or-later with GCC Runtime Library Exception', 'mingw/, mingw-sources/'),
+    ('mingw-w64 v13 runtime, headers, winpthreads', 'ZPL-2.1 / MIT-style / public domain', 'mingw/'),
+    ('LLVM/Clang (tested commit) and builtin headers', 'Apache-2.0 WITH LLVM-exception', 'llvm/LICENSE.txt'),
+]
+# Only the Microsoft VC++ 2015-2022 runtime may come from the machine's System32; it is the
+# redistributable's own signed files, recorded by hash in engine.json (ADR-0316).
+VC_RUNTIME = re.compile(r'^(msvcp140(_\d)?|vcruntime140(_1)?|concrt140|vcomp140)\.dll$', re.I)
+SYSTEM32 = Path(os.environ.get('SystemRoot', 'C:/Windows')) / 'System32'
 SYSTEM_DLL = re.compile(r'^(api-ms-|ext-ms-)|^(kernel32|ntdll|user32|gdi32|gdi32full|advapi32|'
     r'shell32|shlwapi|ole32|oleaut32|comdlg32|comctl32|ws2_32|winmm|imm32|version|'
     r'setupapi|cfgmgr32|secur32|bcrypt|bcryptprimitives|crypt32|cryptbase|rpcrt4|'
@@ -82,7 +122,8 @@ def dll_closure(seeds, search, destination, objdump):
             key = name.lower()
             if SYSTEM_DLL.search(name) or key in found:
                 continue
-            source = next((folder / name for folder in search if (folder / name).is_file()), None)
+            source = next((folder / name for folder in search if (folder / name).is_file() and
+                       (folder != SYSTEM32 or VC_RUNTIME.match(name))), None)
             if source is None:
                 raise FileNotFoundError(f'unbundled PE dependency {name} imported by {path.name}')
             target = destination / name
@@ -168,11 +209,17 @@ def toolchain_sources(mingw, destination):
     (destination / 'sources.json').write_text(json.dumps(records, indent=2) + '\n')
 
 
+def audit_no_firmware(files):
+    """files: {relative path: sha256}. Refuse console firmware by content or name."""
+    bad = [f'{name} ({FIRMWARE_SHA256[digest]})' for name, digest in files.items() if digest in FIRMWARE_SHA256]
+    bad += [name for name in files if re.search(r'(^|/)pif[^/]*[.](rom|bin)$', name, re.I)]
+    if bad:
+        raise ValueError('console firmware must not be bundled: ' + ', '.join(sorted(set(bad))))
+
+
 def build(args):
     if os.name != 'nt':
         raise RuntimeError('first engine target is Windows x64; build on Windows')
-    if not args.local_test:
-        raise RuntimeError('PIF firmware redistribution is not verified; use --local-test for private validation only (ADR-0316)')
     destination = ROOT / 'dist/engine'
     if destination.exists():
         raise FileExistsError('dist/engine already exists; move it aside before packaging')
@@ -221,7 +268,7 @@ def build(args):
         copy(oracle.parent / name, destination / 'target/ares-boot/oracle' / name)
     for name in ('plaid_rt64.dll', 'plaid_rt64.lib', 'SDL2.dll', 'dxcompiler.dll', 'dxil.dll'):
         copy(rt64 / name, destination / 'target/rt64-shim/Release' / name)
-    for relative in ('.refs/n64sym/src/builtin_signatures.sig', '.refs/ares/ares/System/Nintendo 64/pif.ntsc.rom', 'refs.lock.toml'):
+    for relative in ('.refs/n64sym/src/builtin_signatures.sig', 'refs.lock.toml'):
         copy(ROOT / relative, destination / relative)
     with zipfile.ZipFile(download(PYTHON_URL, 'python.zip', PYTHON_SHA)) as archive:
         archive.extractall(destination / 'python')
@@ -261,6 +308,16 @@ def build(args):
     copy(download('https://raw.githubusercontent.com/nlohmann/json/v3.12.0/LICENSE.MIT',
         'nlohmann-json-v3.12.0-LICENSE.MIT'), notices / 'rt64/json/LICENSE.MIT')
     copy(ROOT / '.refs/ares/LICENSE', notices / 'ares/LICENSE')
+    copy(ROOT / '.refs/ares/thirdparty/sljit/LICENSE', notices / 'ares/sljit-LICENSE')
+    xxhash = (ROOT / '.refs/ares/thirdparty/xxhash.h').read_text(errors='replace')
+    (notices / 'ares/xxhash-LICENSE.txt').write_text(xxhash[:xxhash.index('*/') + 2] + '\n')
+    copy(ROOT / 'LICENSE-MIT', notices / 'plaid/LICENSE-MIT')
+    copy(ROOT / 'LICENSE-APACHE', notices / 'plaid/LICENSE-APACHE')
+    for name, digest in UTF8CONV_SHA256.items():
+        if sha(contrib / 'utf8conv' / name) != digest:
+            raise ValueError(f'RT64 {name} differs from the upstream release whose MIT license ADR-0316 records')
+    copy(download(f'https://raw.githubusercontent.com/GiovanniDicanio/UnicodeConversions/{UTF8CONV_COMMIT}/LICENSE',
+                  'utf8conv-LICENSE.MIT', UTF8CONV_LICENSE_SHA256), notices / 'rt64/utf8conv/LICENSE.MIT')
     copy(ROOT / '.refs/n64sym/LICENSE.md', notices / 'n64sym/LICENSE.md')
     notices_under(directx_headers, notices / 'directx-headers')
     copy(download(f'https://raw.githubusercontent.com/llvm/llvm-project/{LLVM_REV}/llvm/LICENSE.TXT', 'LLVM-LICENSE.txt'), notices / 'llvm/LICENSE.txt')
@@ -287,7 +344,7 @@ def build(args):
     if vswhere.is_file():
         vs = Path(subprocess.check_output([str(vswhere), '-latest', '-property', 'installationPath'], text=True).strip())
         vc = sorted(vs.glob('VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT'), reverse=True)
-    search = [destination / 'python', rt64, mingw / 'bin', llvm / 'bin', *vc]
+    search = [destination / 'python', rt64, mingw / 'bin', llvm / 'bin', *vc, SYSTEM32]
     # Each application gets its own PE dependency closure, not every other
     # application's DLLs. No reliance on a globally installed VC runtime.
     for folder in ('python', 'target/release', 'target/ares-boot/oracle',
@@ -300,33 +357,33 @@ def build(args):
     runtime_dlls += ['toolchain/mingw/bin/' + name for name in game_runtime]
     manifest = dict(format='plaid-engine-v1', platform='windows-x86_64',
         source_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
-        redistributable=False, redistribution_blockers=['Pinned PIF NTSC firmware: no separately verified redistribution grant.',
-            'RT64 utf8conv headers: copyright notice present, no license grant found in pinned source.'],
+        redistributable=True, firmware_included=False, pif_boot='hle-ipl2-v1',
         python='3.12.10', psutil='7.0.0', gcc='15.2.0', llvm_revision=LLVM_REV,
         references={name: refs[name] for name in ('ares', 'rt64', 'n64sym')},
+        vc_runtime={path.relative_to(destination).as_posix(): sha(path) for path in sorted(destination.rglob('*.dll'))
+                    if VC_RUNTIME.match(path.name)},
         rust_components=rust_components, runtime_dlls=sorted(runtime_dlls))
     (destination / 'engine.json').write_text(json.dumps(manifest, indent=2) + '\n')
-    (notices / 'README.txt').write_text('Private validation bundle; NOT cleared for installer redistribution.\n'
-        'PIF NTSC firmware is copied from the pinned ares reference for local testing only.\n'
-        'Its upstream presence is not treated as an independent redistribution grant.\n'
-        'RT64 utf8conv headers also have no verified license grant in the pinned tree.\n'
-        'MinGW sources, vendor patches and configure recipes are in mingw-sources/.\n'
+    (notices / 'INDEX.txt').write_text('Plaid engine third-party notices (see docs/DECISIONS.md ADR-0316)\n\n'
+        + ''.join(f'{name}\n    license: {kind}\n    text: THIRD_PARTY_NOTICES/{where}\n' for name, kind, where in LICENSES)
+        + '\nNo console firmware is included. MinGW sources, vendor patches and configure recipes are in mingw-sources/.\n'
         'RT64 nested notices include components not linked on Windows; preserved conservatively.\n'
-        'Python licenses are in python/LICENSE.txt and psutil licenses in its dist-info directory.\n')
+        'Python licenses are in python/LICENSE.txt.\n')
     (destination / 'engine.cmd').write_text('@echo off\r\nsetlocal DisableDelayedExpansion\r\n'
         '"%~dp0python\\python.exe" -B -u "%~dp0scripts\\native.py" %*\r\nexit /b %errorlevel%\r\n')
-    (destination / 'README.txt').write_text('Plaid offline Windows x64 engine (local validation only)\n'
+    (destination / 'README.txt').write_text('Plaid offline Windows x64 engine\n'
         'cwd: this directory\npython\\python.exe -B -u scripts\\native.py <user ROM> --rt64 --seconds 60\n'
         'Set PLAID_WORK_DIR to an absolute writable directory. Default: engine directory.\n'
         'Outputs: %PLAID_WORK_DIR%/target/native/<id> and target/rt64-shim/Release/<id>-rt64.exe\n'
         'No system Python, Rust, git, C compiler or checkout required at runtime.\n'
         'Requires Windows 10+ x64 and a working DirectX12/Vulkan graphics driver.\n'
-        'See engine.json and THIRD_PARTY_NOTICES before redistribution.\n')
+        'Licenses: THIRD_PARTY_NOTICES/INDEX.txt. No console firmware is included or needed.\n')
     files = {p.relative_to(destination).as_posix(): sha(p) for p in sorted(destination.rglob('*')) if p.is_file()}
+    audit_no_firmware(files)
     (destination / 'files.sha256.json').write_text(json.dumps(files, indent=2) + '\n')
     uncompressed = sum(p.stat().st_size for p in destination.rglob('*') if p.is_file())
     archive = ROOT / 'dist/engine-windows-x64.zip'
-    with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as output:
+    with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=6, strict_timestamps=False) as output:
         for path in sorted(destination.rglob('*')):
             if path.is_file():
                 output.write(path, 'engine/' + path.relative_to(destination).as_posix())
@@ -337,7 +394,6 @@ def build(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--local-test', action='store_true', help='private validation; not cleared for redistribution')
     parser.add_argument('--mingw', type=Path, help='MinGW-Builds GCC 15.2 root (default: from PATH)')
     parser.add_argument('--llvm', type=Path, help='tested LLVM root (default: from PATH)')
     parser.add_argument('--rt64-build', type=Path, help='existing validated RT64 shim build, including Release/')

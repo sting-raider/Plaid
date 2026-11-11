@@ -73,6 +73,44 @@ class EngineContracts(unittest.TestCase):
         self.assertFalse(package_engine.SYSTEM_DLL.search('VCRUNTIME140.dll'))
         self.assertFalse(package_engine.SYSTEM_DLL.search('libwinpthread-1.dll'))
 
+    def test_firmware_never_bundled(self):
+        pif = package_engine.FIRMWARE_SHA256
+        self.assertEqual(len(pif), 2)
+        package_engine.audit_no_firmware({'scripts/native.py': '0' * 64})
+        for files in ({'x/pif.ntsc.rom': '0' * 64}, {'renamed.bin': next(iter(pif))}):
+            with self.assertRaises(ValueError):
+                package_engine.audit_no_firmware(files)
+
+    def test_license_table_matches_adr(self):
+        adr = (Path(__file__).resolve().parents[1] / 'docs/DECISIONS.md').read_text(encoding='utf-8')
+        block = adr[adr.index('## ADR-0316'):]
+        for name, kind, _ in package_engine.LICENSES:
+            self.assertIn(name, block)
+            self.assertIn(kind, block)
+
+    def test_oracle_boots_without_firmware(self):
+        # The default analysis boot reads no PIF ROM and starts at IPL3 with the skipped IPL2 accounted.
+        import ares_boot
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('PLAID_PIF_ROM', None)
+            self.assertIsNone(ares_boot.pif_rom())
+            self.assertIsNone(ares_boot.pif_identity(None))
+        exe = ares_boot.build_oracle()
+        with tempfile.TemporaryDirectory() as directory:
+            rom, output = Path(directory) / 'synthetic.z64', Path(directory) / 'out.json'
+            data = bytearray(0x101000)
+            data[:4] = bytes.fromhex('80371240')
+            data[8:12] = (0x80000400).to_bytes(4, 'big')
+            rom.write_bytes(data)
+            import subprocess
+            subprocess.run([str(exe), str(rom), '-', '0x80000400', '0x80000400', '500000', 'CIC-NUS-6102', str(output)],
+                           check=True, timeout=300)
+            row = json.loads(output.read_text().splitlines()[-1])
+            # CIC 6102 skips 410,078 IPL2 instructions and 12 VI frames before IPL3 runs.
+            self.assertEqual(row['stop_reason'], 'entries_complete')
+            self.assertGreater(row['steps'], 410078)
+            self.assertGreaterEqual(row['vi'], 12)
+
 
 def run_contract():
     result = unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(EngineContracts))
