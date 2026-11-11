@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import time
 import zlib
+from engine_paths import BUNDLED
 
 ROOT = Path(__file__).resolve().parents[1]
 REV = '9408cb43d4948fc3ea6e152a307a34348df3fe04'
@@ -30,6 +31,11 @@ def lock_exclusive(lock):
 
 
 def build_oracle():
+    if BUNDLED:
+        exe = ROOT / 'target/ares-boot/oracle/oracle.exe'
+        if not exe.is_file():
+            raise FileNotFoundError(f'missing bundled analysis oracle: {exe}')
+        return exe
     import ares_oracle as builder
     directory = ROOT / 'target/ares-boot/oracle'
     directory.mkdir(parents=True, exist_ok=True)
