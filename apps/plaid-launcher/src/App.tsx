@@ -1,6 +1,3 @@
-import { check as checkApp, type Update } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
-import type { UpdateInfo } from "./api";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -9,7 +6,8 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, CompileEvent, Config, coverFor, Game, PHASES, Progress } from "./api";
 import { Boot } from "./Boot";
 import { PlaySheet, Saves, SettingsPanel, SettingsTab } from "./settings";
-import { Back, Check, Close, Folder, Gear, Grid, Hammer, Logo, Maximize, Minimize, Play, Refresh, ArrowUp, Search } from "./icons";
+import { Back, Check, Close, Folder, Gear, Grid, Hammer, Logo, Maximize, Minimize, Play, Refresh, Search } from "./icons";
+import { useUpdates, type Notice } from "./update";
 import "./styles.css";
 
 interface Build { id: string; progress: Progress; logs: string[]; status: "running" | "done" | "failed" | "cancelled"; message?: string; started: number; lastOutput: number }
@@ -228,19 +226,14 @@ export default function App() {
   const [booted, setBooted] = useState(false);
   const [config, setConfig] = useState<Config | null>(null);
   const [games, setGames] = useState<Game[]>([]);
-  const [update, setUpdate] = useState("");
-  const [plaid, setPlaid] = useState<UpdateInfo | null>(null);
-  const [checking, setChecking] = useState(false);
-  /** Download progress 0..100 while an app update downloads, else null. */
-  const [downloading, setDownloading] = useState<number | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [appUpdate, setAppUpdate] = useState<Update | null>(null);
   const [view, setView] = useState<View>("all");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [builds, setBuilds] = useState<Record<string, Build>>({});
   const [playing, setPlaying] = useState<Game | null>(null);
-  const [toast, setToast] = useState("");
+  const [toast, setNotice] = useState<Notice | null>(null);
+  const setToast = (t: string | Notice) => setNotice(typeof t === "string" ? { title: t } : t);
+  const updates = useUpdates(setToast, booted);
 
   const [scanning, setScanning] = useState(false);
   const rescan = () => {
@@ -250,43 +243,10 @@ export default function App() {
       .finally(() => setScanning(false));
   };
 
-  /** Checks main for recompiler changes and GitHub releases for a new app. */
-  const checkAll = async () => {
-    const timeout = new Promise<null>((r) => setTimeout(() => r(null), 6000));
-    const [u, a] = await Promise.all([
-      Promise.race([api.checkUpdates().catch(() => null), timeout]),
-      checkApp().catch(() => null),
-    ]);
-    const pending = (u?.behind ?? 0) + (a ? 1 : 0);
-    setUpdate(u ? (pending ? `${pending} update${pending > 1 ? "s" : ""} available` : `Up to date · ${u.current}`) : "Offline");
-    setPlaid(u);
-    setAppUpdate(a);
-    return u;
-  };
-
-  const applyUpdate = async () => {
-    setFailed(false);
-    try {
-      if (plaid?.behind) { setUpdate("Updating the recompiler…"); await api.updatePlaid(); setPlaid({ ...plaid, behind: 0, changes: [] }); setUpdate("Up to date"); }
-      if (appUpdate) {
-        let total = 0, got = 0;
-        setUpdate("Downloading the update…");
-        setDownloading(0);
-        await appUpdate.downloadAndInstall((e) => {
-          if (e.event === "Started") total = e.data.contentLength ?? 0;
-          if (e.event === "Progress") { got += e.data.chunkLength; if (total) { const pct = Math.round((got / total) * 100); setDownloading(pct); setUpdate(`Downloading the update… ${pct}%`); } }
-          if (e.event === "Finished") setUpdate("Installing, Plaid restarts in a moment…");
-        });
-        await relaunch();
-      }
-      else setToast("Recompiler updated; it rebuilds on the next compile.");
-    } catch (e) { setDownloading(null); setFailed(true); setToast(`Could not update: ${String(e)}`); setUpdate("Update failed · click to retry"); }
-  };
-
   const startup = async (status: (s: string) => void) => {
     const c = await api.getConfig();
     setConfig(c);
-    const u = await checkAll();
+    const u = await updates.checkAll();
     if (c.romDir) { status("Reading cartridges"); await api.scan().then(setGames).catch(() => {}); }
     return u?.behind ? `${u.behind} update${u.behind > 1 ? "s" : ""} available` : u ? "Up to date" : "Offline · skipped update check";
   };
@@ -309,7 +269,7 @@ export default function App() {
     return () => { off.then((f) => f()); };
   }, []);
 
-  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(""), 4500); return () => clearTimeout(t); }, [toast]);
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setNotice(null), toast.detail ? 8000 : 4500); return () => clearTimeout(t); }, [toast]);
 
   const shown = useMemo(() => games.filter((g) =>
     (view === "all" || view === "settings" || (view === "ready" ? g.compiled : !g.compiled)) && g.title.toLowerCase().includes(query.toLowerCase())), [games, view, query]);
@@ -340,17 +300,9 @@ export default function App() {
             {games.map((g) => <SideGame key={g.id} game={g} active={selected === g.id} busy={builds[g.id]?.status === "running"} onClick={() => setSelected(g.id)} />)}
           </div>
           <div className="side-foot">
-            <span className={`dot ${plaid?.behind || appUpdate ? "yellow" : update === "Offline" ? "" : "green"}`} />
-            <span className="side-foot-text">{update}</span>
-            <div className="update-wrap">
-              {(plaid?.behind || appUpdate) && <UpdatePanel plaid={plaid} app={appUpdate} />}
-              {downloading !== null
-                ? <button className="icon-btn update-ready" aria-label={`Downloading the update, ${downloading}%`} aria-disabled="true"><ProgressRing pct={downloading} /></button>
-                : plaid?.behind || appUpdate
-                ? <button className="icon-btn update-ready" aria-label={failed ? "Retry the update" : "Update"} onClick={applyUpdate}><ArrowUp size={16} /><span className={`badge ${failed ? "error" : ""}`} /></button>
-                : <button className={`icon-btn ${checking ? "spin" : ""}`} aria-label="Check for updates" title="Check for updates"
-                    onClick={async () => { setChecking(true); await Promise.all([checkAll(), new Promise((r) => setTimeout(r, 600))]); setChecking(false); }}><Refresh size={16} /></button>}
-            </div>
+            <span className={`dot ${updates.dot}`} />
+            <span className="side-foot-text" title={updates.label}>{updates.status}</span>
+            {updates.control}
           </div>
         </aside>
 
@@ -394,7 +346,7 @@ export default function App() {
 
       {playing && <PlaySheet game={playing} onClose={() => setPlaying(null)} onSettings={() => { setPlaying(null); setSelected(playing.id); }}
         onPlay={() => { api.play(playing.id).catch((e) => setToast(String(e))); setPlaying(null); }} />}
-      {toast && <div className="toast"><span className="dot green" />{toast}</div>}
+      {toast && <div className="toast" role="status"><span className={`dot ${toast.error ? "red" : "green"}`} /><div><div>{toast.title}</div>{toast.detail && <div className="toast-detail">{toast.detail}</div>}</div></div>}
     </div>
   );
 }
@@ -407,40 +359,5 @@ function SideGame({ game, active, busy, onClick }: { game: Game; active: boolean
       <span className="name">{game.title}</span>
       <span className={`dot ${busy ? "busy" : game.compiled ? "green" : ""}`} />
     </button>
-  );
-}
-
-/** What an update brings in, like an app's release notes: app notes, then recompiler changes on main. */
-function UpdatePanel({ plaid, app }: { plaid: UpdateInfo | null; app: Update | null }) {
-  const parts = [app && "this app", plaid?.behind && "the recompiler"].filter(Boolean).join(" and ");
-  const notes = (app?.body ?? "").split(/\r?\n/).map((l) => l.replace(/^\s*[-*]\s*/, "").trim()).filter(Boolean);
-  return (
-    <div className="update-panel" role="tooltip"><div className="update-card">
-      <strong className="update-head">Update {parts}</strong>
-      <div className="update-body">
-        {app && <section>
-          <div className="update-sub">Plaid app {app.version}{app.date ? ` · ${app.date.slice(0, 10)}` : ""}</div>
-          <ul>{notes.length ? notes.map((n, i) => { const m = /^\*\*([^*]+)\*\*\s*(.*)$/.exec(n); return <li key={i}>{m ? <><strong>{m[1]}</strong> {m[2]}</> : n}</li>; }) : <li>New version of the app.</li>}</ul>
-        </section>}
-        {!!plaid?.behind && <section>
-          <div className="update-sub">Recompiler · {plaid.behind} change{plaid.behind > 1 ? "s" : ""} on main</div>
-          <ul>{plaid.changes.map((c) => <li key={c.sha}>{c.subject} <span className="update-meta">{c.sha} · {c.when}</span></li>)}</ul>
-          {plaid.changes.length < plaid.behind && <div className="update-meta">plus {plaid.behind - plaid.changes.length} merge and docs commits</div>}
-        </section>}
-      </div>
-      <div className="update-meta">Click the button to update{app ? " and restart" : ""}.</div>
-    </div></div>
-  );
-}
-
-/** Circular download progress, like T3 Code's update button. */
-function ProgressRing({ pct }: { pct: number }) {
-  const c = 2 * Math.PI * 7;
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" className="ring">
-      <circle cx="9" cy="9" r="7" fill="none" stroke="var(--border-strong)" strokeWidth="2" />
-      <circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-        strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} transform="rotate(-90 9 9)" />
-    </svg>
   );
 }

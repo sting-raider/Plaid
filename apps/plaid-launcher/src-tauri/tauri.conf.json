@@ -45,7 +45,8 @@
         "installMode": "currentUser",
         "sidebarImage": "installer/sidebar.bmp",
         "headerImage": "installer/header.bmp",
-        "installerIcon": "icons/icon.ico"
+        "installerIcon": "icons/icon.ico",
+        "template": "installer/installer.nsi"
       }
     }
   },

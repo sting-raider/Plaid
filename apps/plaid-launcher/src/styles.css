@@ -245,23 +245,20 @@ li.now .step-mark { border-color: var(--n-yellow); animation: blink 0.8s steps(2
 .cursor::after { content: "_"; animation: blink 0.9s steps(2) infinite; }
 
 .side-foot-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.update-wrap { position: relative; }
+.side-foot { position: relative; }
+.update-wrap { display: contents; }
 .icon-btn.spin svg { animation: spin 0.6s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.update-ready { position: relative; color: var(--text); }
-.update-ready .badge { position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--n-yellow); box-shadow: 0 0 0 2px var(--bg); }
 /* hover the update button to read what it brings in; the bottom padding bridges the gap so it stays open */
-.update-panel { position: absolute; right: -8px; bottom: 100%; padding-bottom: 8px; width: 340px; z-index: 20;
+.update-panel { position: absolute; left: 8px; right: 8px; bottom: 100%; padding-bottom: 8px; z-index: 20;
   opacity: 0; visibility: hidden; transform: translateY(6px) scale(0.98); transform-origin: bottom right; pointer-events: none;
   transition: opacity 0.16s var(--ease), transform 0.16s var(--ease), visibility 0s linear 0.16s; }
 .update-panel { transition-delay: 0.15s, 0.15s, 0.31s; }
 .update-wrap:hover .update-panel, .update-wrap:focus-within .update-panel { opacity: 1; visibility: visible; transform: none; pointer-events: auto; transition-delay: 0.08s, 0.08s, 0s; }
-.update-ready .badge.error { background: var(--n-red); }
-.ring circle:last-child { transition: stroke-dashoffset 0.3s ease-out; }
 .icon-btn:focus-visible, .btn:focus-visible, .link:focus-visible { outline: 2px solid var(--border-strong); outline-offset: 2px; }
 .update-card { box-shadow: 0 16px 40px -18px rgb(0 0 0 / 55%); }
 @media (prefers-reduced-motion: reduce) {
-  .update-panel, .ring circle:last-child { transition: none; }
+  .update-panel, .upd-ring .bar { transition: none; }
   .icon-btn.spin svg { animation: none; }
 }
 .update-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; max-height: 70vh; background: var(--raised); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); }
@@ -272,3 +269,24 @@ li.now .step-mark { border-color: var(--n-yellow); animation: blink 0.8s steps(2
 .update-sub { color: var(--faint); font-family: var(--mono); font-size: 11.5px; }
 .update-meta { color: var(--faint); font-family: var(--mono); font-size: 11px; }
 .set-row.disabled { opacity: 0.4; pointer-events: none; transition: opacity 0.15s; }
+/* update button states, after T3 Code's DesktopUpdateStatusIcon */
+.update-btn { position: relative; border-radius: 50%; }
+.update-btn.active { background: var(--raised); color: var(--text); }
+.update-btn.active:hover { background: var(--hover); }
+.update-btn[aria-disabled="true"] { cursor: default; }
+.upd-glyph { position: relative; display: grid; place-items: center; }
+.upd-dot { position: absolute; top: -2px; right: -2px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 2px var(--raised); }
+.upd-check { position: absolute; right: -4px; bottom: -4px; width: 10px; height: 10px; border-radius: 50%; display: grid; place-items: center; background: var(--text); color: var(--bg); box-shadow: 0 0 0 2px var(--raised); }
+.upd-ring { position: relative; display: grid; place-items: center; width: 32px; height: 32px; }
+.upd-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.upd-ring .track { stroke: currentColor; opacity: 0.22; }
+.upd-ring .bar { transition: stroke-dashoffset 0.3s ease-out; }
+.upd-error { position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--n-red); box-shadow: 0 0 0 2px var(--bg); }
+.update-link { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; color: var(--muted); font-size: 12px; text-underline-offset: 2px; transition: color 0.12s; }
+.update-link:hover { color: var(--text); text-decoration: underline; }
+.update-link:focus-visible { outline: 2px solid var(--border-strong); outline-offset: 2px; border-radius: 3px; }
+.toast { align-items: flex-start; }
+.toast > .dot { margin-top: 5px; }
+.toast-detail { margin-top: 2px; color: var(--muted); }
+.toast-detail .link { display: inline-flex; align-items: center; gap: 3px; }
+.update-error { margin-top: 6px; color: var(--n-red); font-size: 12px; line-height: 1.45; user-select: text; }

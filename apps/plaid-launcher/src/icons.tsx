@@ -20,3 +20,8 @@ export const Grid = ({ size = 18 }: P) => (<svg width={size} height={size} viewB
 export const Bolt = ({ size = 18 }: P) => (<svg width={size} height={size} viewBox="0 0 24 24" {...s}><path d="M13 3L5 13h6l-1 8 8-10h-6z" /></svg>);
 export const Pad = ({ size = 18 }: P) => (<svg width={size} height={size} viewBox="0 0 24 24" {...s}><path d="M7 8h10a4 4 0 0 1 4 4.5l-.6 3.6a2.5 2.5 0 0 1-4.3 1.3L14 15h-4l-2.1 2.4a2.5 2.5 0 0 1-4.3-1.3L3 12.5A4 4 0 0 1 7 8z" /><path d="M8 11v3M6.5 12.5h3" /><circle cx="16" cy="11.5" r=".6" fill="currentColor" /><circle cx="17.5" cy="13.5" r=".6" fill="currentColor" /></svg>);
 export const Info = ({ size = 18 }: P) => (<svg width={size} height={size} viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>);
+// lucide paths, as T3 Code's update button uses them
+export const Download = ({ size = 18 }: P) => (<svg width={size} height={size} viewBox="0 0 24 24" {...s}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>);
+export const RotateCw = ({ size = 18 }: P) => (<svg width={size} height={size} viewBox="0 0 24 24" {...s}><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></svg>);
+export const CircleArrowUp = ({ size = 18 }: P) => (<svg width={size} height={size} viewBox="0 0 24 24" {...s}><circle cx="12" cy="12" r="10" /><path d="M16 12l-4-4-4 4" /><path d="M12 16V8" /></svg>);
+export const ExternalLink = ({ size = 12 }: P) => (<svg width={size} height={size} viewBox="0 0 24 24" {...s} strokeWidth={2}><path d="M15 3h6v6" /><path d="M10 14L21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg>);
