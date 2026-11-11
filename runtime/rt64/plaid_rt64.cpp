@@ -195,7 +195,16 @@ void renderer() {
             }
             for (auto *old : controllers) if (old) SDL_GameControllerClose(old);
             controllers = current; controller_ids = ids;
-            for (int i = 0; i < 4; ++i) input[i] = plaid_input::sample(settings.players[i], k, controllers[i]);
+            // Controller players take the connected pads in order; a keyboard Player 1
+            // also plays on the first pad left over, with the default pad layout.
+            int next = 0;
+            for (int i = 0; i < 4; ++i) {
+                const auto &p = settings.players[i];
+                bool pad = p.connected && p.type != "keyboard";
+                input[i] = plaid_input::sample(p, k, pad && next < 4 ? controllers[next++] : nullptr);
+            }
+            if (settings.players[0].type == "keyboard" && next < 4 && controllers[next])
+                input[0] = plaid_input::merge(input[0], plaid_input::sample(plaid_input::default_pad(settings.players[0]), k, controllers[next]));
         }
     }
 }

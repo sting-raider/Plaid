@@ -10,26 +10,9 @@ const ASPECTS: [Settings["aspect"], string][] = [
   ["stretch", "Stretch to window"],
 ];
 
-const EXPERIMENTS: [string, string, string][] = [
-  ["widescreenHack", "Widescreen rendering", "Draw the wider field of view instead of pillarboxing the 4:3 image."],
-  ["highFps", "60 FPS patches", "Per-game frame-rate patches where a game's logic allows it."],
-  ["texturePacks", "Texture packs", "Load high-resolution texture replacements."],
-  ["nativeRsp", "Native RSP graphics", "Run the game's own recompiled graphics microcode instead of high-level emulation."],
-  ["mods", "Mods", "Load code and asset mods from the game's mod folder."],
-];
-
 export const Switch = ({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) => (
   <button className={`switch ${on ? "on" : ""}`} onClick={() => onChange(!on)} aria-pressed={on} />
 );
-
-export function Pending() {
-  return (
-    <div className="notice">
-      <Info size={15} />
-      <span>Saved with the game. The native runtime still uses its built-in keyboard layout and a 4:3 picture; it reads these settings once runtime support lands.</span>
-    </div>
-  );
-}
 
 function Graphics({ s, set }: { s: Settings; set: (p: Partial<Settings>) => void }) {
   return (
@@ -51,19 +34,6 @@ function Graphics({ s, set }: { s: Settings; set: (p: Partial<Settings>) => void
   );
 }
 
-function Experimental({ s, set }: { s: Settings; set: (p: Partial<Settings>) => void }) {
-  return (
-    <div className="box">
-      {EXPERIMENTS.map(([id, name, desc]) => (
-        <div className="set-row" key={id}>
-          <div className="txt"><b>{name}</b><span>{desc}</span></div>
-          <Switch on={!!s.experimental[id]} onChange={(v) => set({ experimental: { ...s.experimental, [id]: v } })} />
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function Saves({ game }: { game: Game }) {
   const [files, setFiles] = useState<SaveFile[] | null>(null);
   useEffect(() => { api.saves(game.id).then(setFiles).catch(() => setFiles([])); }, [game.id]);
@@ -81,9 +51,9 @@ export function Saves({ game }: { game: Game }) {
   );
 }
 
-export type SettingsTab = "controls" | "graphics" | "experimental";
+export type SettingsTab = "controls" | "graphics";
 
-/** Controls, graphics or experimental settings for a game, or the defaults when `game` is null. */
+/** Controls or graphics settings for a game, or the defaults when `game` is null. */
 export function SettingsPanel({ game, tab }: { game: Game | null; tab: SettingsTab }) {
   const id = game?.id ?? DEFAULTS_ID;
   const [s, setS] = useState<Settings | null>(null);
@@ -107,10 +77,8 @@ export function SettingsPanel({ game, tab }: { game: Game | null; tab: SettingsT
         <div className="notice"><Info size={15} /><span>This game follows the default settings. Turn on custom settings to change them for this game only.</span></div>
       ) : (
         <>
-          <Pending />
           {tab === "controls" && <ControllerConfig s={s} set={set} />}
           {tab === "graphics" && <Graphics s={s} set={set} />}
-          {tab === "experimental" && <Experimental s={s} set={set} />}
         </>
       )}
     </>

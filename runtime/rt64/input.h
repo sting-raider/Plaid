@@ -53,4 +53,18 @@ inline uint32_t sample(const plaid_settings::Player &p, const Uint8 *keys, SDL_G
     int y = int((get("stickUp") - get("stickDown")) * 80);
     return buttons << 16 | uint32_t(uint8_t(x)) << 8 | uint8_t(y);
 }
+// A pad with the standard layout and the given player's stick tuning.
+inline plaid_settings::Player default_pad(const plaid_settings::Player &like) {
+    plaid_settings::Player p;
+    p.connected = true;
+    p.deadzone = like.deadzone;
+    p.range = like.range;
+    return p;
+}
+// Two input words for one player: buttons combine, each stick axis takes the larger push.
+inline uint32_t merge(uint32_t a, uint32_t b) {
+    auto axis = [](uint32_t w, int shift) { return int8_t(uint8_t(w >> shift)); };
+    auto pick = [](int8_t u, int8_t v) { return uint8_t(std::abs(int(u)) >= std::abs(int(v)) ? u : v); };
+    return ((a | b) & 0xffff0000u) | uint32_t(pick(axis(a, 8), axis(b, 8))) << 8 | pick(axis(a, 0), axis(b, 0));
+}
 }
