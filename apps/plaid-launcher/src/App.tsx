@@ -50,10 +50,12 @@ function Setup({ config, onDone }: { config: Config; onDone: (c: Config) => void
   const [romDir, setRomDir] = useState(config.romDir ?? "");
   const [root, setRoot] = useState(config.plaidRoot);
   const [error, setError] = useState("");
+  // the recompiler folder is asked for only when the built-in one is not a Plaid checkout
+  const [askRoot, setAskRoot] = useState(false);
   const pick = async (set: (v: string) => void) => { const d = await open({ directory: true }); if (typeof d === "string") set(d); };
   const save = async () => {
     const next = { ...config, romDir, plaidRoot: root };
-    try { await api.setConfig(next); onDone(next); } catch (e) { setError(String(e)); }
+    try { await api.setConfig(next); onDone(next); } catch (e) { setError(String(e)); if (String(e).includes("not a Plaid checkout")) setAskRoot(true); }
   };
   return (
     <div className="setup">
@@ -67,10 +69,10 @@ function Setup({ config, onDone }: { config: Config; onDone: (c: Config) => void
           <span className="label">ROM folder</span>
           <button className="picker" onClick={() => pick(setRomDir)}><Folder size={16} /><span className={`path ${romDir ? "" : "faint"}`}>{romDir || "Choose a folder with .z64, .v64 or .n64 files"}</span><span className="faint">Browse</span></button>
         </div>
-        <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
-          <span className="label">Plaid folder</span>
+        {askRoot && <div className="row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+          <span className="label">Plaid recompiler folder</span>
           <button className="picker" onClick={() => pick(setRoot)}><Folder size={16} /><span className="path mono">{root}</span><span className="faint">Change</span></button>
-        </div>
+        </div>}
         {error && <div className="error">{error}</div>}
         <div className="row"><span className="spacer" /><button className="btn primary lg" disabled={!romDir} onClick={save}>Continue</button></div>
       </div>
@@ -208,7 +210,7 @@ function AppSettings({ config, onSave }: { config: Config; onSave: (c: Config) =
             <>
               <div className="box">
                 <div className="set-row"><div className="txt"><b>ROM folder</b><span className="mono">{c.romDir}</span></div><button className="btn" onClick={() => pick("romDir")}><Folder size={15} />Change</button></div>
-                <div className="set-row"><div className="txt"><b>Plaid folder</b><span className="mono">{c.plaidRoot}</span></div><button className="btn" onClick={() => pick("plaidRoot")}><Folder size={15} />Change</button></div>
+                <div className="set-row"><div className="txt"><b>Recompiler folder</b><span className="mono">{c.plaidRoot}</span></div><button className="btn" onClick={() => pick("plaidRoot")}><Folder size={15} />Change</button></div>
                 <div className="set-row"><div className="txt"><b>Test run after each build</b><span>{c.validationSeconds} seconds</span></div>
                   <input type="range" min={5} max={60} step={5} value={c.validationSeconds} onChange={(e) => setC({ ...c, validationSeconds: +e.target.value })} style={{ width: 200 }} /></div>
               </div>
