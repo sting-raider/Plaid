@@ -15,7 +15,7 @@ const REPO = "https://github.com/sting-raider/Plaid";
 const FIRST_CHECK_MS = 15_000; // T3 Code's cadence: shortly after start, then every 4 minutes
 const CHECK_EVERY_MS = 4 * 60_000;
 
-type Phase = "idle" | "downloading" | "downloaded";
+type Phase = "idle" | "downloading" | "downloaded" | "installing";
 type Failure = { step: "recompiler" | "download" | "install"; message: string } | null;
 
 const releaseUrl = (version: string) => `${REPO}/releases/tag/launcher-v${version}`;
@@ -67,11 +67,12 @@ export function useUpdates(notify: (n: Notice) => void, background: boolean) {
 
   const behind = plaid?.behind ?? 0;
   const action: "check" | "download" | "install" =
-    phase === "downloaded" ? "install" : app || behind ? "download" : "check";
+    phase === "downloaded" || phase === "installing" ? "install" : app || behind ? "download" : "check";
 
   const label =
     checking ? "Checking for updates…"
-    : phase === "downloading" ? `Downloading update (${pct}%)`
+    : phase === "downloading" ? `Downloading update ${app?.version ?? ""} · ${pct}%`
+    : phase === "installing" ? `Installing ${app?.version ?? "update"}. Plaid restarts by itself.`
     : failed?.step === "install" && app ? `Install failed for ${app.version}. Click to retry.`
     : phase === "downloaded" && app ? `Update ${app.version} downloaded. Click to restart and install.`
     : failed?.step === "recompiler" ? "Recompiler update failed. Click to retry."
@@ -86,6 +87,7 @@ export function useUpdates(notify: (n: Notice) => void, background: boolean) {
   const status =
     checking ? "Checking…"
     : phase === "downloading" ? `Downloading · ${pct}%`
+    : phase === "installing" ? "Installing…"
     : failed ? "Update failed"
     : action === "install" ? "Restart to update"
     : action === "download" ? (app ? `Update ${app.version} available` : "Recompiler update available")
@@ -135,18 +137,20 @@ export function useUpdates(notify: (n: Notice) => void, background: boolean) {
       { title: "Restart to update", kind: "info", okLabel: "Restart and install", cancelLabel: "Not now" }).catch(() => false);
     if (!ok) return;
     setFailed(null);
+    setPhase("installing");
     try {
       // the installer runs silently and reopens Plaid itself (/R); relaunch covers platforms that return
       await app.install();
       await relaunch();
     } catch (e) {
+      setPhase("downloaded");
       setFailed({ step: "install", message: String(e) });
       notify({ title: "Could not install update", detail: String(e), error: true });
     }
   };
 
   const onClick = async () => {
-    if (pending || checking || phase === "downloading") return;
+    if (pending || checking || phase === "downloading" || phase === "installing") return;
     setPending(true);
     try {
       if (action === "install") await install();
@@ -160,7 +164,7 @@ export function useUpdates(notify: (n: Notice) => void, background: boolean) {
   };
 
   const icon =
-    checking ? <Refresh size={16} />
+    checking || phase === "installing" ? <Refresh size={16} />
     : phase === "downloading" ? <DownloadRing pct={pct} />
     : action === "install" ? <span className="upd-glyph"><RotateCw size={16} /><span className="upd-check"><Check size={8} /></span></span>
     : app ? <span className="upd-glyph"><Download size={16} /><span className="upd-dot" /></span>
@@ -169,12 +173,12 @@ export function useUpdates(notify: (n: Notice) => void, background: boolean) {
 
   const control = (
     <div className="update-wrap">
-      {action !== "check" && <ReleaseNotes app={app} plaid={plaid} title={label} error={failed?.message} available={action === "download" && !failed} />}
+      {action !== "check" && <ReleaseNotes app={app} plaid={plaid} title={label} error={failed?.message} available={action === "download" && phase === "idle" && !failed} />}
       <button
-        className={`icon-btn update-btn ${action !== "check" || phase === "downloading" ? "active" : ""} ${checking ? "spin" : ""}`}
+        className={`icon-btn update-btn ${action !== "check" || phase === "downloading" ? "active" : ""} ${checking || phase === "installing" ? "spin" : ""}`}
         aria-label={label}
         title={action === "check" ? label : undefined}
-        aria-disabled={checking || phase === "downloading" || undefined}
+        aria-disabled={checking || phase === "downloading" || phase === "installing" || undefined}
         onClick={onClick}
       >
         {icon}
@@ -196,7 +200,7 @@ function DownloadRing({ pct }: { pct: number }) {
         <circle cx="16" cy="16" r={r} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"
           strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} className="bar" />
       </svg>
-      <Download size={16} />
+      <Download size={14} />
     </span>
   );
 }
