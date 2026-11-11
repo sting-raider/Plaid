@@ -141,6 +141,8 @@ fn engine_ready(app: AppHandle) -> Result<bool, String> {
 struct EngineProgress {
     done: u64,
     total: u64,
+    /// "download", then "unpack" (no byte progress)
+    phase: &'static str,
 }
 
 static ENGINE_INSTALL: Mutex<()> = Mutex::new(());
@@ -190,7 +192,7 @@ async fn install_engine(app: AppHandle) -> Result<(), String> {
             done += n as u64;
             if done - shown >= 1 << 20 {
                 shown = done;
-                let _ = app.emit("engine", EngineProgress { done, total });
+                let _ = app.emit("engine", EngineProgress { done, total, phase: "download" });
             }
         }
         drop(file);
@@ -199,7 +201,7 @@ async fn install_engine(app: AppHandle) -> Result<(), String> {
             let _ = std::fs::remove_file(&part);
             return Err("the downloaded recompiler is damaged (checksum mismatch); try again".into());
         }
-        let _ = app.emit("engine", EngineProgress { done, total: done });
+        let _ = app.emit("engine", EngineProgress { done, total: done, phase: "unpack" });
         // unpack beside the final folder, then rename, so a half-unpacked engine never counts as ready
         let tmp = dir.join(format!("{}.tmp", &sha[..12]));
         let _ = std::fs::remove_dir_all(&tmp);
@@ -380,11 +382,27 @@ struct GameInfo {
     url: String,
 }
 
+/// True when `text` names a year after the N64's lifetime (a remake's "2026 video game").
+fn late_year(text: &str) -> bool {
+    text.as_bytes()
+        .windows(4)
+        .filter_map(|w| std::str::from_utf8(w).ok()?.parse::<u32>().ok())
+        .any(|y| (2003..2100).contains(&y))
+}
+
+#[test]
+fn late_year_spots_remakes() {
+    assert!(late_year("2026 video game"));
+    assert!(!late_year("2000 video game"));
+    assert!(!late_year("1998 video game"));
+}
+
 /// A short "about" for the game page: the Wikipedia summary of the best search hit, cached.
 #[tauri::command]
 async fn game_info(app: AppHandle, id: String) -> Result<GameInfo, String> {
     let (_, game) = find(&app, &id)?;
-    let dir = config_dir(&app)?.join("info");
+    // info2: the first lookup could cache a remake's article
+    let dir = config_dir(&app)?.join("info2");
     let file = dir.join(format!("{id}.json"));
     if let Some(info) = std::fs::read(&file)
         .ok()
@@ -396,16 +414,40 @@ async fn game_info(app: AppHandle, id: String) -> Result<GameInfo, String> {
         let json = |url: &str| -> Result<serde_json::Value, String> {
             serde_json::from_str(&covers::get(url)?.into_string().map_err(err)?).map_err(err)
         };
+        let summary = |title: &str| {
+            json(&format!(
+                "https://en.wikipedia.org/api/rest_v1/page/summary/{}",
+                covers::encode(&title.replace(' ', "_"))
+            ))
+        };
+        // the N64 game's own article: it names the console and is not a remake or remaster
+        let n64 = |p: &serde_json::Value| {
+            let description = p["description"].as_str().unwrap_or("");
+            p["type"] == "standard"
+                && p["extract"].as_str().unwrap_or("").contains("Nintendo 64")
+                && !late_year(description)
+        };
+        // exact title first ("Zelda - Ocarina of Time" is "Zelda: Ocarina of Time"), then search hits
+        let mut candidates = vec![game.title.replace(" - ", ": ")];
         let query = format!("{} Nintendo 64 video game", game.title.replace(" - ", " "));
         let search = json(&format!(
-            "https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=1&srsearch={}",
+            "https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=5&srsearch={}",
             covers::encode(&query)
         ))?;
-        let title = search["query"]["search"][0]["title"].as_str().ok_or("no article found")?.to_string();
-        let page = json(&format!(
-            "https://en.wikipedia.org/api/rest_v1/page/summary/{}",
-            covers::encode(&title.replace(' ', "_"))
-        ))?;
+        candidates.extend(search["query"]["search"].as_array().into_iter().flatten()
+            .filter_map(|h| h["title"].as_str().map(str::to_string)));
+        let pages: Vec<(String, serde_json::Value)> = candidates
+            .iter()
+            .filter_map(|t| summary(t).ok().filter(|p| n64(p)).map(|p| (t.clone(), p)))
+            .collect();
+        // the game's own article ("1998 video game") over a series or franchise page
+        let game_page = |p: &serde_json::Value| p["description"].as_str().is_some_and(|d| d.contains("video game") && !d.contains("series"));
+        let (title, page) = pages
+            .iter()
+            .find(|(_, p)| game_page(p))
+            .or(pages.first())
+            .cloned()
+            .ok_or("no article found")?;
         let info = GameInfo {
             title,
             description: page["description"].as_str().map(str::to_string),
