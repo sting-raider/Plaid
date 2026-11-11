@@ -6,6 +6,7 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, type UpdateInfo } from "./api";
+import { DEV } from "./stage";
 import { Check, CircleArrowUp, Download, ExternalLink, Refresh, RotateCw } from "./icons";
 
 export type Notice = { title: string; detail?: ReactNode; error?: boolean };
@@ -46,7 +47,7 @@ export function useUpdates(notify: (n: Notice) => void, background: boolean) {
     const timeout = new Promise<null>((r) => setTimeout(() => r(null), 6000));
     const [u, a] = await Promise.all([
       Promise.race([api.checkUpdates().catch(() => null), timeout]),
-      check().catch(() => null),
+      DEV ? null : check().catch(() => null), // dev builds never replace themselves with a release
     ]);
     if (locked.current) return u;
     setPlaid(u);
