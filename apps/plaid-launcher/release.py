@@ -27,6 +27,8 @@ tag = f'launcher-v{version}'
 key = Path(os.environ.get('TAURI_SIGNING_PRIVATE_KEY_PATH', Path.home() / '.tauri/plaid-launcher.key'))
 env = {**os.environ, 'TAURI_SIGNING_PRIVATE_KEY': key.read_text().strip(), 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD': ''}
 env['PATH'] = str(Path.home() / '.cargo/bin') + os.pathsep + env['PATH']
+# a dev build may have left its icon in the exe's resources; build the app crate from clean
+subprocess.run('cargo clean -p plaid-launcher --release --manifest-path src-tauri/Cargo.toml', shell=True, cwd=HERE, env=env, check=True)
 subprocess.run('npx tauri build --bundles nsis', shell=True, cwd=HERE, env=env, check=True)
 
 setup = HERE / f'src-tauri/target/release/bundle/nsis/Plaid_{version}_x64-setup.exe'
