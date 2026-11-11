@@ -132,7 +132,20 @@ function About({ id }: { id: string }) {
   );
 }
 
-type EngineState = { ready: true } | { ready: false; done: number; total: number; error?: string };
+type EngineState = { ready: true } | { ready: false; done: number; total: number; phase?: "download" | "unpack"; error?: string };
+
+/** The recompiler's first-run download: a button that fills, then shimmers while it unpacks. */
+function EngineButton({ engine }: { engine: Extract<EngineState, { ready: false }> }) {
+  const unpacking = engine.phase === "unpack";
+  const pct = engine.total ? Math.floor((engine.done / engine.total) * 100) : 0;
+  return (
+    <div className={`btn lg engine-btn ${unpacking ? "unpacking" : ""}`} role="progressbar" aria-valuenow={unpacking ? undefined : pct}
+      aria-label="Downloading the recompiler" style={{ "--p": `${unpacking ? 100 : pct}%` } as React.CSSProperties}>
+      <Hammer size={15} />
+      {unpacking ? "Unpacking recompiler…" : <>Downloading recompiler<span className="pct">{engine.total ? `${pct}%` : ""}</span></>}
+    </div>
+  );
+}
 
 function GamePage({ game, build, engine, onBack, onCompile, onCancel, onPlay, onRetryEngine }: {
   game: Game; build?: Build; engine: EngineState; onBack: () => void; onCompile: () => void; onCancel: () => void; onPlay: () => void; onRetryEngine: () => void;
@@ -158,9 +171,9 @@ function GamePage({ game, build, engine, onBack, onCompile, onCancel, onPlay, on
             </div>
             <div className="row" style={{ marginTop: 6 }}>
               {game.compiled && !running && <button className="btn primary lg" onClick={onPlay}><Play size={15} />Play</button>}
-              {!engine.ready && !running && <button className={`btn lg ${game.compiled ? "" : "primary"}`} disabled={!engine.error} onClick={onRetryEngine}>
-                {engine.error ? <><Refresh size={15} />Retry download</> : <><Hammer size={15} />Downloading recompiler{engine.total ? ` · ${Math.floor((engine.done / engine.total) * 100)}%` : "…"}</>}
-              </button>}
+              {!engine.ready && !running && (engine.error
+                ? <button className="btn lg" onClick={onRetryEngine}><Refresh size={15} />Retry download</button>
+                : <EngineButton engine={engine} />)}
               {engine.ready && !game.compiled && !running && <button className="btn primary lg" onClick={() => { setTab("overview"); onCompile(); }}><Hammer size={15} />Compile</button>}
               {engine.ready && game.compiled && !running && <button className="btn lg" onClick={() => { setTab("overview"); onCompile(); }}><Refresh size={15} />Recompile</button>}
             </div>
@@ -291,7 +304,7 @@ export default function App() {
   };
   useEffect(() => { if (booted) api.engineReady().then((r) => { if (!r) getEngine(); }).catch(() => {}); }, [booted]);
   useEffect(() => {
-    const off = listen<{ done: number; total: number }>("engine", ({ payload }) => setEngine((s) => (s.ready ? s : { ready: false, ...payload })));
+    const off = listen<{ done: number; total: number; phase: "download" | "unpack" }>("engine", ({ payload }) => setEngine((s) => (s.ready ? s : { ready: false, ...payload })));
     return () => { off.then((f) => f()); };
   }, []);
 
