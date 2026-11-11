@@ -64,10 +64,9 @@ LICENSES = [
     ('mingw-w64 v13 runtime, headers, winpthreads', 'ZPL-2.1 / MIT-style / public domain', 'mingw/'),
     ('LLVM/Clang (tested commit) and builtin headers', 'Apache-2.0 WITH LLVM-exception', 'llvm/LICENSE.txt'),
 ]
-# Only the Microsoft VC++ 2015-2022 runtime may come from the machine's System32; it is the
-# redistributable's own signed files, recorded by hash in engine.json (ADR-0316).
+# The VC++ 2015-2022 runtime comes from Visual Studio's redistributable CRT folder, never
+# System32, and is recorded by hash in engine.json (ADR-0316).
 VC_RUNTIME = re.compile(r'^(msvcp140(_\d)?|vcruntime140(_1)?|concrt140|vcomp140)\.dll$', re.I)
-SYSTEM32 = Path(os.environ.get('SystemRoot', 'C:/Windows')) / 'System32'
 SYSTEM_DLL = re.compile(r'^(api-ms-|ext-ms-)|^(kernel32|ntdll|user32|gdi32|gdi32full|advapi32|'
     r'shell32|shlwapi|ole32|oleaut32|comdlg32|comctl32|ws2_32|winmm|imm32|version|'
     r'setupapi|cfgmgr32|secur32|bcrypt|bcryptprimitives|crypt32|cryptbase|rpcrt4|'
@@ -122,8 +121,7 @@ def dll_closure(seeds, search, destination, objdump):
             key = name.lower()
             if SYSTEM_DLL.search(name) or key in found:
                 continue
-            source = next((folder / name for folder in search if (folder / name).is_file() and
-                       (folder != SYSTEM32 or VC_RUNTIME.match(name))), None)
+            source = next((folder / name for folder in search if (folder / name).is_file()), None)
             if source is None:
                 raise FileNotFoundError(f'unbundled PE dependency {name} imported by {path.name}')
             target = destination / name
@@ -342,9 +340,13 @@ def build(args):
     vswhere = Path(os.environ.get('ProgramFiles(x86)', 'C:/Program Files (x86)')) / 'Microsoft Visual Studio/Installer/vswhere.exe'
     vc = []
     if vswhere.is_file():
-        vs = Path(subprocess.check_output([str(vswhere), '-latest', '-property', 'installationPath'], text=True).strip())
-        vc = sorted(vs.glob('VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT'), reverse=True)
-    search = [destination / 'python', rt64, mingw / 'bin', llvm / 'bin', *vc, SYSTEM32]
+        # -products * includes Build Tools installs, which hold the redistributable CRT folder.
+        installs = subprocess.check_output([str(vswhere), '-all', '-products', '*', '-property', 'installationPath'], text=True).splitlines()
+        vc = sorted((c for vs in installs for c in Path(vs).glob('VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT')),
+                    key=lambda c: tuple(map(int, c.parts[-3].split('.'))), reverse=True)
+    if not vc:
+        raise FileNotFoundError('no Visual Studio redistributable CRT folder (VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT)')
+    search = [*vc, destination / 'python', rt64, mingw / 'bin', llvm / 'bin']
     # Each application gets its own PE dependency closure, not every other
     # application's DLLs. No reliance on a globally installed VC runtime.
     for folder in ('python', 'target/release', 'target/ares-boot/oracle',

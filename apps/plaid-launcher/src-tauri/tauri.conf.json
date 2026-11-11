@@ -48,9 +48,6 @@
         "installerIcon": "icons/icon.ico",
         "template": "installer/installer.nsi"
       }
-    },
-    "resources": {
-      "../../../dist/engine/": "engine/"
     }
   },
   "plugins": {

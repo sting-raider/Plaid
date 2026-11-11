@@ -157,6 +157,10 @@ export const api = {
   checkUpdates: () => invoke<UpdateInfo>("check_updates"),
   /** True when the app installed with its own engine; there is no recompiler folder to choose. */
   engineBundled: () => invoke<boolean>("engine_bundled"),
+  /** False until a release app has downloaded its engine. */
+  engineReady: () => invoke<boolean>("engine_ready"),
+  /** Downloads the engine; progress arrives as `engine` events ({ done, total } bytes). */
+  installEngine: () => invoke<void>("install_engine"),
   updatePlaid: () => invoke<void>("update_plaid"),
   async settings(id: string): Promise<Settings> {
     const stored = await invoke<Partial<Settings> | null>("get_settings", { id });

@@ -132,8 +132,10 @@ function About({ id }: { id: string }) {
   );
 }
 
-function GamePage({ game, build, onBack, onCompile, onCancel, onPlay }: {
-  game: Game; build?: Build; onBack: () => void; onCompile: () => void; onCancel: () => void; onPlay: () => void;
+type EngineState = { ready: true } | { ready: false; done: number; total: number; error?: string };
+
+function GamePage({ game, build, engine, onBack, onCompile, onCancel, onPlay, onRetryEngine }: {
+  game: Game; build?: Build; engine: EngineState; onBack: () => void; onCompile: () => void; onCancel: () => void; onPlay: () => void; onRetryEngine: () => void;
 }) {
   const [tab, setTab] = useState<GameTab>("overview");
   const running = build?.status === "running";
@@ -156,9 +158,13 @@ function GamePage({ game, build, onBack, onCompile, onCancel, onPlay }: {
             </div>
             <div className="row" style={{ marginTop: 6 }}>
               {game.compiled && !running && <button className="btn primary lg" onClick={onPlay}><Play size={15} />Play</button>}
-              {!game.compiled && !running && <button className="btn primary lg" onClick={() => { setTab("overview"); onCompile(); }}><Hammer size={15} />Compile</button>}
-              {game.compiled && !running && <button className="btn lg" onClick={() => { setTab("overview"); onCompile(); }}><Refresh size={15} />Recompile</button>}
+              {!engine.ready && !running && <button className={`btn lg ${game.compiled ? "" : "primary"}`} disabled={!engine.error} onClick={onRetryEngine}>
+                {engine.error ? <><Refresh size={15} />Retry download</> : <><Hammer size={15} />Downloading recompiler{engine.total ? ` · ${Math.floor((engine.done / engine.total) * 100)}%` : "…"}</>}
+              </button>}
+              {engine.ready && !game.compiled && !running && <button className="btn primary lg" onClick={() => { setTab("overview"); onCompile(); }}><Hammer size={15} />Compile</button>}
+              {engine.ready && game.compiled && !running && <button className="btn lg" onClick={() => { setTab("overview"); onCompile(); }}><Refresh size={15} />Recompile</button>}
             </div>
+            {!engine.ready && engine.error && <div className="error">{engine.error}</div>}
           </div>
           <About id={game.id} />
         </div>
@@ -275,6 +281,20 @@ export default function App() {
     return () => { off.then((f) => f()); };
   }, []);
 
+  // a release app downloads its recompiler once, in the background, on first run
+  const [engine, setEngine] = useState<EngineState>({ ready: true });
+  const getEngine = () => {
+    setEngine({ ready: false, done: 0, total: 0 });
+    api.installEngine()
+      .then(() => setEngine({ ready: true }))
+      .catch((e) => setEngine((s) => ({ ...(s.ready ? { done: 0, total: 0 } : s), ready: false, error: String(e) })));
+  };
+  useEffect(() => { if (booted) api.engineReady().then((r) => { if (!r) getEngine(); }).catch(() => {}); }, [booted]);
+  useEffect(() => {
+    const off = listen<{ done: number; total: number }>("engine", ({ payload }) => setEngine((s) => (s.ready ? s : { ready: false, ...payload })));
+    return () => { off.then((f) => f()); };
+  }, []);
+
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setNotice(null), toast.detail ? 8000 : 4500); return () => clearTimeout(t); }, [toast]);
 
   const shown = useMemo(() => games.filter((g) =>
@@ -314,7 +334,7 @@ export default function App() {
 
         <main className="main">
           {game ? (
-            <GamePage key={game.id} game={game} build={builds[game.id]} onBack={() => setSelected(null)} onCompile={() => compile(game.id)}
+            <GamePage key={game.id} game={game} build={builds[game.id]} engine={engine} onRetryEngine={getEngine} onBack={() => setSelected(null)} onCompile={() => compile(game.id)}
               onCancel={() => api.cancel().catch((e) => setToast(String(e)))} onPlay={() => setPlaying(game)} />
           ) : view === "settings" ? (
             <AppSettings config={config} onSave={(c) => { setConfig(c); rescan(); setToast("Settings saved."); }} />
