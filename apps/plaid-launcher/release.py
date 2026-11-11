@@ -6,7 +6,7 @@ one "- **Name.** sentence" bullet per item). The app's update panel shows the sa
 List only what works in this build. Bump "version" in src-tauri/tauri.conf.json first. Needs gh (logged in) and the
 signing key at ~/.tauri/plaid-launcher.key (TAURI_SIGNING_PRIVATE_KEY_PATH overrides).
 """
-import datetime, json, os, subprocess, sys
+import datetime, json, os, shutil, subprocess, sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -30,13 +30,18 @@ env['PATH'] = str(Path.home() / '.cargo/bin') + os.pathsep + env['PATH']
 # the installer ships the offline engine (ADR-0316) as engine/; build it from this checkout.
 # PLAID_ENGINE_READY=1 reuses a dist/engine/ already built from this same commit.
 repo = HERE.parents[1]
-if os.environ.get('PLAID_ENGINE_READY') != '1':
-    subprocess.run([sys.executable, 'scripts/package_engine.py', '--rt64-build', 'target/engine-rt64'], cwd=repo, env=env, check=True)
+# PLAID_BUILT=1 publishes the installer already built (and tested) in target/, building nothing.
+built = os.environ.get('PLAID_BUILT') == '1'
+if not built and os.environ.get('PLAID_ENGINE_READY') != '1':
+    shutil.rmtree(repo / 'dist/engine', ignore_errors=True)  # build output; the packager refuses to overwrite it
+    (repo / 'dist/engine-windows-x64.zip').unlink(missing_ok=True)
+    subprocess.run([sys.executable, 'scripts/package_engine.py'], cwd=repo, env=env, check=True)
 if not (repo / 'dist/engine/engine.json').exists():
     sys.exit('dist/engine is missing; the installer would ship without its engine')
 # a dev build may have left its icon in the exe's resources; build the app crate from clean
-subprocess.run('cargo clean -p plaid-launcher --release --manifest-path src-tauri/Cargo.toml', shell=True, cwd=HERE, env=env, check=True)
-subprocess.run('npx tauri build --bundles nsis', shell=True, cwd=HERE, env=env, check=True)
+if not built:
+    subprocess.run('cargo clean -p plaid-launcher --release --manifest-path src-tauri/Cargo.toml', shell=True, cwd=HERE, env=env, check=True)
+    subprocess.run('npx tauri build --bundles nsis', shell=True, cwd=HERE, env=env, check=True)
 
 setup = HERE / f'src-tauri/target/release/bundle/nsis/Plaid_{version}_x64-setup.exe'
 # Defender's ML model flagged one unsigned build (Trojan:Win32/Bearfoos.A!ml) while a rebuild
