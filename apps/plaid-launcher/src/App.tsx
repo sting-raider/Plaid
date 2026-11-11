@@ -8,6 +8,7 @@ import { Boot } from "./Boot";
 import { PlaySheet, Saves, SettingsPanel, SettingsTab } from "./settings";
 import { Back, Check, Close, Folder, Gear, Grid, Hammer, Logo, Maximize, Minimize, Play, Refresh, Search } from "./icons";
 import { useUpdates, type Notice } from "./update";
+import { DEV, StageBackdrop } from "./stage";
 import "./styles.css";
 
 interface Build { id: string; progress: Progress; logs: string[]; status: "running" | "done" | "failed" | "cancelled"; message?: string; started: number; lastOutput: number }
@@ -16,8 +17,9 @@ const win = getCurrentWindow();
 
 function TitleBar() {
   return (
-    <div className="titlebar">
-      <div className="brand"><Logo size={15} />Plaid</div>
+    <div className={`titlebar ${DEV ? "dev" : ""}`}>
+      <StageBackdrop />
+      <div className="brand"><Logo size={15} />Plaid{DEV && <span className="stage-pill">Dev</span>}</div>
       <div className="drag" data-tauri-drag-region />
       <button className="win-btn" onClick={() => win.minimize()} aria-label="Minimize"><Minimize /></button>
       <button className="win-btn" onClick={() => win.toggleMaximize()} aria-label="Maximize"><Maximize /></button>

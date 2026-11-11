@@ -7,6 +7,10 @@ description: Plaid launcher app (apps/plaid-launcher, Tauri + React). Use when c
 
 The launcher is a Tauri 2 + React app on branch `claude/launcher`. Its bar is T3 Code's desktop app (MIT, `pingdotgg/t3code`): quiet, precise UI, an honest update flow, terse release notes. Ownership: the launcher is ours; the game runtime (`runtime/`, `runtime/rt64`) and the recompiler belong to backend workers, so a launcher feature that needs runtime support ships only after that support is on `main`.
 
+## Dev builds
+
+Local test builds are **Plaid (Dev)**: `npm run tauri:dev-build` (in `apps/plaid-launcher`) merges `src-tauri/tauri.dev.conf.json`, giving its own identifier (`dev.plaid.launcher.dev`, so its own settings folder), install folder, exe name (`plaid-launcher-dev.exe`), blueprint icon (`icons-dev/`), and in-app blueprint title bar with a Dev pill (`src/stage.tsx`, after T3 Code's dev artwork). Dev builds never install app releases. Never install a local build over the real "Plaid"; that one only comes from releases.
+
 ## Shipping a release
 
 1. Every user-visible claim is **verified** in the installed build by hand: launch it, use the feature, see it work. A feature that depends on unlanded backend work is not in the release.

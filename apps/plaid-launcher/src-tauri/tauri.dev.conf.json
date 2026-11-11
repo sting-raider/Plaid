@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Plaid (Dev)",
+  "mainBinaryName": "plaid-launcher-dev",
+  "identifier": "dev.plaid.launcher.dev",
+  "build": {
+    "beforeBuildCommand": "npm run build -- --mode dev"
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false,
+    "icon": [
+      "icons-dev/32x32.png",
+      "icons-dev/128x128.png",
+      "icons-dev/128x128@2x.png",
+      "icons-dev/icon.icns",
+      "icons-dev/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons-dev/icon.ico"
+      }
+    }
+  }
+}
