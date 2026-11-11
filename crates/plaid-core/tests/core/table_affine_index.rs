@@ -56,6 +56,7 @@ fn mapped(image: &CodeImage, extra: Option<u32>) -> ProgramMap {
         map.load_images.insert(
             image.base.image.clone(),
             plaid_core::declared_loads::LoadImage {
+                observed: Default::default(),
                 base_offset: RomOffset(0),
                 base: GuestRange {
                     start: image.base.pc,

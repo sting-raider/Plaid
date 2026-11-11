@@ -1,8 +1,9 @@
 # Next
 
-Residual local traps identify work still needed for unfamiliar ROMs: classify
-the observed RE2 fault at 8004d348 and distinguish executable instructions from
-data before expanding native execution (ADR-0311).
+Implement the automatic multi-round repair loop (step 2b) over the explicit
+observed-image admission interface (ADR-0314). Retain bounded captures, deterministic
+generations, content guards and the closed-world gate. RE2 gameplay progress after
+admission remains unverified; captured data is not an executable-lifetime proof.
 
 ## Build speed: cold builds for small machines
 

@@ -370,6 +370,11 @@ def main():
         changed=bytearray(canonical); changed[64] ^= 1
         bad.write_bytes(changed)
         run("solve",bad,directory/"z64.json",ok=False)
+    import sys
+    sys.path.insert(0, str(ROOT / 'runtime'))
+    from test_observed_images import main as test_observed_images
+    test_observed_images()
+    sys.path.remove(str(ROOT / 'runtime'))
     from test_overlays import main as test_overlays
     test_overlays()
     from test_runtime_bindings import main as test_runtime_bindings

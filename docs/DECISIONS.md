@@ -9166,3 +9166,37 @@ PI DMA history is currently unavailable and explicitly null. These records are
 observations, not executable evidence: no ingestion, generation dispatch, or
 runtime content guard is implemented by this decision. They may contain game
 assets and must not be committed.
+
+
+## ADR-0314: Explicit observed-image admission with fail-closed native dispatch
+
+`native.py --repair-record PATH` explicitly admits a `plaid-repair-v1` window;
+repeated arguments define nonzero generations in input order. Discovery and
+lowering revalidate the schema, bounded aligned RDRAM window, root and SHA-256.
+Each observation has its own content hash and generation in the load-image
+catalog, with a separate raw slot in analysis storage. ROM bytes at the guest
+address are preserved. This reuses declared-load composition without asserting
+ROM ancestry, relocations, DMA history or an exhaustive executable lifetime.
+
+The captured target is a discovery root. Original ROM roots and observed roots
+remain separate lowered entries; the existing solver still rejects nonlocal
+blockers and retains residual/trapped-site obligations. Every build manifest
+lists admitted hashes, generations, roots and analysis storage. Observed builds
+conservatively record `native_complete: false`, including scoped CLOSED maps.
+
+Native entry compares the entire window against the SHA-256-authenticated
+payload, even when a binding was already cached. Exact byte equality implies
+the recorded SHA-256; no runtime hashing or guest decoding is needed. Exactly
+one matching observed generation may execute. A ROM entry may still run only
+when its independent complete compiled block matches and its existing guards
+pass. Missing/ambiguous observed matches fault 17 before executing their code;
+that refusal cannot be overwritten by a later generic transfer fault. Active
+windows retain the existing native-frame write protections; inactive writes
+revoke their bindings. An observed entry retains its captured virtual PC region:
+another physical alias needs its own admitted root, preserving J/JAL semantics.
+
+Synthetic tests cover retained ROM code, distinct and equal-valued generations,
+whole-window/late mismatches, aliases, active-write refusal, inactive revocation,
+malformed records and deterministic maps/manifests. No upstream implementation
+is copied. Automatic fault-driven multi-round rebuilding (step 2b), instruction
+cache lifetime proofs and commercial-game progress are not claimed.

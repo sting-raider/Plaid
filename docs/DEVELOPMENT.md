@@ -798,4 +798,19 @@ interactive verification.
 `python scripts/native.py <rom> --rt64 --repair-capture` writes a numbered
 `target/native/<name>/repair/<n>.json` for a fault 3 or 15. The record contains
 raw game RAM and must stay local. Its SHA-256 binds the captured bytes; PI DMA
-history is currently unavailable. Records cannot yet be ingested into builds.
+history is currently unavailable.
+
+To admit a retained record explicitly:
+
+```bash
+python scripts/native.py <rom> --repair-record target/native/<name>/repair/0.json
+```
+
+Repeat `--repair-record` in generation order (1, 2, ...). The build retains the
+records in its observed-load catalog, preserves ROM code, and lists observed
+images in `native-manifest.json` with `native_complete: false`. RAM must match
+the entire authenticated window before observed code executes; mismatches or
+ambiguous generations fault 17. Active-window writes still fail closed. These
+broad windows can include mutable data, so subsequent data changes can refuse
+execution conservatively. Records are never consumed automatically; the multi-round
+repair loop is separate work. Run native validation with `SDL_AUDIODRIVER=dummy`.

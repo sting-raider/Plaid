@@ -473,6 +473,7 @@ mod tests {
             program::RomOffset,
         };
         let mut spec = LoadImage {
+            observed: Default::default(),
             base_offset: RomOffset(0x1000),
             base: GuestRange {
                 start: GuestAddr(0x8000_0400),

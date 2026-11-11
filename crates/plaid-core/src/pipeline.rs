@@ -236,6 +236,28 @@ fn discover_bounded(
         map = analyze_indirect(&map, image)?;
         indirect_time += indirect_started.elapsed();
         let old_count = (roots.len(), external.len());
+        // Observed occupants do not erase decodable ROM code at the same link.
+        // Retain its independent native source; entry selects by checked bytes.
+        if let Some((spec, _)) = loads
+            && !spec.observed.is_empty()
+        {
+            for target in map.direct_edges.iter().map(|e| e.target.pc).chain(
+                map.indirect_sites
+                    .iter()
+                    .flat_map(|s| s.candidates.keys().map(|t| t.pc)),
+            ) {
+                if spec.observed.values().any(|r| {
+                    target.0 >= 0x80000000
+                        && target.0 < 0xc0000000
+                        && (target.0 & 0x1fffffff).wrapping_sub(r.window_base) < r.window_size
+                }) && crate::discovery::slot_entry_decodable(image, target)
+                    && !boundary.contains(&target)
+                {
+                    roots.insert(target);
+                    external.insert(target);
+                }
+            }
+        }
         // Linked calls discover decodable CPU entries in content-bound slots.
         // Missing identities remain solver obligations; residual dispatch may
         // refuse them at run time, never execute their bytes as guest code.

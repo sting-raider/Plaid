@@ -34,3 +34,30 @@ def write_record(raw_path, directory):
             return path
         except FileExistsError:
             n += 1
+
+
+def admit_records(loads, paths):
+    """Explicit input order defines generations; captures are never auto-consumed."""
+    doc = json.loads(loads.read_text())
+    if doc.get('observed_images'):
+        raise ValueError('repair records already admitted in loads')
+    doc['observed_images'] = [dict(generation=n, record=json.loads(path.read_text()))
+                              for n, path in enumerate(paths, 1)]
+    loads.write_text(json.dumps(doc, indent=2) + '\n')
+
+
+def native_manifest(program, verdict, residual):
+    images = []
+    for spec in program.get('load_images', {}).values():
+        for generation, record in spec.get('observed', {}).items():
+            load = next(l for l in spec['loads'] if l['encoding'] == {'observed': {'generation': int(generation)}})
+            images.append(dict(image=record['sha256'], sha256=record['sha256'], generation=int(generation),
+                               window_base=record['window_base'], window_size=record['window_size'],
+                               observed_root=record['target_pc'], site_pc=record['site_pc'],
+                               storage_base=load['destination']['start']))
+    images.sort(key=lambda i: (i['generation'], i['image'], i['storage_base']))
+    return dict(mode='residual-dispatch' if residual else ('observed-dispatch' if images else 'closed'),
+                native_complete=not residual and not images,
+                residual_sites=[f"{s['pc']:08x}" for s in verdict.get('residual_sites', [])],
+                trapped_sites=[dict(pc=f"{b['site']['pc']:08x}", kind=b['kind']) for b in verdict.get('trapped_sites', [])],
+                observed_images=images)
