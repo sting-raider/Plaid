@@ -23,4 +23,7 @@ int main() {
     assert(plaid_input::sample(p, keys, nullptr) == 0x50u);
     p.connected = false;
     assert(plaid_input::sample(p, keys, nullptr) == 0);
+    // keyboard + pad on Player 1: buttons combine, each axis keeps the larger push
+    assert(plaid_input::merge(0x80000050u, 0x4000b000u) == 0xc000b050u);
+    assert(plaid_input::default_pad(p).bindings.at("a") == "Button 0");
 }

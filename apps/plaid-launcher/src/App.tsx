@@ -139,7 +139,7 @@ function GamePage({ game, build, engine, onBack, onCompile, onCancel, onPlay, on
 }) {
   const [tab, setTab] = useState<GameTab>("overview");
   const running = build?.status === "running";
-  const tabs: [GameTab, string][] = [["overview", "Overview"], ["controls", "Controls"], ["graphics", "Graphics"], ["experimental", "Experimental"], ["saves", "Saves"]];
+  const tabs: [GameTab, string][] = [["overview", "Overview"], ["controls", "Controls"], ["graphics", "Graphics"], ["saves", "Saves"]];
   return (
     <>
       <div className="header">
@@ -192,7 +192,7 @@ function GamePage({ game, build, engine, onBack, onCompile, onCancel, onPlay, on
               </div>
             </>
           )}
-          {(tab === "controls" || tab === "graphics" || tab === "experimental") && <SettingsPanel game={game} tab={tab} />}
+          {(tab === "controls" || tab === "graphics") && <SettingsPanel game={game} tab={tab} />}
           {tab === "saves" && <Saves game={game} />}
         </div>
       </div>
@@ -207,7 +207,7 @@ function AppSettings({ config, onSave }: { config: Config; onSave: (c: Config) =
   const [bundled, setBundled] = useState(true);
   useEffect(() => { api.engineBundled().then(setBundled).catch(() => setBundled(false)); }, []);
   const pick = async (key: "romDir" | "plaidRoot") => { const d = await open({ directory: true }); if (typeof d === "string") setC({ ...c, [key]: d }); };
-  const tabs: ["general" | SettingsTab, string][] = [["general", "General"], ["controls", "Default controls"], ["graphics", "Default graphics"], ["experimental", "Experimental"]];
+  const tabs: ["general" | SettingsTab, string][] = [["general", "General"], ["controls", "Default controls"], ["graphics", "Default graphics"]];
   return (
     <>
       <div className="header"><h2>Settings</h2></div>
