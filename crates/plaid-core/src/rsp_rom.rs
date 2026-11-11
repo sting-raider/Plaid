@@ -380,7 +380,7 @@ mod tests {
                 start: GuestAddr(0x8000_7000),
                 size: 8,
             }],
-            slots: vec![],
+            slots: Default::default(),
         };
         // Store an OSTask-like ucode pointer through an unknown task base.
         image.words[..9].copy_from_slice(&[
@@ -474,7 +474,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: vec![],
-            slots: vec![],
+            slots: Default::default(),
         };
         // Two destinations, then three length/offset pairs. The second pair
         // selects destination byte offset two, and DMA rounds lengths up.

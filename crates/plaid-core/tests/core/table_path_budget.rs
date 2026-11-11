@@ -45,7 +45,7 @@ fn image(chain: usize, clobber: bool) -> CodeImage {
         rom_offset: None,
         physical_start: None,
         holes: Vec::new(),
-        slots: Vec::new(),
+        slots: Default::default(),
     }
 }
 

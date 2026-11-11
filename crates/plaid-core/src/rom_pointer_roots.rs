@@ -146,7 +146,7 @@ mod tests {
             rom_offset: Some(RomOffset(64)),
             physical_start: Some(PhysicalAddr(0)),
             holes: vec![],
-            slots: vec![],
+            slots: Default::default(),
         };
         let map = discover_address_taken(
             RomIdentity {

@@ -182,16 +182,17 @@ pub fn plausible_at(image: &CodeImage, pc: GuestAddr, starts: &BTreeSet<u32>) ->
 /// A decodable Yaz0 stream contributes its decoded words instead of its
 /// compressed bytes, which are not data (ADR-0175).
 pub fn rom_words(bytes: &[u8], image: &CodeImage, starts: &BTreeSet<u32>) -> BTreeSet<GuestAddr> {
-    let mut out = BTreeSet::new();
+    // Each distinct word is judged once, on every core: a ROM and an image hold
+    // tens of millions of words but far fewer values, and each value's verdict
+    // does not depend on where it appears.
+    let mut values: Vec<u32> = Vec::with_capacity(bytes.len() / 4);
     let mut take = |words: &[u8]| {
-        out.extend(
+        values.extend(
             words
                 .as_chunks::<4>()
                 .0
                 .iter()
-                .flat_map(|w| image.slot_copies(u32::from_be_bytes(*w)))
-                .map(GuestAddr)
-                .filter(|&pc| plausible_at(image, pc, starts)),
+                .map(|w| u32::from_be_bytes(*w)),
         )
     };
     let mut at = 0;
@@ -209,7 +210,20 @@ pub fn rom_words(bytes: &[u8], image: &CodeImage, starts: &BTreeSet<u32>) -> BTr
         }
     }
     take(&bytes[raw..]);
-    out
+    values.sort_unstable();
+    values.dedup();
+    let chunks: Vec<&[u32]> = values.chunks(4096).collect();
+    crate::indirect::par_map(&chunks, |chunk| {
+        chunk
+            .iter()
+            .flat_map(|&w| image.slot_copies(w))
+            .map(GuestAddr)
+            .filter(|&pc| plausible_at(image, pc, starts))
+            .collect::<Vec<_>>()
+    })
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 /// Address constants (`lui r, hi` or an untaken PC link, then `addiu`/`ori`) built in
@@ -570,7 +584,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: vec![],
-            slots: vec![],
+            slots: Default::default(),
         };
         let map = |image: &CodeImage| {
             crate::discovery::direct_cfg(
@@ -638,7 +652,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: vec![],
-            slots: vec![],
+            slots: Default::default(),
         };
         let data = 0x8000_0008u32.to_be_bytes();
         assert_eq!(
@@ -690,7 +704,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
-            slots: Vec::new(),
+            slots: Default::default(),
         };
         let data: Vec<u8> = [
             0x8000_0000u32,
@@ -727,7 +741,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
-            slots: Vec::new(),
+            slots: Default::default(),
         };
         let placed = crate::program::GuestRange {
             start: GuestAddr(0x8000_0000),
@@ -769,7 +783,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
-            slots: Vec::new(),
+            slots: Default::default(),
         };
         let mut rom = b"Yaz0".to_vec();
         rom.extend(16u32.to_be_bytes());
@@ -811,7 +825,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
-            slots: Vec::new(),
+            slots: Default::default(),
         };
         let rom = crate::program::RomIdentity {
             sha256: "a".repeat(64),
@@ -838,7 +852,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
-            slots: Vec::new(),
+            slots: Default::default(),
         };
         // b +8 stays in the image; j 0x84001068 (RSP boot code) does not
         assert!(plausible(&image(0x1000_0001), GuestAddr(0x8000_0000)));
@@ -859,7 +873,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
-            slots: Vec::new(),
+            slots: Default::default(),
         };
         let second = GuestAddr(0x8000_0010);
         assert!(!plausible(&image, second));
@@ -879,7 +893,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
-            slots: Vec::new(),
+            slots: Default::default(),
         };
         assert!(plausible(&image, GuestAddr(0x8000_0010)));
         // a working word right after the slot is not a function start

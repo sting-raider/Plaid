@@ -650,7 +650,7 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
         rom_offset,
         physical_start: None,
         holes: Vec::new(),
-        slots: Vec::new(),
+        slots: Default::default(),
     };
     let base = image(spec.base.start, base_bytes, Some(spec.base_offset));
     if spec.loads.is_empty() {
@@ -733,7 +733,7 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
             .copy_from_slice(&data);
     }
     let mut out = image(GuestAddr(lo as u32), &composite, None);
-    out.slots = slots;
+    out.slots = slots.into();
     out.holes = holes;
     if !out.holes.is_empty() || !out.slots.is_empty() {
         out.base.image = out.content_identity();
@@ -989,7 +989,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
-            slots: vec![(data.destination.clone(), data.destination.start.0, 0)],
+            slots: vec![(data.destination.clone(), data.destination.start.0, 0)].into(),
         };
         image.base.image = image.content_identity();
         let spec = LoadImage {
@@ -1131,7 +1131,8 @@ mod tests {
         changed.base.image = changed.content_identity();
         assert!(!verify_slots(&changed, Some(&spec)));
         let mut changed = image.clone();
-        changed.slots.push(changed.slots[0].clone());
+        let first = changed.slots[0].clone();
+        changed.slots.push(first);
         let mut duplicated = spec.clone();
         duplicated.loads.push(duplicated.loads[0].clone());
         changed.base.image = changed.content_identity();
@@ -1293,7 +1294,7 @@ mod runtime_source_tests {
             rom_offset: None,
             physical_start: None,
             holes: vec![],
-            slots: vec![(GuestRange { start, size: 32 }, 0xe000_0000, 16)],
+            slots: vec![(GuestRange { start, size: 32 }, 0xe000_0000, 16)].into(),
         };
         let entry = image.address(start);
         let mut function = crate::program::RuntimeFunction {

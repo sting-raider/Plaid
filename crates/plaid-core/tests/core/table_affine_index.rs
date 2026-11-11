@@ -34,7 +34,7 @@ fn image() -> CodeImage {
         rom_offset: None,
         physical_start: None,
         holes: vec![],
-        slots: vec![],
+        slots: Default::default(),
     }
 }
 fn mapped(image: &CodeImage, extra: Option<u32>) -> ProgramMap {
@@ -245,7 +245,8 @@ fn bound_bridge_image() -> CodeImage {
             BASE + 0x4000,
             0x10,
         ),
-    ];
+    ]
+    .into();
     call
 }
 

@@ -938,6 +938,13 @@ impl ProgramMap {
                 return Err("TLB exception vector requires a unique lowered guest entry".into());
             }
         }
+        // indexed once: derived entries times indirect sites is quadratic
+        let mut sites_at: BTreeMap<&CodeAddress, Vec<&IndirectSite>> = BTreeMap::new();
+        if !self.derived_entries.is_empty() {
+            for site in &self.indirect_sites {
+                sites_at.entry(&site.site).or_default().push(site);
+            }
+        }
         for (target, sources) in &self.derived_entries {
             address(target)?;
             if !self.entries.contains_key(target)
@@ -953,10 +960,8 @@ impl ProgramMap {
                         "derived entry source and target have different execution identity".into(),
                     );
                 }
-                if !self.indirect_sites.iter().any(|site| {
-                    site.site == *source
-                        && site.link_register.is_none()
-                        && site.candidates.contains_key(target)
+                if !sites_at.get(source).into_iter().flatten().any(|site| {
+                    site.link_register.is_none() && site.candidates.contains_key(target)
                 }) {
                     return Err(
                         "derived entry origin lacks a matching non-link indirect candidate".into(),

@@ -28,7 +28,7 @@ fn map(f: [u32; 5]) -> ProgramMap {
         rom_offset: Some(RomOffset(64)),
         physical_start: Some(PhysicalAddr(0)),
         holes: Vec::new(),
-        slots: Vec::new(),
+        slots: Default::default(),
     };
     let rom = RomIdentity {
         sha256: "e".repeat(64),

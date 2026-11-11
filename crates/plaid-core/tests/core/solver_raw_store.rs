@@ -12,7 +12,7 @@ fn image(physical_start: Option<PhysicalAddr>) -> CodeImage {
         rom_offset: None,
         physical_start,
         holes: Vec::new(),
-        slots: Vec::new(),
+        slots: Default::default(),
     }
 }
 

@@ -15,7 +15,7 @@ fn lower(words: &[u32], exit: u32) -> Result<String, String> {
         rom_offset: None,
         physical_start: None,
         holes: Vec::new(),
-        slots: Vec::new(),
+        slots: Default::default(),
     };
     let rom = RomIdentity {
         sha256: "b".repeat(64),
@@ -123,7 +123,7 @@ fn unlisted_entries_are_rejected() {
         rom_offset: None,
         physical_start: None,
         holes: Vec::new(),
-        slots: Vec::new(),
+        slots: Default::default(),
     };
     let rom = RomIdentity {
         sha256: "b".repeat(64),
@@ -151,7 +151,7 @@ fn map_of(words: &[u32]) -> (ProgramMap, CodeImage) {
         rom_offset: None,
         physical_start: None,
         holes: Vec::new(),
-        slots: Vec::new(),
+        slots: Default::default(),
     };
     let rom = RomIdentity {
         sha256: "b".repeat(64),
@@ -264,7 +264,7 @@ fn runtime_map(words: &[u32], runtime: u32, callbacks: Vec<u8>) -> (ProgramMap, 
         rom_offset: None,
         physical_start: None,
         holes: Vec::new(),
-        slots: Vec::new(),
+        slots: Default::default(),
     };
     let rom = RomIdentity {
         sha256: "b".repeat(64),

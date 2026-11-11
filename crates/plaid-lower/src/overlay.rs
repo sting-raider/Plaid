@@ -102,7 +102,7 @@ int plaid_overlay_verify_{id}(const uint8_t *ram, size_t ram_size, uint32_t base
         let at = r.offset;
         let w = words[at as usize / 4];
         match r.kind {
-            2 if w & 0x0f000000 != 0 => {}
+            2 if plaid_core::overlays::segmented(w, link, end) => {}
             2 => out += &format!("  {put}(expected + {at}, 0x{w:08x}u + delta);\n"),
             4 => {
                 let target = 0x80000000 | ((w & 0x03ffffff) << 2);
@@ -119,8 +119,9 @@ int plaid_overlay_verify_{id}(const uint8_t *ram, size_t ram_size, uint32_t base
                 let target = original.wrapping_shl(16).wrapping_add(low);
                 // A reused HI observes its previous patch for the segmented
                 // pointer test, but reconstructs the target from the original HI.
+                // plaid_core::overlays::segmented, at run time
                 out += &format!(
-                    "  if (((({get}(expected + {hi}) << 16) + 0x{low:08x}u) & 0x0f000000u) == 0) {{\n"
+                    "  if (((({get}(expected + {hi}) << 16) + 0x{low:08x}u) & 0x0f000000u) == 0 || (({get}(expected + {hi}) << 16) + 0x{low:08x}u) - 0x{link:08x}u <= {span}u) {{\n"
                 );
                 if !(link..=end).contains(&target) {
                     out += "    free(expected); return 0;\n";

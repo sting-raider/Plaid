@@ -253,13 +253,32 @@ pub fn source_cell_range_in(
 /// Record source-identified candidates. Unmapped code remains a candidate but
 /// cannot receive a closed proof; absence of stores never proves cell stability.
 pub fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap, String> {
-    map.validate()?;
-    let mut out = map.clone();
-    let index = MapIndex::new(map);
+    analyze_owned(map.clone(), image)
+}
+
+/// [`analyze`] on a map the caller hands over, so no copy is made.
+pub fn analyze_owned(mut out: ProgramMap, image: &CodeImage) -> Result<ProgramMap, String> {
+    out.validate()?;
     let mut produced = BTreeSet::new();
-    let sites: Vec<_> = map.indirect_sites.iter().collect();
-    let found = crate::indirect::par_map(&sites, |old| detail(&index, image, old));
-    for (old, found) in sites.into_iter().zip(found) {
+    let found = {
+        let index = MapIndex::new(&out);
+        let sites: Vec<_> = out.indirect_sites.iter().collect();
+        crate::indirect::par_map(&sites, |old| detail(&index, image, old))
+    };
+    // the old proofs' producers, read before evidence is added
+    let old_tail: Vec<bool> = out
+        .indirect_sites
+        .iter()
+        .map(|old| {
+            old.closed_proof.as_deref().is_some_and(|proof| {
+                out.evidence
+                    .get(proof)
+                    .is_some_and(|evidence| evidence.producer == PRODUCER)
+            })
+        })
+        .collect();
+    let sites: Vec<IndirectSite> = out.indirect_sites.iter().cloned().collect();
+    for ((old, found), old_tail) in sites.iter().zip(found).zip(old_tail) {
         let Some((certificate, detail, id)) = found else {
             continue;
         };
@@ -281,11 +300,7 @@ pub fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap, String
                 .or_default()
                 .insert(id.clone());
         }
-        if old.closed_proof.as_deref().is_some_and(|proof| {
-            map.evidence
-                .get(proof)
-                .is_some_and(|evidence| evidence.producer == PRODUCER)
-        }) {
+        if old_tail {
             site.closed_proof = Some(id.clone());
         }
         produced.insert((site.site.clone(), id));
@@ -432,7 +447,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
-            slots: Vec::new(),
+            slots: Default::default(),
         };
         let mut site = IndirectSite {
             site: code("synthetic", 7, BASE + 8),
@@ -662,7 +677,8 @@ mod tests {
                 },
                 0x1000,
                 0x40,
-            )],
+            )]
+            .into(),
         };
         let mut site = IndirectSite {
             site: code("slot", 3, base + 8),

@@ -24,15 +24,131 @@ pub struct CodeImage {
     /// data. Table reads from code in a placed range use the placed copy.
     /// Fixed replay data uses an identity link and zero text, with the same
     /// declaration/content verification; it never supplies instructions.
-    pub slots: Vec<(GuestRange, u32, u32)>,
+    pub slots: Slots,
 }
+
+/// One slot alternate: placed range, linked address, text size.
+pub type Slot = (GuestRange, u32, u32);
+
+/// The slot list plus a lookup index built on first use. Mutable access drops
+/// the index, so callers edit it like the `Vec` it derefs to.
+#[derive(Debug, Clone, Default)]
+pub struct Slots {
+    list: Vec<Slot>,
+    index: std::sync::OnceLock<Option<SlotIndex>>,
+}
+
+/// `None` when placed ranges overlap or a range wraps; lookups then scan the
+/// list in order, as before.
+#[derive(Debug, Clone)]
+struct SlotIndex {
+    /// (placed start, slot) sorted by start; the ranges are disjoint
+    placed: Vec<(u32, usize)>,
+    /// (linked, slot) sorted by linked, and the largest text size
+    linked: Vec<(u32, usize)>,
+    max_text: u32,
+}
+
+impl From<Vec<Slot>> for Slots {
+    fn from(list: Vec<Slot>) -> Self {
+        Self {
+            list,
+            index: Default::default(),
+        }
+    }
+}
+impl FromIterator<Slot> for Slots {
+    fn from_iter<I: IntoIterator<Item = Slot>>(iter: I) -> Self {
+        Vec::from_iter(iter).into()
+    }
+}
+impl std::ops::Deref for Slots {
+    type Target = Vec<Slot>;
+    fn deref(&self) -> &Vec<Slot> {
+        &self.list
+    }
+}
+impl std::ops::DerefMut for Slots {
+    fn deref_mut(&mut self) -> &mut Vec<Slot> {
+        self.index = Default::default();
+        &mut self.list
+    }
+}
+impl<'a> IntoIterator for &'a Slots {
+    type Item = &'a Slot;
+    type IntoIter = std::slice::Iter<'a, Slot>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.list.iter()
+    }
+}
+impl<'a> IntoIterator for &'a mut Slots {
+    type Item = &'a mut Slot;
+    type IntoIter = std::slice::IterMut<'a, Slot>;
+    fn into_iter(self) -> Self::IntoIter {
+        std::ops::DerefMut::deref_mut(self).iter_mut()
+    }
+}
+impl Slots {
+    fn index(&self) -> Option<&SlotIndex> {
+        self.index
+            .get_or_init(|| {
+                let mut placed: Vec<(u32, usize)> = self
+                    .list
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| (s.0.start.0, i))
+                    .collect();
+                placed.sort_unstable();
+                let disjoint = placed.windows(2).all(|w| {
+                    let a = &self.list[w[0].1].0;
+                    u64::from(a.start.0) + u64::from(a.size) <= u64::from(w[1].0)
+                });
+                let fits = self.list.iter().all(|s| {
+                    u64::from(s.0.start.0) + u64::from(s.0.size) <= 1 << 32
+                        && u64::from(s.1) + u64::from(s.2) <= 1 << 32
+                });
+                (disjoint && fits).then(|| {
+                    let mut linked: Vec<(u32, usize)> = self
+                        .list
+                        .iter()
+                        .enumerate()
+                        .map(|(i, s)| (s.1, i))
+                        .collect();
+                    linked.sort_unstable();
+                    let max_text = self.list.iter().map(|s| s.2).max().unwrap_or(0);
+                    SlotIndex {
+                        placed,
+                        linked,
+                        max_text,
+                    }
+                })
+            })
+            .as_ref()
+    }
+    /// The slot whose placed range holds `pc` (at most one: they are
+    /// disjoint), or `None` when there is no index.
+    fn placed_at(&self, pc: u32) -> Option<Option<&Slot>> {
+        let index = self.index()?;
+        let at = index.placed.partition_point(|&(start, _)| start <= pc);
+        Some(at.checked_sub(1).and_then(|k| {
+            let slot = &self.list[index.placed[k].1];
+            (pc - slot.0.start.0 < slot.0.size).then_some(slot)
+        }))
+    }
+}
+
 impl CodeImage {
     /// Slot data remains readable for tables, but cannot supply instructions.
     pub fn instruction_word(&self, pc: GuestAddr) -> Option<u32> {
-        if self.slots.iter().any(|(placed, _, text)| {
+        let data = |(placed, _, text): &Slot| {
             let off = pc.0.wrapping_sub(placed.start.0);
             off < placed.size && off >= *text
-        }) {
+        };
+        let in_data = match self.slots.placed_at(pc.0) {
+            Some(slot) => slot.is_some_and(data),
+            None => self.slots.iter().any(data),
+        };
+        if in_data {
             return None;
         }
         self.word(pc)
@@ -50,25 +166,29 @@ impl CodeImage {
     /// Where code at `at` finds `address`: in a slot alternate's placed copy
     /// when `at` is in one and `address` is in its linked range (ADR-0185).
     pub fn slot_view(&self, at: GuestAddr, address: u32) -> u32 {
-        self.slots
-            .iter()
-            .find_map(|(placed, linked, _)| {
-                let off = address.wrapping_sub(*linked);
-                (at.0.wrapping_sub(placed.start.0) < placed.size && off < placed.size)
-                    .then(|| placed.start.0 + off)
-            })
-            .unwrap_or(address)
+        let view = |(placed, linked, _): &Slot| {
+            let off = address.wrapping_sub(*linked);
+            (at.0.wrapping_sub(placed.start.0) < placed.size && off < placed.size)
+                .then(|| placed.start.0 + off)
+        };
+        match self.slots.placed_at(at.0) {
+            Some(slot) => slot.and_then(view),
+            None => self.slots.iter().find_map(view),
+        }
+        .unwrap_or(address)
     }
     /// Architectural PC of a word held in an analysis slot alternate.
     pub fn linked_pc(&self, pc: GuestAddr) -> GuestAddr {
+        let link = |(placed, linked, _): &Slot| {
+            let offset = pc.0.wrapping_sub(placed.start.0);
+            (offset < placed.size).then(|| linked.wrapping_add(offset))
+        };
         GuestAddr(
-            self.slots
-                .iter()
-                .find_map(|(placed, linked, _)| {
-                    let offset = pc.0.wrapping_sub(placed.start.0);
-                    (offset < placed.size).then(|| linked.wrapping_add(offset))
-                })
-                .unwrap_or(pc.0),
+            match self.slots.placed_at(pc.0) {
+                Some(slot) => slot.and_then(link),
+                None => self.slots.iter().find_map(link),
+            }
+            .unwrap_or(pc.0),
         )
     }
     /// J/JAL keeps the executing virtual PC region. An internal target stays
@@ -91,30 +211,43 @@ impl CodeImage {
     /// Sequential execution follows the guest PC across fragment boundaries;
     /// neighboring analysis storage does not identify the next guest bytes.
     pub fn sequential_pc(&self, pc: GuestAddr, bytes: u32) -> GuestAddr {
-        for (placed, linked, _) in &self.slots {
+        let step = |(placed, linked, _): &Slot| {
             let offset = pc.0.wrapping_sub(placed.start.0);
-            if offset < placed.size {
+            (offset < placed.size).then(|| {
                 let next = offset.wrapping_add(bytes);
-                return GuestAddr(if next < placed.size {
+                GuestAddr(if next < placed.size {
                     placed.start.0.wrapping_add(next)
                 } else {
                     linked.wrapping_add(next)
-                });
-            }
+                })
+            })
+        };
+        match self.slots.placed_at(pc.0) {
+            Some(slot) => slot.and_then(step),
+            None => self.slots.iter().find_map(step),
         }
-        GuestAddr(pc.0.wrapping_add(bytes))
+        .unwrap_or(GuestAddr(pc.0.wrapping_add(bytes)))
     }
     /// Every placed copy of `address` when it is in a slot's linked text:
     /// a pointer there names whichever alternate is loaded (ADR-0185).
     pub fn slot_copies(&self, address: u32) -> Vec<u32> {
-        let copies: Vec<u32> = self
-            .slots
-            .iter()
-            .filter_map(|(placed, linked, text)| {
-                let off = address.wrapping_sub(*linked);
-                (off < *text).then(|| placed.start.0 + off)
-            })
-            .collect();
+        let copy = |(placed, linked, text): &Slot| {
+            let off = address.wrapping_sub(*linked);
+            (off < *text).then(|| placed.start.0 + off)
+        };
+        let copies: Vec<u32> = match self.slots.index() {
+            Some(index) => {
+                // only links at most max_text below `address` can hold it; keep list order
+                let lo = index
+                    .linked
+                    .partition_point(|&(l, _)| l < address.saturating_sub(index.max_text));
+                let hi = index.linked.partition_point(|&(l, _)| l <= address);
+                let mut hits: Vec<usize> = index.linked[lo..hi].iter().map(|&(_, i)| i).collect();
+                hits.sort_unstable();
+                hits.iter().filter_map(|&i| copy(&self.slots[i])).collect()
+            }
+            None => self.slots.iter().filter_map(copy).collect(),
+        };
         if copies.is_empty() {
             vec![address]
         } else {
@@ -151,7 +284,7 @@ impl CodeImage {
             rom_offset: Some(offset),
             physical_start: None,
             holes: Vec::new(),
-            slots: Vec::new(),
+            slots: Default::default(),
         })
     }
     pub fn size(&self) -> Result<u32, String> {
@@ -273,6 +406,185 @@ pub fn direct_cfg(
     direct_cfg_bounded(rom, image, entries, budget, &BTreeSet::new())
 }
 
+/// What discovery learns from one reachable PC. Pure, so a wave of PCs can be
+/// visited on every core; applying the visits in any order builds the same map.
+#[derive(Default)]
+struct Visit {
+    /// the PC decoded (it is not an unmapped target)
+    decoded: bool,
+    unresolved: Vec<Unresolved>,
+    terminal: Option<u32>,
+    words: Vec<(CodeAddress, u32)>,
+    edges: Vec<DirectEdge>,
+    indirect: Option<IndirectSite>,
+    /// successors, and whether each one starts a block
+    next: Vec<(GuestAddr, bool)>,
+}
+
+fn visit(
+    image: &CodeImage,
+    runtime: &BTreeSet<GuestAddr>,
+    evidence: &EvidenceRefs,
+    pc: GuestAddr,
+) -> Visit {
+    let mut v = Visit::default();
+    let site = image.address(pc);
+    let Some(word) = image.instruction_word(pc) else {
+        v.unresolved.push(Unresolved {
+            kind: "unmapped_target".into(),
+            site: Some(site),
+            detail: "reachable PC has no instruction source in supplied mapping".into(),
+            evidence: evidence.clone(),
+        });
+        return v;
+    };
+    v.decoded = true;
+    v.words.push((site.clone(), word));
+    let i = decode(word, pc);
+    if unsupported(&i) {
+        v.unresolved.push(Unresolved {
+            kind: "exception_or_unsupported_instruction".into(),
+            site: Some(site.clone()),
+            detail: format!(
+                "instruction {word:08x} ({}) requires additional execution model",
+                i.opcode_name()
+            ),
+            evidence: evidence.clone(),
+        });
+        if !is_conditional_trap(word) {
+            v.terminal = Some(4);
+            return v;
+        }
+    }
+    if i.has_delay_slot() {
+        let never_taken = i.is_valid() && branch_never_taken(word);
+        let annulled = never_taken && i.is_branch_likely();
+        let links = i.does_link() && !(i.opcode_name() == "jalr" && i.get_rd() == 0);
+        let ds = image.sequential_pc(pc, 4);
+        let ds_word = (ds.0 == pc.0.wrapping_add(4))
+            .then(|| image.instruction_word(ds))
+            .flatten();
+        let ds_valid = ds_word.is_some_and(|w| {
+            let d = decode(w, ds);
+            !unsupported(&d) && !d.has_delay_slot()
+        });
+        v.terminal = Some(
+            if !annulled && ds_word.is_some() && ds.0 == pc.0.wrapping_add(4) {
+                8
+            } else {
+                4
+            },
+        );
+        if let Some(w) = ds_word.filter(|_| !annulled) {
+            v.words.push((image.address(ds), w));
+        }
+        if !annulled && !ds_valid {
+            v.unresolved.push(Unresolved {
+                kind: "unsupported_delay_slot".into(),
+                site: Some(site.clone()),
+                detail: "delay slot absent, exceptional, reserved, or contains a control transfer"
+                    .into(),
+                evidence: evidence.clone(),
+            });
+        }
+        let delay = if i.is_branch_likely() {
+            DelaySlot::TakenOnly
+        } else {
+            DelaySlot::Always
+        };
+        if (i.is_branch() || i.is_jump_with_address()) && !never_taken {
+            // Rabbitizer treats PC=0 as an unspecified address for J. Use
+            // literal ISA arithmetic so low-address synthetic inputs work.
+            let target = GuestAddr(if i.is_jump_with_address() {
+                image.jump_target(pc, word).0
+            } else {
+                image.branch_target(pc, word).0
+            });
+            let kind = if links {
+                EdgeKind::Call
+            } else if i.is_branch() {
+                EdgeKind::Branch
+            } else {
+                EdgeKind::Jump
+            };
+            v.edges.push(DirectEdge {
+                site: site.clone(),
+                target: image.address(target),
+                kind,
+                delay_slot: delay,
+                evidence: evidence.clone(),
+            });
+            // A linked slot call selects an executable identity at run time;
+            // the overlapping fallback ROM window is not another identity.
+            let slot_call = kind == EdgeKind::Call
+                && image.slot_copies(target.0).iter().any(|&t| t != target.0);
+            if !slot_call && !(runtime.contains(&target) && kind != EdgeKind::Branch) {
+                v.next.push((target, true));
+            }
+        } else if !never_taken {
+            v.indirect = Some(IndirectSite {
+                site: site.clone(),
+                link_register: if links { Some(i.get_rd() as u8) } else { None },
+                delay_slot: delay,
+                candidates: BTreeMap::new(),
+                observed: BTreeMap::new(),
+                closed_proof: None,
+                evidence: evidence.clone(),
+            });
+        }
+        if (i.is_branch() && !i.is_unconditional_branch()) || links {
+            let next = image.sequential_pc(pc, 8);
+            if links {
+                v.edges.push(DirectEdge {
+                    site: site.clone(),
+                    target: image.address(next),
+                    kind: EdgeKind::ReturnContinuation,
+                    delay_slot: DelaySlot::None,
+                    evidence: evidence.clone(),
+                });
+            }
+            if i.is_branch() && !i.is_unconditional_branch() {
+                v.edges.push(DirectEdge {
+                    site,
+                    target: image.address(next),
+                    kind: EdgeKind::Fallthrough,
+                    delay_slot: if i.is_branch_likely() {
+                        DelaySlot::None
+                    } else {
+                        DelaySlot::Always
+                    },
+                    evidence: evidence.clone(),
+                });
+            }
+            let bound_next = next.0 != pc.0.wrapping_add(8)
+                && image.slot_copies(next.0).iter().any(|&copy| copy != next.0);
+            if !bound_next {
+                v.next.push((next, true));
+            }
+        }
+    } else {
+        let next = image.sequential_pc(pc, 4);
+        if next.0 == pc.0.wrapping_add(4) && image.instruction_word(next).is_some() {
+            v.next.push((next, false));
+        } else {
+            v.terminal = Some(4);
+            v.edges.push(DirectEdge {
+                site,
+                target: image.address(next),
+                kind: EdgeKind::Fallthrough,
+                delay_slot: DelaySlot::None,
+                evidence: evidence.clone(),
+            });
+            let bound_next = next.0 != pc.0.wrapping_add(4)
+                && image.slot_copies(next.0).iter().any(|&copy| copy != next.0);
+            if !bound_next {
+                v.next.push((next, true));
+            }
+        }
+    }
+    v
+}
+
 /// Direct discovery that records calls and jumps into `runtime` entries but
 /// never decodes them (ADR-0129).
 pub fn direct_cfg_bounded(
@@ -328,178 +640,106 @@ pub fn direct_cfg_bounded(
         pending.insert(pc);
         leaders.insert(pc);
     }
+    #[allow(clippy::too_many_arguments)]
+    fn apply(
+        v: Visit,
+        pc: GuestAddr,
+        map: &mut ProgramMap,
+        normal: &mut BTreeSet<GuestAddr>,
+        terminal: &mut BTreeMap<GuestAddr, u32>,
+        words: &mut BTreeMap<CodeAddress, u32>,
+        leaders: &mut BTreeSet<GuestAddr>,
+        pending: &mut BTreeSet<GuestAddr>,
+    ) {
+        if v.decoded {
+            normal.insert(pc);
+        }
+        map.unresolved.extend(v.unresolved);
+        if let Some(t) = v.terminal {
+            terminal.insert(pc, t);
+        }
+        words.extend(v.words);
+        map.direct_edges.extend(v.edges);
+        map.indirect_sites.extend(v.indirect);
+        for (to, leader) in v.next {
+            if leader {
+                leaders.insert(to);
+            }
+            pending.insert(to);
+        }
+    }
+    // Visit waves of pending PCs on every core, each worker following its
+    // straight-line run. The reachable set, and so the map, is the fixed point
+    // whatever the order; only where the instruction budget cuts off depends on
+    // order, so a traversal that reaches it is redone in the sequential order.
+    if std::env::var_os("PLAID_SERIAL_CFG").is_none() {
+        let (map0, leaders0, pending0) = (map.clone(), leaders.clone(), pending.clone());
+        let mut seen = BTreeSet::new();
+        while !pending.is_empty() && normal.len() < budget {
+            let wave: Vec<GuestAddr> = std::mem::take(&mut pending).into_iter().collect();
+            seen.extend(wave.iter().copied());
+            let known = &normal;
+            let runs = crate::indirect::par_map(&wave, |&start| {
+                let mut out = Vec::new();
+                let mut pc = start;
+                loop {
+                    let v = visit(image, runtime, &evidence, pc);
+                    let follow = match v.next.as_slice() {
+                        [(n, false)] if !known.contains(n) && out.len() < 4096 => Some(*n),
+                        _ => None,
+                    };
+                    out.push((pc, v));
+                    let Some(n) = follow else { break };
+                    pc = n;
+                }
+                out
+            });
+            for (pc, v) in runs.into_iter().flatten() {
+                seen.insert(pc);
+                apply(
+                    v,
+                    pc,
+                    &mut map,
+                    &mut normal,
+                    &mut terminal,
+                    &mut words,
+                    &mut leaders,
+                    &mut pending,
+                );
+            }
+            pending.retain(|pc| !seen.contains(pc) && !normal.contains(pc));
+        }
+        if normal.len() >= budget {
+            (map, leaders, pending) = (map0, leaders0, pending0);
+            normal.clear();
+            terminal.clear();
+            words.clear();
+        }
+    }
     while let Some(pc) = pending.pop_first() {
         if normal.contains(&pc) {
             continue;
         }
-        let site = image.address(pc);
-        let Some(word) = image.instruction_word(pc) else {
-            map.unresolved.insert(Unresolved {
-                kind: "unmapped_target".into(),
-                site: Some(site),
-                detail: "reachable PC has no instruction source in supplied mapping".into(),
-                evidence: evidence.clone(),
-            });
-            continue;
-        };
-        if normal.len() >= budget {
+        let v = visit(image, runtime, &evidence, pc);
+        if v.decoded && normal.len() >= budget {
             map.unresolved.insert(Unresolved {
                 kind: "resource_limit".into(),
-                site: Some(site),
+                site: Some(image.address(pc)),
                 detail: "direct CFG instruction budget reached".into(),
                 evidence: evidence.clone(),
             });
             break;
         }
-        normal.insert(pc);
-        words.insert(site.clone(), word);
-        let i = decode(word, pc);
-        if unsupported(&i) {
-            map.unresolved.insert(Unresolved {
-                kind: "exception_or_unsupported_instruction".into(),
-                site: Some(site.clone()),
-                detail: format!(
-                    "instruction {word:08x} ({}) requires additional execution model",
-                    i.opcode_name()
-                ),
-                evidence: evidence.clone(),
-            });
-            if !is_conditional_trap(word) {
-                terminal.insert(pc, 4);
-                continue;
-            }
-        }
-        if i.has_delay_slot() {
-            let never_taken = i.is_valid() && branch_never_taken(word);
-            let annulled = never_taken && i.is_branch_likely();
-            let links = i.does_link() && !(i.opcode_name() == "jalr" && i.get_rd() == 0);
-            let ds = image.sequential_pc(pc, 4);
-            let ds_word = (ds.0 == pc.0.wrapping_add(4))
-                .then(|| image.instruction_word(ds))
-                .flatten();
-            let ds_valid = ds_word.is_some_and(|w| {
-                let d = decode(w, ds);
-                !unsupported(&d) && !d.has_delay_slot()
-            });
-            terminal.insert(
-                pc,
-                if !annulled && ds_word.is_some() && ds.0 == pc.0.wrapping_add(4) {
-                    8
-                } else {
-                    4
-                },
-            );
-            if let Some(w) = ds_word.filter(|_| !annulled) {
-                words.insert(image.address(ds), w);
-            }
-            if !annulled && !ds_valid {
-                map.unresolved.insert(Unresolved {
-                    kind: "unsupported_delay_slot".into(),
-                    site: Some(site.clone()),
-                    detail:
-                        "delay slot absent, exceptional, reserved, or contains a control transfer"
-                            .into(),
-                    evidence: evidence.clone(),
-                });
-            }
-            let delay = if i.is_branch_likely() {
-                DelaySlot::TakenOnly
-            } else {
-                DelaySlot::Always
-            };
-            if (i.is_branch() || i.is_jump_with_address()) && !never_taken {
-                // Rabbitizer treats PC=0 as an unspecified address for J. Use
-                // literal ISA arithmetic so low-address synthetic inputs work.
-                let target = GuestAddr(if i.is_jump_with_address() {
-                    image.jump_target(pc, word).0
-                } else {
-                    image.branch_target(pc, word).0
-                });
-                let kind = if links {
-                    EdgeKind::Call
-                } else if i.is_branch() {
-                    EdgeKind::Branch
-                } else {
-                    EdgeKind::Jump
-                };
-                map.direct_edges.insert(DirectEdge {
-                    site: site.clone(),
-                    target: image.address(target),
-                    kind,
-                    delay_slot: delay,
-                    evidence: evidence.clone(),
-                });
-                // A linked slot call selects an executable identity at run time;
-                // the overlapping fallback ROM window is not another identity.
-                let slot_call = kind == EdgeKind::Call
-                    && image.slot_copies(target.0).iter().any(|&t| t != target.0);
-                if !slot_call && !(runtime.contains(&target) && kind != EdgeKind::Branch) {
-                    leaders.insert(target);
-                    pending.insert(target);
-                }
-            } else if !never_taken {
-                map.indirect_sites.insert(IndirectSite {
-                    site: site.clone(),
-                    link_register: if links { Some(i.get_rd() as u8) } else { None },
-                    delay_slot: delay,
-                    candidates: BTreeMap::new(),
-                    observed: BTreeMap::new(),
-                    closed_proof: None,
-                    evidence: evidence.clone(),
-                });
-            }
-            if (i.is_branch() && !i.is_unconditional_branch()) || links {
-                let next = image.sequential_pc(pc, 8);
-                if links {
-                    map.direct_edges.insert(DirectEdge {
-                        site: site.clone(),
-                        target: image.address(next),
-                        kind: EdgeKind::ReturnContinuation,
-                        delay_slot: DelaySlot::None,
-                        evidence: evidence.clone(),
-                    });
-                }
-                if i.is_branch() && !i.is_unconditional_branch() {
-                    map.direct_edges.insert(DirectEdge {
-                        site,
-                        target: image.address(next),
-                        kind: EdgeKind::Fallthrough,
-                        delay_slot: if i.is_branch_likely() {
-                            DelaySlot::None
-                        } else {
-                            DelaySlot::Always
-                        },
-                        evidence: evidence.clone(),
-                    });
-                }
-                let bound_next = next.0 != pc.0.wrapping_add(8)
-                    && image.slot_copies(next.0).iter().any(|&copy| copy != next.0);
-                if !bound_next {
-                    leaders.insert(next);
-                    pending.insert(next);
-                }
-            }
-        } else {
-            let next = image.sequential_pc(pc, 4);
-            if next.0 == pc.0.wrapping_add(4) && image.instruction_word(next).is_some() {
-                pending.insert(next);
-            } else {
-                terminal.insert(pc, 4);
-                map.direct_edges.insert(DirectEdge {
-                    site,
-                    target: image.address(next),
-                    kind: EdgeKind::Fallthrough,
-                    delay_slot: DelaySlot::None,
-                    evidence: evidence.clone(),
-                });
-                let bound_next = next.0 != pc.0.wrapping_add(4)
-                    && image.slot_copies(next.0).iter().any(|&copy| copy != next.0);
-                if !bound_next {
-                    leaders.insert(next);
-                    pending.insert(next);
-                }
-            }
-        }
+        apply(
+            v,
+            pc,
+            &mut map,
+            &mut normal,
+            &mut terminal,
+            &mut words,
+            &mut leaders,
+            &mut pending,
+        );
     }
     // Partition after traversal, so a newly found target splits earlier linear code.
     for &leader in &leaders {
@@ -564,7 +804,8 @@ mod prefix_tests {
                 },
                 base.0,
                 8,
-            )],
+            )]
+            .into(),
         };
         assert!(!decode(image.words[2], GuestAddr(base.0 + 8)).is_valid());
         assert!(slot_entry_decodable(&image, GuestAddr(base.0 + 4)));

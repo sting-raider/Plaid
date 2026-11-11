@@ -1,5 +1,11 @@
 # Next
 
+Direction (2026-11-11): quality first. Paper Mario's map overlays now bind
+(ADR-0319..0321) and its build is 13 min instead of 19 (ADR-0322). Next speed
+step: make the discovery fixed point incremental. Each `discover` call still
+re-derives the whole CFG about 14 times and the build runs it 7 times. Then the
+solver's CFG recheck and return closure (~7 of 14 s per solve).
+
 Continue GoldenEye after firmware-free refill discovery (ADR-0318): verify the
 complete fresh build and resolve the checked exception handoff and guest/host
 run-queue ownership before claiming gameplay. The retained handoff WIP and

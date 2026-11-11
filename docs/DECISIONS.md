@@ -9356,3 +9356,99 @@ upstream code or ROM asset is included. On the local GoldenEye input, a
 previously refused refill at `7f002000` now identifies a complete 4096-byte
 ROM DMA source. This is a source candidate, not a proof of runtime reachability,
 gameplay or native completeness. See research/refill-hle-2026-11-11.md.
+
+## ADR-0319: Shared slot tables
+
+Status: accepted
+
+Overlay discovery recognizes a shared slot table: aligned
+`(rom_start, rom_end, ram)` rows where at least two distinct ROM files link
+at the same RAM address and the rows sit close together in the table. Each
+file whose start decodes as CPU text becomes a content-guarded slot
+alternate (ADR-0185) with a raw catalog encoding, deduplicated by ROM start
+and link. Data files, header rows and single-file slots are not admitted. A
+wrong row only adds a guarded alternate that never verifies at run time.
+
+A file must also be whole: every J, JAL and branch in its text lands in its
+own text or outside its load neighbourhood (the 64 KiB block of its link
+address up to the file's end). A transfer just before the file or into its
+data means the row names one part of a larger load. Admitting such a part
+left direct transfers into code no image supplies, so the build refused.
+Trapping those transfers at run time was tried and rejected: residual builds
+may leave only indirect transfer sites unresolved (AGENTS.md invariant 3,
+ADR-0233), and `runtime/test_observed_images.py` checks exactly that.
+
+On the local Paper Mario input, 420 map files share 0x80240000 in one table;
+one had been discovered before. The whole-file check rejects three fragment
+rows (links 0x802b6000 and 0x802b60b4) and keeps every map file. Tests: a
+synthetic shared table with a data file, a header row, a single-file slot and
+scattered rows; whole and fragment files.
+
+## ADR-0320: Partial harvest call projection
+
+Status: accepted
+
+Analysis-time harvest projects open call sites to the runtime PCs the replay
+must watch. One site that cannot be projected (an overlay copy routine, say)
+used to refuse the whole projection, so no site was watched. The harvest now
+skips the unprojectable sites, records them as `call_projection_refusal`
+("N open call(s) ... first XXXXXXXX"), and watches the rest. It still refuses
+when nothing projects and there are no entries. Observed targets remain
+discovery roots only, never certificates. `scripts/test_ares_boot.py` covers a
+partial projection.
+
+## ADR-0321: Own-range pointers are never segmented
+
+Status: accepted
+
+The overlay loader model leaves a word or `lui`/low pair alone when the
+address has bits 24..27 set: the segmented-pointer convention. Slot
+alternates are relocated to analysis placements, and with hundreds of
+alternates those placements pass 0x81000000, where every pointer into the
+file's own text sets those bits. The model and the generated run-time
+verifier then skipped all of the file's relocations; the verifier compared
+placement addresses against RAM and never bound the overlay, so calls into it
+faulted 3.
+
+`plaid_core::overlays::segmented` now excludes the overlay's own
+`link..=end` range, in the core model and in the C verifier. Real overlays
+link below 0x80800000, where the bits are clear, so their behaviour is
+unchanged. Test: a copy placed at 0x81900000 relocates its `lui`/`addiu` pair
+and data pointer while a real segmented pointer stays. Found on the local
+Paper Mario input: the map overlay loaded at VI ~680 matched its build byte
+for byte but did not verify.
+
+## ADR-0322: Discovery speed without changing maps
+
+Status: accepted
+
+Discovery dominated native builds: on the local Paper Mario input with the
+slot tables of ADR-0319, `discover` took 853 of 1134 s. Profiling with phase
+timings showed overhead, not analysis:
+
+- `CodeImage.slots` is now a `Slots` list with a lazily built index (placed
+  ranges sorted by start; linked starts sorted, bounded by the largest text).
+  Instruction, PC and slot-copy lookups were linear in the ~690 alternates.
+  Mutable access drops the index; overlapping or wrapping ranges fall back
+  to the old ordered scan.
+- `ProgramMap::validate` indexes indirect sites by address once instead of
+  scanning all 12.7k sites for each of 5.2k derived-entry sources.
+- `analyze_indirect_owned`, `tail_cells::analyze_owned` and
+  `tables::analyze` take the map by value: each computes its per-site
+  results from the unmodified map, then edits it in place. Three whole-map
+  copies (142k blocks, 221k edges) per iteration are gone.
+- Direct CFG discovery visits waves of pending PCs on every core, each worker
+  following a straight-line run; the reachable set is order-independent. A
+  traversal that reaches the instruction budget is redone in the sequential
+  order (`PLAID_SERIAL_CFG=1` forces it).
+- Address-taken ROM words are deduplicated before the per-value check,
+  which runs on every core.
+- The solver checks per-site table, tail-cell, constant and return proofs on
+  every core. On Paper Mario this saved nothing measurable (14.4 vs 14.2 s);
+  solve time is spread over the CFG recheck, return closure and slot checks.
+
+The maps are byte-identical: serial vs parallel CFG, and before vs after the
+validate and owned-map changes, give the same `map.json` SHA-256 on Paper
+Mario. One discover call went from 131-144 s to 66 s; a full Paper Mario
+build from 1134 s to 779 s (19.2 to 13.2 min). Timings are single runs on a
+20-thread laptop with other load, so treat them as approximate.
