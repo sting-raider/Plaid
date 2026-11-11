@@ -1,6 +1,6 @@
 //! Discord Rich Presence while a game runs: "Playing Plaid", the game's name, the Plaid logo.
 
-use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
+use discord_rich_presence::{DiscordIpc, DiscordIpcClient, activity};
 
 /// The "Plaid" application in the Discord developer portal; its art asset "plaid" is the logo.
 const APP_ID: &str = "1569834758970548378";

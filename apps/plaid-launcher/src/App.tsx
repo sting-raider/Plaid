@@ -198,6 +198,8 @@ function AppSettings({ config, onSave }: { config: Config; onSave: (c: Config) =
   const [tab, setTab] = useState<"general" | SettingsTab>("general");
   const [c, setC] = useState(config);
   const [msg, setMsg] = useState("");
+  const [bundled, setBundled] = useState(true);
+  useEffect(() => { api.engineBundled().then(setBundled).catch(() => setBundled(false)); }, []);
   const pick = async (key: "romDir" | "plaidRoot") => { const d = await open({ directory: true }); if (typeof d === "string") setC({ ...c, [key]: d }); };
   const tabs: ["general" | SettingsTab, string][] = [["general", "General"], ["controls", "Default controls"], ["graphics", "Default graphics"], ["experimental", "Experimental"]];
   return (
@@ -210,7 +212,7 @@ function AppSettings({ config, onSave }: { config: Config; onSave: (c: Config) =
             <>
               <div className="box">
                 <div className="set-row"><div className="txt"><b>ROM folder</b><span className="mono">{c.romDir}</span></div><button className="btn" onClick={() => pick("romDir")}><Folder size={15} />Change</button></div>
-                <div className="set-row"><div className="txt"><b>Recompiler folder</b><span className="mono">{c.plaidRoot}</span></div><button className="btn" onClick={() => pick("plaidRoot")}><Folder size={15} />Change</button></div>
+                {!bundled && <div className="set-row"><div className="txt"><b>Recompiler folder</b><span className="mono">{c.plaidRoot}</span></div><button className="btn" onClick={() => pick("plaidRoot")}><Folder size={15} />Change</button></div>}
                 <div className="set-row"><div className="txt"><b>Test run after each build</b><span>{c.validationSeconds} seconds</span></div>
                   <input type="range" min={5} max={60} step={5} value={c.validationSeconds} onChange={(e) => setC({ ...c, validationSeconds: +e.target.value })} style={{ width: 200 }} /></div>
               </div>
