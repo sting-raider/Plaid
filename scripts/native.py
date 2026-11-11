@@ -41,7 +41,7 @@ from pathlib import Path
 from native_audio import audio_peak
 from harvest_boot import harvest, harvest_refills, harvest_vectors
 from ares_boot import ORACLE_SOURCES, capture_many
-from repair_record import write_record
+from repair_record import write_record, admit_records, native_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 # Unproven sites are watched this long by default; --deep watches up to
@@ -270,6 +270,7 @@ def main():
     ap.add_argument('--strict', action='store_true', help='build only a CLOSED map; refuse residual run-time dispatch (ADR-0233)')
     ap.add_argument('--rsp-gfx', action='store_true', help='run lowered graphics microcode; requires --rt64')
     ap.add_argument('--rsp-dump', type=Path, help='capture IMEM for oracle comparison only; never a build input')
+    ap.add_argument('--repair-record', type=Path, action='append', default=[], help='admit a captured code image; repeat in generation order')
     ap.add_argument('--repair-capture', action='store_true', help='save a versioned fault capture in the build repair directory')
     ap.add_argument('--press', action='append', default=[], help='runtime button press, e.g. 0x1000@300:4')
     ap.add_argument('--require-audio', action='store_true', help='reject a validation run with empty or silent PCM')
@@ -299,6 +300,11 @@ def main():
     if not a.loads:
         with phase('infer-loads'):
             plaid('infer-loads', rom, loads)
+    if a.repair_record:
+        admitted = out / 'observed-loads.json'
+        shutil.copyfile(loads, admitted)
+        admit_records(admitted, a.repair_record)
+        loads = admitted
     # the main image ends where the entry stub's BSS clear begins; else IPL3's 1 MiB
     window = [rom, '0x1000', entry, hex(info.get('boot_image_size') or 0x100000)]
     m = out / 'map.json'
@@ -307,7 +313,7 @@ def main():
         with phase('harvest-vectors'):
             harvest_vectors(rom, loads, out / 'vector-harvest.json')
         # A ROM with no file table and no reset stub has no loads to declare.
-        with_loads = ['--loads', loads] if json.loads(loads.read_text())['loads'] else []
+        with_loads = ['--loads', loads] if (json.loads(loads.read_text())['loads'] or json.loads(loads.read_text()).get('observed_images')) else []
         with phase('identify'):
             (out / 'id.json').write_text(memo_plaid('identify', *window, SIGNATURES, *with_loads), newline='')
         discover = ['discover', *window, entry, m, out / 'id.json', *with_loads, '--address-taken', '--fr0']
@@ -320,7 +326,7 @@ def main():
             continue
         with phase('solve'):
             verdict = json.loads(memo_plaid('solve', rom, m, '--address-taken'))
-        if verdict['status'] == 'closed' or a.loads or attempt == 63:
+        if verdict['status'] == 'closed' or a.loads or a.repair_record or attempt == 63:
             break
         previous_loads = loads.read_bytes()
         with phase('infer-call-loads'):
@@ -343,7 +349,7 @@ def main():
     if verdict['status'] != 'closed' and not (residual and verdict.get('trapped_sites') and all(b in verdict['trapped_sites'] for b in verdict['blockers'])):
         sys.exit('not CLOSED under the address-taken scope' + ('' if a.strict else ', even with residual dispatch') + ': nothing is built')
     # Always rewritten: a stale manifest must never describe a later build.
-    (out / 'native-manifest.json').write_text(json.dumps({'mode': 'residual-dispatch' if residual else 'closed', 'native_complete': not residual, 'residual_sites': [f"{s['pc']:08x}" for s in verdict.get('residual_sites', [])], 'trapped_sites': [{'pc': f"{b['site']['pc']:08x}", 'kind': b['kind']} for b in verdict.get('trapped_sites', [])]}, indent=2) + '\n')
+    (out / 'native-manifest.json').write_text(json.dumps(native_manifest(program, verdict, residual), indent=2) + '\n')
 
     # The native run starts SP memory as the ROM's own IPL3 leaves it (ADR-0195).
     try:

@@ -18,6 +18,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LoadEncoding {
+    /// A SHA-256 authenticated runtime window in separate analysis storage.
+    Observed {
+        generation: u64,
+    },
     Raw,
     /// Unmodified raw bytes executed at a TLB-translated virtual link.
     /// Storage placement is analysis-only; no relocation is applied.
@@ -95,6 +99,22 @@ impl DeclaredLoad {
     /// The overlay layout of a relocatable load whose placed bytes are
     /// `bytes`: a slot alternate's synthesized one, else the Zelda64 trailer.
     pub fn layout(&self, bytes: &[u8]) -> Result<crate::overlays::Layout, String> {
+        if matches!(self.encoding, LoadEncoding::Observed { .. }) {
+            if !self.relocatable
+                || self.linked.is_none()
+                || bytes.len() != self.destination.size as usize
+            {
+                return Err("observed image requires separate content-bound storage".into());
+            }
+            return Ok(crate::overlays::Layout {
+                text: bytes.len() as u32,
+                data: 0,
+                rodata: 0,
+                bss: 0,
+                file_size: bytes.len() as u32,
+                relocations: Vec::new(),
+            });
+        }
         if let LoadEncoding::AresData { physical, .. } = self.encoding {
             if self.source.0 != 0
                 || self.relocatable
@@ -280,6 +300,8 @@ pub fn verify_slots(image: &CodeImage, spec: Option<&LoadImage>) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LoadImage {
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub observed: std::collections::BTreeMap<u64, crate::repair::RepairRecord>,
     pub base_offset: RomOffset,
     pub base: GuestRange,
     pub loads: Vec<DeclaredLoad>,
@@ -452,6 +474,9 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
     let start = usize::try_from(load.source.0).map_err(|_| "load source too large")?;
     let size = load.destination.size as usize;
     let data = match load.encoding {
+        LoadEncoding::Observed { .. } => {
+            return Err("observed image needs its record catalog".into());
+        }
         LoadEncoding::Raw | LoadEncoding::TlbRaw { .. } => bytes
             .get(start..start.checked_add(size).ok_or("load source overflow")?)
             .ok_or("load source outside the ROM")?
@@ -679,7 +704,26 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
     composite[at(u64::from(spec.base.start.0))..at(spec.base.end())].copy_from_slice(base_bytes);
     let mut slots = Vec::new();
     for load in &spec.loads {
-        let data = decoded(bytes, load)?;
+        let data = if let LoadEncoding::Observed { generation } = load.encoding {
+            let record = spec
+                .observed
+                .get(&generation)
+                .ok_or("missing observed generation")?;
+            let observed = record.image(generation)?;
+            if load.source.0 != 0
+                || load.linked != Some(observed.base.pc)
+                || load.destination.size != record.window_size
+            {
+                return Err("observed load differs from its record".into());
+            }
+            observed
+                .words
+                .into_iter()
+                .flat_map(u32::to_be_bytes)
+                .collect()
+        } else {
+            decoded(bytes, load)?
+        };
         if let Some(linked) = load.linked {
             slots.push((load.destination.clone(), linked.0, load.layout(&data)?.text));
         } else if matches!(load.encoding, LoadEncoding::AresData { .. }) {
@@ -693,6 +737,9 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
     out.holes = holes;
     if !out.holes.is_empty() || !out.slots.is_empty() {
         out.base.image = out.content_identity();
+    }
+    if !spec.observed.is_empty() {
+        out.base.generation = *spec.observed.keys().next_back().unwrap();
     }
     Ok((base, out))
 }
@@ -849,6 +896,7 @@ mod tests {
             },
         );
         let mut spec = LoadImage {
+            observed: Default::default(),
             base_offset: RomOffset(0),
             base: GuestRange {
                 start: GuestAddr(0x8000_0400),
@@ -945,6 +993,7 @@ mod tests {
         };
         image.base.image = image.content_identity();
         let spec = LoadImage {
+            observed: Default::default(),
             base_offset: RomOffset(0),
             base: data.destination.clone(),
             loads: vec![data.clone()],
@@ -1061,6 +1110,7 @@ mod tests {
         alternate.relocatable = true;
         alternate.linked = Some(GuestAddr(0x8000_4000));
         let spec = LoadImage {
+            observed: Default::default(),
             base_offset: RomOffset(0),
             base: GuestRange {
                 start: GuestAddr(0x8000_0000),
@@ -1152,6 +1202,7 @@ mod tests {
     fn compose_patches_extends_leaves_holes_and_rejects_overlaps() {
         let rom: Vec<u8> = (0..64u8).collect();
         let spec = |loads| LoadImage {
+            observed: Default::default(),
             base_offset: RomOffset(0),
             base: GuestRange {
                 start: GuestAddr(0x8000_0000),

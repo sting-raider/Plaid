@@ -1,10 +1,19 @@
 # Status
 
+## Observed repair images (ADR-0314)
+
+Explicit repair records now supply separate, SHA-256-authenticated code images
+with deterministic generations and observed roots. Native dispatch compares the
+complete captured RAM window and faults 17 on a content/generation refusal;
+manifests report each admission and retain `native_complete: false`. Synthetic
+contracts cover admission, native execution, mismatches and generation selection.
+The automatic multi-round repair loop remains unimplemented.
+
 ## Bounded fault records (ADR-0313)
 
 Opt-in native runs can retain hashed, versioned fault-3 and fault-15 RAM
-windows locally. Ingestion, generation-aware dispatch and content guards remain
-unimplemented; these records do not establish native completeness.
+windows locally. Explicit ingestion and guarded dispatch are available through
+ADR-0314; these records do not establish native completeness.
 
 ## Residual local blocker traps (ADR-0311)
 

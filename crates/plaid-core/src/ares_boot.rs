@@ -325,6 +325,7 @@ mod tests {
             .unwrap()
             .insert((rom.identity.sha256.clone(), entry), captured);
         let mut spec = LoadImage {
+            observed: Default::default(),
             base_offset: RomOffset(64),
             base: GuestRange {
                 start: GuestAddr(0x80001000),
@@ -414,6 +415,7 @@ mod tests {
             .unwrap()
             .insert((rom.identity.sha256.clone(), entry), captured);
         let mut spec = LoadImage {
+            observed: Default::default(),
             base_offset: RomOffset(64),
             base: GuestRange {
                 start: GuestAddr(0x80001000),

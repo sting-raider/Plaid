@@ -224,7 +224,7 @@ pub fn branch_never_taken(word: u32) -> bool {
 /// Reject a reserved encoding in a short straight-line prefix; transfers and
 /// the scan limit keep the identity for ordinary discovery. Rejected identities
 /// must be reported by the solver and refused by native slot dispatch.
-pub(crate) fn slot_entry_decodable(image: &CodeImage, pc: GuestAddr) -> bool {
+pub fn slot_entry_decodable(image: &CodeImage, pc: GuestAddr) -> bool {
     let remaining = image.slots.iter().find_map(|(placed, _, _)| {
         placed
             .contains(pc)

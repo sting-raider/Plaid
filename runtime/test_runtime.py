@@ -825,6 +825,7 @@ def steps(exe, cc):
         ('test_indexed_dispatch', lambda: importlib.import_module('test_indexed_dispatch').main()),
         ('test_residual_dispatch', lambda: importlib.import_module('test_residual_dispatch').main()),
         ('test_repair_capture', lambda: importlib.import_module('test_repair_capture').main()),
+        ('test_observed_images', lambda: importlib.import_module('test_observed_images').main()),
         ('test_rom_pointer_roots', lambda: importlib.import_module('test_rom_pointer_roots').main()),
         ('test_pc_link_roots', lambda: importlib.import_module('test_pc_link_roots').main()),
         ('test_indexed_slot_calls', lambda: importlib.import_module('test_indexed_slot_calls').main()),

@@ -64,6 +64,7 @@ fn main() {
         image.base.image = image.content_identity();
         let id = "authored-data".to_string();
         let spec = LoadImage {
+            observed: Default::default(),
             base_offset: RomOffset(0),
             base: GuestRange {
                 start: GuestAddr(base),
