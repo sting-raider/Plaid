@@ -94,6 +94,38 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
+/// Where the recompiler runs from and where its outputs go.
+struct Engine {
+    /// the engine bundle installed with the app, or a Plaid checkout
+    root: PathBuf,
+    /// holds target/native/<id> and target/rt64-shim/Release/<id>-rt64.exe
+    work: PathBuf,
+    bundled: bool,
+}
+
+/// An installed app runs the engine it shipped with (ADR-0316 bundle) and keeps builds in
+/// its own data folder; without one (dev builds) it runs the configured checkout in place.
+fn engine(app: &AppHandle, config: &Config) -> Engine {
+    let bundle = app.path().resource_dir().ok().map(|d| d.join("engine"));
+    match (bundle, app.path().app_local_data_dir()) {
+        (Some(root), Ok(data)) if root.join("engine.json").exists() => Engine {
+            root,
+            work: data.join("work"),
+            bundled: true,
+        },
+        _ => Engine {
+            root: PathBuf::from(&config.plaid_root),
+            work: PathBuf::from(&config.plaid_root),
+            bundled: false,
+        },
+    }
+}
+
+#[tauri::command]
+fn engine_bundled(app: AppHandle) -> Result<bool, String> {
+    Ok(engine(&app, &get_config(app.clone())?).bundled)
+}
+
 fn config_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_config_dir().map_err(err)?;
     std::fs::create_dir_all(&dir).map_err(err)?;
@@ -120,9 +152,10 @@ fn get_config(app: AppHandle) -> Result<Config, String> {
 
 #[tauri::command]
 fn set_config(app: AppHandle, config: Config) -> Result<(), String> {
-    if !Path::new(&config.plaid_root)
-        .join("scripts/native.py")
-        .exists()
+    if !engine(&app, &config).bundled
+        && !Path::new(&config.plaid_root)
+            .join("scripts/native.py")
+            .exists()
     {
         return Err(format!(
             "{} is not a Plaid checkout (scripts/native.py is missing)",
@@ -154,13 +187,13 @@ fn rom_files(dir: &Path, depth: u32, out: &mut Vec<PathBuf>) {
     }
 }
 
-fn library(config: &Config) -> Vec<Game> {
+fn library(app: &AppHandle, config: &Config) -> Vec<Game> {
     let Some(dir) = &config.rom_dir else {
         return vec![];
     };
     let mut files = vec![];
     rom_files(Path::new(dir), 2, &mut files);
-    let root = Path::new(&config.plaid_root);
+    let root = engine(app, config).work;
     let mut games: Vec<Game> = files
         .iter()
         .filter_map(|path| {
@@ -209,12 +242,12 @@ fn library(config: &Config) -> Vec<Game> {
 
 #[tauri::command]
 fn scan_library(app: AppHandle) -> Result<Vec<Game>, String> {
-    Ok(library(&get_config(app)?))
+    Ok(library(&app, &get_config(app.clone())?))
 }
 
 fn find(app: &AppHandle, id: &str) -> Result<(Config, Game), String> {
     let config = get_config(app.clone())?;
-    let game = library(&config)
+    let game = library(app, &config)
         .into_iter()
         .find(|g| g.id == id)
         .ok_or_else(|| format!("{id} is no longer in the ROM folder"))?;
@@ -391,7 +424,11 @@ fn run_step(
 fn compile_game(app: AppHandle, running: State<'_, Shared>, id: String) -> Result<(), String> {
     let (config, game) = find(&app, &id)?;
     let rom = z64_path(&app, &game)?;
-    let root = PathBuf::from(&config.plaid_root);
+    let Engine {
+        root,
+        work,
+        bundled,
+    } = engine(&app, &config);
     {
         let mut r = running.lock().unwrap();
         if let Some(busy) = &r.id {
@@ -410,7 +447,7 @@ fn compile_game(app: AppHandle, running: State<'_, Shared>, id: String) -> Resul
     let path = format!("{cargo_bin}{}", std::env::var("PATH").unwrap_or_default());
     std::thread::spawn(move || {
         let emit = |e: CompileEvent| drop(app.emit("compile", e));
-        let out = root.join("target/native").join(&id);
+        let out = work.join("target/native").join(&id);
         let _ = std::fs::create_dir_all(&out);
         // the full output, for diagnosing a build after the window is gone
         let mut log = std::fs::File::create(out.join("launcher-build.log")).ok();
@@ -424,33 +461,46 @@ fn compile_game(app: AppHandle, running: State<'_, Shared>, id: String) -> Resul
             progress: tracker.progress(),
         });
 
-        // Build the recompiler first, visibly: native.py builds it quietly, which looked like a hang.
-        let mut cargo = Command::new("cargo");
-        cargo
-            .args(["build", "--release", "-p", "plaid", "--color", "never"])
-            .current_dir(&root)
-            .env("PATH", &path);
-        let built = run_step(
-            &app,
-            &id,
-            cargo,
-            &mut tracker,
-            &mut log,
-            &mut tail,
-            &mut |_| {},
-        );
+        // A checkout builds the recompiler first, visibly: native.py builds it quietly, which
+        // looked like a hang. The bundle ships it prebuilt.
+        let built = if bundled {
+            Ok(std::process::ExitStatus::default())
+        } else {
+            let mut cargo = Command::new("cargo");
+            cargo
+                .args(["build", "--release", "-p", "plaid", "--color", "never"])
+                .current_dir(&root)
+                .env("PATH", &path);
+            run_step(
+                &app,
+                &id,
+                cargo,
+                &mut tracker,
+                &mut log,
+                &mut tail,
+                &mut |_| {},
+            )
+        };
         let status = match built {
             Ok(s) if s.success() => {
-                let mut py = Command::new("python");
-                py.args(["-u", "scripts/native.py"])
-                    .arg(&rom)
+                let mut py = if bundled {
+                    // the bundle sets its own PATH, caches and temp dirs under PLAID_WORK_DIR
+                    let mut c = Command::new(root.join(r"python\python.exe"));
+                    c.args(["-B", "-u", "scripts/native.py"])
+                        .env("PLAID_WORK_DIR", &work);
+                    c
+                } else {
+                    let mut c = Command::new("python");
+                    c.args(["-u", "scripts/native.py"]).env("PATH", &path);
+                    c
+                };
+                py.arg(&rom)
                     .args([
                         "--rt64",
                         "--seconds",
                         &config.validation_seconds.to_string(),
                     ])
                     .current_dir(&root)
-                    .env("PATH", &path)
                     .env("PYTHONUNBUFFERED", "1")
                     .env("SDL_AUDIODRIVER", "dummy");
                 let out = out.clone();
@@ -492,7 +542,7 @@ fn cancel_compile(running: State<'_, Shared>) -> Result<(), String> {
 #[tauri::command]
 fn play_game(app: AppHandle, id: String) -> Result<(), String> {
     let (config, game) = find(&app, &id)?;
-    let root = PathBuf::from(&config.plaid_root);
+    let root = engine(&app, &config).work;
     let exe = root.join(format!("target/rt64-shim/Release/{id}-rt64.exe"));
     if !exe.exists() {
         return Err("compile this game first".into());
@@ -653,7 +703,16 @@ struct Change {
 
 #[tauri::command]
 async fn check_updates(app: AppHandle) -> Result<UpdateInfo, String> {
-    let root = get_config(app)?.plaid_root;
+    let config = get_config(app.clone())?;
+    if engine(&app, &config).bundled {
+        // the engine ships inside app releases, which the app updater checks
+        return Ok(UpdateInfo {
+            current: env!("CARGO_PKG_VERSION").into(),
+            behind: 0,
+            changes: vec![],
+        });
+    }
+    let root = config.plaid_root;
     tauri::async_runtime::spawn_blocking(move || {
         let git = |args: &[&str]| -> Result<String, String> {
             let out = hidden(Command::new("git").arg("-C").arg(&root).args(args))
@@ -670,18 +729,25 @@ async fn check_updates(app: AppHandle) -> Result<UpdateInfo, String> {
             behind: git(&["rev-list", "--count", "HEAD..origin/main"])?
                 .parse()
                 .unwrap_or(0),
-            changes: git(&["log", "--no-merges", "--format=%h%x1f%s%x1f%cr", "HEAD..origin/main"])?
-                .lines()
-                .filter_map(|l| {
-                    let mut f = l.split('\u{1f}');
-                    Some(Change {
-                        sha: f.next()?.into(),
-                        subject: f.next()?.into(),
-                        when: f.next()?.into(),
-                    })
+            changes: git(&[
+                "log",
+                "--no-merges",
+                "--format=%h%x1f%s%x1f%cr",
+                "HEAD..origin/main",
+            ])?
+            .lines()
+            .filter_map(|l| {
+                let mut f = l.split('\u{1f}');
+                Some(Change {
+                    sha: f.next()?.into(),
+                    subject: f.next()?.into(),
+                    when: f.next()?.into(),
                 })
-                .filter(|c| !c.subject.starts_with("Update README") && !c.subject.starts_with("Add ADR-"))
-                .collect(),
+            })
+            .filter(|c| {
+                !c.subject.starts_with("Update README") && !c.subject.starts_with("Add ADR-")
+            })
+            .collect(),
         })
     })
     .await
@@ -695,7 +761,11 @@ async fn update_plaid(app: AppHandle, running: State<'_, Shared>) -> Result<(), 
     if let Some(busy) = &running.lock().unwrap().id {
         return Err(format!("{busy} is compiling; update after it finishes"));
     }
-    let root = get_config(app)?.plaid_root;
+    let config = get_config(app.clone())?;
+    if engine(&app, &config).bundled {
+        return Err("this install updates its engine with the app".into());
+    }
+    let root = config.plaid_root;
     tauri::async_runtime::spawn_blocking(move || {
         let git = |args: &[&str]| -> Result<String, String> {
             let out = hidden(Command::new("git").arg("-C").arg(&root).args(args))
@@ -730,6 +800,7 @@ pub fn run() {
         .manage(Shared::default())
         .invoke_handler(tauri::generate_handler![
             get_config,
+            engine_bundled,
             set_config,
             scan_library,
             get_cover,

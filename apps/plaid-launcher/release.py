@@ -27,6 +27,13 @@ tag = f'launcher-v{version}'
 key = Path(os.environ.get('TAURI_SIGNING_PRIVATE_KEY_PATH', Path.home() / '.tauri/plaid-launcher.key'))
 env = {**os.environ, 'TAURI_SIGNING_PRIVATE_KEY': key.read_text().strip(), 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD': ''}
 env['PATH'] = str(Path.home() / '.cargo/bin') + os.pathsep + env['PATH']
+# the installer ships the offline engine (ADR-0316) as engine/; build it from this checkout.
+# PLAID_ENGINE_READY=1 reuses a dist/engine/ already built from this same commit.
+repo = HERE.parents[1]
+if os.environ.get('PLAID_ENGINE_READY') != '1':
+    subprocess.run([sys.executable, 'scripts/package_engine.py', '--rt64-build', 'target/engine-rt64'], cwd=repo, env=env, check=True)
+if not (repo / 'dist/engine/engine.json').exists():
+    sys.exit('dist/engine is missing; the installer would ship without its engine')
 # a dev build may have left its icon in the exe's resources; build the app crate from clean
 subprocess.run('cargo clean -p plaid-launcher --release --manifest-path src-tauri/Cargo.toml', shell=True, cwd=HERE, env=env, check=True)
 subprocess.run('npx tauri build --bundles nsis', shell=True, cwd=HERE, env=env, check=True)

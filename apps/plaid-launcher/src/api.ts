@@ -155,6 +155,8 @@ export const api = {
   saves: (id: string) => invoke<SaveFile[]>("list_saves", { id }),
   openFolder: (path: string) => invoke<void>("open_folder", { path }),
   checkUpdates: () => invoke<UpdateInfo>("check_updates"),
+  /** True when the app installed with its own engine; there is no recompiler folder to choose. */
+  engineBundled: () => invoke<boolean>("engine_bundled"),
   updatePlaid: () => invoke<void>("update_plaid"),
   async settings(id: string): Promise<Settings> {
     const stored = await invoke<Partial<Settings> | null>("get_settings", { id });

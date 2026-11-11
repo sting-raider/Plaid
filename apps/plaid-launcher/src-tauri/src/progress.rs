@@ -132,7 +132,8 @@ mod tests {
     #[test]
     fn a_fault_three_rebuild_shows_as_repair() {
         let mut t = Tracker::default();
-        t.line("+ clang --target=x86_64-w64-windows-gnu -O0 -c a.part0.c").unwrap();
+        t.line("+ clang --target=x86_64-w64-windows-gnu -O0 -c a.part0.c")
+            .unwrap();
         assert!(t.in_gcc());
         let p = t
             .line("fault 3: rebuilding with the full analysis-time replay (--deep)")
