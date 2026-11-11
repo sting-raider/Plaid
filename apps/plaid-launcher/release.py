@@ -32,6 +32,13 @@ subprocess.run('cargo clean -p plaid-launcher --release --manifest-path src-taur
 subprocess.run('npx tauri build --bundles nsis', shell=True, cwd=HERE, env=env, check=True)
 
 setup = HERE / f'src-tauri/target/release/bundle/nsis/Plaid_{version}_x64-setup.exe'
+# Defender's ML model flagged one unsigned build (Trojan:Win32/Bearfoos.A!ml) while a rebuild
+# scanned clean; never publish a file Defender flags. shortcut: until the installer is code-signed.
+if os.name == 'nt':
+    mp = Path(os.environ['ProgramFiles']) / 'Windows Defender/MpCmdRun.exe'
+    scan = subprocess.run([str(mp), '-Scan', '-ScanType', '3', '-File', str(setup), '-DisableRemediation'], capture_output=True, text=True)
+    if 'found no threats' not in scan.stdout:
+        sys.exit(f'Defender flags {setup.name}; not publishing. Rebuild and rerun. ' + scan.stdout[-600:])
 latest = setup.with_name('latest.json')
 latest.write_text(json.dumps({
     'version': version,
