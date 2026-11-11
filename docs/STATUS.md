@@ -17,6 +17,8 @@ were configured and the ROMs were unavailable locally. The user explicitly
 requested skipping those measurements without disk searches. Scope and validation
 receipt: `research/bounded-repair-loop.md` and the landing commit.
 
+2026-11-11 local measurements: PM cold default 422.465s fails at round-2 solve after VI651/fault3; explicit deep 655.551s passes VI3552/fault0; RE2 cold default 34.605s fails at round-2 solve, retained run VI9/fault15/8004d348; native_complete remains false. Receipt: [repair-loop measurements](../research/repair-loop-measurements-2026-11-11.md).
+
 ## Observed repair images (ADR-0314)
 
 Explicit repair records now supply separate, SHA-256-authenticated code images
