@@ -112,8 +112,10 @@ typedef struct { u32 start, end; int load; } plaid_range;
    10: a conditional trap was taken (its exception handler is not modeled);
    11: Status observation/acquisition outside the supported SDK context;
    12: COP0 state, mode or event effects outside the verified subset;
-   13: unsupported nonlocal jump or expired/cross-thread host continuation. */
+   13: unsupported nonlocal jump or expired/cross-thread host continuation;
+   17: observed-image content/generation mismatch or ambiguous dispatch. */
 static inline int plaid_fault(plaid_state *s, u32 pc, u32 code) {
+  if (s->fault == 17) return 1; /* observed-image refusal is terminal */
   s->fault = code; s->fault_pc = pc; return 1;
 }
 static inline int plaid_transfer_fault(plaid_state *s, u32 pc, u64 target) {
@@ -200,6 +202,8 @@ static inline int plaid_text_enter(plaid_state *s, u32 p, const u32 *words, u32 
 int plaid_ovl_write(plaid_state *s, u32 p, u32 pc);
 int plaid_ovl_can_write(plaid_state *s, u32 p, u32 pc);
 u32 plaid_link(plaid_state *s, u32 t);
+u32 plaid_observed_link(plaid_state *s, u32 t);
+int plaid_observed_check(plaid_state *s, u32 k, u32 pc);
 u32 plaid_fetch_link(plaid_state *s, u32 t);
 int plaid_native_refill(plaid_state *s, u32 target);
 int plaid_tlb_write(plaid_state *s, u32 index, plaid_tlb_entry entry, u32 pc);
@@ -646,6 +650,8 @@ fn overlay_runtime(
     functions: &BTreeSet<u32>,
     image: &CodeImage,
     mut split_verifiers: Option<&mut Vec<String>>,
+    observed: &BTreeMap<usize, &plaid_core::repair::RepairRecord>,
+    original_blocks: &[(u32, u32)],
 ) -> Result<String, String> {
     // Verifiers are straight-line code that dominates gcc time in the main
     // unit; they only need a prototype, so a split build compiles them in parts.
@@ -655,20 +661,35 @@ fn overlay_runtime(
         ));
     }
     let mut out = String::from(
-        "typedef struct { u32 f, w, probe; } plaid_ovl_fn;\ntypedef struct { u32 start, end, proof; } plaid_ovl_range;\ntypedef struct { u32 link, text, mapped, virtual_base, physical_base, span, guards; const plaid_ovl_range *ranges; int (*verify)(const uint8_t *, size_t, uint32_t); u32 n; const plaid_ovl_fn *f; } plaid_ovl;\n",
+        "typedef struct { u32 f, w, probe; } plaid_ovl_fn;\ntypedef struct { u32 start, end, proof; } plaid_ovl_range;\ntypedef struct { u32 link, text, mapped, virtual_base, physical_base, span, guards, observed; const plaid_ovl_range *ranges; int (*verify)(const uint8_t *, size_t, uint32_t); u32 n; const plaid_ovl_fn *f; } plaid_ovl;\n",
     );
     let mut table = Vec::new();
     for (k, (&(link, _), (bytes, layout))) in overlays.iter().zip(layouts).enumerate() {
         // Slot text bounds are candidate extents, not a section certificate.
-        let verifier = overlay::verifier_text_ranges(
-            bytes,
-            layout,
-            compared[k],
-            link,
-            k as u32,
-            &guarded[k].text,
-            &guarded[k].data,
-        )?;
+        let verifier = if let Some(record) = observed.get(&k) {
+            let source = bytes
+                .iter()
+                .map(u8::to_string)
+                .collect::<Vec<_>>()
+                .join(",");
+            format!(
+                "#include <string.h>\nint plaid_overlay_verify_{k}(const uint8_t *ram, size_t ram_size, uint32_t base) {{ static const unsigned char expected[] = {{{source}}}; return ram && base == 0x{:08x}u && {}u <= ram_size && sizeof expected <= ram_size - {}u && !memcmp(ram + {}u, expected, sizeof expected); }}\n",
+                0x80000000 | record.window_base,
+                record.window_base,
+                record.window_base,
+                record.window_base
+            )
+        } else {
+            overlay::verifier_text_ranges(
+                bytes,
+                layout,
+                compared[k],
+                link,
+                k as u32,
+                &guarded[k].text,
+                &guarded[k].data,
+            )?
+        };
         if let Some(verifiers) = split_verifiers.as_deref_mut() {
             out += &format!(
                 "int plaid_overlay_verify_{k}(const uint8_t *ram, size_t ram_size, uint32_t base);\n"
@@ -731,12 +752,13 @@ fn overlay_runtime(
             }
         );
         table.push(format!(
-            "{{0x{link:08x}u, {}u, {}u, {}u, {}u, {span}u, {}u, plaid_ovl_ranges_{k}, plaid_overlay_verify_{k}, {}u, plaid_ovl_fn_{k}}}",
+            "{{0x{link:08x}u, {}u, {}u, {}u, {}u, {span}u, {}u, {}u, plaid_ovl_ranges_{k}, plaid_overlay_verify_{k}, {}u, plaid_ovl_fn_{k}}}",
             layout.text,
             u8::from(mapped_bases[k].0.is_some()),
-            mapped_bases[k].0.unwrap_or(0),
-            mapped_bases[k].1.unwrap_or(u32::MAX),
+            observed.get(&k).map_or(mapped_bases[k].0.unwrap_or(0), |r| (r.target().unwrap() & 0xe0000000) | r.window_base),
+            observed.get(&k).map_or(mapped_bases[k].1.unwrap_or(u32::MAX), |r| r.window_base),
             ranges.len(),
+            u8::from(observed.contains_key(&k)),
             entries.len()
         ));
     }
@@ -745,7 +767,43 @@ fn overlay_runtime(
         table.join(", "),
         table.len()
     );
-    out += OVERLAY_RUNTIME;
+    out += "static int plaid_observed_original(plaid_state *s, u32 p) { (void)s; switch(p) {\n";
+    if !observed.is_empty() {
+        for &(f, size) in original_blocks {
+            let pc = f & 0x1fffffff;
+            if !observed
+                .values()
+                .any(|r| pc >= r.window_base && pc < r.window_base + r.window_size)
+            {
+                continue;
+            }
+            let bytes = (f..f + size)
+                .step_by(4)
+                .map(|at| {
+                    image
+                        .word(GuestAddr(at))
+                        .ok_or("original block source missing")
+                })
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .flat_map(u32::to_be_bytes)
+                .map(|b| b.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
+            out += &format!(
+                "case 0x{pc:x}u: {{ static const u8 bytes[] = {{{bytes}}}; return p <= PLAID_RAM_SIZE - sizeof bytes && !memcmp(s->ram+p, bytes, sizeof bytes); }}\n"
+            );
+        }
+    }
+    out += "} return 0; }\n";
+    if observed.is_empty() {
+        out += &OVERLAY_RUNTIME.replace(
+            "  { u32 observed = plaid_observed_link(s, t); if (observed) return observed; }\n",
+            "",
+        );
+    } else {
+        out += OVERLAY_RUNTIME;
+    }
     out += TLB_WRITES;
     Ok(out)
 }
@@ -867,6 +925,54 @@ int plaid_ovl_write(plaid_state *s, u32 p, u32 pc) {
       plaid_ovl_revoke(s, k);
   return 0;
 }
+/* An observation supplies bytes, never permission to execute another image.
+   Exact byte equality to the build-time SHA-256 authenticated payload is
+   stronger than accepting a hash match alone. Recheck even a cached binding. */
+int plaid_observed_check(plaid_state *s, u32 k, u32 pc) {
+  if (k < PLAID_OVLS && plaid_ovls[k].observed && s->ovl_ok[k] &&
+      plaid_ovls[k].verify(s->ram, PLAID_RAM_SIZE, 0x80000000u + plaid_ovls[k].physical_base)) return 0;
+  return plaid_fault(s, pc, 17);
+}
+u32 plaid_observed_link(plaid_state *s, u32 t) {
+  u32 k, j, selected = 0, count = 0, offset, p = t & 0x1fffffffu;
+  int covered = 0;
+  if (s->fault) return 1;
+  if (t < 0x80000000u || t >= 0xc0000000u || (t & 3u)) return 0;
+  for (k = 0; k < PLAID_OVLS; k++) {
+    const plaid_ovl *o = &plaid_ovls[k];
+    if (!o->observed || p - o->physical_base >= o->text) continue;
+    offset = p - o->physical_base;
+    for (j = 0; j < o->n; j++) {
+      if (o->f[j].f - o->link != offset) continue;
+      covered = 1;
+      /* J/JAL retain the captured virtual PC region; another alias needs its own root. */
+      if ((t & 0xe0000000u) != (o->virtual_base & 0xe0000000u)) continue;
+      if (o->verify(s->ram, PLAID_RAM_SIZE, 0x80000000u + o->physical_base)) { selected = k; count++; }
+    }
+  }
+  if (!covered) return 0;
+  if (!count && plaid_observed_original(s, p)) return 0;
+  if (count != 1) { plaid_fault(s, t, 17); return 1; }
+  k = selected;
+  j = (t - (p - plaid_ovls[k].physical_base)) - plaid_ovls[k].link;
+  if (s->ovl_ok[k] && s->ovl_delta[k] == j)
+    return plaid_ovls[k].link + p - plaid_ovls[k].physical_base;
+  if (!s->prot_ready) plaid_build_prot(s);
+  for (j = 0; j < PLAID_OVLS; j++) {
+    u32 a = plaid_ovls[j].link + s->ovl_backing[j];
+    u32 b = plaid_ovls[k].physical_base;
+    if (j == k || !s->ovl_ok[j] || a >= b + plaid_ovls[k].span || b >= a + plaid_ovls[j].span) continue;
+    if (s->ovl_active[j]) { plaid_fault(s, t, 17); return 1; }
+    plaid_ovl_revoke(s, j);
+  }
+  j = (t - (p - plaid_ovls[k].physical_base)) - plaid_ovls[k].link;
+  if (s->ovl_active[k] && s->ovl_delta[k] != j) { plaid_fault(s, t, 17); return 1; }
+  s->ovl_delta[k] = j;
+  s->ovl_backing[k] = plaid_ovls[k].physical_base - plaid_ovls[k].link;
+  s->ovl_tlb[k] = 0; s->ovl_ok[k] = 1;
+  plaid_ovl_protect(s, k, plaid_ovls[k].physical_base, 255);
+  return plaid_ovls[k].link + p - plaid_ovls[k].physical_base;
+}
 /* Translate only after source bytes and mapping identity agree. Compiled
    addresses name native functions; virtual addresses remain guest-visible. */
 u32 plaid_link(plaid_state *s, u32 t) {
@@ -874,13 +980,14 @@ u32 plaid_link(plaid_state *s, u32 t) {
   int ram = t >= 0x80000000u && t < 0xa0000000u && p < PLAID_RAM_SIZE && !(t & 3u), hit = 0;
   u8 m = 0;
   if (t & 3u) return 1;
+  { u32 observed = plaid_observed_link(s, t); if (observed) return observed; }
   if (!s->prot_ready) plaid_build_prot(s);
   if (ram) {
     m = s->prot[p >> 2];
     if (m && m != 255) return t;
   }
   for (k = 0; k < PLAID_OVLS; k++) {
-    if (!s->ovl_ok[k]) continue;
+    if (plaid_ovls[k].observed || !s->ovl_ok[k]) continue;
     if (s->ovl_tlb[k]) {
       a = 0; i = 0;
       if (s->ovl_generation[k] != s->tlb_generation[s->ovl_tlb[k] - 1] ||
@@ -894,6 +1001,7 @@ u32 plaid_link(plaid_state *s, u32 t) {
       return t - s->ovl_delta[k];
   }
   for (k = 0; k < PLAID_OVLS; k++) {
+    if (plaid_ovls[k].observed) continue;
     if (plaid_ovls[k].mapped) {
       if (t - plaid_ovls[k].virtual_base >= plaid_ovls[k].text) continue;
       a = 0; i = 0;
@@ -1905,6 +2013,18 @@ fn lower_c_units(
     let relocatable: Vec<&plaid_core::declared_loads::DeclaredLoad> =
         declared.iter().filter(|l| l.relocatable).collect();
     let overlays: Vec<(u32, u32)> = relocatable.iter().map(|l| range(l)).collect();
+    let spec = map.load_images.get(&image.base.image);
+    let observed: BTreeMap<usize, &plaid_core::repair::RepairRecord> = relocatable
+        .iter()
+        .enumerate()
+        .filter_map(|(k, l)| {
+            if let plaid_core::declared_loads::LoadEncoding::Observed { generation } = l.encoding {
+                Some((k, spec?.observed.get(&generation)?))
+            } else {
+                None
+            }
+        })
+        .collect();
     let virtual_bases: Vec<Option<u32>> = relocatable
         .iter()
         .map(|l| match l.encoding {
@@ -2323,6 +2443,18 @@ fn lower_c_units(
                 .cloned(),
         );
     }
+    callees.extend(
+        map.blocks
+            .iter()
+            .filter(|b| {
+                ovl_of(b.start.pc.0).is_some_and(|k| observed.contains_key(&k))
+                    || (ovl_of(b.start.pc.0).is_none()
+                        && observed.values().any(|r| {
+                            (b.start.pc.0 & 0x1fffffff).wrapping_sub(r.window_base) < r.window_size
+                        }))
+            })
+            .map(|b| b.start.clone()),
+    );
     callees.retain(|f| !runtime.contains_key(&f.pc.0));
     let residual_thread_entries = plaid_core::callbacks::callbacks(map, image)
         .iter()
@@ -2449,6 +2581,9 @@ fn lower_c_units(
         }
     }
     for (k, guards) in guarded.iter_mut().enumerate() {
+        if observed.contains_key(&k) {
+            guards.text = vec![(0, layouts[k].1.text)];
+        }
         if relocatable[k].linked.is_none() {
             guards.text = vec![(0, layouts[k].1.text)];
         } else {
@@ -2634,6 +2769,12 @@ fn lower_c_units(
             .collect(),
         image,
         (parts > 1).then_some(&mut verifiers),
+        &observed,
+        &map.blocks
+            .iter()
+            .filter(|b| ovl_of(b.start.pc.0).is_none())
+            .map(|b| (b.start.pc.0, b.size))
+            .collect::<Vec<_>>(),
     )?;
     out += &runtime_text;
     out += "static inline int plaid_native_vector(plaid_state *s, u32 vector, u64 ret) { (void)s; (void)ret; switch(vector) {\n";
@@ -2777,6 +2918,12 @@ fn lower_c_units(
     let mut lowered = verifiers;
     let relocated = relocations.keys().copied().collect();
     for f in callees.iter().filter(|f| seen.insert(f.pc.0)) {
+        // Observed block entries can be unused when no residual transfer needs them.
+        let link = if parts == 1 && !observed.is_empty() {
+            "static inline "
+        } else {
+            link
+        };
         let mut out = String::new();
         let body = &bodies[f];
         let blocks: Vec<_> = body
@@ -2897,6 +3044,32 @@ fn lower_c_units(
                 out += &format!("L_{start:08x}: s->pc = 0x{start:08x}u; return 2;\n");
                 continue;
             }
+            let observed_block = ovl_of(start).is_some_and(|k| observed.contains_key(&k));
+            let redirects: Vec<_> = observed
+                .iter()
+                .filter_map(|(&k, record)| {
+                    let offset = (start & 0x1fffffff).checked_sub(record.window_base)?;
+                    let target = overlays[k].0.checked_add(offset)?;
+                    (ovl_of(start).is_none()
+                        && offset < record.window_size
+                        && functions.contains(&target))
+                    .then_some(target)
+                })
+                .collect();
+            if observed_block {
+                let k = ovl_of(start).unwrap();
+                out += &format!(
+                    "L_{start:08x}: if (plaid_observed_check(s, {k}, 0x{start:08x}u + s->ovl_delta[{k}])) return 1;\n"
+                );
+            } else if !redirects.is_empty() {
+                out += &format!(
+                    "L_{start:08x}: {{ u32 t = plaid_observed_link(s, 0x{start:08x}u); if (t) switch(t) {{"
+                );
+                for target in &redirects {
+                    out += &format!("case 0x{target:08x}u: return F_{target:08x}(s, ret);");
+                }
+                out += &format!("default: return plaid_fault(s, 0x{start:08x}u, 17); }} }}\n");
+            }
             if let Some(trap) = report
                 .trapped_sites
                 .iter()
@@ -2925,10 +3098,19 @@ fn lower_c_units(
                     "exception_or_unsupported_instruction" => 15,
                     _ => 14,
                 };
-                out += &format!("L_{start:08x}: return plaid_fault(s, 0x{pc:08x}u, {code});\n");
+                out += &format!(
+                    "{}return plaid_fault(s, 0x{pc:08x}u, {code});\n",
+                    if observed_block || !redirects.is_empty() {
+                        String::new()
+                    } else {
+                        format!("L_{start:08x}: ")
+                    }
+                );
                 continue;
             }
-            out += &format!("L_{start:08x}:\n");
+            if !observed_block && redirects.is_empty() {
+                out += &format!("L_{start:08x}:\n");
+            }
             if headers.contains(&start) {
                 out += "  PLAID_SAFEPOINT(s);\n";
             }

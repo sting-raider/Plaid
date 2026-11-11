@@ -17,6 +17,7 @@ fn measure(target: u32) -> (usize, bool) {
     let mut rom = words(&[0x0800_0000 | (target >> 2 & 0x03ff_ffff), 0, 0, 0]);
     rom.extend(words(&[0x1000_ffff, 0]));
     let spec = LoadImage {
+        observed: Default::default(),
         base_offset: RomOffset(0),
         base: GuestRange {
             start: GuestAddr(0x8000_0000),

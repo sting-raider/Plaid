@@ -208,6 +208,8 @@ static unsigned long vi_count, gfx_tasks, audio_tasks, dma_count;
 static long stop_gfx = 1; /* stop after this many graphics tasks (0: never) */
 static double run_seconds = 0;
 static u32 dump_at, dump_words;
+static const char *repair_capture_path;
+#include "repair_capture.h"
 
 /* ---- reporting ---------------------------------------------------------- */
 
@@ -222,6 +224,9 @@ static void wav_header(void) {
 }
 static void finish(int code, const char *why) {
   u32 i, p;
+  if (repair_capture_path && plaid_repair_capture(repair_capture_path, S->ram, PLAID_RAM_SIZE,
+                                                  S->fault, S->fault_pc, S->fault_target, vi_count) < 0)
+    fprintf(stderr, "cannot write repair capture: %s\n", repair_capture_path);
   if (wav) { wav_header(); fclose(wav); wav = NULL; }
   if (dump_words) {
     printf("{\"dump\":\"%08x\",\"words\":[", dump_at);
@@ -2122,6 +2127,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--fullscreen")) fullscreen = 1;
     else if (!strcmp(argv[i], "--config") && i + 1 < argc) config_path = argv[++i];
 #endif
+    else if (!strcmp(argv[i], "--repair-capture") && i + 1 < argc) repair_capture_path = argv[++i];
     else if (!strcmp(argv[i], "--dump") && i + 2 < argc) {
       dump_at = (u32)strtoul(argv[i + 1], NULL, 0);
       dump_words = (u32)strtoul(argv[i + 2], NULL, 0);

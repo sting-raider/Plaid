@@ -21,6 +21,7 @@ fn solve_with_load(
     scope: Scope,
 ) -> plaid_core::solver::SolveReport {
     let spec = LoadImage {
+        observed: Default::default(),
         base_offset: RomOffset(0),
         base: GuestRange {
             start: GuestAddr(0x8000_0000),

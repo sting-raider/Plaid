@@ -128,10 +128,10 @@ def run_contract():
 
     stop, solves, manifest = build('closed', False)
     assert 'test stop after manifest' in stop and solves == ['--address-taken'], (stop, solves)
-    assert manifest == {'mode': 'closed', 'native_complete': True, 'residual_sites': [], 'trapped_sites': []}, manifest
+    assert manifest == {'mode': 'closed', 'native_complete': True, 'residual_sites': [], 'trapped_sites': [], 'observed_images': []}, manifest
     stop, solves, manifest = build('open', False)
     assert 'test stop after manifest' in stop and solves == ['--address-taken', '--residual-dispatch'], (stop, solves)
-    assert manifest == {'mode': 'residual-dispatch', 'native_complete': False, 'residual_sites': ['80000420'], 'trapped_sites': []}, manifest
+    assert manifest == {'mode': 'residual-dispatch', 'native_complete': False, 'residual_sites': ['80000420'], 'trapped_sites': [], 'observed_images': []}, manifest
     stop, solves, manifest = build('open', False, trap=True)
     assert 'test stop after manifest' in stop and manifest['native_complete'] is False, (stop, manifest)
     assert manifest['trapped_sites'] == [{'pc': '80000420', 'kind': 'exception_or_unsupported_instruction'}], manifest

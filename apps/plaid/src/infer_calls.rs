@@ -221,6 +221,7 @@ mod tests {
             linked: Some(GuestAddr(0x80002040)),
         };
         let current = LoadImage {
+            observed: Default::default(),
             base_offset: RomOffset(0x1000),
             base: GuestRange {
                 start: GuestAddr(0x80000400),

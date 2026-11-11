@@ -247,6 +247,7 @@ mod tests {
         assert_eq!(loads.len(), 1);
         assert_eq!(loads[0].linked, Some(GuestAddr(0x8004_0000)));
         let spec = LoadImage {
+            observed: Default::default(),
             base_offset: RomOffset(0),
             base: GuestRange {
                 start: GuestAddr(0x8000_0000),
