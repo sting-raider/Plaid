@@ -793,12 +793,22 @@ real controller. Visual aspect modes and fullscreen toggle keys also require
 interactive verification.
 
 
-## Opt-in fault capture
+## Bounded automatic repair and retained captures
 
-`python scripts/native.py <rom> --rt64 --repair-capture` writes a numbered
+`python scripts/native.py <rom> --rt64` writes a numbered
 `target/native/<name>/repair/<n>.json` for a fault 3 or 15. The record contains
 raw game RAM and must stay local. Its SHA-256 binds the captured bytes; PI DMA
-history is currently unavailable.
+history is currently unavailable. `--repair-capture` remains accepted for
+compatibility; the bounded loop always requests captures.
+
+The default build attempts at most four build/validation rounds, admitting each
+new fault-3/15 capture through the existing guarded observed-image interface.
+It stops on success, a non-repairable stop (including fault 17), a missing capture,
+a repeated payload SHA-256 or the round cap. Every round prints its fault, PC,
+hash if captured, and disposition. A stop other than success rejects validation.
+`--deep` selects the full analysis-time replay budget explicitly; repair never
+escalates that budget automatically. Captures from earlier invocations are not
+scanned or admitted automatically.
 
 To admit a retained record explicitly:
 
@@ -812,5 +822,6 @@ images in `native-manifest.json` with `native_complete: false`. RAM must match
 the entire authenticated window before observed code executes; mismatches or
 ambiguous generations fault 17. Active-window writes still fail closed. These
 broad windows can include mutable data, so subsequent data changes can refuse
-execution conservatively. Records are never consumed automatically; the multi-round
-repair loop is separate work. Run native validation with `SDL_AUDIODRIVER=dummy`.
+execution conservatively. Only explicit records and captures from the current
+loop enter a rebuild. Run native validation with `SDL_AUDIODRIVER=dummy` and keep
+game windows visible.

@@ -9200,3 +9200,29 @@ whole-window/late mismatches, aliases, active-write refusal, inactive revocation
 malformed records and deterministic maps/manifests. No upstream implementation
 is copied. Automatic fault-driven multi-round rebuilding (step 2b), instruction
 cache lifetime proofs and commercial-game progress are not claimed.
+
+## ADR-0315: Bounded automatic observed-image repair
+
+Step 2b replaces ADR-0310's automatic fault-3 deep replay with at most four
+build/validation rounds, counting the initial build. Each native validation run
+requests ADR-0313 capture. A fault-3 or fault-15 capture must match the stop's
+fault, site, target and VI before conversion; the next round admits it through
+ADR-0314 in capture order. The first round's refined baseline loads are retained.
+No prior output-directory captures are scanned or implicitly trusted.
+
+Success requires a valid fault-zero stop and process exit zero. Other faults,
+missing/invalid stops, unavailable captures, repeated payload SHA-256 and the
+four-round cap stop with failed acceptance. A repeated byte payload counts as
+no progress even if its VI, site or target differs; this conservative rule may
+stop before a different root could be admitted. Each completed round prints its
+number, fault code, PC, captured hash when present and reason. Build/capture/run
+errors stop rather than starting another round. `--deep` still selects the full
+analysis-time replay budget and is never selected implicitly by repair.
+
+No compiler, native dispatch or runtime semantics change. Observed builds retain
+`native_complete: false`, full-window guards, fault-17 content refusals, native-frame
+write protection and solver obligations. Repair adds no interpreter/JIT, game
+exceptions or completeness claim. Synthetic policy/CLI contracts and an actual
+discover/lower/compile/capture/admit/rebuild fixture cover convergence and stop
+conditions. Paper Mario and RE2 measurements remain unavailable because no local
+ROM paths were configured; see `research/bounded-repair-loop.md`.
