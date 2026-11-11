@@ -9,7 +9,7 @@ The launcher is a Tauri 2 + React app on branch `claude/launcher`. Its bar is T3
 
 ## Dev builds
 
-Local test builds are **Plaid (Dev)**: `npm run tauri:dev-build` (in `apps/plaid-launcher`) merges `src-tauri/tauri.dev.conf.json`, giving its own identifier (`dev.plaid.launcher.dev`, so its own settings folder), install folder, exe name (`plaid-launcher-dev.exe`), blueprint icon (`icons-dev/`), and in-app blueprint title bar with a Dev pill (`src/stage.tsx`, after T3 Code's dev artwork). Dev builds never install app releases. Never install a local build over the real "Plaid"; that one only comes from releases.
+Local test builds are **Plaid (Dev)**: `npm run tauri:dev-build` (in `apps/plaid-launcher`) merges `src-tauri/tauri.dev.conf.json`, giving its own identifier (`dev.plaid.launcher.dev`, so its own settings folder), install folder, exe name (`plaid-launcher-dev.exe`), tartan icon (`icons-dev/`, from `icons-dev-source.png`), and a woven tartan in the logo colours behind the title bar with a Dev pill (`src/stage.tsx`). Dev builds never install app releases. Never install a local build over the real "Plaid"; that one only comes from releases.
 
 ## Shipping a release
 
