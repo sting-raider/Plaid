@@ -9322,3 +9322,37 @@ Windows build does not link (e.g. mupen64plus API headers); they are preserved
 conservatively. Rust crate licenses are listed per crate in `engine.json`. The
 launcher must show `THIRD_PARTY_NOTICES/INDEX.txt` in its About/licenses view.
 Bundle size: SIZES.
+
+
+## ADR-0317: Restore full-budget single-pass native builds
+
+Amends ADR-0315: the launcher command with no policy flags uses the full
+analysis-time site replay budget and validates once. Bounded fault-driven
+repair remains available with `--repair-loop`; it retains the short budget
+unless `--deep` is also supplied. Explicit `--deep` remains supported and
+clears an inherited site-budget override. A failed validation still rejects
+the build; neither mode falls back to guest execution or promotes completeness.
+
+Paper Mario's measured short-budget repair failed its second solver pass while
+the full-budget run completed; RE2 likewise remained OPEN after repair. See
+`research/deep-default-2026-11-11.md` and
+`research/repair-loop-measurements-2026-11-11.md` for scope and timings.
+
+## ADR-0318: Initialize firmware-free refill replays at IPL3
+
+Status: accepted
+
+Counterfactual refill discovery uses the same firmware-free post-IPL1/IPL2
+state as ordinary boot replay when no PIF ROM is supplied. The guest still
+executes IPL3 and the refill path, and the existing anchor, DMA provenance,
+mapping, source-byte and native execution guards remain required. Fixture and
+real-firmware paths retain their existing initialization.
+
+Previously refill mode skipped the firmware-free initializer and executed a
+zero-filled PIF image. A synthetic 6102 IPL3 spin contract compares ordinary
+and refill stop PC, step count, VI, SP and CP0 state; it fails on the previous
+code and passes with the initializer. Pinned ares remains analysis-only; no
+upstream code or ROM asset is included. On the local GoldenEye input, a
+previously refused refill at `7f002000` now identifies a complete 4096-byte
+ROM DMA source. This is a source candidate, not a proof of runtime reachability,
+gameplay or native completeness. See research/refill-hle-2026-11-11.md.

@@ -86,23 +86,38 @@ def run_contract():
         assert 'round-cap' in error and len(calls) == 1
         error, _, _ = exercise([3, 0], ['24020007', None], initial=records)
         assert 'repeated-hash' in error and len(calls) == 1
-        # The public CLI carries forward refined baseline loads and explicit
-        # records without silently selecting --deep, and honors --deep itself.
-        for deep in (False, True):
+        # The launcher uses the full replay budget and a single validation;
+        # repair is explicit and preserves the refined loads between rounds.
+        for flags, expected_budget, rounds in [([], None, 1), (['--deep'], None, 1),
+                                               (['--repair-loop'], str(native.FAST_SITE_BUDGET), 2),
+                                               (['--repair-loop', '--deep'], None, 2)]:
             seen = []
             def build_once(args):
                 seen.append((args.loads, list(args.repair_record), os.environ.get('PLAID_SITE_BUDGET')))
-                fault = 3 if len(seen) == 1 else 0
+                fault = 3 if len(seen) == 1 and rounds == 2 else 0
                 result = CompletedProcess([], int(bool(fault)), json.dumps(dict(
                     stop='synthetic', fault=fault, fault_pc='80000400'), separators=(',', ':')), '')
                 return result, records[0] if fault else None, loads
             with patch.object(native, 'build_once', side_effect=build_once), \
-                    patch('sys.argv', ['native.py', 'synthetic.z64', *(['--deep'] if deep else [])]), \
+                    patch('sys.argv', ['native.py', 'synthetic.z64', *flags]), \
                     patch.dict(os.environ, {'PLAID_SITE_BUDGET': str(native.FAST_SITE_BUDGET)}), \
                     patch('sys.stdout', io.StringIO()):
                 native.main()
-            budget = None if deep else str(native.FAST_SITE_BUDGET)
-            assert seen == [(None, [], budget), (loads, records, budget)], seen
+            expected = [(None, [], expected_budget)]
+            if rounds == 2:
+                expected.append((loads, records, expected_budget))
+            assert seen == expected, seen
+        # A default fault must reject after one build, never admit a capture.
+        with patch.object(native, 'build_once', return_value=(CompletedProcess([], 1,
+                '{"stop":"fault","fault":3,"fault_pc":"80000400"}', ''), records[0], loads)) as build, \
+                patch('sys.argv', ['native.py', 'synthetic.z64']), patch('sys.stdout', io.StringIO()):
+            try:
+                native.main()
+            except SystemExit:
+                pass
+            else:
+                raise AssertionError('fault accepted')
+            assert build.call_count == 1
         # A process exit without a valid stop cannot be mistaken for success.
         for stdout, rc in [('', 0), ('{"stop":', 0), ('{"stop":"seconds","fault":false,"fault_pc":"00000000"}', 0),
                            ('{"stop":"seconds","fault":0,"fault_pc":"00000000"}', 1)]:

@@ -441,7 +441,7 @@ int main(int argc, char** argv) {
     cpu.context.setMode(); cpu.pipeline.setPc(0xffffffff00000000ull | boot);
   }
   u32 vis = 0;
-  if(hleBoot && std::strcmp(argv[6], "fixture") && !refill) {
+  if(hleBoot && std::strcmp(argv[6], "fixture")) {
     steps = plaidHleBoot(bytes.data(), bytes.size(), argv[6], vis);
     if(steps == ~0ull) return 4;
   }

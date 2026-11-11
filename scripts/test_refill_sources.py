@@ -22,6 +22,32 @@ def main():
         else:
             raise AssertionError('malformed root accepted')
     exe = build_oracle()
+    # A real CIC boot path must begin from the same firmware-free IPL3 state in
+    # ordinary and counterfactual replays. The synthetic IPL3 spins in DMEM;
+    # neither requested RDRAM entry is reachable, so compare the stop state.
+    with tempfile.TemporaryDirectory(prefix='plaid-refill-hle-') as temporary:
+        directory = Path(temporary)
+        source = directory / 'synthetic.z64'
+        synthetic = bytearray(0x3000)
+        synthetic[:4] = bytes.fromhex('80371240')
+        synthetic[0x40:0x48] = struct.pack('>2I', 0x1000ffff, 0)
+        source.write_bytes(synthetic)
+
+        def hle_stop(refill):
+            output = directory / ('refill.jsonl' if refill else 'ordinary.jsonl')
+            command = [str(exe), str(source), '-', '0x80000400',
+                       '0x60000000' if refill else '0x80001000', '410100',
+                       'CIC-NUS-6102', str(output)]
+            command += ['refill-v1', '0x80001000'] if refill else ['exact-many']
+            subprocess.run(command, check=True, timeout=30,
+                           env={**os.environ, 'SDL_AUDIODRIVER': 'dummy'})
+            return json.loads(output.read_text().splitlines()[-1])
+
+        ordinary, refill = hle_stop(False), hle_stop(True)
+        assert ordinary['stop_pc'] in (0xa4000040, 0xa4000044), ordinary
+        for key in ('stop_pc', 'steps', 'vi', 'sp', 'boot_status', 'boot_entryhi', 'boot_cp0'):
+            assert refill[key] == ordinary[key], (key, refill[key], ordinary[key])
+        assert not refill['counterfactual']['applied']
     firmware = ROOT / '.refs/ares/ares/System/Nintendo 64/pif.ntsc.rom'
     rom = bytearray(0x3000)
     rom[:4] = bytes.fromhex('80371240')
