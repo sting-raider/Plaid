@@ -707,7 +707,7 @@ async fn check_updates(app: AppHandle) -> Result<UpdateInfo, String> {
     if engine(&app, &config).bundled {
         // the engine ships inside app releases, which the app updater checks
         return Ok(UpdateInfo {
-            current: env!("CARGO_PKG_VERSION").into(),
+            current: app.package_info().version.to_string(),
             behind: 0,
             changes: vec![],
         });
