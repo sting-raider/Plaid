@@ -1,9 +1,12 @@
 # Next
 
-Implement the automatic multi-round repair loop (step 2b) over the explicit
-observed-image admission interface (ADR-0314). Retain bounded captures, deterministic
-generations, content guards and the closed-world gate. RE2 gameplay progress after
-admission remains unverified; captured data is not an executable-lifetime proof.
+Step 2b now supplies four bounded build/validation rounds over observed-image
+admission (ADR-0315). Measure Paper Mario cold loop versus explicit `--deep` and
+the RE2 stop sequence when user-local ROM paths are configured; neither ROM was
+available for this landing. Retain content guards, deterministic generations,
+hash-repeat/cap stops and the closed-world gate. Broad mutable capture windows
+can still refuse with fault 17; RE2 gameplay after admission remains unverified.
+Captured data is not an executable-lifetime proof.
 
 ## Build speed: cold builds for small machines
 

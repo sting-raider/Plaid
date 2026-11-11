@@ -17,7 +17,8 @@ Steps, each a plain `plaid` command whose output stays in target/native/<name>:
   snapshots      oracle-only; never loaded by the default build
   sp-boot        SP DMEM/IMEM as the ROM's IPL3 leaves them in pinned ares
   ram-boot       IPL3's first 0x400 RDRAM bytes, before the game overwrites them
-  validate       run once (visibly with --rt64); unknown microcode faults
+  validate       up to four build/run rounds; admit fault-3/15 captures and
+                 rebuild with content guards, never guest execution fallback
   --rt64         also link the RT64 window build (target/rt64-shim/Release)
 
 Saves go to <out>/<name>.sra (SRAM) or <name>.fla (FlashRAM); EEPROM to
@@ -45,8 +46,9 @@ from repair_record import write_record, admit_records, native_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 # Unproven sites are watched this long by default; --deep watches up to
-# ares_boot.SITE_BUDGET, and a fault-3 stop rebuilds deep once (ADR-0310).
+# ares_boot.SITE_BUDGET (ADR-0310). Repair never changes the replay budget.
 FAST_SITE_BUDGET = 100_000_000
+REPAIR_ROUND_CAP = 4
 OBJECT_CACHE = Path(os.environ.get('PLAID_OBJECT_CACHE', Path.home() / '.cache/plaid/objects'))
 SIGNATURES = ROOT / '.refs/n64sym/src/builtin_signatures.sig'
 RT64 = ROOT / 'target/rt64-shim/Release'
@@ -261,6 +263,54 @@ def write_boot_state(capture, out, entry):
     return sp_boot, ram_boot
 
 
+def validation_stop(result):
+    lines = [line for line in result.stdout.splitlines() if line.startswith('{"stop"')]
+    try:
+        stop = json.loads(lines[-1])
+        if type(stop.get('fault')) is int and isinstance(stop.get('fault_pc'), str):
+            return stop
+    except (IndexError, ValueError, AttributeError):
+        pass
+    return None
+
+
+def repair_loop(build, records, round_cap=REPAIR_ROUND_CAP):
+    """Only this invocation's captures and explicit inputs enter the next build."""
+    records = list(records)
+    seen = {json.loads(path.read_text())['sha256'] for path in records}
+    for number in range(1, round_cap + 1):
+        try:
+            result, record = build(records)
+        except (SystemExit, subprocess.SubprocessError, OSError, ValueError):
+            print(f'repair round {number}: fault=none pc=none stop=build-or-validation-error', flush=True)
+            raise
+        stop = validation_stop(result)
+        fault, pc = (stop['fault'], stop['fault_pc']) if stop else ('none', 'none')
+        record_hash = json.loads(record.read_text())['sha256'] if record else None
+        if stop and fault == 0 and result.returncode == 0:
+            reason = 'success'
+        elif not stop:
+            reason = 'missing-or-invalid-stop'
+        elif fault not in (3, 15):
+            reason = 'non-repairable-stop'
+        elif not record:
+            reason = 'capture-unavailable'
+        elif record_hash in seen:
+            reason = 'repeated-hash'
+        elif number == round_cap:
+            reason = 'round-cap'
+        else:
+            reason = 'admit-and-rebuild'
+        print(f'repair round {number}: fault={fault} pc={pc}' +
+              (f' sha256={record_hash}' if record_hash else '') + f' stop={reason}', flush=True)
+        if reason == 'success':
+            return
+        if reason != 'admit-and-rebuild':
+            sys.exit(result.stderr[-2000:] + f'\nnative validation failed ({reason}); executable is not accepted')
+        records.append(record)
+        seen.add(record_hash)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('rom', type=Path)
@@ -271,7 +321,7 @@ def main():
     ap.add_argument('--rsp-gfx', action='store_true', help='run lowered graphics microcode; requires --rt64')
     ap.add_argument('--rsp-dump', type=Path, help='capture IMEM for oracle comparison only; never a build input')
     ap.add_argument('--repair-record', type=Path, action='append', default=[], help='admit a captured code image; repeat in generation order')
-    ap.add_argument('--repair-capture', action='store_true', help='save a versioned fault capture in the build repair directory')
+    ap.add_argument('--repair-capture', action='store_true', help='compatibility flag; bounded repair always captures fault-3/15 stops')
     ap.add_argument('--press', action='append', default=[], help='runtime button press, e.g. 0x1000@300:4')
     ap.add_argument('--require-audio', action='store_true', help='reject a validation run with empty or silent PCM')
     ap.add_argument('--deep', action='store_true', help='watch unproven indirect sites for the full analysis-time replay budget')
@@ -281,6 +331,23 @@ def main():
         ap.error('--rsp-gfx requires --rt64')
     if not a.deep:
         os.environ.setdefault('PLAID_SITE_BUDGET', str(FAST_SITE_BUDGET))
+    else:
+        os.environ.pop('PLAID_SITE_BUDGET', None)
+    # Keep the first round's refined loads, rather than replaying analysis or
+    # inheriting observations left by a previous invocation in the output dir.
+    base_loads = a.loads
+
+    def build(records):
+        a.repair_record = records
+        result, record, inferred = build_once(a)
+        if base_loads is None:
+            a.loads = inferred
+        return result, record
+
+    repair_loop(build, a.repair_record)
+
+
+def build_once(a):
     rom = a.rom.resolve()
     # 32 characters keep both Zelda titles (and similar series) apart
     name = a.name or ''.join(c for c in rom.stem.lower() if c.isalnum())[:32]
@@ -300,6 +367,7 @@ def main():
     if not a.loads:
         with phase('infer-loads'):
             plaid('infer-loads', rom, loads)
+    base_loads = loads
     if a.repair_record:
         admitted = out / 'observed-loads.json'
         shutil.copyfile(loads, admitted)
@@ -425,21 +493,23 @@ def main():
     env = {**os.environ, 'SDL_AUDIODRIVER': 'dummy'}
     with tempfile.TemporaryDirectory(dir=out, prefix='repair-raw-') as temporary:
         raw_capture = Path(temporary) / 'capture.json'
-        if a.repair_capture:
-            command.extend(['--repair-capture', str(raw_capture)])
+        command.extend(['--repair-capture', str(raw_capture)])
         with phase('validation'):
             r = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, errors='replace', timeout=a.seconds + 60, env=env)
-        if raw_capture.exists():
-            print('repair record:', write_record(raw_capture, out / 'repair'), flush=True)
+        stop = validation_stop(r)
+        record = None
+        if stop and stop['fault'] in (3, 15) and raw_capture.exists():
+            raw = json.loads(raw_capture.read_text())
+            target = stop.get('fault_target') if stop['fault'] == 3 else stop['fault_pc']
+            if (raw.get('fault'), raw.get('site'), raw.get('target'), raw.get('vi')) != (
+                    stop['fault'], stop['fault_pc'], target, stop.get('vi')):
+                raise ValueError('repair capture does not match validation stop')
+            record = write_record(raw_capture, out / 'repair')
+            print('repair record:', record, flush=True)
     stops = [line for line in r.stdout.splitlines() if line.startswith('{"stop"')]
     print(stops[-1][:400] if stops else r.stderr[-400:])
-    if stops and json.loads(stops[-1])['fault'] == 3 and os.environ.get('PLAID_SITE_BUDGET') == str(FAST_SITE_BUDGET):
-        # An unknown transfer target the short replay never reached: watch longer.
-        print('fault 3: rebuilding with the full analysis-time replay (--deep)', flush=True)
-        os.environ.pop('PLAID_SITE_BUDGET')
-        sys.exit(subprocess.run([sys.executable, *sys.argv, '--deep'], cwd=Path.cwd()).returncode)
-    if r.returncode:
-        sys.exit(r.stderr[-2000:] + '\nnative validation failed; executable is not accepted')
+    if r.returncode or not stop or stop['fault']:
+        return r, record, base_loads
     if a.require_audio:
         try:
             print('audio peak:', audio_peak(out / 'validation.wav'))
@@ -455,6 +525,7 @@ def main():
         print('window build:', window_exe)
         print('play:', launcher)
     print('headless build:', exe)
+    return r, record, base_loads
 
 
 if __name__ == '__main__':

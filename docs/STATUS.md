@@ -1,5 +1,22 @@
 # Status
 
+## Automatic bounded repair (ADR-0315)
+
+Default native builds now attempt at most four build/validation rounds. Faults
+3 and 15 with valid matching captures supply ordered observed images for the
+next build; success, another fault (including content refusal 17), unavailable
+capture, repeated payload SHA-256 or the round cap stops the loop. Each round
+prints its fault, PC, hash when available and disposition. The replay budget
+stays short unless `--deep` is explicitly selected. Observed-image manifests
+stay `native_complete: false`; dispatch guards and solver refusals are unchanged.
+
+Synthetic contracts cover two-round native convergence, ordered generations,
+repetition, cap, non-repairable stops and CLI budget/load preservation. Paper Mario
+cold loop/deep timings and the RE2 stop sequence were not measured: no ROM paths
+were configured and the ROMs were unavailable locally. The user explicitly
+requested skipping those measurements without disk searches. Scope and validation
+receipt: `research/bounded-repair-loop.md` and the landing commit.
+
 ## Observed repair images (ADR-0314)
 
 Explicit repair records now supply separate, SHA-256-authenticated code images
@@ -7,7 +24,7 @@ with deterministic generations and observed roots. Native dispatch compares the
 complete captured RAM window and faults 17 on a content/generation refusal;
 manifests report each admission and retain `native_complete: false`. Synthetic
 contracts cover admission, native execution, mismatches and generation selection.
-The automatic multi-round repair loop remains unimplemented.
+The automatic multi-round repair loop is now provided by ADR-0315.
 
 ## Bounded fault records (ADR-0313)
 
@@ -32,7 +49,8 @@ remain unverified.
 A cold F-Zero X build fell from 486 s to 94 s: the analysis-time ares replay
 now watches unproven sites for 100M instructions instead of 2e9 (361 s to
 11 s). A build whose validation run stops on an unknown transfer target
-(fault 3) rebuilds once with the full replay; Paper Mario takes that path.
+(fault 3) originally rebuilt once with the full replay; ADR-0315 replaces that
+automatic escalation with bounded observed-image repair. `--deep` remains explicit.
 Fixed a `missing provenance` failure when the replay observed only a runtime
 function. Compiled objects are shared machine-wide by content.
 

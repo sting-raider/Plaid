@@ -37,7 +37,7 @@ def write_record(raw_path, directory):
 
 
 def admit_records(loads, paths):
-    """Explicit input order defines generations; captures are never auto-consumed."""
+    """Caller-supplied record order defines generations; never scan captures."""
     doc = json.loads(loads.read_text())
     if doc.get('observed_images'):
         raise ValueError('repair records already admitted in loads')
