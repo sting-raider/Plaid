@@ -254,7 +254,8 @@ li.now .step-mark { border-color: var(--n-yellow); animation: blink 0.8s steps(2
   opacity: 0; visibility: hidden; transform: translateY(6px) scale(0.98); transform-origin: bottom right; pointer-events: none;
   transition: opacity 0.16s var(--ease), transform 0.16s var(--ease), visibility 0s linear 0.16s; }
 .update-panel { transition-delay: 0.15s, 0.15s, 0.31s; }
-.update-wrap:hover .update-panel, .update-wrap:focus-within .update-panel { opacity: 1; visibility: visible; transform: none; pointer-events: auto; transition-delay: 0.08s, 0.08s, 0s; }
+/* hover, or keyboard focus; a mouse click must not pin it open */
+.update-wrap:hover .update-panel, .update-wrap:has(:focus-visible) .update-panel { opacity: 1; visibility: visible; transform: none; pointer-events: auto; transition-delay: 0.08s, 0.08s, 0s; }
 .icon-btn:focus-visible, .btn:focus-visible, .link:focus-visible { outline: 2px solid var(--border-strong); outline-offset: 2px; }
 .update-card { box-shadow: 0 16px 40px -18px rgb(0 0 0 / 55%); }
 @media (prefers-reduced-motion: reduce) {
@@ -277,8 +278,9 @@ li.now .step-mark { border-color: var(--n-yellow); animation: blink 0.8s steps(2
 .upd-glyph { position: relative; display: grid; place-items: center; }
 .upd-dot { position: absolute; top: -2px; right: -2px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 2px var(--raised); }
 .upd-check { position: absolute; right: -4px; bottom: -4px; width: 10px; height: 10px; border-radius: 50%; display: grid; place-items: center; background: var(--text); color: var(--bg); box-shadow: 0 0 0 2px var(--raised); }
-.upd-ring { position: relative; display: grid; place-items: center; width: 32px; height: 32px; }
-.upd-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.upd-ring { position: relative; display: grid; place-items: center; width: 26px; height: 26px; }
+/* only the ring turns to start at 12 o'clock; the arrow inside stays upright */
+.upd-ring > svg:first-child { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
 .upd-ring .track { stroke: currentColor; opacity: 0.22; }
 .upd-ring .bar { transition: stroke-dashoffset 0.3s ease-out; }
 .upd-error { position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--n-red); box-shadow: 0 0 0 2px var(--bg); }
