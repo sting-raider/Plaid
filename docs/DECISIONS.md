@@ -9322,3 +9322,18 @@ Windows build does not link (e.g. mupen64plus API headers); they are preserved
 conservatively. Rust crate licenses are listed per crate in `engine.json`. The
 launcher must show `THIRD_PARTY_NOTICES/INDEX.txt` in its About/licenses view.
 Bundle size: SIZES.
+
+
+## ADR-0317: Restore full-budget single-pass native builds
+
+Amends ADR-0315: the launcher command with no policy flags uses the full
+analysis-time site replay budget and validates once. Bounded fault-driven
+repair remains available with `--repair-loop`; it retains the short budget
+unless `--deep` is also supplied. Explicit `--deep` remains supported and
+clears an inherited site-budget override. A failed validation still rejects
+the build; neither mode falls back to guest execution or promotes completeness.
+
+Paper Mario's measured short-budget repair failed its second solver pass while
+the full-budget run completed; RE2 likewise remained OPEN after repair. See
+`research/deep-default-2026-11-11.md` and
+`research/repair-loop-measurements-2026-11-11.md` for scope and timings.

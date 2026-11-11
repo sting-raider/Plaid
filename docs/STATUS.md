@@ -9,13 +9,13 @@ point `python/python.exe -B -u scripts/native.py <rom> --rt64 ...` from the bund
 state measured per CIC (`scripts/ares_hle_boot*.hpp`, `spikes/099-pif-hle-boot`); the real ROM is
 verification-only via `PLAID_PIF_ROM`. RT64's utf8conv headers are verified upstream-MIT.
 
-## Automatic bounded repair (ADR-0315)
+## Automatic bounded repair (ADR-0315, amended by ADR-0317)
 
-Default native builds now attempt at most four build/validation rounds. Faults
+Opt-in `--repair-loop` builds attempt at most four build/validation rounds. Faults
 3 and 15 with valid matching captures supply ordered observed images for the
 next build; success, another fault (including content refusal 17), unavailable
 capture, repeated payload SHA-256 or the round cap stops the loop. Each round
-prints its fault, PC, hash when available and disposition. The replay budget
+prints its fault, PC, hash when available and disposition. The default build validates once with the full replay budget. The repair-loop replay budget
 stays short unless `--deep` is explicitly selected. Observed-image manifests
 stay `native_complete: false`; dispatch guards and solver refusals are unchanged.
 

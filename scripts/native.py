@@ -17,8 +17,8 @@ Steps, each a plain `plaid` command whose output stays in target/native/<name>:
   snapshots      oracle-only; never loaded by the default build
   sp-boot        SP DMEM/IMEM as the ROM's IPL3 leaves them in pinned ares
   ram-boot       IPL3's first 0x400 RDRAM bytes, before the game overwrites them
-  validate       up to four build/run rounds; admit fault-3/15 captures and
-                 rebuild with content guards, never guest execution fallback
+  validate       one build/run; --repair-loop optionally admits fault-3/15
+                 captures in up to four rounds, never guest execution fallback
   --rt64         also link the RT64 window build (target/rt64-shim/Release)
 
 Saves go to <out>/<name>.sra (SRAM) or <name>.fla (FlashRAM); EEPROM to
@@ -46,8 +46,7 @@ from ares_boot import ORACLE_SOURCES, capture_many
 from repair_record import write_record, admit_records, native_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
-# Unproven sites are watched this long by default; --deep watches up to
-# ares_boot.SITE_BUDGET (ADR-0310). Repair never changes the replay budget.
+# Opt-in repair uses a shorter replay budget unless --deep is also supplied.
 FAST_SITE_BUDGET = 100_000_000
 REPAIR_ROUND_CAP = 4
 OBJECT_CACHE = Path(os.environ.get('PLAID_OBJECT_CACHE', Path.home() / '.cache/plaid/objects'))
@@ -325,15 +324,16 @@ def main():
     ap.add_argument('--rsp-gfx', action='store_true', help='run lowered graphics microcode; requires --rt64')
     ap.add_argument('--rsp-dump', type=Path, help='capture IMEM for oracle comparison only; never a build input')
     ap.add_argument('--repair-record', type=Path, action='append', default=[], help='admit a captured code image; repeat in generation order')
-    ap.add_argument('--repair-capture', action='store_true', help='compatibility flag; bounded repair always captures fault-3/15 stops')
+    ap.add_argument('--repair-capture', action='store_true', help='compatibility flag; validation always captures fault-3/15 stops')
+    ap.add_argument('--repair-loop', action='store_true', help='try bounded automatic repair with a shorter site replay budget')
     ap.add_argument('--press', action='append', default=[], help='runtime button press, e.g. 0x1000@300:4')
     ap.add_argument('--require-audio', action='store_true', help='reject a validation run with empty or silent PCM')
-    ap.add_argument('--deep', action='store_true', help='watch unproven indirect sites for the full analysis-time replay budget')
+    ap.add_argument('--deep', action='store_true', help='watch unproven indirect sites for the full analysis-time replay budget (default without --repair-loop)')
     ap.add_argument('--seconds', type=float, default=60, help='length of the native validation run')
     a = ap.parse_args()
     if a.rsp_gfx and not a.rt64:
         ap.error('--rsp-gfx requires --rt64')
-    if not a.deep:
+    if a.repair_loop and not a.deep:
         os.environ.setdefault('PLAID_SITE_BUDGET', str(FAST_SITE_BUDGET))
     else:
         os.environ.pop('PLAID_SITE_BUDGET', None)
@@ -348,7 +348,7 @@ def main():
             a.loads = inferred
         return result, record
 
-    repair_loop(build, a.repair_record)
+    repair_loop(build, a.repair_record, REPAIR_ROUND_CAP if a.repair_loop else 1)
 
 
 def build_once(a):
