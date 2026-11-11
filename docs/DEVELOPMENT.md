@@ -799,16 +799,17 @@ interactive verification.
 `target/native/<name>/repair/<n>.json` for a fault 3 or 15. The record contains
 raw game RAM and must stay local. Its SHA-256 binds the captured bytes; PI DMA
 history is currently unavailable. `--repair-capture` remains accepted for
-compatibility; the bounded loop always requests captures.
+compatibility; validation always requests captures.
 
-The default build attempts at most four build/validation rounds, admitting each
+The default build uses the full site replay budget and validates once. With
+`--repair-loop`, it attempts at most four build/validation rounds, admitting each
 new fault-3/15 capture through the existing guarded observed-image interface.
 It stops on success, a non-repairable stop (including fault 17), a missing capture,
 a repeated payload SHA-256 or the round cap. Every round prints its fault, PC,
 hash if captured, and disposition. A stop other than success rejects validation.
-`--deep` selects the full analysis-time replay budget explicitly; repair never
-escalates that budget automatically. Captures from earlier invocations are not
-scanned or admitted automatically.
+`--repair-loop` uses the shorter site replay budget; add `--deep` to use the
+full budget. Repair never escalates that budget automatically. Captures from
+earlier invocations are not scanned or admitted automatically.
 
 To admit a retained record explicitly:
 
