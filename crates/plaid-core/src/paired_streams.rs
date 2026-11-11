@@ -464,6 +464,7 @@ mod tests {
             linked: Some(GuestAddr(f.destination)),
         };
         let spec = LoadImage {
+            observed: Default::default(),
             base_offset: RomOffset(0),
             base: GuestRange {
                 start: GuestAddr(0x80810000),

@@ -35,6 +35,7 @@ fn fixture() -> (Vec<u8>, LoadImage) {
     (
         bytes,
         LoadImage {
+            observed: Default::default(),
             base_offset: RomOffset(0),
             base: GuestRange {
                 start: GuestAddr(0x8000_0000),

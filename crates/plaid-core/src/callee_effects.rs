@@ -596,6 +596,7 @@ mod tests {
             .load_images
             .entry(image.base.image.clone())
             .or_insert_with(|| crate::declared_loads::LoadImage {
+                observed: Default::default(),
                 base_offset: crate::program::RomOffset(0),
                 base: crate::program::GuestRange {
                     start: image.base.pc,

@@ -938,6 +938,7 @@ fn run() -> Result<(), String> {
                         &mut declared
                             .insert((
                                 plaid_core::declared_loads::LoadImage {
+                                    observed: Default::default(),
                                     base_offset: RomOffset(number(offset)?),
                                     base: range,
                                     loads: Vec::new(),
@@ -976,6 +977,23 @@ fn run() -> Result<(), String> {
                 })
                 .collect();
             entries.extend(vector_roots.iter().copied());
+            if let Some((spec, _)) = &declared {
+                for load in &spec.loads {
+                    if let plaid_core::declared_loads::LoadEncoding::Observed { generation } =
+                        load.encoding
+                    {
+                        let record = &spec.observed[&generation];
+                        let original = GuestAddr(record.target()?);
+                        if plaid_core::discovery::slot_entry_decodable(&image, original) {
+                            entries.push(original);
+                        }
+                        entries.push(GuestAddr(
+                            load.destination.start.0 + (record.target()? & 0x1fffffff)
+                                - record.window_base,
+                        ));
+                    }
+                }
+            }
             let roots = if data_roots {
                 plaid_core::data_roots::scan(rom.bytes(), &image)
             } else {
@@ -1894,6 +1912,32 @@ fn load_declarations(
             load.relocatable = true;
         }
     }
+    let mut observed = BTreeMap::new();
+    if let Some(rows) = doc.get("observed_images") {
+        for row in rows.as_array().ok_or("observed_images must be an array")? {
+            let generation = row["generation"]
+                .as_u64()
+                .filter(|g| *g != 0)
+                .ok_or("invalid observed generation")?;
+            let record: plaid_core::repair::RepairRecord =
+                serde_json::from_value(row["record"].clone()).map_err(|e| e.to_string())?;
+            let image = record.image(generation)?;
+            loads.push(DeclaredLoad {
+                destination: GuestRange {
+                    start: image.base.pc,
+                    size: record.window_size,
+                },
+                source: RomOffset(0),
+                encoding: LoadEncoding::Observed { generation },
+                evidence: [id.clone()].into(),
+                relocatable: true,
+                linked: Some(image.base.pc),
+            });
+            if observed.insert(generation, record).is_some() {
+                return Err("duplicate observed generation".into());
+            }
+        }
+    }
     // slot files go above every other load and RAM, each at its link address
     // modulo 64 KiB, so moving it changes only the high half of a HI16/LO16 pair
     let mut next = loads
@@ -1918,6 +1962,7 @@ fn load_declarations(
     };
     Ok(Some((
         LoadImage {
+            observed,
             base_offset,
             base,
             loads,

@@ -34,6 +34,11 @@ def main():
         from test_native import rsp_dependency_contract, split_contract
         split_contract()
         rsp_dependency_contract()
+        from test_repair_record import main as repair_record_contract
+        repair_record_contract()
+        from test_native_repair import run_contract as native_repair_contract, native_execution_contract
+        native_repair_contract()
+        native_execution_contract(exe, directory)
         from test_running_thread_bindings import run_contract as runtime_bindings_contract
         runtime_bindings_contract(run, directory)
         # Independently named raw section descriptors supply exact slot text.
@@ -368,6 +373,11 @@ def main():
         changed=bytearray(canonical); changed[64] ^= 1
         bad.write_bytes(changed)
         run("solve",bad,directory/"z64.json",ok=False)
+    import sys
+    sys.path.insert(0, str(ROOT / 'runtime'))
+    from test_observed_images import main as test_observed_images
+    test_observed_images()
+    sys.path.remove(str(ROOT / 'runtime'))
     from test_overlays import main as test_overlays
     test_overlays()
     from test_runtime_bindings import main as test_runtime_bindings
