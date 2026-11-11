@@ -176,7 +176,8 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 
 ; Installer pages, must be ordered as they appear
 ; 1. Welcome Page
-!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
+; Plaid: no welcome page
+!define MUI_PAGE_CUSTOMFUNCTION_PRE Skip
 !insertmacro MUI_PAGE_WELCOME
 
 ; 2. License Page (if defined)
@@ -290,7 +291,8 @@ Function PageReinstall
   ; of this function because we need to populate some variables
   ; related to current installed version if detected and whether
   ; we are downgrading or not.
-  ${If} $PassiveMode = 1
+  ; Plaid: always upgrade in place without asking, as the passive installer does
+  ${If} 1 = 1
     Call PageLeaveReinstall
   ${Else}
     nsDialogs::Create 1018
@@ -420,7 +422,12 @@ Function PageLeaveReinstall
 FunctionEnd
 
 ; 5. Choose install directory page
+; Plaid: the only page an interactive install shows; updates (/S) and /P skip it
+!define MUI_PAGE_HEADER_TEXT "Install Plaid"
+!define MUI_PAGE_HEADER_SUBTEXT "Choose a folder, then Install. Updates keep using this folder."
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW PlaidDirectoryShow
+!define MUI_DIRECTORYPAGE_TEXT_TOP "Plaid installs into this folder. Use Browse to pick another one."
 !insertmacro MUI_PAGE_DIRECTORY
 
 ; 6. Start menu shortcut page
@@ -433,6 +440,10 @@ Var AppStartMenuFolder
 !endif
 !insertmacro MUI_PAGE_STARTMENU Application $AppStartMenuFolder
 
+!macro PlaidColor dlg id fg
+  GetDlgItem $R9 ${dlg} ${id}
+  SetCtlColors $R9 ${fg} 0b0b0c
+!macroend
 !macro PlaidHide parent id
   GetDlgItem $R9 ${parent} ${id}
   ShowWindow $R9 0
@@ -444,6 +455,26 @@ Var AppStartMenuFolder
 !define MUI_PAGE_HEADER_SUBTEXT "This takes a few seconds. Plaid opens when it is done."
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW PlaidInstFilesShow
 !insertmacro MUI_PAGE_INSTFILES
+Function PlaidDirectoryShow
+  !insertmacro PlaidHide $HWNDPARENT 3
+  !insertmacro PlaidHide $HWNDPARENT 1028
+  !insertmacro PlaidHide $HWNDPARENT 1256
+  !insertmacro PlaidHide $HWNDPARENT 1035
+  !insertmacro PlaidHide $HWNDPARENT 1045
+  SetCtlColors $HWNDPARENT f2f2f3 0b0b0c
+  FindWindow $0 "#32770" "" $HWNDPARENT
+  SetCtlColors $0 f2f2f3 0b0b0c
+  ; intro text and space required / available; the themed "Destination Folder" frame ignores
+  ; text colours (dark on dark), so it goes
+  !insertmacro PlaidColor $0 1006 e6e6ea
+  !insertmacro PlaidHide $0 1020
+  !insertmacro PlaidColor $0 1023 b4b4ba
+  !insertmacro PlaidColor $0 1024 b4b4ba
+  GetDlgItem $1 $0 1019
+  SetCtlColors $1 f2f2f3 1c1b22
+  GetDlgItem $1 $HWNDPARENT 1
+  SendMessage $1 ${WM_SETTEXT} 0 "STR:Install"
+FunctionEnd
 Function PlaidInstFilesShow
   ; Next, Cancel, Back, branding text and the line above the buttons
   !insertmacro PlaidHide $HWNDPARENT 1
@@ -469,7 +500,7 @@ FunctionEnd
 ;
 ; Don't auto jump to finish page after installation page,
 ; because the installation page has useful info that can be used debug any issues with the installer.
-!define MUI_FINISHPAGE_NOAUTOCLOSE
+; Plaid: no finish page, so the progress page closes by itself
 ; Use show readme button in the finish page as a button create a desktop shortcut
 !define MUI_FINISHPAGE_SHOWREADME
 !define MUI_FINISHPAGE_SHOWREADME_TEXT "$(createDesktop)"
@@ -477,7 +508,7 @@ FunctionEnd
 ; Show run app after installation.
 !define MUI_FINISHPAGE_RUN
 !define MUI_FINISHPAGE_RUN_FUNCTION RunMainBinary
-!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
+!define MUI_PAGE_CUSTOMFUNCTION_PRE Skip
 !insertmacro MUI_PAGE_FINISH
 
 Function RunMainBinary
@@ -546,8 +577,10 @@ LangString choowHowToInstall 0 ""
 {{/each}}
 
 Function .onInit
-  ; Plaid: always passive, so a first install is one progress window, no wizard pages
-  StrCpy $PassiveMode 1
+  ${GetOptions} $CMDLINE "/P" $PassiveMode
+  ${IfNot} ${Errors}
+    StrCpy $PassiveMode 1
+  ${EndIf}
 
   ${GetOptions} $CMDLINE "/NS" $NoShortcutMode
   ${IfNot} ${Errors}
@@ -806,8 +839,8 @@ Section Install
 
   ; Create desktop shortcut for silent and passive installers
   ; because finish page will be skipped
-  ${If} $PassiveMode = 1
-  ${OrIf} ${Silent}
+  ; Plaid: the finish page that offered it never shows
+  ${If} 1 = 1
     Call CreateOrUpdateDesktopShortcut
   ${EndIf}
 
