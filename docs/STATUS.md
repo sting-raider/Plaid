@@ -1,5 +1,10 @@
 # Status
 
+Firmware-free counterfactual refill replays now initialize the same post-PIF
+state as ordinary analysis (ADR-0318). The synthetic oracle contract detects
+the prior zero-firmware execution; a previously refused local GoldenEye page
+now has a verified ROM DMA source. Runtime gameplay remains unverified.
+
 ## Offline engine bundle (ADR-0316)
 
 `python scripts/package_engine.py` builds `dist/engine/` (Windows x64, gitignored): Python, GCC+Clang,

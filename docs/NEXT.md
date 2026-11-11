@@ -1,5 +1,10 @@
 # Next
 
+Continue GoldenEye after firmware-free refill discovery (ADR-0318): verify the
+complete fresh build and resolve the checked exception handoff and guest/host
+run-queue ownership before claiming gameplay. The retained handoff WIP and
+diagnostic evidence are described in research/refill-hle-2026-11-11.md.
+
 The opt-in repair loop supplies four bounded build/validation rounds over
 observed-image admission (ADR-0315/0317). Cold measurements show Paper Mario
 and RE2 fail in the second solve; investigate these admissions and compare with

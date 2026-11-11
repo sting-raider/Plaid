@@ -9337,3 +9337,22 @@ Paper Mario's measured short-budget repair failed its second solver pass while
 the full-budget run completed; RE2 likewise remained OPEN after repair. See
 `research/deep-default-2026-11-11.md` and
 `research/repair-loop-measurements-2026-11-11.md` for scope and timings.
+
+## ADR-0318: Initialize firmware-free refill replays at IPL3
+
+Status: accepted
+
+Counterfactual refill discovery uses the same firmware-free post-IPL1/IPL2
+state as ordinary boot replay when no PIF ROM is supplied. The guest still
+executes IPL3 and the refill path, and the existing anchor, DMA provenance,
+mapping, source-byte and native execution guards remain required. Fixture and
+real-firmware paths retain their existing initialization.
+
+Previously refill mode skipped the firmware-free initializer and executed a
+zero-filled PIF image. A synthetic 6102 IPL3 spin contract compares ordinary
+and refill stop PC, step count, VI, SP and CP0 state; it fails on the previous
+code and passes with the initializer. Pinned ares remains analysis-only; no
+upstream code or ROM asset is included. On the local GoldenEye input, a
+previously refused refill at `7f002000` now identifies a complete 4096-byte
+ROM DMA source. This is a source candidate, not a proof of runtime reachability,
+gameplay or native completeness. See research/refill-hle-2026-11-11.md.
