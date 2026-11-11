@@ -30,6 +30,8 @@
     }
   },
   "bundle": {
+    "publisher": "sting-raider",
+    "copyright": "Copyright © 2026 sting-raider",
     "active": true,
     "targets": "all",
     "icon": [

@@ -381,6 +381,8 @@ Function PageLeaveReinstall
       ExecWait '$R1' $0
     ${Else}
       ReadRegStr $4 SHCTX "${MANUPRODUCTKEY}" ""
+      ; Plaid: installs made before the publisher became sting-raider recorded their folder here
+      ${IfThen} $4 == "" ${|} ReadRegStr $4 SHCTX "Software\plaid\${PRODUCTNAME}" "" ${|}
       ReadRegStr $R1 SHCTX "${UNINSTKEY}" "UninstallString"
       ${IfThen} $UpdateMode = 1 ${|} StrCpy $R1 "$R1 /UPDATE" ${|} ; append /UPDATE
       ${IfThen} $PassiveMode = 1 ${|} StrCpy $R1 "$R1 /P" ${|} ; append /P
@@ -987,6 +989,8 @@ Section Uninstall
   ${AndIf} $UpdateMode <> 1
     ; Clear the install location $INSTDIR from registry
     DeleteRegKey SHCTX "${MANUPRODUCTKEY}"
+    DeleteRegKey SHCTX "Software\plaid\${PRODUCTNAME}" ; Plaid: pre-sting-raider key
+    DeleteRegKey /ifempty SHCTX "Software\plaid"
     DeleteRegKey /ifempty SHCTX "${MANUKEY}"
 
     ; Clear the install language from registry
@@ -1012,6 +1016,8 @@ SectionEnd
 
 Function RestorePreviousInstallLocation
   ReadRegStr $4 SHCTX "${MANUPRODUCTKEY}" ""
+  ; Plaid: installs made before the publisher became sting-raider recorded their folder here
+  ${IfThen} $4 == "" ${|} ReadRegStr $4 SHCTX "Software\plaid\${PRODUCTNAME}" "" ${|}
   StrCmp $4 "" +2 0
     StrCpy $INSTDIR $4
 FunctionEnd
