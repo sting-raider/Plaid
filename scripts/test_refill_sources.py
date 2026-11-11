@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 from unittest.mock import patch
 
-from ares_boot import ROOT, build_oracle, capture_refill, validate_refill
+from ares_boot import ROOT, build_oracle, capture_refill, validate_refill, pif_identity, pif_rom
 import harvest_boot
 
 
@@ -96,7 +96,7 @@ def main():
         assert not any('rom_source' in r for r in missing)
         # Exercise the production wrapper, including footer-only boot metadata
         # and its separate cache. No special synthetic CIC enters production.
-        natural_rows = [dict(natural, firmware_sha256=hashlib.sha256(firmware.read_bytes()).hexdigest(), cic='fixture'),
+        natural_rows = [dict(natural, firmware_sha256=pif_identity(pif_rom()), cic='fixture'),
                         dict(boot_entry=0x80000400)]
         source.write_bytes(rom)
         calls = []

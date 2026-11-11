@@ -182,14 +182,31 @@ fn capture_rows(rom: &CanonicalRom, entries: &[u32]) -> Result<BTreeMap<u32, Cap
     let result = (|| {
         let path = directory.join("input.z64");
         std::fs::write(&path, rom.bytes()).map_err(|e| e.to_string())?;
-        let helper =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/ares_boot.py");
+        let engine = std::env::var_os("PLAID_ENGINE_ROOT")
+            .map(std::path::PathBuf::from)
+            .or_else(|| {
+                let exe = std::env::current_exe().ok()?;
+                let root = exe.parent()?.parent()?.parent()?;
+                root.join("engine.json")
+                    .is_file()
+                    .then(|| root.to_path_buf())
+            });
+        let helper = engine.as_ref().map_or_else(
+            || std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/ares_boot.py"),
+            |root| root.join("scripts/ares_boot.py"),
+        );
+        let python = std::env::var_os("PLAID_PYTHON").unwrap_or_else(|| {
+            engine.as_ref().map_or_else(
+                || if cfg!(windows) { "python" } else { "python3" }.into(),
+                |root| root.join("python/python.exe").into_os_string(),
+            )
+        });
         let entry_list = entries
             .iter()
             .map(|entry| format!("{entry:#x}"))
             .collect::<Vec<_>>()
             .join(",");
-        let output = std::process::Command::new(if cfg!(windows) { "python" } else { "python3" })
+        let output = std::process::Command::new(python)
             .arg(helper)
             .arg(path)
             .arg(entry_list)
