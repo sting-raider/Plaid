@@ -41,6 +41,9 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0335 | `33f75660` | RT64 gets the interlaced field the game chose, so odd fields stop showing stale frames: Rogue Squadron's rubber-banding is gone (snap-backs 249 → 15 in a recording) |
+| 0334 | `33f75660` | Virtual-clock windows present the scanned-out buffer under RT64's lock: no more Mario Party 2 curtain flicker in fast runs (28 → 0 flips) |
+| 0333 | `1885e5e0` | Build validation runs on the virtual clock: replays exactly, skips idle time; the full gate fell from ~400 s to ~175 s with no load retries |
 | — | `7cef5a72` | RT64's VI gamma uses the hardware square-root curve (Star Fox 64's title haze 121 → 112, as hardware); `PLAID_TRACE_WATCH` shows which device reads an RDP-only buffer |
 | — | `5969cfcd` | VI trace prints VI_CONTROL; Star Fox 64's title grey wash is the game's own (a 23% full-screen rectangle through the VI gamma curve), not a renderer bug |
 | 0332 | `6b08a515` | `PLAID_DETERMINISTIC` runs a game on a virtual clock that replays byte-identically, for exact native-against-native comparison |
