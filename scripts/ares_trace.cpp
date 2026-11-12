@@ -94,6 +94,22 @@ int main(int argc, char** argv) {
     for(u32 i = 0; i < count; i++) std::fprintf(out, " %016llx", (unsigned long long)words[i]);
     std::fputc(10, out);
   };
+  // PLAID_TRACE_WATCH=lo-hi: reads of physical [lo, hi) other than the VI's
+  // scanout, e.g. a CPU or RSP read of a buffer only the RDP draws.
+  static u32 watchLo = 0, watchHi = 0, watched = 0;
+  if(auto w = std::getenv("PLAID_TRACE_WATCH")) std::sscanf(w, "%x-%x", &watchLo, &watchHi);
+  if(watchHi) {
+    static auto watch = [](bool write, u32 a, u32 n, u32 d) {
+      if(write || a >= watchHi || a + n <= watchLo || d == (u32)RBusDevice::VI_DMA) return;
+      static u32 lastPc = 0, lastFrame = ~0u;  // one line per run of reads from one pc
+      if(lastPc == (u32)cpu.ipu.pc && lastFrame == frames) return;
+      lastPc = cpu.ipu.pc, lastFrame = frames;
+      if(++watched > 20000) return;
+      std::fprintf(out, "watch vi %u frame %u pc %08x addr %08x size %u device %u\n", vis, frames, (u32)cpu.ipu.pc, a, n, d);
+    };
+    plaidRdramScalarObserver = [](bool w, u32 a, u32 n, u32 d, u64) { watch(w, a, n, d); };
+    plaidRdramBurstObserver = [](bool w, u32 a, u32 n, u32 d, const u32*) { watch(w, a, n, d); };
+  }
   bool halted = rsp.status.halted;
   while(vis < limit) {
     if(cpu.instruction()) cpu.synchronize();
