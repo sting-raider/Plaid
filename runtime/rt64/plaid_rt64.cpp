@@ -19,6 +19,7 @@
 #include <SDL.h>
 
 #include <atomic>
+#include <cstdlib>
 #include <condition_variable>
 #include <cstdint>
 #include <cstring>
@@ -93,6 +94,11 @@ void renderer() {
     // Framebuffer storage can have non-square pixels; present on the 4:3 TV
     // surface instead of fitting its storage dimensions to the window.
     app->enhancementConfig.presentation.removeBlackBorders = false;
+    // An unpaced virtual-clock run (ADR-0332) outruns the presenter: skip
+    // buffering would show a buffer the next frame is already redrawing.
+    // Present what the VI scans out, under the workload lock (ADR-0334).
+    if (std::getenv("PLAID_DETERMINISTIC"))
+        app->enhancementConfig.presentation.mode = RT64::EnhancementConfiguration::Presentation::Mode::Console;
     if (settings_loaded) {
         using Config = RT64::UserConfiguration;
         app->userConfig.resolution = settings.n64Mode ? Config::Resolution::Original : Config::Resolution::Manual;

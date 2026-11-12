@@ -9683,3 +9683,33 @@ deadline never came (Paper Mario polled PI_STATUS at 8006b6fc). On the
 virtual clock `deliver_pending()` now leaves it set. `runtime/test_vi_dp.py`
 polls an empty queue without blocking until a retrace message arrives; it
 hangs without the fix.
+
+## ADR-0334: Present the scanned-out buffer on the virtual clock
+
+Mario Party 2's curtain scene flickered in the RT64 window on the virtual
+clock (ADR-0333) but not in real time, although both runs gave the RDP the
+same command stream frame for frame. RT64's default SkipBuffering mode
+presents the colour image the current workload just drew, and it does so
+without the workload lock. An unpaced guest outruns the presenter, so a
+present could read a buffer the next frame was already clearing or redrawing.
+Under `PLAID_DETERMINISTIC` the shim now uses RT64's Console mode: it presents
+the buffer the VI scans out, under the workload lock. A 14 s desktop
+recording at 60 fps (ffmpeg ddagrab) counted 28 frames whose brightness
+jumped more than 3 levels and then jumped back; with Console mode it counted
+0 in two recordings, with the same 6.0 largest jump as real time. Play keeps
+RT64's default.
+
+## ADR-0335: Give RT64 the field the guest chose the origin for
+
+RT64 finds the framebuffer behind an interlaced origin by subtracting one row,
+or two when `VI_V_CURRENT`'s low bit says the odd field. libultra makes the
+same choice: it reads `VI_V_CURRENT` and adds that field's row offset to the
+origin. The runtime handed RT64 the stored `VI_V_CURRENT`, which a guest never
+writes, so RT64 always saw the even field. Every odd-field origin then
+resolved one row into its buffer, matched no framebuffer, and showed stale
+memory: Rogue Squadron's intro snapped back to the previous frame every other
+field (the reported rubber-banding). The runtime now records the field
+`vi_line()` shows when the guest writes the origin and passes it as
+`VI_V_CURRENT` with each screen update. In a 14 s, 60 fps recording of the
+window, frames that changed and then returned to the frame before fell from
+249 of 466 to 15 of 173.
