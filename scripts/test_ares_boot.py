@@ -188,7 +188,7 @@ def replay_cache_contract():
             # A replay that met no uncovered fetch answers any request covering more.
             found = {}
             ares_boot.replay = lambda rom, data, entries, exact, covered, *rest: calls.append(covered) or [
-                {'uncovered_entry': found.get(covered[0][0]), 'n': len(calls)}]
+                {'entry': entries[0]}, {'uncovered_entry': found.get(covered[0][0]), 'n': len(calls)}]
             sites = dict(sites=[0x80000500], bindings=[])
             first = capture_many(rom, [0x80000400], covered=[(0x100, 0x200)], **sites)
             assert capture_many(rom, [0x80000400], covered=[(0x0, 0x100), (0x100, 0x300)], **sites) == first

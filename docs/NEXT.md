@@ -6,6 +6,25 @@ step: make the discovery fixed point incremental. Each `discover` call still
 re-derives the whole CFG about 14 times and the build runs it 7 times. Then the
 solver's CFG recheck and return closure (~7 of 14 s per solve).
 
+An outside review (2026-11-12) left these leads; each still needs evidence:
+
+- Incremental discovery: retain per-PC `visit` facts and walk only new roots,
+  but keep the round boundaries (CFG, constants, tail cells, tables, proof
+  recheck, then new roots) and fall back to the serial walk at the budget.
+  Per-site invalidation must track what each analysis read, including failed
+  queries. Compare exact `map.json` bytes at every attempt.
+- Harvest: reuse one replay across changing site queries needs event-time
+  evidence (slot source bytes, I-cache conflicts), not bare (site, target)
+  pairs. A quiet interval is no sound stop for open calls.
+- Overlays: lowering re-infers slot relocations from the placed bytes, so a
+  literal equal to a placed-range address would be patched by the verifier;
+  carry the source relocation offsets instead. `standalone()` rejects a file
+  that calls a fixed helper just below it, and misses COP1 branches.
+- Star Fox 64 panel flash, F-Zero X vanishing cars, Paper Mario partial
+  screen, Rogue Squadron rubber-banding: compare against ares at device
+  boundaries first (task inputs, VI origin, Count per delivered VI), then
+  trace the first mismatching interval (spikes/098-rsp-task, 096-native-slice).
+
 Continue GoldenEye after firmware-free refill discovery (ADR-0318): verify the
 complete fresh build and resolve the checked exception handoff and guest/host
 run-queue ownership before claiming gameplay. The retained handoff WIP and
