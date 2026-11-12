@@ -9563,3 +9563,14 @@ to the previous binary (single runs, same machine):
 | Star Fox 64 discover | 16 s | 11 s |
 | Banjo-Kazooie discover | 11 s | 8 s |
 | Majora's Mask solve | 6.0 s | 4.3 s |
+
+## ADR-0328: The indirect pass validates its map once on entry and once on exit
+
+`analyze_indirect_owned` validated the map on entry and exit, and its two
+inner passes (`tail_cells::analyze_owned`, `tables::analyze`) validated the
+intermediate maps three more times every discovery round. The inner passes
+have no other production caller, so their checks only repeated work whose
+result the exit check still guards. `tail_cells::analyze`, the borrowing
+wrapper tests use, validates around the pass instead. Majora's Mask `discover`
+is 34.1/36.3 s before and 31.4/32.9 s after (interleaved runs), with an
+identical map.
