@@ -52,6 +52,7 @@ REPAIR_ROUND_CAP = 4
 OBJECT_CACHE = Path(os.environ.get('PLAID_OBJECT_CACHE', Path.home() / '.cache/plaid/objects'))
 SIGNATURES = ROOT / '.refs/n64sym/src/builtin_signatures.sig'
 RT64 = work_root(ROOT) / 'target/rt64-shim/Release'
+VALIDATION_NS_PER_SAFEPOINT = 1000  # guest ns per loop iteration on the virtual clock
 
 # Per-phase wall times, so a slow ROM is attributable without re-running the
 # whole pipeline under a profiler. Each entry is (name, seconds, cached).
@@ -330,6 +331,8 @@ def main():
     ap.add_argument('--require-audio', action='store_true', help='reject a validation run with empty or silent PCM')
     ap.add_argument('--deep', action='store_true', help='watch unproven indirect sites for the full analysis-time replay budget (default without --repair-loop)')
     ap.add_argument('--seconds', type=float, default=60, help='length of the native validation run')
+    ap.add_argument('--realtime', action='store_true',
+                    help='validate on the wall clock instead of the virtual clock (ADR-0333)')
     a = ap.parse_args()
     if a.rsp_gfx and not a.rt64:
         ap.error('--rsp-gfx requires --rt64')
@@ -500,6 +503,10 @@ def build_once(a):
         command.extend(['--wav', str(out / 'validation.wav')])
     # Validation runs are silent (SDL's dummy driver); --wav still records the audio.
     env = {**os.environ, 'SDL_AUDIODRIVER': 'dummy'}
+    # The virtual clock (ADR-0332) replays exactly and skips idle time, so a
+    # 60 s validation takes ~15-25 s and host load cannot starve retraces.
+    if not a.realtime:
+        env.setdefault('PLAID_DETERMINISTIC', str(VALIDATION_NS_PER_SAFEPOINT))
     with tempfile.TemporaryDirectory(dir=out, prefix='repair-raw-') as temporary:
         raw_capture = Path(temporary) / 'capture.json'
         command.extend(['--repair-capture', str(raw_capture)])
