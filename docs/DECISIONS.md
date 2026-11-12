@@ -9507,3 +9507,35 @@ unchanged outputs:
   the final map and loads. The pair is timed as one phase.
 - The compile pool asks each distinct compiler for its version once, not
   once per job.
+
+## ADR-0326: Discovery continues its traversal instead of restarting it
+
+Each discovery round re-walked the whole direct CFG from every root, about 14
+times per `discover` call on Paper Mario, although roots only grow. A
+finished traversal (`discovery::Walk`: the map before partitioning, visited
+and leader PCs, terminal lengths and words) is a union over what each root
+reaches, so walking only the new roots from it yields the same sets as a
+fresh walk. `direct_cfg_continued` does that when the previous walk covered a
+subset of the roots in the same image, runtime boundary and budget; blocks are
+still partitioned from the combined state. The walk carries across the
+fixed-point rounds and the outer address-taken rounds. A traversal that
+reaches the instruction budget redoes the whole walk sequentially from every
+root, as before, and hands on no walk. `PLAID_SERIAL_CFG=1` still forces the
+fresh sequential walk.
+
+`a_continued_walk_equals_a_fresh_one` compares a continued and a fresh walk
+whose new roots split an existing block. Final `discover` maps are
+byte-identical against the previous binary on five games:
+
+| Game | Before | After |
+|---|---:|---:|
+| Paper Mario | 35 s | 27 s |
+| Majora's Mask | 167 s | 114 s |
+| Mario Party 2 | 83 s | 52 s |
+| Banjo-Kazooie | 23 s | 16 s |
+| Star Fox 64 | 22 s | 14 s |
+
+(The "before" binary also lacks ADR-0325's hole lookup; single runs.)
+
+`standalone()` (ADR-0319) also treats COP1 branches as transfers, and
+`discover` reports its setup time (`discover.setup`).

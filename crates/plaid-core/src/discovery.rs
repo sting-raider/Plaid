@@ -604,6 +604,37 @@ pub fn direct_cfg_bounded(
     budget: usize,
     runtime: &BTreeSet<GuestAddr>,
 ) -> Result<Discovery, String> {
+    direct_cfg_continued(rom, image, entries, budget, runtime, None).map(|(d, _)| d)
+}
+
+/// A finished traversal before block partitioning: every set in it is a union
+/// over what each root reaches, so walking more roots from it gives the same
+/// sets as walking all of them afresh (ADR-0326).
+#[derive(Clone)]
+pub struct Walk {
+    image: CodeAddress,
+    runtime: BTreeSet<GuestAddr>,
+    budget: usize,
+    entries: BTreeSet<GuestAddr>,
+    map: ProgramMap,
+    normal: BTreeSet<GuestAddr>,
+    terminal: BTreeMap<GuestAddr, u32>,
+    words: BTreeMap<CodeAddress, u32>,
+    leaders: BTreeSet<GuestAddr>,
+    seen: BTreeSet<GuestAddr>,
+}
+
+/// [`direct_cfg_bounded`] that continues `previous` when it walked a subset of
+/// `entries` in the same image, boundary and budget. The returned walk is
+/// `None` when the budget forced the sequential traversal.
+pub fn direct_cfg_continued(
+    rom: RomIdentity,
+    image: &CodeImage,
+    entries: &[GuestAddr],
+    budget: usize,
+    runtime: &BTreeSet<GuestAddr>,
+    previous: Option<Walk>,
+) -> Result<(Discovery, Option<Walk>), String> {
     let size = image.size()?;
     GuestRange {
         start: image.base.pc,
@@ -642,13 +673,37 @@ pub fn direct_cfg_bounded(
     let mut normal = BTreeSet::new();
     let mut terminal = BTreeMap::new();
     let mut words = BTreeMap::new();
-    for &pc in entries {
-        if !pc.0.is_multiple_of(4) {
-            return Err("unaligned CFG entry".into());
+    let mut seen = BTreeSet::new();
+    let fresh = map.clone();
+    let all: BTreeSet<GuestAddr> = entries.iter().copied().collect();
+    if let Some(w) = previous.filter(|w| {
+        w.image == image.base
+            && &w.runtime == runtime
+            && w.budget == budget
+            && w.entries.is_subset(&all)
+            && std::env::var_os("PLAID_SERIAL_CFG").is_none()
+    }) {
+        (map, normal, terminal, words, leaders, seen) =
+            (w.map, w.normal, w.terminal, w.words, w.leaders, w.seen);
+        for &pc in all.difference(&w.entries) {
+            if !pc.0.is_multiple_of(4) {
+                return Err("unaligned CFG entry".into());
+            }
+            map.entries.insert(image.address(pc), evidence.clone());
+            leaders.insert(pc);
+            if !normal.contains(&pc) {
+                pending.insert(pc);
+            }
         }
-        map.entries.insert(image.address(pc), evidence.clone());
-        pending.insert(pc);
-        leaders.insert(pc);
+    } else {
+        for &pc in entries {
+            if !pc.0.is_multiple_of(4) {
+                return Err("unaligned CFG entry".into());
+            }
+            map.entries.insert(image.address(pc), evidence.clone());
+            pending.insert(pc);
+            leaders.insert(pc);
+        }
     }
     #[allow(clippy::too_many_arguments)]
     fn apply(
@@ -682,9 +737,8 @@ pub fn direct_cfg_bounded(
     // straight-line run. The reachable set, and so the map, is the fixed point
     // whatever the order; only where the instruction budget cuts off depends on
     // order, so a traversal that reaches it is redone in the sequential order.
-    if std::env::var_os("PLAID_SERIAL_CFG").is_none() {
-        let (map0, leaders0, pending0) = (map.clone(), leaders.clone(), pending.clone());
-        let mut seen = BTreeSet::new();
+    let mut parallel = std::env::var_os("PLAID_SERIAL_CFG").is_none();
+    if parallel {
         while !pending.is_empty() && normal.len() < budget {
             let wave: Vec<GuestAddr> = std::mem::take(&mut pending).into_iter().collect();
             seen.extend(wave.iter().copied());
@@ -720,10 +774,16 @@ pub fn direct_cfg_bounded(
             pending.retain(|pc| !seen.contains(pc) && !normal.contains(pc));
         }
         if normal.len() >= budget {
-            (map, leaders, pending) = (map0, leaders0, pending0);
-            normal.clear();
-            terminal.clear();
-            words.clear();
+            // Redo the whole traversal in order, from every entry.
+            parallel = false;
+            pending.clear();
+            (map, normal, terminal, words, leaders) =
+                (fresh, BTreeSet::new(), BTreeMap::new(), BTreeMap::new(), BTreeSet::new());
+            for &pc in entries {
+                map.entries.insert(image.address(pc), evidence.clone());
+                pending.insert(pc);
+                leaders.insert(pc);
+            }
         }
     }
     while let Some(pc) = pending.pop_first() {
@@ -751,6 +811,18 @@ pub fn direct_cfg_bounded(
             &mut pending,
         );
     }
+    let walk = parallel.then(|| Walk {
+        image: image.base.clone(),
+        runtime: runtime.clone(),
+        budget,
+        entries: all,
+        map: map.clone(),
+        normal: normal.clone(),
+        terminal: terminal.clone(),
+        words: words.clone(),
+        leaders: leaders.clone(),
+        seen,
+    });
     // Partition after traversal, so a newly found target splits earlier linear code.
     for &leader in &leaders {
         if !normal.contains(&leader) {
@@ -787,7 +859,7 @@ pub fn direct_cfg_bounded(
         });
     }
     map.validate()?;
-    Ok(Discovery { map, words })
+    Ok((Discovery { map, words }, walk))
 }
 
 #[cfg(test)]
@@ -821,5 +893,54 @@ mod prefix_tests {
         assert!(slot_entry_decodable(&image, GuestAddr(base.0 + 4)));
         image.words[1] = 0x7000_0000;
         assert!(!slot_entry_decodable(&image, GuestAddr(base.0 + 4)));
+    }
+
+    #[test]
+    fn a_continued_walk_equals_a_fresh_one() {
+        let base = GuestAddr(0x8000_0000);
+        let image = CodeImage {
+            base: CodeAddress {
+                pc: base,
+                image: "00".repeat(32),
+                generation: 0,
+            },
+            // A: jal B; jr ra (0x08 is a later root inside A). B at 0x10.
+            // C at 0x20: a branch over one instruction, then jr ra.
+            words: vec![
+                0x0c00_0004,
+                0,
+                0x03e0_0008,
+                0,
+                0x2402_0001,
+                0x03e0_0008,
+                0,
+                0,
+                0x1000_0002,
+                0,
+                0x2402_0001,
+                0x03e0_0008,
+                0,
+            ],
+            rom_offset: None,
+            physical_start: None,
+            holes: vec![],
+            slots: Default::default(),
+        };
+        let rom = RomIdentity {
+            sha256: "a".repeat(64),
+            size: 4096,
+        };
+        let at = |o: u32| GuestAddr(base.0 + o);
+        let none = BTreeSet::new();
+        let (first, walk) =
+            direct_cfg_continued(rom.clone(), &image, &[at(0)], 1000, &none, None).unwrap();
+        assert!(walk.is_some());
+        let all = [at(0), at(0x20), at(8)];
+        let (continued, _) =
+            direct_cfg_continued(rom.clone(), &image, &all, 1000, &none, walk).unwrap();
+        let fresh = direct_cfg_bounded(rom, &image, &all, 1000, &none).unwrap();
+        assert_eq!(continued.map.to_json(), fresh.map.to_json());
+        assert_eq!(continued.words, fresh.words);
+        assert!(fresh.map.blocks.len() > first.map.blocks.len(), "C adds blocks");
     }
 }

@@ -1,7 +1,7 @@
 //! Bounded fixed point between direct discovery and local target inference.
 use crate::{
     GuestAddr,
-    discovery::{CodeImage, Discovery, direct_cfg_bounded},
+    discovery::{CodeImage, Discovery, direct_cfg_continued},
     indirect::analyze_indirect_owned,
     program::*,
 };
@@ -42,7 +42,7 @@ pub fn discover_image_with_loads(
 ) -> Result<Discovery, String> {
     validate_load_context(image, loads)?;
     discover_seeded(
-        rom, image, entries, runtime, evidence, budget, true, None, loads,
+        rom, image, entries, runtime, evidence, budget, true, None, loads, &mut None,
     )
 }
 
@@ -79,7 +79,7 @@ pub(crate) fn discover_labelled(
     label: bool,
 ) -> Result<Discovery, String> {
     discover_seeded(
-        rom, image, entries, runtime, evidence, budget, label, None, None,
+        rom, image, entries, runtime, evidence, budget, label, None, None, &mut None,
     )
 }
 
@@ -96,6 +96,7 @@ pub(crate) fn discover_seeded(
     label: bool,
     previous: Option<&ProgramMap>,
     loads: Option<&LoadContext>,
+    walk: &mut Option<crate::discovery::Walk>,
 ) -> Result<Discovery, String> {
     let declared = match (runtime.is_empty(), evidence) {
         (true, _) => None,
@@ -127,6 +128,7 @@ pub(crate) fn discover_seeded(
         label,
         previous,
         loads,
+        walk,
     )
 }
 
@@ -142,6 +144,7 @@ fn discover_bounded(
     label: bool,
     previous: Option<&ProgramMap>,
     loads: Option<&LoadContext>,
+    walk: &mut Option<crate::discovery::Walk>,
 ) -> Result<Discovery, String> {
     let boundary: BTreeSet<GuestAddr> = declared
         .map(|(_, _, f)| f.keys().map(|a| a.pc).collect())
@@ -168,16 +171,19 @@ fn discover_bounded(
     let mut cfg_time = std::time::Duration::ZERO;
     let mut indirect_time = std::time::Duration::ZERO;
     let mut iterations = 0usize;
+    // Roots only grow, so each round continues the previous traversal.
     for _ in 0..budget.clamp(1, 512) {
         iterations += 1;
         let cfg_started = std::time::Instant::now();
-        let mut discovery = direct_cfg_bounded(
+        let (mut discovery, next) = direct_cfg_continued(
             rom.clone(),
             image,
             &roots.iter().copied().collect::<Vec<_>>(),
             budget,
             boundary,
+            walk.take(),
         )?;
+        *walk = next;
         cfg_time += cfg_started.elapsed();
         if let Some((id, evidence, functions)) = declared {
             discovery.map.evidence.insert(id.clone(), evidence.clone());
