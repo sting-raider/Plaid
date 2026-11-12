@@ -794,6 +794,13 @@ frame equality ends at the first timing-seeded state; after that, read the
 per-second opcode means. A flag in one second at a scene change is pacing; a
 flag that persists across seconds of one scene is a lead.
 
+`PLAID_TRACE_WATCH=<lo>-<hi>` (hex physical addresses) makes the ares side of
+devtrace (`target/ares-trace/oracle.exe <rom> CIC-NUS-<cic> <vis> <out>`)
+log every read of that range except the VI's scanout, one line per run of
+reads from one PC: `watch vi <n> frame <n> pc <pc> addr <a> size <n> device <d>`
+(device is ares's RBusDevice: 1-3 CPU, 4 SP DMA). Use it to find out whether a
+game reads back a buffer only the RDP draws.
+
 `PLAID_DETERMINISTIC=<ns>` (devtrace: `--deterministic <ns>`) runs the game
 on a virtual clock: `<ns>` per loop safepoint and 1 ms steps while every guest
 thread waits, with no host pump thread (ADR-0332). The same build and input

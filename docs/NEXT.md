@@ -31,7 +31,13 @@ An outside review (2026-11-12) left these leads; each still needs evidence:
   (208,208,208) at alpha 0x08-0x3c, blended over the black clear, and the
   game sets VI_CONTROL 0x300e (gamma on). 23% of 208 is about 49; through the
   VI gamma curve that is about 112-120, and RT64 shows 121. The commands
-  match ares (above), so hardware draws the same haze.
+  match ares (above), so hardware draws the same haze. parallel-RDP's
+  hardware gamma table maps 49 to 112. A 1080p longplay video shows the haze
+  from the same moment ("IN", about 13 s) but at about 30-49, because its
+  emulator ignores VI gamma. `PLAID_TRACE_WATCH` shows the CPU and RSP never
+  read the colour or depth buffers after boot, so headless ares not drawing
+  them cannot change the stream. RT64's VI gamma is now the hardware's
+  square root (runtime/rt64/patches.cmake), so the haze shows 112, not 121.
 - Paper Mario and Rogue Squadron (ADR-0330): the first ~11 s of RDP frames
   are hash-identical to ares (640 and 364 frames), and every steady second of
   25 s matches once ares is shifted 1 s; flags fall only on scene changes.
