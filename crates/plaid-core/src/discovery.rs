@@ -295,10 +295,20 @@ impl CodeImage {
     }
     pub fn word(&self, pc: GuestAddr) -> Option<u32> {
         let offset = pc.0.checked_sub(self.base.pc.0)?;
-        if !offset.is_multiple_of(4) || self.holes.iter().any(|h| h.contains(pc)) {
+        if !offset.is_multiple_of(4) || self.in_hole(pc) {
             return None;
         }
         self.words.get((offset / 4) as usize).copied()
+    }
+    fn in_hole(&self, pc: GuestAddr) -> bool {
+        // Many holes come only from a composite, which builds them sorted and
+        // disjoint (declared_loads); a few hand-made ones are scanned.
+        if self.holes.len() < 16 {
+            return self.holes.iter().any(|h| h.contains(pc));
+        }
+        debug_assert!(self.holes.is_sorted_by_key(|h| h.start.0));
+        let after = self.holes.partition_point(|h| h.start.0 <= pc.0);
+        after > 0 && self.holes[after - 1].contains(pc)
     }
     /// The content-derived identity: the SHA-256 of the words, plus the hole
     /// layout when there are holes (ADR-0150).

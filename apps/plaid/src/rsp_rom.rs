@@ -51,17 +51,23 @@ pub fn generate(
     let mut seen = BTreeSet::new();
     let mut same_code: BTreeMap<String, usize> = BTreeMap::new();
     let mut matchable = Vec::new();
-    let named: BTreeSet<GuestAddr> = images
+    // Each static image's constants, scanned once: all of them name DMA
+    // sources; an image's own resolvable ones are its roots.
+    let mut constants: Vec<BTreeSet<GuestAddr>> = images
         .iter()
-        .flat_map(|image| plaid_core::rsp_rom::constants(image, map))
+        .map(|image| plaid_core::rsp_rom::constants(image, map))
         .collect();
+    let named: BTreeSet<GuestAddr> = constants.iter().flatten().copied().collect();
     let static_images = images.len();
     for (k, image) in images.into_iter().chain(sources).enumerate() {
         let dma = k >= static_images;
         let mut roots = if dma {
             BTreeSet::new()
         } else {
-            plaid_core::rsp_rom::roots(&image, map)
+            std::mem::take(&mut constants[k])
+                .into_iter()
+                .filter(|&address| image.word(address).is_some())
+                .collect()
         };
         if dma && named.contains(&image.base.pc) {
             roots.insert(image.base.pc);

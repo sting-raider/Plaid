@@ -203,7 +203,7 @@ def compile_all(jobs):
     """Compile (source, flags, dependencies) jobs on one pool, largest first so
     the longest unit starts at once and the tail stays short; results keep job order.
     Each object is keyed on the version of the compiler that builds it."""
-    versions = {flags[0]: subprocess.check_output([flags[0], '--version']) for _, flags, _ in jobs}
+    versions = {c: subprocess.check_output([c, '--version']) for c in {flags[0] for _, flags, _ in jobs}}
     order = sorted(range(len(jobs)), key=lambda i: -jobs[i][0].stat().st_size)
     objs = [None] * len(jobs)
     with ThreadPoolExecutor(compile_workers()) as pool:
@@ -431,14 +431,16 @@ def build_once(a):
     except ValueError as error:
         sys.exit(str(error) + ': nothing is built')
 
-    with phase('rsp-from-rom'):
-        plaid('rsp-from-rom', rom, m, texts, '--loads', loads)
-    rsp_manifest = json.loads((texts / 'rsp-files.json').read_text())
     c = out / f'{name}.c'
     # RAM address zero is executable when the guest owns its refill vector.
     exit_pc = '0xbfc00000' if program.get('tlb_exception_vectors') else '0x80000000'
-    with phase('lower'):
+    # Both read only the final map and loads and write separate outputs, so they
+    # run side by side (one phase: the shared phase stack is not thread-safe).
+    with phase('rsp-from-rom+lower'), ThreadPoolExecutor(2) as pool:
+        rsp = pool.submit(plaid, 'rsp-from-rom', rom, m, texts, '--loads', loads)
         lower_parts(rom, m, entry, exit_pc, c, len(program['blocks']), residual)
+        rsp.result()
+    rsp_manifest = json.loads((texts / 'rsp-files.json').read_text())
     # Generated game code builds at -O0: optimising it cost ~18x the compile
     # time and ran no faster, since each guest op is guest-state memory traffic.
     # Clang -O0 is ~4x faster again than GCC -O0; GCC stays the fallback.

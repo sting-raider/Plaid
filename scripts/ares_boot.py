@@ -202,7 +202,9 @@ def capture_many(rom, entries, exact=False, covered=None, sites=None, bindings=N
     partial = cached.with_name(f'{key}.{os.getpid()}.tmp')
     partial.write_text(json.dumps(results))
     partial.replace(cached)
-    if covered is not None and all('uncovered_entry' in r and r['uncovered_entry'] is None for r in results):
+    # Only the final row reports the uncovered fetch; entry rows omit it.
+    if (covered is not None and any('uncovered_entry' in r for r in results) and
+            all(r.get('uncovered_entry') is None for r in results)):
         family.parent.mkdir(exist_ok=True)
         partial = family.with_name(f'{family.stem}.{os.getpid()}.tmp')
         partial.write_text(json.dumps(known + [[covered, key]]))

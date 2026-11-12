@@ -9489,3 +9489,21 @@ result when the new coverage contains the old. A result with an uncovered
 fetch is never reused. Outputs are unchanged by construction;
 `replay_cache_contract` covers reuse, less coverage, other sites and an
 uncovered fetch.
+
+## ADR-0325: Cheaper RSP derivation, hole lookups and build overlap
+
+From an outside review of the build's critical path, four changes with
+unchanged outputs:
+
+- `rsp-from-rom` scanned every static image's constants twice (once for the
+  DMA-source names, again for each image's roots). It keeps the per-image
+  result. On Paper Mario the command went from 41.3 to 17.4 s with
+  byte-identical output (all 50 files).
+- `CodeImage::word` binary-searches holes when there are 16 or more; only a
+  composite has that many, and it builds them sorted and disjoint. One
+  Paper Mario `discover` call went from 89.6 to 70.1 s with the same
+  `map.json` SHA-256 (single runs on a loaded laptop).
+- `scripts/native.py` runs `rsp-from-rom` beside `lower-map`; both read only
+  the final map and loads. The pair is timed as one phase.
+- The compile pool asks each distinct compiler for its version once, not
+  once per job.
