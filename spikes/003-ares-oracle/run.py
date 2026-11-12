@@ -18,7 +18,7 @@ OUTPUT = ROOT / "target/ares-oracle-spike"
 # MinGW names executables with .exe and links nall's Windows APIs; Linux needs libdl.
 ORACLE = "oracle.exe" if os.name == "nt" else "oracle"
 
-def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False, rdram_scalar_access=False, fetch_boundary_access=False, pi_dma_access=False, queue_access=False, sp_backing_access=False, pif_backing_access=False, rsp_dmem_access=False, cpu_instruction_access=False, rsp_word_read_access=False, rsp_dma_lifecycle_access=False, rsp_dma_pending_access=False, tlb_write_access=False, entryhi_write_access=False, entrylo_write_access=False, tlbr_load_access=False, dcache_access=False, memory_mutation_access=False, rsp_instruction_fetch_access=False,rsp_scalar_store_access=False,sp_dma_egress_access=False):
+def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False, extra_sources=(), cache_fill_access=False, cache_operation_access=False, rdram_burst_access=False, rdram_scalar_access=False, fetch_boundary_access=False, pi_dma_access=False, queue_access=False, sp_backing_access=False, pif_backing_access=False, rsp_dmem_access=False, cpu_instruction_access=False, rsp_word_read_access=False, rsp_dma_lifecycle_access=False, rsp_dma_pending_access=False, tlb_write_access=False, entryhi_write_access=False, entrylo_write_access=False, tlbr_load_access=False, dcache_access=False, memory_mutation_access=False, rsp_instruction_fetch_access=False,rsp_scalar_store_access=False,sp_dma_egress_access=False,rdp_command_queue=False):
     if dcache_access: assert cpu_instruction_access and rdram_burst_access
     if cache_fill_access: assert raw_fetch_access and physical_fetch_access
     if cache_operation_access: assert raw_fetch_access and physical_fetch_access
@@ -79,6 +79,8 @@ def build(driver, directory, raw_fetch_access=False, physical_fetch_access=False
         "extra_sources":{str(Path(p).relative_to(ROOT)):hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in extra_sources},
         "fixture_driver":hashlib.sha256(Path(__file__).with_name("driver.cpp").read_bytes()).hexdigest(),
         "recipe":hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+    if rdp_command_queue:
+        inputs["rdp_command_queue_recipe"]=hashlib.sha256((ROOT/"scripts/ares_rdp_queue.py").read_bytes()).hexdigest()
     if memory_mutation_access:
         inputs["memory_mutation_access"]=True
         inputs["memory_mutation_recipe"]=hashlib.sha256((ROOT/"spikes/086-storage-mutation-sensing/prepare.py").read_bytes()).hexdigest()
@@ -220,6 +222,11 @@ struct PlaidQueueDispatchScope {
         unity = (REF / "ares/n64/n64.cpp").read_text()
         assert unity.count("#include <n64/system/system.cpp>") == 1
         unity = unity.replace("#include <n64/system/system.cpp>", f'#include "{output / "system.cpp"}"')
+        if rdp_command_queue:
+            spec = importlib.util.spec_from_file_location("plaid_rdp_queue", ROOT/"scripts/ares_rdp_queue.py")
+            module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+            assert unity.count("#include <n64/rdp/rdp.cpp>") == 1
+            unity = unity.replace("#include <n64/rdp/rdp.cpp>", f'#include "{module.generate(REF, output)}"')
         if pi_dma_access:
             dma = (REF / "ares/n64/pi/dma.cpp").read_text()
             begin = "auto PI::dmaWrite() -> void {"
