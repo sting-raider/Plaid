@@ -43,17 +43,24 @@ def run(exe, cc, T):
                *A.DONE]
     for name in names: program += [name,A.jr(A.ra),A.nop]
     binary=T.build(exe,cc,'vi-dp',program,names)
-    result=subprocess.run([str(binary),'--stop-at','none','--seconds','5','--dump',hex(log),'9'],capture_output=True,text=True,timeout=30)
-    rows=[json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')]
-    stop=next(row for row in rows if 'stop' in row)
-    assert result.returncode==0 and stop['stop']=='exit',(result.stdout,result.stderr)
-    words=next(row['words'] for row in rows if 'dump' in row)
-    assert words[:3]==[0xffffff,0x1f0fff,0xffffff],[hex(w) for w in words]
-    assert words[3] & 1 == 0 and 2 <= words[3] < 0x40 and words[4]==0x77,[hex(w) for w in words]
-    assert words[5:]==[0xffffffff,0,0x66,0x55],[hex(w) for w in words]
-    assert stop['framebuffer']=='00ffffff',stop
+    def check(env=None):
+        result=subprocess.run([str(binary),'--stop-at','none','--seconds','5','--dump',hex(log),'9'],capture_output=True,text=True,timeout=30,env=env)
+        rows=[json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')]
+        stop=next(row for row in rows if 'stop' in row)
+        assert result.returncode==0 and stop['stop']=='exit',(result.stdout,result.stderr)
+        words=next(row['words'] for row in rows if 'dump' in row)
+        assert words[:3]==[0xffffff,0x1f0fff,0xffffff],[hex(w) for w in words]
+        assert words[3] & 1 == 0 and 2 <= words[3] < 0x40 and words[4]==0x77,[hex(w) for w in words]
+        assert words[5:]==[0xffffffff,0,0x66,0x55],[hex(w) for w in words]
+        assert stop['framebuffer']=='00ffffff',stop
+        return result.stdout
+    check()
+    # ADR-0332: guest time from safepoints and idle steps, so a run replays exactly
+    deterministic=dict(os.environ,PLAID_DETERMINISTIC='1000')
+    assert check(deterministic)==check(deterministic)
     print('VI and DP: registers keep ares bits and mirror, the retrace is OS_EVENT_VI near VI_V_INTR, '
-          'a frozen RDP holds the DP event until the thaw, Count reaching Compare is OS_EVENT_COUNTER')
+          'a frozen RDP holds the DP event until the thaw, Count reaching Compare is OS_EVENT_COUNTER; '
+          'a deterministic-clock run replays exactly')
 
 if __name__=='__main__':
     import test_runtime as T

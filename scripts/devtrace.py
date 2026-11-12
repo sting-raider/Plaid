@@ -131,6 +131,7 @@ def main():
     ap.add_argument('--vis', type=int, default=900, help='ares retraces to trace (60 per second)')
     ap.add_argument('--seconds', type=float, help='native run length (default: vis / 60)')
     ap.add_argument('--keep', type=Path, help='directory for both raw traces')
+    ap.add_argument('--deterministic', type=int, metavar='NS', help='native guest time: NS per loop safepoint (ADR-0332)')
     ap.add_argument('--press', action='append', default=[], help='as the native runtime: <buttons>@<vi>:<frames>')
     a = ap.parse_args()
     data = a.rom.read_bytes()
@@ -144,6 +145,8 @@ def main():
     ares_log, native_log = keep / 'ares.trace', keep / 'native.trace'
     env = dict(os.environ, SDL_AUDIODRIVER='dummy', PLAID_TRACE_TASK='1', PLAID_TRACE_VI='1', PLAID_TRACE_RDP='1')
     seconds = a.seconds or a.vis / 60
+    if a.deterministic:
+        env['PLAID_DETERMINISTIC'] = str(a.deterministic)
     exe = oracle()
     presses = [arg for p in a.press for arg in ('--press', p)]
     with native_log.open('w') as err:

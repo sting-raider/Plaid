@@ -9640,3 +9640,22 @@ ares exactly, and the only RDRAM differences are the framebuffer and depth
 clears at 0x360000 and 0x3d0800. The divergent first RDP frame therefore
 comes from the CPU's display list, consistent with a time-driven fade.
 `scripts/test_devtrace.py` covers the press re-keying.
+
+## ADR-0332: A deterministic native clock for differential runs
+
+`PLAID_DETERMINISTIC=<ns>` replaces the host clock with a virtual one:
+`now_ns()` returns it, so Count, VI, AI and the DP clock follow it. Every loop
+header's safepoint (ADR-0159) advances it by `<ns>` and polls VI, AI and the
+time limit, as the pump thread did; `plaid_preempt` stays set so each loop
+header ticks. When `hand_to` finds no runnable thread it steps the clock in
+1 ms increments, capped at the next retrace, delivering events as the pump did,
+until one is runnable. The pump thread is not started. With one baton holder
+at a time and every event raised from guest progress, a run replays exactly;
+`runtime/test_vi_dp.py` runs its VI, DP and Count/Compare program twice this
+way and requires identical output. `devtrace.py --deterministic <ns>` sets it.
+
+Star Fox 64 replays byte-identically (10 virtual seconds in 5-6 s of wall
+time), but parts from ares at the same RDP frame 93 for safepoint costs from
+100 to 3000 ns: the starfield seed comes from Count, and native boot skips
+IPL3's cycles. The mode is for exact native-against-native comparison; it is
+unpaced and not for play.

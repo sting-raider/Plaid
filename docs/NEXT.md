@@ -44,9 +44,12 @@ An outside review (2026-11-12) left these leads; each still needs evidence:
   ares (spike098) gives identical DMEM, IMEM and RSP state: the lowered
   microcode is exact and the display list the CPU built differs, consistent
   with a time-driven fade (first frame at VI 10 natively, 63 in ares). Exact
-  comparison past the first time-dependent state needs a deterministic native
-  clock: Count, VI and AI advanced by retired guest work instead of host time,
-  as a devtrace-only mode. That is the next step for gameplay bugs.
+  comparison with ares past the first Count-seeded state is out of reach
+  without cycle-level timing: `PLAID_DETERMINISTIC` (ADR-0332) made native
+  runs replay exactly, yet Star Fox 64 still parts from ares at frame 93 for
+  every safepoint cost from 100 to 3000 ns. For gameplay bugs, use exact
+  native-against-native runs (a suspect change against its parent, or a
+  recompiler option toggled) and ares's per-second opcode means.
 
 Continue GoldenEye after firmware-free refill discovery (ADR-0318): verify the
 complete fresh build and resolve the checked exception handoff and guest/host
