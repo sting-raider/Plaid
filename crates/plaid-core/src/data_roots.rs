@@ -466,6 +466,8 @@ pub fn discover_address_taken_with_loads(
         .partition(|a| runtime_entries.contains(a));
     // Decoder seeds keep their incoming candidate edges across outer rounds.
     let mut history = None;
+    // Outer rounds only add roots, so the traversal carries across them too.
+    let mut walk = None;
     let rounds = std::time::Instant::now();
     let mut rounds_count = 0usize;
     loop {
@@ -488,6 +490,7 @@ pub fn discover_address_taken_with_loads(
             false,
             history.as_ref(),
             loads,
+            &mut walk,
         )?;
         let before = taken.len();
         let constants_started = std::time::Instant::now();

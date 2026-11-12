@@ -861,6 +861,7 @@ fn run() -> Result<(), String> {
             output,
             runtime @ ..,
         ] if command == "discover" && runtime.len() <= 1 => {
+            let setup_started = std::time::Instant::now();
             let (
                 runtime,
                 evidence,
@@ -882,8 +883,11 @@ fn run() -> Result<(), String> {
                 RomOffset(number(offset)?),
                 range.clone(),
             )?;
+            plaid_core::timing::note("discover.declarations", setup_started.elapsed());
             if let Some((spec, _)) = &declared {
+                let started = std::time::Instant::now();
                 image = plaid_core::declared_loads::compose(rom.bytes(), spec)?.1;
+                plaid_core::timing::note("discover.compose-loads", started.elapsed());
             }
             // overlay tables are found in the image as composed so far
             let mut overlay_evidence = None;
@@ -994,6 +998,7 @@ fn run() -> Result<(), String> {
                     }
                 }
             }
+            plaid_core::timing::note("discover.setup", setup_started.elapsed());
             let roots = if data_roots {
                 plaid_core::data_roots::scan(rom.bytes(), &image)
             } else {

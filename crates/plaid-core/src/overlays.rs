@@ -671,7 +671,11 @@ fn standalone(bytes: &[u8], ram: u32, text: u32) -> bool {
             1 if matches!((w >> 16) & 31, 0..=3 | 16..=19) => pc
                 .wrapping_add(4)
                 .wrapping_add_signed(i32::from(w as i16) * 4),
+            // BC1F/BC1T/BC1FL/BC1TL too: COP1 with rs = 8.
             4..=7 | 20..=23 => pc
+                .wrapping_add(4)
+                .wrapping_add_signed(i32::from(w as i16) * 4),
+            17 if (w >> 21) & 31 == 8 => pc
                 .wrapping_add(4)
                 .wrapping_add_signed(i32::from(w as i16) * 4),
             _ => return true,
@@ -1355,6 +1359,9 @@ mod tests {
         ));
         // a branch into its own data
         assert!(!standalone(&file([0x1000_0002, 0, 0, 0]), ram, 8));
+        // a COP1 branch (bc1t) just before the file, and one in its own text
+        assert!(!standalone(&file([0x4501_fff0, 0, 0, 0]), ram, 16));
+        assert!(standalone(&file([0x4501_0001, 0, 0, 0]), ram, 16));
     }
 
     #[test]
