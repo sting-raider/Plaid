@@ -778,8 +778,13 @@ pub fn direct_cfg_continued(
             // Redo the whole traversal in order, from every entry.
             parallel = false;
             pending.clear();
-            (map, normal, terminal, words, leaders) =
-                (fresh, BTreeSet::new(), BTreeMap::new(), BTreeMap::new(), BTreeSet::new());
+            (map, normal, terminal, words, leaders) = (
+                fresh,
+                BTreeSet::new(),
+                BTreeMap::new(),
+                BTreeMap::new(),
+                BTreeSet::new(),
+            );
             for &pc in entries {
                 map.entries.insert(image.address(pc), evidence.clone());
                 pending.insert(pc);
@@ -949,6 +954,9 @@ mod prefix_tests {
         let fresh = direct_cfg_bounded(rom, &image, &all, 1000, &none).unwrap();
         assert_eq!(continued.map.to_json(), fresh.map.to_json());
         assert_eq!(continued.words, fresh.words);
-        assert!(fresh.map.blocks.len() > first.map.blocks.len(), "C adds blocks");
+        assert!(
+            fresh.map.blocks.len() > first.map.blocks.len(),
+            "C adds blocks"
+        );
     }
 }
