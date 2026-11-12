@@ -41,6 +41,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0330 | `72dd3800` | devtrace aligns ares by best-matching seconds and logs the VI field; Paper Mario and Rogue Squadron intros match ares (640 and 364 identical RDP frames) |
 | 0329 | `e18f32e2` | `scripts/devtrace.py` compares RSP tasks, framebuffers and RDP command frames with headless ares; Star Fox 64's title wash is not a CPU or RSP lowering error |
 | 0328 | `b1a2436b` | The indirect pass validates its map once on entry and exit instead of five times a round; identical maps, Majora's Mask `discover` about 9% faster |
 | 0327 | `583d54af` | The analysis binary uses mimalloc; identical maps, `discover` 23-53% faster (Majora's Mask 96 to 74 s), solve 6.0 to 4.3 s |
