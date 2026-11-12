@@ -23,6 +23,7 @@ def generate(ref, output):
     assert render.count(begin) == 1 and lengths.count(',') == 64
     # The observer sees each frame's command words, hashed as PLAID_TRACE_RDP does natively.
     render = render.replace(begin, '''void (*plaidRdpFrameObserver)(u64 hash, u32 commands, const u32* ops) = nullptr;
+void (*plaidRdpCommandObserver)(const u64* words, u32 count) = nullptr;
 ''' + begin + '{' + lengths + '''
   static u64 hash = 0xcbf29ce484222325ull;
   static u32 count = 0, ops[64] = {};
@@ -38,6 +39,7 @@ def generate(ref, output):
     if(at + commandLength[code] > pending.size()) break;  // completed by the next DPC_END
     for(u32 i = 0; i < commandLength[code]; i++) hash = (hash ^ pending[at + i]) * 0x100000001b3ull;
     count++; ops[code]++;
+    if(plaidRdpCommandObserver) plaidRdpCommandObserver(&pending[at], commandLength[code]);
     if(code == 0x29) {
       if(plaidRdpFrameObserver) plaidRdpFrameObserver(hash, count, ops);
       hash = 0xcbf29ce484222325ull; count = 0; for(auto& o : ops) o = 0;

@@ -23,6 +23,12 @@ def test_compare():
     assert '  second 1: opcode 0f per frame native 0.0 ares 10.0' in report
 
 
+def test_ares_presses():
+    frames = [(3, 1, 10, {}), (3, 2, 12, {}), (3, 3, 15, {})]
+    assert devtrace.ares_presses(['0x1000@12:5', '0x8000@100:2'], frames) == ['0x1000@1:5', '0x8000@3:2']
+
+
 if __name__ == '__main__':
+    test_ares_presses()
     test_compare()
     print('devtrace comparison passed')

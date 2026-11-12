@@ -184,11 +184,11 @@ static u8 rsp_gfx_dirty[PLAID_RAM_SIZE / 4096];
 static void trace_rdp(const u8 *bytes, u32 size) {
   static const u8 length[64] = {1, 1, 1, 1, 1, 1, 1, 1, 4, 6, 12, 14, 12, 14, 20, 22,
                                 [16 ... 35] = 1, 2, 2, [38 ... 63] = 1};
-  static long t = -1;
+  static long t = -1, dump;
   static u64 pending[32], h = 0xcbf29ce484222325ull;
   static u32 count, frames, n, ops[64];
   u32 i, j;
-  if (t < 0) t = getenv("PLAID_TRACE_RDP") ? 1 : 0;
+  if (t < 0) t = getenv("PLAID_TRACE_RDP") ? 1 : 0, dump = getenv("PLAID_TRACE_RDP_DUMP") ? atol(getenv("PLAID_TRACE_RDP_DUMP")) : 0;
   if (!t) return;
   for (i = 0; i + 8 <= size; i += 8) {
     u64 w = 0;
@@ -198,6 +198,11 @@ static void trace_rdp(const u8 *bytes, u32 size) {
     for (j = 0; j < n; j++) h = (h ^ pending[j]) * 0x100000001b3ull;
     count++;
     ops[pending[0] >> 56 & 63]++;
+    if ((long)frames < dump) { /* PLAID_TRACE_RDP_DUMP=N: the words of the first N frames */
+      fprintf(stderr, "cmd %u", frames + 1);
+      for (j = 0; j < n; j++) fprintf(stderr, " %016llx", (unsigned long long)pending[j]);
+      fputc(10, stderr);
+    }
     if ((pending[0] >> 56 & 63) == 0x29) {
       fprintf(stderr, "rdp %u commands %u hash %016llx vi %lu ops", ++frames, count, (unsigned long long)h, vi_count);
       for (j = 0; j < 64; j++) if (ops[j]) fprintf(stderr, " %02x:%u", j, ops[j]);
@@ -1713,7 +1718,10 @@ static int rsp_rom_matches(u32 index, const u8 *bytes, u32 start, u32 size) {
 }
 #endif
 static void rsp_task(void) {
-  int rc, capture = rsp_capture_dir && (long)audio_tasks == rsp_capture;
+  /* --rsp-capture N: audio task N; -N: graphics task N (type 1 at DMEM 0xfc0). */
+  int graphics = rsp.dmem[0xfc3] == 1 && !rsp.dmem[0xfc0] && !rsp.dmem[0xfc1] && !rsp.dmem[0xfc2];
+  int rc, capture = rsp_capture_dir && (rsp_capture < 0 ? graphics && (long)gfx_tasks == -rsp_capture
+                                                      : (long)audio_tasks == rsp_capture);
 #ifdef PLAID_RSP_ROM
   /* Check the submitted bytes before any RSP side effects. The recognized
      boot DMA length takes precedence over the SDK's often ignored ucode_size. */

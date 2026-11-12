@@ -38,8 +38,15 @@ An outside review (2026-11-12) left these leads; each still needs evidence:
   Rogue Squadron's field parity matches ares on every retrace; which buffer
   each field shows depends on the frame's swap timing, so the intro does not
   show the rubber-banding. The reported bugs (also F-Zero X vanishing cars)
-  are in gameplay: give `devtrace.py` the same `--press` script on both sides
-  (an ares controller input observer) and compare a level.
+  are in gameplay; `devtrace.py --press` (ADR-0331) now drives both sides.
+- Mario Party 2 (ADR-0331): RDP frame 1 differs from ares (an extra
+  fade-overlay block, alpha-compare bit), yet `--rsp-capture -1` replayed in
+  ares (spike098) gives identical DMEM, IMEM and RSP state: the lowered
+  microcode is exact and the display list the CPU built differs, consistent
+  with a time-driven fade (first frame at VI 10 natively, 63 in ares). Exact
+  comparison past the first time-dependent state needs a deterministic native
+  clock: Count, VI and AI advanced by retired guest work instead of host time,
+  as a devtrace-only mode. That is the next step for gameplay bugs.
 
 Continue GoldenEye after firmware-free refill discovery (ADR-0318): verify the
 complete fresh build and resolve the checked exception handoff and guest/host
