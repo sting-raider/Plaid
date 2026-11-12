@@ -736,6 +736,9 @@ static void vi_poll(u64 now) {
     next_vi = now - next_vi < VI_PERIOD_NS ? next_vi + VI_PERIOD_NS : now + VI_PERIOD_NS;
     vi_count++;
     vi_retrace_ns = now;
+    { static long t = -1; if (t < 0) t = getenv("PLAID_TRACE_VI") ? 1 : 0;
+      if (t) fprintf(stderr, "vi %lu ns %llu origin %08x count %08x gfx %lu\n", vi_count,
+                     (unsigned long long)now, vi_regs[1], (u32)count_now(), (unsigned long)gfx_tasks); }
     if (!(vi_regs[6] & 1)) vi_field ^= 1; /* an interlaced mode alternates fields */
     post(EV_VI);
 #ifdef PLAID_RT64

@@ -20,6 +20,15 @@ An outside review (2026-11-12) left these leads; each still needs evidence:
   literal equal to a placed-range address would be patched by the verifier;
   carry the source relocation offsets instead. `standalone()` rejects a file
   that calls a fixed helper just below it, and misses COP1 branches.
+- Rogue Squadron rubber-banding (2026-11-12, `PLAID_TRACE_VI=1`): the intro
+  runs at 20 fps, each frame shown for three interlaced fields; the guest's
+  origin order is correct (B1 B0 | A1 A0 A1 | B0 B1 B0). Odd fields point one
+  scanline (0x320) into the buffer. Suspect the renderer's handling of the
+  odd-field origin (stale content on those fields), then uneven retraces
+  (5-28 ms apart instead of 16.7). Needs frame-accurate capture to confirm.
+- Star Fox 64: the title sun washes the whole screen flat grey for ~6 s,
+  identically with HLE and native RSP graphics. Unknown whether that is the
+  reported flash or real behaviour; needs a reference frame.
 - Star Fox 64 panel flash, F-Zero X vanishing cars, Paper Mario partial
   screen, Rogue Squadron rubber-banding: compare against ares at device
   boundaries first (task inputs, VI origin, Count per delivered VI), then
