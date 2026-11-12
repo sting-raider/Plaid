@@ -780,8 +780,19 @@ records each site's kind; none of these traps executes guest instructions.
 
 `PLAID_TRACE_MQ=1` prints each message-queue send and event registration to
 stderr; `PLAID_TRACE_VI=1` prints each retrace: VI number, host time, VI
-origin, Count and graphics tasks so far. Run the game executable directly to
-keep its stderr.
+origin, Count and graphics tasks so far. `PLAID_TRACE_TASK=1` prints each RSP
+task start (type, physical data pointer, size, FNV hash of the data) and
+`PLAID_TRACE_RDP=1` (with `--rsp-gfx`) one line per RDP SYNC_FULL: command
+count, FNV hash of the command words and an opcode histogram. Run the game
+executable directly to keep its stderr.
+
+`scripts/devtrace.py <rom.z64> <exe>` compares those traces with the pinned
+ares core run headless on the same ROM (ADR-0329). Pass the native-RSP window
+build (`target/rt64-shim/Release/<name>-rsp-rt64.exe`, from `native.py --rt64
+--rsp-gfx`) so RDP frames are compared. Native time is wall-clock, so exact
+frame equality ends at the first timing-seeded state; after that, read the
+per-second opcode means. A flag in one second at a scene change is pacing; a
+flag that persists across seconds of one scene is a lead.
 
 ### RT64 window settings
 

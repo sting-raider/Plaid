@@ -9574,3 +9574,35 @@ result the exit check still guards. `tail_cells::analyze`, the borrowing
 wrapper tests use, validates around the pass instead. Majora's Mask `discover`
 is 34.1/36.3 s before and 31.4/32.9 s after (interleaved runs), with an
 identical map.
+
+## ADR-0329: Differential device-boundary traces against headless ares
+
+`scripts/devtrace.py <rom> <exe>` runs a native build and the pinned ares core
+on the same ROM and compares what reaches the devices: every RSP task start
+(type, physical data pointer, size, FNV-1a of up to 64 KiB of its data), every
+retrace's framebuffer origin, and every RDP frame (the command words up to each
+SYNC_FULL: count, FNV-1a, opcode histogram). Natively `PLAID_TRACE_TASK`,
+`PLAID_TRACE_VI` and `PLAID_TRACE_RDP` print them; `scripts/ares_trace.cpp`
+prints the same lines from ares, HLE-booted as the analysis oracle is (ADR-0316)
+with a neutral gamepad, about 40x real time. Yielded-task resumptions are
+skipped in ares because the native runtime never yields.
+
+Headless ares has no Vulkan renderer, and its software rasterizer reads a
+command split across two DPC_END writes past END; Star Fox 64's microcode then
+waits forever for DPC_CURRENT to reach END. The oracle build option
+`rdp_command_queue` (recipe `scripts/ares_rdp_queue.py`) gives `RDP::render`
+the Vulkan path's accounting from the same pinned file: consume to END, carry a
+partial command, raise DP on SYNC_FULL, draw nothing. The RDP then writes no
+framebuffer bytes, so a game that reads its framebuffer back can diverge. The
+build options otherwise equal `ares_boot.build_oracle`'s because the HLE boot
+table patches serialized state by offset. Adding the option changed
+`spikes/003-ares-oracle/run.py`, which keys the replay and analysis caches, so
+the first build after this landing re-runs analysis once.
+
+Native time is wall-clock, so exact equality ends at the first timing-seeded
+state. The report gives the first divergent and first never-seen native frame,
+then per-second opcode means (both VI clocks are 60 Hz; the last second is
+skipped). On Star Fox 64 (1500 VIs) the first 93 RDP frames are identical and
+every steady second matches; flags appear only in the seconds of scene changes,
+where native trails by a few frames. The title's grey wash is therefore not a
+CPU or RSP lowering error. `scripts/test_devtrace.py` covers the comparison.

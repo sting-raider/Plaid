@@ -27,12 +27,16 @@ An outside review (2026-11-12) left these leads; each still needs evidence:
   odd-field origin (stale content on those fields), then uneven retraces
   (5-28 ms apart instead of 16.7). Needs frame-accurate capture to confirm.
 - Star Fox 64: the title sun washes the whole screen flat grey for ~6 s,
-  identically with HLE and native RSP graphics. Unknown whether that is the
-  reported flash or real behaviour; needs a reference frame.
-- Star Fox 64 panel flash, F-Zero X vanishing cars, Paper Mario partial
-  screen, Rogue Squadron rubber-banding: compare against ares at device
-  boundaries first (task inputs, VI origin, Count per delivered VI), then
-  trace the first mismatching interval (spikes/098-rsp-task, 096-native-slice).
+  identically with HLE and native RSP graphics. `scripts/devtrace.py`
+  (ADR-0329) shows the lowered CPU and RSP give the RDP the same commands as
+  ares through 25 s: the first 93 frames hash-identical, then the same
+  per-second opcode means (the starfield is timing-seeded). So the wash is in
+  RT64's rendering of a correct stream, or real; compare a rendered frame next.
+- F-Zero X vanishing cars, Paper Mario partial screen, Rogue Squadron
+  rubber-banding: run `scripts/devtrace.py` on each native-RSP build; a
+  persistent per-second opcode shortfall localizes a recompiler bug to a scene,
+  and the first never-seen frame to a VI. Rogue Squadron's custom microcode and
+  interlaced origins are the first test of the framebuffer comparison.
 
 Continue GoldenEye after firmware-free refill discovery (ADR-0318): verify the
 complete fresh build and resolve the checked exception handoff and guest/host

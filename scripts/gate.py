@@ -109,7 +109,7 @@ def main():
              ('clippy', [cargo, 'clippy', '--locked', '--workspace', '--all-targets', '--', '-D', 'warnings']),
              ('cargo test', [cargo, 'test', '--locked', '--workspace'])]
     if not a.quick:
-        steps += [('test_cli', [py, 'scripts/test_cli.py']), ('test_gate', [py, 'scripts/test_gate.py']),
+        steps += [('test_cli', [py, 'scripts/test_cli.py']), ('test_gate', [py, 'scripts/test_gate.py']), ('test_devtrace', [py, 'scripts/test_devtrace.py']),
                   ('progress', [py, 'tools/progress.py', '--check'])]
         if a.runtime or (a.runtime is None and touches_runtime()):
             steps.append(('test_runtime', [py, 'runtime/test_runtime.py']))

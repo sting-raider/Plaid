@@ -160,6 +160,7 @@ u32 plaid_gfx_input_player(int player);
 u32 plaid_gfx_connected(void); /* buttons << 16 | stick x << 8 | stick y */
 void plaid_audio_play(const u8 *samples, u32 bytes, u32 rate); /* big-endian s16 stereo */
 #endif
+static unsigned long vi_count;
 #ifdef PLAID_RSP
 /* RSP tasks run lowered microcode (ADR-0169): the IMEM texts that
    runtime/rsp_texts.py lists, null-terminated. */
@@ -177,15 +178,46 @@ static int rsp_graphics;
 static int rsp_executing; /* native RSP tasks run synchronously, without CPU execution */
 #ifdef PLAID_RT64
 static u8 rsp_gfx_dirty[PLAID_RAM_SIZE / 4096];
+/* PLAID_TRACE_RDP: one line per SYNC_FULL with the FNV hash of the 64-bit
+   command words since the last, as scripts/ares_rdp_queue.py prints them in
+   ares (ADR-0329). Word counts per command are ares vulkan.cpp's (ISC). */
+static void trace_rdp(const u8 *bytes, u32 size) {
+  static const u8 length[64] = {1, 1, 1, 1, 1, 1, 1, 1, 4, 6, 12, 14, 12, 14, 20, 22,
+                                [16 ... 35] = 1, 2, 2, [38 ... 63] = 1};
+  static long t = -1;
+  static u64 pending[32], h = 0xcbf29ce484222325ull;
+  static u32 count, frames, n, ops[64];
+  u32 i, j;
+  if (t < 0) t = getenv("PLAID_TRACE_RDP") ? 1 : 0;
+  if (!t) return;
+  for (i = 0; i + 8 <= size; i += 8) {
+    u64 w = 0;
+    for (j = 0; j < 8; j++) w = w << 8 | bytes[i + j];
+    pending[n++] = w;
+    if (n < length[pending[0] >> 56 & 63]) continue;
+    for (j = 0; j < n; j++) h = (h ^ pending[j]) * 0x100000001b3ull;
+    count++;
+    ops[pending[0] >> 56 & 63]++;
+    if ((pending[0] >> 56 & 63) == 0x29) {
+      fprintf(stderr, "rdp %u commands %u hash %016llx vi %lu ops", ++frames, count, (unsigned long long)h, vi_count);
+      for (j = 0; j < 64; j++) if (ops[j]) fprintf(stderr, " %02x:%u", j, ops[j]);
+      fputc(10, stderr);
+      h = 0xcbf29ce484222325ull; count = 0; memset(ops, 0, sizeof ops);
+    }
+    n = 0;
+  }
+}
 static int rsp_dpc_consume(u32 current, u32 size, int dmem) {
   if (dmem) {
     u8 commands[4096];
     u32 i;
     if (size > sizeof commands) return 1;
     for (i = 0; i < size; i++) commands[i] = rsp.dmem[(current + i) & 0xfff];
+    trace_rdp(commands, size);
     if (plaid_gfx_rdp(S->ram, commands, size, rsp_gfx_dirty, gfx_writeback, S)) return 1;
   } else {
     if (current > PLAID_RAM_SIZE || size > PLAID_RAM_SIZE - current) return 1;
+    trace_rdp(S->ram + current, size);
     if (plaid_gfx_rdp(S->ram, S->ram + current, size, rsp_gfx_dirty, gfx_writeback, S)) return 1;
   }
   memset(rsp_gfx_dirty, 0, sizeof rsp_gfx_dirty);
@@ -204,7 +236,7 @@ static struct { u32 len[2], count, on, rate; u64 start_ns; u32 addr; } ai = {{0,
 static void ai_update(void);
 static u32 ai_length(void);
 static void ai_submit(u32 p, u32 n);
-static unsigned long vi_count, gfx_tasks, audio_tasks, dma_count;
+static unsigned long gfx_tasks, audio_tasks, dma_count;
 static long stop_gfx = 1; /* stop after this many graphics tasks (0: never) */
 static double run_seconds = 0;
 static u32 dump_at, dump_words;
@@ -1780,8 +1812,21 @@ static int dp_frozen(void) {
 }
 /* Graphics tasks go to the renderer (RT64); with PLAID_RSP other tasks run
    their lowered microcode, otherwise they complete at once. */
+/* PLAID_TRACE_TASK: the device-boundary line scripts/ares_trace.cpp prints for
+   the same task (ADR-0329), FNV-1a over the bytes the task's data names. */
+static void trace_task(u32 task, u32 type) {
+  static long t = -1;
+  u32 data = rd32(task + 0x30) & 0x1fffffffu, size = rd32(task + 0x34), span, i;
+  u64 h = 0xcbf29ce484222325ull;
+  if (t < 0) t = getenv("PLAID_TRACE_TASK") ? 1 : 0;
+  if (!t) return;
+  span = !size ? 1024 : size < 65536 ? size : 65536;
+  for (i = 0; i < span && data + i < PLAID_RAM_SIZE; i++) h = (h ^ S->ram[data + i]) * 0x100000001b3ull;
+  fprintf(stderr, "task %u data %08x size %u hash %016llx vi %lu\n", type, data, size, (unsigned long long)h, vi_count);
+}
 RT(osSpTaskStartGo) {
   u32 task = arg(0), type = rd32(task);
+  trace_task(task, type);
   if (type == 1) {
     gfx_tasks++;
     sp_unknown = 1;
