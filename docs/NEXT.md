@@ -20,12 +20,8 @@ An outside review (2026-11-12) left these leads; each still needs evidence:
   literal equal to a placed-range address would be patched by the verifier;
   carry the source relocation offsets instead. `standalone()` rejects a file
   that calls a fixed helper just below it, and misses COP1 branches.
-- Rogue Squadron rubber-banding (2026-11-12, `PLAID_TRACE_VI=1`): the intro
-  runs at 20 fps, each frame shown for three interlaced fields; the guest's
-  origin order is correct (B1 B0 | A1 A0 A1 | B0 B1 B0). Odd fields point one
-  scanline (0x320) into the buffer. Suspect the renderer's handling of the
-  odd-field origin (stale content on those fields), then uneven retraces
-  (5-28 ms apart instead of 16.7). Needs frame-accurate capture to confirm.
+- Rogue Squadron rubber-banding: fixed (ADR-0335). RT64 never saw the odd
+  field, so odd-field origins showed stale memory.
 - Star Fox 64's title-sun grey wash is the game's own (2026-11-12, closed):
   each glare frame ends with a full-screen rectangle of prim colour
   (208,208,208) at alpha 0x08-0x3c, blended over the black clear, and the

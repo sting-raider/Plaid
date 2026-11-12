@@ -140,6 +140,7 @@ static int load_file(const char *path, u8 *bytes, size_t size);
 static struct timespec t0;
 static u64 time_base; /* osSetTime offset in count ticks */
 static u32 vi_regs[14], vi_field; /* VI registers as the guest wrote them (ADR-0199) */
+static u32 origin_field; /* the field VI_V_CURRENT showed when the guest last wrote the origin */
 static u64 vi_retrace_ns;
 #define VI_PERIOD_NS 16683350ull /* NTSC: 60000/1001 Hz */
 static u64 next_vi = VI_PERIOD_NS;
@@ -801,7 +802,15 @@ static void vi_poll(u64 now) {
     if (!(vi_regs[6] & 1)) vi_field ^= 1; /* an interlaced mode alternates fields */
     post(EV_VI);
 #ifdef PLAID_RT64
-    if (vi_regs[0] & 3) plaid_gfx_screen(vi_regs); /* a color depth: video on */
+    if (vi_regs[0] & 3) { /* a color depth: video on */
+      /* RT64 reads the field from VI_V_CURRENT to find an interlaced origin's
+         buffer (one row in, or two on the odd field): give it the field
+         libultra chose the origin for (ADR-0335). */
+      u32 regs[14];
+      memcpy(regs, vi_regs, sizeof regs);
+      regs[4] = origin_field;
+      plaid_gfx_screen(regs);
+    }
     if (plaid_gfx_closed()) finish(0, "window closed");
 #endif
   }
@@ -1495,7 +1504,7 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
     u32 r = (p & 0x3fu) >> 2;
     if (!write) *v = r == 4 ? vi_line() : r < 14 ? vi_regs[r] : 0;
     else if (r == 4) pending[EV_VI] = 0; /* VI_V_CURRENT: acknowledges the interrupt */
-    else if (r < 14) vi_regs[r] = (u32)*v & vi_mask[r];
+    else if (r < 14) { vi_regs[r] = (u32)*v & vi_mask[r]; if (r == 1) origin_field = vi_line() & 1; }
     return 0;
   }
   if (p >= 0x04500000u && p < 0x04600000u) { /* AI registers, as ares ai/io.cpp */
