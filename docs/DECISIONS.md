@@ -9539,3 +9539,27 @@ byte-identical against the previous binary on five games:
 
 `standalone()` (ADR-0319) also treats COP1 branches as transfers, and
 `discover` reports its setup time (`discover.setup`).
+
+## ADR-0327: The analysis binary uses mimalloc
+
+Discovery and the solver build maps of hundreds of thousands of blocks and
+edges, each carrying owned image and evidence strings, every round. Timers
+showed `cfg.clone` and `cfg.partition` costing several times the CFG walk
+itself, and neither sharing the image string (`Arc<str>`) nor bulk-building
+the partitioned sets changed that: the cost was the Windows system heap.
+`plaid` now sets `mimalloc` (MIT, `mimalloc` 0.1 / `libmimalloc-sys`) as its
+global allocator; the engine bundle lists it with the other crate licenses
+from cargo metadata. The indirect-analysis timers now measure their own
+segment (`indirect.tables` and `indirect.index2` were cumulative from the
+tail-cell pass).
+
+Final `discover` maps and the Majora's Mask residual solve are byte-identical
+to the previous binary (single runs, same machine):
+
+| Step | Before | After |
+|---|---:|---:|
+| Majora's Mask discover | 96 s | 74 s |
+| Mario Party 2 discover | 37 s | 17 s |
+| Star Fox 64 discover | 16 s | 11 s |
+| Banjo-Kazooie discover | 11 s | 8 s |
+| Majora's Mask solve | 6.0 s | 4.3 s |

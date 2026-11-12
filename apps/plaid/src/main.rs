@@ -1,3 +1,7 @@
+// The analysis makes millions of small allocations; the system heap dominates them.
+#[global_allocator]
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 mod infer_calls;
 mod rsp_rom;
 mod runtime_bindings;
