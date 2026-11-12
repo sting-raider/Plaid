@@ -1469,6 +1469,6 @@ pub(crate) fn analyze(mut out: ProgramMap, image: &CodeImage) -> Result<ProgramM
             });
         }
     }
-    out.validate()?;
+    // `indirect::analyze_indirect_owned`, the only caller, validates the result.
     Ok(out)
 }

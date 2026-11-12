@@ -253,12 +253,15 @@ pub fn source_cell_range_in(
 /// Record source-identified candidates. Unmapped code remains a candidate but
 /// cannot receive a closed proof; absence of stores never proves cell stability.
 pub fn analyze(map: &ProgramMap, image: &CodeImage) -> Result<ProgramMap, String> {
-    analyze_owned(map.clone(), image)
+    map.validate()?;
+    let out = analyze_owned(map.clone(), image)?;
+    out.validate()?;
+    Ok(out)
 }
 
-/// [`analyze`] on a map the caller hands over, so no copy is made.
+/// [`analyze`] on a map the caller hands over, so no copy is made. The caller
+/// validates the map before and after (`indirect::analyze_indirect_owned` does).
 pub fn analyze_owned(mut out: ProgramMap, image: &CodeImage) -> Result<ProgramMap, String> {
-    out.validate()?;
     let mut produced = BTreeSet::new();
     let found = {
         let index = MapIndex::new(&out);
@@ -405,7 +408,6 @@ pub fn analyze_owned(mut out: ProgramMap, image: &CodeImage) -> Result<ProgramMa
         }
         out.indirect_sites.insert(site);
     }
-    out.validate()?;
     Ok(out)
 }
 
