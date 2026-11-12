@@ -780,7 +780,7 @@ records each site's kind; none of these traps executes guest instructions.
 
 `PLAID_TRACE_MQ=1` prints each message-queue send and event registration to
 stderr; `PLAID_TRACE_VI=1` prints each retrace: VI number, host time, VI
-origin, Count and graphics tasks so far. `PLAID_TRACE_TASK=1` prints each RSP
+origin, Count, graphics tasks so far, field and VI_CONTROL. `PLAID_TRACE_TASK=1` prints each RSP
 task start (type, physical data pointer, size, FNV hash of the data) and
 `PLAID_TRACE_RDP=1` (with `--rsp-gfx`) one line per RDP SYNC_FULL: command
 count, FNV hash of the command words and an opcode histogram. Run the game
