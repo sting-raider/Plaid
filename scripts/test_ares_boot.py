@@ -185,6 +185,21 @@ def replay_cache_contract():
             capture_many(rom, [0x80000400], covered=[(0, 4)])
             rom.write_bytes(bytes(0xfff) + b'')
             assert capture_many(rom, [0x80000400]) == [{'entry': 0x80000400, 'n': 4}] and len(calls) == 4
+            # A replay that met no uncovered fetch answers any request covering more.
+            found = {}
+            ares_boot.replay = lambda rom, data, entries, exact, covered, *rest: calls.append(covered) or [
+                {'uncovered_entry': found.get(covered[0][0]), 'n': len(calls)}]
+            sites = dict(sites=[0x80000500], bindings=[])
+            first = capture_many(rom, [0x80000400], covered=[(0x100, 0x200)], **sites)
+            assert capture_many(rom, [0x80000400], covered=[(0x0, 0x100), (0x100, 0x300)], **sites) == first
+            assert len(calls) == 5
+            capture_many(rom, [0x80000400], covered=[(0x100, 0x1f0)], **sites)  # less coverage
+            capture_many(rom, [0x80000400], covered=[(0x0, 0x300)], sites=[0x80000504], bindings=[])
+            assert len(calls) == 7
+            found[0x400] = 0x80000600  # an uncovered fetch is never reused
+            capture_many(rom, [0x80000400], covered=[(0x400, 0x500)], **sites)
+            capture_many(rom, [0x80000400], covered=[(0x400, 0x600)], **sites)
+            assert len(calls) == 9
     finally:
         ares_boot.replay = saved
         if saved_root is None:

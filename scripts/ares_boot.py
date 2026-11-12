@@ -180,19 +180,45 @@ def capture_many(rom, entries, exact=False, covered=None, sites=None, bindings=N
         raise ValueError('boot capture requires a word-aligned ROM of 4 KiB..64 MiB')
     # A replay is deterministic in its sources and arguments, so an identical
     # request reuses the recorded results instead of launching ares (and WSL).
-    key = hashlib.sha256(json.dumps([REV, [hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in ORACLE_SOURCES],
-                                     hashlib.sha256(data).hexdigest(), entries, exact, covered, sites, bindings, budget,
-                                     pif_identity(pif_rom())]).encode()).hexdigest()
-    cached = Path(os.environ.get('PLAID_REPLAY_CACHE', Path.home() / '.cache/plaid/ares-replay')) / f'{key}.json'
+    request = [REV, [hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in ORACLE_SOURCES],
+               hashlib.sha256(data).hexdigest(), entries, exact, covered, sites, bindings, budget,
+               pif_identity(pif_rom())]
+    key = hashlib.sha256(json.dumps(request).encode()).hexdigest()
+    root = Path(os.environ.get('PLAID_REPLAY_CACHE', Path.home() / '.cache/plaid/ares-replay'))
+    cached = root / f'{key}.json'
     if cached.exists():
         return json.loads(cached.read_text())
+    # Coverage only decides which fetch counts as uncovered (ares_boot.cpp), so a
+    # replay that found none with fewer covered ranges ran exactly as this one will.
+    request[5] = None
+    family = root / 'covered' / (hashlib.sha256(json.dumps(request).encode()).hexdigest() + '.json')
+    known = json.loads(family.read_text()) if covered is not None and family.exists() else []
+    for old, old_key in known:
+        if covers(covered, old) and (root / f'{old_key}.json').exists():
+            return json.loads((root / f'{old_key}.json').read_text())
     # JSON-normalized, exactly as a cache hit or the WSL route returns it.
     results = json.loads(json.dumps(replay(rom, data, entries, exact, covered, sites, bindings, budget)))
     cached.parent.mkdir(parents=True, exist_ok=True)
     partial = cached.with_name(f'{key}.{os.getpid()}.tmp')
     partial.write_text(json.dumps(results))
     partial.replace(cached)
+    if covered is not None and all('uncovered_entry' in r and r['uncovered_entry'] is None for r in results):
+        family.parent.mkdir(exist_ok=True)
+        partial = family.with_name(f'{family.stem}.{os.getpid()}.tmp')
+        partial.write_text(json.dumps(known + [[covered, key]]))
+        partial.replace(family)
     return results
+
+
+def covers(ranges, inner):
+    """Whether the address ranges `ranges` contain every range of `inner`."""
+    merged = []
+    for lo, hi in sorted(ranges):
+        if merged and lo <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+    return all(any(a <= lo and hi <= b for a, b in merged) for lo, hi in inner)
 
 
 def replay(rom, data, entries, exact, covered, sites, bindings, budget):
