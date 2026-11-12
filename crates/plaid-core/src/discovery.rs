@@ -674,6 +674,7 @@ pub fn direct_cfg_continued(
     let mut terminal = BTreeMap::new();
     let mut words = BTreeMap::new();
     let mut seen = BTreeSet::new();
+    let walk_started = std::time::Instant::now();
     let fresh = map.clone();
     let all: BTreeSet<GuestAddr> = entries.iter().copied().collect();
     if let Some(w) = previous.filter(|w| {
@@ -811,6 +812,8 @@ pub fn direct_cfg_continued(
             &mut pending,
         );
     }
+    crate::timing::note("cfg.walk", walk_started.elapsed());
+    let clone_started = std::time::Instant::now();
     let walk = parallel.then(|| Walk {
         image: image.base.clone(),
         runtime: runtime.clone(),
@@ -823,6 +826,8 @@ pub fn direct_cfg_continued(
         leaders: leaders.clone(),
         seen,
     });
+    crate::timing::note("cfg.clone", clone_started.elapsed());
+    let partition_started = std::time::Instant::now();
     // Partition after traversal, so a newly found target splits earlier linear code.
     for &leader in &leaders {
         if !normal.contains(&leader) {
@@ -858,7 +863,10 @@ pub fn direct_cfg_continued(
             evidence: evidence.clone(),
         });
     }
+    crate::timing::note("cfg.partition", partition_started.elapsed());
+    let validate_started = std::time::Instant::now();
     map.validate()?;
+    crate::timing::note("cfg.validate", validate_started.elapsed());
     Ok((Discovery { map, words }, walk))
 }
 
