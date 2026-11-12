@@ -9659,3 +9659,27 @@ time), but parts from ares at the same RDP frame 93 for safepoint costs from
 100 to 3000 ns: the starfield seed comes from Count, and native boot skips
 IPL3's cycles. The mode is for exact native-against-native comparison; it is
 unpaced and not for play.
+
+## ADR-0333: Validate native builds on the virtual clock
+
+`scripts/native.py` now runs its validation (and so every gate game control)
+with `PLAID_DETERMINISTIC=1000` unless `--realtime` is given. The virtual clock
+skips the time every guest thread spends waiting, so the run lasts as long as
+the guest's own work: Star Fox 64's 60 s run takes 16.6 s headless and 25.7 s
+in the RT64 window (was 60.0 and 60.7 s), Paper Mario's 30 s takes 5.5 s, and
+the full gate fell from about 400 s to 174 s. Each run replays exactly, and a
+loaded host can no longer starve retraces, so the gate's VI threshold no
+longer needs its solo retry for Majora's Mask (every control reached VI 1798).
+1000 ns per loop iteration (about 90 guest instructions) gave Star Fox 64
+the same frame count as real time (1810 against 1807 graphics tasks); 100 ns
+ran slower than real time and 30000 ns dropped frames. Playing a game still
+uses the wall clock.
+
+The first gate on the virtual clock hung five games: `deliver_pending()`
+cleared `plaid_preempt`, and runtime calls other than the safepoint reach
+it (osRecvMesg, osYieldThread, __osRestoreInt, register reads). A guest loop
+that polls through such a call then stopped ticking the clock, so its
+deadline never came (Paper Mario polled PI_STATUS at 8006b6fc). On the
+virtual clock `deliver_pending()` now leaves it set. `runtime/test_vi_dp.py`
+polls an empty queue without blocking until a retrace message arrives; it
+hangs without the fix.

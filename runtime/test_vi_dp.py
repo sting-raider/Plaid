@@ -13,6 +13,7 @@ def run(exe, cc, T):
     names = ['osCreateThread','osStartThread','osCreateMesgQueue','osSetEventMesg','osSpTaskStartGo','osRecvMesg',
              'osGetCount','__osSetCompare']
     cq, cqbuf = 0x800020a0, 0x800020c0
+    pq, pqbuf = 0x80002f00, 0x80002f20
     def read(address, offset):
         return [*T.li(A.t0,address),A.lw(A.t1,0,A.t0),A.sw(A.t1,offset,A.gp)]
     program = [*T.li(A.sp,0x80007f00),
@@ -40,18 +41,22 @@ def run(exe, cc, T):
                *T.call('osCreateMesgQueue',cq,cqbuf,4),*T.call('osSetEventMesg',3,cq,0x55),
                *T.call('osGetCount'),*T.li(A.t0,0x20000),A.addu(A.a0,A.v0,A.t0),A.jal('__osSetCompare'),A.nop,
                *T.call('osRecvMesg',cq,slot,1),*read(slot,32),
+               # polling a queue without blocking still lets the next retrace come,
+               # on the virtual clock too (its calls deliver events between ticks)
+               *T.call('osCreateMesgQueue',pq,pqbuf,4),*T.call('osSetEventMesg',7,pq,0x88),
+               'poll',*T.call('osRecvMesg',pq,slot,0),A.bne(A.v0,A.zero,'poll'),A.nop,*read(slot,36),
                *A.DONE]
     for name in names: program += [name,A.jr(A.ra),A.nop]
     binary=T.build(exe,cc,'vi-dp',program,names)
     def check(env=None):
-        result=subprocess.run([str(binary),'--stop-at','none','--seconds','5','--dump',hex(log),'9'],capture_output=True,text=True,timeout=30,env=env)
+        result=subprocess.run([str(binary),'--stop-at','none','--seconds','5','--dump',hex(log),'10'],capture_output=True,text=True,timeout=30,env=env)
         rows=[json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')]
         stop=next(row for row in rows if 'stop' in row)
         assert result.returncode==0 and stop['stop']=='exit',(result.stdout,result.stderr)
         words=next(row['words'] for row in rows if 'dump' in row)
         assert words[:3]==[0xffffff,0x1f0fff,0xffffff],[hex(w) for w in words]
         assert words[3] & 1 == 0 and 2 <= words[3] < 0x40 and words[4]==0x77,[hex(w) for w in words]
-        assert words[5:]==[0xffffffff,0,0x66,0x55],[hex(w) for w in words]
+        assert words[5:]==[0xffffffff,0,0x66,0x55,0x88],[hex(w) for w in words]
         assert stop['framebuffer']=='00ffffff',stop
         return result.stdout
     check()

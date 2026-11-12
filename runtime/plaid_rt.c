@@ -738,7 +738,7 @@ static void pi_complete(u32 mq, u32 msg) {
 static void deliver_pending(void) {
   int ev, i;
   u64 c;
-  plaid_preempt = 0;
+  plaid_preempt = deterministic != 0; /* on the virtual clock every loop header ticks */
   for (ev = 0; ev < EV_COUNT; ev++)
     while (pending[ev] && event_eligible(ev)) {
       if (ev == EV_SI && si_due && si_finish()) finish(1, "SI transfer outside the declared Joybus subset");

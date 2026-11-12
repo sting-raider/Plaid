@@ -807,6 +807,8 @@ thread waits, with no host pump thread (ADR-0332). The same build and input
 then give byte-identical traces, so two native builds can be compared exactly.
 It does not reproduce ares's Count values, so ares comparisons still part at
 the first Count-seeded state. Runs are unpaced (often faster than real time).
+`scripts/native.py` validates on this clock (1000 ns) unless `--realtime`
+is given (ADR-0333).
 
 ### RT64 window settings
 
