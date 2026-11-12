@@ -1,6 +1,7 @@
 """Differential device-boundary trace: native build against pinned ares (ADR-0329).
 
     python scripts/devtrace.py <rom.z64> <native exe> [--vis N] [--seconds S] [--keep DIR]
+                               [--press <buttons>@<vi>:<frames>]...
 
 Both sides log every RSP task start (type, physical data pointer, size, FNV
 hash of the data bytes), every retrace's framebuffer origin, and every RDP
@@ -10,6 +11,9 @@ come from its RSP. Native VIs are paced by wall time and ares VIs by guest
 time, so streams are compared in order and by membership, not by VI number:
 a native frame whose commands ares never produced is the lead to chase.
 Audio tasks size themselves to elapsed time and diverge early by design.
+Presses use the native runtime's syntax. Native runs first; each press then
+starts in ares after the same number of RDP frames native had finished by its
+VI, so it lands on the same game frame while the frames still match.
 Traces derive from game data and stay local; only the summary is printed.
 """
 import argparse
@@ -110,6 +114,16 @@ def compare(native, ares):
     return out
 
 
+def ares_presses(presses, native_frames):
+    """Re-key `<buttons>@<vi>:<frames>` from native VIs to native RDP frames done."""
+    out = []
+    for press in presses:
+        buttons, rest = press.split('@')
+        at, length = (int(x, 0) for x in rest.split(':'))
+        out.append(f'{buttons}@{sum(f[2] < at for f in native_frames)}:{length}')
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('rom', type=Path)
@@ -117,6 +131,7 @@ def main():
     ap.add_argument('--vis', type=int, default=900, help='ares retraces to trace (60 per second)')
     ap.add_argument('--seconds', type=float, help='native run length (default: vis / 60)')
     ap.add_argument('--keep', type=Path, help='directory for both raw traces')
+    ap.add_argument('--press', action='append', default=[], help='as the native runtime: <buttons>@<vi>:<frames>')
     a = ap.parse_args()
     data = a.rom.read_bytes()
     if data[:4] != bytes.fromhex('80371240'):
@@ -129,12 +144,14 @@ def main():
     ares_log, native_log = keep / 'ares.trace', keep / 'native.trace'
     env = dict(os.environ, SDL_AUDIODRIVER='dummy', PLAID_TRACE_TASK='1', PLAID_TRACE_VI='1', PLAID_TRACE_RDP='1')
     seconds = a.seconds or a.vis / 60
+    exe = oracle()
+    presses = [arg for p in a.press for arg in ('--press', p)]
     with native_log.open('w') as err:
-        native = subprocess.Popen([str(a.exe), '--rom', str(a.rom), '--stop-at', 'none', '--seconds', str(seconds), '--rsp-gfx'],
-                                  stdout=subprocess.DEVNULL, stderr=err, env=env)
-        subprocess.run([str(oracle()), str(a.rom), 'CIC-NUS-' + cic, str(a.vis), str(ares_log)], check=True)
-        native.wait()
-    for line in compare(parse(native_log.read_text(errors='replace')), parse(ares_log.read_text())):
+        subprocess.run([str(a.exe), '--rom', str(a.rom), '--stop-at', 'none', '--seconds', str(seconds), '--rsp-gfx', *presses],
+                       stdout=subprocess.DEVNULL, stderr=err, env=env)
+    native = parse(native_log.read_text(errors='replace'))
+    subprocess.run([str(exe), str(a.rom), 'CIC-NUS-' + cic, str(a.vis), str(ares_log), *ares_presses(a.press, native[2])], check=True)
+    for line in compare(native, parse(ares_log.read_text())):
         print(line)
     print('traces in', keep)
 

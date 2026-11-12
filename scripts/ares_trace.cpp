@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: ISC
  * Analysis-only device-boundary trace from the pinned ares core (ADR-0329):
- *   ares_trace <rom> <CIC-NUS-xxxx> <vis> <out>
+ *   ares_trace <rom> <CIC-NUS-xxxx> <vis> <out> [<buttons>@<rdp frame>:<vis>]...
+ * A press holds OSContPad button bits on port 1 for <vis> retraces from the
+ * retrace after RDP frame <rdp frame> completes, so presses land on the same
+ * game frame as a native --press run while frames still match.
  * One line per retrace (`vi <n> origin <x>`), per RSP task start
  * (`task <type> data <phys> size <n> hash <fnv> vi <n>`) and per RDP
  * SYNC_FULL (`rdp <n> commands <n> hash <fnv> vi <n>`), the formats
@@ -14,9 +17,30 @@
 #include <vector>
 #include "ares_hle_boot.hpp"
 
-namespace ares::Nintendo64 { extern void (*plaidRdpFrameObserver)(u64 hash, u32 commands, const u32* ops); }
+namespace ares::Nintendo64 {
+  extern void (*plaidRdpFrameObserver)(u64 hash, u32 commands, const u32* ops);
+  extern void (*plaidRdpCommandObserver)(const u64* words, u32 count);
+}
 static FILE* out;
 static u32 vis = 0, frames = 0;
+struct Press { u32 buttons, frame, length, start = 0; bool started = false; };
+static std::vector<Press> presses;
+// libultra OSContPad bits, as the native runtime's --press takes them.
+static u32 held() {
+  u32 b = 0;
+  for(auto& p : presses) if(p.started && vis - p.start < p.length) b |= p.buttons;
+  return b;
+}
+struct Scripted : Headless {
+  auto input(Node::Input::Input node) -> void override {
+    static const std::pair<const char*, u32> bits[] = {{"A", 0x8000}, {"B", 0x4000}, {"Z", 0x2000},
+      {"Start", 0x1000}, {"Up", 0x0800}, {"Down", 0x0400}, {"Left", 0x0200}, {"Right", 0x0100},
+      {"L", 0x0020}, {"R", 0x0010}, {"C-Up", 0x0008}, {"C-Down", 0x0004}, {"C-Left", 0x0002}, {"C-Right", 0x0001}};
+    auto button = node->cast<Node::Input::Button>();
+    if(!button) return;
+    for(auto& [name, bit] : bits) if(node->name() == name) button->setValue(held() & bit);
+  }
+};
 
 // FNV-1a over the task's data bytes; the native runtime hashes the same span.
 static u64 hashRdram(u32 p, u32 n) {
@@ -27,14 +51,19 @@ static u64 hashRdram(u32 p, u32 n) {
 }
 
 int main(int argc, char** argv) {
-  if(argc != 5) return 2;
+  if(argc < 5) return 2;
+  for(int i = 5; i < argc; i++) {
+    Press p;
+    if(std::sscanf(argv[i], "%i@%u:%u", (int*)&p.buttons, &p.frame, &p.length) != 3) return 2;
+    presses.push_back(p);
+  }
   auto bytes = nall::file::read(argv[1]);
   u32 limit = std::strtoul(argv[3], nullptr, 0);
   if(bytes.size() < 4096 || !limit) return 2;
   out = std::fopen(argv[4], "wb"); if(!out) return 2;
   std::vector<u8> firmware(1984);
 
-  Headless frontend; platform = &frontend;
+  Scripted frontend; platform = &frontend;
   frontend.systemPak->append("pif.ntsc.rom", std::span<const u8>{firmware.data(), firmware.size()});
   frontend.cartPak->setAttribute("title", "Plaid device trace");
   frontend.cartPak->setAttribute("region", "NTSC");
@@ -57,11 +86,20 @@ int main(int argc, char** argv) {
     for(u32 i = 0; i < 64; i++) if(ops[i]) std::fprintf(out, " %02x:%u", i, ops[i]);
     std::fputc(10, out);
   };
+  // PLAID_TRACE_RDP_DUMP=N: the words of the first N frames, as natively.
+  static u32 dump = std::getenv("PLAID_TRACE_RDP_DUMP") ? std::strtoul(std::getenv("PLAID_TRACE_RDP_DUMP"), nullptr, 0) : 0;
+  if(dump) ares::Nintendo64::plaidRdpCommandObserver = [](const u64* words, u32 count) {
+    if(frames >= dump) return;
+    std::fprintf(out, "cmd %u", frames + 1);
+    for(u32 i = 0; i < count; i++) std::fprintf(out, " %016llx", (unsigned long long)words[i]);
+    std::fputc(10, out);
+  };
   bool halted = rsp.status.halted;
   while(vis < limit) {
     if(cpu.instruction()) cpu.synchronize();
     if(vi.refreshed) {
       vi.refreshed = false;
+      for(auto& p : presses) if(!p.started && frames >= p.frame) p.started = true, p.start = vis + 1;
       std::fprintf(out, "vi %u origin %08x field %u\n", ++vis, (u32)vi.io.dramAddress, (u32)vi.io.field);
     }
     if(halted && !rsp.status.halted) {

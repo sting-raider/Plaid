@@ -9621,3 +9621,22 @@ the first 93, 640 and 364 RDP frames are hash-identical to ares and flags
 appear only around scene changes. Rogue Squadron's field parity matches ares
 on every retrace; the field-to-buffer assignment follows the game's swap
 timing. None of the reported visual bugs shows in these intro sequences.
+
+## ADR-0331: devtrace drives input, dumps RDP words; capture a graphics task
+
+`devtrace.py --press <buttons>@<vi>:<frames>` passes the native runtime's
+press script to the native run, then re-keys each press to the number of RDP
+frames native had finished by that VI; `ares_trace.cpp` (a scripted headless
+frontend answering ares's gamepad polls with OSContPad bits) starts the press
+after the same frame in ares. Native now runs before ares, since ares needs its
+frames. `PLAID_TRACE_RDP_DUMP=N` prints the command words of the first N RDP
+frames on both sides (`cmd <frame> <words>`), and `--rsp-capture -N` captures
+graphics task N for spike098 (positive N still counts audio tasks).
+
+For a graphics task, spike098's RDRAM comparison also sees RDP output: RT64
+writes fill results back to RDRAM, spike098's ares does not run the RDP. On
+Mario Party 2's first graphics task, DMEM, IMEM and the whole RSP state match
+ares exactly, and the only RDRAM differences are the framebuffer and depth
+clears at 0x360000 and 0x3d0800. The divergent first RDP frame therefore
+comes from the CPU's display list, consistent with a time-driven fade.
+`scripts/test_devtrace.py` covers the press re-keying.
