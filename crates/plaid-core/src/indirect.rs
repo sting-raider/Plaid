@@ -485,11 +485,13 @@ pub fn analyze_indirect_owned(
     let tail_started = std::time::Instant::now();
     out = crate::tail_cells::analyze_owned(out, image)?;
     crate::timing::note("indirect.tail-cells", tail_started.elapsed());
+    let tables_started = std::time::Instant::now();
     out = crate::tables::analyze(out, image)?;
-    crate::timing::note("indirect.tables", tail_started.elapsed());
+    crate::timing::note("indirect.tables", tables_started.elapsed());
     // New candidate edges may themselves enter a prefix and break dominance.
+    let index_started = std::time::Instant::now();
     let index = MapIndex::new(&out);
-    crate::timing::note("indirect.index2", tail_started.elapsed());
+    crate::timing::note("indirect.index2", index_started.elapsed());
     let verify_started = std::time::Instant::now();
     let sites: Vec<_> = out.indirect_sites.iter().collect();
     let verified = par_map(&sites, |old| verify_static_in(&index, &out, image, old));
