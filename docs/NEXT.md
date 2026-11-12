@@ -26,12 +26,12 @@ An outside review (2026-11-12) left these leads; each still needs evidence:
   scanline (0x320) into the buffer. Suspect the renderer's handling of the
   odd-field origin (stale content on those fields), then uneven retraces
   (5-28 ms apart instead of 16.7). Needs frame-accurate capture to confirm.
-- Star Fox 64: the title sun washes the whole screen flat grey for ~6 s,
-  identically with HLE and native RSP graphics. `scripts/devtrace.py`
-  (ADR-0329) shows the lowered CPU and RSP give the RDP the same commands as
-  ares through 25 s: the first 93 frames hash-identical, then the same
-  per-second opcode means (the starfield is timing-seeded). So the wash is in
-  RT64's rendering of a correct stream, or real; compare a rendered frame next.
+- Star Fox 64's title-sun grey wash is the game's own (2026-11-12, closed):
+  each glare frame ends with a full-screen rectangle of prim colour
+  (208,208,208) at alpha 0x08-0x3c, blended over the black clear, and the
+  game sets VI_CONTROL 0x300e (gamma on). 23% of 208 is about 49; through the
+  VI gamma curve that is about 112-120, and RT64 shows 121. The commands
+  match ares (above), so hardware draws the same haze.
 - Paper Mario and Rogue Squadron (ADR-0330): the first ~11 s of RDP frames
   are hash-identical to ares (640 and 364 frames), and every steady second of
   25 s matches once ares is shifted 1 s; flags fall only on scene changes.
