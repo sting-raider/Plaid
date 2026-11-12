@@ -776,6 +776,13 @@ an unsupported scope effect, 15 for an unsupported instruction or exception,
 and 16 for an unsupported delay slot. `fault_pc` is the reported blocker
 site, which can lie after the start of the block that was stopped. The manifest
 records each site's kind; none of these traps executes guest instructions.
+### Runtime traces
+
+`PLAID_TRACE_MQ=1` prints each message-queue send and event registration to
+stderr; `PLAID_TRACE_VI=1` prints each retrace: VI number, host time, VI
+origin, Count and graphics tasks so far. Run the game executable directly to
+keep its stderr.
+
 ### RT64 window settings
 
 The RT64 executable accepts `--title <text>`, `--fullscreen`, and
