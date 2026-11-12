@@ -41,6 +41,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0327 | `583d54af` | The analysis binary uses mimalloc; identical maps, `discover` 23-53% faster (Majora's Mask 96 to 74 s), solve 6.0 to 4.3 s |
 | 0326 | `3d54e6ce` | Discovery continues its CFG walk across rounds instead of restarting it; identical maps, `discover` 30-40% faster (Majora's Mask 167 to 114 s) |
 | 0325 | `d78eedf6` | `rsp-from-rom` scans constants once (Paper Mario 41 to 17 s, identical output) and runs beside lowering; hole lookups binary-search (one discover call 90 to 70 s, same map) |
 | 0324 | `d78eedf6` | A harvest replay that found no uncovered fetch answers later rounds with wider coverage; Paper Mario's last round 80 to 7 s |
