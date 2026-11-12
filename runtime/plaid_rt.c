@@ -323,8 +323,14 @@ static int ret64(u64 v) { S->r[2] = SX32((u32)(v >> 32)); S->r[3] = SX32((u32)v)
 
 /* ---- time --------------------------------------------------------------- */
 
+/* PLAID_DETERMINISTIC=<ns>: guest time advances <ns> per loop safepoint and,
+   while every thread waits, in 1 ms steps up to the next retrace, instead of
+   following the host clock; with no pump thread, a run replays exactly
+   (ADR-0332). For differential traces, not for play: speed is not paced. */
+static u64 deterministic, vclock;
 static u64 now_ns(void) {
   struct timespec t;
+  if (deterministic) return vclock;
   clock_gettime(CLOCK_MONOTONIC, &t);
   return (u64)(t.tv_sec - t0.tv_sec) * 1000000000ull + (u64)t.tv_nsec - (u64)t0.tv_nsec;
 }
@@ -557,7 +563,23 @@ int plaid_rt_bind_queue_tail(plaid_state *s, u32 global) {
   pthread_mutex_unlock(&big);
   return result;
 }
+static void vi_poll(u64 now);
+static void ai_update(void);
+static void deliver_pending(void);
+static void deterministic_tick(void) {
+  vi_poll(vclock);
+  ai_update();
+  if (run_seconds > 0 && vclock > (u64)(run_seconds * 1e9)) finish(0, "time limit");
+}
 static void hand_to(rt_thread *next) {
+  if (deterministic && !next) { /* what the pump does while every thread waits */
+    running = NULL;
+    while (!(next = best_runnable())) {
+      vclock = next_vi > vclock && next_vi - vclock < 1000000 ? next_vi : vclock + 1000000;
+      deterministic_tick();
+      deliver_pending();
+    }
+  }
   if (queue_tail_global && next && next != &boot) kernel_write_check(next->guest + 0x10, 2);
   if (running_thread_global) kernel_write_check(running_thread_global, 4);
   if (next) next->state = T_RUNNING;
@@ -829,7 +851,9 @@ static void *thread_main(void *p) {
 int plaid_rt_safepoint(plaid_state *s) {
   (void)s;
   pthread_mutex_lock(&big);
+  if (deterministic) { vclock += deterministic; deterministic_tick(); }
   maybe_preempt(0);
+  if (deterministic) plaid_preempt = 1; /* every loop header is a clock tick */
   pthread_mutex_unlock(&big);
   return 0;
 }
@@ -2265,13 +2289,15 @@ int main(int argc, char **argv) {
   if (!rom || plaid_gfx_open(rom)) { fprintf(stderr, "the renderer needs --rom and a working GPU\n"); return 2; }
 #endif
   clock_gettime(CLOCK_MONOTONIC, &t0);
+  if (getenv("PLAID_DETERMINISTIC")) deterministic = strtoull(getenv("PLAID_DETERMINISTIC"), NULL, 0);
+  plaid_preempt = deterministic != 0;
   plaid_load_images(S);
   pthread_mutex_lock(&big);
   boot.pri = -1; boot.state = T_RUNNING; running = &boot;
   host_context = boot.context = new_context(&boot, 1, 0);
   S->native_context = host_context;
   pthread_mutex_unlock(&big);
-  pthread_create(&pump, NULL, event_pump, NULL);
+  if (!deterministic) pthread_create(&pump, NULL, event_pump, NULL);
   S->r[31] = THREAD_RETURN;
   r = plaid_run(S);
   pthread_mutex_lock(&big);

@@ -794,6 +794,13 @@ frame equality ends at the first timing-seeded state; after that, read the
 per-second opcode means. A flag in one second at a scene change is pacing; a
 flag that persists across seconds of one scene is a lead.
 
+`PLAID_DETERMINISTIC=<ns>` (devtrace: `--deterministic <ns>`) runs the game
+on a virtual clock: `<ns>` per loop safepoint and 1 ms steps while every guest
+thread waits, with no host pump thread (ADR-0332). The same build and input
+then give byte-identical traces, so two native builds can be compared exactly.
+It does not reproduce ares's Count values, so ares comparisons still part at
+the first Count-seeded state. Runs are unpaced (often faster than real time).
+
 ### RT64 window settings
 
 The RT64 executable accepts `--title <text>`, `--fullscreen`, and
