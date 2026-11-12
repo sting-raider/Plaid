@@ -41,6 +41,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| — | `5969cfcd` | VI trace prints VI_CONTROL; Star Fox 64's title grey wash is the game's own (a 23% full-screen rectangle through the VI gamma curve), not a renderer bug |
 | 0332 | `6b08a515` | `PLAID_DETERMINISTIC` runs a game on a virtual clock that replays byte-identically, for exact native-against-native comparison |
 | 0331 | `59430b4f` | devtrace drives input on both sides and dumps RDP words; `--rsp-capture -N` captures graphics tasks; Mario Party 2's first graphics task matches ares exactly in the RSP |
 | 0330 | `72dd3800` | devtrace aligns ares by best-matching seconds and logs the VI field; Paper Mario and Rogue Squadron intros match ares (640 and 364 identical RDP frames) |
