@@ -14,7 +14,7 @@ def test_compare():
     assert 'first divergence none; 0 of the first 1 native hashes' in report[0]
     assert report[2].endswith('same order')  # origin 0 (VI not set up) is ignored
     assert 'RDP frames: native 3 ares 3; first divergence none; 0 of the first 3' in report[3]
-    assert report[-1] == 'per-second opcode means compared over 2 seconds'
+    assert report[-1] == 'per-second opcode means compared over 2 seconds, ares shifted +0 s'
     # Second 1 lacks ten triangles natively: a frame ares never drew, and a shifted mean.
     native = same[:1] + [(3, 9, 60, '29:1 36:2'), (3, 3, 120, '29:1 36:2')]
     ares = same[:1] + [(13, 2, 60, '0f:10 29:1 36:2'), (3, 3, 120, '29:1 36:2')]
