@@ -32,11 +32,14 @@ An outside review (2026-11-12) left these leads; each still needs evidence:
   ares through 25 s: the first 93 frames hash-identical, then the same
   per-second opcode means (the starfield is timing-seeded). So the wash is in
   RT64's rendering of a correct stream, or real; compare a rendered frame next.
-- F-Zero X vanishing cars, Paper Mario partial screen, Rogue Squadron
-  rubber-banding: run `scripts/devtrace.py` on each native-RSP build; a
-  persistent per-second opcode shortfall localizes a recompiler bug to a scene,
-  and the first never-seen frame to a VI. Rogue Squadron's custom microcode and
-  interlaced origins are the first test of the framebuffer comparison.
+- Paper Mario and Rogue Squadron (ADR-0330): the first ~11 s of RDP frames
+  are hash-identical to ares (640 and 364 frames), and every steady second of
+  25 s matches once ares is shifted 1 s; flags fall only on scene changes.
+  Rogue Squadron's field parity matches ares on every retrace; which buffer
+  each field shows depends on the frame's swap timing, so the intro does not
+  show the rubber-banding. The reported bugs (also F-Zero X vanishing cars)
+  are in gameplay: give `devtrace.py` the same `--press` script on both sides
+  (an ares controller input observer) and compare a level.
 
 Continue GoldenEye after firmware-free refill discovery (ADR-0318): verify the
 complete fresh build and resolve the checked exception handoff and guest/host

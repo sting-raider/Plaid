@@ -9606,3 +9606,18 @@ skipped). On Star Fox 64 (1500 VIs) the first 93 RDP frames are identical and
 every steady second matches; flags appear only in the seconds of scene changes,
 where native trails by a few frames. The title's grey wash is therefore not a
 CPU or RSP lowering error. `scripts/test_devtrace.py` covers the comparison.
+
+## ADR-0330: devtrace aligns seconds by command counts and logs the VI field
+
+Boot and loading take different VI counts in ares and natively (ares starts
+at IPL3), so ADR-0329's per-second comparison misread a constant offset as
+divergence on Paper Mario. `devtrace.py` now shifts ares by the whole seconds
+(within 3) that best match the per-second command counts, and reports the
+shift. Both VI traces append the field bit (`field 0|1`; natively the field
+whose origin was just shown) so interlaced origin choices can be compared.
+
+Over 25 s, Star Fox 64 aligns at +0 s, Paper Mario and Rogue Squadron at +1 s;
+the first 93, 640 and 364 RDP frames are hash-identical to ares and flags
+appear only around scene changes. Rogue Squadron's field parity matches ares
+on every retrace; the field-to-buffer assignment follows the game's swap
+timing. None of the reported visual bugs shows in these intro sequences.

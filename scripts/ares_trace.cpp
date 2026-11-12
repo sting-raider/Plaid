@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
     if(cpu.instruction()) cpu.synchronize();
     if(vi.refreshed) {
       vi.refreshed = false;
-      std::fprintf(out, "vi %u origin %08x\n", ++vis, (u32)vi.io.dramAddress);
+      std::fprintf(out, "vi %u origin %08x field %u\n", ++vis, (u32)vi.io.dramAddress, (u32)vi.io.field);
     }
     if(halted && !rsp.status.halted) {
       // osSpTaskLoad placed the OSTask at DMEM 0xfc0 with physical pointers.

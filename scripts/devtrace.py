@@ -88,18 +88,25 @@ def compare(native, ares):
                    + (f', first at frame {missing[0]} (native vi {within[missing[0]][2]}, {within[missing[0]][0]} commands)' if missing else ''))
         # Timing-seeded state (random stars, animation phase) breaks exact frame
         # equality; missing geometry still shows as a shifted per-second opcode
-        # mean. Both VI clocks run at 60 Hz, so seconds roughly align; the last
-        # second is skipped (a run's end lands mid-scene-change).
+        # mean. Both VI clocks run at 60 Hz, but boot and loading take different
+        # VI counts, so ares is shifted by the whole seconds (within 3) that best
+        # match the per-second command counts. The last second is skipped (a
+        # run's end lands mid-scene-change).
         seconds = lambda fs: {s: [f for f in fs if f[2] // 60 == s] for s in {f[2] // 60 for f in fs}}
         sn, sa = seconds(n), seconds(a)
-        mean = lambda fs, op: sum(f[3].get(op, 0) for f in fs) / len(fs)
-        shared = sorted(set(sn) & set(sa))[:-1]
+        mean = lambda fs, op=None: sum(f[0] if op is None else f[3].get(op, 0) for f in fs) / len(fs)
+
+        def cost(shift):
+            pairs = [(s, s + shift) for s in sn if s + shift in sa]
+            return sum(abs(mean(sn[x]) - mean(sa[y])) for x, y in pairs) / len(pairs) if len(pairs) > 3 else float('inf')
+        shift = min(range(-3, 4), key=lambda d: (cost(d), abs(d)))
+        shared = sorted(s for s in sn if s + shift in sa)[:-1]
         for s in shared:
-            for op in sorted({op for f in sn[s] + sa[s] for op in f[3]}):
-                x, y = mean(sn[s], op), mean(sa[s], op)
+            for op in sorted({op for f in sn[s] + sa[s + shift] for op in f[3]}):
+                x, y = mean(sn[s], op), mean(sa[s + shift], op)
                 if abs(x - y) > max(2.0, 0.1 * max(x, y)):
                     out.append(f'  second {s}: opcode {op:02x} per frame native {x:.1f} ares {y:.1f}')
-        out.append(f'per-second opcode means compared over {len(shared)} seconds')
+        out.append(f'per-second opcode means compared over {len(shared)} seconds, ares shifted {shift:+d} s')
     return out
 
 
