@@ -41,6 +41,9 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0325 | `d78eedf6` | `rsp-from-rom` scans constants once (Paper Mario 41 to 17 s, identical output) and runs beside lowering; hole lookups binary-search (one discover call 90 to 70 s, same map) |
+| 0324 | `d78eedf6` | A harvest replay that found no uncovered fetch answers later rounds with wider coverage; Paper Mario's last round 80 to 7 s |
+| 0323 | `1c6f789a` | RT64 window: pads route by player (keyboard P1 also uses the first free pad, also without `--config`); audio drops the newest buffer instead of clearing the queue. Guest audio checked bit-exact against ares |
 | 0322 | `383e9aa7` | Discovery stops scanning every slot per lookup, re-validating quadratically and copying the whole map three times per pass; byte-identical maps, a Paper Mario build 19.2 to 13.2 min |
 | 0321 | `383e9aa7` | Overlay verifiers relocate a copy's own pointers when its analysis placement is above 0x81000000; Paper Mario's map overlay now binds at VI ~680 instead of faulting 3 |
 | 0320 | `383e9aa7` | Analysis replay watches every call site it can place instead of refusing all of them when one cannot be placed |
