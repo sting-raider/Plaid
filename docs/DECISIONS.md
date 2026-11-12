@@ -9452,3 +9452,40 @@ validate and owned-map changes, give the same `map.json` SHA-256 on Paper
 Mario. One discover call went from 131-144 s to 66 s; a full Paper Mario
 build from 1134 s to 779 s (19.2 to 13.2 min). Timings are single runs on a
 20-thread laptop with other load, so treat them as approximate.
+
+## ADR-0323: Pad routing and audio queue in the RT64 window
+
+The launcher branch carried two engine fixes that main lacked; they are
+ported, with two routing defects closed:
+
+- `plaid_input::assign` routes pads: controller players take connected pads
+  in SDL order, and a connected keyboard Player 1 also plays on the first pad
+  left over, merged with its keys. A disconnected Player 1 takes no pad (the
+  branch let it). Pads are polled without `--config` too: the default
+  settings are the old hardcoded keyboard map plus the first pad, so the
+  separate keyboard path is gone. `plaid_rt64_input` covers the routing.
+- `plaid_audio_play` drops the newest buffer past 150 ms queued instead of
+  clearing the whole queue at 200 ms, and leads with 40 ms of silence after
+  the queue ran dry. Clearing was an audible jump; an empty queue tore.
+
+Audio distortion was checked before blaming the host queue. The guest PCM
+from 50 s runs (`--wav`) of Mario Party 2, Star Fox 64, Banjo-Kazooie and
+Rogue Squadron has no sample-to-sample wrap; Rogue Squadron clips at full
+scale in its own mix. Three Rogue Squadron audio tasks (`--rsp-capture` 300,
+793, 800) match pinned ares in RDRAM, IMEM, DMEM and RSP state
+(`spikes/098-rsp-task`). So the guest output is correct and the queue policy
+is what changed what players hear.
+
+## ADR-0324: Harvest replays reuse wider-coverage results
+
+A harvest round replays the game in ares to its full site budget whenever no
+uncovered fetch appears; on Paper Mario the last round repeated the previous
+one (same entries, sites and bindings, more covered ranges) for ~80 s and
+found nothing. Coverage only decides which fetch counts as uncovered
+(`scripts/ares_boot.cpp`), so a replay that met no uncovered fetch under
+fewer covered ranges runs exactly as one with more. `capture_many` records
+such replays per request without its coverage and returns the recorded
+result when the new coverage contains the old. A result with an uncovered
+fetch is never reused. Outputs are unchanged by construction;
+`replay_cache_contract` covers reuse, less coverage, other sites and an
+uncovered fetch.

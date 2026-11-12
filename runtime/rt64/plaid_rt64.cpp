@@ -136,7 +136,7 @@ void renderer() {
     wake.notify_all();
     if (!ok) return;
 
-    if (settings_loaded) SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
+    SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
     std::array<SDL_GameController *, 4> controllers{};
     std::array<SDL_JoystickID, 4> controller_ids{};
     controller_ids.fill(-1);
@@ -165,20 +165,10 @@ void renderer() {
                 closed = true;
             }
         }
-        // Keyboard as controller 1: X/C/Z = A/B/Z, Enter = START, Q/E = L/R,
-        // I/K/J/L = C buttons, W/S/A/D = D-pad, arrows = stick.
-        static const struct { SDL_Scancode key; uint32_t bit; } map[] = {
-            {SDL_SCANCODE_X, 0x8000}, {SDL_SCANCODE_C, 0x4000}, {SDL_SCANCODE_Z, 0x2000},
-            {SDL_SCANCODE_RETURN, 0x1000}, {SDL_SCANCODE_W, 0x0800}, {SDL_SCANCODE_S, 0x0400},
-            {SDL_SCANCODE_A, 0x0200}, {SDL_SCANCODE_D, 0x0100}, {SDL_SCANCODE_Q, 0x0020},
-            {SDL_SCANCODE_E, 0x0010}, {SDL_SCANCODE_I, 0x0008}, {SDL_SCANCODE_K, 0x0004},
-            {SDL_SCANCODE_J, 0x0002}, {SDL_SCANCODE_L, 0x0001}};
+        // Without --config the default settings are keyboard Player 1 (X/C/Z,
+        // Enter, Q/E, IJKL, WASD, arrows) plus the first pad.
         const Uint8 *k = SDL_GetKeyboardState(nullptr);
-        uint32_t b = 0;
-        for (const auto &m : map) b |= k[m.key] ? m.bit : 0;
-        int x = (k[SDL_SCANCODE_RIGHT] - k[SDL_SCANCODE_LEFT]) * 80, y = (k[SDL_SCANCODE_UP] - k[SDL_SCANCODE_DOWN]) * 80;
-        input[0] = b << 16 | uint32_t(uint8_t(x)) << 8 | uint8_t(y);
-        if (settings_loaded) {
+        {
             // Enumerate the current connected controllers in SDL device order.
             std::array<SDL_GameController *, 4> current{};
             std::array<SDL_JoystickID, 4> ids{};
@@ -195,7 +185,11 @@ void renderer() {
             }
             for (auto *old : controllers) if (old) SDL_GameControllerClose(old);
             controllers = current; controller_ids = ids;
-            for (int i = 0; i < 4; ++i) input[i] = plaid_input::sample(settings.players[i], k, controllers[i]);
+            auto pad = plaid_input::assign(settings.players, slot);
+            for (int i = 0; i < 4; ++i)
+                input[i] = plaid_input::sample(settings.players[i], k, pad[i] < 0 ? nullptr : controllers[pad[i]]);
+            if (pad[4] >= 0)
+                input[0] = plaid_input::merge(input[0], plaid_input::sample(plaid_input::default_pad(settings.players[0]), k, controllers[pad[4]]));
         }
     }
 }
@@ -315,9 +309,16 @@ __declspec(dllexport) void plaid_audio_play(const uint8_t *samples, uint32_t byt
     if (!audio) return;
     pcm.resize(bytes / 2);
     for (uint32_t i = 0; i < bytes / 2; i++) pcm[i] = int16_t(samples[2 * i] << 8 | samples[2 * i + 1]);
-    // shortcut: the AI model and the device run on different clocks; past
-    // 200 ms of queued audio drop it rather than resample.
-    if (SDL_GetQueuedAudioSize(audio) > rate * 4 / 5) SDL_ClearQueuedAudio(audio);
+    // shortcut: the AI model and the device run on different clocks; drop the
+    // newest buffer past 150 ms queued rather than resample (clearing the whole
+    // queue was an audible jump). After the queue ran dry (a hitch), lead with
+    // 40 ms of silence so the next small hitch is absorbed instead of tearing.
+    Uint32 queued = SDL_GetQueuedAudioSize(audio), second = rate * 4;
+    if (queued > second * 3 / 20) return;
+    if (queued == 0) {
+        std::vector<int16_t> cushion(second / 25 / 2 & ~1u);
+        SDL_QueueAudio(audio, cushion.data(), Uint32(cushion.size() * 2));
+    }
     SDL_QueueAudio(audio, pcm.data(), bytes);
 }
 

@@ -23,4 +23,18 @@ int main() {
     assert(plaid_input::sample(p, keys, nullptr) == 0x50u);
     p.connected = false;
     assert(plaid_input::sample(p, keys, nullptr) == 0);
+    // keyboard + pad on Player 1: buttons combine, each axis keeps the larger push
+    assert(plaid_input::merge(0x80000050u, 0x4000b000u) == 0xc000b050u);
+    assert(plaid_input::default_pad(p).bindings.at("a") == "Button 0");
+    // pad routing: defaults give keyboard P1 the first pad
+    plaid_settings::Settings s;
+    assert((plaid_input::assign(s.players, 0) == std::array<int, 5>{-1, -1, -1, -1, -1}));
+    assert((plaid_input::assign(s.players, 1) == std::array<int, 5>{-1, -1, -1, -1, 0}));
+    // a pad P2 takes the first pad; keyboard P1 gets the second
+    s.players[1].connected = true;
+    assert((plaid_input::assign(s.players, 1) == std::array<int, 5>{-1, 0, -1, -1, -1}));
+    assert((plaid_input::assign(s.players, 2) == std::array<int, 5>{-1, 0, -1, -1, 1}));
+    // a disconnected keyboard P1 takes no pad
+    s.players[0].connected = false;
+    assert((plaid_input::assign(s.players, 2) == std::array<int, 5>{-1, 0, -1, -1, -1}));
 }
