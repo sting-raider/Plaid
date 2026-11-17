@@ -72,6 +72,7 @@ pub enum LoadEncoding {
 pub enum OverlayCompression {
     Raw,
     Mio0,
+    Yay0,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -358,7 +359,20 @@ pub fn yaz0(data: &[u8]) -> Result<Vec<u8>, String> {
 
 /// Decode one bounded Nintendo MIO0 stream.
 pub fn mio0(data: &[u8]) -> Result<Vec<u8>, String> {
-    if data.len() < 16 || &data[..4] != b"MIO0" {
+    split_lz(data, false).map(|(out, _)| out)
+}
+
+/// Decode one bounded Nintendo Yay0 stream and return the stream bytes it
+/// spans (ADR-0338). Yay0 is MIO0 with a long form: a back-reference whose
+/// count nibble is 0 takes its count from the next literal byte, plus 0x12.
+pub fn yay0_stream(data: &[u8]) -> Result<(Vec<u8>, usize), String> {
+    split_lz(data, true)
+}
+
+/// MIO0 and Yay0: control bits, a back-reference stream and a literal stream.
+fn split_lz(data: &[u8], yay0: bool) -> Result<(Vec<u8>, usize), String> {
+    let magic: &[u8] = if yay0 { b"Yay0" } else { b"MIO0" };
+    if data.len() < 16 || &data[..4] != magic {
         return Err("not a MIO0 stream".into());
     }
     let be = |at: usize| -> Result<usize, String> {
@@ -406,7 +420,15 @@ pub fn mio0(data: &[u8]) -> Result<Vec<u8>, String> {
                     .unwrap(),
             );
             comp = token_end;
-            let count = usize::from(token >> 12) + 3;
+            let count = match token >> 12 {
+                0 if yay0 => {
+                    let long = *data.get(raw).ok_or("truncated MIO0 literal stream")?;
+                    raw += 1;
+                    usize::from(long) + 0x12
+                }
+                n if yay0 => usize::from(n) + 2,
+                n => usize::from(n) + 3,
+            };
             let distance = usize::from(token & 0x0fff) + 1;
             if distance > out.len() || count > size - out.len() {
                 return Err("invalid MIO0 back-reference".into());
@@ -417,7 +439,7 @@ pub fn mio0(data: &[u8]) -> Result<Vec<u8>, String> {
         }
         mask >>= 1;
     }
-    Ok(out)
+    Ok((out, raw))
 }
 
 /// The largest decoded size accepted, so a stray header cannot demand an
@@ -496,6 +518,7 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
                     .ok_or("catalog raw source is shorter than its logical size")?
                     .to_vec(),
                 OverlayCompression::Mio0 => mio0(source)?,
+                OverlayCompression::Yay0 => yay0_stream(source)?.0,
             }
         }
         LoadEncoding::RarePair { end, text_size } => {
@@ -700,6 +723,7 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
     let at = |a: u64| (a - lo) as usize;
     composite[at(u64::from(spec.base.start.0))..at(spec.base.end())].copy_from_slice(base_bytes);
     let mut slots = Vec::new();
+    let mut calls = Vec::new();
     for load in &spec.loads {
         let data = if let LoadEncoding::Observed { generation } = load.encoding {
             let record = spec
@@ -722,12 +746,37 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
             decoded(bytes, load)?
         };
         if let Some(linked) = load.linked {
-            slots.push((load.destination.clone(), linked.0, load.layout(&data)?.text));
+            let layout = load.layout(&data)?;
+            slots.push((load.destination.clone(), linked.0, layout.text));
+            let foreign = crate::overlays::FOREIGN | 4;
+            calls.extend(
+                layout
+                    .relocations
+                    .iter()
+                    .filter(|r| r.kind == foreign)
+                    .map(|r| load.destination.start.0 + r.offset),
+            );
         } else if matches!(load.encoding, LoadEncoding::AresData { .. }) {
             slots.push((load.destination.clone(), load.destination.start.0, 0));
         }
         composite[at(u64::from(load.destination.start.0))..at(load.destination.end())]
             .copy_from_slice(&data);
+    }
+    // A call into another fragment names that fragment's link address; analysis
+    // follows it into the one catalogued copy linked there (ADR-0338). The
+    // native call still takes its target from the bound bytes.
+    for pc in calls {
+        let word = u32::from_be_bytes(composite[at(u64::from(pc))..][..4].try_into().unwrap());
+        let target = (pc & 0xf000_0000) | ((word & 0x03ff_ffff) << 2);
+        let mut placed = spec.loads.iter().filter(|l| {
+            l.linked
+                .is_some_and(|linked| target.wrapping_sub(linked.0) < l.destination.size)
+        });
+        if let (Some(callee), None) = (placed.next(), placed.next()) {
+            let moved = callee.destination.start.0 + (target - callee.linked.unwrap().0);
+            let patched = (word & 0xfc00_0000) | ((moved & 0x0fff_ffff) >> 2);
+            composite[at(u64::from(pc))..][..4].copy_from_slice(&patched.to_be_bytes());
+        }
     }
     let mut out = image(GuestAddr(lo as u32), &composite, None);
     out.slots = slots.into();
@@ -1194,6 +1243,27 @@ mod tests {
         // A malformed token may not borrow bytes from the literal stream.
         repeated[12..16].copy_from_slice(&18u32.to_be_bytes());
         assert!(mio0(&repeated).is_err());
+    }
+
+    #[test]
+    fn yay0_counts_are_mio0_minus_one_with_a_long_form() {
+        let stream = |size: u32, control: u8, token: [u8; 2], literals: &[u8]| {
+            let mut s = b"Yay0".to_vec();
+            s.extend(size.to_be_bytes());
+            s.extend(17u32.to_be_bytes());
+            s.extend(19u32.to_be_bytes());
+            s.push(control);
+            s.extend(token);
+            s.extend(literals);
+            s
+        };
+        // Two literals, then nibble 1: three bytes from two back.
+        let short = stream(5, 0xc0, [0x10, 0x01], b"ab");
+        assert_eq!(yay0_stream(&short).unwrap(), (b"ababa".to_vec(), 21));
+        // One literal, then nibble 0: the next literal byte + 0x12 bytes.
+        let long = stream(21, 0x80, [0x00, 0x00], &[b'a', 2]);
+        assert_eq!(yay0_stream(&long).unwrap(), (vec![b'a'; 21], 21));
+        assert!(mio0(&long).is_err(), "the magic selects the format");
     }
 
     #[test]

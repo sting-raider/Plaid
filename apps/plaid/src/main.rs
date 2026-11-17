@@ -1892,7 +1892,8 @@ fn load_declarations(
                 encoding: match l["compression"].as_str() {
                     Some("raw") => OverlayCompression::Raw,
                     Some("mio0") => OverlayCompression::Mio0,
-                    _ => return Err("catalog overlay compression is raw or mio0".into()),
+                    Some("yay0") => OverlayCompression::Yay0,
+                    _ => return Err("catalog overlay compression is raw, mio0 or yay0".into()),
                 },
                 encoded_size: u32::try_from(field("encoded_size")?).map_err(|e| e.to_string())?,
                 text_size: u32::try_from(field("text_size")?).map_err(|e| e.to_string())?,

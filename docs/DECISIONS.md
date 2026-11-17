@@ -9753,3 +9753,32 @@ fragment's word 0 is a map entry that address-taken dispatch includes.
 Pokemon Stadium 2 went from fault 3 at VI 14 to fault 3 at VI 172. The next
 blocker is fragments stored in Yay0 streams (673 of 762 "FRAGMENT" strings in
 the ROM) and modules that jump into other modules.
+
+## ADR-0338: Compressed fragments, calls between fragments, and anchored binding
+
+ADR-0337 left Pokemon Stadium 2 at fault 3 on VI 172. Three gaps remained.
+
+Most of its FRAGMENT modules (673 of 762 "FRAGMENT" strings in the ROM) sit in
+Yay0 streams. Yay0 is MIO0 with a long form (a back-reference whose count
+nibble is 0 takes the next literal byte plus 0x12 as its count, and short
+counts are the nibble plus 2), so the MIO0 decoder now serves both, and the
+fragment catalog decodes each Yay0 stream and keeps the fragments it holds as
+`yay0` catalog overlays.
+
+Fifty of the raw fragments call (`jal`) or tail-jump (`j`) into another
+fragment. Each such target lies in exactly one catalogued fragment, so the
+reference is kept as a FOREIGN J26 relocation: composition points the word at
+that fragment's analysis copy, so discovery follows an ordinary call, while
+the verifier accepts the loader's target bits (keeping the opcode compared)
+and the lowered call reads its target from the bound bytes and dispatches
+through the binder over that one callee. Resident references are now those
+below 0x80800000 (RDRAM), so a patched analysis target is never mistaken for
+one. A fragment's exported entries are a run of `j x; nop` thunks; a thunk
+right after another now counts as a function start for address-taken roots.
+
+With 582 relocatable overlays, binding an unknown target ran the full verifier
+(which rebuilds the whole expected image) for every candidate entry. Each
+unmapped overlay now names one unrelocated nonzero text word the verifier
+compares; the binder checks that word first. Pokemon Stadium 2 now builds in
+88 s and runs the 60 s validation (3596 VIs, 1641 graphics tasks) without a
+fault.

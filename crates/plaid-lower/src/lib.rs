@@ -661,7 +661,7 @@ fn overlay_runtime(
         ));
     }
     let mut out = String::from(
-        "typedef struct { u32 f, w, probe; } plaid_ovl_fn;\ntypedef struct { u32 start, end, proof; } plaid_ovl_range;\ntypedef struct { u32 link, text, mapped, virtual_base, physical_base, span, guards, observed; const plaid_ovl_range *ranges; int (*verify)(const uint8_t *, size_t, uint32_t); u32 n; const plaid_ovl_fn *f; } plaid_ovl;\n",
+        "typedef struct { u32 f, w, probe; } plaid_ovl_fn;\ntypedef struct { u32 start, end, proof; } plaid_ovl_range;\ntypedef struct { u32 link, text, mapped, virtual_base, physical_base, span, guards, observed; const plaid_ovl_range *ranges; int (*verify)(const uint8_t *, size_t, uint32_t); u32 n; const plaid_ovl_fn *f; u32 anchor, anchor_w; } plaid_ovl;\n",
     );
     let mut table = Vec::new();
     for (k, (&(link, _), (bytes, layout))) in overlays.iter().zip(layouts).enumerate() {
@@ -751,8 +751,26 @@ fn overlay_runtime(
                 entries.join(", ")
             }
         );
+        // One unrelocated nonzero text word the verifier compares: a cheap
+        // refusal before the full verify of an unmapped candidate base.
+        let anchor = (mapped_bases[k].0.is_none() && !observed.contains_key(&k))
+            .then(|| {
+                ranges
+                    .iter()
+                    .filter(|r| !r.2)
+                    .flat_map(|&(start, end, _)| (start..end).step_by(4))
+                    .find(|&o| {
+                        o % 4 == 0
+                            && !relocated.contains(&(link + o))
+                            && image.word(GuestAddr(link + o)).is_some_and(|w| w != 0)
+                    })
+            })
+            .flatten();
+        let (anchor, anchor_w) = anchor.map_or((u32::MAX, 0), |o| {
+            (o, image.word(GuestAddr(link + o)).unwrap_or(0))
+        });
         table.push(format!(
-            "{{0x{link:08x}u, {}u, {}u, {}u, {}u, {span}u, {}u, {}u, plaid_ovl_ranges_{k}, plaid_overlay_verify_{k}, {}u, plaid_ovl_fn_{k}}}",
+            "{{0x{link:08x}u, {}u, {}u, {}u, {}u, {span}u, {}u, {}u, plaid_ovl_ranges_{k}, plaid_overlay_verify_{k}, {}u, plaid_ovl_fn_{k}, {anchor}u, 0x{anchor_w:08x}u}}",
             layout.text,
             u8::from(mapped_bases[k].0.is_some()),
             observed.get(&k).map_or(mapped_bases[k].0.unwrap_or(0), |r| (r.target().unwrap() & 0xe0000000) | r.window_base),
@@ -1015,6 +1033,11 @@ u32 plaid_link(plaid_state *s, u32 t) {
         w = (u32)s->ram[p] << 24 | (u32)s->ram[p + 1] << 16 | (u32)s->ram[p + 2] << 8 | s->ram[p + 3];
         if (plaid_ovls[k].f[j].probe && plaid_ovls[k].f[j].w != w) continue;
         b = t - (plaid_ovls[k].f[j].f - plaid_ovls[k].link);
+      }
+      if (plaid_ovls[k].anchor != 0xffffffffu) {
+        u32 q = (b & 0x1fffffffu) + plaid_ovls[k].anchor;
+        if (q > PLAID_RAM_SIZE - 4 ||
+            ((u32)s->ram[q] << 24 | (u32)s->ram[q + 1] << 16 | (u32)s->ram[q + 2] << 8 | s->ram[q + 3]) != plaid_ovls[k].anchor_w) continue;
       }
       if (!plaid_ovls[k].verify(s->ram, PLAID_RAM_SIZE, b)) continue;
       if (hit) return 1;
@@ -1477,6 +1500,8 @@ struct Lowerer<'a> {
     /// Relocatable overlays' link ranges, and the one this function is in.
     overlays: &'a [(u32, u32)],
     ovl: Option<usize>,
+    /// JALs into another fragment (ADR-0338): the target is read from RAM.
+    foreign_calls: &'a BTreeSet<u32>,
     /// Pinned frame of a fixed-text function (ADR-0219): its entry and full
     /// range count, and per call continuation the range count still live there.
     frame: Option<(u32, usize)>,
@@ -1515,6 +1540,16 @@ impl Lowerer<'_> {
     }
     fn ovl_of(&self, pc: u32) -> Option<usize> {
         self.overlays.iter().position(|(s, e)| *s <= pc && pc < *e)
+    }
+    /// A J/JAL target: the analysis target, or for a jump into another
+    /// fragment the one the game's loader wrote into the bound copy (ADR-0338).
+    fn jump_target(&self, jump: u32, pc: u32) -> String {
+        match self.ovl {
+            Some(n) if self.foreign_calls.contains(&pc) => {
+                format!("SX32(0x80000000u | ((plaid_ow(s, {n}, 0x{pc:08x}u) & 0x03ffffffu) << 2))")
+            }
+            _ => sx(jump),
+        }
     }
     /// A return address as the guest sees it: in overlay code, where the
     /// bound copy really runs (ADR-0181).
@@ -1809,7 +1844,7 @@ impl Lowerer<'_> {
                 let k = self.dispatch[proven()?];
                 Ok(format!(
                     "{slot} return plaid_call_{k}(s, {}, ret, 0x{pc:08x}u);",
-                    sx(jump)
+                    self.jump_target(jump, pc)
                 ))
             }
             (2, _, _) if self.ovl_of(jump).is_some_and(|k| Some(k) != self.ovl) => Ok(format!(
@@ -1823,14 +1858,14 @@ impl Lowerer<'_> {
             )),
             (3, _, _) if self.targets.contains_key(&pc) => {
                 let k = self.dispatch[proven()?];
+                let target = self.jump_target(jump, pc);
                 Ok(format!(
                     "s->r[31] = {}; {slot} {} {}",
                     self.link(after),
                     self.pin(
                         after,
                         format!(
-                            "{{ int r = plaid_call_{k}(s, {}, {}, 0x{pc:08x}u); if (r) return r; }}",
-                            sx(jump),
+                            "{{ int r = plaid_call_{k}(s, {target}, {}, 0x{pc:08x}u); if (r) return r; }}",
                             self.link(after)
                         )
                     ),
@@ -2278,6 +2313,21 @@ fn lower_c_units(
         .filter(|e| ovl_of(e.pc.0).is_some() && map.blocks.iter().any(|b| b.start.pc == e.pc))
         .cloned()
         .collect();
+    // A JAL into another fragment dispatches over the one callee analysis
+    // followed; the native call binds whatever RAM names (ADR-0338).
+    let starts: BTreeSet<u32> = map.blocks.iter().map(|b| b.start.pc.0).collect();
+    let mut foreign_calls = BTreeSet::new();
+    for (&pc, &(_, kind)) in &relocations {
+        if kind != plaid_core::overlays::FOREIGN | 4 {
+            continue;
+        }
+        let t = (pc & 0xf000_0000) | ((word(pc)? & 0x03ff_ffff) << 2);
+        if ovl_of(t).is_some() && starts.contains(&t) {
+            callees.push(image.address(GuestAddr(t)));
+            targets.insert(pc, BTreeSet::from([t]));
+            foreign_calls.insert(pc);
+        }
+    }
     let mut residual = BTreeMap::new();
     for site in &map.indirect_sites {
         if report.residual_sites.contains(&site.site) {
@@ -2986,6 +3036,7 @@ fn lower_c_units(
             dispatch: &dispatch,
             overlays: &overlays,
             ovl: ovl_of(f.pc.0),
+            foreign_calls: &foreign_calls,
         };
         // Relocated immediates are read from the bound copy (ADR-0181).
         let lower = |w: u32, pc: u32| -> Result<String, String> {

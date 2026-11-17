@@ -347,11 +347,11 @@ pub fn fragment_layout(bytes: &[u8], link: u32) -> Option<Layout> {
         }
         listed.push((offset, kind));
     }
-    // The table lists every absolute reference. One into resident code (below
-    // 0x81000000) keeps its value. One into another fragment moves with that
-    // fragment, which only the run knows: a data word or HI16/LO16 pair is kept
-    // as a FOREIGN relocation, its value read from the bound bytes; a jump
-    // into another fragment refuses the file.
+    // The table lists every absolute reference. One into resident code (RDRAM,
+    // below 0x80800000) keeps its value. One into another fragment moves with
+    // that fragment, which only the run knows: a data word, HI16/LO16 pair, J
+    // or JAL is kept as a FOREIGN relocation, its value read from the bound
+    // bytes (ADR-0337, ADR-0338).
     let own = link..=link.checked_add(size.max(ram))?;
     let mut kept: Vec<Option<u8>> = vec![None; listed.len()];
     let mut highs: [Option<usize>; 32] = [None; 32];
@@ -374,9 +374,9 @@ pub fn fragment_layout(bytes: &[u8], link: u32) -> Option<Layout> {
         };
         let decided = if own.contains(&target) {
             kind
-        } else if target >= 0x8100_0000 && kind != 4 {
+        } else if target >= 0x8080_0000 && (kind != 4 || matches!(x >> 26, 2 | 3)) {
             kind | FOREIGN
-        } else if target >= 0x8100_0000 {
+        } else if target >= 0x8080_0000 {
             return None;
         } else {
             continue;
@@ -439,26 +439,45 @@ pub fn is_fragment(at: &[u8]) -> bool {
     fragment_at(at).is_some()
 }
 
-/// Every raw fragment in the ROM, at its link base (ADR-0337).
+/// Every fragment in the ROM, raw or in a Yay0 stream, at its link base
+/// (ADR-0337, ADR-0338).
 fn fragment_catalog(rom: &[u8]) -> Vec<Overlay> {
     let mut found = Vec::new();
-    for start in (0..rom.len().saturating_sub(0x24)).step_by(16) {
-        let Some((bytes, link, layout)) = fragment_at(&rom[start..]) else {
+    for start in (0..rom.len().saturating_sub(0x24)).step_by(4) {
+        let at = &rom[start..];
+        let decoded;
+        let (bytes, encoding, encoded) = if start % 16 == 0 && at.get(8..16) == Some(b"FRAGMENT") {
+            (at, OverlayCompression::Raw, None)
+        } else if at.starts_with(b"Yay0") {
+            let Ok((out, used)) = crate::declared_loads::yay0_stream(at) else {
+                continue;
+            };
+            decoded = out;
+            (
+                decoded.as_slice(),
+                OverlayCompression::Yay0,
+                Some(used as u32),
+            )
+        } else {
+            continue;
+        };
+        let Some((bytes, link, layout)) = fragment_at(bytes) else {
             continue;
         };
         let size = bytes.len() as u32;
+        let encoded_size = encoded.unwrap_or(size);
         found.push(Overlay {
             file: RomFile {
                 virtual_start: start as u32,
                 virtual_end: start as u32 + size,
                 rom_start: start as u32,
-                rom_end: start as u32 + size,
+                rom_end: start as u32 + encoded_size,
             },
             link,
             source_sha256: sha256(bytes),
             encoding: LoadEncoding::CatalogOverlay {
-                encoding: OverlayCompression::Raw,
-                encoded_size: size,
+                encoding,
+                encoded_size,
                 text_size: layout.text,
                 bss_size: layout.bss,
             },
@@ -951,6 +970,11 @@ pub fn discover(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> 
                         rom.get(file.rom_start as usize..file.rom_end as usize)
                             .ok_or("DMA file outside ROM")?,
                     ),
+                    OverlayCompression::Yay0 => crate::declared_loads::yay0_stream(
+                        rom.get(file.rom_start as usize..file.rom_end as usize)
+                            .ok_or("DMA file outside ROM")?,
+                    )
+                    .map(|(out, _)| out),
                     OverlayCompression::Raw => rom
                         .get(file.rom_start as usize..file.rom_start as usize + file_size as usize)
                         .ok_or_else(|| "DMA raw file outside ROM".to_string())
@@ -1535,9 +1559,16 @@ mod tests {
             "entry outside the link"
         );
         assert!(
-            fragment_layout(&set(0x2c, 0x0c60_0000), 0x8170_0000).is_none(),
-            "jump into another fragment"
+            fragment_layout(&set(0x2c, 0x1060_0000), 0x8170_0000).is_none(),
+            "R_MIPS_26 on a branch"
         );
+        // A call into another fragment is kept; its target comes from RAM.
+        let call = set(0x2c, 0x0c60_0000);
+        let layout = fragment_layout(&call, 0x8170_0000).unwrap();
+        assert!(layout.relocations.contains(&Relocation {
+            offset: 0x2c,
+            kind: 4 | FOREIGN
+        }));
         // Data and HI16/LO16 references into another fragment keep the loader's bits.
         let data = set(0x44, 0x8180_0000);
         let layout = fragment_layout(&data, 0x8170_0000).unwrap();

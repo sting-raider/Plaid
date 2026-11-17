@@ -37,7 +37,13 @@ fn after_return(image: &CodeImage, pc: GuestAddr, starts: &BTreeSet<u32>) -> boo
     let frame = image
         .word(pc)
         .is_some_and(|w| w & 0xffff_0000 == 0x27bd_0000 && (w as i16) < 0 && (w & 7) == 0);
-    let terminal = |word: Option<u32>| word.is_some_and(|w| w == JR_RA || (w >> 26 == 2 && frame));
+    // A `j x; nop` thunk right after another is a jump-table export entry, as a
+    // fragment's table of callable entry points (ADR-0338).
+    let thunk = word(4) == Some(0)
+        && image.word(pc).is_some_and(|w| w >> 26 == 2)
+        && image.word(GuestAddr(pc.0.wrapping_add(4))) == Some(0);
+    let terminal =
+        |word: Option<u32>| word.is_some_and(|w| w == JR_RA || (w >> 26 == 2 && (frame || thunk)));
     // after a hole: a declared load (a relocatable overlay's text, say)
     // begins with a function (ADR-0181)
     if word(4).is_none() {
@@ -860,6 +866,38 @@ mod tests {
         // b +8 stays in the image; j 0x84001068 (RSP boot code) does not
         assert!(plausible(&image(0x1000_0001), GuestAddr(0x8000_0000)));
         assert!(!plausible(&image(0x0900_041a), GuestAddr(0x8000_0000)));
+    }
+
+    #[test]
+    fn a_run_of_jump_thunks_is_an_export_table() {
+        // jr ra; nop; then `j x; nop` thunks; a thunk with a working delay
+        // slot, or a plain instruction after a J, is not an entry (ADR-0338)
+        let image = CodeImage {
+            base: CodeAddress {
+                pc: GuestAddr(0x8000_0000),
+                image: "thunks".into(),
+                generation: 0,
+            },
+            words: vec![
+                JR_RA,
+                0,
+                0x0800_0000,
+                0,
+                0x0800_0000,
+                0,
+                0x0800_0000,
+                0x2402_0001,
+                0x2402_0001,
+            ],
+            rom_offset: None,
+            physical_start: None,
+            holes: Vec::new(),
+            slots: Default::default(),
+        };
+        let none = BTreeSet::new();
+        assert!(after_return(&image, GuestAddr(0x8000_0010), &none));
+        assert!(!after_return(&image, GuestAddr(0x8000_0018), &none));
+        assert!(!after_return(&image, GuestAddr(0x8000_0020), &none));
     }
 
     #[test]
