@@ -315,6 +315,12 @@ def main():
         defined=[body.findall(u.read_text(encoding='utf-8')) for u in units]
         assert len(units)>1 and not defined[0]
         assert sorted(sum(defined[1:],[]))==sorted(body.findall(lowered.read_text(encoding='utf-8')))
+        assert not list(directory.glob('split.*.tmp'))
+        blocked = directory/'blocked.c'
+        blocked.mkdir()
+        run("lower-map", rom, taken, "0x80000000", "0x80000f00", blocked, "--parts", "3", ok=False)
+        assert not list(directory.glob('blocked.*.tmp'))
+        assert not list(directory.glob('blocked.part*.c'))
         cc=os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
         if cc:
             objects=[]
@@ -325,6 +331,9 @@ def main():
             subprocess.run([cc,'-std=gnu11','-DPLAID_SAFEPOINTS','-DPLAID_LOWERED="split.c"','-I',str(directory),
                             str(ROOT/'runtime/plaid_rt.c'),*map(str,objects),'-pthread','-o',str(directory/'split.exe')],check=True)
         run("lower-map",rom,runtime_map,"0x80000000","0x80000f00",directory/'open.c',ok=False)
+        run("lower-map", rom, runtime_map, "0x80000000", "0x80000f00", directory/'open.c', "--parts", "3", ok=False)
+        assert not (directory/'open.c').exists()
+        assert not list(directory.glob('open.*.tmp'))
         # declared loads (ADR-0136): the composite is rebuilt by solve
         loads=directory/'loads.json'
         def declare(destination):

@@ -1,5 +1,12 @@
 # Status
 
+The native build starts post-IPL capture during discovery (ADR-0343). The
+verified closure verdict still gates startup header generation. The retained
+Paper Mario boot state matches byte for byte, and seven visible ROM controls
+passed with zero faults. Multipart C generation now streams function bodies
+to keep fewer bytes in memory while emitting the same translation units
+(ADR-0344).
+
 Firmware-free counterfactual refill replays now initialize the same post-PIF
 state as ordinary analysis (ADR-0318). The synthetic oracle contract detects
 the prior zero-firmware execution; a previously refused local GoldenEye page

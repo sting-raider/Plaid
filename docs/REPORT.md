@@ -41,6 +41,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0343 | `470e5d33` | Startup capture runs during discovery, and mapped partitioning consumes the parsed map. All 82 runtime checks and seven visible ROM controls passed. |
 | 0342 | `ada84a0e` | Tail-cell verification reuses its CFG index across proof label updates. Its phase fell from 0.499 s to 0.337 s, and all seven game maps and manifests remained byte-identical. |
 | 0341 | `463776ee` | One build solve produces both closure reports. The reports match on three retained maps, and Paper Mario's final solve went from 6.894 s to 3.464 s. All seven ROM controls passed. |
 | 0340 | `040d8089` | Mapped fragment partitioning parses its evidence once. GoldenEye's retained partition pass dropped from 5.199 s to 0.376 s, and a synthetic split wrote byte-identical output. |

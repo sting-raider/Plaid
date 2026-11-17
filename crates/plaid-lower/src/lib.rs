@@ -13,6 +13,7 @@ use plaid_core::{
     solver::{ClosureStatus, Scope, solve},
 };
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::{self, Read, Write};
 
 mod cop0_effects;
 pub mod coverage;
@@ -1936,8 +1937,11 @@ pub fn lower_c_parts(
         preload,
         entry,
         exits,
-        (parts, false),
-        residual_dispatch,
+        CPartOptions {
+            parts,
+            separate_runtime: false,
+            residual_dispatch,
+        },
     )?
     .units)
 }
@@ -1949,6 +1953,12 @@ pub struct LoweredCUnits {
     pub runtime_header: String,
 }
 
+pub struct CPartOptions {
+    pub parts: usize,
+    pub separate_runtime: bool,
+    pub residual_dispatch: bool,
+}
+
 pub fn lower_c_runtime_units(
     map: &ProgramMap,
     images: &[CodeImage],
@@ -1958,17 +1968,17 @@ pub fn lower_c_runtime_units(
     parts: usize,
     residual_dispatch: bool,
 ) -> Result<LoweredCUnits, String> {
-    if parts < 2 {
-        return Err("separate runtime requires multipart output".into());
-    }
     lower_c_units(
         map,
         images,
         preload,
         entry,
         exits,
-        (parts, true),
-        residual_dispatch,
+        CPartOptions {
+            parts,
+            separate_runtime: true,
+            residual_dispatch,
+        },
     )
 }
 
@@ -1978,10 +1988,83 @@ fn lower_c_units(
     preload: &CodeImage,
     entry: GuestAddr,
     exits: &[GuestAddr],
-    partition: (usize, bool),
-    residual_dispatch: bool,
+    options: CPartOptions,
 ) -> Result<LoweredCUnits, String> {
-    let (parts, separate_runtime) = partition;
+    let mut bodies = Vec::new();
+    let layout = lower_c_bodies(map, images, preload, entry, exits, options, &mut bodies)?;
+    let mut units = Vec::new();
+    let runtime_header = layout.emit_units(bodies.as_slice(), |_, c| {
+        units.push(String::from_utf8(c).map_err(|e| e.to_string())?);
+        Ok(())
+    })?;
+    Ok(LoweredCUnits {
+        units,
+        runtime_header,
+    })
+}
+
+pub struct CPartLayout {
+    main: String,
+    shared: String,
+    run: String,
+    runtime_header: String,
+    part_sizes: Vec<usize>,
+    parts: usize,
+}
+
+impl CPartLayout {
+    /// Read the body stream produced by `lower_c_bodies` in output order.
+    /// Keep at most one allocated translation unit live at a time.
+    pub fn emit_units(
+        self,
+        mut bodies: impl Read,
+        mut emit: impl FnMut(usize, Vec<u8>) -> Result<(), String>,
+    ) -> Result<String, String> {
+        let mut main = self.main.into_bytes();
+        if self.parts <= 1 {
+            bodies.read_to_end(&mut main).map_err(|e| e.to_string())?;
+        }
+        main.extend_from_slice(self.run.as_bytes());
+        emit(0, main)?;
+        if self.parts > 1 {
+            for (index, size) in self.part_sizes.into_iter().enumerate() {
+                let part = index + 1;
+                let mut c = format!(
+                    "/* part {part} of {} (ADR-0174) */\n{}",
+                    self.parts, self.shared
+                )
+                .into_bytes();
+                let offset = c.len();
+                c.resize(offset + size, 0);
+                bodies
+                    .read_exact(&mut c[offset..])
+                    .map_err(|e| e.to_string())?;
+                emit(part, c)?;
+            }
+        }
+        Ok(self.runtime_header)
+    }
+}
+
+/// Verify and lower functions to a sequential body stream. Preserve the
+/// original byte-weighted split without retaining the function texts in RAM.
+pub fn lower_c_bodies(
+    map: &ProgramMap,
+    images: &[CodeImage],
+    preload: &CodeImage,
+    entry: GuestAddr,
+    exits: &[GuestAddr],
+    options: CPartOptions,
+    bodies_out: impl Write,
+) -> Result<CPartLayout, String> {
+    let CPartOptions {
+        parts,
+        separate_runtime,
+        residual_dispatch,
+    } = options;
+    if separate_runtime && parts < 2 {
+        return Err("separate runtime requires multipart output".into());
+    }
     let link = if parts > 1 { "" } else { "static " };
     // Address-taken dispatch is its own scope (ADR-0153); residual dispatch is
     // the validation-only relaxation of it (ADR-0218).
@@ -2974,7 +3057,18 @@ fn lower_c_units(
             .or_default()
             .push(e.target.pc.0);
     }
-    let mut lowered = verifiers;
+    let mut bodies_out = io::BufWriter::new(bodies_out);
+    let mut sizes = Vec::new();
+    let mut write_body = |source: String| -> Result<(), String> {
+        bodies_out
+            .write_all(source.as_bytes())
+            .map_err(|e| e.to_string())?;
+        sizes.push(source.len());
+        Ok(())
+    };
+    for verifier in verifiers {
+        write_body(verifier)?;
+    }
     let relocated = relocations.keys().copied().collect();
     for f in callees.iter().filter(|f| seen.insert(f.pc.0)) {
         // Observed block entries can be unused when no residual transfer needs them.
@@ -3247,41 +3341,41 @@ fn lower_c_units(
             }
         }
         out += "}\n";
-        lowered.push(out);
+        write_body(out)?;
     }
     // Contiguous shares of about equal size for the parts after the main
     // unit; with one part, all stay here.
-    let share = lowered.iter().map(String::len).sum::<usize>() / parts.saturating_sub(1).max(1) + 1;
-    let mut units = vec![out];
-    let mut size = 0;
-    for f in lowered {
-        if parts > 1 && (units.len() == 1 || size >= share) && units.len() < parts {
-            units.push(format!(
-                "/* part {} of {parts} (ADR-0174) */\n{shared}",
-                units.len()
-            ));
-            size = 0;
+    bodies_out.flush().map_err(|e| e.to_string())?;
+    let share = sizes.iter().sum::<usize>() / parts.saturating_sub(1).max(1) + 1;
+    let mut part_sizes = Vec::new();
+    for size in sizes {
+        if part_sizes.is_empty()
+            || (part_sizes.len() + 1 < parts && part_sizes.last().is_some_and(|n| *n >= share))
+        {
+            part_sizes.push(0);
         }
-        size += f.len();
-        units.last_mut().expect("main unit").push_str(&f);
+        *part_sizes.last_mut().expect("at least one body part") += size;
     }
-    let mut out = units.remove(0);
     // 2: an exit was reached; 0: the host entry returned through its checked $ra.
-    out += &format!(
+    let run = format!(
         "{}int plaid_run(plaid_state *s) {{\n  u64 host = s->r[31];\n  int r = F_{:08x}(s, host);\n  if (r == 2) return 0;\n  /* a checked return to the host's $ra hands control back (ADR-0146) */\n  if (r == 0) {{ s->pc = (u32)host; return 0; }}\n  return r;\n}}\n",
         if separate_runtime { "" } else { "static " },
         entry.0
     );
-    units.insert(0, out);
-    Ok(LoweredCUnits {
-        units,
-        runtime_header: if separate_runtime {
-            format!(
-                "{shared}\nvoid plaid_load_images(plaid_state *s);\nint plaid_run(plaid_state *s);\nint plaid_runtime_write(plaid_state *s,u32 p,u32 size,u32 pc);\nint plaid_runtime_check_write(plaid_state *s,u32 p,u32 size,u32 pc);\nint plaid_enter(plaid_state *s,u32 entry,u64 ret);\ntypedef int (*plaid_coroutine_fn)(plaid_state *,u64);\nplaid_coroutine_fn plaid_coroutine_target(plaid_state *s,u32 entry);\nint plaid_coroutine_enter(plaid_state *s,u32 entry,u64 ret);\n"
-            )
-        } else {
-            String::new()
-        },
+    let runtime_header = if separate_runtime {
+        format!(
+            "{shared}\nvoid plaid_load_images(plaid_state *s);\nint plaid_run(plaid_state *s);\nint plaid_runtime_write(plaid_state *s,u32 p,u32 size,u32 pc);\nint plaid_runtime_check_write(plaid_state *s,u32 p,u32 size,u32 pc);\nint plaid_enter(plaid_state *s,u32 entry,u64 ret);\ntypedef int (*plaid_coroutine_fn)(plaid_state *,u64);\nplaid_coroutine_fn plaid_coroutine_target(plaid_state *s,u32 entry);\nint plaid_coroutine_enter(plaid_state *s,u32 entry,u64 ret);\n"
+        )
+    } else {
+        String::new()
+    };
+    Ok(CPartLayout {
+        main: out,
+        shared,
+        run,
+        runtime_header,
+        part_sizes,
+        parts,
     })
 }
 

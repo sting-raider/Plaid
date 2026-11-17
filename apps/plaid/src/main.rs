@@ -51,7 +51,7 @@ use plaid_core::{
 use std::{
     collections::{BTreeMap, BTreeSet},
     env, fs,
-    io::{BufReader, Write},
+    io::{BufReader, Seek, Write},
     process::ExitCode,
 };
 
@@ -1316,42 +1316,60 @@ fn run() -> Result<(), String> {
             };
             let entry = GuestAddr(number32(entry)?);
             let exits = [GuestAddr(number32(exit)?)];
-            let lowered = if separate_runtime == 1 {
-                plaid_lower::lower_c_runtime_units(
+            let stem = output.strip_suffix(".c").unwrap_or(output);
+            if parts <= 1 {
+                if separate_runtime == 1 {
+                    return Err("separate runtime requires multipart output".into());
+                }
+                let c = plaid_lower::lower_c_with_preload(
                     &map,
                     &images,
                     &preload,
                     entry,
                     &exits,
-                    parts,
                     residual_dispatch,
-                )?
+                )?;
+                fs::write(output, c).map_err(|e| e.to_string())?;
             } else {
-                plaid_lower::LoweredCUnits {
-                    units: plaid_lower::lower_c_parts(
+                let scratch = format!("{stem}.{}.tmp", std::process::id());
+                let mut bodies = fs::OpenOptions::new()
+                    .create_new(true)
+                    .read(true)
+                    .write(true)
+                    .open(&scratch)
+                    .map_err(|e| e.to_string())?;
+                let lower = (|| {
+                    let layout = plaid_lower::lower_c_bodies(
                         &map,
                         &images,
                         &preload,
                         entry,
                         &exits,
-                        parts,
-                        residual_dispatch,
-                    )?,
-                    runtime_header: String::new(),
-                }
-            };
-            let stem = output.strip_suffix(".c").unwrap_or(output);
-            if separate_runtime == 1 {
-                fs::write(format!("{stem}.runtime.h"), lowered.runtime_header)
-                    .map_err(|e| e.to_string())?;
-            }
-            for (k, c) in lowered.units.iter().enumerate() {
-                let path = if k == 0 {
-                    output.clone()
-                } else {
-                    format!("{stem}.part{k}.c")
-                };
-                fs::write(path, c).map_err(|e| e.to_string())?;
+                        plaid_lower::CPartOptions {
+                            parts,
+                            separate_runtime: separate_runtime == 1,
+                            residual_dispatch,
+                        },
+                        &mut bodies,
+                    )?;
+                    bodies.rewind().map_err(|e| e.to_string())?;
+                    let header = layout.emit_units(&mut bodies, |k, c| {
+                        let path = if k == 0 {
+                            output.clone()
+                        } else {
+                            format!("{stem}.part{k}.c")
+                        };
+                        fs::write(&path, c).map_err(|e| format!("{path}: {e}"))
+                    })?;
+                    if separate_runtime == 1 {
+                        fs::write(format!("{stem}.runtime.h"), header)
+                            .map_err(|e| e.to_string())?;
+                    }
+                    Ok::<(), String>(())
+                })();
+                drop(bodies);
+                let cleanup = fs::remove_file(&scratch).map_err(|e| format!("{scratch}: {e}"));
+                lower.and(cleanup)?;
             }
             println!("lowered {} blocks", map.blocks.len());
         }

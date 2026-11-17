@@ -9832,3 +9832,12 @@ partition pass also reuses the builder's parsed map. On retained GoldenEye
 inputs this reduces the median partition pass from 0.375 s to 0.030 s. On
 Paper Mario the cold boot-state wait drops from 0.951 s to 0.003 s with
 byte-identical boot state, map and manifest. See research/boot-capture-overlap.md.
+
+## ADR-0344: Stream generated functions into multipart output
+
+Multipart lowering spools completed function bodies to a temporary file. The
+body lengths preserve the same byte-weighted partition boundaries. Emission
+reads one translation unit at a time, after lowering and proof checks finish.
+On the retained Paper Mario map, 54 outputs match byte for byte. Two paired
+runs reduce peak working set from 2.03 GB to 1.83 GB and add about 0.44 s to
+lowering. See research/streamed-lowering.md.
