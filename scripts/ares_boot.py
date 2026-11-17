@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import time
 import zlib
@@ -139,7 +140,9 @@ def capture_refill(rom, anchor, target):
             output = Path(temporary) / 'source.jsonl'
             command = [str(exe), str(rom), str(firmware or '-'), hex(natural_rows[-1]['boot_entry']), hex(target),
                        str(BUDGET), 'CIC-NUS-' + natural['cic'], str(output), 'refill-v1', hex(anchor)]
+            started = time.perf_counter()
             subprocess.run(command, check=True, timeout=300)
+            print(f'ares refill replay {target:#x}: {time.perf_counter() - started:.1f} s', file=sys.stderr, flush=True)
             rows = [json.loads(line) for line in output.read_text().splitlines()]
         # A completed, deterministic refusal is worth caching too: unresolved
         # roots recur across frontier rounds. Validation still runs on every hit.
@@ -269,6 +272,8 @@ def replay(rom, data, entries, exact, covered, sites, bindings, budget):
         started = time.perf_counter()
         subprocess.run(command, check=True, timeout=900)
         replay_seconds = round(time.perf_counter() - started, 3)
+        print(f'ares replay: {len(entries)} entries, {len(sites or [])} sites, budget {budget}: {replay_seconds:.1f} s',
+              file=sys.stderr, flush=True)
         results = [json.loads(line) for line in output.read_text().splitlines()]
     for result in results:
         result.update(format='plaid-ares-boot-harvest-v1', revision=REV, budget=budget, vi_budget=3600, replay_seconds=replay_seconds, rom_sha256=hashlib.sha256(data).hexdigest(),

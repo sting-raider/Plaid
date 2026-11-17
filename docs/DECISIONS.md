@@ -9713,3 +9713,17 @@ field (the reported rubber-banding). The runtime now records the field
 `VI_V_CURRENT` with each screen update. In a 14 s, 60 fps recording of the
 window, frames that changed and then returned to the frame before fell from
 249 of 466 to 15 of 173.
+
+## ADR-0336: Run refill replays side by side
+
+A cold GoldenEye build spent about 550 s of its harvest in `harvest_refills`:
+up to 64 counterfactual refill replays per round (ADR-0282), each an
+independent single-threaded ares process of about 3 s, run one after
+another. They now run in a thread pool, one replay per core, after the shared
+anchor replay is cached. Results are admitted in the original order with the
+original skip rule (a root an earlier admitted source already covers is
+dropped), so the receipt and loads match the serial loop's; a covered root
+only costs a replay that goes unused. `ares_boot` now prints each replay's
+time to stderr. A solo cold GoldenEye build fell from 22 m 50 s to 15 m 18 s
+and its harvest phases from 893 s to 444 s; `loads.json`, `map.json` and all
+22 generated C files were byte-identical.

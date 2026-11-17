@@ -1,6 +1,8 @@
 """Recover missing executable images using a deterministic, input-free ares boot."""
 import hashlib
 import json
+import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from ares_boot import capture_many, capture_refill
@@ -75,14 +77,27 @@ def harvest_refills(rom, loads_path, map_path, info, receipt_path):
         if not 0x80000000 <= target < 0xc0000000:
             candidates.setdefault(target >> 12, target)
     receipt = dict(format='plaid-refill-harvest-v1', anchor=hex(anchor), sources=[], refusals=[])
-    for target in sorted(candidates.values())[:64]:
-        if any(int(l['destination'], 0) <= target < int(l['destination'], 0) + int(l['size'], 0)
-               for l in loads['loads'] if l.get('slot')):
-            continue
+    inside = lambda target: any(int(l['destination'], 0) <= target < int(l['destination'], 0) + int(l['size'], 0)
+                                for l in loads['loads'] if l.get('slot'))
+    chosen = [t for t in sorted(candidates.values())[:64] if not inside(t)]
+
+    def attempt(target):
         try:
-            capture = capture_refill(rom, anchor, target)
+            return capture_refill(rom, anchor, target)
         except ValueError as error:
-            receipt['refusals'].append(dict(target=hex(target), reason=str(error)))
+            return error
+    # Each root is an independent single-threaded ares replay: run them side by
+    # side, then admit in order with the same skip rule, so the result is the
+    # serial loop's. The shared anchor replay is cached first.
+    if chosen:
+        capture_many(rom, [anchor], exact=True)
+    with ThreadPoolExecutor(min(len(chosen), os.cpu_count() or 1) or 1) as pool:
+        outcomes = list(pool.map(attempt, chosen))
+    for target, capture in zip(chosen, outcomes):
+        if inside(target):  # an earlier root of this round already supplies it
+            continue
+        if isinstance(capture, ValueError):
+            receipt['refusals'].append(dict(target=hex(target), reason=str(capture)))
             continue
         start, source, data = capture['destination'], capture['rom_source'], bytes(capture['bytes'])
         load = dict(destination=hex(start), size=hex(len(data)), rom=hex(source), encoding='tlb_raw',
