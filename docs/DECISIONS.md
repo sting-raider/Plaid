@@ -9813,3 +9813,12 @@ controls discovery refinement and selects a fully proved build when closed.
 Strict builds continue to request the address-taken scope on its own.
 Three retained ROM maps give equal reports and roughly halve the final
 solve time. See research/shared-build-solve.md.
+
+## ADR-0342: Reuse the index for tail-cell proof labels
+
+The map after candidate insertion supplies the CFG index for both new
+tail-cell claims and stale proof checks. Reuse is local to the pass and
+requires one indirect record per address. Maps with duplicate records
+still recheck against a rebuilt index. Six Paper Mario discovery maps
+match byte for byte, and the median tail-cell phase falls from 0.499 s
+to 0.337 s. See research/tail-cell-index-reuse.md.

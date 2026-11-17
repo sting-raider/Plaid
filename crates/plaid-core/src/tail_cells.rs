@@ -208,20 +208,37 @@ pub(crate) fn verified_certificate_in(
         return None;
     }
     let (certificate, detail, id) = detail(index, image, site)?;
-    let targets: BTreeSet<_> = certificate.targets.iter().cloned().collect();
-    let valid = evidence_id == id.as_str()
-        && evidence.detail == detail
-        && site.candidates.keys().cloned().collect::<BTreeSet<_>>() == targets
+    (evidence_id == id
+        && matches_targets(index, site, &certificate)
+        && matches_evidence(site, evidence, evidence_id, &detail))
+    .then_some(certificate)
+}
+
+fn matches_targets(
+    index: &MapIndex<'_>,
+    site: &IndirectSite,
+    certificate: &TailCellCertificate,
+) -> bool {
+    site.candidates.keys().eq(certificate.targets.iter())
         && site
-            .candidates
-            .values()
-            .all(|references| references.contains(evidence_id))
-        && site.observed.keys().all(|target| targets.contains(target))
+            .observed
+            .keys()
+            .all(|target| site.candidates.contains_key(target))
         && certificate
             .targets
             .iter()
-            .all(|target| mapped_target(index, target));
-    valid.then_some(certificate)
+            .all(|target| mapped_target(index, target))
+}
+
+fn matches_evidence(site: &IndirectSite, evidence: &Evidence, id: &str, detail: &str) -> bool {
+    evidence.kind == EvidenceKind::Static
+        && evidence.producer == PRODUCER
+        && evidence.revision == "0"
+        && evidence.detail == detail
+        && site
+            .candidates
+            .values()
+            .all(|references| references.contains(id))
 }
 
 /// The one source word that a verified native tail dispatch must bind/protect.
@@ -240,10 +257,7 @@ pub fn source_cell_range_in(
     image: &CodeImage,
     site: &IndirectSite,
 ) -> Option<GuestRange> {
-    if !verify_in(index, map, image, site) {
-        return None;
-    }
-    let certificate = certificate(index, image, site)?;
+    let certificate = verified_certificate_in(index, map, image, site)?;
     Some(GuestRange {
         start: certificate.source_cell,
         size: 4,
@@ -335,24 +349,15 @@ pub fn analyze_owned(mut out: ProgramMap, image: &CodeImage) -> Result<ProgramMa
                 .find(|site| site.site == site_address)?
                 .clone();
             let exact_candidates =
-                detail(&index, image, &site).is_some_and(|(certificate, _, current_id)| {
-                    current_id == id
-                        && site.candidates.keys().cloned().collect::<BTreeSet<_>>()
-                            == certificate.targets.iter().cloned().collect()
-                        && site
-                            .observed
-                            .keys()
-                            .all(|target| certificate.targets.contains(target))
-                        && certificate
-                            .targets
-                            .iter()
-                            .all(|target| mapped_target(&index, target))
+                detail(&index, image, &site).filter(|(certificate, _, current_id)| {
+                    *current_id == id && matches_targets(&index, &site, certificate)
                 });
-            if exact_candidates {
-                site.closed_proof = Some(id.clone());
-                if !verify_in(&index, &out, image, &site) {
-                    site.closed_proof = None;
-                }
+            if let Some((_, detail, _)) = exact_candidates {
+                site.closed_proof = out
+                    .evidence
+                    .get(&id)
+                    .is_some_and(|evidence| matches_evidence(&site, evidence, &id, &detail))
+                    .then(|| id.clone());
             } else if site.closed_proof.as_deref().is_some_and(|proof| {
                 out.evidence
                     .get(proof)
@@ -363,6 +368,21 @@ pub fn analyze_owned(mut out: ProgramMap, image: &CodeImage) -> Result<ProgramMa
             Some((site, id))
         })
         .collect();
+    // With one record per address, the updates only change proof labels.
+    // Prefix entry checks depend on block/target membership, so this index
+    // remains sufficient. Keep the legacy recheck for ambiguous records.
+    let unique_sites = out
+        .indirect_sites
+        .iter()
+        .zip(out.indirect_sites.iter().skip(1))
+        .all(|(a, b)| a.site != b.site);
+    let stale = unique_sites.then(|| {
+        stale_tail_sites(&index, &out, image, |site| {
+            updates
+                .binary_search_by(|(updated, _)| updated.site.cmp(&site.site))
+                .is_err()
+        })
+    });
     for (site, id) in updates {
         let current = out
             .indirect_sites
@@ -381,20 +401,8 @@ pub fn analyze_owned(mut out: ProgramMap, image: &CodeImage) -> Result<ProgramMa
         out.indirect_sites.insert(site);
     }
     // Stale tail-cell claims must never survive a failed byte/CFG recheck.
-    let index = MapIndex::new(&out);
-    let stale: Vec<_> = out
-        .indirect_sites
-        .iter()
-        .filter(|site| {
-            site.closed_proof
-                .as_deref()
-                .and_then(|id| out.evidence.get(id))
-                .is_some_and(|evidence| {
-                    evidence.producer == PRODUCER && !verify_in(&index, &out, image, site)
-                })
-        })
-        .cloned()
-        .collect();
+    let stale =
+        stale.unwrap_or_else(|| stale_tail_sites(&MapIndex::new(&out), &out, image, |_| true));
     for mut site in stale {
         let stale_proof = site.closed_proof.clone();
         site.closed_proof = None;
@@ -409,6 +417,28 @@ pub fn analyze_owned(mut out: ProgramMap, image: &CodeImage) -> Result<ProgramMa
         out.indirect_sites.insert(site);
     }
     Ok(out)
+}
+
+fn stale_tail_sites(
+    index: &MapIndex<'_>,
+    map: &ProgramMap,
+    image: &CodeImage,
+    selected: impl Fn(&IndirectSite) -> bool,
+) -> Vec<IndirectSite> {
+    map.indirect_sites
+        .iter()
+        .filter(|site| {
+            selected(site)
+                && site
+                    .closed_proof
+                    .as_deref()
+                    .and_then(|id| map.evidence.get(id))
+                    .is_some_and(|evidence| {
+                        evidence.producer == PRODUCER && !verify_in(index, map, image, site)
+                    })
+        })
+        .cloned()
+        .collect()
 }
 
 #[cfg(test)]
@@ -598,6 +628,31 @@ mod tests {
         );
         let alternate = analyzed(&map, &image, &site);
         assert!(analyzed_site(&alternate, &site).closed_proof.is_none());
+    }
+
+    #[test]
+    fn reanalysis_revokes_an_existing_proof_when_a_new_entry_bypasses_its_load() {
+        let (map, image, site) = fixture();
+        let mut proved = analyzed(&map, &image, &site);
+        assert!(analyzed_site(&proved, &site).closed_proof.is_some());
+        proved.entries.insert(
+            code("synthetic", 7, BASE + 4),
+            ["synthetic-fixture".into()].into(),
+        );
+        let unique = analyze(&proved, &image).unwrap();
+        assert!(analyzed_site(&unique, &site).closed_proof.is_none());
+
+        let mut duplicate = analyzed_site(&proved, &site);
+        duplicate.link_register = Some(31);
+        proved.indirect_sites.insert(duplicate);
+        let ambiguous = analyze(&proved, &image).unwrap();
+        assert_eq!(ambiguous.indirect_sites.len(), 2);
+        assert!(
+            ambiguous
+                .indirect_sites
+                .iter()
+                .all(|site| site.closed_proof.is_none())
+        );
     }
 
     #[test]
