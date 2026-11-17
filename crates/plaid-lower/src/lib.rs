@@ -2270,6 +2270,14 @@ fn lower_c_units(
         }
         callees.push(vector.clone());
     }
+    // Declared entries inside a relocatable overlay are where its binder
+    // enters it, by register call (a fragment's `j entry` word, ADR-0337).
+    let overlay_roots: Vec<_> = map
+        .entries
+        .keys()
+        .filter(|e| ovl_of(e.pc.0).is_some() && map.blocks.iter().any(|b| b.start.pc == e.pc))
+        .cloned()
+        .collect();
     let mut residual = BTreeMap::new();
     for site in &map.indirect_sites {
         if report.residual_sites.contains(&site.site) {
@@ -2288,11 +2296,12 @@ fn lower_c_units(
             .and_then(|id| map.evidence.get(id));
         if proof.is_none() && site.link_register.is_some() && !map.address_taken.is_empty() {
             // the solver accepted it under the address-taken scope
-            callees.extend(map.address_taken.keys().cloned());
+            callees.extend(map.address_taken.keys().chain(&overlay_roots).cloned());
             targets.insert(
                 site.site.pc.0,
                 map.address_taken
                     .keys()
+                    .chain(&overlay_roots)
                     .map(|t| t.pc.0)
                     .collect::<BTreeSet<_>>(),
             );
@@ -2983,7 +2992,7 @@ fn lower_c_units(
             let Some(&(k, kind)) = relocations.get(&pc) else {
                 return lowerer.simple(w, pc, None);
             };
-            match kind {
+            match kind & !plaid_core::overlays::FOREIGN {
                 5 => Ok(set(
                     (w >> 16) & 31,
                     format!("SX32((plaid_ow(s, {k}, 0x{pc:08x}u) & 0xffffu) << 16)"),

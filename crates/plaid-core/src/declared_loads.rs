@@ -194,11 +194,8 @@ impl DeclaredLoad {
                     return Err("MIO0 overlay needs bounded text and BSS extents".into());
                 }
                 // Like RarePair, the bytes here are the slot copy (ADR-0257).
-                let mut layout = crate::overlays::slot_layout_bounded(
-                    bytes,
-                    self.destination.start.0,
-                    text_size,
-                )?;
+                let mut layout =
+                    crate::overlays::catalog_layout(bytes, self.destination.start.0, text_size)?;
                 layout.bss = bss_size;
                 Ok(layout)
             }
@@ -604,7 +601,7 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
         }
         if let LoadEncoding::CatalogOverlay { text_size, .. } = load.encoding {
             load.layout(&data)?;
-            let layout = crate::overlays::slot_layout_bounded(&data, linked.0, text_size)?;
+            let layout = crate::overlays::catalog_layout(&data, linked.0, text_size)?;
             let mut relocated = layout.apply(&data, linked.0, load.destination.start.0)?;
             relocated.truncate(data.len());
             return Ok(relocated);

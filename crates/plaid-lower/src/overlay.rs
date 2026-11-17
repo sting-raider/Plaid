@@ -102,6 +102,20 @@ int plaid_overlay_verify_{id}(const uint8_t *ram, size_t ram_size, uint32_t base
         let at = r.offset;
         let w = words[at as usize / 4];
         match r.kind {
+            // Another module's address: the loader's bits are accepted as RAM holds them.
+            0x82 => {
+                out += &format!(
+                    "  {put}(expected + {at}, {get}(ram + p + {at}));
+"
+                )
+            }
+            0x85 | 0x86 => {
+                out += &format!(
+                    "  {put}(expected + {at}, 0x{:08x}u | ({get}(ram + p + {at}) & 0xffffu));
+",
+                    w & 0xffff0000
+                )
+            }
             2 if plaid_core::overlays::segmented(w, link, end) => {}
             2 => out += &format!("  {put}(expected + {at}, 0x{w:08x}u + delta);\n"),
             4 => {
@@ -184,6 +198,38 @@ mod tests {
             assert!(verifier_guarded(&[0; 12], &layout, 8, 0x80000000, 0, &guarded).is_err());
         }
         assert!(verifier_guarded(&[0; 12], &layout, 8, 0x80000000, 0, &[(8, 12)]).is_ok());
+    }
+
+    #[test]
+    fn foreign_relocations_accept_the_loader_bits_and_only_them() {
+        // lui t0 / addiu t0 into another module, then a foreign data word.
+        let bytes: Vec<u8> = [0x3c08_8290u32, 0x2508_0040, 0x8290_0000]
+            .iter()
+            .flat_map(|w| w.to_be_bytes())
+            .collect();
+        let foreign = plaid_core::overlays::FOREIGN;
+        let layout = Layout {
+            text: 8,
+            data: 4,
+            rodata: 0,
+            bss: 0,
+            file_size: 12,
+            relocations: [(0, 5), (4, 6), (8, 2)]
+                .map(|(offset, kind)| plaid_core::overlays::Relocation {
+                    offset,
+                    kind: kind | foreign,
+                })
+                .to_vec(),
+        };
+        let c = verifier(&bytes, &layout, 12, 0x8170_0000, 0).unwrap();
+        // The opcode half stays compared; only the immediate (or data word) comes from RAM.
+        assert!(c.contains("plaid_overlay_put_0(expected + 0, 0x3c080000u | (plaid_overlay_get_0(ram + p + 0) & 0xffffu));"));
+        assert!(c.contains("plaid_overlay_put_0(expected + 4, 0x25080000u | (plaid_overlay_get_0(ram + p + 4) & 0xffffu));"));
+        assert!(c.contains("plaid_overlay_put_0(expected + 8, plaid_overlay_get_0(ram + p + 8));"));
+        assert!(
+            !c.contains("free(expected); return 0;"),
+            "a foreign pair never refuses the binding"
+        );
         for ranges in [vec![(0, 12)], vec![(4, 4)], vec![(1, 8)], vec![(0, 7)]] {
             assert!(
                 verifier_text_ranges(&[0; 12], &layout, 8, 0x80000000, 0, &ranges, &[]).is_err()

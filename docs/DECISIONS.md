@@ -9727,3 +9727,29 @@ only costs a replay that goes unused. `ares_boot` now prints each replay's
 time to stderr. A solo cold GoldenEye build fell from 22 m 50 s to 15 m 18 s
 and its harvest phases from 893 s to 444 s; `loads.json`, `map.json` and all
 22 generated C files were byte-identical.
+
+## ADR-0337: Relocatable FRAGMENT modules
+
+Pokemon Stadium 2 keeps much of its code in "FRAGMENT" modules: a 32-byte
+header (`j entry`, a zero word, the magic, header size 0x20, relocation table
+offset R, file size S, RAM size M) followed by text, data and a Zelda64-style
+packed relocation table. The game's loader copies a module into its heap,
+relocates `[0, R)` from the module's 1 MiB link base and zeroes `[R, M)`, then
+calls word 0. Plaid could not place them: a wrong fixed copy from the boot
+harvest hid resident code (fault 12), and the heap copies faulted as unbound
+targets (fault 3).
+
+`fragment_layout` now reads the table exactly. A reference into the module is
+an ordinary relocation; one into resident code (below 0x81000000) keeps its
+value. One into another module moves with that module, which only the run
+knows: a data word or HI16/LO16 pair becomes a FOREIGN relocation (kind flag
+0x80) whose relocated bits the verifier takes from RAM, keeping the opcode
+half compared, and whose immediate lowering already reads from the bound copy;
+a jump into another module still refuses the file. HI16/LO16 pairs follow
+table order, the loader's order, not offset order. Raw aligned fragments join
+the overlay catalog at their link base; infer-loads drops fixed copies of a
+fragment, the harvest skips snapshots that start with one, and each catalogued
+fragment's word 0 is a map entry that address-taken dispatch includes.
+Pokemon Stadium 2 went from fault 3 at VI 14 to fault 3 at VI 172. The next
+blocker is fragments stored in Yay0 streams (673 of 762 "FRAGMENT" strings in
+the ROM) and modules that jump into other modules.

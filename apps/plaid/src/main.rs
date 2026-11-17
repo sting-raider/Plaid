@@ -985,6 +985,18 @@ fn run() -> Result<(), String> {
                 })
                 .collect();
             entries.extend(vector_roots.iter().copied());
+            // A fragment's first word, `j entry`, is where its loader's caller
+            // enters it (ADR-0337); the magic survives relocation into the slot.
+            entries.extend(
+                declared
+                    .iter()
+                    .flat_map(|(spec, _)| &spec.loads)
+                    .map(|l| l.destination.start)
+                    .filter(|&d| {
+                        image.word(GuestAddr(d.0 + 8)) == Some(0x4652_4147)
+                            && image.word(GuestAddr(d.0 + 12)) == Some(0x4d45_4e54)
+                    }),
+            );
             if let Some((spec, _)) = &declared {
                 for load in &spec.loads {
                     if let plaid_core::declared_loads::LoadEncoding::Observed { generation } =
@@ -1124,6 +1136,7 @@ fn run() -> Result<(), String> {
             }
             bind_status_globals(&mut d.map, &status_globals)?;
             bind_eeprom_timers(&mut d.map, &eeprom_timers);
+            // its loader hands that address to callers: address-taken code
             for (entry, function) in &mut d.map.runtime_functions {
                 function.source_size = source_sizes.get(&entry.pc).copied();
                 if let Some(global) = running_thread_globals.get(&entry.pc) {
@@ -1575,6 +1588,13 @@ fn run() -> Result<(), String> {
                 .ok_or("ROM ends before its boot window")?;
             let mut found =
                 plaid_core::overlays::static_loads(bytes, base, rom.header.boot_address.0)?;
+            // a fragment is relocated wherever the game loads it, so a fixed
+            // placement of its unrelocated bytes is never the game's (ADR-0337)
+            found.retain(|l| {
+                !bytes
+                    .get(l.file.rom_start as usize..)
+                    .is_some_and(plaid_core::overlays::is_fragment)
+            });
             // a fixed load of bytes inside a bounded main image would overwrite
             // that image with itself elsewhere; slots and in-place copies stay
             // (ADR-0258)

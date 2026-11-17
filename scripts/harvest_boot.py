@@ -426,6 +426,11 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
                 added = True
             continue
         lo, hi = capture['destination'], capture['destination'] + len(data)
+        at = capture['entry'] - lo
+        if 0 <= at and data[at + 8:at + 16] == b'FRAGMENT':
+            # A relocated fragment the game placed in its heap: the catalog
+            # binds it wherever it lands, so no fixed copy (ADR-0337).
+            continue
         pieces = [(lo, hi)]
         # Preserve static inference and earlier snapshots byte-for-byte.
         covered = [(base, base + size)] + [(int(l['destination'], 0), int(l['destination'], 0) + int(l['size'], 0))

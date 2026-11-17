@@ -5942,8 +5942,8 @@ mod tests {
         )
         .unwrap();
         ram.cached = true;
-        for n in 0..4 {
-            ram.origins[n] = RamByteOrigin::SpDma {
+        for (n, origin) in ram.origins.iter_mut().enumerate().take(4) {
+            *origin = RamByteOrigin::SpDma {
                 write_ordinal: 100,
                 source_offset: n as u16,
             };
@@ -6440,9 +6440,9 @@ mod tests {
     fn cpu_ram_copy_keeps_held_load_parents_but_unattributed_equal_store_cuts_them() {
         let (mut ram, begin, effect, parent) = cpu_ram_fixture();
         ram.cpu_write(&effect, &begin, Some(&parent)).unwrap();
-        for n in 0..4 {
+        for (n, origin) in ram.origins.iter().enumerate().take(4) {
             assert_eq!(
-                ram.origins[n],
+                *origin,
                 RamByteOrigin::CpuCopy {
                     write_ordinal: 21,
                     source_offset: n as u8
