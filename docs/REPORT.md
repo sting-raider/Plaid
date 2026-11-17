@@ -18,6 +18,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
+| — | `8948d59b` | Trace oracle can watch writes from a chosen retrace, logs the CPU pc per retrace and can boot through local firmware: found why DK64 stalls (CIC-6105 boot decryption) |
 | 0336 | `a34b4e8f` | Refill replays run side by side: a cold GoldenEye build fell from 22m50s to 15m18s with byte-identical output |
 | Super Mario 64 (USA) | code segment, 2 load files, a local symbol map for 3 names | ✅ | full-speed gameplay with input, EEPROM saves and audio, no stop in 90 s | infer its loads from the ROM |
 | Majora's Mask (USA) | **none** | ??? | intro and Clock Town attract scene, 90 s, fault 0, audio (ADR-0187, ADR-0189); current main: 60 s, VI 3563, fault 0 after the frame-pin fix (ADR-0239); a native Windows 30 s control reaches 1798 VIs, fault 0 (ADR-0295) | longer play |
