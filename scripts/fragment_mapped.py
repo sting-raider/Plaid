@@ -9,6 +9,20 @@ def partition_mapped(loads_path, map_path):
                and int(l['text_size'], 0) == int(l['size'], 0) for l in loads['loads']):
         return False
     program = json.loads(Path(map_path).read_text())
+    # Table evidence, parsed once: (table, count, consuming site or None).
+    tables = []
+    for evidence in program.get('evidence', {}).values():
+        try:
+            detail = json.loads(evidence['detail'])
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(detail, dict):
+            continue
+        table, count = detail.get('table_start', detail.get('source_cell')), detail.get('count', 1)
+        if type(table) is int and type(count) is int and count > 0:
+            consumer = detail.get('site')
+            site = consumer.get('pc') if isinstance(consumer, dict) else None
+            tables.append((table, count, site if type(site) is int else None))
     result = []
     for load in loads['loads']:
         if (load['encoding'] != 'ares_tlb' or not load.get('slot') or
@@ -33,25 +47,16 @@ def partition_mapped(loads_path, map_path):
                      and function.get('source_size')]
         # Conservatively keep whole known tables together, including candidate
         # evidence. Extra/stale ranges can only suppress cuts, never grant code.
-        for evidence in program.get('evidence', {}).values():
-            try:
-                detail = json.loads(evidence['detail'])
-            except (ValueError, TypeError):
-                continue
-            if not isinstance(detail, dict):
-                continue
-            table, count = detail.get('table_start', detail.get('source_cell')), detail.get('count', 1)
-            if type(table) is int and type(count) is int and count > 0:
-                for base in (placed, start):
-                    if base <= table < base + size:
-                        site = detail.get('site', {}).get('pc')
-                        if type(site) is int and placed <= site < placed + size:
-                            # The consuming native entry must bind the proof
-                            # input too, even when it is on a different page.
-                            protected.append((min(site - placed, table - base),
-                                              max(site - placed + 8, table - base + 4 * count)))
-                        else:
-                            protected.append((0, size))
+        for table, count, site in tables:
+            for base in (placed, start):
+                if base <= table < base + size:
+                    if site is not None and placed <= site < placed + size:
+                        # The consuming native entry must bind the proof
+                        # input too, even when it is on a different page.
+                        protected.append((min(site - placed, table - base),
+                                          max(site - placed + 8, table - base + 4 * count)))
+                    else:
+                        protected.append((0, size))
         cuts = [0, *[v - start for v in range((start | 0xfff) + 1, start + size, 0x1000)
                      if not any(lo < v - start < hi for lo, hi in protected)], size]
         for lo, hi in zip(cuts, cuts[1:]):

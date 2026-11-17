@@ -46,7 +46,8 @@ def mapped_partition_contract():
         # page must bind those words through the very same fragment.
         for proof in [dict(table_start=placed + 0x3010, count=1, site=dict(pc=placed + 0x100)),
                       dict(source_cell=placed + 0x3010, site=dict(pc=placed + 0x100)),
-                      dict(table_start=placed + 0x3010, count=1)]:
+                      dict(table_start=placed + 0x3010, count=1),
+                      dict(table_start=placed + 0x3010, count=1, site=None)]:
             program['evidence'] = {'far': dict(detail=json.dumps(proof))}
             mapping.write_text(json.dumps(program)); loads.write_text(json.dumps(document))
             before = loads.read_bytes()

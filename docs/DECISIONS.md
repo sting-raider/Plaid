@@ -9795,3 +9795,11 @@ once, lazily, and hands it to every load. A GoldenEye solve composes in
 solve and infer-call-loads fell from 421 s to 139 s (963 s to 214 s in total,
 the rest from a warm ares replay cache). `solve` reports `solve.images` and
 `solve.solve` under `PLAID_PHASE_TIMINGS`.
+
+## ADR-0340: Parse partition evidence once
+
+Mapped fragment partitioning decodes table evidence once per map and reuses
+it for each load. The existing protected extents and source identity checks
+still determine the cuts. The retained GoldenEye pass takes 0.376 s instead
+of 5.199 s at the median of three paired runs. A synthetic split produces
+byte-identical output. See research/mapped-partition-timing.md.
