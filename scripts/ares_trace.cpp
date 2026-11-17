@@ -61,7 +61,15 @@ int main(int argc, char** argv) {
   u32 limit = std::strtoul(argv[3], nullptr, 0);
   if(bytes.size() < 4096 || !limit) return 2;
   out = std::fopen(argv[4], "wb"); if(!out) return 2;
+  // PLAID_PIF_ROM: boot through user-supplied firmware, for local verification
+  // only (ADR-0316); by default the oracle starts at IPL3 in the HLE state.
   std::vector<u8> firmware(1984);
+  auto pifRom = std::getenv("PLAID_PIF_ROM");
+  if(pifRom) {
+    auto f = nall::file::read(pifRom);
+    if(f.size() != firmware.size()) return 2;
+    std::copy(f.begin(), f.end(), firmware.begin());
+  }
 
   Scripted frontend; platform = &frontend;
   frontend.systemPak->append("pif.ntsc.rom", std::span<const u8>{firmware.data(), firmware.size()});
@@ -78,7 +86,7 @@ int main(int argc, char** argv) {
   ares::Nintendo64::system.power(false);
   if(cpu.recompiler.enabled || rsp.recompiler.enabled) return 4;
   std::vector<u8> hidden(rdram.ram.size / 2); rdram.hidden.data = hidden.data();
-  if(plaidHleBoot(bytes.data(), bytes.size(), argv[2], vis) == ~0ull) return 4;
+  if(!pifRom && plaidHleBoot(bytes.data(), bytes.size(), argv[2], vis) == ~0ull) return 4;
   vis = 0;  // count retraces from the game's entry, as the native runtime does
 
   ares::Nintendo64::plaidRdpFrameObserver = [](u64 hash, u32 commands, const u32* ops) {
@@ -94,18 +102,21 @@ int main(int argc, char** argv) {
     for(u32 i = 0; i < count; i++) std::fprintf(out, " %016llx", (unsigned long long)words[i]);
     std::fputc(10, out);
   };
-  // PLAID_TRACE_WATCH=lo-hi: reads of physical [lo, hi) other than the VI's
-  // scanout, e.g. a CPU or RSP read of a buffer only the RDP draws.
-  static u32 watchLo = 0, watchHi = 0, watched = 0;
-  if(auto w = std::getenv("PLAID_TRACE_WATCH")) std::sscanf(w, "%x-%x", &watchLo, &watchHi);
+  // PLAID_TRACE_WATCH=lo-hi[@vi]: reads (and writes, with
+  // PLAID_TRACE_WATCH_WRITES) of physical [lo, hi) other than the
+  // VI's scanout from retrace vi on, e.g. a CPU or RSP read of a buffer only
+  // the RDP draws.
+  static u32 watchLo = 0, watchHi = 0, watched = 0, watchFrom = 0;
+  if(auto w = std::getenv("PLAID_TRACE_WATCH")) std::sscanf(w, "%x-%x@%u", &watchLo, &watchHi, &watchFrom);
   if(watchHi) {
     static auto watch = [](bool write, u32 a, u32 n, u32 d) {
-      if(write || a >= watchHi || a + n <= watchLo || d == (u32)RBusDevice::VI_DMA) return;
+      static bool writes = std::getenv("PLAID_TRACE_WATCH_WRITES");
+      if((write && !writes) || vis < watchFrom || a >= watchHi || a + n <= watchLo || d == (u32)RBusDevice::VI_DMA) return;
       static u32 lastPc = 0, lastFrame = ~0u;  // one line per run of reads from one pc
       if(lastPc == (u32)cpu.ipu.pc && lastFrame == frames) return;
       lastPc = cpu.ipu.pc, lastFrame = frames;
       if(++watched > 20000) return;
-      std::fprintf(out, "watch vi %u frame %u pc %08x addr %08x size %u device %u\n", vis, frames, (u32)cpu.ipu.pc, a, n, d);
+      std::fprintf(out, "watch vi %u frame %u pc %08x addr %08x size %u device %u%s\n", vis, frames, (u32)cpu.ipu.pc, a, n, d, write ? " write" : "");
     };
     plaidRdramScalarObserver = [](bool w, u32 a, u32 n, u32 d, u64) { watch(w, a, n, d); };
     plaidRdramBurstObserver = [](bool w, u32 a, u32 n, u32 d, const u32*) { watch(w, a, n, d); };
@@ -116,7 +127,7 @@ int main(int argc, char** argv) {
     if(vi.refreshed) {
       vi.refreshed = false;
       for(auto& p : presses) if(!p.started && frames >= p.frame) p.started = true, p.start = vis + 1;
-      std::fprintf(out, "vi %u origin %08x field %u\n", ++vis, (u32)vi.io.dramAddress, (u32)vi.io.field);
+      std::fprintf(out, "vi %u origin %08x field %u pc %08x\n", ++vis, (u32)vi.io.dramAddress, (u32)vi.io.field, (u32)cpu.ipu.pc);
     }
     if(halted && !rsp.status.halted) {
       // osSpTaskLoad placed the OSTask at DMEM 0xfc0 with physical pointers.

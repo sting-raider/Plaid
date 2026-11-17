@@ -799,7 +799,11 @@ devtrace (`target/ares-trace/oracle.exe <rom> CIC-NUS-<cic> <vis> <out>`)
 log every read of that range except the VI's scanout, one line per run of
 reads from one PC: `watch vi <n> frame <n> pc <pc> addr <a> size <n> device <d>`
 (device is ares's RBusDevice: 1-3 CPU, 4 SP DMA). Use it to find out whether a
-game reads back a buffer only the RDP draws.
+game reads back a buffer only the RDP draws. `<lo>-<hi>@<vi>` starts logging at
+retrace `<vi>`; `PLAID_TRACE_WATCH_WRITES=1` logs writes too (marked `write`).
+Each `vi` line ends with the CPU `pc` at that retrace, which finds a game
+spinning in place. `PLAID_PIF_ROM=<your PIF ROM>` boots through that firmware
+instead of the HLE state, for local comparison only (ADR-0316).
 
 `PLAID_DETERMINISTIC=<ns>` (devtrace: `--deterministic <ns>`) runs the game
 on a virtual clock: `<ns>` per loop safepoint and 1 ms steps while every guest
