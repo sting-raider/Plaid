@@ -401,7 +401,8 @@ def build_once(a):
         if partitioned:
             continue
         with phase('solve'):
-            verdict = json.loads(memo_plaid('solve', rom, m, '--address-taken'))
+            report = json.loads(memo_plaid('solve', rom, m, '--address-taken' if a.strict else '--build'))
+            verdict = report if a.strict else report['address_taken']
         if verdict['status'] == 'closed' or a.loads or a.repair_record or attempt == 63:
             break
         previous_loads = loads.read_bytes()
@@ -419,8 +420,7 @@ def build_once(a):
     print('solve', verdict['status'], len(verdict['blockers']), 'blockers')
     residual = verdict['status'] != 'closed' and not a.strict
     if residual:
-        with phase('residual-solve'):
-            verdict = json.loads(memo_plaid('solve', rom, m, '--residual-dispatch'))
+        verdict = report['residual_dispatch']
         print('residual-dispatch solve', verdict['status'], len(verdict['blockers']), 'blockers,', len(verdict.get('residual_sites', [])), 'residual sites')
     if verdict['status'] != 'closed' and not (residual and verdict.get('trapped_sites') and all(b in verdict['trapped_sites'] for b in verdict['blockers'])):
         sys.exit('not CLOSED under the address-taken scope' + ('' if a.strict else ', even with residual dispatch') + ': nothing is built')

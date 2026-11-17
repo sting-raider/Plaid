@@ -286,6 +286,18 @@ def main():
         run("discover",rom,"64","0x80000000","40","0x80000000",taken,"--address-taken")
         assert len(json.loads(taken.read_bytes())['blocks'])>=len(json.loads(runtime_map.read_bytes())['blocks'])
         assert json.loads(run("solve",rom,taken,"--address-taken"))['status']=='closed'
+        unknown_rom = directory/'unknown-jump.z64'
+        unknown_rom.write_bytes(canonical[:64] + bytes.fromhex('0100000800000000') + canonical[72:])
+        unknown_map = directory/'unknown-jump-map.json'
+        run('discover', unknown_rom, '64', '0x80000000', '8', '0x80000000', unknown_map)
+        for source, path in ((rom, taken), (rom, runtime_map), (unknown_rom, unknown_map)):
+            ordinary = json.loads(run('solve', source, path, '--address-taken'))
+            combined = json.loads(run('solve', source, path, '--build'))
+            assert combined['address_taken'] == ordinary
+            fallback = (json.loads(run('solve', source, path, '--residual-dispatch'))
+                        if ordinary['status'] == 'open' else None)
+            assert combined['residual_dispatch'] == fallback
+        assert ordinary['status'] == 'open' and fallback['status'] == 'closed'
         # the COP1 register mode is a declared map property (ADR-0160)
         fr0_map=directory/'fr0-map.json'
         run("discover",rom,"64","0x80000000","40","0x80000000",fr0_map,"--fr0")

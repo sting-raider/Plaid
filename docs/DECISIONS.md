@@ -9803,3 +9803,13 @@ it for each load. The existing protected extents and source identity checks
 still determine the cuts. The retained GoldenEye pass takes 0.376 s instead
 of 5.199 s at the median of three paired runs. A synthetic split produces
 byte-identical output. See research/mapped-partition-timing.md.
+
+## ADR-0341: Share the two build closure reports
+
+The default builder verifies its address-taken and residual scopes in one
+pass over the same authenticated image and CFG. The address-taken view
+restores precisely the blockers waived by residual dispatch. It still
+controls discovery refinement and selects a fully proved build when closed.
+Strict builds continue to request the address-taken scope on its own.
+Three retained ROM maps give equal reports and roughly halve the final
+solve time. See research/shared-build-solve.md.

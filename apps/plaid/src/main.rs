@@ -40,7 +40,7 @@ use plaid_core::{
     program::{GuestRange, ProgramMap, RomOffset},
     rom::CanonicalRom,
     rsp_cpu_imem::{RspCpuImemReport, inspect_rsp_cpu_imem_history, verify_rsp_cpu_imem_report},
-    solver::{DiscoverySourceInputs, Scope, solve, solve_with_discovery_sources},
+    solver::{DiscoverySourceInputs, Scope, solve, solve_for_build, solve_with_discovery_sources},
     sp_history::{
         SpHistoryReport, SpWriterFetchReport, inspect_sp_boot_history,
         inspect_sp_writer_fetch_history, verify_sp_boot_history_report,
@@ -791,12 +791,12 @@ fn run() -> Result<(), String> {
                 [] => Scope::WholeRom,
                 [f] if f == "--guarded-ram" => Scope::DeclaredStaticImagesGuardedRam,
                 [f] if f == "--address-taken" => Scope::DeclaredStaticImagesGuardedRamAddressTaken,
-                [f] if f == "--residual-dispatch" => {
+                [f] if f == "--residual-dispatch" || f == "--build" => {
                     Scope::DeclaredStaticImagesGuardedRamResidualDispatch
                 }
                 _ => {
                     return Err(
-                        "solve accepts only --guarded-ram, --address-taken or --residual-dispatch"
+                        "solve accepts only --guarded-ram, --address-taken, --residual-dispatch or --build"
                             .into(),
                     );
                 }
@@ -811,12 +811,17 @@ fn run() -> Result<(), String> {
             let images = rom_images(&rom, &map)?;
             plaid_core::timing::note("solve.images", started.elapsed());
             let started = std::time::Instant::now();
-            let report = solve(&map, &images, scope)?;
+            let output = if flag.first().is_some_and(|f| f == "--build") {
+                let (address_taken, residual_dispatch) = solve_for_build(&map, &images)?;
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "address_taken": address_taken,
+                    "residual_dispatch": residual_dispatch,
+                }))
+            } else {
+                serde_json::to_string_pretty(&solve(&map, &images, scope)?)
+            };
             plaid_core::timing::note("solve.solve", started.elapsed());
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
-            );
+            println!("{}", output.map_err(|e| e.to_string())?);
         }
         [command, rom_path, map_path, declarations, output]
             if command == "bind-runtime-globals" =>

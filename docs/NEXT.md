@@ -1,5 +1,11 @@
 # Next
 
+Mapped fragment partitioning parses its evidence once (ADR-0340). The
+builder's address-taken and residual verdicts now share one proof walk
+(ADR-0341). For incremental indirect proofs, measure tail-cell and indexed
+table costs separately. Candidate edges can change prefix dominance between
+rounds. Preserve final verification and compare the output map byte for byte.
+
 Direction (2026-11-11): quality first. Paper Mario's map overlays now bind
 (ADR-0319..0321) and its build is 13 min instead of 19 (ADR-0322). Next speed
 step: make the discovery fixed point incremental. Each `discover` call still
