@@ -2,7 +2,8 @@
 
 Mapped fragment partitioning parses its evidence once (ADR-0340). The
 builder's address-taken and residual verdicts now share one proof walk
-(ADR-0341). For incremental indirect proofs, measure tail-cell and indexed
+(ADR-0341). The reset capture runs during discovery and the mapped partition
+consumes the parsed map (ADR-0343). For incremental indirect proofs, measure tail-cell and indexed
 table costs separately. Candidate edges can change prefix dominance between
 rounds. Preserve final verification and compare the output map byte for byte.
 

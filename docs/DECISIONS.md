@@ -9822,3 +9822,13 @@ requires one indirect record per address. Maps with duplicate records
 still recheck against a rebuilt index. Six Paper Mario discovery maps
 match byte for byte, and the median tail-cell phase falls from 0.499 s
 to 0.337 s. See research/tail-cell-index-reuse.md.
+
+## ADR-0343: Capture startup state during discovery
+
+The ROM entry address is sufficient to start the reset replay. Discovery and
+closure run while it captures startup state. The builder consumes the result
+after closure admits the map, so closure refusals still take precedence. The
+partition pass also reuses the builder's parsed map. On retained GoldenEye
+inputs this reduces the median partition pass from 0.375 s to 0.030 s. On
+Paper Mario the cold boot-state wait drops from 0.951 s to 0.003 s with
+byte-identical boot state, map and manifest. See research/boot-capture-overlap.md.

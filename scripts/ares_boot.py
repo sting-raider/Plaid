@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from threading import get_ident
 import time
 import zlib
 from engine_paths import BUNDLED
@@ -202,7 +203,7 @@ def capture_many(rom, entries, exact=False, covered=None, sites=None, bindings=N
     # JSON-normalized, exactly as a cache hit or the WSL route returns it.
     results = json.loads(json.dumps(replay(rom, data, entries, exact, covered, sites, bindings, budget)))
     cached.parent.mkdir(parents=True, exist_ok=True)
-    partial = cached.with_name(f'{key}.{os.getpid()}.tmp')
+    partial = cached.with_name(f'{key}.{os.getpid()}.{get_ident()}.tmp')
     partial.write_text(json.dumps(results))
     partial.replace(cached)
     # Only the final row reports the uncovered fetch; entry rows omit it.

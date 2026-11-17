@@ -3,12 +3,11 @@ import json
 from pathlib import Path
 
 
-def partition_mapped(loads_path, map_path):
+def partition_mapped(loads_path, program):
     loads = json.loads(Path(loads_path).read_text())
     if not any(l['encoding'] == 'ares_tlb' and int(l['size'], 0) > 0x1000
                and int(l['text_size'], 0) == int(l['size'], 0) for l in loads['loads']):
         return False
-    program = json.loads(Path(map_path).read_text())
     # Table evidence, parsed once: (table, count, consuming site or None).
     tables = []
     for evidence in program.get('evidence', {}).values():

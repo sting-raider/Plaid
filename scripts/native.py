@@ -355,6 +355,11 @@ def main():
 
 
 def build_once(a):
+    with ThreadPoolExecutor(1) as boot_pool:
+        return build_native(a, boot_pool)
+
+
+def build_native(a, boot_pool):
     rom = a.rom.resolve()
     # 32 characters keep both Zelda titles (and similar series) apart
     name = a.name or ''.join(c for c in rom.stem.lower() if c.isalnum())[:32]
@@ -371,6 +376,9 @@ def build_once(a):
     with phase('rom-info'):
         info = json.loads(plaid('rom-info', rom, capture_output=True, text=True).stdout)
     entry = info['header']['boot_address']  # the header entry, less a CIC-6103/6106 offset
+    # Capture from reset while discovery works. Consume only after the map is
+    # admitted so a closure refusal still takes precedence over a capture error.
+    boot = boot_pool.submit(capture_many, rom, [entry])
     loads = a.loads.resolve() if a.loads else out / 'loads.json'
     if not a.loads:
         with phase('infer-loads'):
@@ -397,7 +405,7 @@ def build_once(a):
             overlay_support = discover_map(discover, overlay_support, m)
         program = json.loads(m.read_text())
         with phase('partition'):
-            partitioned = attempt < 63 and partition_mapped(loads, m)
+            partitioned = attempt < 63 and partition_mapped(loads, program)
         if partitioned:
             continue
         with phase('solve'):
@@ -430,7 +438,7 @@ def build_once(a):
     # The native run starts SP memory as the ROM's own IPL3 leaves it (ADR-0195).
     try:
         with phase('boot-state'):
-            sp_boot, ram_boot = write_boot_state(capture_many(rom, [entry])[-1], out, entry)
+            sp_boot, ram_boot = write_boot_state(boot.result()[-1], out, entry)
     except ValueError as error:
         sys.exit(str(error) + ': nothing is built')
 
