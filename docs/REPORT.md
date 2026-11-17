@@ -18,6 +18,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
+| ADR-0337 | `8cd50e87` | Pokemon Stadium 2: its heap-loaded FRAGMENT code modules are catalogued from their relocation tables, with cross-module data references read at run time; the game now runs to frame 172 instead of faulting at frame 14. |
 | — | `8948d59b` | Trace oracle can watch writes from a chosen retrace, logs the CPU pc per retrace and can boot through local firmware: found why DK64 stalls (CIC-6105 boot decryption) |
 | 0336 | `a34b4e8f` | Refill replays run side by side: a cold GoldenEye build fell from 22m50s to 15m18s with byte-identical output |
 | Super Mario 64 (USA) | code segment, 2 load files, a local symbol map for 3 names | ✅ | full-speed gameplay with input, EEPROM saves and audio, no stop in 90 s | infer its loads from the ROM |
