@@ -18,9 +18,6 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | Game | Hand input | Native build | Longest native run | Next gap |
 | --- | --- | --- | --- | --- |
-| ADR-0337 | `8cd50e87` | Pokemon Stadium 2: its heap-loaded FRAGMENT code modules are catalogued from their relocation tables, with cross-module data references read at run time; the game now runs to frame 172 instead of faulting at frame 14. |
-| — | `8948d59b` | Trace oracle can watch writes from a chosen retrace, logs the CPU pc per retrace and can boot through local firmware: found why DK64 stalls (CIC-6105 boot decryption) |
-| 0336 | `a34b4e8f` | Refill replays run side by side: a cold GoldenEye build fell from 22m50s to 15m18s with byte-identical output |
 | Super Mario 64 (USA) | code segment, 2 load files, a local symbol map for 3 names | ✅ | full-speed gameplay with input, EEPROM saves and audio, no stop in 90 s | infer its loads from the ROM |
 | Majora's Mask (USA) | **none** | ??? | intro and Clock Town attract scene, 90 s, fault 0, audio (ADR-0187, ADR-0189); current main: 60 s, VI 3563, fault 0 after the frame-pin fix (ADR-0239); a native Windows 30 s control reaches 1798 VIs, fault 0 (ADR-0295) | longer play |
 | F-Zero X (USA) | **none** | ✅ | 65 s races with compiled graphics microcode and audio, fault 0 (ADR-0186); current main: 20 s with `--rsp-gfx`, fault 0, now built through residual dispatch (1 open blocker) | longer play |
@@ -44,6 +41,9 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0337 | `8cd50e87` | Pokemon Stadium 2: its heap-loaded FRAGMENT code modules are catalogued from their relocation tables, with cross-module data references read at run time; the game now runs to frame 172 instead of faulting at frame 14. |
+| — | `8948d59b` | Trace oracle can watch writes from a chosen retrace, logs the CPU pc per retrace and can boot through local firmware: found why DK64 stalls (CIC-6105 boot decryption) |
+| 0336 | `a34b4e8f` | Refill replays run side by side: a cold GoldenEye build fell from 22m50s to 15m18s with byte-identical output |
 | 0335 | `33f75660` | RT64 gets the interlaced field the game chose, so odd fields stop showing stale frames: Rogue Squadron's rubber-banding is gone (snap-backs 249 → 15 in a recording) |
 | 0334 | `33f75660` | Virtual-clock windows present the scanned-out buffer under RT64's lock: no more Mario Party 2 curtain flicker in fast runs (28 → 0 flips) |
 | 0333 | `1885e5e0` | Build validation runs on the virtual clock: replays exactly, skips idle time; the full gate fell from ~400 s to ~175 s with no load retries |
