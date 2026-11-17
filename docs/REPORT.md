@@ -41,6 +41,7 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0339 | `2ecd9b92` | Builds are faster: the cartridge is copied and hashed once per analysis step instead of once per load, so a cold GoldenEye build went from 963 s to 214 s and every gate game builds sooner. |
 | 0338 | `345101b8` | Pokemon Stadium 2 builds and runs its 60 s check without a fault: compressed (Yay0) code modules are catalogued, calls between modules use the target the game's loader wrote, and binding checks one word before a full verify. |
 | 0337 | `8cd50e87` | Pokemon Stadium 2: its heap-loaded FRAGMENT code modules are catalogued from their relocation tables, with cross-module data references read at run time; the game now runs to frame 172 instead of faulting at frame 14. |
 | — | `8948d59b` | Trace oracle can watch writes from a chosen retrace, logs the CPU pc per retrace and can boot through local firmware: found why DK64 stalls (CIC-6105 boot decryption) |
