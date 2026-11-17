@@ -807,8 +807,12 @@ fn run() -> Result<(), String> {
             if map.rom != rom.identity {
                 return Err("map does not match canonical ROM".into());
             }
+            let started = std::time::Instant::now();
             let images = rom_images(&rom, &map)?;
+            plaid_core::timing::note("solve.images", started.elapsed());
+            let started = std::time::Instant::now();
             let report = solve(&map, &images, scope)?;
+            plaid_core::timing::note("solve.solve", started.elapsed());
             println!(
                 "{}",
                 serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?

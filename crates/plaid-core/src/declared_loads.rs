@@ -489,7 +489,23 @@ pub fn yaz0_stream(data: &[u8]) -> Result<(Vec<u8>, usize), String> {
     Ok((out, at))
 }
 
-fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
+/// The canonical ROM, built once per composition: every ares-backed load
+/// needs it, and building it hashes the whole cartridge.
+fn canonical<'a>(
+    cell: &'a std::cell::OnceCell<crate::rom::CanonicalRom>,
+    bytes: &[u8],
+) -> Result<&'a crate::rom::CanonicalRom, String> {
+    if cell.get().is_none() {
+        let _ = cell.set(crate::rom::CanonicalRom::from_bytes(bytes)?);
+    }
+    Ok(cell.get().unwrap())
+}
+
+fn decoded(
+    bytes: &[u8],
+    rom: &std::cell::OnceCell<crate::rom::CanonicalRom>,
+    load: &DeclaredLoad,
+) -> Result<Vec<u8>, String> {
     let start = usize::try_from(load.source.0).map_err(|_| "load source too large")?;
     let size = load.destination.size as usize;
     let data = match load.encoding {
@@ -552,8 +568,8 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
                     "boot-produced loads require the whole ROM and a fixed destination".into(),
                 );
             }
-            let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
-            let capture = crate::boot_execution::execute(&rom).map_err(|stop| {
+            let rom = canonical(rom, bytes)?;
+            let capture = crate::boot_execution::execute(rom).map_err(|stop| {
                 format!("boot capture stopped at {:08x}: {}", stop.pc.0, stop.reason)
             })?;
             if capture.destination != load.destination {
@@ -565,8 +581,8 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
             if start != 0 || load.relocatable || load.linked.is_some() {
                 return Err("ares boot loads require the whole ROM and a fixed destination".into());
             }
-            let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
-            let capture = crate::ares_boot::execute(&rom, entry.0)?;
+            let rom = canonical(rom, bytes)?;
+            let capture = crate::ares_boot::execute(rom, entry.0)?;
             if capture.physical_start.is_some() {
                 return Err("mapped boot captures require ares_tlb binding guards".into());
             }
@@ -586,8 +602,8 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
             if start != 0 || load.relocatable || load.linked.is_some() {
                 return Err("replayed data needs whole-ROM replay and a fixed destination".into());
             }
-            let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
-            let data = crate::ares_boot::execute(&rom, entry.0)?
+            let rom = canonical(rom, bytes)?;
+            let data = crate::ares_boot::execute(rom, entry.0)?
                 .data_slice(physical, load.destination.size)?;
             load.layout(&data)?;
             data
@@ -599,8 +615,8 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
                 return Err("mapped boot loads require whole-ROM replay and a slot".into());
             }
             let linked = load.linked.ok_or("mapped boot load lacks virtual link")?;
-            let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
-            let capture = crate::ares_boot::execute(&rom, entry.0)?;
+            let rom = canonical(rom, bytes)?;
+            let capture = crate::ares_boot::execute(rom, entry.0)?;
             capture.mapped_slice(linked.0, physical, load.destination.size)?
         }
     };
@@ -694,9 +710,12 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
             _ => None,
         })
         .collect();
+    let rom = std::cell::OnceCell::new();
     if !ares_entries.is_empty() {
-        let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
-        crate::ares_boot::execute_many(&rom, &ares_entries.iter().copied().collect::<Vec<_>>())?;
+        crate::ares_boot::execute_many(
+            canonical(&rom, bytes)?,
+            &ares_entries.iter().copied().collect::<Vec<_>>(),
+        )?;
     }
     // The composite spans the base and every load; bytes no load or base
     // window supplies are holes (ADR-0150), never code or table bytes.
@@ -743,7 +762,7 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
                 .flat_map(u32::to_be_bytes)
                 .collect()
         } else {
-            decoded(bytes, load)?
+            decoded(bytes, &rom, load)?
         };
         if let Some(linked) = load.linked {
             let layout = load.layout(&data)?;
@@ -1002,7 +1021,7 @@ mod tests {
         );
         slot.relocatable = true;
         slot.linked = Some(GuestAddr(0x8010_0000));
-        let data = decoded(&rom, &slot).unwrap();
+        let data = decoded(&rom, &Default::default(), &slot).unwrap();
         assert_eq!(data[0x40..0x44], 0x8080_0004u32.to_be_bytes());
         // The binding verifier is built from the slot copy (ADR-0257).
         let layout = slot.layout(&data).unwrap();
@@ -1110,7 +1129,7 @@ mod tests {
         );
         alternate.relocatable = true;
         alternate.linked = Some(GuestAddr(0x8010_0000));
-        let data = decoded(&rom, &alternate).unwrap();
+        let data = decoded(&rom, &Default::default(), &alternate).unwrap();
         assert_eq!(alternate.layout(&data).unwrap().text, 0x80);
         assert_eq!(
             slot_targets(&[alternate.clone()], 0x8010_007c),
@@ -1137,10 +1156,13 @@ mod tests {
                     }
                 }
             }
-            assert!(decoded(&rom, &changed).is_err(), "changed field {change}");
+            assert!(
+                decoded(&rom, &Default::default(), &changed).is_err(),
+                "changed field {change}"
+            );
         }
         rom[0x1010..0x1014].copy_from_slice(&0x8010_0084u32.to_be_bytes());
-        assert!(decoded(&rom, &alternate).is_err());
+        assert!(decoded(&rom, &Default::default(), &alternate).is_err());
     }
 
     #[test]

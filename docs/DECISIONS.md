@@ -9782,3 +9782,16 @@ unmapped overlay now names one unrelocated nonzero text word the verifier
 compares; the binder checks that word first. Pokemon Stadium 2 now builds in
 88 s and runs the 60 s validation (3596 VIs, 1641 graphics tasks) without a
 fault.
+
+## ADR-0339: Build the canonical ROM once per composition
+
+Composing a load image (every discover, identify, solve, infer and lower
+call) decoded each ares-backed load (`ares_boot`, `ares_tlb`, `ares_data`)
+by first rebuilding the canonical ROM from the raw bytes, which copies and
+hashes the whole cartridge. GoldenEye declares 458 such loads, so one solve
+spent 3.6 s composing and 0.7 s solving. `compose` now builds the canonical ROM
+once, lazily, and hands it to every load. A GoldenEye solve composes in
+0.57 s with the same verdicts; in a cold GoldenEye build identify, discover,
+solve and infer-call-loads fell from 421 s to 139 s (963 s to 214 s in total,
+the rest from a warm ares replay cache). `solve` reports `solve.images` and
+`solve.solve` under `PLAID_PHASE_TIMINGS`.
