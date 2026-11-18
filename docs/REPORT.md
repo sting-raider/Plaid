@@ -41,6 +41,11 @@ Plaid is a research tool for automatic N64 ROM-to-native recompilation. You give
 
 | ADR | Commit | What |
 | --- | --- | --- |
+| 0348 | `ba16fdbb` | Graphics task receipts now sample up to eight display-list words inside RAM, and null or end-of-RAM pointers give an empty list. A local RE2 run turns its diagnostic stop into a complete receipt at the next RSP coverage boundary. |
+| 0347 | `a7b4583c` | The call-effect checker knows the eight registers a native message receive saves, and a scheduler test checks them across a block and resume. A retained RE2 build finds its jump-table targets and reaches a later CACHE fault; that site stays residual. |
+| 0346 | `e111e012` | Fresh discovery outputs are kept as written after being copied into the stage cache, and cache hits restore files directly, so full-map byte buffers are no longer built. Cache identity and failure handling are unchanged. |
+| 0345 | `bcbac1c1` | The runtime sizes its RSP retry mask from the linked graphics-microcode list, and GCC links through response files so large lists fit on Windows. A 257-stale-match synthetic task reaches the next valid microcode, and a local RE2 build with 300 of them links and runs on to a residual CPU dispatch fault. |
+| 0344 | `ca5f5bca` | Large multipart C output is written from a temporary body file one source file at a time, with the same partition boundaries. On the retained Paper Mario map, 54 outputs match byte for byte, and peak memory fell from 2.03 GB to 1.83 GB for about 0.44 s more lowering. |
 | 0343 | `470e5d33` | Startup capture runs during discovery, and mapped partitioning consumes the parsed map. All 82 runtime checks and seven visible ROM controls passed. |
 | 0342 | `ada84a0e` | Tail-cell verification reuses its CFG index across proof label updates. Its phase fell from 0.499 s to 0.337 s, and all seven game maps and manifests remained byte-identical. |
 | 0341 | `463776ee` | One build solve produces both closure reports. The reports match on three retained maps, and Paper Mario's final solve went from 6.894 s to 3.464 s. All seven ROM controls passed. |
