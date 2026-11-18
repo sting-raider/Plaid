@@ -92,6 +92,17 @@ def run(*args, **kw):
     return subprocess.run([str(a) for a in args], check=True, cwd=ROOT, **kw)
 
 
+def link(path, *inputs):
+    # GCC expands @files before invoking the linker. Preserve argument
+    # boundaries even when the checkout path contains spaces or backslashes.
+    with tempfile.TemporaryDirectory(prefix='plaid-link-') as temporary:
+        response = Path(temporary) / 'inputs.rsp'
+        arguments = [*inputs, '-o', path]
+        quoted = ['"' + str(arg).replace('\\', '\\\\').replace('"', '\\"') + '"' for arg in arguments]
+        response.write_text('\n'.join(quoted) + '\n', encoding='utf-8')
+        run(tool('gcc'), f'@{response}')
+
+
 def plaid(*args, **kw):
     return run(ROOT / 'target/release/plaid', *args, **kw)
 
@@ -490,14 +501,14 @@ def build_native(a, boot_pool):
     if a.rt64:
         window_obj = objs[-1]
     with phase('link'):
-        run(tool('gcc'), main_obj, *part_objs, '-pthread', *objects, '-o', exe)
+        link(exe, main_obj, *part_objs, '-pthread', *objects)
         prepare_runtime(out)
     if a.rt64:
         with phase('link-window'):
             resource = out / 'plaid-icon.o'
             prepare_runtime(RT64)
             run(tool('windres'), 'runtime/rt64/icon.rc', '-I', 'runtime/rt64', '-o', resource)
-            run(tool('gcc'), window_obj, *part_objs, RT64 / 'plaid_rt64.dll', '-pthread', *objects, resource, '-o', window_exe)
+            link(window_exe, window_obj, *part_objs, RT64 / 'plaid_rt64.dll', '-pthread', *objects, resource)
     command = [str(window_exe if a.rt64 else exe), '--rom', str(rom), *map(str, saves),
                '--stop-at', 'none', '--seconds', str(a.seconds)]
     if a.rsp_gfx:

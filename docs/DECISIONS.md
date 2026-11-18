@@ -9841,3 +9841,12 @@ reads one translation unit at a time, after lowering and proof checks finish.
 On the retained Paper Mario map, 54 outputs match byte for byte. Two paired
 runs reduce peak working set from 2.03 GB to 1.83 GB and add about 0.44 s to
 lowering. See research/streamed-lowering.md.
+
+## ADR-0345: Size the RSP retry mask from the generated registry
+
+The runtime counts the linked RSP text entries and allocates one retry bit
+per entry. Matching and fetch guards still handle every attempted text. GCC
+links via response files so larger registries fit on Windows. A synthetic
+task with 257 stale matches reaches the valid next text. A local RE2
+experiment links with 300 texts and continues to a residual CPU dispatch
+fault. See research/large-rsp-registry.md.

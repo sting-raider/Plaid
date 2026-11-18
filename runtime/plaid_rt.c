@@ -1669,15 +1669,22 @@ static void rsp_dump_imem(u32 pc) {
   rsp_file(rsp_dump_dir, name, rsp.imem, 4096);
 }
 static int rsp_run(u32 pc) {
+  static size_t text_count;
+  if (!text_count) {
+    while (plaid_rsp_texts[text_count]) text_count++;
+  }
   u32 xpc = ~0u, xgen = 0;
-  u64 xmask[4] = {0}; /* texts that left at xpc, one bit per registry entry (256 max) */
+  /* Texts that left at xpc, one bit per registry entry. */
+  u64 xmask[text_count / 64 + 1];
+  memset(xmask, 0, sizeof xmask);
   for (;;) {
     const plaid_rsp_text *t = NULL;
-    int i, rc;
+    size_t i;
+    int rc;
     /* Oracle only: capture recognized placements too, without feeding their
        bytes back into ROM discovery or native compilation. */
     rsp_dump_imem(pc);
-    for (i = 0; plaid_rsp_texts[i] && i < 256; i++) {
+    for (i = 0; i < text_count; i++) {
       const plaid_rsp_text *c = plaid_rsp_texts[i];
       if (pc == xpc && rsp.imem_gen == xgen && (xmask[i >> 6] >> (i & 63) & 1)) continue;
       if (pc < c->start || pc + 4 > c->start + c->size) continue;

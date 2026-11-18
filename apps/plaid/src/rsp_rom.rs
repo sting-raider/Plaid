@@ -212,12 +212,6 @@ pub fn generate(
         fs::write(out.join(format!("{name}.bin")), text).map_err(|e| e.to_string())?;
         registry += &format!("extern const plaid_rsp_text plaid_rsp_text_{name};\n");
     }
-    if names.len() > 256 {
-        return Err(format!(
-            "{} RSP texts exceed runtime registry limit",
-            names.len()
-        ));
-    }
     registry += "const plaid_rsp_text *const plaid_rsp_texts[] = {";
     for name in &names {
         registry += &format!("&plaid_rsp_text_{name},");

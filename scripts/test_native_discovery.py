@@ -4,6 +4,7 @@ from threading import Event
 from unittest.mock import patch
 import json
 from pathlib import Path
+import shlex
 import tempfile
 
 import native
@@ -57,6 +58,20 @@ def mapped_partition_contract():
 
 def run_contract():
     mapped_partition_contract()
+    # Exercise the long-link path with enough inputs to exceed Win32 argv.
+    objects = [f'C:\\source tree\\part {i:03d}.o' + 'x' * 96 for i in range(300)]
+
+    def linker(_compiler, argument):
+        assert argument.startswith('@')
+        response = Path(argument[1:])
+        assert shlex.split(response.read_text(encoding='utf-8')) == [*objects, '-pthread', '-o', 'new build.exe']
+        return response
+
+    with patch.object(native, 'run', side_effect=linker) as link_run:
+        native.link('new build.exe', *objects, '-pthread')
+        assert link_run.call_count == 1
+        assert not Path(link_run.call_args.args[1][1:]).exists()
+
     arguments = ['discover', 'synthetic.z64', '0x1000', '0x80000000', '0x20',
                  '0x80000000', 'map.json']
     output = 'map.json'
