@@ -9875,3 +9875,14 @@ renderer or RSP path still owns task handling. The regression covers
 null and end-of-RAM pointers as well as the existing renderer bridge.
 In a local RE2 Status experiment, this turns the diagnostic stop into
 a complete receipt at the next RSP coverage boundary.
+
+## ADR-0349: Discover word-aligned RSP descriptors and scalar prefixes
+
+An SDK overlay descriptor on a word boundary can name a candidate when a
+second complete descriptor sits next to it in the same rooted data window.
+A scalar overlay crossing the task entry can qualify when its words decode
+and it has a direct jump with an in-range delay slot to a supported RSP
+operation in the surviving resident text. That candidate participates in
+live IMEM dispatch only. The retained RE2 diagnostic runs past its earlier
+RSP fault and completes 15 seconds with zero faults. See
+research/rsp-scalar-prefix-overlays.md.

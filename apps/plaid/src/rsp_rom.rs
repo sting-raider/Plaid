@@ -146,7 +146,10 @@ pub fn generate(
                                 || plaid_lower::rsp::plausible_short_overlay(&text, imem, &resident)
                         }
                     };
-                    if text.len() != requested_size as usize || !plausible {
+                    let prefix = !plausible
+                        && matches!(kind, Kind::Overlay)
+                        && plaid_lower::rsp::plausible_prefix_overlay(&text, imem, &resident);
+                    if text.len() != requested_size as usize || !(plausible || prefix) {
                         continue;
                     }
                     let (text, imem) = match kind {
@@ -171,14 +174,17 @@ pub fn generate(
                     // largest of texts it cannot tell apart is matched against a
                     // task; it accepts every task size the others do. All still run.
                     let key = match_key(text, imem, &reachable);
-                    let matched = match same_code.get(&key) {
-                        Some(&k) if texts[k].0.len() >= size => false,
-                        Some(&k) => {
-                            matchable[k] = false;
-                            true
-                        }
-                        None => true,
-                    };
+                    // A prefix recognized through its overlay transfer is
+                    // only eligible for live dispatch after that transfer.
+                    let matched = !prefix
+                        && match same_code.get(&key) {
+                            Some(&k) if texts[k].0.len() >= size => false,
+                            Some(&k) => {
+                                matchable[k] = false;
+                                true
+                            }
+                            None => true,
+                        };
                     if matched {
                         same_code.insert(key, names.len());
                     }

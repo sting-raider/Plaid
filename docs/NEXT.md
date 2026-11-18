@@ -1,5 +1,10 @@
 # Next
 
+RE2 now runs past its scalar RSP overlay in the retained Status diagnostic
+(ADR-0349). For ROM-only startup, close automatic admission of the replaced
+CPU image and verify the SDK thread, interrupt-mask and initialization
+effects before emitting Status bindings.
+
 Mapped fragment partitioning parses its evidence once (ADR-0340). The
 builder's address-taken and residual verdicts now share one proof walk
 (ADR-0341). The reset capture runs during discovery and the mapped partition

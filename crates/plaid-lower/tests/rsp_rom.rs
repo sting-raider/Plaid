@@ -1,6 +1,6 @@
 use plaid_lower::rsp::{
-    lower_rsp, plausible_overlay, plausible_program, plausible_short_overlay, plausible_task,
-    plausible_text, reachable_words,
+    lower_rsp, plausible_overlay, plausible_prefix_overlay, plausible_program,
+    plausible_short_overlay, plausible_task, plausible_text, reachable_words,
 };
 
 fn reach(words: &[u32], imem: u32) -> plaid_lower::rsp::RspReachability {
@@ -120,6 +120,35 @@ fn table_named_overlays_need_only_code_and_one_rsp_operation() {
     assert!(!plausible_overlay(&bytes(&words[..15])));
     words[25] = 0xffff_ffff;
     assert!(!plausible_overlay(&bytes(&words)));
+}
+
+#[test]
+fn scalar_prefix_overlays_jump_to_an_untouched_rsp_instruction() {
+    let mut resident = vec![0; 0xf80];
+    let resident_op = 0x4008_3000u32.to_be_bytes(); // mfc0 t0, SP_DMA_BUSY
+    resident[0x18..0x1c].copy_from_slice(&resident_op); // IMEM 0x98
+    let mut prefix = vec![0; 0x90];
+    prefix[0x80..0x84].copy_from_slice(&0x0800_0026u32.to_be_bytes()); // j 0x98
+    prefix[0x84..0x88].copy_from_slice(&0x2508_0001u32.to_be_bytes());
+    assert!(plausible_prefix_overlay(&prefix, 0, &resident));
+    assert!(!plausible_overlay(&prefix));
+    assert!(!plausible_prefix_overlay(&prefix, 0x10, &resident)); // target overwritten
+    assert!(!plausible_prefix_overlay(&prefix[..0x80], 0, &resident)); // no overlap
+    assert!(!plausible_prefix_overlay(&prefix, 4, &resident));
+    assert!(!plausible_prefix_overlay(&prefix, 0, &resident[..0xf7c]));
+    for invalid in [0x0800_0020u32, 0x0000_000d, 0xffff_ffff] {
+        let mut invalid_slot = prefix.clone();
+        invalid_slot[0x84..0x88].copy_from_slice(&invalid.to_be_bytes());
+        assert!(!plausible_prefix_overlay(&invalid_slot, 0, &resident));
+    }
+    let mut invalid_word = prefix.clone();
+    invalid_word[..4].copy_from_slice(&0xffff_ffffu32.to_be_bytes());
+    assert!(!plausible_prefix_overlay(&invalid_word, 0, &resident));
+    let mut missing_slot = vec![0; 0x90];
+    missing_slot[0x8c..].copy_from_slice(&prefix[0x80..0x84]);
+    assert!(!plausible_prefix_overlay(&missing_slot, 0, &resident));
+    resident[0x18..0x1c].fill(0);
+    assert!(!plausible_prefix_overlay(&prefix, 0, &resident));
 }
 
 #[test]

@@ -1,5 +1,12 @@
 # Status
 
+RSP discovery now finds word-aligned overlay tables and scalar prefixes
+that jump into surviving microcode (ADR-0349). A visible RE2 diagnostic
+reaches VI 899 with zero faults, up from the unlowered IMEM stop at VI 387.
+Automatic replacement-image admission and SDK Status binding are still open.
+The run used a replay-authenticated load catalog and experimental Status
+declarations. [Receipt](../research/rsp-scalar-prefix-overlays.md)
+
 The native build starts post-IPL capture during discovery (ADR-0343). The
 verified closure verdict still gates startup header generation. The retained
 Paper Mario boot state matches byte for byte, and seven visible ROM controls
