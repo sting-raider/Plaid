@@ -9866,3 +9866,12 @@ a proof depends on one of its eight saved registers. The scheduler fixture
 checks their values after a receive blocks and resumes. A retained RE2
 build discovers the jump-table targets and reaches a later CACHE fault.
 The site remains residual. See research/receive-register-preservation.md.
+
+## ADR-0348: Bound display-list samples in task receipts
+
+A graphics task receipt samples up to eight complete words inside RAM.
+Null or unmapped pointers produce an empty list. The runtime's regular
+renderer or RSP path still owns task handling. The regression covers
+null and end-of-RAM pointers as well as the existing renderer bridge.
+In a local RE2 Status experiment, this turns the diagnostic stop into
+a complete receipt at the next RSP coverage boundary.

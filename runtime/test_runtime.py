@@ -655,6 +655,20 @@ def build(exe, cc, name, program, runtime, extra=(), status_globals=None, fr0=Fa
 
 
 def graphics_bridge(exe, cc):
+    last = 0x807FFFF8
+    diagnostic = [*li(A.sp, 0x80007F00), *poke(TASK, 1),
+                  *call('osSpTaskStartGo', TASK),
+                  *poke(TASK + 0x30, last), *poke(last, 0xE9000000),
+                  *call('osSpTaskStartGo', TASK), *A.DONE,
+                  'osSpTaskStartGo', A.jr(A.ra), A.nop]
+    native = build(exe, cc, 'gfx-sample', diagnostic, ['osSpTaskStartGo'])
+    run = subprocess.run([str(native), '--stop-at', 'none'],
+                         capture_output=True, text=True, timeout=30)
+    assert run.returncode == 0, (run.stdout, run.stderr)
+    rows = [json.loads(line) for line in run.stdout.splitlines() if line.startswith('{')]
+    tasks = [row['display_list'] for row in rows if 'gfx_task' in row]
+    assert tasks == [[], ['e900000000000000']], tasks
+
     (OUT / 'stub.c').write_text(GFX_STUB)
     rom = OUT / 'stub.z64'
     rom.write_bytes(bytes([0x80, 0x37, 0x12, 0x40]) + bytes(0x1000))

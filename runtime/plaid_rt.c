@@ -1624,11 +1624,13 @@ RT(osEPiReadIo) {
 /* ---- SP tasks ------------------------------------------------------------ */
 
 static void report_gfx_task(u32 task) {
-  u32 dl = rd32(task + 0x30), i;
+  u32 dl = rd32(task + 0x30), p, count = 0, i;
+  if (!phys(dl, 0, &p)) count = (PLAID_RAM_SIZE - p) / 8;
+  if (count > 8) count = 8;
   printf("{\"gfx_task\":%lu,\"task\":\"%08x\",\"ucode\":\"%08x\",\"data_ptr\":\"%08x\",\"data_size\":%u,"
          "\"display_list\":[",
          gfx_tasks, task, rd32(task + 0x10), dl, rd32(task + 0x34));
-  for (i = 0; i < 8; i++) printf("%s\"%08x%08x\"", i ? "," : "", rd32(dl + 8 * i), rd32(dl + 8 * i + 4));
+  for (i = 0; i < count; i++) printf("%s\"%08x%08x\"", i ? "," : "", rd32(dl + 8 * i), rd32(dl + 8 * i + 4));
   printf("]}\n");
 }
 #ifdef PLAID_RSP
