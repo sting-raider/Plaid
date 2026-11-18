@@ -3,9 +3,12 @@
 RSP discovery now finds word-aligned overlay tables and scalar prefixes
 that jump into surviving microcode (ADR-0349). A visible RE2 diagnostic
 reaches VI 899 with zero faults, up from the unlowered IMEM stop at VI 387.
-Automatic replacement-image admission and SDK Status binding are still open.
 The run used a replay-authenticated load catalog and experimental Status
-declarations. [Receipt](../research/rsp-scalar-prefix-overlays.md)
+declarations. With ADR-0350, `--repair-loop` builds the replacement image
+from the ROM automatically and reaches the later Status fault. Automatic
+SDK Status binding remains open.
+[Overlay receipt](../research/rsp-scalar-prefix-overlays.md)
+[Repair receipt](../research/replayed-boot-repair.md)
 
 The native build starts post-IPL capture during discovery (ADR-0343). The
 verified closure verdict still gates startup header generation. The retained

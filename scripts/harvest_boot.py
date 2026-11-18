@@ -8,6 +8,49 @@ from pathlib import Path
 from ares_boot import capture_many, capture_refill
 
 
+def replay_trapped_boot_load(rom, loads, record, base, size):
+    """Use a native trap window to locate a replacement reproduced from reset."""
+    if record['stop_kind'] != 'local_trap':
+        return None
+    pc = int(record['target_pc'], 16)
+    if not base < pc < base + size or not 0x80000400 <= pc < 0x80800000:
+        return None
+    fixed = [(int(l['destination'], 0), int(l['size'], 0))
+             for l in loads['loads'] if not l.get('slot')]
+    if any(start <= pc < start + length for start, length in fixed):
+        return None
+    try:
+        captures = capture_many(rom, [pc], exact=True)
+    except ValueError:
+        return None
+    capture = next((c for c in captures if c.get('entry') == pc and 'bytes' in c), None)
+    if capture is None or 'physical_start' in capture or 'counterfactual' in capture:
+        return None
+    start, data = capture['destination'], bytes(capture['bytes'])
+    if not base < start <= pc or start % 4 or len(data) % 4 or start + len(data) > 0x80800000:
+        return None
+    physical = pc & 0x1fffffff
+    if not any(lo <= physical and physical + 4 <= hi for lo, hi in capture['cpu_writes']):
+        return None
+    # Preserve other fixed declarations. The whole native witness must lie in
+    # the replayed piece, and replay still supplies all bytes on composition.
+    end = start + len(data)
+    for lo, length in fixed:
+        if lo < pc:
+            start = max(start, lo + length)
+        else:
+            end = min(end, lo)
+    witness_start = record['window_base'] | 0x80000000
+    witness_end = witness_start + record['window_size']
+    if not (start <= witness_start <= pc and pc + 4 <= witness_end <= end):
+        return None
+    witness = data[witness_start - capture['destination']:witness_end - capture['destination']]
+    if witness.hex() != record['bytes'] or hashlib.sha256(witness).hexdigest() != record['sha256']:
+        return None
+    return dict(destination=hex(start), size=hex(end - start), rom='0x0',
+                encoding='ares_boot', entry=hex(pc))
+
+
 def harvest_vectors(rom, loads_path, receipt_path):
     """Declare naturally fetched RAM vectors for mapped executable sources.
 

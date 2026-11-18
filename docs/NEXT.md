@@ -1,9 +1,9 @@
 # Next
 
-RE2 now runs past its scalar RSP overlay in the retained Status diagnostic
-(ADR-0349). For ROM-only startup, close automatic admission of the replaced
-CPU image and verify the SDK thread, interrupt-mask and initialization
-effects before emitting Status bindings.
+RE2's ROM-only repair loop now admits its replaced CPU image from first-fetch
+replay (ADR-0350). Its next stop is the Status guard at `80135cc0`.
+Verify the SDK thread, interrupt-mask and initialization effects before
+emitting Status bindings.
 
 Mapped fragment partitioning parses its evidence once (ADR-0340). The
 builder's address-taken and residual verdicts now share one proof walk

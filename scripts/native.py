@@ -41,7 +41,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from native_audio import audio_peak
-from harvest_boot import harvest, harvest_refills, harvest_vectors
+from harvest_boot import harvest, harvest_refills, harvest_vectors, replay_trapped_boot_load
 from ares_boot import ORACLE_SOURCES, capture_many
 from repair_record import write_record, admit_records, native_manifest
 
@@ -354,9 +354,13 @@ def main():
     # Keep the first round's refined loads, rather than replaying analysis or
     # inheriting observations left by a previous invocation in the output dir.
     base_loads = a.loads
+    explicit_records = len(a.repair_record)
 
     def build(records):
         a.repair_record = records
+        a.automatic_repair_records = (
+            records[explicit_records:] if a.repair_loop and not a.strict and base_loads is None else []
+        )
         result, record, inferred = build_once(a)
         if base_loads is None:
             a.loads = inferred
@@ -395,13 +399,33 @@ def build_native(a, boot_pool):
         with phase('infer-loads'):
             plaid('infer-loads', rom, loads)
     base_loads = loads
+    window_size = info.get('boot_image_size') or 0x100000
+    replayed_replacements = []
     if a.repair_record:
         admitted = out / 'observed-loads.json'
         shutil.copyfile(loads, admitted)
-        admit_records(admitted, a.repair_record)
+        observed = []
+        catalog = json.loads(admitted.read_text())
+        for record_path in a.repair_record:
+            if record_path in a.automatic_repair_records:
+                record = json.loads(record_path.read_text())
+                with phase('repair-replay'):
+                    replacement = replay_trapped_boot_load(rom, catalog, record, entry, window_size)
+                if replacement is not None:
+                    catalog['loads'].append(replacement)
+                    replayed_replacements.append(dict(load=replacement, witness_sha256=record['sha256']))
+                    print(f"repair replay: {replacement['entry']} supplies {replacement['destination']}+{replacement['size']}")
+                    continue
+            observed.append(record_path)
+        if replayed_replacements:
+            catalog['loads'].sort(key=lambda l: (bool(l.get('slot')), 0 if l.get('slot') else int(l['destination'], 0)))
+            catalog['source'] += '; first-fetch replay of a matching native local-trap window'
+            admitted.write_text(json.dumps(catalog, indent=2) + '\n')
+        if observed:
+            admit_records(admitted, observed)
         loads = admitted
     # the main image ends where the entry stub's BSS clear begins; else IPL3's 1 MiB
-    window = [rom, '0x1000', entry, hex(info.get('boot_image_size') or 0x100000)]
+    window = [rom, '0x1000', entry, hex(window_size)]
     m = out / 'map.json'
     overlay_support = None
     for attempt in range(64):
@@ -444,7 +468,12 @@ def build_native(a, boot_pool):
     if verdict['status'] != 'closed' and not (residual and verdict.get('trapped_sites') and all(b in verdict['trapped_sites'] for b in verdict['blockers'])):
         sys.exit('not CLOSED under the address-taken scope' + ('' if a.strict else ', even with residual dispatch') + ': nothing is built')
     # Always rewritten: a stale manifest must never describe a later build.
-    (out / 'native-manifest.json').write_text(json.dumps(native_manifest(program, verdict, residual), indent=2) + '\n')
+    manifest = native_manifest(program, verdict, residual)
+    if replayed_replacements:
+        manifest.update(native_complete=False, replayed_replacements=replayed_replacements)
+        if manifest['mode'] == 'closed':
+            manifest['mode'] = 'replay-repair'
+    (out / 'native-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
 
     # The native run starts SP memory as the ROM's own IPL3 leaves it (ADR-0195).
     try:

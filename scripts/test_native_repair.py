@@ -1,5 +1,6 @@
 """Deterministic bounded repair policy; all capture bytes are synthetic."""
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -11,10 +12,39 @@ import tempfile
 from unittest.mock import patch
 
 import native
+from harvest_boot import replay_trapped_boot_load
 from repair_record import admit_records, native_manifest, write_record
 
 
+def replay_replacement_contract():
+    base, dest, pc = 0x80000400, 0x80000800, 0x80000820
+    data = bytes(range(128))
+    witness = data[16:64]
+    capture = dict(entry=pc, destination=dest, bytes=list(data), cpu_writes=[(0x800, 0x880)])
+    record = dict(stop_kind='local_trap', target_pc=f'{pc:08x}', window_base=0x810,
+                  window_size=len(witness), bytes=witness.hex(), sha256=hashlib.sha256(witness).hexdigest())
+    loads = dict(loads=[dict(destination='0x80000860', size='0x100', encoding='raw')])
+
+    def probe(source=capture, fault=record, catalog=loads):
+        with patch('harvest_boot.capture_many', return_value=[source]) as replay:
+            found = replay_trapped_boot_load('synthetic.z64', catalog, fault, base, 0x4000)
+            if found:
+                replay.assert_called_once_with('synthetic.z64', [pc], exact=True)
+            return found
+    assert probe() == dict(destination=hex(dest), size='0x60', rom='0x0', encoding='ares_boot', entry=hex(pc))
+    assert probe(source=dict(capture, bytes=list(bytes(128)))) is None
+    assert probe(source=dict(capture, cpu_writes=[(0x820, 0x822)])) is None
+    assert probe(source=dict(capture, physical_start=0x800)) is None
+    assert probe(source=dict(capture, counterfactual={})) is None
+    assert probe(source=dict(capture, destination=base)) is None
+    assert probe(source={}) is None
+    assert probe(fault=dict(record, stop_kind='indirect_target')) is None
+    assert probe(fault=dict(record, sha256='0' * 64)) is None
+    assert probe(catalog=dict(loads=[dict(destination='0x80000828', size='0x100')])) is None
+
+
 def run_contract():
+    replay_replacement_contract()
     with tempfile.TemporaryDirectory(prefix='plaid-repair-loop-') as temporary:
         root = Path(temporary)
         loads = root / 'loads.json'
@@ -90,10 +120,12 @@ def run_contract():
         # repair is explicit and preserves the refined loads between rounds.
         for flags, expected_budget, rounds in [([], None, 1), (['--deep'], None, 1),
                                                (['--repair-loop'], str(native.FAST_SITE_BUDGET), 2),
-                                               (['--repair-loop', '--deep'], None, 2)]:
+                                               (['--repair-loop', '--deep'], None, 2),
+                                               (['--repair-loop', '--deep', '--strict'], None, 2)]:
             seen = []
             def build_once(args):
-                seen.append((args.loads, list(args.repair_record), os.environ.get('PLAID_SITE_BUDGET')))
+                seen.append((args.loads, list(args.repair_record), os.environ.get('PLAID_SITE_BUDGET'),
+                             list(args.automatic_repair_records)))
                 fault = 3 if len(seen) == 1 and rounds == 2 else 0
                 result = CompletedProcess([], int(bool(fault)), json.dumps(dict(
                     stop='synthetic', fault=fault, fault_pc='80000400'), separators=(',', ':')), '')
@@ -103,9 +135,9 @@ def run_contract():
                     patch.dict(os.environ, {'PLAID_SITE_BUDGET': str(native.FAST_SITE_BUDGET)}), \
                     patch('sys.stdout', io.StringIO()):
                 native.main()
-            expected = [(None, [], expected_budget)]
+            expected = [(None, [], expected_budget, [])]
             if rounds == 2:
-                expected.append((loads, records, expected_budget))
+                expected.append((loads, records, expected_budget, [] if '--strict' in flags else records))
             assert seen == expected, seen
         # A default fault must reject after one build, never admit a capture.
         with patch.object(native, 'build_once', return_value=(CompletedProcess([], 1,

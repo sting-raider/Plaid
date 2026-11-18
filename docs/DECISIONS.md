@@ -9886,3 +9886,15 @@ operation in the surviving resident text. That candidate participates in
 live IMEM dispatch only. The retained RE2 diagnostic runs past its earlier
 RSP fault and completes 15 seconds with zero faults. See
 research/rsp-scalar-prefix-overlays.md.
+
+## ADR-0350: Replay a matching native trap before repairing boot text
+
+The ROM-only repair loop can use a fresh local trap in the boot window to
+request an exact first-fetch ares replay. A CPU write must cover the
+instruction, and all bytes in the native fault window must match within
+the replay extent after clipping around existing fixed declarations.
+The compiler composes the replacement from the pinned replay and uses
+its existing native text guards. The native fault capture identifies the
+source and remains local. The manifest records the selected declaration
+and witness hash and keeps native completeness open. See
+research/replayed-boot-repair.md.
