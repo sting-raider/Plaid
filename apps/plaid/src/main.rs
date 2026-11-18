@@ -1,3 +1,7 @@
+// The analysis makes millions of small allocations; the system heap dominates them.
+#[global_allocator]
+static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 mod infer_calls;
 mod rsp_rom;
 mod runtime_bindings;
@@ -36,7 +40,7 @@ use plaid_core::{
     program::{GuestRange, ProgramMap, RomOffset},
     rom::CanonicalRom,
     rsp_cpu_imem::{RspCpuImemReport, inspect_rsp_cpu_imem_history, verify_rsp_cpu_imem_report},
-    solver::{DiscoverySourceInputs, Scope, solve, solve_with_discovery_sources},
+    solver::{DiscoverySourceInputs, Scope, solve, solve_for_build, solve_with_discovery_sources},
     sp_history::{
         SpHistoryReport, SpWriterFetchReport, inspect_sp_boot_history,
         inspect_sp_writer_fetch_history, verify_sp_boot_history_report,
@@ -47,7 +51,7 @@ use plaid_core::{
 use std::{
     collections::{BTreeMap, BTreeSet},
     env, fs,
-    io::{BufReader, Write},
+    io::{BufReader, Seek, Write},
     process::ExitCode,
 };
 
@@ -787,12 +791,12 @@ fn run() -> Result<(), String> {
                 [] => Scope::WholeRom,
                 [f] if f == "--guarded-ram" => Scope::DeclaredStaticImagesGuardedRam,
                 [f] if f == "--address-taken" => Scope::DeclaredStaticImagesGuardedRamAddressTaken,
-                [f] if f == "--residual-dispatch" => {
+                [f] if f == "--residual-dispatch" || f == "--build" => {
                     Scope::DeclaredStaticImagesGuardedRamResidualDispatch
                 }
                 _ => {
                     return Err(
-                        "solve accepts only --guarded-ram, --address-taken or --residual-dispatch"
+                        "solve accepts only --guarded-ram, --address-taken, --residual-dispatch or --build"
                             .into(),
                     );
                 }
@@ -803,12 +807,21 @@ fn run() -> Result<(), String> {
             if map.rom != rom.identity {
                 return Err("map does not match canonical ROM".into());
             }
+            let started = std::time::Instant::now();
             let images = rom_images(&rom, &map)?;
-            let report = solve(&map, &images, scope)?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
-            );
+            plaid_core::timing::note("solve.images", started.elapsed());
+            let started = std::time::Instant::now();
+            let output = if flag.first().is_some_and(|f| f == "--build") {
+                let (address_taken, residual_dispatch) = solve_for_build(&map, &images)?;
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "address_taken": address_taken,
+                    "residual_dispatch": residual_dispatch,
+                }))
+            } else {
+                serde_json::to_string_pretty(&solve(&map, &images, scope)?)
+            };
+            plaid_core::timing::note("solve.solve", started.elapsed());
+            println!("{}", output.map_err(|e| e.to_string())?);
         }
         [command, rom_path, map_path, declarations, output]
             if command == "bind-runtime-globals" =>
@@ -861,6 +874,7 @@ fn run() -> Result<(), String> {
             output,
             runtime @ ..,
         ] if command == "discover" && runtime.len() <= 1 => {
+            let setup_started = std::time::Instant::now();
             let (
                 runtime,
                 evidence,
@@ -882,8 +896,11 @@ fn run() -> Result<(), String> {
                 RomOffset(number(offset)?),
                 range.clone(),
             )?;
+            plaid_core::timing::note("discover.declarations", setup_started.elapsed());
             if let Some((spec, _)) = &declared {
+                let started = std::time::Instant::now();
                 image = plaid_core::declared_loads::compose(rom.bytes(), spec)?.1;
+                plaid_core::timing::note("discover.compose-loads", started.elapsed());
             }
             // overlay tables are found in the image as composed so far
             let mut overlay_evidence = None;
@@ -977,6 +994,18 @@ fn run() -> Result<(), String> {
                 })
                 .collect();
             entries.extend(vector_roots.iter().copied());
+            // A fragment's first word, `j entry`, is where its loader's caller
+            // enters it (ADR-0337); the magic survives relocation into the slot.
+            entries.extend(
+                declared
+                    .iter()
+                    .flat_map(|(spec, _)| &spec.loads)
+                    .map(|l| l.destination.start)
+                    .filter(|&d| {
+                        image.word(GuestAddr(d.0 + 8)) == Some(0x4652_4147)
+                            && image.word(GuestAddr(d.0 + 12)) == Some(0x4d45_4e54)
+                    }),
+            );
             if let Some((spec, _)) = &declared {
                 for load in &spec.loads {
                     if let plaid_core::declared_loads::LoadEncoding::Observed { generation } =
@@ -994,6 +1023,7 @@ fn run() -> Result<(), String> {
                     }
                 }
             }
+            plaid_core::timing::note("discover.setup", setup_started.elapsed());
             let roots = if data_roots {
                 plaid_core::data_roots::scan(rom.bytes(), &image)
             } else {
@@ -1115,6 +1145,7 @@ fn run() -> Result<(), String> {
             }
             bind_status_globals(&mut d.map, &status_globals)?;
             bind_eeprom_timers(&mut d.map, &eeprom_timers);
+            // its loader hands that address to callers: address-taken code
             for (entry, function) in &mut d.map.runtime_functions {
                 function.source_size = source_sizes.get(&entry.pc).copied();
                 if let Some(global) = running_thread_globals.get(&entry.pc) {
@@ -1285,42 +1316,60 @@ fn run() -> Result<(), String> {
             };
             let entry = GuestAddr(number32(entry)?);
             let exits = [GuestAddr(number32(exit)?)];
-            let lowered = if separate_runtime == 1 {
-                plaid_lower::lower_c_runtime_units(
+            let stem = output.strip_suffix(".c").unwrap_or(output);
+            if parts <= 1 {
+                if separate_runtime == 1 {
+                    return Err("separate runtime requires multipart output".into());
+                }
+                let c = plaid_lower::lower_c_with_preload(
                     &map,
                     &images,
                     &preload,
                     entry,
                     &exits,
-                    parts,
                     residual_dispatch,
-                )?
+                )?;
+                fs::write(output, c).map_err(|e| e.to_string())?;
             } else {
-                plaid_lower::LoweredCUnits {
-                    units: plaid_lower::lower_c_parts(
+                let scratch = format!("{stem}.{}.tmp", std::process::id());
+                let mut bodies = fs::OpenOptions::new()
+                    .create_new(true)
+                    .read(true)
+                    .write(true)
+                    .open(&scratch)
+                    .map_err(|e| e.to_string())?;
+                let lower = (|| {
+                    let layout = plaid_lower::lower_c_bodies(
                         &map,
                         &images,
                         &preload,
                         entry,
                         &exits,
-                        parts,
-                        residual_dispatch,
-                    )?,
-                    runtime_header: String::new(),
-                }
-            };
-            let stem = output.strip_suffix(".c").unwrap_or(output);
-            if separate_runtime == 1 {
-                fs::write(format!("{stem}.runtime.h"), lowered.runtime_header)
-                    .map_err(|e| e.to_string())?;
-            }
-            for (k, c) in lowered.units.iter().enumerate() {
-                let path = if k == 0 {
-                    output.clone()
-                } else {
-                    format!("{stem}.part{k}.c")
-                };
-                fs::write(path, c).map_err(|e| e.to_string())?;
+                        plaid_lower::CPartOptions {
+                            parts,
+                            separate_runtime: separate_runtime == 1,
+                            residual_dispatch,
+                        },
+                        &mut bodies,
+                    )?;
+                    bodies.rewind().map_err(|e| e.to_string())?;
+                    let header = layout.emit_units(&mut bodies, |k, c| {
+                        let path = if k == 0 {
+                            output.clone()
+                        } else {
+                            format!("{stem}.part{k}.c")
+                        };
+                        fs::write(&path, c).map_err(|e| format!("{path}: {e}"))
+                    })?;
+                    if separate_runtime == 1 {
+                        fs::write(format!("{stem}.runtime.h"), header)
+                            .map_err(|e| e.to_string())?;
+                    }
+                    Ok::<(), String>(())
+                })();
+                drop(bodies);
+                let cleanup = fs::remove_file(&scratch).map_err(|e| format!("{scratch}: {e}"));
+                lower.and(cleanup)?;
             }
             println!("lowered {} blocks", map.blocks.len());
         }
@@ -1354,7 +1403,7 @@ fn run() -> Result<(), String> {
                 rom_offset: None,
                 physical_start: None,
                 holes: Vec::new(),
-                slots: Vec::new(),
+                slots: Default::default(),
             };
             let rom = plaid_core::program::RomIdentity {
                 sha256: image.base.image.clone(),
@@ -1566,6 +1615,13 @@ fn run() -> Result<(), String> {
                 .ok_or("ROM ends before its boot window")?;
             let mut found =
                 plaid_core::overlays::static_loads(bytes, base, rom.header.boot_address.0)?;
+            // a fragment is relocated wherever the game loads it, so a fixed
+            // placement of its unrelocated bytes is never the game's (ADR-0337)
+            found.retain(|l| {
+                !bytes
+                    .get(l.file.rom_start as usize..)
+                    .is_some_and(plaid_core::overlays::is_fragment)
+            });
             // a fixed load of bytes inside a bounded main image would overwrite
             // that image with itself elsewhere; slots and in-place copies stay
             // (ADR-0258)
@@ -1863,7 +1919,8 @@ fn load_declarations(
                 encoding: match l["compression"].as_str() {
                     Some("raw") => OverlayCompression::Raw,
                     Some("mio0") => OverlayCompression::Mio0,
-                    _ => return Err("catalog overlay compression is raw or mio0".into()),
+                    Some("yay0") => OverlayCompression::Yay0,
+                    _ => return Err("catalog overlay compression is raw, mio0 or yay0".into()),
                 },
                 encoded_size: u32::try_from(field("encoded_size")?).map_err(|e| e.to_string())?,
                 text_size: u32::try_from(field("text_size")?).map_err(|e| e.to_string())?,

@@ -30,8 +30,18 @@ def run(exe, cc, T):
     image.write_bytes(b''.join(w.to_bytes(4, 'big') for w in words).ljust(4096, b'\0'))
     subprocess.run([str(exe), 'lower-rsp', str(image), '0', '0x1000', '0', 'dpc_task',
                     str(lowered), '--raw'], check=True, capture_output=True)
-    registry.write_text('#include "rsp_state.h"\nextern const plaid_rsp_text plaid_rsp_text_dpc_task;\n'
-                        'const plaid_rsp_text *const plaid_rsp_texts[] = {&plaid_rsp_text_dpc_task, 0};\n')
+    # Force the retry mask through a word beyond the old 256-entry limit.
+    first_word = ','.join(str(b) for b in words[0].to_bytes(4, 'big'))
+    registry.write_text(f"""
+#include "rsp_state.h"
+extern const plaid_rsp_text plaid_rsp_text_dpc_task;
+static int stale(plaid_rsp *r, u32 pc) {{ r->pc = pc; return 2; }}
+static const u8 stale_bytes[] = {{{first_word}}};
+static const plaid_rsp_text stale_text = {{0, 4, stale_bytes, stale, "stale"}};
+const plaid_rsp_text *const plaid_rsp_texts[] = {{
+  [0 ... 256] = &stale_text, &plaid_rsp_text_dpc_task, 0
+}};
+""")
     native = T.build(exe, cc, 'rsp-dpc', program, runtime,
                      ['-DPLAID_RSP', '-I', str(T.ROOT / 'crates/plaid-lower/src'), str(lowered), str(registry)])
     result = subprocess.run([str(native), '--dump', hex(T.OUTB), '10'],

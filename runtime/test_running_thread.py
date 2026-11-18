@@ -9,21 +9,27 @@ def run(exe, cc, T):
     def observe(offset):
         return [*T.li(A.t0,cell),A.lw(A.t1,0,A.t0),*T.li(A.t0,log),A.sw(A.t1,offset,A.t0)]
     names=['osGetThreadPri','osCreateThread','osStartThread','osCreateMesgQueue','osRecvMesg','osSendMesg','osStopThread']
+    saved_registers = range(16, 24)
+    saved_values = [0x13570000 + reg for reg in saved_registers]
     program=[*T.li(A.sp,0x80007f00),*T.call('osGetThreadPri',0),*observe(0),
         *T.call('osCreateMesgQueue',queue,buffer,1),
         *T.call('osCreateThread',one,1,'one',0,0x8000ff00,10),*T.call('osStartThread',one),*A.DONE,
         'one',*observe(4),*T.call('osCreateThread',two,2,'two',0,0x80017f00,20),*T.call('osStartThread',two),
-        *observe(12),*T.call('osSendMesg',queue,7,1),*observe(20),*A.DONE,
-        'two',*observe(8),*T.call('osRecvMesg',queue,slot,1),*observe(16),*T.call('osStopThread',0),*A.DONE]
+        *observe(12), *[A.addiu(reg, A.zero, reg) for reg in saved_registers],
+        *T.call('osSendMesg',queue,7,1),*observe(20),*A.DONE,
+        'two', *observe(8), *[word for reg, value in zip(saved_registers, saved_values) for word in T.li(reg, value)],
+        *T.call('osRecvMesg',queue,slot,1), *observe(16), *T.li(A.t0, log),
+        *[A.sw(reg, 24 + offset * 4, A.t0) for offset, reg in enumerate(saved_registers)],
+        *T.call('osStopThread',0),*A.DONE]
     for name in names:program += [name,A.jr(A.ra),A.nop]
     bindings={name:{'__osRunningThread':cell} for name in ['osGetThreadPri','osStartThread']}
     binary=T.build(exe,cc,'running-thread',program,names,data_bindings=bindings,
         source_sizes={name:8 for name in bindings})
     def check(binary):
-        p=subprocess.run([str(binary),'--dump',hex(log),'6'],capture_output=True,text=True,timeout=30)
+        p=subprocess.run([str(binary),'--dump',hex(log),'14'],capture_output=True,text=True,timeout=30)
         rows=[json.loads(line) for line in p.stdout.splitlines() if line.startswith('{')]
         assert not p.returncode and next(row for row in rows if 'stop' in row)['fault']==0,(p.stdout,p.stderr)
-        assert next(row for row in rows if 'dump' in row)['words']==[0,one,two,one,two,one],rows
+        assert next(row for row in rows if 'dump' in row)['words']==[0,one,two,one,two,one,*saved_values],rows
     check(binary)
     out=T.OUT
     raw=(out/'running-thread.bin').read_bytes()

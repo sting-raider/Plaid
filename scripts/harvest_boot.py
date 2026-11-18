@@ -1,9 +1,54 @@
 """Recover missing executable images using a deterministic, input-free ares boot."""
 import hashlib
 import json
+import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from ares_boot import capture_many, capture_refill
+
+
+def replay_trapped_boot_load(rom, loads, record, base, size):
+    """Use a native trap window to locate a replacement reproduced from reset."""
+    if record['stop_kind'] != 'local_trap':
+        return None
+    pc = int(record['target_pc'], 16)
+    if not base < pc < base + size or not 0x80000400 <= pc < 0x80800000:
+        return None
+    fixed = [(int(l['destination'], 0), int(l['size'], 0))
+             for l in loads['loads'] if not l.get('slot')]
+    if any(start <= pc < start + length for start, length in fixed):
+        return None
+    try:
+        captures = capture_many(rom, [pc], exact=True)
+    except ValueError:
+        return None
+    capture = next((c for c in captures if c.get('entry') == pc and 'bytes' in c), None)
+    if capture is None or 'physical_start' in capture or 'counterfactual' in capture:
+        return None
+    start, data = capture['destination'], bytes(capture['bytes'])
+    if not base < start <= pc or start % 4 or len(data) % 4 or start + len(data) > 0x80800000:
+        return None
+    physical = pc & 0x1fffffff
+    if not any(lo <= physical and physical + 4 <= hi for lo, hi in capture['cpu_writes']):
+        return None
+    # Preserve other fixed declarations. The whole native witness must lie in
+    # the replayed piece, and replay still supplies all bytes on composition.
+    end = start + len(data)
+    for lo, length in fixed:
+        if lo < pc:
+            start = max(start, lo + length)
+        else:
+            end = min(end, lo)
+    witness_start = record['window_base'] | 0x80000000
+    witness_end = witness_start + record['window_size']
+    if not (start <= witness_start <= pc and pc + 4 <= witness_end <= end):
+        return None
+    witness = data[witness_start - capture['destination']:witness_end - capture['destination']]
+    if witness.hex() != record['bytes'] or hashlib.sha256(witness).hexdigest() != record['sha256']:
+        return None
+    return dict(destination=hex(start), size=hex(end - start), rom='0x0',
+                encoding='ares_boot', entry=hex(pc))
 
 
 def harvest_vectors(rom, loads_path, receipt_path):
@@ -75,14 +120,27 @@ def harvest_refills(rom, loads_path, map_path, info, receipt_path):
         if not 0x80000000 <= target < 0xc0000000:
             candidates.setdefault(target >> 12, target)
     receipt = dict(format='plaid-refill-harvest-v1', anchor=hex(anchor), sources=[], refusals=[])
-    for target in sorted(candidates.values())[:64]:
-        if any(int(l['destination'], 0) <= target < int(l['destination'], 0) + int(l['size'], 0)
-               for l in loads['loads'] if l.get('slot')):
-            continue
+    inside = lambda target: any(int(l['destination'], 0) <= target < int(l['destination'], 0) + int(l['size'], 0)
+                                for l in loads['loads'] if l.get('slot'))
+    chosen = [t for t in sorted(candidates.values())[:64] if not inside(t)]
+
+    def attempt(target):
         try:
-            capture = capture_refill(rom, anchor, target)
+            return capture_refill(rom, anchor, target)
         except ValueError as error:
-            receipt['refusals'].append(dict(target=hex(target), reason=str(error)))
+            return error
+    # Each root is an independent single-threaded ares replay: run them side by
+    # side, then admit in order with the same skip rule, so the result is the
+    # serial loop's. The shared anchor replay is cached first.
+    if chosen:
+        capture_many(rom, [anchor], exact=True)
+    with ThreadPoolExecutor(min(len(chosen), os.cpu_count() or 1) or 1) as pool:
+        outcomes = list(pool.map(attempt, chosen))
+    for target, capture in zip(chosen, outcomes):
+        if inside(target):  # an earlier root of this round already supplies it
+            continue
+        if isinstance(capture, ValueError):
+            receipt['refusals'].append(dict(target=hex(target), reason=str(capture)))
             continue
         start, source, data = capture['destination'], capture['rom_source'], bytes(capture['bytes'])
         load = dict(destination=hex(start), size=hex(len(data)), rom=hex(source), encoding='tlb_raw',
@@ -263,7 +321,10 @@ def replay_bindings(program, base, size):
     return sorted(set(tuple(b) for b in bindings), key=lambda b: (*b[:3], -2 if b[3] is None else b[3]))
 
 
-def replay_sites(program, bindings):
+def replay_sites(program, bindings, skipped=None):
+    """Runtime PCs of the open calls. A call without exactly one supported
+    binding refuses the projection, or with `skipped` is left unobserved and
+    listed there: observing fewer calls only resolves less (ADR-0320)."""
     sites = set()
     for site in program['indirect_sites']:
         if site.get('closed_proof') is not None or site.get('link_register') is None:
@@ -272,7 +333,10 @@ def replay_sites(program, bindings):
         matches = {runtime + pc - mapped for mapped, runtime, size, source in bindings
                    if mapped <= pc < mapped + size and source != -1}
         if len(matches) != 1:
-            raise ValueError(f'open call {pc:08x} has no unique supported replay binding')
+            if skipped is None:
+                raise ValueError(f'open call {pc:08x} has no unique supported replay binding')
+            skipped.append(pc)
+            continue
         runtime = matches.pop()
         sites.add(runtime)
         if 0x80000000 <= runtime < 0xc0000000:
@@ -302,19 +366,16 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
         # Calls only: a computed jr is often a return or an in-function jump,
         # whose target is no function start (ADR-0222).
         bindings = replay_bindings(program, base, size)
-        try:
-            sites = replay_sites(program, bindings)
-        except ValueError as error:
-            # Unsupported call projection cannot invalidate an independent
-            # first-fetch source replay. Keep those calls unobserved.
-            if not entries:
-                raise
-            sites = []
-            projection_refusal = str(error)
-        else:
-            projection_refusal = None
+        # A call without a unique supported binding stays unobserved; the others
+        # are still watched (one shared-slot copy must not blind the whole replay).
+        skipped = []
+        sites = replay_sites(program, bindings, skipped)
+        projection_refusal = (f'{len(skipped)} open call(s) have no unique supported replay binding, '
+                              f'first {skipped[0]:08x}') if skipped else None
+        if not sites and skipped and not entries:
+            raise ValueError(projection_refusal)
         captures = (capture_many(rom, entries, covered=coverage(loads, base, size, slots=True), sites=sites, bindings=bindings)
-                    if unknown_indirect and projection_refusal is None else capture_many(rom, entries))
+                    if unknown_indirect and (sites or not skipped) else capture_many(rom, entries))
     except ValueError as error:
         Path(receipt_path).write_text(json.dumps({'targets': targets, 'refusal': str(error)}, indent=2) + '\n')
         return False
@@ -408,6 +469,11 @@ def harvest(rom, loads_path, map_path, info, receipt_path):
                 added = True
             continue
         lo, hi = capture['destination'], capture['destination'] + len(data)
+        at = capture['entry'] - lo
+        if 0 <= at and data[at + 8:at + 16] == b'FRAGMENT':
+            # A relocated fragment the game placed in its heap: the catalog
+            # binds it wherever it lands, so no fixed copy (ADR-0337).
+            continue
         pieces = [(lo, hi)]
         # Preserve static inference and earlier snapshots byte-for-byte.
         covered = [(base, base + size)] + [(int(l['destination'], 0), int(l['destination'], 0) + int(l['size'], 0))

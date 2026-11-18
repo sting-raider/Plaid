@@ -92,7 +92,7 @@ impl RepairRecord {
             rom_offset: None,
             physical_start: Some(crate::program::PhysicalAddr(self.window_base)),
             holes: Vec::new(),
-            slots: Vec::new(),
+            slots: Default::default(),
         })
     }
 }

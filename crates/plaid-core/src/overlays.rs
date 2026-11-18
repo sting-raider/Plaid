@@ -253,7 +253,11 @@ impl Layout {
             let at = r.offset as usize;
             let w = word(&out, at)?;
             let changed = match r.kind {
-                2 if w & 0x0f000000 != 0 => w, // Segmented data pointer: loader leaves it alone.
+                k if k & FOREIGN != 0 => continue,
+                // Segmented data pointer: loader leaves it alone. A word into the
+                // overlay's own link range is never one, even when an analysis
+                // placement links it above 0x81000000.
+                2 if segmented(w, link, end) => w,
                 2 => target(w)?,
                 4 => {
                     if !matches!(w >> 26, 2 | 3) {
@@ -274,7 +278,7 @@ impl Layout {
                         .ok_or("LO16 lacks register-matched HI16")?;
                     let current = word(&out, hi)?;
                     let low = w as u16 as i16 as i32 as u32;
-                    if current.wrapping_shl(16).wrapping_add(low) & 0x0f000000 != 0 {
+                    if segmented(current.wrapping_shl(16).wrapping_add(low), link, end) {
                         continue;
                     }
                     let value = target(original.wrapping_shl(16).wrapping_add(low))?;
@@ -289,6 +293,206 @@ impl Layout {
         out.resize(span as usize, 0);
         Ok(out)
     }
+}
+
+/// Relocation kind flag (ADR-0337): the word refers into another module the
+/// run places, so its relocated bits are whatever the game's loader wrote.
+pub const FOREIGN: u8 = 0x80;
+
+/// A "FRAGMENT" module (ADR-0337): `j entry`, a zero word, the magic, the
+/// header size 0x20, then the relocation table offset R, file size S and RAM
+/// size M. The table is a count and Zelda64-packed entries (offsets from the
+/// file start, bits 31..30 0 inside the file or 2 outside it) for words inside
+/// [0, R); the loader relocates [0, R) and
+/// zeroes [R, M), so the table never runs. The file links at the 1 MiB base of
+/// its entry. Text is the header and the decodable run after it; data and the
+/// table follow. `None` unless every field agrees with `bytes` and `link`.
+pub fn fragment_layout(bytes: &[u8], link: u32) -> Option<Layout> {
+    let w = |at: u32| word(bytes, at as usize).ok();
+    let size = u32::try_from(bytes.len()).ok()?;
+    if size < 0x24 || !size.is_multiple_of(4) || bytes.get(8..16)? != b"FRAGMENT" {
+        return None;
+    }
+    let (jump, zero, header, table, file, ram) = (w(0)?, w(4)?, w(16)?, w(20)?, w(24)?, w(28)?);
+    let entry = (link & 0xf000_0000) | ((jump & 0x03ff_ffff) << 2);
+    let count = w(table)?;
+    let end = table.checked_add(4)?.checked_add(count.checked_mul(4)?)?;
+    if jump >> 26 != 2
+        || zero != 0
+        || header != 0x20
+        || file != size
+        || !table.is_multiple_of(4)
+        || table <= header
+        || ram < table
+        || !ram.is_multiple_of(4)
+        || end > size
+        || bytes[end as usize..].iter().any(|b| *b != 0)
+        || !(link + header..link + table).contains(&entry)
+    {
+        return None;
+    }
+    // Table order is the pairing order: a HI16 applies to the LO16s after it.
+    let (mut listed, mut seen) = (Vec::new(), BTreeSet::new());
+    for n in 0..count {
+        let packed = w(table + 4 + 4 * n)?;
+        let (kind, offset) = (((packed >> 24) & 63) as u8, packed & 0x00ff_ffff);
+        // Bits 31..30: 0 for a reference into this file, 2 for one outside it.
+        if !matches!(packed >> 30, 0 | 2)
+            || !matches!(kind, 2 | 4 | 5 | 6)
+            || !offset.is_multiple_of(4)
+            || offset + 4 > table
+            || !seen.insert(offset)
+        {
+            return None;
+        }
+        listed.push((offset, kind));
+    }
+    // The table lists every absolute reference. One into resident code (RDRAM,
+    // below 0x80800000) keeps its value. One into another fragment moves with
+    // that fragment, which only the run knows: a data word, HI16/LO16 pair, J
+    // or JAL is kept as a FOREIGN relocation, its value read from the bound
+    // bytes (ADR-0337, ADR-0338).
+    let own = link..=link.checked_add(size.max(ram))?;
+    let mut kept: Vec<Option<u8>> = vec![None; listed.len()];
+    let mut highs: [Option<usize>; 32] = [None; 32];
+    for (n, &(offset, kind)) in listed.iter().enumerate() {
+        let x = w(offset)?;
+        let target = match kind {
+            2 => x,
+            4 => (link & 0xf000_0000) | ((x & 0x03ff_ffff) << 2),
+            5 => {
+                if x >> 26 != 15 {
+                    return None;
+                }
+                highs[(x >> 16 & 31) as usize] = Some(n);
+                continue;
+            }
+            _ => {
+                let high = highs[(x >> 21 & 31) as usize]?;
+                (w(listed[high].0)? << 16).wrapping_add(x as u16 as i16 as i32 as u32)
+            }
+        };
+        let decided = if own.contains(&target) {
+            kind
+        } else if target >= 0x8080_0000 && (kind != 4 || matches!(x >> 26, 2 | 3)) {
+            kind | FOREIGN
+        } else if target >= 0x8080_0000 {
+            return None;
+        } else {
+            continue;
+        };
+        kept[n] = Some(decided);
+        if kind == 6 {
+            // The pair's HI16 relocates the same way; a HI16 shared by own and
+            // foreign LO16s has no single value, so the file is refused.
+            let high = highs[(x >> 21 & 31) as usize]?;
+            let pair = 5 | (decided & FOREIGN);
+            if kept[high].is_some_and(|k| k != pair) {
+                return None;
+            }
+            kept[high] = Some(pair);
+        }
+    }
+    let text = header + slot_text(&bytes[header as usize..table as usize], 0)?.len() as u32;
+    Some(Layout {
+        text,
+        data: table - text,
+        rodata: size - table,
+        bss: ram.saturating_sub(size),
+        file_size: size,
+        relocations: listed
+            .iter()
+            .zip(kept)
+            .filter_map(|(&(offset, _), kind)| {
+                Some(Relocation {
+                    offset,
+                    kind: kind?,
+                })
+            })
+            .collect(),
+    })
+}
+
+/// A catalog file's layout: a fragment's exact table, else the slot scan.
+pub fn catalog_layout(bytes: &[u8], link: u32, text: u32) -> Result<Layout, String> {
+    match fragment_layout(bytes, link) {
+        Some(layout) if layout.text == text => Ok(layout),
+        Some(_) => Err("fragment text differs from its catalog entry".into()),
+        None => slot_layout_bounded(bytes, link, text),
+    }
+}
+
+/// The fragment starting at `at` and its link base: the 1 MiB base of its
+/// entry (ADR-0337).
+fn fragment_at(at: &[u8]) -> Option<(&[u8], u32, Layout)> {
+    if at.get(8..16)? != b"FRAGMENT" {
+        return None;
+    }
+    let (jump, size) = (word(at, 0).ok()?, word(at, 24).ok()?);
+    let link = 0x8000_0000 | ((jump & 0x03ff_ffff) << 2) & 0x0ff0_0000;
+    let bytes = at.get(..size as usize)?;
+    Some((bytes, link, fragment_layout(bytes, link)?))
+}
+
+/// Whether a well-formed fragment starts at `at`.
+pub fn is_fragment(at: &[u8]) -> bool {
+    fragment_at(at).is_some()
+}
+
+/// Every fragment in the ROM, raw or in a Yay0 stream, at its link base
+/// (ADR-0337, ADR-0338).
+fn fragment_catalog(rom: &[u8]) -> Vec<Overlay> {
+    let mut found = Vec::new();
+    for start in (0..rom.len().saturating_sub(0x24)).step_by(4) {
+        let at = &rom[start..];
+        let decoded;
+        let (bytes, encoding, encoded) = if start % 16 == 0 && at.get(8..16) == Some(b"FRAGMENT") {
+            (at, OverlayCompression::Raw, None)
+        } else if at.starts_with(b"Yay0") {
+            let Ok((out, used)) = crate::declared_loads::yay0_stream(at) else {
+                continue;
+            };
+            decoded = out;
+            (
+                decoded.as_slice(),
+                OverlayCompression::Yay0,
+                Some(used as u32),
+            )
+        } else {
+            continue;
+        };
+        let Some((bytes, link, layout)) = fragment_at(bytes) else {
+            continue;
+        };
+        let size = bytes.len() as u32;
+        let encoded_size = encoded.unwrap_or(size);
+        found.push(Overlay {
+            file: RomFile {
+                virtual_start: start as u32,
+                virtual_end: start as u32 + size,
+                rom_start: start as u32,
+                rom_end: start as u32 + encoded_size,
+            },
+            link,
+            source_sha256: sha256(bytes),
+            encoding: LoadEncoding::CatalogOverlay {
+                encoding,
+                encoded_size,
+                text_size: layout.text,
+                bss_size: layout.bss,
+            },
+            layout,
+            table_offsets: Vec::new(),
+        });
+    }
+    found
+}
+
+/// The loader's segmented-pointer test (bits 24..27 set), except for an
+/// address in the overlay's own `link..=end` range: a slot alternate placed
+/// for analysis above 0x81000000 sets those bits in its own pointers.
+pub fn segmented(address: u32, link: u32, end: u32) -> bool {
+    address & 0x0f00_0000 != 0 && !(link..=end).contains(&address)
 }
 
 /// The text of a fixed-address file that shares a slot with others
@@ -565,6 +769,115 @@ fn segment_table(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String>
     Ok(found.into_values().collect())
 }
 
+/// Shared-slot tables in a static image: rows that begin with ROM start, ROM end
+/// and RAM destination (Paper Mario's map configs, for one). A destination counts
+/// as an overlay slot only when at least two distinct ROM files name it from rows
+/// at most 0x100 bytes apart (a table, not scattered coincidences); each file must
+/// open with code and lie past the ROM header and boot code. Like every catalog entry these are byte-source
+/// candidates: lowered code still runs only while RAM matches its image.
+fn shared_slot_table(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> {
+    let mut slots: BTreeMap<u32, BTreeMap<(u32, u32), Vec<u32>>> = BTreeMap::new();
+    for at in (0..table_image.len().saturating_sub(11)).step_by(4) {
+        let (rom_start, rom_end, ram) = (
+            word(table_image, at)?,
+            word(table_image, at + 4)?,
+            word(table_image, at + 8)?,
+        );
+        if !(0x8000_0000..0x8080_0000).contains(&ram)
+            || !ram.is_multiple_of(4)
+            || !rom_start.is_multiple_of(4)
+            || !rom_end.is_multiple_of(4)
+            || rom_start < 0x1000
+            || rom_end <= rom_start
+            || rom_end as usize > rom.len()
+            || rom_end - rom_start > MAX_IMAGE as u32
+            || ram
+                .checked_add(rom_end - rom_start)
+                .is_none_or(|end| end > 0x8080_0000)
+        {
+            continue;
+        }
+        slots
+            .entry(ram)
+            .or_default()
+            .entry((rom_start, rom_end))
+            .or_default()
+            .push(at as u32);
+    }
+    let mut found = Vec::new();
+    let tabular = |files: &BTreeMap<(u32, u32), Vec<u32>>| {
+        let offsets: BTreeSet<u32> = files.values().flatten().copied().collect();
+        files.len() >= 2
+            && offsets
+                .iter()
+                .zip(offsets.iter().skip(1))
+                .any(|(a, b)| b - a <= 0x100)
+    };
+    for (ram, files) in slots.into_iter().filter(|(_, files)| tabular(files)) {
+        for ((rom_start, rom_end), table_offsets) in files {
+            let bytes = &rom[rom_start as usize..rom_end as usize];
+            if slot_text(bytes, 0).is_none() {
+                continue;
+            }
+            let layout = slot_layout(bytes, ram);
+            let text_size = layout.text;
+            if !standalone(bytes, ram, text_size) {
+                continue;
+            }
+            found.push(Overlay {
+                file: RomFile {
+                    virtual_start: rom_start,
+                    virtual_end: rom_end,
+                    rom_start,
+                    rom_end,
+                },
+                link: ram,
+                source_sha256: sha256(bytes),
+                layout,
+                table_offsets,
+                encoding: LoadEncoding::CatalogOverlay {
+                    encoding: OverlayCompression::Raw,
+                    encoded_size: rom_end - rom_start,
+                    text_size,
+                    bss_size: 0,
+                },
+            });
+        }
+    }
+    Ok(found)
+}
+
+/// Whether a shared-slot file's text is whole: every J, JAL and branch lands in
+/// its own text, or outside its load neighbourhood (from the 64 KiB block of
+/// `ram` to the file's end), as calls into fixed code and other regions do. A
+/// transfer just before the file or into its data means the row names one part
+/// of a larger load, whose missing code no alternate can supply.
+fn standalone(bytes: &[u8], ram: u32, text: u32) -> bool {
+    let near = (ram & !0xffff)..ram.saturating_add(bytes.len() as u32);
+    let own = ram..ram + text;
+    (0..text / 4).all(|k| {
+        let (at, Ok(w)) = (4 * k, word(bytes, 4 * k as usize)) else {
+            return false;
+        };
+        let pc = ram + at;
+        let target = match w >> 26 {
+            2 | 3 => (pc.wrapping_add(4) & 0xf000_0000) | ((w & 0x03ff_ffff) << 2),
+            1 if matches!((w >> 16) & 31, 0..=3 | 16..=19) => pc
+                .wrapping_add(4)
+                .wrapping_add_signed(i32::from(w as i16) * 4),
+            // BC1F/BC1T/BC1FL/BC1TL too: COP1 with rs = 8.
+            4..=7 | 20..=23 => pc
+                .wrapping_add(4)
+                .wrapping_add_signed(i32::from(w as i16) * 4),
+            17 if (w >> 21) & 31 == 8 => pc
+                .wrapping_add(4)
+                .wrapping_add_signed(i32::from(w as i16) * 4),
+            _ => return true,
+        };
+        own.contains(&target) || !near.contains(&target)
+    })
+}
+
 fn descriptor_catalog(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> {
     let mut found = Vec::new();
     for d in crate::descriptor_loads::infer(rom, table_image) {
@@ -606,6 +919,15 @@ pub fn discover(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> 
             Err(e) => {
                 let mut found = segment_table(rom, table_image)?;
                 found.extend(descriptor_catalog(rom, table_image)?);
+                found.extend(fragment_catalog(rom));
+                for slot in shared_slot_table(rom, table_image)? {
+                    if !found
+                        .iter()
+                        .any(|o| (o.file.rom_start, o.link) == (slot.file.rom_start, slot.link))
+                    {
+                        found.push(slot);
+                    }
+                }
                 return if found.is_empty() { Err(e) } else { Ok(found) };
             }
         },
@@ -648,6 +970,11 @@ pub fn discover(rom: &[u8], table_image: &[u8]) -> Result<Vec<Overlay>, String> 
                         rom.get(file.rom_start as usize..file.rom_end as usize)
                             .ok_or("DMA file outside ROM")?,
                     ),
+                    OverlayCompression::Yay0 => crate::declared_loads::yay0_stream(
+                        rom.get(file.rom_start as usize..file.rom_end as usize)
+                            .ok_or("DMA file outside ROM")?,
+                    )
+                    .map(|(out, _)| out),
                     OverlayCompression::Raw => rom
                         .get(file.rom_start as usize..file.rom_start as usize + file_size as usize)
                         .ok_or_else(|| "DMA raw file outside ROM".to_string())
@@ -1111,6 +1438,200 @@ pub fn reset_stub(rom: &[u8], window: u32) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A fragment linked at 0x81700000: own HI16/LO16, J and data pointer
+    /// relocations, plus a `jal` and a pointer into resident code.
+    fn fragment() -> Vec<u8> {
+        let words: [u32; 18] = [
+            0x085c_0008,
+            0,
+            0x4652_4147,
+            0x4d45_4e54,
+            0x20,
+            0x48,
+            0x70,
+            0x80,
+            0x3c08_8170,
+            0x2508_0040,
+            0x0c5c_0008,
+            0x0c00_0400,
+            0x03e0_0008,
+            0,
+            0,
+            0,
+            0x8170_0020,
+            0x8000_1234,
+        ];
+        let table = [
+            7,
+            0x0400_0000,
+            0x0500_0020,
+            0x0600_0024,
+            0x0400_0028,
+            0x0400_002c,
+            0x0200_0040,
+            0x0200_0044,
+        ];
+        let mut bytes: Vec<u8> = words
+            .iter()
+            .chain(&table)
+            .flat_map(|w: &u32| w.to_be_bytes())
+            .collect();
+        bytes.resize(0x70, 0);
+        bytes
+    }
+
+    #[test]
+    fn fragments_relocate_their_own_references_and_keep_resident_ones() {
+        let bytes = fragment();
+        let layout = fragment_layout(&bytes, 0x8170_0000).unwrap();
+        assert_eq!(
+            (layout.text, layout.data, layout.rodata, layout.bss),
+            (0x38, 0x10, 0x28, 0x10)
+        );
+        let kept: Vec<_> = layout
+            .relocations
+            .iter()
+            .map(|r| (r.offset, r.kind))
+            .collect();
+        assert_eq!(kept, [(0, 4), (0x20, 5), (0x24, 6), (0x28, 4), (0x40, 2)]);
+        let moved = layout.apply(&bytes, 0x8170_0000, 0x8020_0000).unwrap();
+        let at = |o: usize| word(&moved, o).unwrap();
+        assert_eq!(at(0), 0x0808_0008);
+        assert_eq!((at(0x20), at(0x24)), (0x3c08_8020, 0x2508_0040));
+        assert_eq!((at(0x28), at(0x2c)), (0x0c08_0008, 0x0c00_0400));
+        assert_eq!((at(0x40), at(0x44)), (0x8020_0020, 0x8000_1234));
+        assert_eq!(moved.len(), 0x80);
+        assert_eq!(catalog_layout(&bytes, 0x8170_0000, 0x38).unwrap(), layout);
+        assert!(catalog_layout(&bytes, 0x8170_0000, 0x30).is_err());
+        assert!(is_fragment(&[bytes.clone(), vec![0; 8]].concat()));
+        assert!(!is_fragment(&bytes[..0x60]));
+        let found = fragment_catalog(&[vec![0; 0x30], bytes.clone()].concat());
+        assert_eq!(found.len(), 1);
+        assert_eq!(
+            (
+                found[0].link,
+                found[0].file.rom_start,
+                found[0].file.rom_end
+            ),
+            (0x8170_0000, 0x30, 0xa0)
+        );
+    }
+
+    #[test]
+    fn fragment_pairs_follow_table_order() {
+        // lui t0 resident @0x20, addiu @0x24, lui t0 own @0x28; the table lists
+        // the second lui before the addiu, so the pair is 0x28/0x24.
+        let mut b = fragment();
+        for (at, value) in [
+            (0x20, 0x3c08_8000),
+            (0x28, 0x3c08_8170),
+            (0x50, 0x0500_0020),
+            (0x54, 0x0500_0028),
+            (0x58, 0x0600_0024),
+        ] {
+            b[at..at + 4].copy_from_slice(&u32::to_be_bytes(value));
+        }
+        let layout = fragment_layout(&b, 0x8170_0000).unwrap();
+        let kept: Vec<_> = layout
+            .relocations
+            .iter()
+            .map(|r| (r.offset, r.kind))
+            .collect();
+        assert_eq!(kept, [(0, 4), (0x28, 5), (0x24, 6), (0x40, 2)]);
+        let moved = layout.apply(&b, 0x8170_0000, 0x8020_0000).unwrap();
+        assert_eq!(
+            (word(&moved, 0x20).unwrap(), word(&moved, 0x28).unwrap()),
+            (0x3c08_8000, 0x3c08_8020)
+        );
+    }
+
+    #[test]
+    fn fragments_fail_closed() {
+        let base = fragment();
+        let set = |at: usize, value: u32| {
+            let mut b = base.clone();
+            b[at..at + 4].copy_from_slice(&value.to_be_bytes());
+            b
+        };
+        assert!(
+            fragment_layout(&base, 0x8180_0000).is_none(),
+            "entry outside the link"
+        );
+        assert!(
+            fragment_layout(&set(0x2c, 0x1060_0000), 0x8170_0000).is_none(),
+            "R_MIPS_26 on a branch"
+        );
+        // A call into another fragment is kept; its target comes from RAM.
+        let call = set(0x2c, 0x0c60_0000);
+        let layout = fragment_layout(&call, 0x8170_0000).unwrap();
+        assert!(layout.relocations.contains(&Relocation {
+            offset: 0x2c,
+            kind: 4 | FOREIGN
+        }));
+        // Data and HI16/LO16 references into another fragment keep the loader's bits.
+        let data = set(0x44, 0x8180_0000);
+        let layout = fragment_layout(&data, 0x8170_0000).unwrap();
+        assert!(layout.relocations.contains(&Relocation {
+            offset: 0x44,
+            kind: 2 | FOREIGN
+        }));
+        assert_eq!(
+            word(
+                &layout.apply(&data, 0x8170_0000, 0x8020_0000).unwrap(),
+                0x44
+            )
+            .unwrap(),
+            0x8180_0000
+        );
+        let pair = set(0x20, 0x3c08_8180);
+        let layout = fragment_layout(&pair, 0x8170_0000).unwrap();
+        let kinds: Vec<_> = layout
+            .relocations
+            .iter()
+            .filter(|r| r.offset & !4 == 0x20)
+            .map(|r| r.kind)
+            .collect();
+        assert_eq!(kinds, [5 | FOREIGN, 6 | FOREIGN]);
+        let moved = layout.apply(&pair, 0x8170_0000, 0x8020_0000).unwrap();
+        assert_eq!(
+            (word(&moved, 0x20).unwrap(), word(&moved, 0x24).unwrap()),
+            (0x3c08_8180, 0x2508_0040)
+        );
+        assert!(
+            fragment_layout(&set(8, 0x4652_4148), 0x8170_0000).is_none(),
+            "magic"
+        );
+        assert!(
+            fragment_layout(&set(0x48, 40), 0x8170_0000).is_none(),
+            "count past the file"
+        );
+        assert!(
+            fragment_layout(&set(0x6c, 1), 0x8170_0000).is_none(),
+            "nonzero padding"
+        );
+        assert!(
+            fragment_layout(&set(0x4c, 0x4400_0000), 0x8170_0000).is_none(),
+            "flag bits"
+        );
+        let outside = set(0x5c, 0x8400_002c); // the resident `jal`, flagged external
+        assert_eq!(
+            fragment_layout(&outside, 0x8170_0000)
+                .unwrap()
+                .relocations
+                .len(),
+            5
+        );
+        assert!(
+            fragment_layout(&set(0x18, 0x74), 0x8170_0000).is_none(),
+            "file size"
+        );
+        assert!(
+            fragment_layout(&set(0x1c, 0x40), 0x8170_0000).is_none(),
+            "RAM below table"
+        );
+    }
+
     #[test]
     fn dma_catalog_uses_virtual_keys_and_bounded_packed_physical_extents() {
         let mut rom = vec![0; 0x400];
@@ -1210,6 +1731,105 @@ mod tests {
             .map(|(v, _)| v)
             .collect();
         assert_eq!(found, [0x2f20, 0x8009_6d50].into());
+    }
+
+    #[test]
+    fn a_slot_file_must_hold_its_own_code() {
+        let ram = 0x802b_60b4;
+        let file = |w: [u32; 4]| -> Vec<u8> { w.iter().flat_map(|w| w.to_be_bytes()).collect() };
+        let j = |t: u32| 0x0800_0000 | ((t & 0x0fff_ffff) >> 2);
+        let jal = |t: u32| 0x0c00_0000 | ((t & 0x0fff_ffff) >> 2);
+        // a jump into its own text, a call into fixed code: whole
+        assert!(standalone(
+            &file([j(ram + 8), 0, jal(0x8000_1000), 0]),
+            ram,
+            16
+        ));
+        // a jump just before the file: one part of a larger load
+        assert!(!standalone(
+            &file([j(0x802b_608c), 0, 0x03e0_0008, 0]),
+            ram,
+            16
+        ));
+        // a branch into its own data
+        assert!(!standalone(&file([0x1000_0002, 0, 0, 0]), ram, 8));
+        // a COP1 branch (bc1t) just before the file, and one in its own text
+        assert!(!standalone(&file([0x4501_fff0, 0, 0, 0]), ram, 16));
+        assert!(standalone(&file([0x4501_0001, 0, 0, 0]), ram, 16));
+    }
+
+    #[test]
+    fn copies_placed_above_16_mib_still_relocate_their_own_pointers() {
+        let placed: u32 = 0x8190_0000;
+        let words = [
+            0x3c05_8190, // lui a1, %hi(placed + 8)
+            0x24a5_0008, // addiu a1, a1, %lo
+            0x03e0_0008,
+            0,
+            placed + 4,  // data pointer into the text
+            0x0b00_0010, // a real segmented pointer stays
+        ];
+        let bytes: Vec<u8> = words.iter().flat_map(|w| w.to_be_bytes()).collect();
+        let layout = slot_layout_bounded(&bytes, placed, 16).unwrap();
+        let out = layout.apply(&bytes, placed, 0x8024_0000).unwrap();
+        let got: Vec<u32> = out
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|w| u32::from_be_bytes(*w))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                0x3c05_8024,
+                0x24a5_0008,
+                0x03e0_0008,
+                0,
+                0x8024_0004,
+                0x0b00_0010
+            ]
+        );
+        assert!(segmented(0x0b00_0010, placed, placed + 24));
+        assert!(!segmented(placed + 4, placed, placed + 24));
+    }
+
+    #[test]
+    fn shared_slot_tables_name_every_file_of_a_slot() {
+        let link = 0x8024_0000;
+        // three code files (jr ra; nop), one data file, and code inside the header
+        let mut rom = vec![0; 0x1300];
+        for file in [0x40, 0x1100, 0x1180, 0x1200] {
+            put(&mut rom, file, 0x03e0_0008);
+        }
+        put(&mut rom, 0x1280, 0xfc00_0000); // not an instruction
+        let mut table = vec![0; 0x60];
+        // rows of a 0x10-byte config: start, end, destination, then a name pointer
+        for (row, (start, end, ram)) in [
+            (0x1100, 0x1140, link),
+            (0x1180, 0x11c0, link),
+            (0x1280, 0x12c0, link),        // data, not code: skipped
+            (0x40, 0x80, link),            // header and boot code: never a file
+            (0x1200, 0x1240, 0x8030_0000), // the only file for its slot: not a slot
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            for (k, value) in [start, end, ram, 0x8009_0000].into_iter().enumerate() {
+                put(&mut table, row * 16 + k * 4, value);
+            }
+        }
+        let slots = shared_slot_table(&rom, &table).unwrap();
+        let named: Vec<_> = slots.iter().map(|o| (o.file.rom_start, o.link)).collect();
+        assert_eq!(named, [(0x1100, link), (0x1180, link)]);
+        assert_eq!(slots[0].table_offsets, [0]);
+        // the same two rows far apart are coincidences, not a table
+        let mut scattered = vec![0; 0x400];
+        for (at, start) in [(0, 0x1100u32), (0x300, 0x1180)] {
+            for (k, value) in [start, start + 0x40, link].into_iter().enumerate() {
+                put(&mut scattered, at + k * 4, value);
+            }
+        }
+        assert!(shared_slot_table(&rom, &scattered).unwrap().is_empty());
     }
 
     #[test]

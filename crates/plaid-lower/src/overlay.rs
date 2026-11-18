@@ -102,7 +102,22 @@ int plaid_overlay_verify_{id}(const uint8_t *ram, size_t ram_size, uint32_t base
         let at = r.offset;
         let w = words[at as usize / 4];
         match r.kind {
-            2 if w & 0x0f000000 != 0 => {}
+            // Another module's address: the loader's bits are accepted as RAM holds them.
+            0x82 => out += &format!("  {put}(expected + {at}, {get}(ram + p + {at}));\n"),
+            0x84..=0x86 => {
+                // The opcode bits stay compared; the target or immediate is the loader's.
+                let mask = if r.kind == 0x84 {
+                    0xfc00_0000
+                } else {
+                    0xffff_0000
+                };
+                out += &format!(
+                    "  {put}(expected + {at}, 0x{:08x}u | ({get}(ram + p + {at}) & 0x{:08x}u));\n",
+                    w & mask,
+                    !mask
+                )
+            }
+            2 if plaid_core::overlays::segmented(w, link, end) => {}
             2 => out += &format!("  {put}(expected + {at}, 0x{w:08x}u + delta);\n"),
             4 => {
                 let target = 0x80000000 | ((w & 0x03ffffff) << 2);
@@ -119,8 +134,9 @@ int plaid_overlay_verify_{id}(const uint8_t *ram, size_t ram_size, uint32_t base
                 let target = original.wrapping_shl(16).wrapping_add(low);
                 // A reused HI observes its previous patch for the segmented
                 // pointer test, but reconstructs the target from the original HI.
+                // plaid_core::overlays::segmented, at run time
                 out += &format!(
-                    "  if (((({get}(expected + {hi}) << 16) + 0x{low:08x}u) & 0x0f000000u) == 0) {{\n"
+                    "  if (((({get}(expected + {hi}) << 16) + 0x{low:08x}u) & 0x0f000000u) == 0 || (({get}(expected + {hi}) << 16) + 0x{low:08x}u) - 0x{link:08x}u <= {span}u) {{\n"
                 );
                 if !(link..=end).contains(&target) {
                     out += "    free(expected); return 0;\n";
@@ -188,5 +204,40 @@ mod tests {
                 verifier_text_ranges(&[0; 12], &layout, 8, 0x80000000, 0, &ranges, &[]).is_err()
             );
         }
+    }
+
+    #[test]
+    fn foreign_relocations_accept_the_loader_bits_and_only_them() {
+        // lui t0 / addiu t0 and a jal into another module, then a foreign data word.
+        let bytes: Vec<u8> = [0x3c08_8290u32, 0x2508_0040, 0x0e40_0010, 0x8290_0000]
+            .iter()
+            .flat_map(|w| w.to_be_bytes())
+            .collect();
+        let foreign = plaid_core::overlays::FOREIGN;
+        let layout = Layout {
+            text: 12,
+            data: 4,
+            rodata: 0,
+            bss: 0,
+            file_size: 16,
+            relocations: [(0, 5), (4, 6), (8, 4), (12, 2)]
+                .map(|(offset, kind)| plaid_core::overlays::Relocation {
+                    offset,
+                    kind: kind | foreign,
+                })
+                .to_vec(),
+        };
+        let c = verifier(&bytes, &layout, 16, 0x8170_0000, 0).unwrap();
+        // The opcode half stays compared; only the immediate (or data word) comes from RAM.
+        assert!(c.contains("plaid_overlay_put_0(expected + 0, 0x3c080000u | (plaid_overlay_get_0(ram + p + 0) & 0x0000ffffu));"));
+        assert!(c.contains("plaid_overlay_put_0(expected + 4, 0x25080000u | (plaid_overlay_get_0(ram + p + 4) & 0x0000ffffu));"));
+        assert!(c.contains("plaid_overlay_put_0(expected + 8, 0x0c000000u | (plaid_overlay_get_0(ram + p + 8) & 0x03ffffffu));"));
+        assert!(
+            c.contains("plaid_overlay_put_0(expected + 12, plaid_overlay_get_0(ram + p + 12));")
+        );
+        assert!(
+            !c.contains("free(expected); return 0;"),
+            "a foreign pair never refuses the binding"
+        );
     }
 }

@@ -140,6 +140,7 @@ static int load_file(const char *path, u8 *bytes, size_t size);
 static struct timespec t0;
 static u64 time_base; /* osSetTime offset in count ticks */
 static u32 vi_regs[14], vi_field; /* VI registers as the guest wrote them (ADR-0199) */
+static u32 origin_field; /* the field VI_V_CURRENT showed when the guest last wrote the origin */
 static u64 vi_retrace_ns;
 #define VI_PERIOD_NS 16683350ull /* NTSC: 60000/1001 Hz */
 static u64 next_vi = VI_PERIOD_NS;
@@ -160,6 +161,7 @@ u32 plaid_gfx_input_player(int player);
 u32 plaid_gfx_connected(void); /* buttons << 16 | stick x << 8 | stick y */
 void plaid_audio_play(const u8 *samples, u32 bytes, u32 rate); /* big-endian s16 stereo */
 #endif
+static unsigned long vi_count;
 #ifdef PLAID_RSP
 /* RSP tasks run lowered microcode (ADR-0169): the IMEM texts that
    runtime/rsp_texts.py lists, null-terminated. */
@@ -177,15 +179,51 @@ static int rsp_graphics;
 static int rsp_executing; /* native RSP tasks run synchronously, without CPU execution */
 #ifdef PLAID_RT64
 static u8 rsp_gfx_dirty[PLAID_RAM_SIZE / 4096];
+/* PLAID_TRACE_RDP: one line per SYNC_FULL with the FNV hash of the 64-bit
+   command words since the last, as scripts/ares_rdp_queue.py prints them in
+   ares (ADR-0329). Word counts per command are ares vulkan.cpp's (ISC). */
+static void trace_rdp(const u8 *bytes, u32 size) {
+  static const u8 length[64] = {1, 1, 1, 1, 1, 1, 1, 1, 4, 6, 12, 14, 12, 14, 20, 22,
+                                [16 ... 35] = 1, 2, 2, [38 ... 63] = 1};
+  static long t = -1, dump;
+  static u64 pending[32], h = 0xcbf29ce484222325ull;
+  static u32 count, frames, n, ops[64];
+  u32 i, j;
+  if (t < 0) t = getenv("PLAID_TRACE_RDP") ? 1 : 0, dump = getenv("PLAID_TRACE_RDP_DUMP") ? atol(getenv("PLAID_TRACE_RDP_DUMP")) : 0;
+  if (!t) return;
+  for (i = 0; i + 8 <= size; i += 8) {
+    u64 w = 0;
+    for (j = 0; j < 8; j++) w = w << 8 | bytes[i + j];
+    pending[n++] = w;
+    if (n < length[pending[0] >> 56 & 63]) continue;
+    for (j = 0; j < n; j++) h = (h ^ pending[j]) * 0x100000001b3ull;
+    count++;
+    ops[pending[0] >> 56 & 63]++;
+    if ((long)frames < dump) { /* PLAID_TRACE_RDP_DUMP=N: the words of the first N frames */
+      fprintf(stderr, "cmd %u", frames + 1);
+      for (j = 0; j < n; j++) fprintf(stderr, " %016llx", (unsigned long long)pending[j]);
+      fputc(10, stderr);
+    }
+    if ((pending[0] >> 56 & 63) == 0x29) {
+      fprintf(stderr, "rdp %u commands %u hash %016llx vi %lu ops", ++frames, count, (unsigned long long)h, vi_count);
+      for (j = 0; j < 64; j++) if (ops[j]) fprintf(stderr, " %02x:%u", j, ops[j]);
+      fputc(10, stderr);
+      h = 0xcbf29ce484222325ull; count = 0; memset(ops, 0, sizeof ops);
+    }
+    n = 0;
+  }
+}
 static int rsp_dpc_consume(u32 current, u32 size, int dmem) {
   if (dmem) {
     u8 commands[4096];
     u32 i;
     if (size > sizeof commands) return 1;
     for (i = 0; i < size; i++) commands[i] = rsp.dmem[(current + i) & 0xfff];
+    trace_rdp(commands, size);
     if (plaid_gfx_rdp(S->ram, commands, size, rsp_gfx_dirty, gfx_writeback, S)) return 1;
   } else {
     if (current > PLAID_RAM_SIZE || size > PLAID_RAM_SIZE - current) return 1;
+    trace_rdp(S->ram + current, size);
     if (plaid_gfx_rdp(S->ram, S->ram + current, size, rsp_gfx_dirty, gfx_writeback, S)) return 1;
   }
   memset(rsp_gfx_dirty, 0, sizeof rsp_gfx_dirty);
@@ -204,7 +242,7 @@ static struct { u32 len[2], count, on, rate; u64 start_ns; u32 addr; } ai = {{0,
 static void ai_update(void);
 static u32 ai_length(void);
 static void ai_submit(u32 p, u32 n);
-static unsigned long vi_count, gfx_tasks, audio_tasks, dma_count;
+static unsigned long gfx_tasks, audio_tasks, dma_count;
 static long stop_gfx = 1; /* stop after this many graphics tasks (0: never) */
 static double run_seconds = 0;
 static u32 dump_at, dump_words;
@@ -286,8 +324,14 @@ static int ret64(u64 v) { S->r[2] = SX32((u32)(v >> 32)); S->r[3] = SX32((u32)v)
 
 /* ---- time --------------------------------------------------------------- */
 
+/* PLAID_DETERMINISTIC=<ns>: guest time advances <ns> per loop safepoint and,
+   while every thread waits, in 1 ms steps up to the next retrace, instead of
+   following the host clock; with no pump thread, a run replays exactly
+   (ADR-0332). For differential traces, not for play: speed is not paced. */
+static u64 deterministic, vclock;
 static u64 now_ns(void) {
   struct timespec t;
+  if (deterministic) return vclock;
   clock_gettime(CLOCK_MONOTONIC, &t);
   return (u64)(t.tv_sec - t0.tv_sec) * 1000000000ull + (u64)t.tv_nsec - (u64)t0.tv_nsec;
 }
@@ -520,7 +564,23 @@ int plaid_rt_bind_queue_tail(plaid_state *s, u32 global) {
   pthread_mutex_unlock(&big);
   return result;
 }
+static void vi_poll(u64 now);
+static void ai_update(void);
+static void deliver_pending(void);
+static void deterministic_tick(void) {
+  vi_poll(vclock);
+  ai_update();
+  if (run_seconds > 0 && vclock > (u64)(run_seconds * 1e9)) finish(0, "time limit");
+}
 static void hand_to(rt_thread *next) {
+  if (deterministic && !next) { /* what the pump does while every thread waits */
+    running = NULL;
+    while (!(next = best_runnable())) {
+      vclock = next_vi > vclock && next_vi - vclock < 1000000 ? next_vi : vclock + 1000000;
+      deterministic_tick();
+      deliver_pending();
+    }
+  }
   if (queue_tail_global && next && next != &boot) kernel_write_check(next->guest + 0x10, 2);
   if (running_thread_global) kernel_write_check(running_thread_global, 4);
   if (next) next->state = T_RUNNING;
@@ -679,7 +739,7 @@ static void pi_complete(u32 mq, u32 msg) {
 static void deliver_pending(void) {
   int ev, i;
   u64 c;
-  plaid_preempt = 0;
+  plaid_preempt = deterministic != 0; /* on the virtual clock every loop header ticks */
   for (ev = 0; ev < EV_COUNT; ev++)
     while (pending[ev] && event_eligible(ev)) {
       if (ev == EV_SI && si_due && si_finish()) finish(1, "SI transfer outside the declared Joybus subset");
@@ -736,10 +796,21 @@ static void vi_poll(u64 now) {
     next_vi = now - next_vi < VI_PERIOD_NS ? next_vi + VI_PERIOD_NS : now + VI_PERIOD_NS;
     vi_count++;
     vi_retrace_ns = now;
+    { static long t = -1; if (t < 0) t = getenv("PLAID_TRACE_VI") ? 1 : 0;
+      if (t) fprintf(stderr, "vi %lu ns %llu origin %08x count %08x gfx %lu field %u control %x\n", vi_count,
+                     (unsigned long long)now, vi_regs[1], (u32)count_now(), (unsigned long)gfx_tasks, vi_field, vi_regs[0]); }
     if (!(vi_regs[6] & 1)) vi_field ^= 1; /* an interlaced mode alternates fields */
     post(EV_VI);
 #ifdef PLAID_RT64
-    if (vi_regs[0] & 3) plaid_gfx_screen(vi_regs); /* a color depth: video on */
+    if (vi_regs[0] & 3) { /* a color depth: video on */
+      /* RT64 reads the field from VI_V_CURRENT to find an interlaced origin's
+         buffer (one row in, or two on the odd field): give it the field
+         libultra chose the origin for (ADR-0335). */
+      u32 regs[14];
+      memcpy(regs, vi_regs, sizeof regs);
+      regs[4] = origin_field;
+      plaid_gfx_screen(regs);
+    }
     if (plaid_gfx_closed()) finish(0, "window closed");
 #endif
   }
@@ -789,7 +860,9 @@ static void *thread_main(void *p) {
 int plaid_rt_safepoint(plaid_state *s) {
   (void)s;
   pthread_mutex_lock(&big);
+  if (deterministic) { vclock += deterministic; deterministic_tick(); }
   maybe_preempt(0);
+  if (deterministic) plaid_preempt = 1; /* every loop header is a clock tick */
   pthread_mutex_unlock(&big);
   return 0;
 }
@@ -1431,7 +1504,7 @@ static int rt_io(plaid_state *s, u32 p, u32 size, int write, u64 *v) {
     u32 r = (p & 0x3fu) >> 2;
     if (!write) *v = r == 4 ? vi_line() : r < 14 ? vi_regs[r] : 0;
     else if (r == 4) pending[EV_VI] = 0; /* VI_V_CURRENT: acknowledges the interrupt */
-    else if (r < 14) vi_regs[r] = (u32)*v & vi_mask[r];
+    else if (r < 14) { vi_regs[r] = (u32)*v & vi_mask[r]; if (r == 1) origin_field = vi_line() & 1; }
     return 0;
   }
   if (p >= 0x04500000u && p < 0x04600000u) { /* AI registers, as ares ai/io.cpp */
@@ -1551,11 +1624,13 @@ RT(osEPiReadIo) {
 /* ---- SP tasks ------------------------------------------------------------ */
 
 static void report_gfx_task(u32 task) {
-  u32 dl = rd32(task + 0x30), i;
+  u32 dl = rd32(task + 0x30), p, count = 0, i;
+  if (!phys(dl, 0, &p)) count = (PLAID_RAM_SIZE - p) / 8;
+  if (count > 8) count = 8;
   printf("{\"gfx_task\":%lu,\"task\":\"%08x\",\"ucode\":\"%08x\",\"data_ptr\":\"%08x\",\"data_size\":%u,"
          "\"display_list\":[",
          gfx_tasks, task, rd32(task + 0x10), dl, rd32(task + 0x34));
-  for (i = 0; i < 8; i++) printf("%s\"%08x%08x\"", i ? "," : "", rd32(dl + 8 * i), rd32(dl + 8 * i + 4));
+  for (i = 0; i < count; i++) printf("%s\"%08x%08x\"", i ? "," : "", rd32(dl + 8 * i), rd32(dl + 8 * i + 4));
   printf("]}\n");
 }
 #ifdef PLAID_RSP
@@ -1596,15 +1671,22 @@ static void rsp_dump_imem(u32 pc) {
   rsp_file(rsp_dump_dir, name, rsp.imem, 4096);
 }
 static int rsp_run(u32 pc) {
+  static size_t text_count;
+  if (!text_count) {
+    while (plaid_rsp_texts[text_count]) text_count++;
+  }
   u32 xpc = ~0u, xgen = 0;
-  u64 xmask[4] = {0}; /* texts that left at xpc, one bit per registry entry (256 max) */
+  /* Texts that left at xpc, one bit per registry entry. */
+  u64 xmask[text_count / 64 + 1];
+  memset(xmask, 0, sizeof xmask);
   for (;;) {
     const plaid_rsp_text *t = NULL;
-    int i, rc;
+    size_t i;
+    int rc;
     /* Oracle only: capture recognized placements too, without feeding their
        bytes back into ROM discovery or native compilation. */
     rsp_dump_imem(pc);
-    for (i = 0; plaid_rsp_texts[i] && i < 256; i++) {
+    for (i = 0; i < text_count; i++) {
       const plaid_rsp_text *c = plaid_rsp_texts[i];
       if (pc == xpc && rsp.imem_gen == xgen && (xmask[i >> 6] >> (i & 63) & 1)) continue;
       if (pc < c->start || pc + 4 > c->start + c->size) continue;
@@ -1678,7 +1760,10 @@ static int rsp_rom_matches(u32 index, const u8 *bytes, u32 start, u32 size) {
 }
 #endif
 static void rsp_task(void) {
-  int rc, capture = rsp_capture_dir && (long)audio_tasks == rsp_capture;
+  /* --rsp-capture N: audio task N; -N: graphics task N (type 1 at DMEM 0xfc0). */
+  int graphics = rsp.dmem[0xfc3] == 1 && !rsp.dmem[0xfc0] && !rsp.dmem[0xfc1] && !rsp.dmem[0xfc2];
+  int rc, capture = rsp_capture_dir && (rsp_capture < 0 ? graphics && (long)gfx_tasks == -rsp_capture
+                                                      : (long)audio_tasks == rsp_capture);
 #ifdef PLAID_RSP_ROM
   /* Check the submitted bytes before any RSP side effects. The recognized
      boot DMA length takes precedence over the SDK's often ignored ucode_size. */
@@ -1777,8 +1862,21 @@ static int dp_frozen(void) {
 }
 /* Graphics tasks go to the renderer (RT64); with PLAID_RSP other tasks run
    their lowered microcode, otherwise they complete at once. */
+/* PLAID_TRACE_TASK: the device-boundary line scripts/ares_trace.cpp prints for
+   the same task (ADR-0329), FNV-1a over the bytes the task's data names. */
+static void trace_task(u32 task, u32 type) {
+  static long t = -1;
+  u32 data = rd32(task + 0x30) & 0x1fffffffu, size = rd32(task + 0x34), span, i;
+  u64 h = 0xcbf29ce484222325ull;
+  if (t < 0) t = getenv("PLAID_TRACE_TASK") ? 1 : 0;
+  if (!t) return;
+  span = !size ? 1024 : size < 65536 ? size : 65536;
+  for (i = 0; i < span && data + i < PLAID_RAM_SIZE; i++) h = (h ^ S->ram[data + i]) * 0x100000001b3ull;
+  fprintf(stderr, "task %u data %08x size %u hash %016llx vi %lu\n", type, data, size, (unsigned long long)h, vi_count);
+}
 RT(osSpTaskStartGo) {
   u32 task = arg(0), type = rd32(task);
+  trace_task(task, type);
   if (type == 1) {
     gfx_tasks++;
     sp_unknown = 1;
@@ -2209,13 +2307,15 @@ int main(int argc, char **argv) {
   if (!rom || plaid_gfx_open(rom)) { fprintf(stderr, "the renderer needs --rom and a working GPU\n"); return 2; }
 #endif
   clock_gettime(CLOCK_MONOTONIC, &t0);
+  if (getenv("PLAID_DETERMINISTIC")) deterministic = strtoull(getenv("PLAID_DETERMINISTIC"), NULL, 0);
+  plaid_preempt = deterministic != 0;
   plaid_load_images(S);
   pthread_mutex_lock(&big);
   boot.pri = -1; boot.state = T_RUNNING; running = &boot;
   host_context = boot.context = new_context(&boot, 1, 0);
   S->native_context = host_context;
   pthread_mutex_unlock(&big);
-  pthread_create(&pump, NULL, event_pump, NULL);
+  if (!deterministic) pthread_create(&pump, NULL, event_pump, NULL);
   S->r[31] = THREAD_RETURN;
   r = plaid_run(S);
   pthread_mutex_lock(&big);

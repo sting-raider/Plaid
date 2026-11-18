@@ -191,30 +191,34 @@ pub fn overlay_descriptors(
 ) -> BTreeSet<(u32, u32, u32)> {
     let mut out = BTreeSet::new();
     for (i, &offset) in image.words.iter().enumerate() {
+        if offset == 0 || offset > 0x10000 || !offset.is_multiple_of(8) {
+            continue;
+        }
         let at = GuestAddr(image.base.pc.0 + i as u32 * 4);
-        if !at.0.is_multiple_of(8) || offset == 0 || offset > 0x10000 || !offset.is_multiple_of(8) {
-            continue;
-        }
-        if roots
-            .range(..=at)
-            .next_back()
-            .is_none_or(|r| at.0 - r.0 >= 0x1000)
-        {
-            continue;
-        }
-        let Some(spec) = image.word(GuestAddr(at.0 + 4)) else {
+        let Some(root) = roots.range(..=at).next_back() else {
             continue;
         };
-        let dest = spec & 0xffff;
-        let size = ((spec >> 16) | 7) + 1;
-        if image.word(at).is_some()
-            && (0x1000..0x2000).contains(&dest)
-            && dest.is_multiple_of(8)
-            && size >= 64
-            && size <= 0x2000 - dest
-        {
-            out.insert((offset, size, dest & 0xfff));
+        if at.0 - root.0 >= 0x1000 {
+            continue;
         }
+        let Some(descriptor) = sdk_overlay_descriptor(image, at) else {
+            continue;
+        };
+        // LW/LHU-based loaders use word-aligned tables too. Require another
+        // complete entry next to a descriptor at this alignment.
+        let in_window = |pc: u32| pc.checked_sub(root.0).is_some_and(|n| n <= 0xff8);
+        if !at.0.is_multiple_of(8)
+            && (!in_window(at.0)
+                || ![at.0.checked_sub(8), at.0.checked_add(8)]
+                    .into_iter()
+                    .flatten()
+                    .any(|pc| {
+                        in_window(pc) && sdk_overlay_descriptor(image, GuestAddr(pc)).is_some()
+                    }))
+        {
+            continue;
+        }
+        out.insert(descriptor);
     }
     let layouts = roots
         .iter()
@@ -229,6 +233,21 @@ pub fn overlay_descriptors(
         .collect();
     out.extend(packed_overlay_descriptors(image, roots, &layouts));
     out
+}
+
+fn sdk_overlay_descriptor(image: &CodeImage, at: GuestAddr) -> Option<(u32, u32, u32)> {
+    let offset = image.word(at)?;
+    let spec = image.word(GuestAddr(at.0.checked_add(4)?))?;
+    let dest = spec & 0xffff;
+    let size = ((spec >> 16) | 7) + 1;
+    (offset != 0
+        && offset <= 0x10000
+        && offset.is_multiple_of(8)
+        && (0x1000..0x2000).contains(&dest)
+        && dest.is_multiple_of(8)
+        && size >= 64
+        && size <= 0x2000 - dest)
+        .then_some((offset, size, dest & 0xfff))
 }
 
 /// Recognize a packed-table DMA loader's field accesses and native SP DMA
@@ -380,7 +399,7 @@ mod tests {
                 start: GuestAddr(0x8000_7000),
                 size: 8,
             }],
-            slots: vec![],
+            slots: Default::default(),
         };
         // Store an OSTask-like ucode pointer through an unknown task base.
         image.words[..9].copy_from_slice(&[
@@ -420,6 +439,42 @@ mod tests {
             [(0x1000, 0x170, 0)].into()
         );
         assert!(overlay_descriptors(&image, &BTreeSet::new()).is_empty());
+    }
+
+    #[test]
+    fn word_aligned_descriptors_need_an_adjacent_complete_entry_in_the_same_window() {
+        let base = GuestAddr(0x8000_1000);
+        let mut image = CodeImage {
+            base: CodeAddress {
+                pc: base,
+                image: "synthetic".into(),
+                generation: 0,
+            },
+            words: vec![0; 0x1100 / 4],
+            rom_offset: None,
+            physical_start: None,
+            holes: vec![],
+            slots: Default::default(),
+        };
+        let roots = [base].into();
+        let descriptors = [0x1038, 0x00ab_1000, 0x1168, 0x013f_1140];
+        image.words[0x24 / 4..0x34 / 4].copy_from_slice(&descriptors);
+        assert_eq!(
+            overlay_descriptors(&image, &roots),
+            [(0x1038, 0xb0, 0), (0x1168, 0x140, 0x140)].into()
+        );
+        assert!(overlay_descriptors(&image, &[GuestAddr(base.0 + 0x28)].into()).is_empty());
+        image.holes.push(GuestRange {
+            start: GuestAddr(base.0 + 0x30),
+            size: 4,
+        });
+        assert!(overlay_descriptors(&image, &roots).is_empty());
+        image.holes.clear();
+        image.words[0x30 / 4] = 0x013f_1ff8;
+        assert!(overlay_descriptors(&image, &roots).is_empty());
+        image.words[0x24 / 4..0x34 / 4].fill(0);
+        image.words[0xff4 / 4..0x1004 / 4].copy_from_slice(&descriptors);
+        assert!(overlay_descriptors(&image, &roots).is_empty());
     }
 
     #[test]
@@ -474,7 +529,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: vec![],
-            slots: vec![],
+            slots: Default::default(),
         };
         // Two destinations, then three length/offset pairs. The second pair
         // selects destination byte offset two, and DMA rounds lengths up.

@@ -142,14 +142,17 @@ struct Proof<'a, 'm> {
 }
 
 impl Proof<'_, '_> {
-    // These host implementations only update TLB/binding state. They neither
-    // write GPRs nor enter callbacks/scheduling; runtime scope remains mandatory.
+    // TLB helpers leave GPRs alone. A blocking receive can yield, but the
+    // scheduler restores the same thread's callee-saved registers on resume.
+    // Keep the runtime declaration in the witness so lowering rechecks it.
     fn runtime_boundary(&self, pc: GuestAddr) -> Option<&crate::program::RuntimeFunction> {
         let function = self.map?.runtime_functions.get(&self.image.address(pc))?;
-        (matches!(
+        let preserves = matches!(
             function.name.as_str(),
             "osMapTLB" | "osUnmapTLB" | "osUnmapTLBAll"
-        ) && self.index.containing(&self.image.address(pc)).is_empty()
+        ) || (function.name == "osRecvMesg" && (16..=23).contains(&self.register));
+        (preserves
+            && self.index.containing(&self.image.address(pc)).is_empty()
             && function.callbacks.is_empty()
             && function.status_global.is_none()
             && function.eeprom_timer.is_none()
@@ -512,7 +515,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
-            slots: Vec::new(),
+            slots: Default::default(),
         }
     }
 
@@ -632,7 +635,7 @@ mod tests {
     }
 
     #[test]
-    fn tlb_runtime_effects_keep_budget_and_slot_boundaries() {
+    fn runtime_effects_keep_budget_and_slot_boundaries() {
         let (mut map, mut image) = proof(vec![0x03e00008, 0]);
         let address = image.base.clone();
         map.blocks.clear();
@@ -664,6 +667,12 @@ mod tests {
             no_gpr_write_bound(&MapIndex::new(&map), &map, &image, address.pc, 19, 0, None)
                 .is_none()
         );
+        map.runtime_functions.get_mut(&address).unwrap().name = "osRecvMesg".into();
+        let index = MapIndex::new(&map);
+        for register in 1..=31 {
+            let effect = no_gpr_write_bound(&index, &map, &image, address.pc, register, 1, None);
+            assert_eq!(effect.is_some(), (16..=23).contains(&register));
+        }
         image.slots.push((
             crate::program::GuestRange {
                 start: GuestAddr(BASE + 0x1000),

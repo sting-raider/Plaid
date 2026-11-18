@@ -51,17 +51,23 @@ pub fn generate(
     let mut seen = BTreeSet::new();
     let mut same_code: BTreeMap<String, usize> = BTreeMap::new();
     let mut matchable = Vec::new();
-    let named: BTreeSet<GuestAddr> = images
+    // Each static image's constants, scanned once: all of them name DMA
+    // sources; an image's own resolvable ones are its roots.
+    let mut constants: Vec<BTreeSet<GuestAddr>> = images
         .iter()
-        .flat_map(|image| plaid_core::rsp_rom::constants(image, map))
+        .map(|image| plaid_core::rsp_rom::constants(image, map))
         .collect();
+    let named: BTreeSet<GuestAddr> = constants.iter().flatten().copied().collect();
     let static_images = images.len();
     for (k, image) in images.into_iter().chain(sources).enumerate() {
         let dma = k >= static_images;
         let mut roots = if dma {
             BTreeSet::new()
         } else {
-            plaid_core::rsp_rom::roots(&image, map)
+            std::mem::take(&mut constants[k])
+                .into_iter()
+                .filter(|&address| image.word(address).is_some())
+                .collect()
         };
         if dma && named.contains(&image.base.pc) {
             roots.insert(image.base.pc);
@@ -140,7 +146,10 @@ pub fn generate(
                                 || plaid_lower::rsp::plausible_short_overlay(&text, imem, &resident)
                         }
                     };
-                    if text.len() != requested_size as usize || !plausible {
+                    let prefix = !plausible
+                        && matches!(kind, Kind::Overlay)
+                        && plaid_lower::rsp::plausible_prefix_overlay(&text, imem, &resident);
+                    if text.len() != requested_size as usize || !(plausible || prefix) {
                         continue;
                     }
                     let (text, imem) = match kind {
@@ -165,14 +174,17 @@ pub fn generate(
                     // largest of texts it cannot tell apart is matched against a
                     // task; it accepts every task size the others do. All still run.
                     let key = match_key(text, imem, &reachable);
-                    let matched = match same_code.get(&key) {
-                        Some(&k) if texts[k].0.len() >= size => false,
-                        Some(&k) => {
-                            matchable[k] = false;
-                            true
-                        }
-                        None => true,
-                    };
+                    // A prefix recognized through its overlay transfer is
+                    // only eligible for live dispatch after that transfer.
+                    let matched = !prefix
+                        && match same_code.get(&key) {
+                            Some(&k) if texts[k].0.len() >= size => false,
+                            Some(&k) => {
+                                matchable[k] = false;
+                                true
+                            }
+                            None => true,
+                        };
                     if matched {
                         same_code.insert(key, names.len());
                     }
@@ -205,12 +217,6 @@ pub fn generate(
         fs::write(out.join(format!("{name}.c")), c).map_err(|e| e.to_string())?;
         fs::write(out.join(format!("{name}.bin")), text).map_err(|e| e.to_string())?;
         registry += &format!("extern const plaid_rsp_text plaid_rsp_text_{name};\n");
-    }
-    if names.len() > 256 {
-        return Err(format!(
-            "{} RSP texts exceed runtime registry limit",
-            names.len()
-        ));
     }
     registry += "const plaid_rsp_text *const plaid_rsp_texts[] = {";
     for name in &names {

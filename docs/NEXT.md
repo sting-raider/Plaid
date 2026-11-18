@@ -1,5 +1,70 @@
 # Next
 
+RE2's ROM-only repair loop now admits its replaced CPU image from first-fetch
+replay (ADR-0350). Its next stop is the Status guard at `80135cc0`.
+Verify the SDK thread, interrupt-mask and initialization effects before
+emitting Status bindings.
+
+Mapped fragment partitioning parses its evidence once (ADR-0340). The
+builder's address-taken and residual verdicts now share one proof walk
+(ADR-0341). The reset capture runs during discovery and the mapped partition
+consumes the parsed map (ADR-0343). For incremental indirect proofs, measure tail-cell and indexed
+table costs separately. Candidate edges can change prefix dominance between
+rounds. Preserve final verification and compare the output map byte for byte.
+
+Direction (2026-11-11): quality first. Paper Mario's map overlays now bind
+(ADR-0319..0321) and its build is 13 min instead of 19 (ADR-0322). Next speed
+step: make the discovery fixed point incremental. Each `discover` call still
+re-derives the whole CFG about 14 times and the build runs it 7 times. Then the
+solver's CFG recheck and return closure (~7 of 14 s per solve).
+
+An outside review (2026-11-12) left these leads; each still needs evidence:
+
+- Incremental discovery: retain per-PC `visit` facts and walk only new roots,
+  but keep the round boundaries (CFG, constants, tail cells, tables, proof
+  recheck, then new roots) and fall back to the serial walk at the budget.
+  Per-site invalidation must track what each analysis read, including failed
+  queries. Compare exact `map.json` bytes at every attempt.
+- Harvest: reuse one replay across changing site queries needs event-time
+  evidence (slot source bytes, I-cache conflicts), not bare (site, target)
+  pairs. A quiet interval is no sound stop for open calls.
+- Overlays: lowering re-infers slot relocations from the placed bytes, so a
+  literal equal to a placed-range address would be patched by the verifier;
+  carry the source relocation offsets instead. `standalone()` rejects a file
+  that calls a fixed helper just below it, and misses COP1 branches.
+- Rogue Squadron rubber-banding: fixed (ADR-0335). RT64 never saw the odd
+  field, so odd-field origins showed stale memory.
+- Star Fox 64's title-sun grey wash is the game's own (2026-11-12, closed):
+  each glare frame ends with a full-screen rectangle of prim colour
+  (208,208,208) at alpha 0x08-0x3c, blended over the black clear, and the
+  game sets VI_CONTROL 0x300e (gamma on). 23% of 208 is about 49; through the
+  VI gamma curve that is about 112-120, and RT64 shows 121. The commands
+  match ares (above), so hardware draws the same haze. parallel-RDP's
+  hardware gamma table maps 49 to 112. A 1080p longplay video shows the haze
+  from the same moment ("IN", about 13 s) but at about 30-49, because its
+  emulator ignores VI gamma. `PLAID_TRACE_WATCH` shows the CPU and RSP never
+  read the colour or depth buffers after boot, so headless ares not drawing
+  them cannot change the stream. RT64's VI gamma is now the hardware's
+  square root (runtime/rt64/patches.cmake), so the haze shows 112, not 121.
+- Paper Mario and Rogue Squadron (ADR-0330): the first ~11 s of RDP frames
+  are hash-identical to ares (640 and 364 frames), and every steady second of
+  25 s matches once ares is shifted 1 s; flags fall only on scene changes.
+  Rogue Squadron's field parity matches ares on every retrace; which buffer
+  each field shows depends on the frame's swap timing, so the intro does not
+  show the rubber-banding. The reported bugs (also F-Zero X vanishing cars)
+  are in gameplay; `devtrace.py --press` (ADR-0331) now drives both sides.
+- Mario Party 2 (ADR-0331): RDP frame 1 differs from ares (an extra
+  fade-overlay block, alpha-compare bit), yet `--rsp-capture -1` replayed in
+  ares (spike098) gives identical DMEM, IMEM and RSP state: the lowered
+  microcode is exact and the display list the CPU built differs, consistent
+  with a time-driven fade (first frame at VI 10 natively, 63 in ares). Exact
+  comparison with ares past the first Count-seeded state is out of reach
+  without cycle-level timing: `PLAID_DETERMINISTIC` (ADR-0332) made native
+  runs replay exactly, yet Star Fox 64 still parts from ares at frame 93 for
+  every safepoint cost from 100 to 3000 ns. For gameplay bugs, use exact
+  native-against-native runs (a suspect change against its parent, or a
+  recompiler option toggled) and ares's per-second opcode means.
+
 Continue GoldenEye after firmware-free refill discovery (ADR-0318): verify the
 complete fresh build and resolve the checked exception handoff and guest/host
 run-queue ownership before claiming gameplay. The retained handoff WIP and

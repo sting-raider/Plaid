@@ -19,6 +19,7 @@
 #include <SDL.h>
 
 #include <atomic>
+#include <cstdlib>
 #include <condition_variable>
 #include <cstdint>
 #include <cstring>
@@ -93,6 +94,11 @@ void renderer() {
     // Framebuffer storage can have non-square pixels; present on the 4:3 TV
     // surface instead of fitting its storage dimensions to the window.
     app->enhancementConfig.presentation.removeBlackBorders = false;
+    // An unpaced virtual-clock run (ADR-0332) outruns the presenter: skip
+    // buffering would show a buffer the next frame is already redrawing.
+    // Present what the VI scans out, under the workload lock (ADR-0334).
+    if (std::getenv("PLAID_DETERMINISTIC"))
+        app->enhancementConfig.presentation.mode = RT64::EnhancementConfiguration::Presentation::Mode::Console;
     if (settings_loaded) {
         using Config = RT64::UserConfiguration;
         app->userConfig.resolution = settings.n64Mode ? Config::Resolution::Original : Config::Resolution::Manual;
@@ -136,7 +142,7 @@ void renderer() {
     wake.notify_all();
     if (!ok) return;
 
-    if (settings_loaded) SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
+    SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
     std::array<SDL_GameController *, 4> controllers{};
     std::array<SDL_JoystickID, 4> controller_ids{};
     controller_ids.fill(-1);
@@ -165,20 +171,10 @@ void renderer() {
                 closed = true;
             }
         }
-        // Keyboard as controller 1: X/C/Z = A/B/Z, Enter = START, Q/E = L/R,
-        // I/K/J/L = C buttons, W/S/A/D = D-pad, arrows = stick.
-        static const struct { SDL_Scancode key; uint32_t bit; } map[] = {
-            {SDL_SCANCODE_X, 0x8000}, {SDL_SCANCODE_C, 0x4000}, {SDL_SCANCODE_Z, 0x2000},
-            {SDL_SCANCODE_RETURN, 0x1000}, {SDL_SCANCODE_W, 0x0800}, {SDL_SCANCODE_S, 0x0400},
-            {SDL_SCANCODE_A, 0x0200}, {SDL_SCANCODE_D, 0x0100}, {SDL_SCANCODE_Q, 0x0020},
-            {SDL_SCANCODE_E, 0x0010}, {SDL_SCANCODE_I, 0x0008}, {SDL_SCANCODE_K, 0x0004},
-            {SDL_SCANCODE_J, 0x0002}, {SDL_SCANCODE_L, 0x0001}};
+        // Without --config the default settings are keyboard Player 1 (X/C/Z,
+        // Enter, Q/E, IJKL, WASD, arrows) plus the first pad.
         const Uint8 *k = SDL_GetKeyboardState(nullptr);
-        uint32_t b = 0;
-        for (const auto &m : map) b |= k[m.key] ? m.bit : 0;
-        int x = (k[SDL_SCANCODE_RIGHT] - k[SDL_SCANCODE_LEFT]) * 80, y = (k[SDL_SCANCODE_UP] - k[SDL_SCANCODE_DOWN]) * 80;
-        input[0] = b << 16 | uint32_t(uint8_t(x)) << 8 | uint8_t(y);
-        if (settings_loaded) {
+        {
             // Enumerate the current connected controllers in SDL device order.
             std::array<SDL_GameController *, 4> current{};
             std::array<SDL_JoystickID, 4> ids{};
@@ -195,16 +191,11 @@ void renderer() {
             }
             for (auto *old : controllers) if (old) SDL_GameControllerClose(old);
             controllers = current; controller_ids = ids;
-            // Controller players take the connected pads in order; a keyboard Player 1
-            // also plays on the first pad left over, with the default pad layout.
-            int next = 0;
-            for (int i = 0; i < 4; ++i) {
-                const auto &p = settings.players[i];
-                bool pad = p.connected && p.type != "keyboard";
-                input[i] = plaid_input::sample(p, k, pad && next < 4 ? controllers[next++] : nullptr);
-            }
-            if (settings.players[0].type == "keyboard" && next < 4 && controllers[next])
-                input[0] = plaid_input::merge(input[0], plaid_input::sample(plaid_input::default_pad(settings.players[0]), k, controllers[next]));
+            auto pad = plaid_input::assign(settings.players, slot);
+            for (int i = 0; i < 4; ++i)
+                input[i] = plaid_input::sample(settings.players[i], k, pad[i] < 0 ? nullptr : controllers[pad[i]]);
+            if (pad[4] >= 0)
+                input[0] = plaid_input::merge(input[0], plaid_input::sample(plaid_input::default_pad(settings.players[0]), k, controllers[pad[4]]));
         }
     }
 }

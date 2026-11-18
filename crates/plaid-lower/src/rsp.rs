@@ -231,6 +231,47 @@ pub fn plausible_overlay(text: &[u8]) -> bool {
             .all(|(i, &w)| is_control(w) || simple(w, i as u32 * 4, "").is_ok())
 }
 
+/// A descriptor can replace the task entry with scalar code. Require a
+/// direct jump with its delay slot in the transfer and an RSP operation
+/// at the destination in the untouched resident suffix.
+pub fn plausible_prefix_overlay(text: &[u8], imem: u32, resident: &[u8]) -> bool {
+    if text.len() < 64
+        || !text.len().is_multiple_of(8)
+        || !imem.is_multiple_of(8)
+        || imem >= 0x80
+        || resident.len() != 0xf80
+    {
+        return false;
+    }
+    let end = imem as usize + text.len();
+    if !(0x81..0x1000).contains(&end) {
+        return false;
+    }
+    let words: Vec<_> = text
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|w| u32::from_be_bytes(*w))
+        .collect();
+    words.windows(2).enumerate().any(|(i, pair)| {
+        let jump = pair[0];
+        let slot = pair[1];
+        let target = ((jump << 2) & 0xfff) as usize;
+        if !matches!(jump >> 26, 2 | 3) || target < end {
+            return false;
+        }
+        let at = target - 0x80;
+        let destination = u32::from_be_bytes(resident[at..at + 4].try_into().unwrap());
+        rsp_specific(destination)
+            && simple(destination, target as u32, "").is_ok()
+            && !(slot >> 26 == 0 && slot & 63 == 13)
+            && simple(slot, imem + (i as u32 + 1) * 4, "").is_ok()
+    }) && words
+        .iter()
+        .enumerate()
+        .all(|(i, &w)| is_control(w) || simple(w, imem + i as u32 * 4, "").is_ok())
+}
+
 /// A short table-named overlay may be a scalar trampoline into the resident
 /// RSP DMA helper. Require its actual placed control flow to reach an RSP
 /// operation without leaving the composite or executing unsupported words.

@@ -6,7 +6,9 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
+from threading import get_ident
 import time
 import zlib
 from engine_paths import BUNDLED
@@ -139,7 +141,9 @@ def capture_refill(rom, anchor, target):
             output = Path(temporary) / 'source.jsonl'
             command = [str(exe), str(rom), str(firmware or '-'), hex(natural_rows[-1]['boot_entry']), hex(target),
                        str(BUDGET), 'CIC-NUS-' + natural['cic'], str(output), 'refill-v1', hex(anchor)]
+            started = time.perf_counter()
             subprocess.run(command, check=True, timeout=300)
+            print(f'ares refill replay {target:#x}: {time.perf_counter() - started:.1f} s', file=sys.stderr, flush=True)
             rows = [json.loads(line) for line in output.read_text().splitlines()]
         # A completed, deterministic refusal is worth caching too: unresolved
         # roots recur across frontier rounds. Validation still runs on every hit.
@@ -180,19 +184,47 @@ def capture_many(rom, entries, exact=False, covered=None, sites=None, bindings=N
         raise ValueError('boot capture requires a word-aligned ROM of 4 KiB..64 MiB')
     # A replay is deterministic in its sources and arguments, so an identical
     # request reuses the recorded results instead of launching ares (and WSL).
-    key = hashlib.sha256(json.dumps([REV, [hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in ORACLE_SOURCES],
-                                     hashlib.sha256(data).hexdigest(), entries, exact, covered, sites, bindings, budget,
-                                     pif_identity(pif_rom())]).encode()).hexdigest()
-    cached = Path(os.environ.get('PLAID_REPLAY_CACHE', Path.home() / '.cache/plaid/ares-replay')) / f'{key}.json'
+    request = [REV, [hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in ORACLE_SOURCES],
+               hashlib.sha256(data).hexdigest(), entries, exact, covered, sites, bindings, budget,
+               pif_identity(pif_rom())]
+    key = hashlib.sha256(json.dumps(request).encode()).hexdigest()
+    root = Path(os.environ.get('PLAID_REPLAY_CACHE', Path.home() / '.cache/plaid/ares-replay'))
+    cached = root / f'{key}.json'
     if cached.exists():
         return json.loads(cached.read_text())
+    # Coverage only decides which fetch counts as uncovered (ares_boot.cpp), so a
+    # replay that found none with fewer covered ranges ran exactly as this one will.
+    request[5] = None
+    family = root / 'covered' / (hashlib.sha256(json.dumps(request).encode()).hexdigest() + '.json')
+    known = json.loads(family.read_text()) if covered is not None and family.exists() else []
+    for old, old_key in known:
+        if covers(covered, old) and (root / f'{old_key}.json').exists():
+            return json.loads((root / f'{old_key}.json').read_text())
     # JSON-normalized, exactly as a cache hit or the WSL route returns it.
     results = json.loads(json.dumps(replay(rom, data, entries, exact, covered, sites, bindings, budget)))
     cached.parent.mkdir(parents=True, exist_ok=True)
-    partial = cached.with_name(f'{key}.{os.getpid()}.tmp')
+    partial = cached.with_name(f'{key}.{os.getpid()}.{get_ident()}.tmp')
     partial.write_text(json.dumps(results))
     partial.replace(cached)
+    # Only the final row reports the uncovered fetch; entry rows omit it.
+    if (covered is not None and any('uncovered_entry' in r for r in results) and
+            all(r.get('uncovered_entry') is None for r in results)):
+        family.parent.mkdir(exist_ok=True)
+        partial = family.with_name(f'{family.stem}.{os.getpid()}.tmp')
+        partial.write_text(json.dumps(known + [[covered, key]]))
+        partial.replace(family)
     return results
+
+
+def covers(ranges, inner):
+    """Whether the address ranges `ranges` contain every range of `inner`."""
+    merged = []
+    for lo, hi in sorted(ranges):
+        if merged and lo <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+    return all(any(a <= lo and hi <= b for a, b in merged) for lo, hi in inner)
 
 
 def replay(rom, data, entries, exact, covered, sites, bindings, budget):
@@ -241,6 +273,8 @@ def replay(rom, data, entries, exact, covered, sites, bindings, budget):
         started = time.perf_counter()
         subprocess.run(command, check=True, timeout=900)
         replay_seconds = round(time.perf_counter() - started, 3)
+        print(f'ares replay: {len(entries)} entries, {len(sites or [])} sites, budget {budget}: {replay_seconds:.1f} s',
+              file=sys.stderr, flush=True)
         results = [json.loads(line) for line in output.read_text().splitlines()]
     for result in results:
         result.update(format='plaid-ares-boot-harvest-v1', revision=REV, budget=budget, vi_budget=3600, replay_seconds=replay_seconds, rom_sha256=hashlib.sha256(data).hexdigest(),

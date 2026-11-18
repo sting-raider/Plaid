@@ -518,6 +518,32 @@ fn allowed_static_effect(word: u32, pc: crate::GuestAddr, guarded_ram: bool) -> 
 }
 
 pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<SolveReport, String> {
+    solve_inner(map, images, scope, false).map(|(report, _)| report)
+}
+
+/// Derive both build verdicts from the same authenticated CFG and proof walk.
+/// A CLOSED address-taken result doesn't need a dispatch verdict.
+pub fn solve_for_build(
+    map: &ProgramMap,
+    images: &[CodeImage],
+) -> Result<(SolveReport, Option<SolveReport>), String> {
+    let (residual, strict) = solve_inner(
+        map,
+        images,
+        Scope::DeclaredStaticImagesGuardedRamResidualDispatch,
+        true,
+    )?;
+    let strict = strict.expect("the shared solve produces an address-taken report");
+    let fallback = (strict.status == ClosureStatus::Open).then_some(residual);
+    Ok((strict, fallback))
+}
+
+fn solve_inner(
+    map: &ProgramMap,
+    images: &[CodeImage],
+    scope: Scope,
+    include_strict: bool,
+) -> Result<(SolveReport, Option<SolveReport>), String> {
     map.validate()?;
     for image in images {
         GuestRange {
@@ -537,6 +563,18 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     }
     let mut discharged = BTreeSet::new();
     let mut residual_sites = BTreeSet::new();
+    let mut strict_only = BTreeSet::new();
+    let mut waived =
+        |kind: &str, site: Option<CodeAddress>, detail: &str, evidence: EvidenceRefs| {
+            if include_strict {
+                strict_only.insert(Blocker {
+                    kind: kind.into(),
+                    site,
+                    detail: detail.into(),
+                    evidence,
+                });
+            }
+        };
     let mut add = |kind: &str, site: Option<CodeAddress>, detail: &str, evidence: EvidenceRefs| {
         blockers.insert(Blocker {
             kind: kind.into(),
@@ -869,6 +907,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         {
             if scope == Scope::DeclaredStaticImagesGuardedRamResidualDispatch {
                 residual_sites.insert(edge.site.clone());
+                waived(
+                    "unresolved_slot_call_identity",
+                    Some(edge.site.clone()),
+                    "a linked slot call has an undecoded executable identity; requires guarded residual dispatch",
+                    edge.evidence.clone(),
+                );
             } else {
                 add(
                     "unresolved_slot_call_identity",
@@ -943,11 +987,14 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                             .all(|&pc| starts.contains(&image.address(crate::GuestAddr(pc))))
                 })
             }) {
-                if scope == Scope::DeclaredStaticImagesGuardedRamResidualDispatch
-                    && crate::callbacks::residual_thread_entry(map, image, &c)
-                {
+                let waived_callback = scope
+                    == Scope::DeclaredStaticImagesGuardedRamResidualDispatch
+                    && crate::callbacks::residual_thread_entry(map, image, &c);
+                if waived_callback {
                     residual_sites.insert(c.site.clone());
-                    continue;
+                    if !include_strict {
+                        continue;
+                    }
                 }
                 let evidence = map
                     .direct_edges
@@ -955,7 +1002,11 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                     .find(|e| e.site == c.site)
                     .map(|e| e.evidence.clone())
                     .unwrap_or_default();
-                add(
+                (if waived_callback {
+                    &mut waived as &mut dyn FnMut(_, _, _, _)
+                } else {
+                    &mut add
+                })(
                     "unresolved_runtime_callback",
                     Some(c.site.clone()),
                     &format!(
@@ -1004,29 +1055,38 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
                 })
         });
     let mut uses_address_taken = false;
-    for site in &map.indirect_sites {
+    let sites: Vec<&IndirectSite> = map.indirect_sites.iter().collect();
+    if scope.guarded() {
+        for site in &sites {
+            if let Some(image) = source(images, &site.site) {
+                closures
+                    .entry(image.base.image.clone())
+                    .or_insert_with(|| crate::returns::Closure::new(map, image));
+            }
+        }
+    }
+    // Each site's proofs are pure functions of the map and its image.
+    let verdicts = crate::indirect::par_map(&sites, |site| {
+        let image = source(images, &site.site);
         // Return certificates hold only under the guarded scope's checked
         // call/return assumption; every other scope keeps such sites OPEN.
         let returns = scope.guarded()
-            && source(images, &site.site).is_some_and(|image| {
-                closures
-                    .entry(image.base.image.clone())
-                    .or_insert_with(|| crate::returns::Closure::new(map, image))
-                    .verify(map, image, site)
-            });
-        return_closure |= returns;
+            && image.is_some_and(|image| closures[&image.base.image].verify(map, image, site));
         // A verified jump table closes only under the guarded scope, whose
         // native artifact store-protects table bytes (ADR-0132).
         let table = scope.guarded()
-            && source(images, &site.site).is_some_and(|image| {
+            && image.is_some_and(|image| {
                 crate::tables::verify_in(&index, map, image, site)
                     || crate::tail_cells::verify_in(&index, map, image, site)
             });
+        let constant = image.is_some_and(|image| verify_constant_in(&index, map, image, site));
+        (returns, table, constant)
+    });
+    for (site, (returns, table, constant)) in sites.into_iter().zip(verdicts) {
+        return_closure |= returns;
         if table {
             tables.insert(site.site.clone());
         }
-        let constant = source(images, &site.site)
-            .is_some_and(|image| verify_constant_in(&index, map, image, site));
         let dispatched =
             !returns && !table && !constant && address_taken_ok && site.link_register.is_some();
         uses_address_taken |= dispatched;
@@ -1043,8 +1103,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         if residual {
             residual_sites.insert(site.site.clone());
         }
-        if !proof_valid && !residual {
-            add(
+        if !proof_valid {
+            (if residual {
+                &mut waived as &mut dyn FnMut(_, _, _, _)
+            } else {
+                &mut add
+            })(
                 "unresolved_indirect_site",
                 Some(site.site.clone()),
                 "finite candidates or samples are insufficient; no rechecked closed-target certificate",
@@ -1053,13 +1117,16 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         }
         for target in site.candidates.keys().chain(site.observed.keys()) {
             if !starts.contains(target)
-                && !(residual && sp_memory(target))
                 && !(site.link_register.is_some() && map.runtime_functions.contains_key(target))
                 && !((site.link_register.is_some()
                     || !(0x8000_0000..0xc000_0000).contains(&target.pc.0))
                     && into_slot(target))
             {
-                add(
+                (if residual && sp_memory(target) {
+                    &mut waived as &mut dyn FnMut(_, _, _, _)
+                } else {
+                    &mut add
+                })(
                     "unresolved_indirect_target",
                     Some(site.site.clone()),
                     &format!("candidate/observed target {:?} has no block", target),
@@ -1193,6 +1260,12 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             if checked_eret(u) {
                 if scope == Scope::DeclaredStaticImagesGuardedRamResidualDispatch {
                     residual_sites.extend(u.site.clone());
+                    waived(
+                        "eret_return_target_unknown",
+                        u.site.clone(),
+                        "ERET requires a closed return-target proof or explicit residual dispatch",
+                        u.evidence.clone(),
+                    );
                 } else {
                     add(
                         "eret_return_target_unknown",
@@ -1395,7 +1468,8 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
             map.address_taken.len()
         ));
     }
-    if !residual_sites.is_empty() {
+    let residual_assumption = (!residual_sites.is_empty()).then_some(assumptions.len());
+    if residual_assumption.is_some() {
         assumptions.push(format!(
             "VALIDATION ONLY (ADR-0218/0233/0270/0272): {} transfer site(s) lack full target/slot-identity closure; native dispatch accepts only lowered entries with verified bindings and faults 3 on any other target. This includes unproven direct osCreateThread entry arguments. The artifact is not natively complete.",
             residual_sites.len()
@@ -1558,7 +1632,7 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
     } else {
         BTreeSet::new()
     };
-    Ok(SolveReport {
+    let report = SolveReport {
         schema_version: 0,
         scope,
         status: if blockers.is_empty() {
@@ -1572,5 +1646,22 @@ pub fn solve(map: &ProgramMap, images: &[CodeImage], scope: Scope) -> Result<Sol
         discharged,
         residual_sites,
         trapped_sites,
-    })
+    };
+    let strict = if include_strict {
+        let mut strict = report.clone();
+        strict.scope = Scope::DeclaredStaticImagesGuardedRamAddressTaken;
+        strict.blockers.append(&mut strict_only);
+        if !strict.blockers.is_empty() {
+            strict.status = ClosureStatus::Open;
+        }
+        strict.residual_sites.clear();
+        strict.trapped_sites.clear();
+        if let Some(index) = residual_assumption {
+            strict.assumptions.remove(index);
+        }
+        Some(strict)
+    } else {
+        None
+    };
+    Ok((report, strict))
 }

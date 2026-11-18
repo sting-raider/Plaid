@@ -13,6 +13,7 @@ use plaid_core::{
     solver::{ClosureStatus, Scope, solve},
 };
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::{self, Read, Write};
 
 mod cop0_effects;
 pub mod coverage;
@@ -661,7 +662,7 @@ fn overlay_runtime(
         ));
     }
     let mut out = String::from(
-        "typedef struct { u32 f, w, probe; } plaid_ovl_fn;\ntypedef struct { u32 start, end, proof; } plaid_ovl_range;\ntypedef struct { u32 link, text, mapped, virtual_base, physical_base, span, guards, observed; const plaid_ovl_range *ranges; int (*verify)(const uint8_t *, size_t, uint32_t); u32 n; const plaid_ovl_fn *f; } plaid_ovl;\n",
+        "typedef struct { u32 f, w, probe; } plaid_ovl_fn;\ntypedef struct { u32 start, end, proof; } plaid_ovl_range;\ntypedef struct { u32 link, text, mapped, virtual_base, physical_base, span, guards, observed; const plaid_ovl_range *ranges; int (*verify)(const uint8_t *, size_t, uint32_t); u32 n; const plaid_ovl_fn *f; u32 anchor, anchor_w; } plaid_ovl;\n",
     );
     let mut table = Vec::new();
     for (k, (&(link, _), (bytes, layout))) in overlays.iter().zip(layouts).enumerate() {
@@ -751,8 +752,26 @@ fn overlay_runtime(
                 entries.join(", ")
             }
         );
+        // One unrelocated nonzero text word the verifier compares: a cheap
+        // refusal before the full verify of an unmapped candidate base.
+        let anchor = (mapped_bases[k].0.is_none() && !observed.contains_key(&k))
+            .then(|| {
+                ranges
+                    .iter()
+                    .filter(|r| !r.2)
+                    .flat_map(|&(start, end, _)| (start..end).step_by(4))
+                    .find(|&o| {
+                        o % 4 == 0
+                            && !relocated.contains(&(link + o))
+                            && image.word(GuestAddr(link + o)).is_some_and(|w| w != 0)
+                    })
+            })
+            .flatten();
+        let (anchor, anchor_w) = anchor.map_or((u32::MAX, 0), |o| {
+            (o, image.word(GuestAddr(link + o)).unwrap_or(0))
+        });
         table.push(format!(
-            "{{0x{link:08x}u, {}u, {}u, {}u, {}u, {span}u, {}u, {}u, plaid_ovl_ranges_{k}, plaid_overlay_verify_{k}, {}u, plaid_ovl_fn_{k}}}",
+            "{{0x{link:08x}u, {}u, {}u, {}u, {}u, {span}u, {}u, {}u, plaid_ovl_ranges_{k}, plaid_overlay_verify_{k}, {}u, plaid_ovl_fn_{k}, {anchor}u, 0x{anchor_w:08x}u}}",
             layout.text,
             u8::from(mapped_bases[k].0.is_some()),
             observed.get(&k).map_or(mapped_bases[k].0.unwrap_or(0), |r| (r.target().unwrap() & 0xe0000000) | r.window_base),
@@ -1015,6 +1034,11 @@ u32 plaid_link(plaid_state *s, u32 t) {
         w = (u32)s->ram[p] << 24 | (u32)s->ram[p + 1] << 16 | (u32)s->ram[p + 2] << 8 | s->ram[p + 3];
         if (plaid_ovls[k].f[j].probe && plaid_ovls[k].f[j].w != w) continue;
         b = t - (plaid_ovls[k].f[j].f - plaid_ovls[k].link);
+      }
+      if (plaid_ovls[k].anchor != 0xffffffffu) {
+        u32 q = (b & 0x1fffffffu) + plaid_ovls[k].anchor;
+        if (q > PLAID_RAM_SIZE - 4 ||
+            ((u32)s->ram[q] << 24 | (u32)s->ram[q + 1] << 16 | (u32)s->ram[q + 2] << 8 | s->ram[q + 3]) != plaid_ovls[k].anchor_w) continue;
       }
       if (!plaid_ovls[k].verify(s->ram, PLAID_RAM_SIZE, b)) continue;
       if (hit) return 1;
@@ -1477,6 +1501,8 @@ struct Lowerer<'a> {
     /// Relocatable overlays' link ranges, and the one this function is in.
     overlays: &'a [(u32, u32)],
     ovl: Option<usize>,
+    /// JALs into another fragment (ADR-0338): the target is read from RAM.
+    foreign_calls: &'a BTreeSet<u32>,
     /// Pinned frame of a fixed-text function (ADR-0219): its entry and full
     /// range count, and per call continuation the range count still live there.
     frame: Option<(u32, usize)>,
@@ -1515,6 +1541,16 @@ impl Lowerer<'_> {
     }
     fn ovl_of(&self, pc: u32) -> Option<usize> {
         self.overlays.iter().position(|(s, e)| *s <= pc && pc < *e)
+    }
+    /// A J/JAL target: the analysis target, or for a jump into another
+    /// fragment the one the game's loader wrote into the bound copy (ADR-0338).
+    fn jump_target(&self, jump: u32, pc: u32) -> String {
+        match self.ovl {
+            Some(n) if self.foreign_calls.contains(&pc) => {
+                format!("SX32(0x80000000u | ((plaid_ow(s, {n}, 0x{pc:08x}u) & 0x03ffffffu) << 2))")
+            }
+            _ => sx(jump),
+        }
     }
     /// A return address as the guest sees it: in overlay code, where the
     /// bound copy really runs (ADR-0181).
@@ -1809,7 +1845,7 @@ impl Lowerer<'_> {
                 let k = self.dispatch[proven()?];
                 Ok(format!(
                     "{slot} return plaid_call_{k}(s, {}, ret, 0x{pc:08x}u);",
-                    sx(jump)
+                    self.jump_target(jump, pc)
                 ))
             }
             (2, _, _) if self.ovl_of(jump).is_some_and(|k| Some(k) != self.ovl) => Ok(format!(
@@ -1823,14 +1859,14 @@ impl Lowerer<'_> {
             )),
             (3, _, _) if self.targets.contains_key(&pc) => {
                 let k = self.dispatch[proven()?];
+                let target = self.jump_target(jump, pc);
                 Ok(format!(
                     "s->r[31] = {}; {slot} {} {}",
                     self.link(after),
                     self.pin(
                         after,
                         format!(
-                            "{{ int r = plaid_call_{k}(s, {}, {}, 0x{pc:08x}u); if (r) return r; }}",
-                            sx(jump),
+                            "{{ int r = plaid_call_{k}(s, {target}, {}, 0x{pc:08x}u); if (r) return r; }}",
                             self.link(after)
                         )
                     ),
@@ -1901,8 +1937,11 @@ pub fn lower_c_parts(
         preload,
         entry,
         exits,
-        (parts, false),
-        residual_dispatch,
+        CPartOptions {
+            parts,
+            separate_runtime: false,
+            residual_dispatch,
+        },
     )?
     .units)
 }
@@ -1914,6 +1953,12 @@ pub struct LoweredCUnits {
     pub runtime_header: String,
 }
 
+pub struct CPartOptions {
+    pub parts: usize,
+    pub separate_runtime: bool,
+    pub residual_dispatch: bool,
+}
+
 pub fn lower_c_runtime_units(
     map: &ProgramMap,
     images: &[CodeImage],
@@ -1923,17 +1968,17 @@ pub fn lower_c_runtime_units(
     parts: usize,
     residual_dispatch: bool,
 ) -> Result<LoweredCUnits, String> {
-    if parts < 2 {
-        return Err("separate runtime requires multipart output".into());
-    }
     lower_c_units(
         map,
         images,
         preload,
         entry,
         exits,
-        (parts, true),
-        residual_dispatch,
+        CPartOptions {
+            parts,
+            separate_runtime: true,
+            residual_dispatch,
+        },
     )
 }
 
@@ -1943,10 +1988,83 @@ fn lower_c_units(
     preload: &CodeImage,
     entry: GuestAddr,
     exits: &[GuestAddr],
-    partition: (usize, bool),
-    residual_dispatch: bool,
+    options: CPartOptions,
 ) -> Result<LoweredCUnits, String> {
-    let (parts, separate_runtime) = partition;
+    let mut bodies = Vec::new();
+    let layout = lower_c_bodies(map, images, preload, entry, exits, options, &mut bodies)?;
+    let mut units = Vec::new();
+    let runtime_header = layout.emit_units(bodies.as_slice(), |_, c| {
+        units.push(String::from_utf8(c).map_err(|e| e.to_string())?);
+        Ok(())
+    })?;
+    Ok(LoweredCUnits {
+        units,
+        runtime_header,
+    })
+}
+
+pub struct CPartLayout {
+    main: String,
+    shared: String,
+    run: String,
+    runtime_header: String,
+    part_sizes: Vec<usize>,
+    parts: usize,
+}
+
+impl CPartLayout {
+    /// Read the body stream produced by `lower_c_bodies` in output order.
+    /// Keep at most one allocated translation unit live at a time.
+    pub fn emit_units(
+        self,
+        mut bodies: impl Read,
+        mut emit: impl FnMut(usize, Vec<u8>) -> Result<(), String>,
+    ) -> Result<String, String> {
+        let mut main = self.main.into_bytes();
+        if self.parts <= 1 {
+            bodies.read_to_end(&mut main).map_err(|e| e.to_string())?;
+        }
+        main.extend_from_slice(self.run.as_bytes());
+        emit(0, main)?;
+        if self.parts > 1 {
+            for (index, size) in self.part_sizes.into_iter().enumerate() {
+                let part = index + 1;
+                let mut c = format!(
+                    "/* part {part} of {} (ADR-0174) */\n{}",
+                    self.parts, self.shared
+                )
+                .into_bytes();
+                let offset = c.len();
+                c.resize(offset + size, 0);
+                bodies
+                    .read_exact(&mut c[offset..])
+                    .map_err(|e| e.to_string())?;
+                emit(part, c)?;
+            }
+        }
+        Ok(self.runtime_header)
+    }
+}
+
+/// Verify and lower functions to a sequential body stream. Preserve the
+/// original byte-weighted split without retaining the function texts in RAM.
+pub fn lower_c_bodies(
+    map: &ProgramMap,
+    images: &[CodeImage],
+    preload: &CodeImage,
+    entry: GuestAddr,
+    exits: &[GuestAddr],
+    options: CPartOptions,
+    bodies_out: impl Write,
+) -> Result<CPartLayout, String> {
+    let CPartOptions {
+        parts,
+        separate_runtime,
+        residual_dispatch,
+    } = options;
+    if separate_runtime && parts < 2 {
+        return Err("separate runtime requires multipart output".into());
+    }
     let link = if parts > 1 { "" } else { "static " };
     // Address-taken dispatch is its own scope (ADR-0153); residual dispatch is
     // the validation-only relaxation of it (ADR-0218).
@@ -2270,6 +2388,29 @@ fn lower_c_units(
         }
         callees.push(vector.clone());
     }
+    // Declared entries inside a relocatable overlay are where its binder
+    // enters it, by register call (a fragment's `j entry` word, ADR-0337).
+    let overlay_roots: Vec<_> = map
+        .entries
+        .keys()
+        .filter(|e| ovl_of(e.pc.0).is_some() && map.blocks.iter().any(|b| b.start.pc == e.pc))
+        .cloned()
+        .collect();
+    // A JAL into another fragment dispatches over the one callee analysis
+    // followed; the native call binds whatever RAM names (ADR-0338).
+    let starts: BTreeSet<u32> = map.blocks.iter().map(|b| b.start.pc.0).collect();
+    let mut foreign_calls = BTreeSet::new();
+    for (&pc, &(_, kind)) in &relocations {
+        if kind != plaid_core::overlays::FOREIGN | 4 {
+            continue;
+        }
+        let t = (pc & 0xf000_0000) | ((word(pc)? & 0x03ff_ffff) << 2);
+        if ovl_of(t).is_some() && starts.contains(&t) {
+            callees.push(image.address(GuestAddr(t)));
+            targets.insert(pc, BTreeSet::from([t]));
+            foreign_calls.insert(pc);
+        }
+    }
     let mut residual = BTreeMap::new();
     for site in &map.indirect_sites {
         if report.residual_sites.contains(&site.site) {
@@ -2288,11 +2429,12 @@ fn lower_c_units(
             .and_then(|id| map.evidence.get(id));
         if proof.is_none() && site.link_register.is_some() && !map.address_taken.is_empty() {
             // the solver accepted it under the address-taken scope
-            callees.extend(map.address_taken.keys().cloned());
+            callees.extend(map.address_taken.keys().chain(&overlay_roots).cloned());
             targets.insert(
                 site.site.pc.0,
                 map.address_taken
                     .keys()
+                    .chain(&overlay_roots)
                     .map(|t| t.pc.0)
                     .collect::<BTreeSet<_>>(),
             );
@@ -2915,7 +3057,18 @@ fn lower_c_units(
             .or_default()
             .push(e.target.pc.0);
     }
-    let mut lowered = verifiers;
+    let mut bodies_out = io::BufWriter::new(bodies_out);
+    let mut sizes = Vec::new();
+    let mut write_body = |source: String| -> Result<(), String> {
+        bodies_out
+            .write_all(source.as_bytes())
+            .map_err(|e| e.to_string())?;
+        sizes.push(source.len());
+        Ok(())
+    };
+    for verifier in verifiers {
+        write_body(verifier)?;
+    }
     let relocated = relocations.keys().copied().collect();
     for f in callees.iter().filter(|f| seen.insert(f.pc.0)) {
         // Observed block entries can be unused when no residual transfer needs them.
@@ -2977,13 +3130,14 @@ fn lower_c_units(
             dispatch: &dispatch,
             overlays: &overlays,
             ovl: ovl_of(f.pc.0),
+            foreign_calls: &foreign_calls,
         };
         // Relocated immediates are read from the bound copy (ADR-0181).
         let lower = |w: u32, pc: u32| -> Result<String, String> {
             let Some(&(k, kind)) = relocations.get(&pc) else {
                 return lowerer.simple(w, pc, None);
             };
-            match kind {
+            match kind & !plaid_core::overlays::FOREIGN {
                 5 => Ok(set(
                     (w >> 16) & 31,
                     format!("SX32((plaid_ow(s, {k}, 0x{pc:08x}u) & 0xffffu) << 16)"),
@@ -3187,41 +3341,41 @@ fn lower_c_units(
             }
         }
         out += "}\n";
-        lowered.push(out);
+        write_body(out)?;
     }
     // Contiguous shares of about equal size for the parts after the main
     // unit; with one part, all stay here.
-    let share = lowered.iter().map(String::len).sum::<usize>() / parts.saturating_sub(1).max(1) + 1;
-    let mut units = vec![out];
-    let mut size = 0;
-    for f in lowered {
-        if parts > 1 && (units.len() == 1 || size >= share) && units.len() < parts {
-            units.push(format!(
-                "/* part {} of {parts} (ADR-0174) */\n{shared}",
-                units.len()
-            ));
-            size = 0;
+    bodies_out.flush().map_err(|e| e.to_string())?;
+    let share = sizes.iter().sum::<usize>() / parts.saturating_sub(1).max(1) + 1;
+    let mut part_sizes = Vec::new();
+    for size in sizes {
+        if part_sizes.is_empty()
+            || (part_sizes.len() + 1 < parts && part_sizes.last().is_some_and(|n| *n >= share))
+        {
+            part_sizes.push(0);
         }
-        size += f.len();
-        units.last_mut().expect("main unit").push_str(&f);
+        *part_sizes.last_mut().expect("at least one body part") += size;
     }
-    let mut out = units.remove(0);
     // 2: an exit was reached; 0: the host entry returned through its checked $ra.
-    out += &format!(
+    let run = format!(
         "{}int plaid_run(plaid_state *s) {{\n  u64 host = s->r[31];\n  int r = F_{:08x}(s, host);\n  if (r == 2) return 0;\n  /* a checked return to the host's $ra hands control back (ADR-0146) */\n  if (r == 0) {{ s->pc = (u32)host; return 0; }}\n  return r;\n}}\n",
         if separate_runtime { "" } else { "static " },
         entry.0
     );
-    units.insert(0, out);
-    Ok(LoweredCUnits {
-        units,
-        runtime_header: if separate_runtime {
-            format!(
-                "{shared}\nvoid plaid_load_images(plaid_state *s);\nint plaid_run(plaid_state *s);\nint plaid_runtime_write(plaid_state *s,u32 p,u32 size,u32 pc);\nint plaid_runtime_check_write(plaid_state *s,u32 p,u32 size,u32 pc);\nint plaid_enter(plaid_state *s,u32 entry,u64 ret);\ntypedef int (*plaid_coroutine_fn)(plaid_state *,u64);\nplaid_coroutine_fn plaid_coroutine_target(plaid_state *s,u32 entry);\nint plaid_coroutine_enter(plaid_state *s,u32 entry,u64 ret);\n"
-            )
-        } else {
-            String::new()
-        },
+    let runtime_header = if separate_runtime {
+        format!(
+            "{shared}\nvoid plaid_load_images(plaid_state *s);\nint plaid_run(plaid_state *s);\nint plaid_runtime_write(plaid_state *s,u32 p,u32 size,u32 pc);\nint plaid_runtime_check_write(plaid_state *s,u32 p,u32 size,u32 pc);\nint plaid_enter(plaid_state *s,u32 entry,u64 ret);\ntypedef int (*plaid_coroutine_fn)(plaid_state *,u64);\nplaid_coroutine_fn plaid_coroutine_target(plaid_state *s,u32 entry);\nint plaid_coroutine_enter(plaid_state *s,u32 entry,u64 ret);\n"
+        )
+    } else {
+        String::new()
+    };
+    Ok(CPartLayout {
+        main: out,
+        shared,
+        run,
+        runtime_header,
+        part_sizes,
+        parts,
     })
 }
 

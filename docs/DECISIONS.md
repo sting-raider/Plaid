@@ -9356,3 +9356,545 @@ upstream code or ROM asset is included. On the local GoldenEye input, a
 previously refused refill at `7f002000` now identifies a complete 4096-byte
 ROM DMA source. This is a source candidate, not a proof of runtime reachability,
 gameplay or native completeness. See research/refill-hle-2026-11-11.md.
+
+## ADR-0319: Shared slot tables
+
+Status: accepted
+
+Overlay discovery recognizes a shared slot table: aligned
+`(rom_start, rom_end, ram)` rows where at least two distinct ROM files link
+at the same RAM address and the rows sit close together in the table. Each
+file whose start decodes as CPU text becomes a content-guarded slot
+alternate (ADR-0185) with a raw catalog encoding, deduplicated by ROM start
+and link. Data files, header rows and single-file slots are not admitted. A
+wrong row only adds a guarded alternate that never verifies at run time.
+
+A file must also be whole: every J, JAL and branch in its text lands in its
+own text or outside its load neighbourhood (the 64 KiB block of its link
+address up to the file's end). A transfer just before the file or into its
+data means the row names one part of a larger load. Admitting such a part
+left direct transfers into code no image supplies, so the build refused.
+Trapping those transfers at run time was tried and rejected: residual builds
+may leave only indirect transfer sites unresolved (AGENTS.md invariant 3,
+ADR-0233), and `runtime/test_observed_images.py` checks exactly that.
+
+On the local Paper Mario input, 420 map files share 0x80240000 in one table;
+one had been discovered before. The whole-file check rejects three fragment
+rows (links 0x802b6000 and 0x802b60b4) and keeps every map file. Tests: a
+synthetic shared table with a data file, a header row, a single-file slot and
+scattered rows; whole and fragment files.
+
+## ADR-0320: Partial harvest call projection
+
+Status: accepted
+
+Analysis-time harvest projects open call sites to the runtime PCs the replay
+must watch. One site that cannot be projected (an overlay copy routine, say)
+used to refuse the whole projection, so no site was watched. The harvest now
+skips the unprojectable sites, records them as `call_projection_refusal`
+("N open call(s) ... first XXXXXXXX"), and watches the rest. It still refuses
+when nothing projects and there are no entries. Observed targets remain
+discovery roots only, never certificates. `scripts/test_ares_boot.py` covers a
+partial projection.
+
+## ADR-0321: Own-range pointers are never segmented
+
+Status: accepted
+
+The overlay loader model leaves a word or `lui`/low pair alone when the
+address has bits 24..27 set: the segmented-pointer convention. Slot
+alternates are relocated to analysis placements, and with hundreds of
+alternates those placements pass 0x81000000, where every pointer into the
+file's own text sets those bits. The model and the generated run-time
+verifier then skipped all of the file's relocations; the verifier compared
+placement addresses against RAM and never bound the overlay, so calls into it
+faulted 3.
+
+`plaid_core::overlays::segmented` now excludes the overlay's own
+`link..=end` range, in the core model and in the C verifier. Real overlays
+link below 0x80800000, where the bits are clear, so their behaviour is
+unchanged. Test: a copy placed at 0x81900000 relocates its `lui`/`addiu` pair
+and data pointer while a real segmented pointer stays. Found on the local
+Paper Mario input: the map overlay loaded at VI ~680 matched its build byte
+for byte but did not verify.
+
+## ADR-0322: Discovery speed without changing maps
+
+Status: accepted
+
+Discovery dominated native builds: on the local Paper Mario input with the
+slot tables of ADR-0319, `discover` took 853 of 1134 s. Profiling with phase
+timings showed overhead, not analysis:
+
+- `CodeImage.slots` is now a `Slots` list with a lazily built index (placed
+  ranges sorted by start; linked starts sorted, bounded by the largest text).
+  Instruction, PC and slot-copy lookups were linear in the ~690 alternates.
+  Mutable access drops the index; overlapping or wrapping ranges fall back
+  to the old ordered scan.
+- `ProgramMap::validate` indexes indirect sites by address once instead of
+  scanning all 12.7k sites for each of 5.2k derived-entry sources.
+- `analyze_indirect_owned`, `tail_cells::analyze_owned` and
+  `tables::analyze` take the map by value: each computes its per-site
+  results from the unmodified map, then edits it in place. Three whole-map
+  copies (142k blocks, 221k edges) per iteration are gone.
+- Direct CFG discovery visits waves of pending PCs on every core, each worker
+  following a straight-line run; the reachable set is order-independent. A
+  traversal that reaches the instruction budget is redone in the sequential
+  order (`PLAID_SERIAL_CFG=1` forces it).
+- Address-taken ROM words are deduplicated before the per-value check,
+  which runs on every core.
+- The solver checks per-site table, tail-cell, constant and return proofs on
+  every core. On Paper Mario this saved nothing measurable (14.4 vs 14.2 s);
+  solve time is spread over the CFG recheck, return closure and slot checks.
+
+The maps are byte-identical: serial vs parallel CFG, and before vs after the
+validate and owned-map changes, give the same `map.json` SHA-256 on Paper
+Mario. One discover call went from 131-144 s to 66 s; a full Paper Mario
+build from 1134 s to 779 s (19.2 to 13.2 min). Timings are single runs on a
+20-thread laptop with other load, so treat them as approximate.
+
+## ADR-0323: Pad routing and audio queue in the RT64 window
+
+The launcher branch carried two engine fixes that main lacked; they are
+ported, with two routing defects closed:
+
+- `plaid_input::assign` routes pads: controller players take connected pads
+  in SDL order, and a connected keyboard Player 1 also plays on the first pad
+  left over, merged with its keys. A disconnected Player 1 takes no pad (the
+  branch let it). Pads are polled without `--config` too: the default
+  settings are the old hardcoded keyboard map plus the first pad, so the
+  separate keyboard path is gone. `plaid_rt64_input` covers the routing.
+- `plaid_audio_play` drops the newest buffer past 150 ms queued instead of
+  clearing the whole queue at 200 ms, and leads with 40 ms of silence after
+  the queue ran dry. Clearing was an audible jump; an empty queue tore.
+
+Audio distortion was checked before blaming the host queue. The guest PCM
+from 50 s runs (`--wav`) of Mario Party 2, Star Fox 64, Banjo-Kazooie and
+Rogue Squadron has no sample-to-sample wrap; Rogue Squadron clips at full
+scale in its own mix. Three Rogue Squadron audio tasks (`--rsp-capture` 300,
+793, 800) match pinned ares in RDRAM, IMEM, DMEM and RSP state
+(`spikes/098-rsp-task`). So the guest output is correct and the queue policy
+is what changed what players hear.
+
+## ADR-0324: Harvest replays reuse wider-coverage results
+
+A harvest round replays the game in ares to its full site budget whenever no
+uncovered fetch appears; on Paper Mario the last round repeated the previous
+one (same entries, sites and bindings, more covered ranges) for ~80 s and
+found nothing. Coverage only decides which fetch counts as uncovered
+(`scripts/ares_boot.cpp`), so a replay that met no uncovered fetch under
+fewer covered ranges runs exactly as one with more. `capture_many` records
+such replays per request without its coverage and returns the recorded
+result when the new coverage contains the old. A result with an uncovered
+fetch is never reused. Outputs are unchanged by construction;
+`replay_cache_contract` covers reuse, less coverage, other sites and an
+uncovered fetch.
+
+## ADR-0325: Cheaper RSP derivation, hole lookups and build overlap
+
+From an outside review of the build's critical path, four changes with
+unchanged outputs:
+
+- `rsp-from-rom` scanned every static image's constants twice (once for the
+  DMA-source names, again for each image's roots). It keeps the per-image
+  result. On Paper Mario the command went from 41.3 to 17.4 s with
+  byte-identical output (all 50 files).
+- `CodeImage::word` binary-searches holes when there are 16 or more; only a
+  composite has that many, and it builds them sorted and disjoint. One
+  Paper Mario `discover` call went from 89.6 to 70.1 s with the same
+  `map.json` SHA-256 (single runs on a loaded laptop).
+- `scripts/native.py` runs `rsp-from-rom` beside `lower-map`; both read only
+  the final map and loads. The pair is timed as one phase.
+- The compile pool asks each distinct compiler for its version once, not
+  once per job.
+
+## ADR-0326: Discovery continues its traversal instead of restarting it
+
+Each discovery round re-walked the whole direct CFG from every root, about 14
+times per `discover` call on Paper Mario, although roots only grow. A
+finished traversal (`discovery::Walk`: the map before partitioning, visited
+and leader PCs, terminal lengths and words) is a union over what each root
+reaches, so walking only the new roots from it yields the same sets as a
+fresh walk. `direct_cfg_continued` does that when the previous walk covered a
+subset of the roots in the same image, runtime boundary and budget; blocks are
+still partitioned from the combined state. The walk carries across the
+fixed-point rounds and the outer address-taken rounds. A traversal that
+reaches the instruction budget redoes the whole walk sequentially from every
+root, as before, and hands on no walk. `PLAID_SERIAL_CFG=1` still forces the
+fresh sequential walk.
+
+`a_continued_walk_equals_a_fresh_one` compares a continued and a fresh walk
+whose new roots split an existing block. Final `discover` maps are
+byte-identical against the previous binary on five games:
+
+| Game | Before | After |
+|---|---:|---:|
+| Paper Mario | 35 s | 27 s |
+| Majora's Mask | 167 s | 114 s |
+| Mario Party 2 | 83 s | 52 s |
+| Banjo-Kazooie | 23 s | 16 s |
+| Star Fox 64 | 22 s | 14 s |
+
+(The "before" binary also lacks ADR-0325's hole lookup; single runs.)
+
+`standalone()` (ADR-0319) also treats COP1 branches as transfers, and
+`discover` reports its setup time (`discover.setup`).
+
+## ADR-0327: The analysis binary uses mimalloc
+
+Discovery and the solver build maps of hundreds of thousands of blocks and
+edges, each carrying owned image and evidence strings, every round. Timers
+showed `cfg.clone` and `cfg.partition` costing several times the CFG walk
+itself, and neither sharing the image string (`Arc<str>`) nor bulk-building
+the partitioned sets changed that: the cost was the Windows system heap.
+`plaid` now sets `mimalloc` (MIT, `mimalloc` 0.1 / `libmimalloc-sys`) as its
+global allocator; the engine bundle lists it with the other crate licenses
+from cargo metadata. The indirect-analysis timers now measure their own
+segment (`indirect.tables` and `indirect.index2` were cumulative from the
+tail-cell pass).
+
+Final `discover` maps and the Majora's Mask residual solve are byte-identical
+to the previous binary (single runs, same machine):
+
+| Step | Before | After |
+|---|---:|---:|
+| Majora's Mask discover | 96 s | 74 s |
+| Mario Party 2 discover | 37 s | 17 s |
+| Star Fox 64 discover | 16 s | 11 s |
+| Banjo-Kazooie discover | 11 s | 8 s |
+| Majora's Mask solve | 6.0 s | 4.3 s |
+
+## ADR-0328: The indirect pass validates its map once on entry and once on exit
+
+`analyze_indirect_owned` validated the map on entry and exit, and its two
+inner passes (`tail_cells::analyze_owned`, `tables::analyze`) validated the
+intermediate maps three more times every discovery round. The inner passes
+have no other production caller, so their checks only repeated work whose
+result the exit check still guards. `tail_cells::analyze`, the borrowing
+wrapper tests use, validates around the pass instead. Majora's Mask `discover`
+is 34.1/36.3 s before and 31.4/32.9 s after (interleaved runs), with an
+identical map.
+
+## ADR-0329: Differential device-boundary traces against headless ares
+
+`scripts/devtrace.py <rom> <exe>` runs a native build and the pinned ares core
+on the same ROM and compares what reaches the devices: every RSP task start
+(type, physical data pointer, size, FNV-1a of up to 64 KiB of its data), every
+retrace's framebuffer origin, and every RDP frame (the command words up to each
+SYNC_FULL: count, FNV-1a, opcode histogram). Natively `PLAID_TRACE_TASK`,
+`PLAID_TRACE_VI` and `PLAID_TRACE_RDP` print them; `scripts/ares_trace.cpp`
+prints the same lines from ares, HLE-booted as the analysis oracle is (ADR-0316)
+with a neutral gamepad, about 40x real time. Yielded-task resumptions are
+skipped in ares because the native runtime never yields.
+
+Headless ares has no Vulkan renderer, and its software rasterizer reads a
+command split across two DPC_END writes past END; Star Fox 64's microcode then
+waits forever for DPC_CURRENT to reach END. The oracle build option
+`rdp_command_queue` (recipe `scripts/ares_rdp_queue.py`) gives `RDP::render`
+the Vulkan path's accounting from the same pinned file: consume to END, carry a
+partial command, raise DP on SYNC_FULL, draw nothing. The RDP then writes no
+framebuffer bytes, so a game that reads its framebuffer back can diverge. The
+build options otherwise equal `ares_boot.build_oracle`'s because the HLE boot
+table patches serialized state by offset. Adding the option changed
+`spikes/003-ares-oracle/run.py`, which keys the replay and analysis caches, so
+the first build after this landing re-runs analysis once.
+
+Native time is wall-clock, so exact equality ends at the first timing-seeded
+state. The report gives the first divergent and first never-seen native frame,
+then per-second opcode means (both VI clocks are 60 Hz; the last second is
+skipped). On Star Fox 64 (1500 VIs) the first 93 RDP frames are identical and
+every steady second matches; flags appear only in the seconds of scene changes,
+where native trails by a few frames. The title's grey wash is therefore not a
+CPU or RSP lowering error. `scripts/test_devtrace.py` covers the comparison.
+
+## ADR-0330: devtrace aligns seconds by command counts and logs the VI field
+
+Boot and loading take different VI counts in ares and natively (ares starts
+at IPL3), so ADR-0329's per-second comparison misread a constant offset as
+divergence on Paper Mario. `devtrace.py` now shifts ares by the whole seconds
+(within 3) that best match the per-second command counts, and reports the
+shift. Both VI traces append the field bit (`field 0|1`; natively the field
+whose origin was just shown) so interlaced origin choices can be compared.
+
+Over 25 s, Star Fox 64 aligns at +0 s, Paper Mario and Rogue Squadron at +1 s;
+the first 93, 640 and 364 RDP frames are hash-identical to ares and flags
+appear only around scene changes. Rogue Squadron's field parity matches ares
+on every retrace; the field-to-buffer assignment follows the game's swap
+timing. None of the reported visual bugs shows in these intro sequences.
+
+## ADR-0331: devtrace drives input, dumps RDP words; capture a graphics task
+
+`devtrace.py --press <buttons>@<vi>:<frames>` passes the native runtime's
+press script to the native run, then re-keys each press to the number of RDP
+frames native had finished by that VI; `ares_trace.cpp` (a scripted headless
+frontend answering ares's gamepad polls with OSContPad bits) starts the press
+after the same frame in ares. Native now runs before ares, since ares needs its
+frames. `PLAID_TRACE_RDP_DUMP=N` prints the command words of the first N RDP
+frames on both sides (`cmd <frame> <words>`), and `--rsp-capture -N` captures
+graphics task N for spike098 (positive N still counts audio tasks).
+
+For a graphics task, spike098's RDRAM comparison also sees RDP output: RT64
+writes fill results back to RDRAM, spike098's ares does not run the RDP. On
+Mario Party 2's first graphics task, DMEM, IMEM and the whole RSP state match
+ares exactly, and the only RDRAM differences are the framebuffer and depth
+clears at 0x360000 and 0x3d0800. The divergent first RDP frame therefore
+comes from the CPU's display list, consistent with a time-driven fade.
+`scripts/test_devtrace.py` covers the press re-keying.
+
+## ADR-0332: A deterministic native clock for differential runs
+
+`PLAID_DETERMINISTIC=<ns>` replaces the host clock with a virtual one:
+`now_ns()` returns it, so Count, VI, AI and the DP clock follow it. Every loop
+header's safepoint (ADR-0159) advances it by `<ns>` and polls VI, AI and the
+time limit, as the pump thread did; `plaid_preempt` stays set so each loop
+header ticks. When `hand_to` finds no runnable thread it steps the clock in
+1 ms increments, capped at the next retrace, delivering events as the pump did,
+until one is runnable. The pump thread is not started. With one baton holder
+at a time and every event raised from guest progress, a run replays exactly;
+`runtime/test_vi_dp.py` runs its VI, DP and Count/Compare program twice this
+way and requires identical output. `devtrace.py --deterministic <ns>` sets it.
+
+Star Fox 64 replays byte-identically (10 virtual seconds in 5-6 s of wall
+time), but parts from ares at the same RDP frame 93 for safepoint costs from
+100 to 3000 ns: the starfield seed comes from Count, and native boot skips
+IPL3's cycles. The mode is for exact native-against-native comparison; it is
+unpaced and not for play.
+
+## ADR-0333: Validate native builds on the virtual clock
+
+`scripts/native.py` now runs its validation (and so every gate game control)
+with `PLAID_DETERMINISTIC=1000` unless `--realtime` is given. The virtual clock
+skips the time every guest thread spends waiting, so the run lasts as long as
+the guest's own work: Star Fox 64's 60 s run takes 16.6 s headless and 25.7 s
+in the RT64 window (was 60.0 and 60.7 s), Paper Mario's 30 s takes 5.5 s, and
+the full gate fell from about 400 s to 174 s. Each run replays exactly, and a
+loaded host can no longer starve retraces, so the gate's VI threshold no
+longer needs its solo retry for Majora's Mask (every control reached VI 1798).
+1000 ns per loop iteration (about 90 guest instructions) gave Star Fox 64
+the same frame count as real time (1810 against 1807 graphics tasks); 100 ns
+ran slower than real time and 30000 ns dropped frames. Playing a game still
+uses the wall clock.
+
+The first gate on the virtual clock hung five games: `deliver_pending()`
+cleared `plaid_preempt`, and runtime calls other than the safepoint reach
+it (osRecvMesg, osYieldThread, __osRestoreInt, register reads). A guest loop
+that polls through such a call then stopped ticking the clock, so its
+deadline never came (Paper Mario polled PI_STATUS at 8006b6fc). On the
+virtual clock `deliver_pending()` now leaves it set. `runtime/test_vi_dp.py`
+polls an empty queue without blocking until a retrace message arrives; it
+hangs without the fix.
+
+## ADR-0334: Present the scanned-out buffer on the virtual clock
+
+Mario Party 2's curtain scene flickered in the RT64 window on the virtual
+clock (ADR-0333) but not in real time, although both runs gave the RDP the
+same command stream frame for frame. RT64's default SkipBuffering mode
+presents the colour image the current workload just drew, and it does so
+without the workload lock. An unpaced guest outruns the presenter, so a
+present could read a buffer the next frame was already clearing or redrawing.
+Under `PLAID_DETERMINISTIC` the shim now uses RT64's Console mode: it presents
+the buffer the VI scans out, under the workload lock. A 14 s desktop
+recording at 60 fps (ffmpeg ddagrab) counted 28 frames whose brightness
+jumped more than 3 levels and then jumped back; with Console mode it counted
+0 in two recordings, with the same 6.0 largest jump as real time. Play keeps
+RT64's default.
+
+## ADR-0335: Give RT64 the field the guest chose the origin for
+
+RT64 finds the framebuffer behind an interlaced origin by subtracting one row,
+or two when `VI_V_CURRENT`'s low bit says the odd field. libultra makes the
+same choice: it reads `VI_V_CURRENT` and adds that field's row offset to the
+origin. The runtime handed RT64 the stored `VI_V_CURRENT`, which a guest never
+writes, so RT64 always saw the even field. Every odd-field origin then
+resolved one row into its buffer, matched no framebuffer, and showed stale
+memory: Rogue Squadron's intro snapped back to the previous frame every other
+field (the reported rubber-banding). The runtime now records the field
+`vi_line()` shows when the guest writes the origin and passes it as
+`VI_V_CURRENT` with each screen update. In a 14 s, 60 fps recording of the
+window, frames that changed and then returned to the frame before fell from
+249 of 466 to 15 of 173.
+
+## ADR-0336: Run refill replays side by side
+
+A cold GoldenEye build spent about 550 s of its harvest in `harvest_refills`:
+up to 64 counterfactual refill replays per round (ADR-0282), each an
+independent single-threaded ares process of about 3 s, run one after
+another. They now run in a thread pool, one replay per core, after the shared
+anchor replay is cached. Results are admitted in the original order with the
+original skip rule (a root an earlier admitted source already covers is
+dropped), so the receipt and loads match the serial loop's; a covered root
+only costs a replay that goes unused. `ares_boot` now prints each replay's
+time to stderr. A solo cold GoldenEye build fell from 22 m 50 s to 15 m 18 s
+and its harvest phases from 893 s to 444 s; `loads.json`, `map.json` and all
+22 generated C files were byte-identical.
+
+## ADR-0337: Relocatable FRAGMENT modules
+
+Pokemon Stadium 2 keeps much of its code in "FRAGMENT" modules: a 32-byte
+header (`j entry`, a zero word, the magic, header size 0x20, relocation table
+offset R, file size S, RAM size M) followed by text, data and a Zelda64-style
+packed relocation table. The game's loader copies a module into its heap,
+relocates `[0, R)` from the module's 1 MiB link base and zeroes `[R, M)`, then
+calls word 0. Plaid could not place them: a wrong fixed copy from the boot
+harvest hid resident code (fault 12), and the heap copies faulted as unbound
+targets (fault 3).
+
+`fragment_layout` now reads the table exactly. A reference into the module is
+an ordinary relocation; one into resident code (below 0x81000000) keeps its
+value. One into another module moves with that module, which only the run
+knows: a data word or HI16/LO16 pair becomes a FOREIGN relocation (kind flag
+0x80) whose relocated bits the verifier takes from RAM, keeping the opcode
+half compared, and whose immediate lowering already reads from the bound copy;
+a jump into another module still refuses the file. HI16/LO16 pairs follow
+table order, the loader's order, not offset order. Raw aligned fragments join
+the overlay catalog at their link base; infer-loads drops fixed copies of a
+fragment, the harvest skips snapshots that start with one, and each catalogued
+fragment's word 0 is a map entry that address-taken dispatch includes.
+Pokemon Stadium 2 went from fault 3 at VI 14 to fault 3 at VI 172. The next
+blocker is fragments stored in Yay0 streams (673 of 762 "FRAGMENT" strings in
+the ROM) and modules that jump into other modules.
+
+## ADR-0338: Compressed fragments, calls between fragments, and anchored binding
+
+ADR-0337 left Pokemon Stadium 2 at fault 3 on VI 172. Three gaps remained.
+
+Most of its FRAGMENT modules (673 of 762 "FRAGMENT" strings in the ROM) sit in
+Yay0 streams. Yay0 is MIO0 with a long form (a back-reference whose count
+nibble is 0 takes the next literal byte plus 0x12 as its count, and short
+counts are the nibble plus 2), so the MIO0 decoder now serves both, and the
+fragment catalog decodes each Yay0 stream and keeps the fragments it holds as
+`yay0` catalog overlays.
+
+Fifty of the raw fragments call (`jal`) or tail-jump (`j`) into another
+fragment. Each such target lies in exactly one catalogued fragment, so the
+reference is kept as a FOREIGN J26 relocation: composition points the word at
+that fragment's analysis copy, so discovery follows an ordinary call, while
+the verifier accepts the loader's target bits (keeping the opcode compared)
+and the lowered call reads its target from the bound bytes and dispatches
+through the binder over that one callee. Resident references are now those
+below 0x80800000 (RDRAM), so a patched analysis target is never mistaken for
+one. A fragment's exported entries are a run of `j x; nop` thunks; a thunk
+right after another now counts as a function start for address-taken roots.
+
+With 582 relocatable overlays, binding an unknown target ran the full verifier
+(which rebuilds the whole expected image) for every candidate entry. Each
+unmapped overlay now names one unrelocated nonzero text word the verifier
+compares; the binder checks that word first. Pokemon Stadium 2 now builds in
+88 s and runs the 60 s validation (3596 VIs, 1641 graphics tasks) without a
+fault.
+
+## ADR-0339: Build the canonical ROM once per composition
+
+Composing a load image (every discover, identify, solve, infer and lower
+call) decoded each ares-backed load (`ares_boot`, `ares_tlb`, `ares_data`)
+by first rebuilding the canonical ROM from the raw bytes, which copies and
+hashes the whole cartridge. GoldenEye declares 458 such loads, so one solve
+spent 3.6 s composing and 0.7 s solving. `compose` now builds the canonical ROM
+once, lazily, and hands it to every load. A GoldenEye solve composes in
+0.57 s with the same verdicts; in a cold GoldenEye build identify, discover,
+solve and infer-call-loads fell from 421 s to 139 s (963 s to 214 s in total,
+the rest from a warm ares replay cache). `solve` reports `solve.images` and
+`solve.solve` under `PLAID_PHASE_TIMINGS`.
+
+## ADR-0340: Parse partition evidence once
+
+Mapped fragment partitioning decodes table evidence once per map and reuses
+it for each load. The existing protected extents and source identity checks
+still determine the cuts. The retained GoldenEye pass takes 0.376 s instead
+of 5.199 s at the median of three paired runs. A synthetic split produces
+byte-identical output. See research/mapped-partition-timing.md.
+
+## ADR-0341: Share the two build closure reports
+
+The default builder verifies its address-taken and residual scopes in one
+pass over the same authenticated image and CFG. The address-taken view
+restores precisely the blockers waived by residual dispatch. It still
+controls discovery refinement and selects a fully proved build when closed.
+Strict builds continue to request the address-taken scope on its own.
+Three retained ROM maps give equal reports and roughly halve the final
+solve time. See research/shared-build-solve.md.
+
+## ADR-0342: Reuse the index for tail-cell proof labels
+
+The map after candidate insertion supplies the CFG index for both new
+tail-cell claims and stale proof checks. Reuse is local to the pass and
+requires one indirect record per address. Maps with duplicate records
+still recheck against a rebuilt index. Six Paper Mario discovery maps
+match byte for byte, and the median tail-cell phase falls from 0.499 s
+to 0.337 s. See research/tail-cell-index-reuse.md.
+
+## ADR-0343: Capture startup state during discovery
+
+The ROM entry address is sufficient to start the reset replay. Discovery and
+closure run while it captures startup state. The builder consumes the result
+after closure admits the map, so closure refusals still take precedence. The
+partition pass also reuses the builder's parsed map. On retained GoldenEye
+inputs this reduces the median partition pass from 0.375 s to 0.030 s. On
+Paper Mario the cold boot-state wait drops from 0.951 s to 0.003 s with
+byte-identical boot state, map and manifest. See research/boot-capture-overlap.md.
+
+## ADR-0344: Stream generated functions into multipart output
+
+Multipart lowering spools completed function bodies to a temporary file. The
+body lengths preserve the same byte-weighted partition boundaries. Emission
+reads one translation unit at a time, after lowering and proof checks finish.
+On the retained Paper Mario map, 54 outputs match byte for byte. Two paired
+runs reduce peak working set from 2.03 GB to 1.83 GB and add about 0.44 s to
+lowering. See research/streamed-lowering.md.
+
+## ADR-0345: Size the RSP retry mask from the generated registry
+
+The runtime counts the linked RSP text entries and allocates one retry bit
+per entry. Matching and fetch guards still handle every attempted text. GCC
+links via response files so larger registries fit on Windows. A synthetic
+task with 257 stale matches reaches the valid next text. A local RE2
+experiment links with 300 texts and continues to a residual CPU dispatch
+fault. See research/large-rsp-registry.md.
+
+## ADR-0346: Keep fresh discovery outputs after cache publication
+
+The producing command already wrote the output on a cache miss. Publish one
+copy to the stage cache and keep the original. Restore the cached files on a
+hit. Both copies operate on files directly, avoiding full-map byte buffers.
+The stage cache identity and failure handling remain the same. Local timing
+and hash comparison are in research/discovery-cache-copy.md.
+
+## ADR-0347: Preserve saved register facts across native message receive
+
+The call effect checker binds the native message-receive declaration when
+a proof depends on one of its eight saved registers. The scheduler fixture
+checks their values after a receive blocks and resumes. A retained RE2
+build discovers the jump-table targets and reaches a later CACHE fault.
+The site remains residual. See research/receive-register-preservation.md.
+
+## ADR-0348: Bound display-list samples in task receipts
+
+A graphics task receipt samples up to eight complete words inside RAM.
+Null or unmapped pointers produce an empty list. The runtime's regular
+renderer or RSP path still owns task handling. The regression covers
+null and end-of-RAM pointers as well as the existing renderer bridge.
+In a local RE2 Status experiment, this turns the diagnostic stop into
+a complete receipt at the next RSP coverage boundary.
+
+## ADR-0349: Discover word-aligned RSP descriptors and scalar prefixes
+
+An SDK overlay descriptor on a word boundary can name a candidate when a
+second complete descriptor sits next to it in the same rooted data window.
+A scalar overlay crossing the task entry can qualify when its words decode
+and it has a direct jump with an in-range delay slot to a supported RSP
+operation in the surviving resident text. That candidate participates in
+live IMEM dispatch only. The retained RE2 diagnostic runs past its earlier
+RSP fault and completes 15 seconds with zero faults. See
+research/rsp-scalar-prefix-overlays.md.
+
+## ADR-0350: Replay a matching native trap before repairing boot text
+
+The ROM-only repair loop can use a fresh local trap in the boot window to
+request an exact first-fetch ares replay. A CPU write must cover the
+instruction, and all bytes in the native fault window must match within
+the replay extent after clipping around existing fixed declarations.
+The compiler composes the replacement from the pinned replay and uses
+its existing native text guards. The native fault capture identifies the
+source and remains local. The manifest records the selected declaration
+and witness hash and keeps native completeness open. See
+research/replayed-boot-repair.md.

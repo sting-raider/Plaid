@@ -67,3 +67,9 @@ plaid_rt64_patch(render/rt64_vi_renderer
     inline hlslpp::float2 fromHDtoWindow(hlslpp::float2 coordinate, hlslpp::float2 hdSize, hlslpp::float2 windowSize) {
         if (plaidStretchPresentation) return coordinate * windowSize / hdSize;
         const hlslpp::float2 hdCenter = hdSize / 2;]=])
+
+# The VI's gamma table is a square root (pinned ares parallel-rdp luts.hpp:
+# 64 -> 128, 49 -> 112), not 1/2.2.
+plaid_rt64_patch(hle/rt64_vi
+    "const float GammaCorrection = 1.0f / 2.2f;"
+    "const float GammaCorrection = 0.5f;")

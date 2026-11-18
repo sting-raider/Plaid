@@ -105,18 +105,21 @@ def main():
         sys.exit(f'--roms needs {shim}; build it first (CONTRIBUTIONS.md, "Running a game")')
 
     cargo, py = tool('cargo'), sys.executable
-    steps = [('fmt', [cargo, 'fmt', '--all', '--', '--check']),
-             ('clippy', [cargo, 'clippy', '--locked', '--workspace', '--all-targets', '--', '-D', 'warnings']),
-             ('cargo test', [cargo, 'test', '--locked', '--workspace'])]
+    cargo_steps = [('fmt', [cargo, 'fmt', '--all', '--', '--check']),
+                   ('clippy', [cargo, 'clippy', '--locked', '--workspace', '--all-targets', '--', '-D', 'warnings']),
+                   ('cargo test', [cargo, 'test', '--locked', '--workspace'])]
+    rest = []
     if not a.quick:
-        steps += [('test_cli', [py, 'scripts/test_cli.py']), ('test_gate', [py, 'scripts/test_gate.py']),
-                  ('progress', [py, 'tools/progress.py', '--check'])]
+        rest += [('test_cli', [py, 'scripts/test_cli.py']), ('test_gate', [py, 'scripts/test_gate.py']), ('test_devtrace', [py, 'scripts/test_devtrace.py']),
+                 ('progress', [py, 'tools/progress.py', '--check'])]
         if a.runtime or (a.runtime is None and touches_runtime()):
-            steps.append(('test_runtime', [py, 'runtime/test_runtime.py']))
+            # Workspace tests build harnesses, not the CLI used by runtime
+            # contracts. Build it before the CLI and runtime suites race.
+            cargo_steps.append(('build runtime CLI', [cargo, 'build', '--locked', '-p', 'plaid']))
+            rest.append(('test_runtime', [py, 'runtime/test_runtime.py']))
 
     # Cargo steps share a build lock, so they run in order; everything after them
     # (Python suites and game controls) runs side by side and reports in order.
-    cargo_steps, rest = steps[:3], steps[3:]
     results = []
     for label, cmd in cargo_steps:
         print(f'\n== {label}: {" ".join(map(str, cmd))}', flush=True)

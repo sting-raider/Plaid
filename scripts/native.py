@@ -41,7 +41,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from native_audio import audio_peak
-from harvest_boot import harvest, harvest_refills, harvest_vectors
+from harvest_boot import harvest, harvest_refills, harvest_vectors, replay_trapped_boot_load
 from ares_boot import ORACLE_SOURCES, capture_many
 from repair_record import write_record, admit_records, native_manifest
 
@@ -52,6 +52,7 @@ REPAIR_ROUND_CAP = 4
 OBJECT_CACHE = Path(os.environ.get('PLAID_OBJECT_CACHE', Path.home() / '.cache/plaid/objects'))
 SIGNATURES = ROOT / '.refs/n64sym/src/builtin_signatures.sig'
 RT64 = work_root(ROOT) / 'target/rt64-shim/Release'
+VALIDATION_NS_PER_SAFEPOINT = 1000  # guest ns per loop iteration on the virtual clock
 
 # Per-phase wall times, so a slow ROM is attributable without re-running the
 # whole pipeline under a profiler. Each entry is (name, seconds, cached).
@@ -91,6 +92,17 @@ def run(*args, **kw):
     return subprocess.run([str(a) for a in args], check=True, cwd=ROOT, **kw)
 
 
+def link(path, *inputs):
+    # GCC expands @files before invoking the linker. Preserve argument
+    # boundaries even when the checkout path contains spaces or backslashes.
+    with tempfile.TemporaryDirectory(prefix='plaid-link-') as temporary:
+        response = Path(temporary) / 'inputs.rsp'
+        arguments = [*inputs, '-o', path]
+        quoted = ['"' + str(arg).replace('\\', '\\\\').replace('"', '\\"') + '"' for arg in arguments]
+        response.write_text('\n'.join(quoted) + '\n', encoding='utf-8')
+        run(tool('gcc'), f'@{response}')
+
+
 def plaid(*args, **kw):
     return run(ROOT / 'target/release/plaid', *args, **kw)
 
@@ -122,18 +134,18 @@ def memo_plaid(*args, writes=()):
         partial = store.with_name(f'{store.name}.{os.getpid()}.tmp')
         partial.mkdir(parents=True, exist_ok=True)
         for n, path in enumerate(writes):
-            (partial / str(n)).write_bytes(Path(path).read_bytes())
+            shutil.copyfile(path, partial / str(n))
         (partial / 'stdout').write_text(result.stdout)
         try:
             partial.replace(store)
         except OSError:  # an identical concurrent invocation recorded it first
             shutil.rmtree(partial)
-    else:
-        if _PHASES:
-            _PHASES[-1]['cached'] += 1
-        print('+ (cached)', *args, flush=True)
+        return result.stdout
+    if _PHASES:
+        _PHASES[-1]['cached'] += 1
+    print('+ (cached)', *args, flush=True)
     for n, path in enumerate(writes):
-        Path(path).write_bytes((store / str(n)).read_bytes())
+        shutil.copyfile(store / str(n), path)
     return (store / 'stdout').read_text()
 
 
@@ -203,7 +215,7 @@ def compile_all(jobs):
     """Compile (source, flags, dependencies) jobs on one pool, largest first so
     the longest unit starts at once and the tail stays short; results keep job order.
     Each object is keyed on the version of the compiler that builds it."""
-    versions = {flags[0]: subprocess.check_output([flags[0], '--version']) for _, flags, _ in jobs}
+    versions = {c: subprocess.check_output([c, '--version']) for c in {flags[0] for _, flags, _ in jobs}}
     order = sorted(range(len(jobs)), key=lambda i: -jobs[i][0].stat().st_size)
     objs = [None] * len(jobs)
     with ThreadPoolExecutor(compile_workers()) as pool:
@@ -330,6 +342,8 @@ def main():
     ap.add_argument('--require-audio', action='store_true', help='reject a validation run with empty or silent PCM')
     ap.add_argument('--deep', action='store_true', help='watch unproven indirect sites for the full analysis-time replay budget (default without --repair-loop)')
     ap.add_argument('--seconds', type=float, default=60, help='length of the native validation run')
+    ap.add_argument('--realtime', action='store_true',
+                    help='validate on the wall clock instead of the virtual clock (ADR-0333)')
     a = ap.parse_args()
     if a.rsp_gfx and not a.rt64:
         ap.error('--rsp-gfx requires --rt64')
@@ -340,9 +354,13 @@ def main():
     # Keep the first round's refined loads, rather than replaying analysis or
     # inheriting observations left by a previous invocation in the output dir.
     base_loads = a.loads
+    explicit_records = len(a.repair_record)
 
     def build(records):
         a.repair_record = records
+        a.automatic_repair_records = (
+            records[explicit_records:] if a.repair_loop and not a.strict and base_loads is None else []
+        )
         result, record, inferred = build_once(a)
         if base_loads is None:
             a.loads = inferred
@@ -352,6 +370,11 @@ def main():
 
 
 def build_once(a):
+    with ThreadPoolExecutor(1) as boot_pool:
+        return build_native(a, boot_pool)
+
+
+def build_native(a, boot_pool):
     rom = a.rom.resolve()
     # 32 characters keep both Zelda titles (and similar series) apart
     name = a.name or ''.join(c for c in rom.stem.lower() if c.isalnum())[:32]
@@ -368,18 +391,41 @@ def build_once(a):
     with phase('rom-info'):
         info = json.loads(plaid('rom-info', rom, capture_output=True, text=True).stdout)
     entry = info['header']['boot_address']  # the header entry, less a CIC-6103/6106 offset
+    # Capture from reset while discovery works. Consume only after the map is
+    # admitted so a closure refusal still takes precedence over a capture error.
+    boot = boot_pool.submit(capture_many, rom, [entry])
     loads = a.loads.resolve() if a.loads else out / 'loads.json'
     if not a.loads:
         with phase('infer-loads'):
             plaid('infer-loads', rom, loads)
     base_loads = loads
+    window_size = info.get('boot_image_size') or 0x100000
+    replayed_replacements = []
     if a.repair_record:
         admitted = out / 'observed-loads.json'
         shutil.copyfile(loads, admitted)
-        admit_records(admitted, a.repair_record)
+        observed = []
+        catalog = json.loads(admitted.read_text())
+        for record_path in a.repair_record:
+            if record_path in a.automatic_repair_records:
+                record = json.loads(record_path.read_text())
+                with phase('repair-replay'):
+                    replacement = replay_trapped_boot_load(rom, catalog, record, entry, window_size)
+                if replacement is not None:
+                    catalog['loads'].append(replacement)
+                    replayed_replacements.append(dict(load=replacement, witness_sha256=record['sha256']))
+                    print(f"repair replay: {replacement['entry']} supplies {replacement['destination']}+{replacement['size']}")
+                    continue
+            observed.append(record_path)
+        if replayed_replacements:
+            catalog['loads'].sort(key=lambda l: (bool(l.get('slot')), 0 if l.get('slot') else int(l['destination'], 0)))
+            catalog['source'] += '; first-fetch replay of a matching native local-trap window'
+            admitted.write_text(json.dumps(catalog, indent=2) + '\n')
+        if observed:
+            admit_records(admitted, observed)
         loads = admitted
     # the main image ends where the entry stub's BSS clear begins; else IPL3's 1 MiB
-    window = [rom, '0x1000', entry, hex(info.get('boot_image_size') or 0x100000)]
+    window = [rom, '0x1000', entry, hex(window_size)]
     m = out / 'map.json'
     overlay_support = None
     for attempt in range(64):
@@ -394,11 +440,12 @@ def build_once(a):
             overlay_support = discover_map(discover, overlay_support, m)
         program = json.loads(m.read_text())
         with phase('partition'):
-            partitioned = attempt < 63 and partition_mapped(loads, m)
+            partitioned = attempt < 63 and partition_mapped(loads, program)
         if partitioned:
             continue
         with phase('solve'):
-            verdict = json.loads(memo_plaid('solve', rom, m, '--address-taken'))
+            report = json.loads(memo_plaid('solve', rom, m, '--address-taken' if a.strict else '--build'))
+            verdict = report if a.strict else report['address_taken']
         if verdict['status'] == 'closed' or a.loads or a.repair_record or attempt == 63:
             break
         previous_loads = loads.read_bytes()
@@ -416,29 +463,35 @@ def build_once(a):
     print('solve', verdict['status'], len(verdict['blockers']), 'blockers')
     residual = verdict['status'] != 'closed' and not a.strict
     if residual:
-        with phase('residual-solve'):
-            verdict = json.loads(memo_plaid('solve', rom, m, '--residual-dispatch'))
+        verdict = report['residual_dispatch']
         print('residual-dispatch solve', verdict['status'], len(verdict['blockers']), 'blockers,', len(verdict.get('residual_sites', [])), 'residual sites')
     if verdict['status'] != 'closed' and not (residual and verdict.get('trapped_sites') and all(b in verdict['trapped_sites'] for b in verdict['blockers'])):
         sys.exit('not CLOSED under the address-taken scope' + ('' if a.strict else ', even with residual dispatch') + ': nothing is built')
     # Always rewritten: a stale manifest must never describe a later build.
-    (out / 'native-manifest.json').write_text(json.dumps(native_manifest(program, verdict, residual), indent=2) + '\n')
+    manifest = native_manifest(program, verdict, residual)
+    if replayed_replacements:
+        manifest.update(native_complete=False, replayed_replacements=replayed_replacements)
+        if manifest['mode'] == 'closed':
+            manifest['mode'] = 'replay-repair'
+    (out / 'native-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
 
     # The native run starts SP memory as the ROM's own IPL3 leaves it (ADR-0195).
     try:
         with phase('boot-state'):
-            sp_boot, ram_boot = write_boot_state(capture_many(rom, [entry])[-1], out, entry)
+            sp_boot, ram_boot = write_boot_state(boot.result()[-1], out, entry)
     except ValueError as error:
         sys.exit(str(error) + ': nothing is built')
 
-    with phase('rsp-from-rom'):
-        plaid('rsp-from-rom', rom, m, texts, '--loads', loads)
-    rsp_manifest = json.loads((texts / 'rsp-files.json').read_text())
     c = out / f'{name}.c'
     # RAM address zero is executable when the guest owns its refill vector.
     exit_pc = '0xbfc00000' if program.get('tlb_exception_vectors') else '0x80000000'
-    with phase('lower'):
+    # Both read only the final map and loads and write separate outputs, so they
+    # run side by side (one phase: the shared phase stack is not thread-safe).
+    with phase('rsp-from-rom+lower'), ThreadPoolExecutor(2) as pool:
+        rsp = pool.submit(plaid, 'rsp-from-rom', rom, m, texts, '--loads', loads)
         lower_parts(rom, m, entry, exit_pc, c, len(program['blocks']), residual)
+        rsp.result()
+    rsp_manifest = json.loads((texts / 'rsp-files.json').read_text())
     # Generated game code builds at -O0: optimising it cost ~18x the compile
     # time and ran no faster, since each guest op is guest-state memory traffic.
     # Clang -O0 is ~4x faster again than GCC -O0; GCC stays the fallback.
@@ -477,14 +530,14 @@ def build_once(a):
     if a.rt64:
         window_obj = objs[-1]
     with phase('link'):
-        run(tool('gcc'), main_obj, *part_objs, '-pthread', *objects, '-o', exe)
+        link(exe, main_obj, *part_objs, '-pthread', *objects)
         prepare_runtime(out)
     if a.rt64:
         with phase('link-window'):
             resource = out / 'plaid-icon.o'
             prepare_runtime(RT64)
             run(tool('windres'), 'runtime/rt64/icon.rc', '-I', 'runtime/rt64', '-o', resource)
-            run(tool('gcc'), window_obj, *part_objs, RT64 / 'plaid_rt64.dll', '-pthread', *objects, resource, '-o', window_exe)
+            link(window_exe, window_obj, *part_objs, RT64 / 'plaid_rt64.dll', '-pthread', *objects, resource)
     command = [str(window_exe if a.rt64 else exe), '--rom', str(rom), *map(str, saves),
                '--stop-at', 'none', '--seconds', str(a.seconds)]
     if a.rsp_gfx:
@@ -498,6 +551,10 @@ def build_once(a):
         command.extend(['--wav', str(out / 'validation.wav')])
     # Validation runs are silent (SDL's dummy driver); --wav still records the audio.
     env = {**os.environ, 'SDL_AUDIODRIVER': 'dummy'}
+    # The virtual clock (ADR-0332) replays exactly and skips idle time, so a
+    # 60 s validation takes ~15-25 s and host load cannot starve retraces.
+    if not a.realtime:
+        env.setdefault('PLAID_DETERMINISTIC', str(VALIDATION_NS_PER_SAFEPOINT))
     with tempfile.TemporaryDirectory(dir=out, prefix='repair-raw-') as temporary:
         raw_capture = Path(temporary) / 'capture.json'
         command.extend(['--repair-capture', str(raw_capture)])

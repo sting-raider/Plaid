@@ -72,6 +72,7 @@ pub enum LoadEncoding {
 pub enum OverlayCompression {
     Raw,
     Mio0,
+    Yay0,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -194,11 +195,8 @@ impl DeclaredLoad {
                     return Err("MIO0 overlay needs bounded text and BSS extents".into());
                 }
                 // Like RarePair, the bytes here are the slot copy (ADR-0257).
-                let mut layout = crate::overlays::slot_layout_bounded(
-                    bytes,
-                    self.destination.start.0,
-                    text_size,
-                )?;
+                let mut layout =
+                    crate::overlays::catalog_layout(bytes, self.destination.start.0, text_size)?;
                 layout.bss = bss_size;
                 Ok(layout)
             }
@@ -361,7 +359,20 @@ pub fn yaz0(data: &[u8]) -> Result<Vec<u8>, String> {
 
 /// Decode one bounded Nintendo MIO0 stream.
 pub fn mio0(data: &[u8]) -> Result<Vec<u8>, String> {
-    if data.len() < 16 || &data[..4] != b"MIO0" {
+    split_lz(data, false).map(|(out, _)| out)
+}
+
+/// Decode one bounded Nintendo Yay0 stream and return the stream bytes it
+/// spans (ADR-0338). Yay0 is MIO0 with a long form: a back-reference whose
+/// count nibble is 0 takes its count from the next literal byte, plus 0x12.
+pub fn yay0_stream(data: &[u8]) -> Result<(Vec<u8>, usize), String> {
+    split_lz(data, true)
+}
+
+/// MIO0 and Yay0: control bits, a back-reference stream and a literal stream.
+fn split_lz(data: &[u8], yay0: bool) -> Result<(Vec<u8>, usize), String> {
+    let magic: &[u8] = if yay0 { b"Yay0" } else { b"MIO0" };
+    if data.len() < 16 || &data[..4] != magic {
         return Err("not a MIO0 stream".into());
     }
     let be = |at: usize| -> Result<usize, String> {
@@ -409,7 +420,15 @@ pub fn mio0(data: &[u8]) -> Result<Vec<u8>, String> {
                     .unwrap(),
             );
             comp = token_end;
-            let count = usize::from(token >> 12) + 3;
+            let count = match token >> 12 {
+                0 if yay0 => {
+                    let long = *data.get(raw).ok_or("truncated MIO0 literal stream")?;
+                    raw += 1;
+                    usize::from(long) + 0x12
+                }
+                n if yay0 => usize::from(n) + 2,
+                n => usize::from(n) + 3,
+            };
             let distance = usize::from(token & 0x0fff) + 1;
             if distance > out.len() || count > size - out.len() {
                 return Err("invalid MIO0 back-reference".into());
@@ -420,7 +439,7 @@ pub fn mio0(data: &[u8]) -> Result<Vec<u8>, String> {
         }
         mask >>= 1;
     }
-    Ok(out)
+    Ok((out, raw))
 }
 
 /// The largest decoded size accepted, so a stray header cannot demand an
@@ -470,7 +489,23 @@ pub fn yaz0_stream(data: &[u8]) -> Result<(Vec<u8>, usize), String> {
     Ok((out, at))
 }
 
-fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
+/// The canonical ROM, built once per composition: every ares-backed load
+/// needs it, and building it hashes the whole cartridge.
+fn canonical<'a>(
+    cell: &'a std::cell::OnceCell<crate::rom::CanonicalRom>,
+    bytes: &[u8],
+) -> Result<&'a crate::rom::CanonicalRom, String> {
+    if cell.get().is_none() {
+        let _ = cell.set(crate::rom::CanonicalRom::from_bytes(bytes)?);
+    }
+    Ok(cell.get().unwrap())
+}
+
+fn decoded(
+    bytes: &[u8],
+    rom: &std::cell::OnceCell<crate::rom::CanonicalRom>,
+    load: &DeclaredLoad,
+) -> Result<Vec<u8>, String> {
     let start = usize::try_from(load.source.0).map_err(|_| "load source too large")?;
     let size = load.destination.size as usize;
     let data = match load.encoding {
@@ -499,6 +534,7 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
                     .ok_or("catalog raw source is shorter than its logical size")?
                     .to_vec(),
                 OverlayCompression::Mio0 => mio0(source)?,
+                OverlayCompression::Yay0 => yay0_stream(source)?.0,
             }
         }
         LoadEncoding::RarePair { end, text_size } => {
@@ -532,8 +568,8 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
                     "boot-produced loads require the whole ROM and a fixed destination".into(),
                 );
             }
-            let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
-            let capture = crate::boot_execution::execute(&rom).map_err(|stop| {
+            let rom = canonical(rom, bytes)?;
+            let capture = crate::boot_execution::execute(rom).map_err(|stop| {
                 format!("boot capture stopped at {:08x}: {}", stop.pc.0, stop.reason)
             })?;
             if capture.destination != load.destination {
@@ -545,8 +581,8 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
             if start != 0 || load.relocatable || load.linked.is_some() {
                 return Err("ares boot loads require the whole ROM and a fixed destination".into());
             }
-            let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
-            let capture = crate::ares_boot::execute(&rom, entry.0)?;
+            let rom = canonical(rom, bytes)?;
+            let capture = crate::ares_boot::execute(rom, entry.0)?;
             if capture.physical_start.is_some() {
                 return Err("mapped boot captures require ares_tlb binding guards".into());
             }
@@ -566,8 +602,8 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
             if start != 0 || load.relocatable || load.linked.is_some() {
                 return Err("replayed data needs whole-ROM replay and a fixed destination".into());
             }
-            let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
-            let data = crate::ares_boot::execute(&rom, entry.0)?
+            let rom = canonical(rom, bytes)?;
+            let data = crate::ares_boot::execute(rom, entry.0)?
                 .data_slice(physical, load.destination.size)?;
             load.layout(&data)?;
             data
@@ -579,8 +615,8 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
                 return Err("mapped boot loads require whole-ROM replay and a slot".into());
             }
             let linked = load.linked.ok_or("mapped boot load lacks virtual link")?;
-            let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
-            let capture = crate::ares_boot::execute(&rom, entry.0)?;
+            let rom = canonical(rom, bytes)?;
+            let capture = crate::ares_boot::execute(rom, entry.0)?;
             capture.mapped_slice(linked.0, physical, load.destination.size)?
         }
     };
@@ -604,7 +640,7 @@ fn decoded(bytes: &[u8], load: &DeclaredLoad) -> Result<Vec<u8>, String> {
         }
         if let LoadEncoding::CatalogOverlay { text_size, .. } = load.encoding {
             load.layout(&data)?;
-            let layout = crate::overlays::slot_layout_bounded(&data, linked.0, text_size)?;
+            let layout = crate::overlays::catalog_layout(&data, linked.0, text_size)?;
             let mut relocated = layout.apply(&data, linked.0, load.destination.start.0)?;
             relocated.truncate(data.len());
             return Ok(relocated);
@@ -650,7 +686,7 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
         rom_offset,
         physical_start: None,
         holes: Vec::new(),
-        slots: Vec::new(),
+        slots: Default::default(),
     };
     let base = image(spec.base.start, base_bytes, Some(spec.base_offset));
     if spec.loads.is_empty() {
@@ -674,9 +710,12 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
             _ => None,
         })
         .collect();
+    let rom = std::cell::OnceCell::new();
     if !ares_entries.is_empty() {
-        let rom = crate::rom::CanonicalRom::from_bytes(bytes)?;
-        crate::ares_boot::execute_many(&rom, &ares_entries.iter().copied().collect::<Vec<_>>())?;
+        crate::ares_boot::execute_many(
+            canonical(&rom, bytes)?,
+            &ares_entries.iter().copied().collect::<Vec<_>>(),
+        )?;
     }
     // The composite spans the base and every load; bytes no load or base
     // window supplies are holes (ADR-0150), never code or table bytes.
@@ -703,6 +742,7 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
     let at = |a: u64| (a - lo) as usize;
     composite[at(u64::from(spec.base.start.0))..at(spec.base.end())].copy_from_slice(base_bytes);
     let mut slots = Vec::new();
+    let mut calls = Vec::new();
     for load in &spec.loads {
         let data = if let LoadEncoding::Observed { generation } = load.encoding {
             let record = spec
@@ -722,18 +762,43 @@ pub fn compose(bytes: &[u8], spec: &LoadImage) -> Result<(CodeImage, CodeImage),
                 .flat_map(u32::to_be_bytes)
                 .collect()
         } else {
-            decoded(bytes, load)?
+            decoded(bytes, &rom, load)?
         };
         if let Some(linked) = load.linked {
-            slots.push((load.destination.clone(), linked.0, load.layout(&data)?.text));
+            let layout = load.layout(&data)?;
+            slots.push((load.destination.clone(), linked.0, layout.text));
+            let foreign = crate::overlays::FOREIGN | 4;
+            calls.extend(
+                layout
+                    .relocations
+                    .iter()
+                    .filter(|r| r.kind == foreign)
+                    .map(|r| load.destination.start.0 + r.offset),
+            );
         } else if matches!(load.encoding, LoadEncoding::AresData { .. }) {
             slots.push((load.destination.clone(), load.destination.start.0, 0));
         }
         composite[at(u64::from(load.destination.start.0))..at(load.destination.end())]
             .copy_from_slice(&data);
     }
+    // A call into another fragment names that fragment's link address; analysis
+    // follows it into the one catalogued copy linked there (ADR-0338). The
+    // native call still takes its target from the bound bytes.
+    for pc in calls {
+        let word = u32::from_be_bytes(composite[at(u64::from(pc))..][..4].try_into().unwrap());
+        let target = (pc & 0xf000_0000) | ((word & 0x03ff_ffff) << 2);
+        let mut placed = spec.loads.iter().filter(|l| {
+            l.linked
+                .is_some_and(|linked| target.wrapping_sub(linked.0) < l.destination.size)
+        });
+        if let (Some(callee), None) = (placed.next(), placed.next()) {
+            let moved = callee.destination.start.0 + (target - callee.linked.unwrap().0);
+            let patched = (word & 0xfc00_0000) | ((moved & 0x0fff_ffff) >> 2);
+            composite[at(u64::from(pc))..][..4].copy_from_slice(&patched.to_be_bytes());
+        }
+    }
     let mut out = image(GuestAddr(lo as u32), &composite, None);
-    out.slots = slots;
+    out.slots = slots.into();
     out.holes = holes;
     if !out.holes.is_empty() || !out.slots.is_empty() {
         out.base.image = out.content_identity();
@@ -956,7 +1021,7 @@ mod tests {
         );
         slot.relocatable = true;
         slot.linked = Some(GuestAddr(0x8010_0000));
-        let data = decoded(&rom, &slot).unwrap();
+        let data = decoded(&rom, &Default::default(), &slot).unwrap();
         assert_eq!(data[0x40..0x44], 0x8080_0004u32.to_be_bytes());
         // The binding verifier is built from the slot copy (ADR-0257).
         let layout = slot.layout(&data).unwrap();
@@ -989,7 +1054,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::new(),
-            slots: vec![(data.destination.clone(), data.destination.start.0, 0)],
+            slots: vec![(data.destination.clone(), data.destination.start.0, 0)].into(),
         };
         image.base.image = image.content_identity();
         let spec = LoadImage {
@@ -1064,7 +1129,7 @@ mod tests {
         );
         alternate.relocatable = true;
         alternate.linked = Some(GuestAddr(0x8010_0000));
-        let data = decoded(&rom, &alternate).unwrap();
+        let data = decoded(&rom, &Default::default(), &alternate).unwrap();
         assert_eq!(alternate.layout(&data).unwrap().text, 0x80);
         assert_eq!(
             slot_targets(&[alternate.clone()], 0x8010_007c),
@@ -1091,10 +1156,13 @@ mod tests {
                     }
                 }
             }
-            assert!(decoded(&rom, &changed).is_err(), "changed field {change}");
+            assert!(
+                decoded(&rom, &Default::default(), &changed).is_err(),
+                "changed field {change}"
+            );
         }
         rom[0x1010..0x1014].copy_from_slice(&0x8010_0084u32.to_be_bytes());
-        assert!(decoded(&rom, &alternate).is_err());
+        assert!(decoded(&rom, &Default::default(), &alternate).is_err());
     }
 
     #[test]
@@ -1131,7 +1199,8 @@ mod tests {
         changed.base.image = changed.content_identity();
         assert!(!verify_slots(&changed, Some(&spec)));
         let mut changed = image.clone();
-        changed.slots.push(changed.slots[0].clone());
+        let first = changed.slots[0].clone();
+        changed.slots.push(first);
         let mut duplicated = spec.clone();
         duplicated.loads.push(duplicated.loads[0].clone());
         changed.base.image = changed.content_identity();
@@ -1196,6 +1265,27 @@ mod tests {
         // A malformed token may not borrow bytes from the literal stream.
         repeated[12..16].copy_from_slice(&18u32.to_be_bytes());
         assert!(mio0(&repeated).is_err());
+    }
+
+    #[test]
+    fn yay0_counts_are_mio0_minus_one_with_a_long_form() {
+        let stream = |size: u32, control: u8, token: [u8; 2], literals: &[u8]| {
+            let mut s = b"Yay0".to_vec();
+            s.extend(size.to_be_bytes());
+            s.extend(17u32.to_be_bytes());
+            s.extend(19u32.to_be_bytes());
+            s.push(control);
+            s.extend(token);
+            s.extend(literals);
+            s
+        };
+        // Two literals, then nibble 1: three bytes from two back.
+        let short = stream(5, 0xc0, [0x10, 0x01], b"ab");
+        assert_eq!(yay0_stream(&short).unwrap(), (b"ababa".to_vec(), 21));
+        // One literal, then nibble 0: the next literal byte + 0x12 bytes.
+        let long = stream(21, 0x80, [0x00, 0x00], &[b'a', 2]);
+        assert_eq!(yay0_stream(&long).unwrap(), (vec![b'a'; 21], 21));
+        assert!(mio0(&long).is_err(), "the magic selects the format");
     }
 
     #[test]
@@ -1293,7 +1383,7 @@ mod runtime_source_tests {
             rom_offset: None,
             physical_start: None,
             holes: vec![],
-            slots: vec![(GuestRange { start, size: 32 }, 0xe000_0000, 16)],
+            slots: vec![(GuestRange { start, size: 32 }, 0xe000_0000, 16)].into(),
         };
         let entry = image.address(start);
         let mut function = crate::program::RuntimeFunction {

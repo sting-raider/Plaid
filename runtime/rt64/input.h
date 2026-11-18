@@ -61,6 +61,18 @@ inline plaid_settings::Player default_pad(const plaid_settings::Player &like) {
     p.range = like.range;
     return p;
 }
+// The connected pad (index in SDL order, or -1) each player reads: controller
+// players take pads in order; a connected keyboard Player 1 also plays on the
+// first pad left over (slot 4 of the result).
+inline std::array<int, 5> assign(const std::array<plaid_settings::Player, 4> &players, int pads) {
+    std::array<int, 5> out;
+    out.fill(-1);
+    int next = 0;
+    for (int i = 0; i < 4; ++i)
+        if (players[i].connected && players[i].type != "keyboard" && next < pads) out[i] = next++;
+    if (players[0].connected && players[0].type == "keyboard" && next < pads) out[4] = next;
+    return out;
+}
 // Two input words for one player: buttons combine, each stick axis takes the larger push.
 inline uint32_t merge(uint32_t a, uint32_t b) {
     auto axis = [](uint32_t w, int shift) { return int8_t(uint8_t(w >> shift)); };

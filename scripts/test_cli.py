@@ -286,6 +286,18 @@ def main():
         run("discover",rom,"64","0x80000000","40","0x80000000",taken,"--address-taken")
         assert len(json.loads(taken.read_bytes())['blocks'])>=len(json.loads(runtime_map.read_bytes())['blocks'])
         assert json.loads(run("solve",rom,taken,"--address-taken"))['status']=='closed'
+        unknown_rom = directory/'unknown-jump.z64'
+        unknown_rom.write_bytes(canonical[:64] + bytes.fromhex('0100000800000000') + canonical[72:])
+        unknown_map = directory/'unknown-jump-map.json'
+        run('discover', unknown_rom, '64', '0x80000000', '8', '0x80000000', unknown_map)
+        for source, path in ((rom, taken), (rom, runtime_map), (unknown_rom, unknown_map)):
+            ordinary = json.loads(run('solve', source, path, '--address-taken'))
+            combined = json.loads(run('solve', source, path, '--build'))
+            assert combined['address_taken'] == ordinary
+            fallback = (json.loads(run('solve', source, path, '--residual-dispatch'))
+                        if ordinary['status'] == 'open' else None)
+            assert combined['residual_dispatch'] == fallback
+        assert ordinary['status'] == 'open' and fallback['status'] == 'closed'
         # the COP1 register mode is a declared map property (ADR-0160)
         fr0_map=directory/'fr0-map.json'
         run("discover",rom,"64","0x80000000","40","0x80000000",fr0_map,"--fr0")
@@ -303,6 +315,12 @@ def main():
         defined=[body.findall(u.read_text(encoding='utf-8')) for u in units]
         assert len(units)>1 and not defined[0]
         assert sorted(sum(defined[1:],[]))==sorted(body.findall(lowered.read_text(encoding='utf-8')))
+        assert not list(directory.glob('split.*.tmp'))
+        blocked = directory/'blocked.c'
+        blocked.mkdir()
+        run("lower-map", rom, taken, "0x80000000", "0x80000f00", blocked, "--parts", "3", ok=False)
+        assert not list(directory.glob('blocked.*.tmp'))
+        assert not list(directory.glob('blocked.part*.c'))
         cc=os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
         if cc:
             objects=[]
@@ -313,6 +331,9 @@ def main():
             subprocess.run([cc,'-std=gnu11','-DPLAID_SAFEPOINTS','-DPLAID_LOWERED="split.c"','-I',str(directory),
                             str(ROOT/'runtime/plaid_rt.c'),*map(str,objects),'-pthread','-o',str(directory/'split.exe')],check=True)
         run("lower-map",rom,runtime_map,"0x80000000","0x80000f00",directory/'open.c',ok=False)
+        run("lower-map", rom, runtime_map, "0x80000000", "0x80000f00", directory/'open.c', "--parts", "3", ok=False)
+        assert not (directory/'open.c').exists()
+        assert not list(directory.glob('open.*.tmp'))
         # declared loads (ADR-0136): the composite is rebuilt by solve
         loads=directory/'loads.json'
         def declare(destination):

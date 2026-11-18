@@ -776,6 +776,44 @@ an unsupported scope effect, 15 for an unsupported instruction or exception,
 and 16 for an unsupported delay slot. `fault_pc` is the reported blocker
 site, which can lie after the start of the block that was stopped. The manifest
 records each site's kind; none of these traps executes guest instructions.
+### Runtime traces
+
+`PLAID_TRACE_MQ=1` prints each message-queue send and event registration to
+stderr; `PLAID_TRACE_VI=1` prints each retrace: VI number, host time, VI
+origin, Count, graphics tasks so far, field and VI_CONTROL. `PLAID_TRACE_TASK=1` prints each RSP
+task start (type, physical data pointer, size, FNV hash of the data) and
+`PLAID_TRACE_RDP=1` (with `--rsp-gfx`) one line per RDP SYNC_FULL: command
+count, FNV hash of the command words and an opcode histogram. Run the game
+executable directly to keep its stderr.
+
+`scripts/devtrace.py <rom.z64> <exe>` compares those traces with the pinned
+ares core run headless on the same ROM (ADR-0329). Pass the native-RSP window
+build (`target/rt64-shim/Release/<name>-rsp-rt64.exe`, from `native.py --rt64
+--rsp-gfx`) so RDP frames are compared. Native time is wall-clock, so exact
+frame equality ends at the first timing-seeded state; after that, read the
+per-second opcode means. A flag in one second at a scene change is pacing; a
+flag that persists across seconds of one scene is a lead.
+
+`PLAID_TRACE_WATCH=<lo>-<hi>` (hex physical addresses) makes the ares side of
+devtrace (`target/ares-trace/oracle.exe <rom> CIC-NUS-<cic> <vis> <out>`)
+log every read of that range except the VI's scanout, one line per run of
+reads from one PC: `watch vi <n> frame <n> pc <pc> addr <a> size <n> device <d>`
+(device is ares's RBusDevice: 1-3 CPU, 4 SP DMA). Use it to find out whether a
+game reads back a buffer only the RDP draws. `<lo>-<hi>@<vi>` starts logging at
+retrace `<vi>`; `PLAID_TRACE_WATCH_WRITES=1` logs writes too (marked `write`).
+Each `vi` line ends with the CPU `pc` at that retrace, which finds a game
+spinning in place. `PLAID_PIF_ROM=<your PIF ROM>` boots through that firmware
+instead of the HLE state, for local comparison only (ADR-0316).
+
+`PLAID_DETERMINISTIC=<ns>` (devtrace: `--deterministic <ns>`) runs the game
+on a virtual clock: `<ns>` per loop safepoint and 1 ms steps while every guest
+thread waits, with no host pump thread (ADR-0332). The same build and input
+then give byte-identical traces, so two native builds can be compared exactly.
+It does not reproduce ares's Count values, so ares comparisons still part at
+the first Count-seeded state. Runs are unpaced (often faster than real time).
+`scripts/native.py` validates on this clock (1000 ns) unless `--realtime`
+is given (ADR-0333).
+
 ### RT64 window settings
 
 The RT64 executable accepts `--title <text>`, `--fullscreen`, and

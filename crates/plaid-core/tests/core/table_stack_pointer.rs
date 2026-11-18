@@ -40,7 +40,7 @@ fn image() -> CodeImage {
         rom_offset: None,
         physical_start: None,
         holes: vec![],
-        slots: vec![],
+        slots: Default::default(),
     }
 }
 

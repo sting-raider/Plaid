@@ -172,7 +172,7 @@ mod tests {
             rom_offset: None,
             physical_start: None,
             holes: Vec::<GuestRange>::new(),
-            slots: Vec::new(),
+            slots: Default::default(),
         }
     }
 
