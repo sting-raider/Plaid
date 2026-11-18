@@ -53,9 +53,15 @@ def memo_contract():
         native.ROOT, native.plaid = root, fake
         try:
             run = lambda: native.memo_plaid('discover', source, 0x80000400, output, writes=(output,))
-            assert run() == 'run 1' and len(calls) == 1
-            output.unlink()
-            assert run() == 'run 1' and output.read_text() == 'map of a' and len(calls) == 1
+            with patch.object(native.shutil, 'copyfile', wraps=shutil.copyfile) as copy:
+                assert run() == 'run 1' and len(calls) == 1
+                copy.assert_called_once()
+                assert copy.call_args.args[0] == output
+                copy.reset_mock()
+                output.unlink()
+                assert run() == 'run 1' and output.read_text() == 'map of a' and len(calls) == 1
+                copy.assert_called_once()
+                assert copy.call_args.args[1] == output
             source.write_text('b')
             assert run() == 'run 2' and output.read_text() == 'map of b'
             for changed in [exe, root / native.ORACLE_SOURCES[1]]:

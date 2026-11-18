@@ -134,18 +134,18 @@ def memo_plaid(*args, writes=()):
         partial = store.with_name(f'{store.name}.{os.getpid()}.tmp')
         partial.mkdir(parents=True, exist_ok=True)
         for n, path in enumerate(writes):
-            (partial / str(n)).write_bytes(Path(path).read_bytes())
+            shutil.copyfile(path, partial / str(n))
         (partial / 'stdout').write_text(result.stdout)
         try:
             partial.replace(store)
         except OSError:  # an identical concurrent invocation recorded it first
             shutil.rmtree(partial)
-    else:
-        if _PHASES:
-            _PHASES[-1]['cached'] += 1
-        print('+ (cached)', *args, flush=True)
+        return result.stdout
+    if _PHASES:
+        _PHASES[-1]['cached'] += 1
+    print('+ (cached)', *args, flush=True)
     for n, path in enumerate(writes):
-        Path(path).write_bytes((store / str(n)).read_bytes())
+        shutil.copyfile(store / str(n), path)
     return (store / 'stdout').read_text()
 
 

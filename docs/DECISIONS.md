@@ -9850,3 +9850,11 @@ links via response files so larger registries fit on Windows. A synthetic
 task with 257 stale matches reaches the valid next text. A local RE2
 experiment links with 300 texts and continues to a residual CPU dispatch
 fault. See research/large-rsp-registry.md.
+
+## ADR-0346: Keep fresh discovery outputs after cache publication
+
+The producing command already wrote the output on a cache miss. Publish one
+copy to the stage cache and keep the original. Restore the cached files on a
+hit. Both copies operate on files directly, avoiding full-map byte buffers.
+The stage cache identity and failure handling remain the same. Local timing
+and hash comparison are in research/discovery-cache-copy.md.
