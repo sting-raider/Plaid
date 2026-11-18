@@ -9858,3 +9858,11 @@ copy to the stage cache and keep the original. Restore the cached files on a
 hit. Both copies operate on files directly, avoiding full-map byte buffers.
 The stage cache identity and failure handling remain the same. Local timing
 and hash comparison are in research/discovery-cache-copy.md.
+
+## ADR-0347: Preserve saved register facts across native message receive
+
+The call effect checker binds the native message-receive declaration when
+a proof depends on one of its eight saved registers. The scheduler fixture
+checks their values after a receive blocks and resumes. A retained RE2
+build discovers the jump-table targets and reaches a later CACHE fault.
+The site remains residual. See research/receive-register-preservation.md.
