@@ -9898,3 +9898,14 @@ its existing native text guards. The native fault capture identifies the
 source and remains local. The manifest records the selected declaration
 and witness hash and keeps native completeness open. See
 research/replayed-boot-repair.md.
+
+## ADR-0351: Recognize the callable body after a fragment header
+
+A declared fragment can jump from its header to an initializer while
+its first executable body has its own address. Address-taken discovery
+now treats the first word after the header as a function boundary when
+the declared start, header fields and jump agree. Its address still has
+to be taken and its body still has to pass the CPU code filter. The
+solver rechecks the same layout and address evidence. The runtime
+continues to bind the loaded fragment by content. See
+research/short-gameplay-and-save-checks.md.

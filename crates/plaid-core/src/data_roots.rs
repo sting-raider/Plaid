@@ -32,6 +32,23 @@ fn after_return(image: &CodeImage, pc: GuestAddr, starts: &BTreeSet<u32>) -> boo
         pc.0.checked_sub(back)
             .and_then(|a| image.word(GuestAddr(a)))
     };
+    // The fragment header can jump to an initializer farther into the file.
+    // A pointer to the first instruction after that header names its own body.
+    if let Some(base) = pc.0.checked_sub(0x20)
+        && starts.contains(&base)
+        && word(28) == Some(0)
+        && word(24) == Some(0x4652_4147)
+        && word(20) == Some(0x4d45_4e54)
+        && word(16) == Some(0x20)
+        && let Some(table) = word(12)
+        && table > 0x20
+        && let Some(end) = base.checked_add(table)
+        && let Some(jump) = word(32)
+        && jump >> 26 == 2
+        && (pc.0..end).contains(&image.jump_target(GuestAddr(base), jump).0)
+    {
+        return true;
+    }
     // Jump-table cases also follow J. Require a new O32 stack frame before
     // treating that weaker layout clue as an independent callable entry.
     let frame = image
@@ -919,6 +936,49 @@ mod tests {
         let second = GuestAddr(0x8000_0010);
         assert!(!plausible(&image, second));
         assert!(plausible_at(&image, second, &BTreeSet::from([second.0])));
+    }
+
+    #[test]
+    fn a_fragment_can_take_the_address_of_its_first_body() {
+        let base = 0x8090_0000;
+        let mut image = CodeImage {
+            base: CodeAddress {
+                pc: GuestAddr(base),
+                image: "fragment".into(),
+                generation: 0,
+            },
+            words: vec![
+                0x0824_000b,
+                0,
+                0x4652_4147,
+                0x4d45_4e54,
+                0x20,
+                0x38,
+                0x40,
+                0x40,
+                0x2402_0001,
+                JR_RA,
+                0,
+                0x2402_0002,
+                JR_RA,
+                0,
+                0,
+                0,
+            ],
+            rom_offset: None,
+            physical_start: None,
+            holes: Vec::new(),
+            slots: Default::default(),
+        };
+        let starts = BTreeSet::from([base]);
+        let body = GuestAddr(base + 0x20);
+        assert!(plausible_at(&image, body, &starts));
+        assert!(!plausible_at(&image, body, &BTreeSet::new()));
+        image.words[2] ^= 1;
+        assert!(!plausible_at(&image, body, &starts));
+        image.words[2] ^= 1;
+        image.words[0] -= 4; // jump into the header
+        assert!(!plausible_at(&image, body, &starts));
     }
 
     #[test]

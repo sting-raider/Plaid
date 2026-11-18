@@ -1,5 +1,11 @@
 # Status
 
+Pokémon Stadium 2 now passes the menu-input crash at VI 945. The repaired
+ROM-only build reaches the Poké Cup entry screen in a 65-second run with
+zero faults (ADR-0351). Paper Mario creates and reloads a named save, then
+stops after Peach's letter on a missing overlay callback.
+[Gameplay and save checks](../research/short-gameplay-and-save-checks.md)
+
 RSP discovery now finds word-aligned overlay tables and scalar prefixes
 that jump into surviving microcode (ADR-0349). A visible RE2 diagnostic
 reaches VI 899 with zero faults, up from the unlowered IMEM stop at VI 387.
