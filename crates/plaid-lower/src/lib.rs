@@ -2723,6 +2723,16 @@ pub fn lower_c_bodies(
         }
     }
     for (k, guards) in guarded.iter_mut().enumerate() {
+        if matches!(
+            relocatable[k].encoding,
+            plaid_core::declared_loads::LoadEncoding::CatalogOverlay { .. }
+        ) && plaid_core::overlays::fragment_layout(&layouts[k].0, overlays[k].0).is_some()
+        {
+            // Identical relocated instructions can belong to several fragments.
+            // The loader leaves the magic and size fields intact. Keep them
+            // checked and protected for the lifetime of the executable binding.
+            guards.data.push((8, 0x20));
+        }
         if observed.contains_key(&k) {
             guards.text = vec![(0, layouts[k].1.text)];
         }

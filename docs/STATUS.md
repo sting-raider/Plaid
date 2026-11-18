@@ -1,9 +1,10 @@
 # Status
 
-Pokémon Stadium 2 now passes the menu-input crash at VI 945. The repaired
-ROM-only build reaches the Poké Cup entry screen in a 65-second run with
-zero faults (ADR-0351). Paper Mario creates and reloads a named save, then
-stops after Peach's letter on a missing overlay callback.
+Pokémon Stadium 2 passes the menu-input and Challenge Cup loading crashes
+(ADR-0351 and ADR-0352). The ROM-only build reopens a newly initialized
+FlashRAM save and plays Challenge Cup turns with zero faults. Paper Mario
+creates and reloads a named save, then stops after Peach's letter on a
+missing overlay callback.
 [Gameplay and save checks](../research/short-gameplay-and-save-checks.md)
 
 RSP discovery now finds word-aligned overlay tables and scalar prefixes

@@ -7,11 +7,69 @@ import importlib.util
 import json
 import os
 import shutil
+import struct
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 SLICE = ROOT / 'spikes/096-native-slice'
 OUT = ROOT / 'target/heap-overlay-contract'
+
+
+def check_fragment_binding(exe, cc):
+    base, target = 0x80000400, 0x80007000
+    slots = (0x80900000, 0x80910000)
+
+    def jump(op, addr):
+        return (op << 26) | ((addr >> 2) & 0x03ffffff)
+
+    def fragment(address, size):
+        words = [jump(2, address + 0x20), 0, 0x46524147, 0x4d454e54,
+                 0x20, 0x2c, size, 0x2c, 0x03e00008, 0x2402002a,
+                 0, 1, 0x04000000]
+        return struct.pack('>13I', *words).ljust(size, b'\0')
+
+    words = [jump(3, slots[0]), 0, jump(3, slots[1]), 0, jump(2, base + 0x10), 0]
+    raw = bytearray(struct.pack('>6I', *words))
+    declarations = []
+    for slot, size in zip(slots, (0x34, 0x38)):
+        declarations.append(dict(destination=hex(slot), size=hex(size), rom=hex(len(raw)),
+                                 slot=True, encoding='catalog_overlay', compression='raw',
+                                 encoded_size=hex(size), text_size='0x28', bss_size='0x0'))
+        raw.extend(fragment(slot, size))
+    source = OUT / 'fragment.bin'
+    loads = OUT / 'fragment.loads.json'
+    lowered = OUT / 'fragment.c'
+    source.write_bytes(raw)
+    loads.write_text(json.dumps(dict(format='plaid-loads-v0', source='synthetic fragment headers',
+                                     loads=declarations)))
+    subprocess.run([str(exe), 'lower-c', str(source), hex(base), hex(base), hex(base + 0x10),
+                    str(lowered), '--loads', str(loads)], check=True, capture_output=True)
+    harness = OUT / 'fragment-harness.c'
+    payload = ','.join(map(str, fragment(target, 0x38)))
+    harness.write_text(f'''#include "{lowered.name}"
+#include <assert.h>
+static plaid_state state;
+int main(void) {{
+    const u8 bytes[] = {{{payload}}};
+    (void)plaid_run;
+    memcpy(state.ram + 0x7000, bytes, sizeof bytes);
+    assert(plaid_link(&state, 0x80007000u) == 0x80810000u);
+    assert(F_80810000(&state, 0) == 0 && state.r[2] == 42 && !state.fault);
+    assert(state.ovl_ok[1] && state.prot[0x7018u >> 2] == 255);
+    assert(plaid_runtime_write(&state, 0x7018u, 4, 0) == 0 && !state.ovl_ok[1]);
+    state.ram[0x701b] = 0x34;
+    assert(plaid_link(&state, 0x80007000u) == 0x80800000u);
+    assert(plaid_runtime_write(&state, 0x7018u, 4, 0) == 0 && !state.ovl_ok[0]);
+    state.ram[0x701b] = 0x3c;
+    assert(plaid_link(&state, 0x80007000u) == 0x80007000u);
+    assert(!state.ovl_ok[0] && !state.ovl_ok[1]);
+    return 0;
+}}
+''')
+    native = OUT / ('fragment.exe' if os.name == 'nt' else 'fragment')
+    subprocess.run([cc, '-O2', '-std=c11', '-Wall', '-Werror', '-Wno-unused-label',
+                    str(harness), '-lm', '-o', str(native)], check=True, capture_output=True)
+    subprocess.run([str(native)], check=True, timeout=30)
 
 
 def main():
@@ -21,6 +79,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     exe = ROOT / 'target/debug' / ('plaid.exe' if os.name == 'nt' else 'plaid')
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')
+    check_fragment_binding(exe, cc)
     for mode in ('move', 'active', 'tamper'):
         extra = [(a.jalr(a.ra, a.a0),), (a.nop,)] if mode == 'active' else []
         words, relocs, text = a.overlay_file(extra)

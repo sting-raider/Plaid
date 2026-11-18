@@ -9909,3 +9909,12 @@ to be taken and its body still has to pass the CPU code filter. The
 solver rechecks the same layout and address evidence. The runtime
 continues to bind the loaded fragment by content. See
 research/short-gameplay-and-save-checks.md.
+
+## ADR-0352: Bind native fragments using their preserved headers
+
+Catalog fragments can have the same lowered instructions after relocation
+and distinct file headers. Compare the magic and size fields of a verified
+fragment alongside its code, and protect those fields for the lifetime of
+the binding. A write to the header follows the same rules as a write to
+any other input used to prove the binding. Multiple matching candidates
+still fail closed. See research/short-gameplay-and-save-checks.md.

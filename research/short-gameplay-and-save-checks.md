@@ -51,3 +51,27 @@ The fragment-boundary regression checks the declared start, bad magic
 and a jump back into the header. The local gate passed all 82 runtime
 checks and seven visible ROM controls. The thread lifecycle check
 passed on an isolated rerun after timing out under parallel load.
+
+The next run reopened a newly initialized 128 KiB FlashRAM image and
+entered the Challenge Cup. On battle load it stopped at VI 6234, with
+fault 3 from `80041584` to fragment entry `806ad900`. Running the generated
+verifiers against captured RAM gave two matches (analysis entries at
+`829a0000` and `833a0000`). Their relocated code matched, but their file
+size fields were `0xcb60` and `0xc9f0`, respectively. The live header
+contained `0xcb60`.
+
+ADR-0352 protects and compares the preserved header fields of catalog
+fragments. The synthetic native contract starts with two matching code
+images, selects the matching header, executes the lowered function,
+revokes the binding on a header write and refuses an unknown header.
+
+With these guards, the same RAM capture passes only the correct verifier.
+Visible runs reopened a copy of the new FlashRAM save and entered the
+battle. In the 165-second replay, controller commands produced attacks
+and HP changes, and the run reached VI 9884 with fault 0. The save file
+also changed during the run. Reloading saved tournament progression
+remains unverified. The artifact continues to report seven residual sites.
+
+The local gate passed the Rust and CLI checks, 82 runtime checks and seven
+visible ROM controls. The graphics bridge contract passed on an isolated
+rerun after timing out under parallel load.
